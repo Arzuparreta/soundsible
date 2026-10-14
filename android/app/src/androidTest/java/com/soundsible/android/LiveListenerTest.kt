@@ -36,7 +36,7 @@ class LiveListenerTest {
         request("/api/auth/login", "POST", "{\"username\":\"member\",\"password\":\"android-test\"}")
         // The principal runner must opt into the isolated relay; never use the official service.
         val configuration = request("/api/community/config", "GET")
-        assertEquals("Isolated Live fixture required", "https://10.0.2.2:58443", configuration.optString("api_url"))
+        assertEquals("Isolated Live fixture required", "https://10.0.2.2:28443", configuration.optString("api_url"))
         var scenario: ActivityScenario<MainActivity>? = null
         var browser: MediaBrowser? = null
         var publisher: LivePeer? = null
@@ -155,7 +155,7 @@ class LiveListenerTest {
                 instrumentation.runOnMainSync { playing.set(!active.playWhenReady && !active.isPlaying && active.volume == .4f) }; playing.get()
             }
             okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build().newCall(okhttp3.Request.Builder()
-                .url("https://10.0.2.2:58443/__fixture/relay-kick").header("X-Android-Fixture", "isolated")
+                .url("https://10.0.2.2:28443/__fixture/relay-kick").header("X-Android-Fixture", "isolated")
                 .post(JSONObject().put("session_id", sessionId).put("role", "read").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
             await("Relay cut was not observed") { instrumentation.runOnMainSync { playing.set(active.playbackState == androidx.media3.common.Player.STATE_BUFFERING) }; playing.get() }
             await("Automatic listener recovery failed") {
@@ -172,7 +172,7 @@ class LiveListenerTest {
             val beforeCloseAudio = audibleFrames.get()
             await("Activity close stopped remote programme") { audibleFrames.get() >= beforeCloseAudio + 50 }
             okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build().newCall(okhttp3.Request.Builder()
-                .url("https://10.0.2.2:58443/__fixture/socket-cut").header("X-Android-Fixture", "isolated")
+                .url("https://10.0.2.2:28443/__fixture/socket-cut").header("X-Android-Fixture", "isolated")
                 .post(JSONObject().put("session_id", sessionId).put("role", "guest").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
             await("MediaSession stop was ignored") { instrumentation.runOnMainSync { playing.set(active.playbackState == androidx.media3.common.Player.STATE_IDLE && !active.playWhenReady) }; playing.get() }
             rms.set(0.0); Thread.sleep(300)

@@ -63,7 +63,7 @@ class LiveRestartTest {
             val room = JSONObject(start.extras.getString("liveSession")!!)
             val id = room.getString("id")
             val publicClient = okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build()
-            fun programme(): JSONObject = publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/v1/sessions/$id").build()).execute().use {
+            fun programme(): JSONObject = publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:28443/v1/sessions/$id").build()).execute().use {
                 check(it.isSuccessful); JSONObject(it.body!!.string()).getJSONObject("session").optJSONObject("program") ?: JSONObject()
             }
             try {
