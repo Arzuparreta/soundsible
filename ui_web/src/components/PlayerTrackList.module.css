@@ -398,11 +398,17 @@
   height: 15px;
 }
 
+/* About 17 frames a second, not 60. The bars sit inside a glass panel, and every
+   frame they change makes the compositor redo the whole stage under them: at
+   60 fps they were the single largest cost of the open player. Each bar holds
+   a value for 60 ms (step-end between the keyframes below), and the delays are
+   multiples of 60 ms so all three bars change on the same frame; delays that
+   are not would put them out of phase and bring the frame rate back up. */
 .eq i {
   width: 3px;
   background: var(--accent);
   border-radius: 2px;
-  animation: playerTrackEq 0.9s ease-in-out infinite alternate;
+  animation: playerTrackEq 0.9s step-end infinite alternate;
   animation-play-state: var(--decorative-animation-state, running);
 }
 
@@ -645,8 +651,24 @@
   }
 }
 
+/* ease-in-out from scaleY(1) to scaleY(0.45), sampled every 60 ms. */
 @keyframes playerTrackEq {
-  to { transform: scaleY(0.45); }
+  0% { transform: scaleY(1); }
+  6.667% { transform: scaleY(0.995); }
+  13.333% { transform: scaleY(0.98); }
+  20% { transform: scaleY(0.955); }
+  26.667% { transform: scaleY(0.919); }
+  33.333% { transform: scaleY(0.873); }
+  40% { transform: scaleY(0.817); }
+  46.667% { transform: scaleY(0.757); }
+  53.333% { transform: scaleY(0.693); }
+  60% { transform: scaleY(0.633); }
+  66.667% { transform: scaleY(0.577); }
+  73.333% { transform: scaleY(0.531); }
+  80% { transform: scaleY(0.495); }
+  86.667% { transform: scaleY(0.47); }
+  93.333% { transform: scaleY(0.455); }
+  100% { transform: scaleY(0.45); }
 }
 
 @media (max-width: 1023px) {

@@ -82,7 +82,11 @@
    it animates is animating permanently, for the whole song, on every route.
    `width` would mean layout + paint on the main thread each frame; `transform`
    is composited off it. The glow rides the scale — on a 2px line the horizontal
-   compression of a 12px shadow is not visible. */
+   compression of a 12px shadow is not visible.
+   `will-change` keeps it on a layer of its own between transitions: without it
+   every update repainted the page underneath. Two steps per update instead of
+   a frame each: a step is about a pixel, and on phones the bar sits inside the
+   frosted pill, which every frame of the bar re-blurs. */
 .progressFill {
   width: 100%;
   height: 100%;
@@ -90,7 +94,8 @@
   box-shadow: 0 0 12px var(--accent-glow);
   transform: scaleX(var(--p, 0));
   transform-origin: left center;
-  transition: transform 0.25s linear;
+  transition: transform 0.25s steps(2, end);
+  will-change: transform;
 }
 
 .openArea {
