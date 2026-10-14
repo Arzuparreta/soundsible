@@ -74,15 +74,31 @@
   gap: clamp(12px, 2.2dvh, 20px);
 }
 
+/* The cover is the one part of the stage that can give way. The frame starts
+   out square at the cover's full size, and when the song, the transport and
+   the actions leave less height than that it is the frame's height that
+   shrinks; the cover inside stays square at whichever side is shorter. A
+   window-height guess (`42dvh`, `100dvh - 510px`) used to stand in for this,
+   and every line added under the cover, or a short phone, pushed the stage
+   past its card instead. */
+.visualFrame {
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+  flex: 0 1 auto;
+  min-height: 96px;
+}
+
 .visualSlot {
   position: relative;
-  width: min(100%, 360px, 42dvh);
-  max-width: 360px;
+  width: min(100cqw, 100cqh);
   aspect-ratio: 1;
   flex: 0 0 auto;
   min-width: 0;
   min-height: 0;
-  margin: 0 auto;
 }
 
 .art {
@@ -164,6 +180,28 @@
 .artist {
   margin: var(--space-xs) 0 0;
   color: var(--ink-secondary);
+}
+
+/* Title, then who, then the record: each a step quieter than the one above.
+   Its own line, so a long artist and a long album each get the full width. */
+.album {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 24px;
+  margin: 0 auto;
+  overflow: hidden;
+  color: var(--ink-tertiary);
+  font-size: var(--text-label);
+  line-height: 24px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .album:hover {
+    color: var(--ink-secondary);
+  }
 }
 
 .artistLink {
@@ -640,7 +678,9 @@
     flex: 1;
     max-width: none;
     margin: 0;
-    padding: var(--space-lg) clamp(24px, 4vw, 64px) var(--space-xl);
+    /* The top clears the stage tile's drag grip (6px down, 32px tall), which
+       the cover otherwise slides under once it grows into the room. */
+    padding: 44px clamp(16px, 1.6vw, 32px) var(--space-xl);
     justify-content: center;
     gap: clamp(16px, 3.2dvh, 36px);
   }
@@ -649,9 +689,8 @@
     flex: 0 1 auto;
   }
 
-  .visualSlot {
-    width: min(100%, 400px, clamp(180px, calc(100dvh - 510px), 44dvh));
-    max-width: 400px;
+  .visualFrame {
+    width: min(100%, 400px);
   }
 
   .controlsPanel {
@@ -671,7 +710,7 @@
   }
 
   .title {
-    font-size: clamp(24px, 2.6vw, 36px);
+    font-size: clamp(22px, 2.2vw, 32px);
     overflow-wrap: anywhere;
   }
 
@@ -738,6 +777,7 @@
   }
 
   .desktopLyricsStage .media,
+  .desktopLyricsStage .visualFrame,
   .desktopLyricsStage .controlsPanel {
     display: contents;
   }
@@ -818,6 +858,11 @@
 
   .desktopLyricsStage .titleRow {
     justify-content: flex-start;
+  }
+
+  /* The dock row holds two lines; the record waits for the cover's return. */
+  .desktopLyricsStage .album {
+    display: none;
   }
 
   .desktopLyricsStage .radioBadge {
@@ -1001,7 +1046,7 @@
 @media (min-width: 768px) and (max-height: 559px) {
   .body {
     gap: var(--space-md);
-    padding-block: var(--space-sm);
+    padding-bottom: var(--space-sm);
   }
 
   .controlsPanel {
@@ -1020,8 +1065,8 @@
     padding: var(--space-sm) var(--gutter) calc(var(--space-md) + env(safe-area-inset-bottom, 0));
   }
 
-  :global(html[data-interface-size='large']) .visualSlot {
-    width: min(100%, 400px, 42dvh);
+  :global(html[data-interface-size='large']) .visualFrame {
+    width: min(100%, 400px);
   }
 
   :global(html[data-interface-size='large']) .mobileQueueToggle {

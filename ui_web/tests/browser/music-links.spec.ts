@@ -51,6 +51,20 @@ test('full player artist opens the general page while keeping the current song a
   expect(await page.locator('[data-player-surface-open] [data-drag-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-drag-row')))).toEqual(queueBefore);
 });
 
+test('full player names the record under the artist and opens it', async ({ page, isMobile }) => {
+  await openMusicPlayer(page);
+  const stage = page.locator('[data-player-surface-open] [data-player-stage-mode="now-playing"]');
+  const artist = stage.getByRole('link', { name: 'Artista 7', exact: true });
+  const album = stage.getByRole('link', { name: 'Biblioteca de prueba', exact: true });
+  await expect(album).toBeVisible();
+  // Its own line, below the artist, inside the stage.
+  const [artistBox, albumBox] = [await artist.boundingBox(), await album.boundingBox()];
+  expect(albumBox!.y).toBeGreaterThanOrEqual(artistBox!.y + artistBox!.height - 1);
+  await activate(page, album, isMobile);
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/album\/Biblioteca%20de%20prueba\?artist=Artista\+7&view=library/);
+});
+
 test('an album card opens the record from the line under its cover', async ({ page, isMobile }) => {
   // The tile is one target end to end. Only the cover and the title carry text
   // that reads like a link, so the credit and the song count are where a thumb
