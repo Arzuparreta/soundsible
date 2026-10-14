@@ -1,5 +1,6 @@
 import { For, Show, createEffect, onCleanup } from 'solid-js';
-import { useLocation, useNavigate } from '@solidjs/router';
+import { useLocation, useNavigate, type Navigator } from '@solidjs/router';
+import { openPrimaryDestination } from '../lib/tabMemory';
 import { t } from '../lib/i18n';
 import { openOverlay } from '../lib/overlay';
 import { desktopShell } from '../lib/shellLayout';
@@ -9,7 +10,7 @@ import { CloseIcon, MenuIcon } from './icons';
 import { navigationGroups, navigationItems, mobileNavGroup } from './primaryNavigation';
 import styles from './NavigationMenu.module.css';
 
-export function NavigationLinks(props: { path: string; search?: string; select?: (href: string, view?: string) => void }) {
+export function NavigationLinks(props: { path: string; search?: string; select?: (href: string, view?: string, selected?: boolean) => void }) {
   return <For each={navigationGroups}>{group => <section class={styles.group}>
     <h2>{group.label()}</h2>
     <nav aria-label={group.label()}><For each={group.hrefs}>{href => {
@@ -18,7 +19,7 @@ export function NavigationLinks(props: { path: string; search?: string; select?:
         <a href={`#${href}`} class={styles.item} data-nav-href={href}
           classList={{ [styles.active]: mobileNavGroup(props.path) === href }}
           aria-current={mobileNavGroup(props.path) === href ? 'page' : undefined}
-          onClick={event => { if (props.select) { event.preventDefault(); props.select(href); } }}>
+          onClick={event => { if (props.select) { event.preventDefault(); props.select(href, undefined, mobileNavGroup(props.path) === href); } }}>
           <span class={styles.icon}>{item.icon()}</span><span>{item.label()}</span>
           <Show when={href === '/downloads' && downloadCounts().active > 0}><span class={styles.badge}>{downloadCounts().active}</span></Show>
         </a>
@@ -38,7 +39,7 @@ export function NavigationLinks(props: { path: string; search?: string; select?:
   </section>}</For>;
 }
 
-function Drawer(props: { path: () => string; search: () => string; close: (after?: () => void) => void; navigate: (href: string) => void; onViewChange?: () => void }) {
+function Drawer(props: { path: () => string; search: () => string; close: (after?: () => void) => void; navigate: Navigator; onViewChange?: () => void }) {
   createEffect(() => { if (desktopShell()) props.close(); });
   // Overlay lives outside the app root, so background controls cannot receive focus.
   const root = document.getElementById('app');
@@ -47,9 +48,9 @@ function Drawer(props: { path: () => string; search: () => string; close: (after
   onCleanup(() => { if (root) root.inert = wasInert ?? false; });
   return <div class={styles.drawer}>
     <header class={styles.head}><strong>Soundsible</strong><button type="button" class={styles.close} aria-label={t('common.close')} onClick={() => props.close()}><CloseIcon /></button></header>
-    <NavigationLinks path={props.path()} search={props.search()} select={(href, view) => props.close(() => {
-      if (view) { props.onViewChange?.(); setLibraryTab(view); }
-      props.navigate(href);
+    <NavigationLinks path={props.path()} search={props.search()} select={(href, view, selected = false) => props.close(() => {
+      if (view) { props.onViewChange?.(); setLibraryTab(view); props.navigate(href); }
+      else openPrimaryDestination(props.navigate, href, selected, `${props.path()}${props.search()}`);
     })} />
   </div>;
 }

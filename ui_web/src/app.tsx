@@ -1,5 +1,6 @@
-import { useNavigate, type RouteSectionProps } from '@solidjs/router';
-import { onCleanup } from 'solid-js';
+import { useLocation, useNavigate, type RouteSectionProps } from '@solidjs/router';
+import { createEffect, onCleanup } from 'solid-js';
+import { rememberTabLocation } from './lib/tabMemory';
 import { registerMusicNavigator } from './lib/musicNavigation';
 import { state } from './stores';
 import { ToastOutlet } from './lib/toast';
@@ -23,6 +24,8 @@ import styles from './app.module.css';
  */
 export default function Shell(props: RouteSectionProps) {
   onCleanup(registerMusicNavigator(useNavigate()));
+  const location = useLocation();
+  createEffect(() => rememberTabLocation(location.pathname, location.search));
   return (
     // The mini-player floats over the routes on touch, so the shell has to say
     // when it is up: that is what lets every scroller reserve room for it

@@ -4,6 +4,7 @@ import { HashRouter, Route, useNavigate, type RouteSectionProps } from '@solidjs
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ScrollHistoryManager,
+  TAB_RETURN_STATE,
   navigateBackOr,
   registerPrimaryScroll,
   resetScrollHistoryForTests,
@@ -88,6 +89,46 @@ describe('scroll history', () => {
   afterEach(() => {
     resetScrollHistoryForTests();
     frames.restore();
+  });
+
+  it('brings a page a tab returns to back where it was left, with no parent to go back to', async () => {
+    function A() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button onClick={() => navigate('/b')}>Open B</button>
+          <div data-testid="scroll-a" ref={(element) => registerPrimaryScroll(element)} />
+        </>
+      );
+    }
+
+    function B() {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate('/a', { state: { [TAB_RETURN_STATE]: true } })}>Return to A</button>;
+    }
+
+    render(() => (
+      <HashRouter root={RouterShell}>
+        <Route path="/a" component={A} />
+        <Route path="/b" component={B} />
+      </HashRouter>
+    ));
+
+    const original = await screen.findByTestId('scroll-a');
+    await frames.flush();
+    original.scrollTop = 180;
+    fireEvent.scroll(original);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open B' }));
+    await screen.findByRole('button', { name: 'Return to A' });
+    await frames.flush();
+
+    // A new entry, not a traversal: the page still comes back where it was.
+    fireEvent.click(screen.getByRole('button', { name: 'Return to A' }));
+    const returned = await screen.findByTestId('scroll-a');
+    await frames.flush();
+    expect(returned.scrollTop).toBe(180);
+    expect(window.history.state?.__soundsibleScroll?.parentId).toBeUndefined();
   });
 
   it('restores a traversed entry once its asynchronous surface is ready', async () => {

@@ -31,6 +31,7 @@ import SongRow from '../components/SongRow';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { ArtistDiscoveryView, formatFans } from '../components/ArtistDiscoveryView';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
+import { tabRoot } from '../lib/tabMemory';
 
 type ViewMode = 'discover' | 'library';
 
@@ -227,7 +228,8 @@ export default function Artist() {
     setSearchParams({ view: mode }, { replace: true });
   };
 
-  const back = () => navigateBackOr(navigate, '/search');
+  // A page with no way back in history sits on the search it belongs to.
+  const back = () => navigateBackOr(navigate, tabRoot('/search') ?? '/search');
   let openCollectionMenu = () => {};
   const coverMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
   const titleMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });

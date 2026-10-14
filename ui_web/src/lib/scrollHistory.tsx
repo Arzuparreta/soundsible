@@ -3,6 +3,11 @@ import { useIsRouting, useLocation, type Navigator } from '@solidjs/router';
 
 const HISTORY_STATE_KEY = '__soundsibleScroll';
 
+/** History state on an entry a primary tab restored (`lib/tabNavigation`). Its
+ * page comes back where it was scrolled, and it has no parent: the page's back
+ * arrow climbs to its tab's root rather than into the tab the listener left. */
+export const TAB_RETURN_STATE = '__soundsibleTabReturn';
+
 interface ScrollEntryState {
   id: string;
   parentId?: string;
@@ -24,6 +29,8 @@ interface PendingRestore {
 }
 
 const positions = new Map<string, number>();
+/** The last position seen on each route, for a tab that returns to it on a new entry. */
+const routePositions = new Map<string, number>();
 const registrations = new Set<ScrollRegistration>();
 
 let activeEntry: ScrollEntryState | null = null;
@@ -95,6 +102,7 @@ function tryRestore(): void {
   if (top == null) return;
   registration.element.scrollTop = top;
   positions.set(pending.entryId, registration.element.scrollTop);
+  routePositions.set(pending.route, registration.element.scrollTop);
 }
 
 function settleRoute(): void {
@@ -108,6 +116,7 @@ function settleRoute(): void {
 
   let entry: ScrollEntryState;
   let fresh = false;
+  let returned = false;
   // The session's first page: there is nothing to restore and the page already
   // starts at the top, but a deep link into it may still ask to land.
   const opening = !stateEntry && activeEntry == null;
@@ -120,6 +129,9 @@ function settleRoute(): void {
   } else {
     if (replacedCurrent && activeEntry) {
       entry = activeEntry;
+    } else if (state[TAB_RETURN_STATE] === true) {
+      entry = { id: nextEntryId() };
+      returned = true;
     } else {
       entry = { id: nextEntryId(), parentId: activeEntry?.id };
       fresh = activeEntry != null;
@@ -134,6 +146,10 @@ function settleRoute(): void {
   const saved = positions.get(entry.id);
   if (traversed && saved != null) {
     pendingRestore = { entryId: entry.id, route, top: saved, fresh: false };
+  } else if (returned) {
+    const top = routePositions.get(route) ?? 0;
+    pendingRestore = { entryId: entry.id, route, top, fresh: false };
+    positions.set(entry.id, top);
   } else if (fresh) {
     pendingRestore = { entryId: entry.id, route, top: 0, fresh: true };
     positions.set(entry.id, 0);
@@ -204,6 +220,7 @@ export function registerPrimaryScroll(
     // frame. Its clamped offset belongs to the destination, not the old entry.
     if (!activeEntry || routeKey() !== activeRoute || element !== activeRegistration()?.element) return;
     positions.set(activeEntry.id, element.scrollTop);
+    routePositions.set(activeRoute, element.scrollTop);
   };
   const cancelPending = () => {
     if (pendingRestore?.entryId === activeEntry?.id) cancelRestore();
@@ -240,6 +257,7 @@ export function navigateBackOr(navigate: Navigator, fallback: string): void {
 /** Test-only reset for module-level session state. */
 export function resetScrollHistoryForTests(): void {
   positions.clear();
+  routePositions.clear();
   registrations.clear();
   activeEntry = null;
   activeDepth = null;

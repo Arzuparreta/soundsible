@@ -1,7 +1,7 @@
 import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { isPodcastTrack } from '../lib/track';
 import { ArtistLinks } from './MusicLinks';
-import { trackMusic } from '../lib/musicNavigation';
+import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { trackCoverUrl } from '../lib/media';
@@ -104,7 +104,7 @@ export function OmniBar() {
   const subtitleMusic = createMemo(() => {
     const track = current();
     if (!track) return undefined;
-    const music = trackMusic(track);
+    const music = playerTrackMusic(track);
     return mobile() ? { ...music, linkable: false } : music;
   });
 

@@ -2,7 +2,7 @@ import { For, Show } from 'solid-js';
 import { A, useLocation, useNavigate } from '@solidjs/router';
 import { t } from '../lib/i18n';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import { reselectPrimaryTab } from '../lib/tabNavigation';
+import { openPrimaryDestination } from '../lib/tabMemory';
 import { bottomNavigation } from '../lib/bottomNavigation';
 import { downloadCounts } from '../stores';
 import { navigationItems, mobileNavGroup } from './primaryNavigation';
@@ -24,9 +24,7 @@ export function TabBar() {
           const tap = createResponsiveTap({
             onTap: (event) => {
               event.preventDefault();
-              if (`${location.pathname}${location.search}` === href()) {
-                reselectPrimaryTab(href());
-              } else navigate(href());
+              openPrimaryDestination(navigate, href(), selected(), `${location.pathname}${location.search}`);
             },
           });
           return (

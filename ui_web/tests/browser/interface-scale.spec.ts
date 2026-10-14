@@ -206,6 +206,9 @@ test.describe('interface scale geometry', () => {
 
       await settingsLink.click();
       await expect(page).toHaveURL(/#\/settings$/);
+      // Library comes back on the songs it was left on; again, and it is home.
+      await page.getByRole('link', { name: 'Biblioteca', exact: true }).filter({ visible: true }).click();
+      await expect(page).toHaveURL(/#\/library\?view=songs$/);
       await page.getByRole('link', { name: 'Biblioteca', exact: true }).filter({ visible: true }).click();
       await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
       expect(await player.evaluate((element, original) => element === original, originalPlayer)).toBe(true);
