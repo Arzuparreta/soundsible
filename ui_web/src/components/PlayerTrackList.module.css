@@ -198,16 +198,8 @@
   letter-spacing: 0.07em;
   text-transform: uppercase;
   background: var(--stage-sheet);
-}
-
-/* Solid rather than frosted. A blur behind the label was one more backdrop
-   pass, re-run on every frame the queue repainted; the sheet is already at
-   least 92 % opaque, so the opaque version of the same colour looks the same,
-   and when `.rows` does scroll under the label it hides the rows completely. */
-@supports (color: rgb(from red r g b)) {
-  .sectionHead {
-    background: rgb(from var(--stage-sheet) r g b);
-  }
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 /* The label now carries the name of wherever the lane came from, which is as

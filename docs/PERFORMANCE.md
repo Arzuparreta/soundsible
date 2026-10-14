@@ -75,14 +75,14 @@ running the Chrome PWA. Playwright's Chromium ran on the same Ryzen 5800X at a
 SwiftShader as the stand-in for a browser without GPU acceleration. CPU is the
 whole browser process tree from `/proc`, as a share of one logical CPU; frame
 rate counts viz `DrawFrame` events. The two builds were served side by side and
-alternated in the same session; figures are medians of six alternating samples
-per build on each.
+alternated in the same session; figures are medians of four alternating
+samples per build on each.
 
 | State | GPU before | GPU after | Frames/s | SwiftShader before | SwiftShader after |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Library, playing | 5.9% | 3.7% | 60 → 11 | 4.8% | 3.5% |
-| Full player, playing | 30.7% | 13.1% | 60 → 21 | 103% | 98% |
-| Full player, paused | 12.0% | 6.0% | 10 → 2 | 65% | 14% |
+| Library, playing | 5.2% | 3.2% | 60 → 11 | 4.8% | 3.5% |
+| Full player, playing | 29.1% | 13.4% | 60 → 20 | 103% | 99% |
+| Full player, paused | 10.2% | 5.2% | 10 → 2 | 64% | 15% |
 
 Every frame in which anything on the stage changes makes the compositor redo
 each backdrop-filtered surface above the wallpaper, so the cost followed the
@@ -92,14 +92,20 @@ on every stage panel over a wallpaper already blurred by 62px, the 10 Hz
 wallpaper steps, and the mini-player's progress rail, whose transition
 repainted the page under it eight times a second. The equaliser now steps at
 about 17 fps with all bars changing on the same frame, the glass only
-saturates, the wallpaper steps twice a second, the rail stays on its own layer
-and moves in two steps per update, and the nested blurs behind the browser's
-top bar and the queue's section heads are gone.
+saturates, the wallpaper steps twice a second, and the rail stays on its own
+layer and moves in two steps per update.
 
 Screenshots of both builds with the same frozen frame differ by a CIE76 ΔE
-under 2.3 (the usual just-noticeable difference) on at least 98.3% of the pixels
-in the dark, light, slate and forest-green themes. Most of what remains is the
-browser's top bar, about 2 ΔE lighter or darker, visible only side by side.
+under 2.3 (the usual just-noticeable difference) on at least 99.9% of the pixels
+in the dark, light, slate and forest-green themes, with a maximum of 3.3;
+pure black, which has no glass, is identical.
+
+The blurs nested inside the panels (the browser's top bar, the queue's section
+heads) stay. Dropping them saved about one more point in Chromium, but on the
+mobile layout Playwright's WebKit, which composites in software, then never
+settled: elements in the panels stayed "not stable" for 30 seconds and scroll
+restoration was lost, on CI and locally on two CPUs. WebKit is the iPhone's
+engine, so they stay until that is understood.
 
 With SwiftShader, the playing player stays bound by the wallpaper's own 62px
 blur, which is recomputed on every frame anything changes above it: removing
@@ -112,7 +118,7 @@ software; check `chrome://gpu` before pursuing it.
 
 | Subsystem | Work and policy |
 | --- | --- |
-| Player wallpaper and translucent panels | The slow full-viewport background causes repeated composition. Retain the artwork, blur, scale and crossfade; quantize only its 38-second pan into 76 steps. Glass over the wallpaper saturates but does not blur again, and nothing nests a second blur inside a panel. |
+| Player wallpaper and translucent panels | The slow full-viewport background causes repeated composition. Retain the artwork, blur, scale and crossfade; quantize only its 38-second pan into 76 steps. The panels' glass over the wallpaper saturates but does not blur it again. |
 | Small animations on the stage | Anything that moves inside or under the glass costs a composite of the whole stage per frame. Budget such animations in frames: the queue equaliser steps every 60 ms, with delays that are multiples of the step so all bars change on the same frame. |
 | Mini-player progress rail | Composited transform on a layer of its own (`will-change`), two steps per timeupdate. |
 | Hidden-page presentation | Pause decorative CSS animation and unsubscribe progress/lyric presentation from the clock. Catch up immediately on visibility restoration. |
