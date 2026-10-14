@@ -28,7 +28,7 @@ async function selectPanel(page: import('@playwright/test').Page, scope: 'now-pl
   await expect(page.locator(`[data-${scope}-tile="${panel}"]`)).not.toHaveAttribute('inert', '');
 }
 
-test('opens general music pages, preserves explorer search, and separates DJ references below Route', async ({ page }, info) => {
+test('opens general music pages and preserves explorer search across player modes', async ({ page }, info) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await openMusicPlayer(page);
@@ -58,7 +58,19 @@ test('opens general music pages, preserves explorer search, and separates DJ ref
   await page.getByRole('button', { name: /^DJ:/ }).click();
   if (mobile) await selectPanel(page, 'auto', 'browser');
   await settle(page);
+  expect(errors).toEqual([]);
   await page.screenshot({ path: `/tmp/soundsible-music-${info.project.name}.png` });
+});
+
+// Apart from the walk above: on WebKit's software compositor each panel change
+// can take seconds, and together they left the walk at the edge of its budget.
+test('separates DJ references below Route and picks one from the explorer', async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await openMusicPlayer(page);
+  const mobile = (page.viewportSize()?.width ?? 0) < 1024;
+  await page.getByRole('tab', { name: 'DJ', exact: true }).click();
+  const browser = page.locator('[data-auto-tile="browser"]');
   if (mobile) await selectPanel(page, 'auto', 'route');
   const route = page.locator('[data-auto-tile="route"]');
   const references = route.getByRole('region', { name: 'Sesión' });
