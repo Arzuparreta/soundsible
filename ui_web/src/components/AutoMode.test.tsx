@@ -143,7 +143,8 @@ describe('AutoMode workspace', () => {
     fireEvent.contextMenu(container.querySelector('[data-drag-row="q-next"]')!);
     expect(buildTrackMenu).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'next', queueId: 'q-next' }),
-      { inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor },
+      expect.objectContaining({ inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor,
+        music: expect.objectContaining({ view: 'discover' }) }),
     );
   });
 

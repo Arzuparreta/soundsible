@@ -1,5 +1,6 @@
 import { setLibraryTab } from '../lib/libraryView';
 import { NavigationLinks } from './NavigationMenu';
+import { openPrimaryDestination } from '../lib/tabMemory';
 import { A, useLocation, useNavigate } from '@solidjs/router';
 import styles from './Sidebar.module.css';
 
@@ -22,7 +23,10 @@ export function Sidebar() {
         <span class={styles.wordmark}>Soundsible</span>
       </A>
 
-      <NavigationLinks path={location.pathname} search={location.search} select={(href, view) => { if (view) setLibraryTab(view); navigate(href); }} />
+      <NavigationLinks path={location.pathname} search={location.search} select={(href, view, selected = false) => {
+        if (view) { setLibraryTab(view); navigate(href); }
+        else openPrimaryDestination(navigate, href, selected, `${location.pathname}${location.search}`);
+      }} />
 
       <div class={styles.spacer} />
     </aside>

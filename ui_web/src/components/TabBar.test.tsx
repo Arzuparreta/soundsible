@@ -1,6 +1,9 @@
 import { libraryTab, setLibraryTab } from '../lib/libraryView';
 import { fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
-import { Route, Router, type RouteSectionProps } from '@solidjs/router';
+import { Route, Router, useLocation, useNavigate, type Navigator, type RouteSectionProps } from '@solidjs/router';
+import { createEffect } from 'solid-js';
+import { rememberTabLocation, resetTabMemoryForTests, tabRoot } from '../lib/tabMemory';
+import { TAB_RETURN_STATE } from '../lib/scrollHistory';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLocale } from '../lib/i18n';
 import styles from './TabBar.module.css';
@@ -11,13 +14,21 @@ import { OverlayOutlet } from '../lib/overlay';
 import { setState } from '../stores/core';
 import { TabBar } from './TabBar';
 
+let navigate: Navigator;
+
 function renderTabs() {
-  const Root = (props: RouteSectionProps) => (
-    <>
-      <TabBar /><NavigationMenuButton /><OverlayOutlet />
-      {props.children}
-    </>
-  );
+  const Root = (props: RouteSectionProps) => {
+    // What the shell does: every location is remembered for its tab.
+    const location = useLocation();
+    navigate = useNavigate();
+    createEffect(() => rememberTabLocation(location.pathname, location.search));
+    return (
+      <>
+        <TabBar /><NavigationMenuButton /><OverlayOutlet />
+        {props.children}
+      </>
+    );
+  };
   return render(() => (
     <Router root={Root}>
       <Route path="*" component={() => null} />
@@ -29,6 +40,7 @@ beforeEach(async () => {
   // Non-English dictionaries load on demand now.
   await setLocale('es');
   window.history.pushState({}, '', '/');
+  resetTabMemoryForTests();
   setBottomNavigation([...defaultBottomNavigation]);
   setState('downloads', 'queue', []);
 });
@@ -115,4 +127,45 @@ it('opens a configured subentry directly and highlights it instead of the root',
   expect(view.getByRole('link', { name: 'Álbumes guardados' })).toHaveAttribute('aria-current', 'page');
   fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
   await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/'));
+});
+
+describe('artist and album pages', () => {
+  const here = () => window.location.pathname + window.location.search;
+
+  it.each(['/artist/Band?view=library', '/album/Record?artist=Band&view=discover'])('belong to Search: %s', (path) => {
+    window.history.replaceState({}, '', path);
+    const view = renderTabs();
+    expect(view.getByRole('link', { name: 'Descubrir' })).toHaveAttribute('aria-current', 'page');
+    expect(view.getByRole('link', { name: 'Biblioteca' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('stay open in Search while the listener visits another tab, on top of the search they came from', async () => {
+    window.history.replaceState({}, '', '/search?q=band');
+    const view = renderTabs();
+    navigate('/artist/Band?view=discover');
+    await waitFor(() => expect(here()).toBe('/artist/Band?view=discover'));
+
+    fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
+    await waitFor(() => expect(here()).toBe('/'));
+    fireEvent.click(view.getByRole('link', { name: 'Descubrir' }));
+    await waitFor(() => expect(here()).toBe('/artist/Band?view=discover'));
+    // A restored page has no parent in history: its back arrow climbs to the
+    // search below it instead of into Library.
+    expect(window.history.state?.[TAB_RETURN_STATE]).toBe(true);
+    expect(tabRoot('/search')).toBe('/search?q=band');
+
+    // Re-selecting the active tab climbs to its root, the search as it was left.
+    fireEvent.click(view.getByRole('link', { name: 'Descubrir' }));
+    await waitFor(() => expect(here()).toBe('/search?q=band'));
+  });
+
+  it('opened by a link from Library return to Library where it was left', async () => {
+    window.history.replaceState({}, '', '/?saved=albums');
+    setBottomNavigation(['/', '/search', '/settings']);
+    const view = renderTabs();
+    navigate('/album/Record?artist=Band&view=library');
+    await waitFor(() => expect(view.getByRole('link', { name: 'Descubrir' })).toHaveAttribute('aria-current', 'page'));
+    fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
+    await waitFor(() => expect(here()).toBe('/?saved=albums'));
+  });
 });

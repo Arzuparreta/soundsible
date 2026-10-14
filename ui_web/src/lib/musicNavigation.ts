@@ -30,6 +30,13 @@ export function libraryTrackMusic(track: Track): MusicMetadata {
   return { ...trackMusic(track), view: 'library' };
 }
 
+/** The player names the song, not the list it was started from: whatever is
+ * playing, its artist and album open on Discover. The page still offers the
+ * listener's own copy when there is one. */
+export function playerTrackMusic(track: Track): MusicMetadata {
+  return { ...trackMusic(track), view: 'discover' };
+}
+
 export function catalogMusic(item: CatalogItem): MusicMetadata {
   return catalogItemMusic(item, item.track_id ? state.library?.find((track) => track.id === item.track_id) : undefined);
 }

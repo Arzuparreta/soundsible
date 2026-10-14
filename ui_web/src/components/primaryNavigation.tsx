@@ -106,8 +106,10 @@ export function mobileNavGroup(path: string, search = ''): string {
   const params = new URLSearchParams(search);
   if (path === '/library' && ['songs', 'albums', 'artists'].includes(params.get('view') ?? '')) return `/library?view=${params.get('view')}`;
   if (['/', '/library'].includes(path) && ['albums', 'artists'].includes(params.get('saved') ?? '')) return `/?saved=${params.get('saved')}`;
-  if (path === '/') return '/';
-  if (path === '/library' || /^\/(album|artist)\//.test(path)) return '/';
+  if (path === '/' || path === '/library') return '/';
+  // Artist and album pages are Search's, wherever the link that opened them
+  // was: the listener's own copy is a view of the page, not another page.
+  if (/^\/(album|artist)\//.test(path)) return '/search';
   return navigationItems.find(item => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)))?.href ?? path;
 }
 export const navigationGroups = [

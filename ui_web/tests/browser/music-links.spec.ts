@@ -33,6 +33,25 @@ test('artist links navigate without playing and preserve browser history', async
   await expect(page.getByRole('link', { name: 'Artista 7', exact: true }).first()).toBeVisible();
 });
 
+test('a linked page stays open in Search while the listener visits their library', async ({ page, isMobile }) => {
+  await page.goto('/player/#/library?view=songs');
+  await activate(page, page.getByRole('link', { name: 'Artista 7', exact: true }).first(), isMobile);
+  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
+  const searchTab = page.locator('[data-nav-href="/search"]').filter({ visible: true });
+  const libraryTab = page.locator('[data-nav-href="/"]').filter({ visible: true });
+  await expect(searchTab).toHaveAttribute('aria-current', 'page');
+
+  await activate(page, libraryTab, isMobile);
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await activate(page, searchTab, isMobile);
+  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
+  await expect(page.getByRole('heading', { name: 'Artista 7', exact: true })).toBeVisible();
+
+  // The page sits on Search: re-selecting the tab climbs to its root.
+  await activate(page, searchTab, isMobile);
+  await expect(page).toHaveURL(/#\/search$/);
+});
+
 test('full player artist opens the general page while keeping the current song and queue', async ({ page, isMobile }) => {
   await openMusicPlayer(page);
   const surface = page.locator('[data-player-surface-open]');
@@ -43,7 +62,10 @@ test('full player artist opens the general page while keeping the current song a
   const link = stage.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await activate(page, link, isMobile);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
-  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
+  // The player names the song, not the list it came from: Discover, and Search
+  // is where the page lives.
+  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=discover/);
+  await expect(page.locator('[aria-current="page"][data-nav-href="/search"]').filter({ visible: true })).toHaveCount(1);
   await expect(page.locator('[data-omni-player]')).toContainText(song!);
   const violations = await new AxeBuilder({ page }).include('[data-omni-player]').analyze();
   expect(violations.violations).toEqual([]);
@@ -62,7 +84,7 @@ test('full player names the record under the artist and opens it', async ({ page
   expect(albumBox!.y).toBeGreaterThanOrEqual(artistBox!.y + artistBox!.height - 1);
   await activate(page, album, isMobile);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
-  await expect(page).toHaveURL(/#\/album\/Biblioteca%20de%20prueba\?artist=Artista\+7&view=library/);
+  await expect(page).toHaveURL(/#\/album\/Biblioteca%20de%20prueba\?artist=Artista\+7&view=discover/);
 });
 
 test('an album card opens the record from the line under its cover', async ({ page, isMobile }) => {
@@ -175,7 +197,7 @@ test('miniplayer artist navigates independently from expansion', async ({ page, 
   const link = mini.getByRole('link', { name: 'Artista 7', exact: true });
   await expect(link).toBeVisible();
   await activate(page, link, isMobile);
-  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
+  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=discover/);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   await expect(mini).toContainText('Canción de biblioteca 320');
 });

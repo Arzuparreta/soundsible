@@ -1,6 +1,6 @@
 import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { AlbumLink, ArtistLinks } from './MusicLinks';
-import { trackMusic } from '../lib/musicNavigation';
+import { playerTrackMusic } from '../lib/musicNavigation';
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { actions, isSavedTrack, state } from '../stores';
 import { clockTime } from '../lib/format';
@@ -192,6 +192,7 @@ export function PlayerStage(props: {
         // panel, so a menu entry was the only way to reach it and nothing said
         // it was there.
         ...buildTrackMenu(current, {
+          music: playerTrackMusic(current),
           auto: props.mode === 'auto',
           onAddToPlaylist: openPlaylistPicker,
           onEditMetadata: openMetadataEditor,
@@ -312,9 +313,9 @@ export function PlayerStage(props: {
                       <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
                     </Show>
                   </div>
-                  <ArtistLinks class={styles.artist} music={trackMusic(current())} />
-                  <Show when={trackMusic(current()).linkable !== false && current().album?.trim()}>
-                    <AlbumLink class={styles.album} music={trackMusic(current())} />
+                  <ArtistLinks class={styles.artist} music={playerTrackMusic(current())} />
+                  <Show when={playerTrackMusic(current()).linkable !== false && current().album?.trim()}>
+                    <AlbumLink class={styles.album} music={playerTrackMusic(current())} />
                   </Show>
                 </div>
               </div>
@@ -504,6 +505,7 @@ export function PlayerStage(props: {
                     onClick={() => desktopLyricsActive()
                       ? openLyricsOverflow()
                       : openTrackMenu(current(), {
+                          music: playerTrackMusic(current()),
                           onAddToPlaylist: openPlaylistPicker,
                           onEditMetadata: openMetadataEditor,
                           onPlayOnDevice: openPlayOnDevice,

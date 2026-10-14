@@ -20,6 +20,9 @@ test('complete menu and independent favourites', async ({ page }, info) => {
   await expect(page.getByRole('heading', { name: 'Álbumes', exact: true })).toBeVisible();
   await nav.getByRole('link', { name: 'Favoritos', exact: true }).click();
   await expect(page).toHaveURL(/#\/favourites$/);
+  // Library comes back where it was left; tapping it again climbs to its root.
+  await nav.getByRole('link', { name: 'Biblioteca' }).click();
+  await expect(page.getByRole('heading', { name: 'Álbumes', exact: true })).toBeVisible();
   await nav.getByRole('link', { name: 'Biblioteca' }).click();
   await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Tu biblioteca' })).toBeVisible();
