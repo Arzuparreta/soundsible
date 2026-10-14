@@ -206,8 +206,17 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
         stop_owned_desktop_engine(config_dir)
 
 
-def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
-    """SIGTERM should stop the engine (no hang after 'Shutting down...')."""
+@pytest.mark.parametrize("recipient", ["process", "worker_thread"])
+def test_desktop_engine_sigterm_exits_cleanly(tmp_path, recipient):
+    """SIGTERM should stop the engine (no hang after 'Shutting down...').
+
+    The kernel hands a process-wide signal to whichever thread it likes. A
+    handler that only runs on the main thread left the engine serving forever
+    when a worker thread got it, so that case is forced here rather than left
+    to the scheduler.
+    """
+    if recipient == "worker_thread" and not Path("/proc/self/task").is_dir():
+        pytest.skip("choosing the receiving thread needs Linux /proc")
     reset_runtime()
     env = os.environ.copy()
     env.update(_runtime_env(tmp_path))
@@ -241,6 +250,11 @@ def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
         _wait_for_health(config_dir)
         if os.name == "nt":
             proc.terminate()
+        elif recipient == "worker_thread":
+            workers = [int(tid) for tid in os.listdir(f"/proc/{proc.pid}/task") if int(tid) != proc.pid]
+            assert workers, "the engine runs no worker threads to receive the signal"
+            # Signalling a thread id makes Linux deliver to that thread first.
+            os.kill(workers[0], signal.SIGTERM)
         else:
             os.killpg(proc.pid, signal.SIGTERM)
         try:

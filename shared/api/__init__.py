@@ -1871,15 +1871,21 @@ def _stop_wsgi_from_signal(_signum: int, _frame: object) -> None:
 
 
 def _register_api_shutdown_handlers() -> None:
-    """Register SIGINT/SIGTERM handlers compatible with gevent's event loop."""
-    try:
-        from gevent import signal as gevent_signal
+    """Stop the server on SIGINT/SIGTERM whichever thread receives the signal.
 
-        gevent_signal.signal(signal.SIGINT, _stop_wsgi_from_signal)
-        gevent_signal.signal(signal.SIGTERM, _stop_wsgi_from_signal)
-    except Exception:
+    A `signal.signal` handler only runs once the main thread executes Python,
+    and an idle gevent hub sits in epoll until something wakes it: a SIGTERM the
+    kernel handed to one of the worker threads left the engine running for
+    good. libev's signal watcher wakes the loop itself.
+    """
+    try:
+        import gevent
+    except ImportError:
         signal.signal(signal.SIGINT, _stop_wsgi_from_signal)
         signal.signal(signal.SIGTERM, _stop_wsgi_from_signal)
+        return
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        gevent.signal_handler(signum, _stop_wsgi_from_signal, signum, None)
 
 
 def _initialize_admin_core() -> Optional[_UserCore]:
