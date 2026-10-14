@@ -7,6 +7,7 @@ import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasComponent
 import androidx.test.platform.app.InstrumentationRegistry
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -38,14 +39,16 @@ class PairingTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val connection = EngineConnection.shared(context)
         connection.clearSession(true); connection.configure(origin) // transport only; the app starts unconfigured below
-        // The owner's own browser, independent of the app's session.
+        // The owner's own browser, independent of the app's session: the phone signs itself out below,
+        // and retiring its transport cancels every call still on it.
+        val browser = FixtureClient.builder(origin.toHttpUrl()).build()
         var ownerCookie = ""
         fun owner(path: String, method: String = "GET", body: JSONObject? = null): JSONObject {
             val request = Request.Builder().url(origin + path).apply {
                 if (ownerCookie.isNotEmpty()) header("Cookie", ownerCookie)
                 if (method != "GET") method(method, (body ?: JSONObject()).toString().toRequestBody("application/json".toMediaType()))
             }.build()
-            connection.client.newCall(request).execute().use { response ->
+            browser.newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty(); check(response.isSuccessful) { "$path ${response.code}: $text" }
                 response.headers("Set-Cookie").firstOrNull { it.startsWith("sb_session=") }?.let { ownerCookie = it.substringBefore(';') }
                 return JSONObject(text)
