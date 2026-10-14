@@ -462,6 +462,103 @@ def test_fetch_lyrics_skips_fallback_when_budget_is_spent(monkeypatch):
     deezer.assert_not_called()
 
 
+class _FakeClock:
+    def __init__(self):
+        self.now = 1000.0
+        self.slept = []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def _lrclib_response(status, body=None, retry_after=None):
+    resp = MagicMock()
+    resp.status_code = status
+    resp.headers = {"Retry-After": retry_after} if retry_after is not None else {}
+    resp.json.return_value = body
+    if status >= 400:
+        resp.raise_for_status.side_effect = lyrics_module.requests.HTTPError(f"{status} Server Error")
+    return resp
+
+
+def _patch_lrclib(monkeypatch, responses):
+    clock = _FakeClock()
+    monkeypatch.setattr(lyrics_module.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(lyrics_module.time, "sleep", clock.sleep)
+    monkeypatch.setattr(lyrics_module.random, "uniform", lambda low, high: 0.0)
+    calls = []
+
+    def fake_get(url, params, headers, timeout):
+        calls.append(timeout)
+        clock.now += 0.3
+        return responses.pop(0)
+
+    monkeypatch.setattr(lyrics_module.requests, "get", fake_get)
+    return clock, calls
+
+
+def test_lrclib_overload_is_waited_out_as_asked(monkeypatch):
+    rows = [{"trackName": "Song"}]
+    clock, calls = _patch_lrclib(monkeypatch, [
+        _lrclib_response(503, retry_after="1"),
+        _lrclib_response(503, retry_after="1"),
+        _lrclib_response(200, rows),
+    ])
+
+    assert lyrics_module._lrclib_get("/api/search", {}, 8.0) == rows
+    assert clock.slept == [1.0, 1.0]
+    assert len(calls) == 3
+
+
+def test_lrclib_rate_limit_wait_is_capped(monkeypatch):
+    clock, _ = _patch_lrclib(monkeypatch, [
+        _lrclib_response(429, retry_after="120"),
+        _lrclib_response(200, []),
+    ])
+
+    assert lyrics_module._lrclib_get("/api/search", {}, 8.0) == []
+    assert clock.slept == [lyrics_module._LRCLIB_MAX_RETRY_WAIT_SEC]
+
+
+def test_lrclib_overload_gives_up_within_the_budget(monkeypatch):
+    clock, calls = _patch_lrclib(monkeypatch, [_lrclib_response(503, retry_after="1") for _ in range(20)])
+
+    with pytest.raises(lyrics_module.requests.HTTPError):
+        lyrics_module._lrclib_get("/api/search", {}, 3.0)
+    # 0.3 s per answer and a second between them: the third answer leaves no
+    # room for another wait and a request after it.
+    assert len(calls) == 2
+    assert clock.slept == [1.0]
+    assert clock.now - 1000.0 <= 3.0
+
+
+def test_lrclib_server_errors_other_than_overload_are_not_retried(monkeypatch):
+    clock, calls = _patch_lrclib(monkeypatch, [_lrclib_response(500)])
+
+    with pytest.raises(lyrics_module.requests.HTTPError):
+        lyrics_module._lrclib_get("/api/search", {}, 8.0)
+    assert len(calls) == 1
+    assert clock.slept == []
+
+
+def test_lyrics_survive_an_lrclib_overload(monkeypatch):
+    clock, _ = _patch_lrclib(monkeypatch, [
+        _lrclib_response(503, retry_after="1"),
+        _lrclib_response(200, [{
+            "trackName": "Song", "artistName": "Artist", "duration": 200, "plainLyrics": "la la",
+        }]),
+    ])
+
+    record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+
+    assert record is not None and record["plain"] == "la la"
+    assert clock.slept == [1.0]
+
+
 def test_lookup_coordinator_has_two_workers_and_zero_backlog():
     coordinator = lyrics_module._LyricsLookupCoordinator()
     release = threading.Event()

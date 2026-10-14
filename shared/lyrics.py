@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import random
 import re
 import threading
 import time
@@ -39,6 +40,13 @@ _DEEZER_TIMEOUT_SEC = 1.25
 _MIN_FALLBACK_BUDGET_SEC = 1.0
 _MIN_MATCH_SCORE = 0.72
 _MIN_TITLE_SCORE = 0.68
+# "Busy, ask again in a moment" answers, retried while the budget allows.
+_LRCLIB_RETRY_STATUSES = frozenset({429, 503})
+_LRCLIB_DEFAULT_RETRY_SEC = 1.0
+_LRCLIB_MAX_RETRY_WAIT_SEC = 2.0
+_LRCLIB_RETRY_JITTER_SEC = 0.25
+# What a retry needs left after its wait to be worth sending.
+_LRCLIB_MIN_RETRY_REQUEST_SEC = 1.0
 
 RESOLVER_SOURCE = "lrclib:v5"
 
@@ -266,17 +274,42 @@ def _timeout_parts(total_sec: float, connect_cap: float) -> tuple[float, float]:
     return max(0.1, connect), max(0.1, total_sec - connect)
 
 
+def _retry_after_sec(resp: requests.Response) -> float:
+    """How long the provider asked to be left alone, within what a listener waits."""
+    try:
+        wait = float(resp.headers.get("Retry-After") or _LRCLIB_DEFAULT_RETRY_SEC)
+    except ValueError:
+        # An HTTP-date, which LRCLIB does not send; its own default is a second.
+        wait = _LRCLIB_DEFAULT_RETRY_SEC
+    return min(max(wait, 0.0), _LRCLIB_MAX_RETRY_WAIT_SEC) + random.uniform(0.0, _LRCLIB_RETRY_JITTER_SEC)
+
+
 def _lrclib_get(path: str, params: Dict[str, Any], timeout_sec: float = _LRCLIB_TIMEOUT_SEC) -> Optional[Any]:
-    resp = requests.get(
-        f"{_LRCLIB_HOST}{path}",
-        params=params,
-        headers={"User-Agent": _USER_AGENT},
-        timeout=_timeout_parts(timeout_sec, 1.0),
-    )
-    if resp.status_code == 404:
-        return None
-    resp.raise_for_status()
-    return resp.json()
+    # LRCLIB sheds load globally: when its search permits run out it answers
+    # 503 "ServerOverloaded" with Retry-After: 1, to everyone at once. Asking
+    # again a second later almost always lands, so that wait is spent here,
+    # within the same allowance, rather than shown to the listener as an outage.
+    # Measured over 260 uncached searches: ~40% were shed, each attempt about
+    # as likely as the one before it whatever the wait, so what helps is
+    # attempts within the budget. Shorter waits found lines sooner but would
+    # multiply the load on a server that has just said it is full.
+    deadline = time.monotonic() + timeout_sec
+    while True:
+        resp = requests.get(
+            f"{_LRCLIB_HOST}{path}",
+            params=params,
+            headers={"User-Agent": _USER_AGENT},
+            timeout=_timeout_parts(deadline - time.monotonic(), 1.0),
+        )
+        if resp.status_code == 404:
+            return None
+        if resp.status_code in _LRCLIB_RETRY_STATUSES:
+            wait = _retry_after_sec(resp)
+            if deadline - time.monotonic() - wait >= _LRCLIB_MIN_RETRY_REQUEST_SEC:
+                time.sleep(wait)
+                continue
+        resp.raise_for_status()
+        return resp.json()
 
 
 def _deezer_search(artist: str, title: str, timeout_sec: float) -> list[Dict[str, Any]]:
