@@ -52,10 +52,15 @@ class LiveFixture:
 
     def start(self):
         self.directory.mkdir()
-        for port in (58080, 58443, 58889, 59997, 58189):
+        # Below Linux's ephemeral range (32768-60999): a port inside it can
+        # already be the local end of the runner's own adb or emulator sockets.
+        for port in (28080, 28443, 28889, 29997, 28189):
             with socket.socket() as probe:
                 probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                probe.bind(("127.0.0.1", port))
+                try:
+                    probe.bind(("127.0.0.1", port))
+                except OSError:
+                    raise RuntimeError(f"Live fixture port {port} is occupied") from None
         config = self.directory / "mediamtx.yml"
         config.write_text(f"""logLevel: info
 rtsp: false
@@ -65,19 +70,19 @@ srt: false
 playback: false
 moq: false
 api: true
-apiAddress: 127.0.0.1:59997
+apiAddress: 127.0.0.1:29997
 authMethod: http
-authHTTPAddress: http://127.0.0.1:58080/internal/media-auth
+authHTTPAddress: http://127.0.0.1:28080/internal/media-auth
 authHTTPExclude:
   - action: api
   - action: metrics
 webrtc: true
-webrtcAddress: :58889
+webrtcAddress: :28889
 webrtcEncryption: true
 webrtcServerCert: {self.directory.parent / "server.pem"}
 webrtcServerKey: {self.directory.parent / "server-key.pem"}
-webrtcLocalUDPAddress: :58189
-webrtcLocalTCPAddress: :58189
+webrtcLocalUDPAddress: :28189
+webrtcLocalTCPAddress: :28189
 webrtcAdditionalHosts: [10.0.2.2]
 webrtcHandshakeTimeout: 30s
 pathDefaults:
@@ -89,9 +94,9 @@ paths:
         environment = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
                        "COMMUNITY_DB_PATH": str(self.directory / "community.db"),
                        "COMMUNITY_ARTWORK_DIR": str(self.directory / "artwork"),
-                       "COMMUNITY_PUBLIC_URL": "https://10.0.2.2:58443",
-                       "COMMUNITY_MEDIA_URL": "https://10.0.2.2:58889",
-                       "COMMUNITY_MEDIA_HEALTH_URL": "http://127.0.0.1:59997/v3/config/global/get"}
+                       "COMMUNITY_PUBLIC_URL": "https://10.0.2.2:28443",
+                       "COMMUNITY_MEDIA_URL": "https://10.0.2.2:28889",
+                       "COMMUNITY_MEDIA_HEALTH_URL": "http://127.0.0.1:29997/v3/config/global/get"}
         try:
             self.process = subprocess.Popen([sys.executable, __file__, "--serve", "--cert", str(self.certificate), "--key", str(self.key)], env=environment, stdout=self.log, stderr=self.log)
             self.relay = subprocess.Popen([str(mediamtx()), str(config)], stdout=self.log, stderr=self.log)
@@ -103,7 +108,7 @@ paths:
                 if self.relay.poll() is not None:
                     raise RuntimeError("MediaMTX exited; inspect fixture.log")
                 try:
-                    with urlopen("https://127.0.0.1:58443/health", context=trust, timeout=1) as response:
+                    with urlopen("https://127.0.0.1:28443/health", context=trust, timeout=1) as response:
                         if response.status == 200:
                             return
                 except OSError:
@@ -204,13 +209,13 @@ def main():
         role = body.get("role")
         if room is None or role not in ("publish", "read"):
             return jsonify(error="invalid isolated resource"), 400
-        with urlopen("http://127.0.0.1:59997/v3/webrtcsessions/list", timeout=2) as response:
+        with urlopen("http://127.0.0.1:29997/v3/webrtcsessions/list", timeout=2) as response:
             peers = json.load(response)["items"]
         selected = [peer for peer in peers if peer["path"] == room["stream_path"] and peer["state"] == role]
         if not selected:
             return jsonify(error="no matching relay peer"), 404
         for peer in selected:
-            with urlopen(Request("http://127.0.0.1:59997/v3/webrtcsessions/kick/" + peer["id"], method="POST"), timeout=2):
+            with urlopen(Request("http://127.0.0.1:29997/v3/webrtcsessions/kick/" + peer["id"], method="POST"), timeout=2):
                 pass
         return jsonify(kicked=len(selected))
 
@@ -237,13 +242,13 @@ def main():
         room = _session_row(request.args.get("session_id", ""))
         if room is None:
             return jsonify(error="invalid isolated resource"), 400
-        with urlopen("http://127.0.0.1:59997/v3/webrtcsessions/list", timeout=2) as response:
+        with urlopen("http://127.0.0.1:29997/v3/webrtcsessions/list", timeout=2) as response:
             peers = json.load(response)["items"]
         selected = [peer for peer in peers if peer["path"] == room["stream_path"]]
         return jsonify(publishers=sum(peer["state"] == "publish" for peer in selected), readers=sum(peer["state"] == "read" for peer in selected))
-    internal = WSGIServer(("127.0.0.1", 58080), app, handler_class=WebSocketHandler)
+    internal = WSGIServer(("127.0.0.1", 28080), app, handler_class=WebSocketHandler)
     internal.start()
-    WSGIServer(("127.0.0.1", 58443), app, handler_class=WebSocketHandler,
+    WSGIServer(("127.0.0.1", 28443), app, handler_class=WebSocketHandler,
                certfile=str(args.cert), keyfile=str(args.key)).serve_forever()
 
 

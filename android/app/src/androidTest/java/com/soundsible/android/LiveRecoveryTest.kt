@@ -35,7 +35,7 @@ class LiveRecoveryTest {
             }
         val client = okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build()
         fun fixture(path: String, body: JSONObject? = null): JSONObject = client.newCall(okhttp3.Request.Builder()
-            .url("https://10.0.2.2:58443/__fixture/$path").header("X-Android-Fixture", "isolated")
+            .url("https://10.0.2.2:28443/__fixture/$path").header("X-Android-Fixture", "isolated")
             .apply { if (body != null) post(body.toString().toRequestBody("application/json".toMediaType())) }.build()).execute().use {
                 assertEquals(200, it.code); JSONObject(it.body!!.string())
             }
@@ -104,7 +104,7 @@ class LiveRecoveryTest {
             host.connect(); host.awaitConnected()
             if (reset) {
                 val count = fixture("read-failure?session_id=$id").getInt("slow_listeners")
-                val slow = JSONObject(room.toString()).put("whep_url", "https://10.0.2.2:58443/__fixture/slow-listener")
+                val slow = JSONObject(room.toString()).put("whep_url", "https://10.0.2.2:28443/__fixture/slow-listener")
                 val active = main { NativeLivePlayer(context, connection, slow).also { it.prepare(); it.play() } }; player = active
                 await("Slow listener OPTIONS not reached") { fixture("read-failure?session_id=$id").getInt("slow_listeners") == count + 1 }
                 val start = System.nanoTime()

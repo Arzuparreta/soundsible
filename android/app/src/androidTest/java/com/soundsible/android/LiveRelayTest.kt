@@ -35,7 +35,7 @@ class LiveRelayTest {
         request("/api/auth/login", "POST", "{\"username\":\"member\",\"password\":\"android-test\"}")
         // The principal runner must opt into the isolated relay; never use the official service.
         val configuration = request("/api/community/config", "GET")
-        assertEquals("Isolated Live fixture required", "https://10.0.2.2:58443", configuration.optString("api_url"))
+        assertEquals("Isolated Live fixture required", "https://10.0.2.2:28443", configuration.optString("api_url"))
         var scenario: ActivityScenario<MainActivity>? = null
         var browser: MediaBrowser? = null
         var publisher: LivePeer? = null

@@ -180,7 +180,7 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                     # Import project modules independently of the caller's working directory.
                     environment = {**os.environ, "PYTHONPATH": str(ROOT)}
                     if live_fixture is not None:
-                        environment.update(SOUNDSIBLE_ANDROID_LIVE_FIXTURE="1", SOUNDSIBLE_COMMUNITY_URL="https://10.0.2.2:58443", REQUESTS_CA_BUNDLE=str(ca_path), NO_PROXY="10.0.2.2,127.0.0.1,localhost")
+                        environment.update(SOUNDSIBLE_ANDROID_LIVE_FIXTURE="1", SOUNDSIBLE_COMMUNITY_URL="https://10.0.2.2:28443", REQUESTS_CA_BUNDLE=str(ca_path), NO_PROXY="10.0.2.2,127.0.0.1,localhost")
                     process = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=log, stderr=log)
                     processes.append(process)
                 # Each engine owns a separate database and port. Start all of them

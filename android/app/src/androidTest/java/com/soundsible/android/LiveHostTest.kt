@@ -37,7 +37,7 @@ class LiveHostTest {
         request("/api/auth/login", "POST", "{\"username\":\"member\",\"password\":\"android-test\"}")
         // The principal runner must opt into the isolated relay; never use the official service.
         val configuration = request("/api/community/config", "GET")
-        assertEquals("Isolated Live fixture required", "https://10.0.2.2:58443", configuration.optString("api_url"))
+        assertEquals("Isolated Live fixture required", "https://10.0.2.2:28443", configuration.optString("api_url"))
         var scenario: ActivityScenario<MainActivity>? = null
         var browser: MediaBrowser? = null
         var started = false
@@ -103,7 +103,7 @@ class LiveHostTest {
             assertFalse(room.has("host_token")); assertFalse(room.has("publish_token")); assertFalse(room.has("whip_url"))
             sessionId = room.getString("id")
             val publicClient = okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build()
-            fun publicRoom(): JSONObject = publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/v1/sessions/$sessionId").build()).execute().use {
+            fun publicRoom(): JSONObject = publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:28443/v1/sessions/$sessionId").build()).execute().use {
                 check(it.isSuccessful); JSONObject(it.body!!.string()).getJSONObject("session")
             }
             receiver = startLiveReader(context, connection, room.getString("whep_url"), sink)
@@ -123,14 +123,14 @@ class LiveHostTest {
             }
             if (!dj) {
             await("Private thumbnail was not published for the room") {
-                publicRoom().optJSONObject("program")?.optJSONObject("primary")?.optString("artwork_url")?.startsWith("https://10.0.2.2:58443/v1/artwork/$sessionId/") == true
+                publicRoom().optJSONObject("program")?.optJSONObject("primary")?.optString("artwork_url")?.startsWith("https://10.0.2.2:28443/v1/artwork/$sessionId/") == true
             }
             val publicArt = publicRoom().getJSONObject("program").getJSONObject("primary").getString("artwork_url")
-            LiveArtwork("https://10.0.2.2:58443", sessionId!!).use { art ->
+            LiveArtwork("https://10.0.2.2:28443", sessionId!!).use { art ->
                 val bytes = art.download(publicArt)
                 assertNotNull("Public thumbnail is not decodable", android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
-                assertTrue("Foreign artwork origin accepted", runCatching { art.download("https://127.0.0.1:58443/v1/artwork/$sessionId/foreign.jpg") }.isFailure)
-                assertTrue("Another room artwork accepted", runCatching { art.download("https://10.0.2.2:58443/v1/artwork/foreign/thumbnail.jpg") }.isFailure)
+                assertTrue("Foreign artwork origin accepted", runCatching { art.download("https://127.0.0.1:28443/v1/artwork/$sessionId/foreign.jpg") }.isFailure)
+                assertTrue("Another room artwork accepted", runCatching { art.download("https://10.0.2.2:28443/v1/artwork/foreign/thumbnail.jpg") }.isFailure)
             }
             }
             val previousSequence = publicRoom().getJSONObject("program").getLong("seq")
@@ -151,7 +151,7 @@ class LiveHostTest {
             }
             if (!dj) {
                 receiver?.close(); receiver = null
-                publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/__fixture/relay-kick").header("X-Android-Fixture", "isolated")
+                publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:28443/__fixture/relay-kick").header("X-Android-Fixture", "isolated")
                     .post(JSONObject().put("session_id", sessionId).put("role", "publish").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
                 fun hostConnected(): Boolean {
                     val observed = AtomicReference<String>()
@@ -178,7 +178,7 @@ class LiveHostTest {
             await("Activity close stopped remote programme") { rms.get() > 500 }
             await("Room heartbeat stopped with Activity") { publicRoom().getJSONObject("program").getLong("seq") > previousSequence + 2 }
             if (!dj) {
-                publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/__fixture/socket-cut").header("X-Android-Fixture", "isolated")
+                publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:28443/__fixture/socket-cut").header("X-Android-Fixture", "isolated")
                     .post(JSONObject().put("session_id", sessionId).put("role", "host").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
                 await("Lost host lease kept publisher alive") {
                     val observed = AtomicReference<String>()
@@ -186,7 +186,7 @@ class LiveHostTest {
                     observed.get()?.let { JSONObject(it).isNull("session") } == true
                 }
                 await("Disconnected host room did not expire") {
-                    publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/v1/sessions/$sessionId").build()).execute().use { it.code == 404 }
+                    publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:28443/v1/sessions/$sessionId").build()).execute().use { it.code == 404 }
                 }
             }
             val stop = call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
@@ -194,7 +194,7 @@ class LiveHostTest {
             }) }
             assertEquals(androidx.media3.session.SessionResult.RESULT_SUCCESS, stop.resultCode)
             started = false
-            publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/v1/sessions/$sessionId").build()).execute().use { assertEquals(404, it.code) }
+            publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:28443/v1/sessions/$sessionId").build()).execute().use { assertEquals(404, it.code) }
             val stillPlaying = AtomicReference(false)
             instrumentation.runOnMainSync { stillPlaying.set(active.isPlaying && ProgramQueue.key(active, active.currentMediaItemIndex) == programmeKey.get()) }
             if (!dj) assertTrue("Ending Live stopped local programme", stillPlaying.get())

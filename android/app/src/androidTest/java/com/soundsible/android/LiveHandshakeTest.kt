@@ -15,7 +15,7 @@ class LiveHandshakeTest {
         connection.clearSession(true)
         connection.configure(InstrumentationRegistry.getArguments().getString("tlsOrigin")!!)
         val peer = LivePeer(instrumentation.targetContext, connection,
-            "https://10.0.2.2:58443/__fixture/slow-handshake", "isolated", true, { fail("Cancelled handshake emitted peer state") })
+            "https://10.0.2.2:28443/__fixture/slow-handshake", "isolated", true, { fail("Cancelled handshake emitted peer state") })
         val worker = Executors.newSingleThreadExecutor()
         try {
             val start = worker.submit<Boolean> { runCatching { peer.start() }.isFailure }

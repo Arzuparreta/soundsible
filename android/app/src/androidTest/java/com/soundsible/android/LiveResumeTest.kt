@@ -40,7 +40,7 @@ class LiveResumeTest {
         val room = core("/api/community/sessions", "POST", JSONObject().put("title", "Resume relay owner")).getJSONObject("session")
         val id = room.getString("id")
         val client = okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build()
-        fun public(path: String): JSONObject = client.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443$path")
+        fun public(path: String): JSONObject = client.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:28443$path")
             .header("X-Android-Fixture", "isolated").build()).execute().use { check(it.isSuccessful); JSONObject(it.body!!.string()) }
         var publisher: LivePeer? = null
         var socket: NativeCommunitySocket? = null
