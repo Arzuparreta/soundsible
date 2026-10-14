@@ -1,5 +1,5 @@
 import { PodcastSkipIcon } from './PodcastSkipIcon';
-import { ArtistLinks } from './MusicLinks';
+import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { trackMusic } from '../lib/musicNavigation';
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { actions, isSavedTrack, state } from '../stores';
@@ -220,88 +220,90 @@ export function PlayerStage(props: {
           {(current) => (
             <>
               <div class={styles.media}>
-                <div
-                  class={styles.visualSlot}
-                  data-player-cover-slot=""
-                  data-now-playing-cover-slot={props.mode === 'now-playing' ? '' : undefined}
-                  data-auto-cover-slot={props.mode === 'auto' ? '' : undefined}
-                  data-lyrics-morph=""
-                  data-lyrics-open={mobileVisual().content === 'lyrics' ? '' : undefined}
-                >
+                <div class={styles.visualFrame}>
                   <div
-                    class={styles.art}
-                    style={{ position: 'relative', background: 'var(--bg-raised)' }}
-                    role="img"
-                    aria-label={current().title}
-                    draggable={Boolean(props.onTrackDragStart)}
-                    onDragStart={(event) => props.onTrackDragStart?.(event, current())}
-                    onPointerDown={(event) => {
-                      if (!props.onCarryTrack) return;
-                      cancelCarry();
-                      carryStart = { x: event.clientX, y: event.clientY };
-                      carryTimer = window.setTimeout(() => props.onCarryTrack?.(current()), 460);
-                    }}
-                    onPointerMove={trackCarry}
-                    onPointerUp={cancelCarry}
-                    onPointerCancel={cancelCarry}
+                    class={styles.visualSlot}
+                    data-player-cover-slot=""
+                    data-now-playing-cover-slot={props.mode === 'now-playing' ? '' : undefined}
+                    data-auto-cover-slot={props.mode === 'auto' ? '' : undefined}
+                    data-lyrics-morph=""
+                    data-lyrics-open={mobileVisual().content === 'lyrics' ? '' : undefined}
                   >
-                    <CoverImage src={trackCoverUrl(current())} eager={props.surfaceOpen} />
-                  </div>
-                  <Show when={!podcast() && mobileVisual().content === 'lyrics'}>
-                    <div class={styles.mobileLyrics}>
-                      <Suspense fallback={
-                        <div class={styles.lyricsPending}>
-                          <Spinner size={22} label={t('lyricsPanel.loading')} />
-                        </div>
-                      }>
-                        <LyricsPanel />
-                      </Suspense>
-                    </div>
-                  </Show>
-                  <Show when={!podcast()}>
-                    <button
-                      classList={{
-                        [styles.mobileLyricsToggle]: true,
-                        [styles.mobileLyricsToggleOn]: mobileVisual().content === 'lyrics',
+                    <div
+                      class={styles.art}
+                      style={{ position: 'relative', background: 'var(--bg-raised)' }}
+                      role="img"
+                      aria-label={current().title}
+                      draggable={Boolean(props.onTrackDragStart)}
+                      onDragStart={(event) => props.onTrackDragStart?.(event, current())}
+                      onPointerDown={(event) => {
+                        if (!props.onCarryTrack) return;
+                        cancelCarry();
+                        carryStart = { x: event.clientX, y: event.clientY };
+                        carryTimer = window.setTimeout(() => props.onCarryTrack?.(current()), 460);
                       }}
-                      type="button"
-                      aria-label={mobileVisual().content === 'lyrics' ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-                      aria-pressed={mobileVisual().content === 'lyrics'}
-                      onClick={() => setMobileVisual(toggleMobileLyrics)}
+                      onPointerMove={trackCarry}
+                      onPointerUp={cancelCarry}
+                      onPointerCancel={cancelCarry}
                     >
-                      <KaraokeMicIcon size={21} />
-                    </button>
-                  </Show>
-                  <Show when={desktopLyricsActive()}>
-                    <div class={styles.desktopLyrics}>
-                      <StageLyrics />
+                      <CoverImage src={trackCoverUrl(current())} eager={props.surfaceOpen} />
                     </div>
-                  </Show>
-                  <Show when={!podcast()}>
-                    <button
-                      classList={{
-                        [styles.desktopLyricsToggle]: true,
-                        [styles.desktopLyricsToggleOn]: desktopLyricsActive(),
-                      }}
-                      type="button"
-                      aria-label={desktopLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-                      aria-pressed={desktopLyricsActive()}
-                      disabled={layoutBusy()}
-                      onClick={toggleDesktopLyrics}
-                    >
-                      <Show
-                        when={!desktopLyricsActive()}
-                        fallback={
-                          <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <rect x="4" y="4" width="16" height="16" rx="2" />
-                            <path d="m7 16 4-4 3 3 2-2 2 3" />
-                          </svg>
-                        }
+                    <Show when={!podcast() && mobileVisual().content === 'lyrics'}>
+                      <div class={styles.mobileLyrics}>
+                        <Suspense fallback={
+                          <div class={styles.lyricsPending}>
+                            <Spinner size={22} label={t('lyricsPanel.loading')} />
+                          </div>
+                        }>
+                          <LyricsPanel />
+                        </Suspense>
+                      </div>
+                    </Show>
+                    <Show when={!podcast()}>
+                      <button
+                        classList={{
+                          [styles.mobileLyricsToggle]: true,
+                          [styles.mobileLyricsToggleOn]: mobileVisual().content === 'lyrics',
+                        }}
+                        type="button"
+                        aria-label={mobileVisual().content === 'lyrics' ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
+                        aria-pressed={mobileVisual().content === 'lyrics'}
+                        onClick={() => setMobileVisual(toggleMobileLyrics)}
                       >
                         <KaraokeMicIcon size={21} />
-                      </Show>
-                    </button>
-                  </Show>
+                      </button>
+                    </Show>
+                    <Show when={desktopLyricsActive()}>
+                      <div class={styles.desktopLyrics}>
+                        <StageLyrics />
+                      </div>
+                    </Show>
+                    <Show when={!podcast()}>
+                      <button
+                        classList={{
+                          [styles.desktopLyricsToggle]: true,
+                          [styles.desktopLyricsToggleOn]: desktopLyricsActive(),
+                        }}
+                        type="button"
+                        aria-label={desktopLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
+                        aria-pressed={desktopLyricsActive()}
+                        disabled={layoutBusy()}
+                        onClick={toggleDesktopLyrics}
+                      >
+                        <Show
+                          when={!desktopLyricsActive()}
+                          fallback={
+                            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                              <rect x="4" y="4" width="16" height="16" rx="2" />
+                              <path d="m7 16 4-4 3 3 2-2 2 3" />
+                            </svg>
+                          }
+                        >
+                          <KaraokeMicIcon size={21} />
+                        </Show>
+                      </button>
+                    </Show>
+                  </div>
                 </div>
                 <div class={styles.info} data-lyrics-morph="">
                   <div class={styles.titleRow}>
@@ -311,6 +313,9 @@ export function PlayerStage(props: {
                     </Show>
                   </div>
                   <ArtistLinks class={styles.artist} music={trackMusic(current())} />
+                  <Show when={trackMusic(current()).linkable !== false && current().album?.trim()}>
+                    <AlbumLink class={styles.album} music={trackMusic(current())} />
+                  </Show>
                 </div>
               </div>
 
