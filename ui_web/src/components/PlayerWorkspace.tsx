@@ -394,7 +394,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
         onScroll={onCarouselScroll}
         onPointerDown={holdCarousel}
         onTouchStart={holdCarousel}
-        onWheel={beginCarouselGesture}
+        on:wheel={{ handleEvent: beginCarouselGesture, passive: true }}
         onPointerUp={releaseCarousel}
         onPointerCancel={releaseCarousel}
         onTouchEnd={releaseCarousel}

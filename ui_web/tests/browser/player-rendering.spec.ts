@@ -30,7 +30,7 @@ test('wallpaper retains artwork and themes and parks only when hidden', async ({
   expect(dark.image).toContain('/api/static/cover/');
   expect(dark.filter).toContain('blur(62px)');
   expect(dark.duration).toBe('38s');
-  expect(dark.timing).toMatch(/^steps\(380(?:, end)?\)$/);
+  expect(dark.timing).toMatch(/^steps\(76(?:, end)?\)$/);
   expect(dark.transition).toContain('0.72s');
   await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
   await expect.poll(async () => (await appearance()).filter).toContain('blur(64px)');
@@ -54,6 +54,48 @@ test('wallpaper retains artwork and themes and parks only when hidden', async ({
   await expect.poll(state).toBe('running');
 });
 
+
+// Every frame in which anything on the open stage changes makes the compositor
+// redo the glass over the wallpaper, so the stage's moving parts are budgeted
+// in frames, not just in pixels.
+test('the open stage\'s glass tints the wallpaper without blurring it again', async ({ page }) => {
+  await openMusicPlayer(page);
+  const glass = () => page.evaluate(() => [...document.querySelectorAll('[data-player-surface-open] [data-player-tile]')]
+    .map((tile) => { const css = getComputedStyle(tile); return css.backdropFilter || css.getPropertyValue('-webkit-backdrop-filter'); }));
+  await expect.poll(async () => (await glass()).length).toBeGreaterThan(0);
+  for (const filter of await glass()) expect(filter).toMatch(/^saturate\(/);
+});
+
+test('the queue equaliser moves all its bars on the same few frames a second', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'the queue is on screen with the stage only on desktop');
+  await openMusicPlayer(page);
+  const bars = () => page.evaluate(() => document.getAnimations()
+    .filter((animation) => animation instanceof CSSAnimation && animation.animationName.includes('playerTrackEq')).length);
+  await expect.poll(bars).toBe(3);
+  // Walk one second of the animation and count the instants at which any bar
+  // changes: at 60 fps that is every frame, here once per 60 ms step with all
+  // three bars together. The samples fall between step boundaries, the way
+  // display frames do.
+  const { looks, changes } = await page.evaluate(() => {
+    const animations = document.getAnimations()
+      .filter((animation): animation is CSSAnimation => animation instanceof CSSAnimation && animation.animationName.includes('playerTrackEq'));
+    const targets = animations.map((animation) => (animation.effect as KeyframeEffect).target as Element);
+    for (const animation of animations) animation.pause();
+    const seen = new Set<string>();
+    let previous = '';
+    let changes = 0;
+    for (let time = 1001; time < 2001; time += 4) {
+      for (const animation of animations) animation.currentTime = time;
+      const now = targets.map((bar) => getComputedStyle(bar).transform).join('|');
+      if (previous && now !== previous) changes += 1;
+      previous = now;
+      seen.add(now);
+    }
+    return { looks: seen.size, changes };
+  });
+  expect(looks).toBeGreaterThan(10);
+  expect(changes).toBeLessThanOrEqual(20);
+});
 
 test('reduced motion disables wallpaper drift', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });

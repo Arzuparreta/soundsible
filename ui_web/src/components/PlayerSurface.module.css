@@ -129,9 +129,11 @@
 }
 
 .open .backdropActive {
-  /* Each step moves the blurred artwork by less than a CSS pixel even at
-     4K. Avoid recompositing the entire stage for subpixel motion every frame. */
-  animation: surfaceDrift 38s steps(380, end) infinite alternate;
+  /* Two steps a second. Each one moves the artwork by under a CSS pixel on a
+     1920px-wide window (two at 4K), which a 62px blur makes invisible, and
+     every step recomposites the whole stage with all its glass, so the step
+     rate is what the open player costs while nothing else moves. */
+  animation: surfaceDrift 38s steps(76, end) infinite alternate;
   animation-play-state: var(--decorative-animation-state, running);
 }
 

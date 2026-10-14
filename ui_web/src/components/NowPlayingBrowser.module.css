@@ -17,8 +17,9 @@
   min-height: 54px;
   padding: var(--space-xs) var(--space-sm);
   border-bottom: 1px solid var(--stage-line-soft);
+  /* No backdrop-filter: the results scroll in .body below this bar, never
+     under it, so a blur here only blurred the wallpaper a second time. */
   background: var(--stage-material-quiet);
-  backdrop-filter: blur(18px);
 }
 
 .search {

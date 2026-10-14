@@ -514,7 +514,11 @@
   --stage-material: rgba(255, 255, 255, 0.08);
   --stage-material-hover: rgba(255, 255, 255, 0.12);
   --stage-material-active: rgba(255, 255, 255, 0.16);
-  --stage-material-filter: blur(22px) saturate(1.16);
+  /* Saturation only, no blur. Everything behind the stage's glass is the
+     wallpaper, which --stage-backdrop has already blurred by 62px: a second
+     blur on top of it is invisible, but it was one more full-panel pass per
+     tile, re-run on every frame anything under or inside the tile changed. */
+  --stage-material-filter: saturate(1.16);
   --stage-panel: color-mix(in srgb, var(--bg-base) 46%, transparent);
   --stage-panel-opaque: color-mix(in srgb, var(--bg-base) 92%, #111116);
   --stage-sheet: rgba(14, 14, 17, 0.94);
@@ -593,7 +597,7 @@
   --stage-material: rgba(255, 255, 255, 0.64);
   --stage-material-hover: rgba(255, 255, 255, 0.78);
   --stage-material-active: rgba(255, 255, 255, 0.9);
-  --stage-material-filter: blur(24px) saturate(1.8);
+  --stage-material-filter: saturate(1.8);
   --stage-panel: rgba(255, 255, 255, 0.6);
   --stage-panel-opaque: #fbfbfd;
   --stage-sheet: rgba(255, 255, 255, 0.92);

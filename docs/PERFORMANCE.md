@@ -67,11 +67,54 @@ scene and server conditions. These results establish lower Soundsible resource
 usage; they do **not** establish a particular FPS recovery or allocate a
 percentage of game stutters to either client or server.
 
+### Chromium: the open stage on a modest GPU
+
+Measurements on 2026-10-14 targeted dual-core laptops with integrated graphics
+running the Chrome PWA. Playwright's Chromium ran on the same Ryzen 5800X at a
+1366 × 768 viewport, once on the RTX 3060 (ANGLE over Vulkan) and once on
+SwiftShader as the stand-in for a browser without GPU acceleration. CPU is the
+whole browser process tree from `/proc`, as a share of one logical CPU; frame
+rate counts viz `DrawFrame` events. The two builds were served side by side and
+alternated in the same session; figures are medians of six alternating samples
+per build on each.
+
+| State | GPU before | GPU after | Frames/s | SwiftShader before | SwiftShader after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Library, playing | 5.9% | 3.7% | 60 → 11 | 4.8% | 3.5% |
+| Full player, playing | 30.7% | 13.1% | 60 → 21 | 103% | 98% |
+| Full player, paused | 12.0% | 6.0% | 10 → 2 | 65% | 14% |
+
+Every frame in which anything on the stage changes makes the compositor redo
+each backdrop-filtered surface above the wallpaper, so the cost followed the
+frame rate of the smallest moving things. Largest first, while playing: the
+queue's three-bar equaliser repainting the queue tile at 60 fps, a second blur
+on every stage panel over a wallpaper already blurred by 62px, the 10 Hz
+wallpaper steps, and the mini-player's progress rail, whose transition
+repainted the page under it eight times a second. The equaliser now steps at
+about 17 fps with all bars changing on the same frame, the glass only
+saturates, the wallpaper steps twice a second, the rail stays on its own layer
+and moves in two steps per update, and the nested blurs behind the browser's
+top bar and the queue's section heads are gone.
+
+Screenshots of both builds with the same frozen frame differ by a CIE76 ΔE
+under 2.3 (the usual just-noticeable difference) on at least 98.3% of the pixels
+in the dark, light, slate and forest-green themes. Most of what remains is the
+browser's top bar, about 2 ΔE lighter or darker, visible only side by side.
+
+With SwiftShader, the playing player stays bound by the wallpaper's own 62px
+blur, which is recomputed on every frame anything changes above it: removing
+that filter alone took the GPU process from 92% to 17% at the same frame rate.
+On a hardware GPU the same filter made no measurable difference. A pre-blurred
+wallpaper image is therefore the next step only for browsers that composite in
+software; check `chrome://gpu` before pursuing it.
+
 ## Work by subsystem
 
 | Subsystem | Work and policy |
 | --- | --- |
-| Player wallpaper and translucent panels | The slow full-viewport background causes repeated composition. Retain the artwork, blur, scale and crossfade; quantize only its 38-second pan into 380 steps. |
+| Player wallpaper and translucent panels | The slow full-viewport background causes repeated composition. Retain the artwork, blur, scale and crossfade; quantize only its 38-second pan into 76 steps. Glass over the wallpaper saturates but does not blur again, and nothing nests a second blur inside a panel. |
+| Small animations on the stage | Anything that moves inside or under the glass costs a composite of the whole stage per frame. Budget such animations in frames: the queue equaliser steps every 60 ms, with delays that are multiples of the step so all bars change on the same frame. |
+| Mini-player progress rail | Composited transform on a layer of its own (`will-change`), two steps per timeupdate. |
 | Hidden-page presentation | Pause decorative CSS animation and unsubscribe progress/lyric presentation from the clock. Catch up immediately on visibility restoration. |
 | Audio and DJ transport | Keep media clocks, hidden-page handoffs, recovery, Media Session and device synchronization independent of presentation visibility. |
 | Playback diagnostics | Track pending serialized size incrementally rather than serializing the accumulated batch on every event. Preserve ordering, bounded storage, retries and account isolation. |
@@ -81,10 +124,11 @@ percentage of game stutters to either client or server.
 | Artwork, loudness and background jobs | Existing bounded artwork generation, cached measurements and disk-aware worker limits remain in place. No blanket resource caps or quality reductions are introduced. |
 
 Rasterizing the wallpaper into a canvas did not reduce sustained cost in repeated
-native-browser comparisons and was discarded. Pausing small equalizer bars or
-forcing their composition produced little benefit. Explicitly hiding the
-already-covered mini-player did not reduce cost either. These experiments do not
-justify additional product complexity.
+native-browser comparisons and was discarded. In Firefox, pausing small
+equalizer bars or forcing their composition produced little benefit; in
+Chromium the same bars were the largest cost of the open player (see above).
+Explicitly hiding the already-covered mini-player did not reduce cost either.
+These experiments do not justify additional product complexity.
 
 ## Server benchmarks
 
