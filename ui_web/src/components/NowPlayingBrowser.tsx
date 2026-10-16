@@ -885,7 +885,7 @@ function LibraryView(props: {
   // it is assigned and have to react when it appears.
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
-    <div class={styles.body} data-browser-body ref={setScrollRef}>
+    <div class={styles.body} classList={{ [styles.songScroll]: libraryTab() === 'songs' && props.tracks.length > 0 }} data-browser-body ref={setScrollRef}>
       <Toolbar lead={<div class={styles.tabs}>
         <button classList={{ [styles.activeTab]: libraryTab() === 'songs' }} type="button" onClick={() => setLibraryTab('songs')}>{t('library.songs')}</button>
         <button classList={{ [styles.activeTab]: libraryTab() === 'albums' }} type="button" onClick={() => setLibraryTab('albums')}>{t('library.albums')}</button>
@@ -1138,8 +1138,9 @@ function TrackCollectionView(props: {
   onUse?: (tracks: Track[]) => void;
 }) {
   const [scroller, setScroller] = createSignal<HTMLElement | null>(null);
+  const editContent = createMemo(() => props.editContent);
   return (
-    <div class={styles.body} data-browser-body ref={setScroller}>
+    <div class={styles.body} classList={{ [styles.songScroll]: !editContent() && props.tracks.length > 0 }} data-browser-body ref={setScroller}>
       <Toolbar title={props.root ? undefined : props.title} onBack={props.root ? undefined : props.onBack}>
         <Show when={props.onUse}><CollectionActions title={props.title} tracks={props.tracks} auto hideReferenceMenu={Boolean(props.headerActions)} onReference={props.onUse} /></Show>
         <Show when={!props.onUse && props.showPlayAll}>
@@ -1149,13 +1150,13 @@ function TrackCollectionView(props: {
         </Show>
         {props.headerActions}
       </Toolbar>
-      <Show when={props.editContent} fallback={
+      <Show when={editContent()} fallback={
         <Show when={props.tracks.length > 0} fallback={<div class={styles.empty}><p>{props.empty}</p></div>}>
           <VirtualRows items={props.tracks} scrollElement={scroller} rowHeight={{ cssVar: '--row-h', fallback: 56 }}>{(track, index) => {
             const row = track(); return row ? props.renderTrack(row, () => actions.playFrom(props.tracks, index, { context: props.context })) : null;
           }}</VirtualRows>
         </Show>
-      }>{props.editContent}</Show>
+      }>{editContent()}</Show>
     </div>
   );
 }

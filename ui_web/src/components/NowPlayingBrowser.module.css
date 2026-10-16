@@ -106,6 +106,13 @@
 }
 
 @media (min-width:1024px) {
+  /* Keeping the vertical scrollbar allocated reduces overflow-auto layout cost
+     as the virtual song window replaces rows. Measured on HD 520;
+     retain the original horizontal overflow and mobile pager behaviour. */
+  .songScroll {
+    overflow-y: scroll;
+  }
+
   .body {
     padding-bottom: 28px;
   }
