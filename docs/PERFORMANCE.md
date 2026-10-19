@@ -124,7 +124,7 @@ software; check `chrome://gpu` before pursuing it.
 | Hidden-page presentation | Pause decorative CSS animation and unsubscribe progress/lyric presentation from the clock. Catch up immediately on visibility restoration. |
 | Audio and DJ transport | Keep media clocks, hidden-page handoffs, recovery, Media Session and device synchronization independent of presentation visibility. |
 | Playback diagnostics | Track pending serialized size incrementally rather than serializing the accumulated batch on every event. Preserve ordering, bounded storage, retries and account isolation. |
-| DJ analysis | Calculate spectral features in batches of at most 256 frames. Carry adjacent-frame flux across batch boundaries and retain the mean spectrum. Avoid BLAS worker teams for small reductions. |
+| DJ analysis | Calculate spectral features in batches of at most 256 frames. Carry adjacent-frame flux across batch boundaries and retain the mean spectrum. Avoid BLAS worker teams for small reductions. The rhythm pass is one more bounded float32 STFT; its bands and pitch classes are summed with `np.add.reduceat`, not a matrix product, and attacks are measured per beat window without a full-length copy of the signal. |
 | Cooperative server scheduling | The daemon patches threading with gevent. Offload pure numerical composition to its native thread pool; keep subprocess and SQLite ownership unchanged and retain two concurrent analysis jobs. Plain unpatched processes run directly. |
 | Preview streaming and prefetch | Existing shared transfers, bounded queues, cancellation and foreground priority already prevent redundant competing downloads. Preserve them. |
 | Artwork, loudness and background jobs | Existing bounded artwork generation, cached measurements and disk-aware worker limits remain in place. No blanket resource caps or quality reductions are introduced. |
@@ -177,6 +177,23 @@ it does not benchmark the production daemon, cold provider downloads, or TLS.
 The durable HTTP benchmark repeated the result with 398–402 ms reference maxima
 and 2.6–5.4 ms updated maxima. The personal running daemon was not restarted to
 obtain these server results.
+
+### Beat grid analyser (analysis version 4)
+
+Measured against `origin/main` at `0ee18af0` with `--allow-changes`, because the
+output changes on purpose. Three-run medians on this Linux workstation:
+
+| Synthetic audio | Features, reference → current | Full pipeline with FFmpeg | Peak RSS |
+| --- | ---: | ---: | ---: |
+| 18 seconds | 12 → 21 ms | 42 → 52 ms | 55.4 → 57.3 MiB |
+| 120 seconds | 36 → 88 ms | 68 → 124 ms | 65.2 → 66.3 MiB |
+| 480 seconds | 84 → 289 ms | 129 → 338 ms | 127.3 → 127.5 MiB |
+| 900 seconds (head and tail windows) | — | 109 → 200 ms | 199.5 → 199.7 MiB |
+
+CPU time equals wall time: the pass stays on one thread. Two concurrent
+480-second analyses under the gevent HTTP benchmark left the largest response
+delay at 1.7–2.3 ms (reference 4.4–7.1 ms). The 53 cached previews on the
+workstation took 24.7 s in total, against 11.5 s before, FFmpeg included.
 
 ## Reproduce safely
 

@@ -174,6 +174,8 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--pipeline', action='store_true', help='Include FFmpeg decoding and full analysis of synthetic WAV')
     parser.add_argument('--http', action='store_true', help='Measure isolated HTTP response latency during two analyses')
+    parser.add_argument('--allow-changes', action='store_true',
+                        help='Time an intentional change of the analysis output instead of requiring identical results')
     parser.add_argument('--serve-http', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--child', choices=['reference', 'current'], help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -212,12 +214,12 @@ def main():
                 features = result.pop('features')
                 if mode == 'reference':
                     expected = features
-                else:
+                elif not args.allow_changes:
                     assert_equivalent(features, expected)
                 runs[mode].append(result)
         summary = {mode: {key: statistics.median(run[key] for run in values)
                           for key in ('wall_s', 'cpu_s', 'peak_rss_kib')} for mode, values in runs.items()}
-        row = {'audio_seconds': seconds, 'equivalent': True, 'median': summary, 'runs': runs}
+        row = {'audio_seconds': seconds, 'equivalent': not args.allow_changes, 'median': summary, 'runs': runs}
         report['results'].append(row)
         print(json.dumps({'audio_seconds': seconds, **summary}))
     if args.output:
