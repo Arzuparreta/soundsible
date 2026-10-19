@@ -7,6 +7,9 @@
 - Engineering resource optimization handoff: read
   `docs/audits/ENGINEERING_HANDOFF.md` before continuing this audit work.
 
+- DJ mode review: read `docs/dj/HANDOFF.md` before working on DJ analysis,
+  route ordering or transitions, and update its status table when a point closes.
+
 - Every completed implementation in Soundsible must end with a git commit. The
   user does not create these commits manually.
 - Commit only the changes that belong to the completed task unless the user
