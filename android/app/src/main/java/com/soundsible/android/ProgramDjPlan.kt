@@ -1,12 +1,14 @@
 package com.soundsible.android
 
+import kotlin.math.ceil
 import kotlin.math.roundToLong
 
 /** Conservative transition policy from stores/dj.ts, with occurrence ownership checked first. */
 internal object ProgramDjPlan {
+    /** `outPeriod`: seconds per beat of the outgoing song at its cue, as measured; 0 when unknown. */
     data class Proposal(val fromKey: String, val technique: ProgramMixCurve.Technique,
         val outCue: Double, val inCue: Double, val overlap: Double, val rate: Double,
-        val confidence: Double, val phaseToleranceMs: Double = 5.0)
+        val confidence: Double, val phaseToleranceMs: Double = 5.0, val outPeriod: Double = 0.0)
     data class Plan(val technique: ProgramMixCurve.Technique, val outCueUs: Long,
         val inCueUs: Long, val overlapUs: Long, val rate: Float, val phaseToleranceUs: Long)
     fun resolve(fromKey: String, durationUs: Long, proposal: Proposal?, mixing: Boolean): Plan? {
@@ -22,12 +24,28 @@ internal object ProgramDjPlan {
         if (latest <= 0) return null
         val earliest = minOf(90.0, duration * 0.6, latest)
         val proposed = chained?.outCue?.takeIf { it.isFinite() && it > 0 } ?: latest
-        val outCue = proposed.coerceIn(earliest, latest)
+        val outCue = placeOutCue(proposed, earliest, latest, if (trusted) 4 * chained!!.outPeriod else 0.0)
         val inCue = if (trusted) chained!!.inCue.coerceIn(0.0, 86400.0) else 0.0
         val rate = if (trusted) chained!!.rate.coerceIn(0.94, 1.06).toFloat() else 1f
         val tolerance = chained?.phaseToleranceMs?.takeIf { it.isFinite() && it != 0.0 } ?: 5.0
         return Plan(if (trusted) chained!!.technique else ProgramMixCurve.Technique.SAFE_FADE,
             (outCue * 1000000).roundToLong(), (inCue * 1000000).roundToLong(),
             (overlap * 1000000).roundToLong(), rate, (tolerance.coerceIn(1.0, 12.0) * 1000).roundToLong())
+    }
+
+    /**
+     * A measured cue sits on a downbeat that `inCue` is aligned to. Moving it
+     * into the allowed window by anything but whole bars would start the
+     * incoming song between two beats; only when no whole bar fits is it
+     * clamped like an unmeasured cue. Same rule as `placeOutCue` in
+     * ui_web/src/lib/djCue.ts.
+     */
+    fun placeOutCue(proposed: Double, earliest: Double, latest: Double, barSeconds: Double): Double {
+        if (proposed in earliest..latest) return proposed
+        val clamped = proposed.coerceIn(earliest, latest)
+        if (!(barSeconds.isFinite() && barSeconds in 0.8..8.0)) return clamped
+        val moved = if (proposed > latest) proposed - ceil((proposed - latest) / barSeconds) * barSeconds
+            else proposed + ceil((earliest - proposed) / barSeconds) * barSeconds
+        return if (moved in earliest..latest) moved else clamped
     }
 }

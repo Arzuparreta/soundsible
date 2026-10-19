@@ -188,10 +188,11 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         val transition = candidate.optJSONObject("transition")
         return if (transition != null && previous != null) {
             val technique = runCatching { ProgramMixCurve.Technique.valueOf(transition.optString("technique").uppercase(java.util.Locale.ROOT)) }.getOrDefault(ProgramMixCurve.Technique.SAFE_FADE)
+            val sync = transition.optJSONObject("sync")
             ProgramDjPlan.Proposal(previous, technique, transition.optDouble("out_cue", Double.NaN),
                 transition.optDouble("in_cue", Double.NaN), transition.optDouble("overlap_seconds", Double.NaN),
                 transition.optDouble("playback_rate", Double.NaN), transition.optDouble("confidence", 0.0),
-                transition.optJSONObject("sync")?.optDouble("phase_tolerance_ms", 5.0) ?: 5.0)
+                sync?.optDouble("phase_tolerance_ms", 5.0) ?: 5.0, sync?.optDouble("out_period", 0.0) ?: 0.0)
         } else null
     }
     fun clear() {

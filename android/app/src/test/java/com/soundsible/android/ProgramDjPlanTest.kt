@@ -1,5 +1,6 @@
 package com.soundsible.android
 
+import kotlin.math.roundToLong
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -52,6 +53,23 @@ class ProgramDjPlanTest {
             confident.copy(technique = ProgramMixCurve.Technique.LONG_BLEND, overlap = 48.0, outCue = 220.0), true)!!
         assertEquals(48000000L, plan.overlapUs)
         assertEquals(220000000L, plan.outCueUs)
+    }
+    @Test fun lateMeasuredCueMovesBackByWholeBarsAndStaysOnItsDownbeat() {
+        // 1.9355 s bars; the downbeat at 185.4 is past the latest start, 200 - 16 - 1 = 183.
+        val plan = ProgramDjPlan.resolve("current", 200000000,
+            confident.copy(outCue = 185.4, outPeriod = 0.483875), true)!!
+        assertEquals(((185.4 - 2 * 1.9355) * 1000000).roundToLong(), plan.outCueUs)
+        assertEquals(12000000L, plan.inCueUs)
+    }
+    @Test fun unmeasuredCueIsStillClampedWithoutABar() {
+        val plan = ProgramDjPlan.resolve("current", 200000000, confident.copy(outCue = 185.4), true)!!
+        assertEquals(183000000L, plan.outCueUs)
+    }
+    @Test fun outCuePlacementMatchesTheWebRule() {
+        assertEquals(150.0, ProgramDjPlan.placeOutCue(150.0, 90.0, 170.0, 2.0), 0.0)
+        assertEquals(90.5, ProgramDjPlan.placeOutCue(80.5, 90.0, 170.0, 2.0), 1e-9)
+        assertEquals(101.0, ProgramDjPlan.placeOutCue(100.0, 101.0, 101.5, 2.0), 0.0)
+        assertEquals(170.0, ProgramDjPlan.placeOutCue(172.0, 90.0, 170.0, Double.NaN), 0.0)
     }
     @Test fun trustedTempoAndPhaseRemainInsideRuntimeBounds() {
         val plan = ProgramDjPlan.resolve("current", 200000000,

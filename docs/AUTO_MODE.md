@@ -60,6 +60,15 @@ The engine limits tempo stretching and falls back safely instead of forcing two
 incompatible recordings together. Loudness levelling sits inside the same
 program path, so a transition does not need a sudden volume jump to feel alive.
 
+Tempo is measured across the whole song to a few thousandths of a BPM, and each
+beat is placed where its attack starts, so the kicks of two blended songs land
+together instead of one just after the other. A recording whose tempo drifts,
+such as a live band, gets a grid that follows the performance and counts as
+less certain when the DJ chooses how to mix it. After an update that changes
+the analysis, each song is measured again in the background when the DJ next
+puts it in the route; until that measurement lands, its transitions are plain
+fades.
+
 ### Whole songs, without mixing
 
 **Settings → DJ → Mix between songs** is on by default. Switched off, the DJ

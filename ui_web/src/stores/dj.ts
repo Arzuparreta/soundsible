@@ -4,6 +4,7 @@ import { audioService, type LiveTransitionPlan, type ProgramPlaybackSnapshot } f
 import { type MediaSessionSyncReason } from "../lib/mediaSession";
 import { playbackYoutubeId } from "../lib/media";
 import { createPreparationOwner } from "../lib/prefetch";
+import { placeOutCue, planBarSeconds } from "../lib/djCue";
 import { toast } from "../lib/toast";
 import { confirmDialog } from "../lib/confirm";
 import { isPodcastTrack } from "../lib/track";
@@ -141,12 +142,14 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     const proposed = chained && Number.isFinite(chained.out_cue) && (chained.out_cue ?? 0) > 0 ? Number(chained.out_cue) : latest;
     return {
       technique: trusted ? chained!.technique : 'safe_fade',
-      out_cue: Math.min(latest, Math.max(earliest, proposed)),
+      out_cue: placeOutCue(proposed, earliest, latest, trusted ? planBarSeconds(chained!.sync) : 0),
       in_cue: trusted ? chained!.in_cue : 0,
       overlap_seconds: overlap,
       overlap_bars: chained?.overlap_bars ?? 0,
       playback_rate: trusted ? chained!.playback_rate : 1,
-      confidence: chained?.confidence ?? 0
+      confidence: chained?.confidence ?? 0,
+      // The planner's phase tolerance, as Android already receives it.
+      ...(trusted && chained!.sync ? { sync: { phase_tolerance_ms: chained!.sync.phase_tolerance_ms } } : {})
     };
   }
   function unmixed(plan: LiveTransitionPlan): LiveTransitionPlan {

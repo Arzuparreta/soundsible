@@ -5,7 +5,8 @@ nuevas y sin el historial del chat. Estado del código revisado: `main` en
 `f1e79d30`. Los números de línea se refieren a ese commit; si el código ha
 cambiado, buscar por nombre de función.
 
-Nada de este documento está implementado todavía. Es un diagnóstico.
+El documento empezó como diagnóstico. Los puntos cerrados lo indican en la tabla
+de estado y en su sección; el resto sigue siendo diagnóstico.
 
 ## Cómo trabajar con este documento
 
@@ -38,7 +39,7 @@ encontradas están en P1 y P2.
 
 | Punto | Tema | Evidencia | Estado |
 | --- | --- | --- | --- |
-| P1 | Precisión del tempo y de la rejilla de golpes | Medido | Pendiente |
+| P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
 | P2 | Alineación de fase en el navegador | Lectura de código | Pendiente |
 | P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente |
 | P4 | La "energía" no mide intensidad | Lectura de código | Pendiente |
@@ -91,15 +92,16 @@ mejor orden), después P4, P6, P8, P9. P7 y P10 son decisiones y limpieza.
 
 | Campo | Cómo se calcula | ¿Se usa al planificar? |
 | --- | --- | --- |
-| `bpm` | Autocorrelación del *spectral flux* entre 65 y 190 BPM, con preferencia leve por 120 | Sí |
-| `beat_grid` | Cada golpe se ajusta al pico de onset más cercano a la predicción | Sí |
-| `downbeats` | De las 4 fases del compás, la de golpes más fuertes; asume 4/4 | Sí |
+| `bpm` | Recta (o curva local) ajustada a todos los golpes de la ventana; ver P1 | Sí |
+| `beat_grid` | Rejilla ajustada y alineada al inicio del ataque, 4 decimales; ver P1 | Sí |
+| `downbeats` | De las 4 fases del compás, la de mayor cambio armónico y ataque más fuerte; asume 4/4 | Sí |
 | `key`, `mode` | Perfiles Krumhansl sobre el croma del espectro medio | Sí |
 | `energy` | Media de `rms / percentil95(rms)` dentro de la misma canción | Sí (orden) |
 | `intro_cue` | Primer instante con energía sobre el percentil 35 | Sí (punto de entrada) |
 | `outro_cue` | Primer límite de frase unos 64 golpes antes del último sonido | Sí (punto de salida) |
 | `sections` | Etiquetas intro/build/drop/breakdown/body/outro por bloques de 8 compases | No (P8) |
-| `loudness_db`, `tempo_confidence` | — | No |
+| `tempo_confidence` | Parte de golpes que encajan en la rejilla; ≤ 0,6 si el tempo deriva | Sí, dentro de `confidence` |
+| `loudness_db` | — | No |
 | `confidence` | `0,38 + 0,36·tempo_conf + min(0,2, margen_tonalidad/8)` | Sí |
 
 ### Cálculo de la transición (`plan_transition`)
@@ -138,7 +140,10 @@ score     = 0.46·tempo + 0.32·armonía + 0.22·confianza
   máximo, la canción entrante empieza en 0:00. En una canción de 4 minutos el
   fundido empieza unos 24 s antes del final.
 - Transición fiable: solapamiento limitado al 25 % de la duración. La salida no
-  empieza antes de 90 s o del 60 % de la canción, lo que llegue antes.
+  empieza antes de 90 s o del 60 % de la canción, lo que llegue antes. Si
+  `out_cue` cae fuera de esa ventana se mueve compases enteros (`placeOutCue` en
+  `ui_web/src/lib/djCue.ts` y `ProgramDjPlan.placeOutCue` en Android), no una
+  cantidad cualquiera.
 - "Mezclar entre canciones" apagado: técnica `direct`, la siguiente empieza
   cuando termina el archivo.
 
@@ -198,19 +203,70 @@ relación se multiplica o divide por 2. Lo que afecta es el salto entre valores.
 - Cualquier par: el punto de entrada y el de salida son golpes con hasta ~23 ms
   de error cada uno. Es el desfase de pocos milisegundos que oye el usuario.
 
-**Posibles soluciones.**
+Además, al medir con pistas sintéticas de golpes conocidos (codificadas en AAC,
+como las previews) apareció otro error mayor: la rejilla quedaba unos 140 ms
+**antes** de cada golpe, por la convención de tiempo del fotograma de 186 ms, y
+ese sesgo variaba ±15 ms según el tipo de bombo. En algunas pistas se enganchaba
+al contratiempo (+110 a +135 ms). Y los clientes recortaban `out_cue` a su
+ventana permitida (`resolveTransition`, `ProgramDjPlan.resolve`) por una cantidad
+cualquiera, lo que sacaba la entrada del compás cuando el corte llegaba a aplicarse.
 
-- Interpolar el pico de la autocorrelación (parabólica) para obtener el periodo
-  con precisión menor que un paso.
-- Ajustar una recta (mínimos cuadrados) a las posiciones de los golpes de toda la
-  canción: da periodo y fase con precisión de milisegundos, y permite rejillas por
-  tramos si el tempo varía.
-- Afinar cada golpe con una función de onset de resolución mayor (hop 64–128, o
-  buscar el inicio del transitorio en la señal alrededor de cada golpe).
-- Coste: más CPU en el análisis en segundo plano; medir con
-  `scripts/benchmark_dj_analysis.py`.
-- Subir `ANALYSER_VERSION`. Ampliar `docs/dj/bpm_probe.py` o pasarlo a test
-  (`tests/test_dj_engine.py`) con un umbral de error, por ejemplo ±0,1 BPM y ±2 ms.
+**Estado: cerrado en #377.** `ANALYSER_VERSION` 4. Cambios:
+
+- `shared/dj_engine.py`, sección *Rhythm*: un STFT propio (ventana 1024, paso 128
+  = 11,6 ms) con flujo logarítmico en 24 bandas; tempo por autocorrelación con
+  apoyo en 2 y 4 golpes y pico interpolado; seguidor de golpes por programación
+  dinámica (Ellis 2007, vectorizado por bloques); ajuste de una recta por
+  consenso de fase y mínimos cuadrados (`_phase_fit`), o curva local robusta
+  (`_local_lines`) si la canción deriva; comprobación pulso/contratiempo con el
+  nivel de energía; y alineación final de la rejilla al inicio del ataque
+  (energía con preénfasis 0,95 en ventanas de 2 ms, media de muchos golpes).
+- Decisión rejilla constante o local: mediana de la desviación de la curva local
+  respecto a la recta ≤ 12 ms, tempo local dentro del 0,3 % del de la recta y
+  ≥ 55 % del peso de los golpes sobre la recta. Coincide con la clasificación de
+  la referencia en 47 de 53 canciones reales.
+- `tempo_confidence` ya mide algo: parte de golpes que encajan en la rejilla; en
+  rejilla local se multiplica por 0,7 (la mezcla mantiene una sola velocidad
+  durante todo el solapamiento). Entra en `confidence` con la misma fórmula.
+- `downbeats`: cambio de croma (dos golpes antes contra dos después) más fuerza
+  del ataque. En las 17 canciones reales cuya rejilla coincide con la referencia,
+  acierta en 9 (antes 4).
+- `_local_period(analysis, cue, span)`: recta por los golpes del tramo que se
+  mezcla, no mediana de intervalos redondeados.
+- `plan_transition`: `out_cue` ≤ `duración − solapamiento − 1,5 s` (los clientes
+  cortan a 1 s) y cues, tasa y periodos con más decimales.
+- Clientes (paridad web/iPhone y Android): si tienen que mover un `out_cue`
+  medido, lo mueven compases enteros (`sync.out_period × 4`). La web pasa ahora
+  `sync.phase_tolerance_ms` al mezclador, como ya hacía Android.
+
+**Resultados (medidos).**
+
+- `python -I docs/dj/bpm_probe.py`: 118–140 BPM medidos con error ≤ 0,004 BPM y
+  rejilla a ~1 ms de cada clic. 174 se sigue leyendo como 87 (mismo pulso).
+- 18 pistas sintéticas en AAC con bombos de cinco formas: error de BPM ≤ 0,002 %
+  y rejilla a ±0,7 ms del ataque en las de tempo fijo; compás correcto en 16.
+  Parejas mezclables (100): desfase al inicio de la mezcla, mediana 0,8 ms (antes
+  49,6 ms); máximo durante el solapamiento, mediana 1,0 ms (antes 237 ms).
+- 53 previews reales contra beat_this (referencia externa, solo para evaluar):
+  rejilla en el pulso en 19 (antes 8), tempo distinto en 11 (antes 25, sobre todo
+  por los saltos de valores).
+- `tests/test_dj_beat_grid.py` fija estos umbrales con canciones sintéticas.
+- Coste: ver `docs/PERFORMANCE.md`, *Beat grid analyser*. Un solo hilo, sin
+  aumento de memoria pico.
+
+**Límites que quedan (medidos).**
+
+- Salsa y otros estilos donde el bajo y la percusión acentúan el contratiempo: la
+  rejilla puede quedar a medio golpe de donde lo marca un oyente. Dos canciones
+  así se mezclan bien entre sí; con una de rejilla en el pulso, no.
+- Rock en directo con sensación ternaria: a veces se mide 3:2 o 4:3 del tempo de
+  referencia.
+- Breakbeat a 174 BPM con bombo sincopado: se lee a 87 y la rejilla puede caer en
+  los contratiempos (caso sintético 12).
+- Una canción que deriva mantiene la rejilla local, pero la mezcla usa una sola
+  velocidad: el desfase crece durante el solapamiento (P2).
+- La regla del ataque marca unos 3 ms dentro de un ataque lento (6 ms) cuando no
+  hay ningún transitorio en el pulso; con clic, en el clic.
 
 ## P2. Alineación de fase en el navegador
 
@@ -231,9 +287,21 @@ de esa salida; la velocidad se aplica con `PlaybackParameters` en
 dos plataformas, porque los puntos de entrada y salida vienen del mismo servidor.
 No se ha medido el desfase en Android.
 
-**Cuándo falla.** En cada mezcla con beatmatch. Con los errores de P1 el desfase
-ya existe desde el primer golpe; aunque P1 se arregle, `currentTime` de un
-`<audio>` no tiene precisión de muestra y su latencia de salida no está garantizada.
+**iPhone.** La app nativa de iOS no tiene modo DJ (`ios/App/Audio/DualDeckPlayer.swift`
+solo hace crossfade). El DJ en iPhone es la web en Safari, así que este punto le
+afecta igual que a cualquier navegador.
+
+**Cuándo falla.** En cada mezcla con beatmatch. Tras P1 los puntos y la velocidad
+llegan con error de ~1 ms y 1e-6; lo que queda en la web es la precisión de
+`currentTime` en la alineación única y la deriva de canciones con tempo variable.
+
+**Android, por verificar (no medido).** `ProgramDjSession.advance` carga la
+entrante con `setMediaItem(item, positionMs)` y `ProgramMixOutput.arm` consume
+`prerollMs` de su PCM suponiendo que empieza exactamente en esa posición
+(`streams[standby].positionOffsetUs`). Si el decodificador empieza en el límite de
+un fotograma AAC (1024 muestras = 23 ms a 44,1 kHz) y no en la posición pedida, la
+entrante llegaría hasta 23 ms adelantada o retrasada. Se puede comprobar con el
+`presentationTimeUs` del primer `write()` tras el seek en `ProgramMixOutput.Source`.
 
 **Posibles soluciones.**
 
@@ -367,12 +435,13 @@ alta). La opción (b) encaja con "la mezcla es automática".
 **Qué pasa.** `_sections_from_features` etiqueta bloques de 8 compases (intro,
 build, drop, breakdown, body, outro), pero nadie lee las etiquetas. `outro_cue`
 solo usa los límites de frase; `intro_cue` es el primer instante con sonido.
-`loudness_db` y `tempo_confidence` tampoco se usan al planificar.
+`loudness_db` no se usa al planificar; `tempo_confidence` solo entra en `confidence`.
 
 **Posibles soluciones.** Colocar la salida al inicio de un outro o antes de un
 breakdown, y la entrada de forma que el drop de la entrante caiga en un límite de
 frase de la que sale. Usar `tempo_confidence` para decidir si se intenta un
-beatmatch. Requiere que P1 dé una rejilla fiable.
+beatmatch: desde P1 vale ≥ 0,9 en canciones de tempo fijo y ≤ 0,6 en las que
+derivan, pero hoy solo entra en `confidence` y casi no cambia la técnica elegida.
 
 ## P9. Eco no sincronizado con el tempo
 
