@@ -39,7 +39,7 @@ encontradas están en P1 y P2.
 
 | Punto | Tema | Evidencia | Estado |
 | --- | --- | --- | --- |
-| P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (rama `fix/dj-beat-grid-precision`) |
+| P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
 | P2 | Alineación de fase en el navegador | Lectura de código | Pendiente |
 | P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente |
 | P4 | La "energía" no mide intensidad | Lectura de código | Pendiente |
@@ -211,7 +211,7 @@ al contratiempo (+110 a +135 ms). Y los clientes recortaban `out_cue` a su
 ventana permitida (`resolveTransition`, `ProgramDjPlan.resolve`) por una cantidad
 cualquiera, lo que sacaba la entrada del compás cuando el corte llegaba a aplicarse.
 
-**Estado: cerrado.** `ANALYSER_VERSION` 4. Cambios:
+**Estado: cerrado en #377.** `ANALYSER_VERSION` 4. Cambios:
 
 - `shared/dj_engine.py`, sección *Rhythm*: un STFT propio (ventana 1024, paso 128
   = 11,6 ms) con flujo logarítmico en 24 bandas; tempo por autocorrelación con
