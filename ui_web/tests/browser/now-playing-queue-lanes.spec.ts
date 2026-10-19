@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockMusicEngine, openMiniPlayer, restoreQueueSession, TRACKS } from './music-browser-fixture';
 import { settle } from './settle';
 import { snapPlayerCarousel } from './playerGestures';
@@ -29,6 +29,13 @@ async function playFromLibrary(page: Page) {
   await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   return openQueuePanel(page);
+}
+
+/** Drop a row on the seam under `target`: the list places a drop at the seam
+ * nearest the pointer, so aiming at the middle of a row is a coin toss. */
+async function dragBelow(source: Locator, target: Locator) {
+  const box = await target.boundingBox();
+  await source.dragTo(target, { targetPosition: { x: 40, y: box!.height - 6 } });
 }
 
 /** A collection whose card unfolds its songs in the queue. */
@@ -107,7 +114,7 @@ test('expanding the collection keeps the player open and exposes the real queue 
   const rows = songs.locator('[data-drag-row]');
   if (!isMobile) {
     const first = await rows.first().getAttribute('data-drag-row');
-    await rows.first().dragTo(rows.nth(2));
+    await dragBelow(rows.first(), rows.nth(2));
     await expect(rows.nth(2)).toHaveAttribute('data-drag-row', first!);
     await expect(expand).toHaveAttribute('aria-expanded', 'true');
   }
@@ -119,6 +126,29 @@ test('expanding the collection keeps the player open and exposes the real queue 
   await card.locator('button[aria-expanded]').last().click();
   await expect(queue.locator('[data-card-songs]')).toHaveCount(0);
   await expect(queue.locator('[data-queue-card="autoplay"] [aria-expanded]')).toHaveCount(0);
+});
+
+test('a request dragged with the mouse shows where it will land and lands there', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'a phone moves songs from their menu');
+  const queue = await restoreLongQueue(page, PLAYLIST);
+  const rows = queue.locator('[data-section="manual"] [data-drag-row]');
+  const id = (index: number) => rows.nth(index).getAttribute('data-drag-row');
+  const [first, third, fourth] = [await id(0), await id(2), await id(3)];
+  const from = (await rows.nth(0).boundingBox())!;
+  const to = (await rows.nth(3).boundingBox())!;
+
+  await page.mouse.move(from.x + 40, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 40, to.y + 6, { steps: 8 });
+  // The line sits on the top edge of the fourth request: between it and the third.
+  await expect(queue.locator(`[data-drag-row="${fourth}"]`)).toHaveAttribute('data-seam', 'before');
+  await expect(queue.locator('[data-seam]')).toHaveCount(1);
+  await page.mouse.up();
+
+  await expect(rows.nth(2)).toHaveAttribute('data-drag-row', first!);
+  await expect(rows.nth(1)).toHaveAttribute('data-drag-row', third!);
+  await expect(rows.nth(3)).toHaveAttribute('data-drag-row', fourth!);
+  await expect(queue.locator('[data-seam]')).toHaveCount(0);
 });
 
 test('the library card opens the library and leaves the music playing', async ({ page, isMobile }) => {
@@ -168,7 +198,7 @@ test('editing an expanded collection keeps it open with the songs it was showing
     // Both ends in sight first: a drop target scrolled into view after the
     // press would slide another row under the pointer before the drag starts.
     await moved.evaluate(node => node.scrollIntoView({ block: 'center' }));
-    await moved.dragTo(rows.nth(16));
+    await dragBelow(moved, rows.nth(16));
   }
   await expect(rows.nth(16)).toHaveAttribute('data-drag-row', id!);
   await expect(rows).toHaveCount(24);

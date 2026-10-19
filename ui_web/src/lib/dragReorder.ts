@@ -23,31 +23,59 @@ export interface DragRow {
 }
 
 export interface DropSlot {
-  /** How many rows sit before this seam. */
-  index: number;
-  /** The row this drop would insert *before*, or undefined at the very end. */
+  /** The row on screen this drop would insert *before*; undefined below the
+   * last row on screen. */
   beforeId?: string;
+  /** The row on screen this drop would follow; undefined above the first. */
+  afterId?: string;
   /** Where the insertion line is drawn. */
   offset: number;
 }
 
 /** Every seam in a list of rows, including the one before the first row and the
  * one after the last. `n` rows produce `n + 1` slots, less any that a `fixed`
- * row rules out. Dropping a seam does not renumber the rest: `index` counts
- * rows, not slots, so the survivors keep the positions they describe. */
+ * row rules out. */
 export function buildDropSlots(rows: readonly DragRow[]): DropSlot[] {
   const slots: DropSlot[] = [];
   rows.forEach((row, index) => {
     if (row.fixed) return;
-    slots.push({ index, beforeId: row.id, offset: row.top });
+    slots.push({ beforeId: row.id, afterId: rows[index - 1]?.id, offset: row.top });
   });
   const last = rows[rows.length - 1];
   slots.push({
-    index: rows.length,
     beforeId: undefined,
+    afterId: last?.id,
     offset: last ? last.top + last.height : 0,
   });
   return slots;
+}
+
+/**
+ * The row a drop on this seam lands in front of, out of the whole ordered list
+ * `ids`, or undefined at its very end.
+ *
+ * The seam below the last row on screen is not the end of the list: a lane
+ * scrolled part-way, or a card showing one page of its songs, has rows below
+ * it that are not drawn. The drop goes right after the row the line is drawn
+ * under, which is in front of whatever follows that row.
+ */
+export function dropBeforeId(ids: readonly string[], slot: DropSlot): string | undefined {
+  if (slot.beforeId || !slot.afterId) return slot.beforeId;
+  const at = ids.indexOf(slot.afterId);
+  return at === -1 ? undefined : ids[at + 1];
+}
+
+/**
+ * Where a row taken out of `ids` must be put back so it lands on this seam: the
+ * `to` of a remove-then-insert move. -1 when `id` is not in `ids`.
+ */
+export function dropIndex(ids: readonly string[], id: string, slot: DropSlot): number {
+  const from = ids.indexOf(id);
+  if (from === -1) return -1;
+  const before = dropBeforeId(ids, slot);
+  const target = before === undefined ? ids.length : ids.indexOf(before);
+  if (target === -1) return -1;
+  return from < target ? target - 1 : target;
 }
 
 /** The seam a pointer is closest to. Distance, not containment — a pointer in
@@ -74,12 +102,35 @@ export function nearestSlot(slots: readonly DropSlot[], pointerY: number): DropS
  *
  * What is dragged may be several rows travelling as one — a bridge belongs with
  * the song it leads into — so the span between the block's own edges, and every
- * seam inside it, all describe where it already is.
+ * seam inside it, all describe where it already is: each of those seams has a
+ * row of the block on one side of it.
  */
-export function isNoopMove(ids: readonly string[], blockIds: readonly string[], slot: DropSlot): boolean {
-  const positions = blockIds.map((id) => ids.indexOf(id)).filter((index) => index !== -1);
-  if (!positions.length) return false;
-  return slot.index >= Math.min(...positions) && slot.index <= Math.max(...positions) + 1;
+export function isNoopMove(blockIds: readonly string[], slot: DropSlot): boolean {
+  return blockIds.some((id) => id === slot.beforeId || id === slot.afterId);
+}
+
+/**
+ * Handlers that make an element take drops while `accepts` says so.
+ *
+ * `dragenter` is cancelled as well as `dragover`, as the HTML drag-and-drop
+ * model asks of a drop target. With `dragover` alone Chromium showed the drop
+ * as allowed, yet releasing the mouse just after it crossed into another
+ * element — the edge of a row, a button inside it — ended the drag with no
+ * `drop` event at all. Aiming between two rows is exactly that.
+ */
+export function dropTarget(accepts: (event: DragEvent) => boolean, onDrop: (event: DragEvent) => void) {
+  const take = (event: DragEvent) => {
+    if (accepts(event)) event.preventDefault();
+  };
+  return {
+    onDragEnter: take,
+    onDragOver: take,
+    onDrop: (event: DragEvent) => {
+      if (!accepts(event)) return;
+      event.preventDefault();
+      onDrop(event);
+    },
+  };
 }
 
 export const EDGE_SCROLL_ZONE = 48;
@@ -106,19 +157,23 @@ export function edgeScrollDelta(
 }
 
 /** Read the rows a container is currently showing, in its own coordinate
- * space, from elements marked with `data-drag-row`.
+ * space, from elements marked with `data-drag-row` — all of them, or only
+ * those inside `scope`, such as the one lane a row may move within.
  *
  * Only the rows actually on screen: each lane scrolls inside the container, so
  * a row scrolled out of its lane still reports a real rect somewhere above or
- * below the container. Left in, those rows offer seams nobody can see, and
+ * below the lane. Left in, those rows offer seams nobody can see, and
  * `nearestSlot` would happily commit the drop to one of them. */
-export function readDragRows(container: HTMLElement): DragRow[] {
+export function readDragRows(container: HTMLElement, scope: HTMLElement = container): DragRow[] {
   const bounds = container.getBoundingClientRect();
+  const lane = scope.getBoundingClientRect();
+  const top = Math.max(bounds.top, lane.top);
+  const bottom = Math.min(bounds.bottom, lane.bottom);
   const origin = bounds.top - container.scrollTop;
   const rows: DragRow[] = [];
-  for (const element of container.querySelectorAll<HTMLElement>('[data-drag-row]')) {
+  for (const element of scope.querySelectorAll<HTMLElement>('[data-drag-row]')) {
     const rect = element.getBoundingClientRect();
-    if (rect.bottom <= bounds.top || rect.top >= bounds.bottom) continue;
+    if (rect.bottom <= top || rect.top >= bottom) continue;
     rows.push({
       id: element.dataset.dragRow ?? '',
       top: rect.top - origin,

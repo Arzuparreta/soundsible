@@ -18,6 +18,7 @@ import {
 } from '../lib/nowPlayingLayout';
 import { contextContinuation, futureEntries, sameQueueSection, type PlaybackContextKind, type PlaybackQueueEntry } from '../lib/playbackQueue';
 import { contextDestination } from '../lib/playbackContext';
+import { dropIndex, type DropSlot } from '../lib/dragReorder';
 import { isPodcastTrack } from '../lib/track';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -55,7 +56,6 @@ export function NowPlaying(props: {
   );
   const [browserView, setBrowserView] = createSignal<'browser' | 'chat'>('browser');
   let desktopQueueEl: HTMLDivElement | undefined;
-  let dragFrom: number | null = null;
 
   // One lookup per queue change, rather than two full scans for every row.
   const queuePositions = createMemo(() => new Map(state.playback.queue.map((entry, index) => [entry.queueId, index])));
@@ -163,19 +163,17 @@ export function NowPlaying(props: {
         if (from > state.playback.index && to > state.playback.index && to < state.playback.queue.length) actions.moveInQueue(from, to);
       },
       draggable: !current,
-      onDragStart: () => { dragFrom = queueIndex(); },
-      onDragEnd: () => { dragFrom = null; },
-      onDragOver: (event) => {
-        const from = dragFrom == null ? undefined : state.playback.queue[dragFrom];
-        if (!current && from && queueIndex() > state.playback.index && sameQueueSection(from, entry)) event.preventDefault();
-      },
-      onDrop: (event) => {
-        event.preventDefault();
-        const to = queueIndex();
-        if (dragFrom != null && dragFrom > state.playback.index && to > state.playback.index && dragFrom !== to) actions.moveInQueue(dragFrom, to);
-        dragFrom = null;
-      },
     };
+  };
+
+  /** A song dragged within its lane, or within an expanded collection, to the
+   * seam the list shows. The list keeps the drag inside the lane it started
+   * in; `moveInQueue` still refuses anything that would cross into another. */
+  const reorderQueue = (queueId: string, slot: DropSlot) => {
+    const ids = state.playback.queue.map((entry) => entry.queueId);
+    const from = ids.indexOf(queueId);
+    const to = dropIndex(ids, queueId, slot);
+    if (from > state.playback.index && to > state.playback.index) actions.moveInQueue(from, to);
   };
 
   /** The collection the music continues into, as one card. Opening it reveals
@@ -340,6 +338,7 @@ export function NowPlaying(props: {
                 virtualize
                 empty={t('nowPlaying.queueEmpty')}
                 dragHandle={dragHandle}
+                onReorder={reorderQueue}
                 headAction={{
                   label: t('nowPlaying.clearManualQueue'),
                   disabled: manualQueue().length === 0,

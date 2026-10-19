@@ -15,7 +15,7 @@ import {
   type AutoModePanelId,
 } from '../lib/autoModeLayout';
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
-import { isNoopMove } from '../lib/dragReorder';
+import { dropBeforeId, isNoopMove } from '../lib/dragReorder';
 import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
@@ -298,9 +298,7 @@ export function AutoMode(props: {
           onClick: () => carriedTrack() ? placeCarriedInRoute() : openDestination('route'),
         },
       ]}
-      onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
-        event.preventDefault();
         const transfer = readAutoTrackTransfer(event);
         if (!transfer) return;
         // The header means "at the end". A row that is already in the route
@@ -309,18 +307,16 @@ export function AutoMode(props: {
         if (transfer.queueId) actions.moveAutoRoute(transfer.queueId);
         else placeInRoute(transfer.track);
       }}
-      onDropAtSlot={(slot, event) => {
-        const transfer = readAutoTrackTransfer(event);
-        if (!transfer) return;
-        if (!transfer.queueId) {
-          placeInRoute(transfer.track, slot.beforeId);
-          return;
-        }
+      onReorder={(queueId, slot) => {
         // Dropping a row back where it already sits would still re-stamp it as
         // fixed and throw away the transition it was planned with — a plain
         // fade earned by changing nothing.
-        if (isNoopMove(upcoming().map((entry) => entry.queueId), routeBlock(transfer.queueId), slot)) return;
-        actions.moveAutoRoute(transfer.queueId, slot.beforeId);
+        if (isNoopMove(routeBlock(queueId), slot)) return;
+        actions.moveAutoRoute(queueId, dropBeforeId(upcoming().map((entry) => entry.queueId), slot));
+      }}
+      onDropAtSlot={(slot, event) => {
+        const transfer = readAutoTrackTransfer(event);
+        if (transfer) placeInRoute(transfer.track, dropBeforeId(upcoming().map((entry) => entry.queueId), slot));
       }}
       sections={[{ id: 'route', entries: routeEntries() }]}
     /></div><AutoReferences carried={carriedTrack()?.track} onUse={addToSources} onAdd={() => openDestination('reference')} onChange={() => openDestination('change')} /></section>

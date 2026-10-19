@@ -269,6 +269,51 @@ describe('AutoMode workspace', () => {
     expect(actions.placeAutoTrack).not.toHaveBeenCalled();
   });
 
+  it('moves a dragged route song to the seam drawn, even below the rows on screen', () => {
+    state.playback.queue.push(
+      { id: 'later', queueId: 'q-later', title: 'Later song', artist: 'Later artist', source: 'preview' as const },
+      { id: 'last', queueId: 'q-last', title: 'Last song', artist: 'Last artist', source: 'preview' as const },
+    );
+    try {
+      const { container } = renderAuto('route');
+      // jsdom lays nothing out: the route shows two rows, and "q-last" is
+      // scrolled out below them.
+      const place = (element: Element, top: number, height: number) => {
+        (element as HTMLElement).getBoundingClientRect = () =>
+          ({ top, height, bottom: top + height, left: 0, right: 300, width: 300, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+      };
+      const row = (id: string) => container.querySelector(`[data-drag-row="${id}"]`)!;
+      place(container.querySelector('[data-section="route"]')!.parentElement!, 0, 100);
+      place(container.querySelector('[data-section-rows]')!, 0, 100);
+      ['q-next', 'q-later', 'q-last'].forEach((id, index) => place(row(id), index * 50, 50));
+      const drag = (node: Element, type: string, clientY = 0) => {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.assign(event, { clientX: 20, clientY, dataTransfer: stubTransfer() });
+        fireEvent(node, event);
+      };
+
+      drag(row('q-next'), 'dragstart');
+      drag(row('q-later'), 'dragenter');
+      // Its own bottom edge is where it already is.
+      drag(row('q-later'), 'dragover', 48);
+      drag(row('q-later'), 'drop', 48);
+      expect(actions.moveAutoRoute).not.toHaveBeenCalled();
+      fireEvent(window, new Event('dragend'));
+
+      drag(row('q-next'), 'dragstart');
+      drag(row('q-later'), 'dragenter');
+      drag(row('q-later'), 'dragover', 98);
+      expect(row('q-later')).toHaveAttribute('data-seam', 'after');
+      drag(row('q-later'), 'drop', 98);
+      // The line was under "q-later", so the song goes there — in front of the
+      // song scrolled out below it, not to the end of the route.
+      expect(actions.moveAutoRoute).toHaveBeenCalledWith('q-next', 'q-last');
+      expect(actions.placeAutoTrack).not.toHaveBeenCalled();
+    } finally {
+      state.playback.queue.splice(2);
+    }
+  });
+
   it('shows which joins lost their transition and puts the repair forward', () => {
     state.playback.queue.push({
       id: 'later', queueId: 'q-later', title: 'Later song', artist: 'Later artist', source: 'preview' as const,

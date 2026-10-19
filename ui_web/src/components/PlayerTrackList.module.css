@@ -244,9 +244,9 @@
 }
 
 /* The seam a drop would land on. Drawn on the row it inserts *before*, so the
- * line sits where the song would actually appear. */
-.row[data-seam]::before,
-.seamTail {
+ * line sits where the song would actually appear — or, below the last row on
+ * screen, on the bottom edge of the row it would follow. */
+.row[data-seam]::before {
   content: '';
   position: absolute;
   left: 4px;
@@ -257,8 +257,13 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-.row[data-seam]::before {
+.row[data-seam='before']::before {
   top: -1px;
+}
+
+.row[data-seam='after']::before {
+  top: auto;
+  bottom: -1px;
 }
 
 /* A join with no transition planned for it. Reordering opens seams the DJ
@@ -271,11 +276,6 @@
   right: 4px;
   left: 4px;
   border-top: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
-}
-
-.seamTail {
-  position: relative;
-  margin: 3px 0;
 }
 
 .main {

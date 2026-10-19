@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDropSlots,
+  dropBeforeId,
+  dropIndex,
+  dropTarget,
   edgeScrollDelta,
   isNoopMove,
   nearestSlot,
@@ -24,12 +27,12 @@ describe('dragReorder', () => {
   it('offers one more seam than there are rows, ending after the last', () => {
     const slots = buildDropSlots(rows);
     expect(slots.map((slot) => slot.beforeId)).toEqual(['a', 'b', 'c', undefined]);
+    expect(slots.map((slot) => slot.afterId)).toEqual([undefined, 'a', 'b', 'c']);
     expect(slots.map((slot) => slot.offset)).toEqual([0, 50, 100, 150]);
-    expect(slots.at(-1)!.index).toBe(3);
   });
 
   it('has a seam to aim at even with nothing in the list', () => {
-    expect(buildDropSlots([])).toEqual([{ index: 0, beforeId: undefined, offset: 0 }]);
+    expect(buildDropSlots([])).toEqual([{ beforeId: undefined, afterId: undefined, offset: 0 }]);
   });
 
   it('snaps to the nearest seam rather than the row under the pointer', () => {
@@ -48,32 +51,81 @@ describe('dragReorder', () => {
 
   it('treats both edges of a row as the place it already is', () => {
     const slots = buildDropSlots(rows);
-    const ids = rows.map((row) => row.id);
-    expect(isNoopMove(ids, ['b'], slots[1])).toBe(true);
-    expect(isNoopMove(ids, ['b'], slots[2])).toBe(true);
-    expect(isNoopMove(ids, ['b'], slots[0])).toBe(false);
-    expect(isNoopMove(ids, ['b'], slots[3])).toBe(false);
-    expect(isNoopMove(ids, ['missing'], slots[0])).toBe(false);
+    expect(isNoopMove(['b'], slots[1])).toBe(true);
+    expect(isNoopMove(['b'], slots[2])).toBe(true);
+    expect(isNoopMove(['b'], slots[0])).toBe(false);
+    expect(isNoopMove(['b'], slots[3])).toBe(false);
+    expect(isNoopMove(['missing'], slots[0])).toBe(false);
   });
 
   it('treats a whole block, and every seam inside it, as where it already is', () => {
     const slots = buildDropSlots(rows);
-    const ids = rows.map((row) => row.id);
     // A bridge and the song it leads into travel as one.
-    expect(isNoopMove(ids, ['a', 'b'], slots[0])).toBe(true);
-    expect(isNoopMove(ids, ['a', 'b'], slots[1])).toBe(true);
-    expect(isNoopMove(ids, ['a', 'b'], slots[2])).toBe(true);
-    expect(isNoopMove(ids, ['a', 'b'], slots[3])).toBe(false);
-    expect(isNoopMove(ids, [], slots[0])).toBe(false);
+    expect(isNoopMove(['a', 'b'], slots[0])).toBe(true);
+    expect(isNoopMove(['a', 'b'], slots[1])).toBe(true);
+    expect(isNoopMove(['a', 'b'], slots[2])).toBe(true);
+    expect(isNoopMove(['a', 'b'], slots[3])).toBe(false);
+    expect(isNoopMove([], slots[0])).toBe(false);
   });
 
-  it('never offers the seam above a fixed row, and does not renumber the rest', () => {
+  it('judges a move by the rows beside the seam, however far the lane is scrolled', () => {
+    // Only "m" and "n" are on screen, deep inside a longer list.
+    const slots = buildDropSlots([{ id: 'm', top: 0, height: 50 }, { id: 'n', top: 50, height: 50 }]);
+    expect(isNoopMove(['n'], slots[1])).toBe(true);
+    expect(isNoopMove(['m'], slots[2])).toBe(false);
+  });
+
+  it('never offers the seam above a fixed row', () => {
     // The cued handoff leads the route: nothing may be put in front of it.
     const slots = buildDropSlots([{ ...rows[0], fixed: true }, rows[1], rows[2]]);
     expect(slots.map((slot) => slot.beforeId)).toEqual(['b', 'c', undefined]);
-    // "before b" still means one row sits ahead of the seam.
-    expect(slots.map((slot) => slot.index)).toEqual([1, 2, 3]);
+    // The seam that is left still knows the fixed row sits above it.
+    expect(slots[0].afterId).toBe('a');
     expect(nearestSlot(slots, -900)?.beforeId).toBe('b');
+  });
+
+  it('lands a drop under the last row on screen right after it, not at the end of the list', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e'];
+    // A card showing its first three songs, or a lane scrolled to show them.
+    const shown = buildDropSlots(rows);
+    expect(dropBeforeId(ids, shown[3])).toBe('d');
+    expect(dropBeforeId(ids, shown[1])).toBe('b');
+    expect(dropBeforeId(['a', 'b', 'c'], shown[3])).toBeUndefined();
+    expect(dropBeforeId([], buildDropSlots([])[0])).toBeUndefined();
+  });
+
+  it('turns a seam into the index a remove-then-insert move puts the row at', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e'];
+    const slots = buildDropSlots(rows);
+    // Down: "a" before "c" ends up second, once it has left its own place.
+    expect(dropIndex(ids, 'a', slots[2])).toBe(1);
+    // Down, under the last row shown: right after "c", ahead of "d".
+    expect(dropIndex(ids, 'a', slots[3])).toBe(2);
+    // Up: "e" before "b".
+    expect(dropIndex(ids, 'e', slots[1])).toBe(1);
+    // Up, under the last row shown: right after "c".
+    expect(dropIndex(ids, 'e', slots[3])).toBe(3);
+    // To the very end of the list.
+    expect(dropIndex(['a', 'b', 'c'], 'a', slots[3])).toBe(2);
+    expect(dropIndex(ids, 'missing', slots[1])).toBe(-1);
+  });
+
+  it('takes a drop only while it accepts one, and takes the entering as well as the hovering', () => {
+    let accepting = false;
+    const dropped: DragEvent[] = [];
+    const handlers = dropTarget(() => accepting, (event) => dropped.push(event));
+    const event = (type: string) => new Event(type, { cancelable: true }) as DragEvent;
+
+    const refused = [event('dragenter'), event('dragover'), event('drop')];
+    handlers.onDragEnter(refused[0]); handlers.onDragOver(refused[1]); handlers.onDrop(refused[2]);
+    expect(refused.map((e) => e.defaultPrevented)).toEqual([false, false, false]);
+    expect(dropped).toHaveLength(0);
+
+    accepting = true;
+    const taken = [event('dragenter'), event('dragover'), event('drop')];
+    handlers.onDragEnter(taken[0]); handlers.onDragOver(taken[1]); handlers.onDrop(taken[2]);
+    expect(taken.map((e) => e.defaultPrevented)).toEqual([true, true, true]);
+    expect(dropped).toEqual([taken[2]]);
   });
 
   it('scrolls only near an edge, and ramps rather than switching on', () => {
@@ -119,6 +171,28 @@ describe('dragReorder', () => {
     expect(read.map((row) => row.fixed)).toEqual([false, true, false]);
     // No seam is offered for a row nobody can see.
     expect(buildDropSlots(read).map((slot) => slot.beforeId)).toEqual(['first', 'last', undefined]);
+  });
+
+  it('reads only the rows of one lane, and only where that lane is on screen', () => {
+    const container = document.createElement('div');
+    stubRect(container, 100, 300);
+    const lanes = [document.createElement('div'), document.createElement('div')];
+    // The first lane scrolls inside the container and shows 100–200 only.
+    stubRect(lanes[0], 100, 100);
+    stubRect(lanes[1], 220, 180);
+    for (const [lane, id, top] of [
+      [0, 'hidden', 40], [0, 'one', 110], [0, 'two', 160], [0, 'scrolled-out', 210],
+      [1, 'other', 230],
+    ] as const) {
+      const row = document.createElement('div');
+      row.dataset.dragRow = id;
+      stubRect(row, top, 50);
+      lanes[lane].append(row);
+    }
+    container.append(...lanes);
+
+    expect(readDragRows(container, lanes[0]).map((row) => row.id)).toEqual(['one', 'two']);
+    expect(readDragRows(container).map((row) => row.id)).toEqual(['one', 'two', 'scrolled-out', 'other']);
   });
 
   it('measures rows against a scrolled container', () => {
