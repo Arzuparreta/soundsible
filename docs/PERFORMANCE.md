@@ -185,15 +185,15 @@ output changes on purpose. Three-run medians on this Linux workstation:
 
 | Synthetic audio | Features, reference → current | Full pipeline with FFmpeg | Peak RSS |
 | --- | ---: | ---: | ---: |
-| 18 seconds | 12 → 21 ms | 42 → 52 ms | 55.4 → 57.3 MiB |
-| 120 seconds | 36 → 88 ms | 68 → 124 ms | 65.2 → 66.3 MiB |
-| 480 seconds | 84 → 289 ms | 129 → 338 ms | 127.3 → 127.5 MiB |
-| 900 seconds (head and tail windows) | — | 109 → 200 ms | 199.5 → 199.7 MiB |
+| 18 seconds | 13 → 21 ms | 43 → 54 ms | 55.2 → 57.3 MiB |
+| 120 seconds | 35 → 89 ms | 69 → 152 ms | 65.3 → 66.3 MiB |
+| 480 seconds | 84 → 292 ms | 131 → 337 ms | 127.3 → 127.3 MiB |
+| 900 seconds (head and tail windows) | — | 110 → 203 ms | 199.5 → 199.6 MiB |
 
 CPU time equals wall time: the pass stays on one thread. Two concurrent
 480-second analyses under the gevent HTTP benchmark left the largest response
-delay at 1.7–2.3 ms (reference 4.4–7.1 ms). The 53 cached previews on the
-workstation took 24.7 s in total, against 11.5 s before, FFmpeg included.
+delay at 1.4–3.1 ms (reference 3.8–6.9 ms). The 53 cached previews on the
+workstation took 18.2 s in total, against 11.5 s before, FFmpeg included.
 
 ## Reproduce safely
 
