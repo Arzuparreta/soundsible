@@ -567,6 +567,9 @@ _ATTACK_SMOOTHING = 0.002
 # One straight grid fits a programmed song: for at least half of the window
 # its locally fitted beats stay within 12 ms of the line and its local tempo
 # within 0.3 % of the line's, and 55 % of the tracked beat weight sits on it.
+# Mean rise of 2 ms level at the beats, in dB, below which nothing audibly
+# pulses: 0.15 for a steady tone, at least 1.7 across 53 real songs.
+_MIN_PULSE_DB = 1.0
 _CONSTANT_WANDER = 0.012
 _CONSTANT_DRIFT = 0.003
 _CONSTANT_SHARE = 0.55
@@ -621,7 +624,10 @@ def _rhythm(samples, sample_rate: int) -> dict[str, Any] | None:
     if grid.size < 4:
         return None
 
-    grid = _settle_beat_phase(samples, sample_rate, grid)
+    grid, pulse = _settle_beat_phase(samples, sample_rate, grid)
+    if pulse < _MIN_PULSE_DB:
+        # A sustained sound: the tracker found only rounding noise to follow.
+        return None
     grid = _align_attacks(samples, sample_rate, grid, _attack_floor(samples, _ATTACK_PREEMPHASIS), constant=constant)
     grid = grid[(grid >= 0) & (grid <= duration)]
     if grid.size < 4:
@@ -961,6 +967,8 @@ def _halfway(grid):
 def _settle_beat_phase(samples, sample_rate: int, grid):
     """Move the grid to the half beat when the attacks clearly live there.
 
+    Returns the grid and the mean attack height (dB) at its points.
+
     The tracker locks onto the stronger of beat and off-beat in its own onset
     measure, where an off-beat hi-hat or bass note counts as much as a kick
     drum. The jump in overall level separates them: it belongs to the kick.
@@ -970,7 +978,7 @@ def _settle_beat_phase(samples, sample_rate: int, grid):
     shifted = _halfway(grid)
     _, on_beat = _mean_attack(samples, sample_rate, grid, floor, emphasis=0.0)
     _, off_beat = _mean_attack(samples, sample_rate, shifted, floor, emphasis=0.0)
-    return shifted if off_beat > 1.1 * on_beat else grid
+    return (shifted, off_beat) if off_beat > 1.1 * on_beat else (grid, on_beat)
 
 
 def _align_attacks(samples, sample_rate: int, grid, floor: float, *, constant: bool):

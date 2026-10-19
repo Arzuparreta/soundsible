@@ -145,6 +145,26 @@ def test_a_drifting_performance_gets_a_following_grid_and_less_trust(analysed):
     assert result["tempo_confidence"] < 0.7
 
 
+def test_a_sustained_sound_has_no_tempo(tmp_path, monkeypatch):
+    # A drone gives the tracker nothing but rounding noise to follow; it must
+    # not come back as a confident grid that the planner would beatmatch.
+    monkeypatch.setattr(dj_engine, "_cache_path", lambda: tmp_path / "analysis.sqlite3")
+    t = np.arange(int(20 * RATE)) / RATE
+    path = tmp_path / "drone.wav"
+    with wave.open(str(path), "wb") as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(RATE)
+        output.writeframes((0.3 * np.sin(2 * np.pi * 220 * t) * 32000).astype("<i2").tobytes())
+
+    result = analyse_audio(path, "drone")
+
+    assert result["analysed"] is True
+    assert result["bpm"] == 0
+    assert result["beat_grid"] == []
+    assert result["tempo_confidence"] == 0
+
+
 def test_two_mixed_songs_keep_their_kicks_together_for_the_whole_overlap(analysed):
     outgoing, out_onsets, _ = analysed("out", 124.0, seconds=90.0, kick="sharp", seed=3)
     incoming, in_onsets, _ = analysed("in", 126.3, seconds=90.0, kick="soft", first=0.83, seed=4)
