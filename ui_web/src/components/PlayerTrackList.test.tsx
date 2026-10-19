@@ -203,3 +203,71 @@ describe('song menus', () => {
     expect(carry).not.toHaveBeenCalled();
   });
 });
+
+describe('dragging a row', () => {
+  /** jsdom lays nothing out, so every rect the drag reads is stated outright. */
+  function place(element: Element, top: number, height: number) {
+    (element as HTMLElement).getBoundingClientRect = () =>
+      ({ top, height, bottom: top + height, left: 0, right: 300, width: 300, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+  }
+  function drag(node: Element, type: string, init: { clientY?: number; dataTransfer?: object } = {}) {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.assign(event, { clientX: 20, clientY: 0, ...init });
+    fireEvent(node, event);
+    return event;
+  }
+  const transfer = () => ({ dropEffect: 'none' });
+
+  it('stays in the lane it was picked up from, draws the seam it will land on, and reports it', () => {
+    const onReorder = vi.fn();
+    const requests = ['req-1', 'req-2'].map((id) => ({ id, title: id, artist: 'Artist', draggable: true }));
+    const card = contextCard({ songs: { count: 3, rows: () => ['song-1', 'song-2', 'song-3'].map((id) => ({ id, title: id, artist: 'Artist', draggable: true })) } });
+    const { container } = render(() => (
+      <PlayerTrackList title="Queue" count={2} empty="Nothing" onReorder={onReorder}
+        sections={[{ id: 'manual', label: 'Next', entries: requests }, { id: 'continuation', entries: [], cards: [card] }]} />
+    ));
+    fireEvent.click(container.querySelector('[data-card-expand]')!);
+    const row = (id: string) => container.querySelector(`[data-drag-row="${id}"]`)!;
+    const list = container.querySelector('[data-section]')!.parentElement!;
+    const [requestLane, cardLane] = container.querySelectorAll('[data-section-rows]');
+    place(list, 0, 600);
+    place(requestLane, 30, 100);
+    place(cardLane, 300, 150);
+    ['req-1', 'req-2'].forEach((id, index) => place(row(id), 30 + index * 50, 50));
+    ['song-1', 'song-2', 'song-3'].forEach((id, index) => place(row(id), 300 + index * 50, 50));
+    const seams = () => [...container.querySelectorAll('[data-seam]')].map((node) => `${node.getAttribute('data-drag-row')}:${node.getAttribute('data-seam')}`);
+
+    const dataTransfer = transfer();
+    drag(row('song-1'), 'dragstart', { dataTransfer });
+    expect(drag(row('song-2'), 'dragenter', { dataTransfer }).defaultPrevented).toBe(true);
+
+    // Under the last song of the card: the line goes on that song's bottom edge.
+    expect(drag(row('song-3'), 'dragover', { clientY: 445, dataTransfer }).defaultPrevented).toBe(true);
+    expect(dataTransfer.dropEffect).toBe('move');
+    expect(seams()).toEqual(['song-3:after']);
+
+    // Over the requests above, it still only offers the card's own seams.
+    drag(row('req-2'), 'dragover', { clientY: 85, dataTransfer });
+    expect(seams()).toEqual(['song-1:before']);
+    // That seam is where the song already is: nothing to report.
+    drag(row('req-2'), 'drop', { clientY: 85, dataTransfer });
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(seams()).toEqual([]);
+    fireEvent(window, new Event('dragend'));
+
+    drag(row('song-1'), 'dragstart', { dataTransfer });
+    drag(row('song-2'), 'dragenter', { dataTransfer });
+    drag(row('song-3'), 'dragover', { clientY: 445, dataTransfer });
+    drag(row('song-3'), 'drop', { clientY: 445, dataTransfer });
+    expect(onReorder).toHaveBeenCalledWith('song-1', { beforeId: undefined, afterId: 'song-3', offset: 450 });
+  });
+
+  it('is no drop target for a list that takes no reordering', () => {
+    const { container } = list(() => [{ id: 'manual', entries: [{ id: 'req-1', title: 'req-1', artist: 'Artist', draggable: true }] }]);
+    const row = container.querySelector('[data-drag-row="req-1"]')!;
+    drag(row, 'dragstart', { dataTransfer: transfer() });
+    expect(drag(row, 'dragenter').defaultPrevented).toBe(false);
+    expect(drag(row, 'dragover').defaultPrevented).toBe(false);
+    fireEvent(window, new Event('dragend'));
+  });
+});

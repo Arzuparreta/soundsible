@@ -1,4 +1,5 @@
 import { createSignal, For, type JSX } from 'solid-js';
+import { dropTarget } from '../lib/dragReorder';
 import { t } from '../lib/i18n';
 import styles from './NowPlayingBrowser.module.css';
 
@@ -20,7 +21,7 @@ export function MusicReorderList<T>(props: {
   };
   return <div aria-busy={busy()}><For each={props.items}>{(item, index) => <div class={styles.editRow}
     draggable={!busy()} onDragStart={(event) => { dragged = index(); event.stopPropagation(); event.dataTransfer?.setData('text/plain', props.label(item)); }}
-    onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged !== null) void move(dragged, index()); dragged = null; }} onDragEnd={() => { dragged = null; }}>
+    {...dropTarget(() => dragged !== null, (event) => { event.stopPropagation(); const from = dragged!; dragged = null; void move(from, index()); })} onDragEnd={() => { dragged = null; }}>
     <div>{props.render(item)}</div>
     <button type="button" disabled={busy() || index() === 0} aria-label={`${t('musicExplorer.up')}: ${props.label(item)}`} onClick={() => void move(index(), index() - 1)}>↑</button>
     <button type="button" disabled={busy() || index() === props.items.length - 1} aria-label={`${t('musicExplorer.down')}: ${props.label(item)}`} onClick={() => void move(index(), index() + 1)}>↓</button>

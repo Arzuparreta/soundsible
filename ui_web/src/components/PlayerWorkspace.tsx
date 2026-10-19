@@ -10,6 +10,7 @@ import {
 } from 'solid-js';
 import { openActionMenu } from './ActionMenu';
 import { t } from '../lib/i18n';
+import { dropTarget } from '../lib/dragReorder';
 import {
   movePanel,
   reorderPanel,
@@ -422,16 +423,11 @@ export function PlayerWorkspace<PanelId extends string>(props: {
                 data-auto-tile={props.dataScope === 'auto' ? panel : undefined}
                 aria-hidden={mobileLayout() && props.activePanel !== panel ? 'true' : undefined}
                 inert={mobileLayout() && props.activePanel !== panel ? true : undefined}
-                onDragOver={(event) => {
-                  if (draggedPanel && draggedPanel !== panel) event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const dragged = draggedPanel;
+                {...dropTarget(() => Boolean(draggedPanel && draggedPanel !== panel), () => {
+                  const dragged = draggedPanel!;
                   draggedPanel = null;
-                  if (!dragged || dragged === panel) return;
                   changePanelOrder(dragged, renderedPanels().indexOf(panel));
-                }}
+                })}
               >
                 {props.renderPanel(panel, <PanelGrip panel={panel} />)}
               </section>

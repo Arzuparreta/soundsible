@@ -16,6 +16,7 @@ import { claimHoldGesture, clearTextSelection } from '../lib/holdGesture';
 import {
   buildDropSlots,
   containerPointer,
+  dropTarget,
   edgeScrollDelta,
   nearestSlot,
   readDragRows,
@@ -47,9 +48,6 @@ export interface PlayerTrackListEntry {
   canMoveDown?: boolean;
   draggable?: boolean;
   onDragStart?: (event: DragEvent) => void;
-  onDragEnd?: (event: DragEvent) => void;
-  onDragOver?: (event: DragEvent) => void;
-  onDrop?: (event: DragEvent) => void;
   before?: JSX.Element;
   onCarry?: () => void;
 }
@@ -127,11 +125,13 @@ export function PlayerTrackList(props: {
   empty: JSX.Element;
   dragHandle?: JSX.Element;
   headAction?: PlayerTrackListHeadAction | PlayerTrackListHeadAction[];
-  onDragOver?: (event: DragEvent) => void;
+  /** Something dropped on the header. */
   onDrop?: (event: DragEvent) => void;
-  /** Given the seam a drag is nearest to, place what is being carried. Wiring
-   * this is what turns the list itself into the drop target, instead of the
-   * per-row gaps that were the only aim-able thing before. */
+  /** A row of this list dragged to the seam nearest the pointer, within the
+   * lane — or the expanded card — it was picked up from. A seam on either side
+   * of the row itself is where it already is, and is not reported. */
+  onReorder?: (id: string, slot: DropSlot) => void;
+  /** Something from outside the list dropped at the seam nearest the pointer. */
   onDropAtSlot?: (slot: DropSlot, event: DragEvent) => void;
   /** True while a track is being carried by long-press, the touch equivalent
    * of a drag: the same seam indicator should be showing. */
@@ -187,6 +187,10 @@ export function PlayerTrackList(props: {
       ?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   });
   let depth = 0;
+  // The row being dragged out of this list, and the lane it may land in. A
+  // drag that started anywhere else has no lane, and is placed with
+  // `onDropAtSlot`.
+  let carried: { id: string; lane: HTMLElement } | null = null;
   let scrollFrame: number | undefined;
   let scrollSpeed = 0;
   // Each lane scrolls itself now, so the element to nudge is whichever one the
@@ -212,18 +216,27 @@ export function PlayerTrackList(props: {
     stopEdgeScroll();
   };
   onCleanup(stopEdgeScroll);
+  const takes = () => Boolean(carried ? props.onReorder : props.onDropAtSlot);
+  const seamAt = (id: string): 'before' | 'after' | undefined => {
+    const at = slot();
+    if (at?.beforeId === id) return 'before';
+    return at && !at.beforeId && at.afterId === id ? 'after' : undefined;
+  };
+  // A card's songs do not scroll by themselves: the list around them does.
+  const scrolls = (element: HTMLElement | null | undefined) =>
+    element && element.scrollHeight > element.clientHeight ? element : undefined;
 
   const trackPointer = (event: DragEvent) => {
-    if (!rowsEl || !props.onDropAtSlot) return;
-    const rows = readDragRows(rowsEl);
+    if (!rowsEl) return;
+    const rows = readDragRows(rowsEl, carried?.lane);
     if (!rows.length) return;
     const next = nearestSlot(buildDropSlots(rows), containerPointer(rowsEl, event.clientY));
-    if (next && next.index !== slot()?.index) {
+    if (next && (next.beforeId !== slot()?.beforeId || next.afterId !== slot()?.afterId)) {
       setSlot(next);
       vibrate(6);
     }
-    const lane = (event.target as Element | null)?.closest<HTMLElement>('[data-section-rows]');
-    const target = lane ?? rowsEl;
+    const lane = carried?.lane ?? (event.target as Element | null)?.closest<HTMLElement>('[data-section-rows]');
+    const target = scrolls(lane) ?? rowsEl;
     const bounds = target.getBoundingClientRect();
     scrollEl = target;
     scrollSpeed = edgeScrollDelta(event.clientY, { top: bounds.top, bottom: bounds.bottom });
@@ -233,7 +246,7 @@ export function PlayerTrackList(props: {
 
   return (
     <div class={styles.panel} data-dragging={dragging() || props.placing ? '' : undefined}>
-      <header class={styles.head} onDragOver={props.onDragOver} onDrop={props.onDrop}>
+      <header class={styles.head} {...dropTarget(() => Boolean(props.onDrop), (event) => props.onDrop?.(event))}>
         <span class={styles.heading}>
           {props.dragHandle}
           <h2>{props.title}</h2>
@@ -261,8 +274,24 @@ export function PlayerTrackList(props: {
       <div
         class={styles.rows}
         ref={(element) => { rowsEl = element; props.setScrollerRef?.(element); }}
+        onDragStart={(event) => {
+          const row = (event.target as Element).closest<HTMLElement>('[data-drag-row]');
+          const lane = row?.closest<HTMLElement>('[data-section-rows]');
+          if (!row?.dataset.dragRow || !lane) return;
+          carried = { id: row.dataset.dragRow, lane };
+          // `dragend` fires on the row and bubbles, so one self-removing
+          // listener closes out the drag however it ended.
+          const done = () => {
+            carried = null;
+            endDrag();
+            window.removeEventListener('dragend', done);
+          };
+          window.addEventListener('dragend', done);
+        }}
+        // Cancelling `dragenter` as well as `dragover` is what makes this a
+        // drop target in Chromium: see `dropTarget`.
         onDragEnter={(event) => {
-          if (!props.onDropAtSlot) return;
+          if (!takes()) return;
           event.preventDefault();
           depth += 1;
           setDragging(true);
@@ -270,21 +299,26 @@ export function PlayerTrackList(props: {
         // `dragleave` fires for every child the pointer crosses, so only a
         // matched count of them means the drag has actually left the list.
         onDragLeave={() => {
-          if (!props.onDropAtSlot) return;
+          if (!takes()) return;
           depth = Math.max(0, depth - 1);
           if (depth === 0) endDrag();
         }}
         onDragOver={(event) => {
-          if (!props.onDropAtSlot) return;
+          if (!takes()) return;
           event.preventDefault();
+          if (carried && event.dataTransfer) event.dataTransfer.dropEffect = 'move';
           trackPointer(event);
         }}
         onDrop={(event) => {
-          if (!props.onDropAtSlot) return;
+          if (!takes()) return;
           event.preventDefault();
           const target = slot();
+          const source = carried;
+          carried = null;
           endDrag();
-          if (target) props.onDropAtSlot(target, event);
+          if (!target) return;
+          if (!source) props.onDropAtSlot?.(target, event);
+          else if (target.beforeId !== source.id && target.afterId !== source.id) props.onReorder?.(source.id, target);
         }}
       >
         <Show when={props.sections.some(sectionHasContent)} fallback={<div class={styles.empty}>{props.empty}</div>}>
@@ -307,11 +341,10 @@ export function PlayerTrackList(props: {
                     </div>
                   </Show>
                   <Show when={section().cards?.length} fallback={
-                  <PlayerLane virtualize={props.virtualize} entries={section().entries} editingId={editingId()}
-                    tail={<Show when={slot() && slot()!.index === section().entries.length}><div class={styles.seamTail} aria-hidden="true" /></Show>}>
-                    {(entry, index) => <>
+                  <PlayerLane virtualize={props.virtualize} entries={section().entries} editingId={editingId()}>
+                    {(entry) => <>
                       {entry().before}
-                      <PlayerTrackListRow entry={entry()} seam={slot()?.index === index()}
+                      <PlayerTrackListRow entry={entry()} seam={seamAt(entry().id)}
                         editing={editingId() === entry().id}
                         onEditingChange={(editing) => { const id = entry().id; setEditingId(editing ? id : null); focusRowControl(id); }}
                         onMove={(direction) => { const row = entry(); row.onMove?.(direction); focusRowControl(row.id, direction < 0 ? 'up' : 'down'); }} />
@@ -329,7 +362,7 @@ export function PlayerTrackList(props: {
                           const rows = cardRows().get(key) ?? [];
                           if (rows[before] && rows.length >= (card().songs?.count ?? 0)) focusRowStart(rows[before].id);
                         }}
-                        editingId={editingId()}
+                        editingId={editingId()} seamAt={seamAt}
                         onEditingChange={(id, editing) => { setEditingId(editing ? id : null); focusRowControl(id); }}
                         onMove={(row, direction) => {
                           // Moving the last song shown down takes it past the page: show the
@@ -370,16 +403,16 @@ function PlayerLane(props: {
   virtualize?: boolean;
   entries: PlayerTrackListEntry[];
   editingId: string | null;
-  tail: JSX.Element;
-  children: (entry: () => PlayerTrackListEntry, index: () => number) => JSX.Element;
+  tail?: JSX.Element;
+  children: (entry: () => PlayerTrackListEntry) => JSX.Element;
 }) {
   const [scroller, setScroller] = createSignal<HTMLDivElement | null>(null);
   return <div ref={setScroller} class={styles.sectionRows} data-section-rows>
-    <Show when={props.virtualize} fallback={<For each={props.entries}>{(entry, index) => props.children(() => entry, index)}</For>}>
+    <Show when={props.virtualize} fallback={<For each={props.entries}>{(entry) => props.children(() => entry)}</For>}>
       <VirtualRows items={props.entries} scrollElement={scroller}
         rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows
         keepMountedIndex={props.entries.findIndex((entry) => entry.id === props.editingId)}>
-        {(entry, index) => <Show when={entry()}>{(current) => props.children(current, () => index)}</Show>}
+        {(entry) => <Show when={entry()}>{(current) => props.children(current)}</Show>}
       </VirtualRows>
     </Show>
     {props.tail}
@@ -395,6 +428,7 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard;
   rows: PlayerTrackListEntry[] | undefined;
   onToggle: () => void; onShowMore: () => void;
   editingId: string | null; onEditingChange: (id: string, editing: boolean) => void;
+  seamAt: (id: string) => 'before' | 'after' | undefined;
   onMove: (entry: PlayerTrackListEntry, direction: -1 | 1) => void }) {
   const contentsId = createUniqueId();
   const expandable = () => props.card.songs !== undefined;
@@ -501,7 +535,7 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard;
               </div>
             </Show>
           }>
-            {(entry) => <PlayerTrackListRow entry={entry()} editing={props.editingId === entry().id}
+            {(entry) => <PlayerTrackListRow entry={entry()} seam={props.seamAt(entry().id)} editing={props.editingId === entry().id}
               onEditingChange={editing => props.onEditingChange(entry().id, editing)} onMove={direction => props.onMove(entry(), direction)} />}
           </PlayerLane>
         </Show>
@@ -513,7 +547,9 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard;
 
 function PlayerTrackListRow(props: {
   entry: PlayerTrackListEntry;
-  seam?: boolean;
+  /** The drop line, drawn on the row's top edge or, under the last row on
+   * screen, on its bottom edge. */
+  seam?: 'before' | 'after';
   editing: boolean;
   onEditingChange: (editing: boolean) => void;
   onMove: (direction: -1 | 1) => void;
@@ -552,15 +588,12 @@ function PlayerTrackListRow(props: {
       // The cued handoff is already loaded: nothing may be inserted in front of
       // it, so the list never draws that seam.
       data-drag-fixed={props.entry.locked ? '' : undefined}
-      data-seam={props.seam ? '' : undefined}
+      data-seam={props.seam}
       data-current={props.entry.current ? '' : undefined}
       data-locked={props.entry.locked ? '' : undefined}
       data-stale={props.entry.stale ? '' : undefined}
       draggable={props.entry.draggable}
       onDragStart={props.entry.onDragStart}
-      onDragEnd={props.entry.onDragEnd}
-      onDragOver={props.entry.onDragOver}
-      onDrop={props.entry.onDrop}
       // Keep right-click alongside the visible menu. Mobile rows own their
       // context and hold gestures through MusicListRow.
       onContextMenu={(event) => {
