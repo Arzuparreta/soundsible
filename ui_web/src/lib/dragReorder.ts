@@ -139,7 +139,9 @@ export const EDGE_SCROLL_MAX = 18;
 /**
  * How far to scroll a list whose edge a drag is hovering near, in pixels per
  * frame. Zero anywhere but the top and bottom bands, and it ramps rather than
- * switching on, so a drag that grazes the edge does not bolt.
+ * switching on, so a drag that grazes the edge does not bolt. Past the edge —
+ * a row dragged out over another lane keeps scrolling its own — it holds at
+ * the band's full speed.
  */
 export function edgeScrollDelta(
   pointerY: number,
@@ -147,12 +149,9 @@ export function edgeScrollDelta(
 ): number {
   const zone = Math.min(EDGE_SCROLL_ZONE, Math.max(0, (bounds.bottom - bounds.top) / 3));
   if (zone <= 0) return 0;
-  if (pointerY < bounds.top + zone) {
-    return -Math.round(((bounds.top + zone - pointerY) / zone) * EDGE_SCROLL_MAX);
-  }
-  if (pointerY > bounds.bottom - zone) {
-    return Math.round(((pointerY - (bounds.bottom - zone)) / zone) * EDGE_SCROLL_MAX);
-  }
+  const pull = (depth: number) => Math.round(Math.min(1, depth / zone) * EDGE_SCROLL_MAX);
+  if (pointerY < bounds.top + zone) return -pull(bounds.top + zone - pointerY);
+  if (pointerY > bounds.bottom - zone) return pull(pointerY - (bounds.bottom - zone));
   return 0;
 }
 

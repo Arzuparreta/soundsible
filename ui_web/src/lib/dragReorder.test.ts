@@ -4,6 +4,7 @@ import {
   dropBeforeId,
   dropIndex,
   dropTarget,
+  EDGE_SCROLL_MAX,
   edgeScrollDelta,
   isNoopMove,
   nearestSlot,
@@ -136,6 +137,13 @@ describe('dragReorder', () => {
     // Deeper into the band pulls harder.
     expect(Math.abs(edgeScrollDelta(102, bounds))).toBeGreaterThan(Math.abs(edgeScrollDelta(140, bounds)));
     expect(edgeScrollDelta(495, bounds)).toBeGreaterThan(edgeScrollDelta(465, bounds));
+  });
+
+  it('holds at full speed past the edge instead of bolting', () => {
+    const bounds = { top: 100, bottom: 500 };
+    expect(edgeScrollDelta(800, bounds)).toBe(EDGE_SCROLL_MAX);
+    expect(edgeScrollDelta(500, bounds)).toBe(EDGE_SCROLL_MAX);
+    expect(edgeScrollDelta(-300, bounds)).toBe(-EDGE_SCROLL_MAX);
   });
 
   it('does not scroll a list too short to have edges', () => {
