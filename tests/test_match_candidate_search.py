@@ -63,16 +63,17 @@ def test_ignores_the_browse_preference(downloader, monkeypatch):
     """SOUNDSIBLE_YT_SEARCH_SOURCE picks where people browse. Scoring is not
     browsing, and following it here is what cost 5.2 s per cold resolve."""
     monkeypatch.setenv("SOUNDSIBLE_YT_SEARCH_SOURCE", "ytmusic")
-    seen = {}
+    seen = []
     monkeypatch.setattr(
         search,
         "search_youtube",
-        lambda query, cookies, **kw: seen.update(kw) or [],
+        lambda query, cookies, **kw: seen.append(kw) or [],
     )
 
     downloader.search_match_candidates("Queen", "Bohemian Rhapsody")
 
-    assert seen["use_ytmusic"] is False
+    assert seen[0]["use_ytmusic"] is False
+    assert [call['use_ytmusic'] for call in seen] == [False, True]
 
 
 def test_empty_track_asks_nothing(downloader, monkeypatch):
@@ -93,3 +94,62 @@ def test_a_duration_is_what_lets_a_match_reach_high():
 
     assert classify_confidence(with_duration) == "high"
     assert with_duration > without_duration
+
+
+def test_empty_video_search_recovers_music_candidates_with_real_durations(downloader, monkeypatch):
+    calls, peeks = [], []
+    def fake_search(query, cookies, **kw):
+        calls.append(kw)
+        return ([{'id': '8lbGTPi60TA', 'title': 'Por Ser un Pervertido', 'channel': 'Robe - Topic'},
+                 {'id': '5YGEid34Cqg', 'title': 'Por Ser un Pervertido (Live)', 'channel': 'Robe - Topic'}]
+                if kw['use_ytmusic'] else [])
+    def peek(video, cookies):
+        peeks.append(video)
+        return {'id': video, 'title': 'Por Ser un Pervertido', 'channel': 'Robe', 'duration': 344}
+    monkeypatch.setattr(search, 'search_youtube', fake_search)
+    monkeypatch.setattr(search, 'peek_brief', peek)
+    rows = downloader.search_match_candidates('Robe', 'Por Ser un Pervertido')
+    assert [call['use_ytmusic'] for call in calls] == [False, True]
+    assert peeks == ['8lbGTPi60TA']
+    assert rows[0]['duration'] == 344
+    score, reason = score_candidate('Robe', 'Por Ser un Pervertido', 343, rows[0])
+    assert classify_confidence(score) == 'high'
+    assert reason == 'title_artist_duration'
+
+
+def test_nonempty_primary_never_pays_for_music_or_peeks(downloader, monkeypatch):
+    calls = []
+    def primary(query, cookies, **kw):
+        calls.append(kw)
+        return [{'id': 'gi3GiEIpeZU', 'title': 'Por Ser un Pervertido', 'channel': 'Robe', 'duration': 344}]
+    monkeypatch.setattr(search, 'search_youtube', primary)
+    monkeypatch.setattr(search, 'peek_brief', lambda *a: pytest.fail('No extra extraction'))
+    assert downloader.search_match_candidates('Robe', 'Por Ser un Pervertido')[0]['duration'] == 344
+    assert len(calls) == 1 and calls[0]['use_ytmusic'] is False
+
+
+def test_fallback_is_bounded_and_does_not_invent_duration(downloader, monkeypatch):
+    peeks = []
+    def music(query, cookies, **kw):
+        return ([{'id': f'video{i:06d}', 'title': 'Song', 'channel': 'Artist'} for i in range(8)]
+                if kw['use_ytmusic'] else [])
+    def peek(video, cookies):
+        peeks.append(video)
+        if video.endswith('0'):
+            raise OSError('unavailable')
+        return {'id': video, 'title': 'Song', 'channel': 'Artist', 'duration': 0}
+    monkeypatch.setattr(search, 'search_youtube', music)
+    monkeypatch.setattr(search, 'peek_brief', peek)
+    rows = downloader.search_match_candidates('Artist', 'Song')
+    assert len(peeks) == 3
+    assert len(rows) == 2 and all(row['duration'] == 0 for row in rows)
+
+
+def test_fallback_preserves_music_source_errors(downloader, monkeypatch):
+    def search_or_fail(query, cookies, **kw):
+        if kw['use_ytmusic']:
+            raise OSError('network down')
+        return []
+    monkeypatch.setattr(search, 'search_youtube', search_or_fail)
+    with pytest.raises(OSError, match='network down'):
+        downloader.search_match_candidates('Artist', 'Song')

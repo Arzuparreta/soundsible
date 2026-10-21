@@ -134,3 +134,34 @@ it('opts into disk-backed deltas with the accepted revision as the explicit base
   expect(String(url)).toContain(`/api/library?delta=1&since=${revision}`);
   expect(options?.headers).toMatchObject({ 'If-None-Match': `W/"${revision}"` });
 });
+
+describe('album recording reconciliation', () => {
+  it('posts only the authoritative album id when the engine finds an orphan', async () => {
+    const { api } = await import('./api');
+    const initial = { title: 'Record', deezer_id: '715226121', reconciliation_needed: true };
+    const repaired = { ...initial, reconciliation_needed: false, tracklist: [{ track_id: 'owned' }] };
+    const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(initial)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(repaired)));
+    globalThis.fetch = fetcher;
+    expect(await api.getAlbumProfile('Record', 'Robe')).toEqual(repaired);
+    expect(String(fetcher.mock.calls[0][0])).toContain('/api/catalog/album?');
+    expect(fetcher.mock.calls[1][0]).toContain('/api/catalog/album/reconcile');
+    expect(fetcher.mock.calls[1][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ deezer_id: '715226121' }) });
+  });
+
+  it('keeps browsing available for a client without library write scope', async () => {
+    const { api } = await import('./api');
+    const initial = { title: 'Record', deezer_id: '715226121', reconciliation_needed: true };
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(initial)))
+      .mockResolvedValueOnce(new Response('{}', { status: 403 }));
+    expect(await api.getAlbumProfile('Record', 'Robe')).toEqual(initial);
+  });
+
+  it('surfaces a failed commit instead of claiming the record was repaired', async () => {
+    const { api } = await import('./api');
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      deezer_id: '715226121', reconciliation_needed: true,
+    }))).mockResolvedValueOnce(new Response('{}', { status: 503 }));
+    await expect(api.getAlbumProfile('Record', 'Robe')).rejects.toMatchObject({ status: 503 });
+  });
+});
