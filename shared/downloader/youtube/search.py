@@ -15,6 +15,8 @@ from urllib.parse import quote
 import yt_dlp
 
 from shared.music_identity import youtube_music_metadata
+from shared.resolution_confidence import best_candidate
+from shared.text_utils import identity_key
 
 from ..config import prefer_ytmusic
 from .ids import is_valid_video_id, thumbnail_url, video_id_from_url, watch_url
@@ -268,6 +270,30 @@ def search_match_candidates(
         use_ytmusic=False,
         enrich_missing=False,
     )
+    if not rows and artist and title:
+        # Some full song queries return an empty videos search even though the
+        # official upload exists (e.g. Robe's "Por Ser un Pervertido"). Music
+        # search is independent. Pay its enrichment cost only on this miss,
+        # then recover real lengths for at most three plausible candidates.
+        # Never invent a duration from the catalog to inflate confidence.
+        music = search_youtube(query, cookies, max_results=max_results, use_ytmusic=True)
+        _, _, _, ranked = best_candidate(artist, title, None, music, top_n=3)
+        plausible = []
+        for row in ranked:
+            music = youtube_music_metadata(row)
+            if (row['confidence_reason'] == 'title_artist'
+                    and identity_key(music['title'], music['artist']) == identity_key(title, artist)):
+                plausible.append(row)
+
+        def recover(row):
+            try:
+                return peek_brief(str(row['id']), cookies)
+            except Exception as exc:
+                logger.debug('Fallback candidate metadata failed for %s: %s', row['id'], exc)
+                return None
+        if plausible:
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                rows = [row for row in executor.map(recover, plausible) if row]
     # Matching scores the upload itself — its official/lyrics/version
     # markers — so it gets the title as uploaded, not the song title.
     return [{**row, "title": row.get("source_title") or row.get("title")} for row in rows]

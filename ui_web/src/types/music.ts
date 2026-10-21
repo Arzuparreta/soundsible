@@ -304,6 +304,7 @@ export interface CatalogYear {
 }
 
 export interface AlbumProfile {
+  reconciliation_needed?: boolean;
   title: string;
   artist: string;
   cover: string;

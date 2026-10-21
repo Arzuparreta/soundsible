@@ -1575,7 +1575,9 @@ def _deezer_artist_top_tracks(artist_id: str, limit: int = 50, library_keys: set
 def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | None = None) -> dict[str, Any] | None:
     artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
     album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
-    title = _clean(row.get("title_short") or row.get("title"))
+    # title_short drops recording versions such as "(Directo Mérida, Teatro
+    # Romano)". Keep those when resolving audio and reconciling owned files.
+    title = _clean(row.get("title") or row.get("title_short"))
     artist = _clean(artist_row.get("name"))
     if not title or not artist:
         return None
@@ -2149,18 +2151,58 @@ def _artist_profile_uncached(name: str, deezer_id: str | None) -> dict[str, Any]
 @catalog_bp.route("/api/catalog/album", methods=["GET"])
 @rate_limit("catalog_album", limit=60, window_sec=60)
 def catalog_album():
+    from shared.catalog_reconciliation import annotate_owned_recordings
     name = _clean(request.args.get("name", ""), 200)
     if len(name) < 1:
         return jsonify({"error": "name is required"}), 400
     artist = _clean(request.args.get("artist", ""), 200) or None
     deezer_id = _clean(request.args.get("deezer_id", ""), 32) or None
 
-    cache_key = f"album:{deezer_id or (name + '|' + (artist or '')).casefold()}"
+    tracks = _library_tracks()
+    library_db = getattr(tracks, 'search_db', None)
+    revision = library_db.get_library_revision() if library_db is not None else ''
+    cache_key = f"album:{deezer_id or (name + '|' + (artist or '')).casefold()}|library:{revision}"
     body, cached = _memo_resolve(
         _album_memo, cache_key, lambda: _album_profile_uncached(name, artist, deezer_id)
     )
     body["cached"] = cached
-    return jsonify(body)
+    return jsonify(annotate_owned_recordings(body, tracks, instance_db()))
+
+
+@catalog_bp.route("/api/catalog/album/reconcile", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("catalog_album_reconcile", limit=30, window_sec=60)
+def catalog_album_reconcile():
+    """Repair verified orphan recordings from an authoritative album listing."""
+    from shared.catalog_reconciliation import annotate_owned_recordings, reconcile_album
+    from shared.library_lifecycle import LibraryPersistenceError
+    from shared.migration.collections import valid_deezer_id
+    from shared.api import emit_to_user
+
+    data = request.get_json(silent=True) or {}
+    deezer_id = valid_deezer_id(data.get('deezer_id'))
+    if not deezer_id:
+        return jsonify({'error': 'deezer_id is required'}), 400
+    try:
+        # Never accept release metadata or a local track id from the caller.
+        profile = _deezer_album_profile(deezer_id)
+    except Exception as exc:
+        logger.info('Album reconciliation could not read %s: %s', deezer_id, exc)
+        return jsonify({'error': 'The album could not be read'}), 502
+    lib, _, _ = _get_api()['get_core']()
+    db = instance_db()
+    try:
+        updated = reconcile_album(lib, profile['tracklist'], db)
+    except LibraryPersistenceError as exc:
+        return jsonify({'error': str(exc), 'code': exc.code}), exc.status
+    if updated:
+        request_scope.invalidate('catalog_library')
+        _album_memo.clear()
+        _artist_memo.clear()
+        _catalog_memo.clear()
+        emit_to_user('library_updated')
+    profile.update(deezer_id=deezer_id, resolved=True, cached=False, partial_failures=[])
+    return jsonify(annotate_owned_recordings(profile, lib.metadata.tracks if lib.metadata else [], db))
 
 
 @catalog_bp.route("/api/catalog/album/download", methods=["POST"])

@@ -1,5 +1,5 @@
 import type { SavedEntity } from './savedEntities';
-import { request } from './http';
+import { ApiError, request } from './http';
 import type { DownloadEvidence } from './track';
 export { request, setUnauthorizedHandler, ApiError } from './http';
 import type {
@@ -1240,13 +1240,25 @@ export const api = {
   getArtistDownload: (deezerId: string, signal?: AbortSignal) =>
     request<{ job: MigrationJob | null }>(`/api/catalog/artist/download?deezer_id=${encodeURIComponent(deezerId)}`, { signal }),
 
-  getAlbumProfile: (name: string, artist: string, deezerId?: string, signal?: AbortSignal) =>
-    request<AlbumProfile>(
+  getAlbumProfile: async (name: string, artist: string, deezerId?: string, signal?: AbortSignal) => {
+    const profile = await request<AlbumProfile>(
       `/api/catalog/album?name=${encodeURIComponent(name)}` +
         `&artist=${encodeURIComponent(artist)}` +
         (deezerId ? `&deezer_id=${encodeURIComponent(deezerId)}` : ''),
       { signal, timeoutMs: 15000 },
-    ),
+    );
+    if (!profile.reconciliation_needed || !profile.deezer_id) return profile;
+    try {
+      return await request<AlbumProfile>('/api/catalog/album/reconcile', {
+        method: 'POST', body: { deezer_id: profile.deezer_id }, signal, timeoutMs: 15000,
+      });
+    } catch (error) {
+      // Read-only clients can browse the same album without acquiring write
+      // permission. Failed commits remain visible and can be retried.
+      if (error instanceof ApiError && error.status === 403) return profile;
+      throw error;
+    }
+  },
 
   // ── Podcasts ──
   /** `next` when the show's feed goes on past `episodes`: hand it to
