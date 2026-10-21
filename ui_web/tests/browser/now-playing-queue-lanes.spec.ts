@@ -273,6 +273,39 @@ test('section labels never land on top of each other', async ({ page }) => {
   await expect(queue.locator('[data-queue-card="autoplay"]')).toBeInViewport();
 });
 
+test('NORMAL queue scrolls vertically without sideways drift at every interface size', async ({ page, isMobile }) => {
+  const queue = await restoreLongQueue(page, PLAYLIST);
+  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
+  await queue.locator('[data-card-expand]').click({ position: { x: 24, y: 24 } });
+
+  for (const size of ['compact', 'normal', 'large']) {
+    await page.evaluate(size => { document.documentElement.dataset.interfaceSize = size; }, size);
+    await settle(page, '[data-now-playing-tile="queue"]');
+    // Check the outer fallback scroller as well as each song lane. Overflow
+    // hidden alone would mask an oversized header while still allowing drift.
+    const scrollers = queue.locator('[data-section-rows]');
+    await expect.poll(() => queue.evaluate(tile => {
+      const lane = tile.querySelector('[data-section-rows]')!;
+      const outer = lane.closest('section')!.parentElement!;
+      return outer.scrollWidth - outer.clientWidth;
+    }), { message: `${size}: the section headers must fit the queue` }).toBe(0);
+    for (const scroller of await scrollers.all()) {
+      expect(await scroller.evaluate(node => node.scrollWidth - node.clientWidth), `${size}: songs must fit their lane`).toBe(0);
+      expect(await scroller.evaluate(node => { node.scrollLeft = 100; return node.scrollLeft; })).toBe(0);
+    }
+    const requests = queue.locator('[data-section="manual"] [data-section-rows]');
+    await expect.poll(() => requests.evaluate(node => {
+      node.scrollTop = node.scrollHeight;
+      return node.scrollTop;
+    }), { message: `${size}: vertical scrolling must still work` }).toBeGreaterThan(0);
+  }
+  if (isMobile) {
+    // The queue must still hand horizontal navigation to NORMAL's pager.
+    await snapPlayerCarousel(page, 'now-playing', 'browser');
+    await expect(page.locator('[data-now-playing-tile="browser"]')).not.toHaveAttribute('inert', '');
+  }
+});
+
 /**
  * On a phone the queue is one card of the pager, and the box holding its
  * sections fills with them and then almost never scrolls. The requests lane is

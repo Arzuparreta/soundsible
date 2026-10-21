@@ -102,7 +102,7 @@ describe('unified player geometry', () => {
     // margin of their own either — the air between them is the box's `gap`.
     expect(scopedDeclarations(trackList, '.rows')).toMatchObject({
       gap: 'var(--space-lg)',
-      padding: '8px 8px 0',
+      padding: '8px var(--space-sm) 0',
     });
     expect(scopedDeclarations(trackList, '.section')['margin-bottom']).toBeUndefined();
     expect(scopedDeclarations(trackList, '.section:last-child .sectionRows')).toMatchObject({

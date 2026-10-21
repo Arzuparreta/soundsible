@@ -99,6 +99,7 @@
    * `margin-bottom` on each one, the last lane's trailing copy had nothing
    * below it to separate and simply pushed the list up off the card. */
   gap: var(--space-lg);
+  overflow-x: hidden;
   overflow-y: auto;
   /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
   overscroll-behavior-y: contain;
@@ -109,7 +110,8 @@
    * panel beside it, whose body always overflows, painted its rows right down
    * to that edge. The clearance belongs at the end of the bottom lane's own
    * scroller, where it is content rather than a floor. */
-  padding: 8px 8px 0;
+  /* Match the section heads' negative margins at every interface size. */
+  padding: 8px var(--space-sm) 0;
 }
 
 /* Every lane keeps its label and at least one row. Shrinking proportionally
@@ -139,6 +141,7 @@
 .sectionRows {
   min-height: 0;
   flex: 1 1 auto;
+  overflow-x: hidden;
   overflow-y: auto;
   /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
   overscroll-behavior-y: contain;
