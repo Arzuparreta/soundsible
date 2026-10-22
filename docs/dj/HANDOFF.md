@@ -26,6 +26,17 @@ de estado y en su sección; el resto sigue siendo diagnóstico.
     el volumen de una canción mientras suena.
   - Android debe igualar las funciones de la web, con la mejor implementación
     nativa, no copiar soluciones provisionales de la web.
+- Decisiones del 2026-10-22 (ver *Decisiones de diseño* más abajo):
+  - Se elimina el arco de energía. El DJ no dirige la sesión: la dirigen las
+    fuentes y el recomendador. El DJ ordena para que las transiciones sean
+    buenas y mezcla.
+  - Ningún valor de gusto escrito a mano y ninguna nota humana (ni del usuario
+    ni del asistente) para calibrar medidas. El código mide magnitudes con
+    unidad, comprobables con señales sintéticas de respuesta conocida.
+  - El DJ debe tener más música analizada de la que hoy le llega, y puede
+    añadir canciones puente al pool, **siempre que se elimine o se mitigue al
+    máximo la preferencia circular** por las canciones ya descargadas
+    (condición del usuario).
 - Comunicar en español, claro y literal.
 
 ## Síntoma que el usuario oye
@@ -44,18 +55,74 @@ no hay síntoma que lo justifique.
 | --- | --- | --- | --- |
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
 | P2 | Alineación de fase en el navegador | Lectura de código | Sin síntoma tras #377; se retoma solo si vuelve a oírse desfase |
-| P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente |
-| P4 | La "energía" no mide intensidad | Lectura de código | Pendiente |
-| P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente |
+| P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente; diseño decidido (continuidad, sin arco) |
+| P4 | La "energía" no mide intensidad | Medido | Rehacer: el enfoque de #384 se descartó; diseño decidido |
+| P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente; ampliado a pool analizado y puentes |
 | P6 | Compatibilidad de tonalidad mal puntuada | Lectura de código | Pendiente |
 | P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Pendiente (necesita decisión) |
 | P8 | Secciones medidas y no usadas | Lectura de código | Pendiente |
 | P9 | Eco no sincronizado con el tempo | Lectura de código | Pendiente |
 | P10 | Código muerto y documentación desactualizada | Lectura de código | Pendiente |
 
-Orden recomendado: P5 y P3 (más mezclas reales y mejor orden), después P4, P6,
-P8, P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja salvo que vuelva el
-síntoma.
+Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
+ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
+salvo que vuelva el síntoma.
+
+Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
+tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
+así que va después de los dos. P5 amplía el pool que P3 ordena.
+
+## Decisiones de diseño (2026-10-22)
+
+### Sin arco de energía
+
+El arco es `_auto_set_arc_position` (`auto_mode.py`): seis valores fijos
+`(0.34, 0.52, 0.74, 0.9, 0.78, 0.58)` escritos a mano. El índice es (canciones
+distintas oídas entre las 4 últimas + `segment_index`) mod 6; `segment_index` lo
+sube el cliente en cada recarga (`ui_web/src/lib/generatedQueue.ts`,
+`ProgramDjPlanner.kt`). Desde la cuarta canción avanza un paso por recarga, y las
+8 canciones de una recarga buscan el mismo objetivo. La respuesta incluye
+`"arc": {"target", "phase"}` y ningún cliente lo lee.
+
+El usuario lo quita: no aporta nada que no haga ya el recomendador (con techno de
+fiesta, la reproducción normal ya sigue dando techno de fiesta). Hay que eliminar
+`_auto_set_arc_position`, el orden por energía de `_build_music_set_route`, la
+elección de la primera canción por energía y el campo `arc` de la respuesta.
+
+### Medir, no calibrar
+
+Condición del usuario: si hay que escribir a mano un valor de gusto o poner notas
+a canciones, no se implementa. Lo que vale:
+
+- Magnitudes con unidad física: notas por segundo, LUFS, BPM, planitud espectral.
+- Constantes de procesado de señal (ventanas, bandas, separación mínima entre
+  ataques) fijadas para que señales sintéticas de respuesta conocida den el valor
+  correcto, como las pistas de clics de P1.
+- Escalas que salen de los datos de cada ruta (dispersión entre las candidatas
+  del momento), no constantes globales.
+
+No vale: notas de intensidad puestas por una persona, curvas o pesos ajustados
+"para que salga bien", un único número de "energía" que mezcle ritmo, timbre y
+volumen con pesos elegidos.
+
+### Más música analizada, sin preferencia circular
+
+Hoy solo se analiza lo que ya está en disco (`_dj_source_path`): la biblioteca
+local y las previews ya descargadas. Las related de YouTube sin descargar no
+tienen BPM, tonalidad ni puntos de mezcla. El usuario quiere que el DJ tenga
+localizada y analizada más música y que pueda añadirla al pool (canciones puente).
+
+Antecedente: hasta `76113008` (2026-07-31) se descargaban por adelantado las
+previews de todas las candidatas. Se quitó por dos razones, escritas en
+`_dj_source_path`: era caro, y daba **ventaja circular** a las canciones ya
+descargadas (analizadas → elegidas más → siguen descargadas). La condición del
+usuario es eliminar o mitigar al máximo esa ventaja. Ver P5.
+
+### Pendiente de decisión
+
+La dirección de la ruta antigua (`direction.energy`, `djDirection.ts`,
+`mobile/DjDirection.tsx`) depende de una energía única que deja de existir. Su
+destino es parte de P7, que sigue necesitando decisión del usuario.
 
 ---
 
@@ -351,24 +418,79 @@ incompatibles en tempo o tonalidad aunque haya candidatas compatibles en el pool
 `docs/ARCHITECTURE.md` afirma que las fuentes se acumulan "with recency decay":
 el peso se calcula pero no influye en la selección.
 
-**Posibles soluciones.** Usar `order_route` en la ruta v6, añadiendo un término
-de distancia al arco de energía y el peso de la fuente. Revisar los tests de
-`tests/test_discovery_save_route.py` que fijan el comportamiento de v6.
+`README.md` dice que el modo DJ "orders songs by tempo, key and energy": hasta
+P3, el tempo y la tonalidad no intervienen en el orden.
+
+**Diseño decidido (2026-10-22).**
+
+- Sin arco (ver *Decisiones de diseño*).
+- La ruta v6 ordena por calidad de transición (`order_route` o su lógica) y por
+  **continuidad**: la siguiente canción cerca de la actual en cada magnitud de P4
+  (notas/s, LUFS, timbre, tempo). Cada magnitud se escala por su dispersión
+  entre las candidatas de esa ruta; pesan igual tras escalarlas. No hay pesos
+  ajustados a gusto.
+- Mantener el peso de la fuente donde ya cuenta (elegir la primera canción), y
+  revisar si `docs/ARCHITECTURE.md` ("recency decay") debe describir otra cosa.
+- Revisar los tests de `tests/test_discovery_save_route.py` que fijan el
+  comportamiento de v6 y quitar los que fijan el arco
+  (`test_explicit_dj_arc_follows_the_recent_window_not_the_whole_history`).
 
 ## P4. La "energía" no mide intensidad
 
-**Qué pasa.** `energy = rms / percentil95(rms)` dentro de la misma canción
-(`dj_engine.py:486`), y se guarda la media (línea 549). Mide lo uniforme que es
-el nivel de la canción, no lo intensa que es.
+**Qué pasa (en `main`).** `energy = rms / percentil95(rms)` dentro de la misma
+canción (`_window_features`), y se guarda la media (`_compose`). Mide lo uniforme
+que es el nivel de la canción, no lo intensa que es. Normalizar cada canción
+contra sí misma hace que los valores no se puedan comparar entre canciones, que
+es justo lo que necesita la ruta.
 
-**Cuándo falla.** Una canción acústica tranquila de nivel constante y un tema de
-EDM comprimido pueden dar el mismo valor (~0,9). El arco de energía (P3) ordena
-con un dato que no separa tranquilo de intenso.
+**Primer intento descartado: #384 (rama `fix/dj-energy-intensity`).** Cambiaba
+`energy` por la planitud espectral de los fotogramas fuertes en escala
+logarítmica (0,002 → 0, 0,25 → 1). Se validó contra notas de intensidad de 1 a 5
+que puso el asistente a 75 canciones de la biblioteca del usuario: Spearman 0,84
+contra 0,23 de la medida antigua. El usuario lo rechazó, con razón:
 
-**Posibles soluciones.** Una medida comparable entre canciones: sonoridad
-absoluta (ya existe `loudness_db`, o LUFS del módulo de nivelación), densidad de
-onsets, energía en graves, brillo espectral (centroide). Normalizar sobre toda la
-biblioteca, no por canción. Subir `ANALYSER_VERSION`.
+- La planitud mide **timbre** (ruido o tonos limpios), no actividad musical.
+  "Little" Fugue de Bach para cuarteto de flautas de pico (rápida, contrapunto
+  denso) da 0,03, casi igual que el Agnus Dei de Barber por VOCES8 (legato,
+  acordes largos), que da 0,00: planitud 0,0023 contra 0,0017. Mozart 25 y el
+  preludio del acto 3 de Lohengrin también quedaban bajos.
+- Las notas las puso el asistente, casi todas de pop, rock y electrónica, donde
+  intensidad y distorsión van juntas. El 0,84 global escondía que la clásica
+  fallaba entera.
+- La escala 0,002 → 0, 0,25 → 1 era un valor elegido a mano.
+- El detector de "ataques por segundo" del prototipo estaba mal: daba 8,9/s al
+  Agnus Dei y 8,1/s a la fuga, porque contaba vibrato, reverberación y ruido, no
+  notas. Por eso parecía que el ritmo no aportaba nada.
+
+**Antes de empezar.** El servicio del usuario (`soundsible.service`) se reinició
+el 2026-10-22 a las 15:04 con el repositorio en la rama de #384 y escribió
+análisis con `ANALYSER_VERSION` 5 en `~/.cache/soundsible/dj/analysis.sqlite3`.
+**El P4 rehecho debe usar `ANALYSER_VERSION` 6**, para que esas filas de la
+planitud no se lean como válidas. #384 está en borrador y no se fusiona.
+
+**Diseño decidido (2026-10-22).** No calcular una "energía" única. Medir por
+canción magnitudes con unidad, cada una comprobada con señales sintéticas de
+respuesta conocida:
+
+| Magnitud | Unidad | Comprobación sintética |
+| --- | --- | --- |
+| Densidad de notas (ataques reales) | notas/s | Pistas con N notas/s conocidas, en legato y en staccato, con y sin reverberación y vibrato |
+| Sonoridad integrada | LUFS | Ya existe `shared/loudness/measure.py` (EBU R128); los planes ya llevan `loudness_lufs` (`_annotate_plan_loudness`). Decidir si se reutiliza esa medida o se calcula en el análisis del DJ |
+| Timbre: planitud espectral | 0–1 | Tono puro contra ruido; el cálculo por bloques de #384 en `_spectral_features` se puede reutilizar, sin la escala a 0–1 |
+| Tempo | BPM | Ya existe (P1) |
+
+Criterio de aceptación mínimo: la fuga de Bach para flautas de pico debe medir
+muchas más notas por segundo que el Agnus Dei de Barber. Comprobarlo también con
+música real de la biblioteca (`/mnt/storage/ARSU/music/library.json`,
+`tracks/<id>.<format>`) sin poner notas: solo comparar magnitudes medidas con lo
+que se sabe de la partitura (tempo y figuración).
+
+Qué se aprovecha de #384: el cálculo de planitud por bloques y su test de
+equivalencia (`tests/test_dj_spectral_memory.py`), la forma de los tests
+sintéticos (`tests/test_dj_energy.py`) y el benchmark (`docs/PERFORMANCE.md`,
+`scripts/benchmark_dj_analysis.py --allow-changes`). Qué no: la escala a 0–1, la
+elección de la primera canción por energía y los cambios de `energy or 0.5`
+(dejan de tener sentido sin energía única).
 
 ## P5. Canciones de YouTube sin caché: fundido simple
 
@@ -394,6 +516,31 @@ estaba en caché: queda `safe_fade` de 6 s, entrada en 0:00.
 guardar la preview en caché. Repetir el refinado hasta que haya medida o hasta el
 momento de cargar la siguiente canción (45 s antes). Aplicar lo mismo en
 `ProgramDjRefiner.kt`.
+
+**Ampliado (2026-10-22): pool analizado y canciones puente.**
+
+1. **Medir primero.** Añadir al registro de `dj-plan` cuántas candidatas tenían
+   análisis en cada recarga. El campo `cache_hit` del registro actual cuenta la
+   caché de related, no la de análisis. Medir cuánto cuesta descargar y analizar
+   las previews de una recarga típica (en los registros hay entre 17 y 46
+   candidatas únicas por recarga; una preview ocupa unos 3 MB; el análisis tarda
+   0,1–0,3 s de CPU por canción).
+2. **Analizar antes de elegir.** Descargar y analizar en segundo plano las
+   previews de un número acotado de candidatas, elegidas por la puntuación de
+   recomendación o por la semilla de la sesión, **nunca por estar ya en caché**.
+3. **Biblioteca local entera analizada** en segundo plano. Es barato: 221
+   canciones de menos de 8 minutos en 25 s con 8 procesos.
+4. **Canciones puente.** Si la siguiente canción mezcla mal con la actual, meter
+   entre las dos una canción analizada compatible con ambas. El usuario lo
+   acepta. Ya hay puentes en `dj-place` (`_dj_place_bridge_pool`) y en
+   `dj-repair` (`route_kind == "bridge"`); la ruta v6 no los usa.
+
+**Condición: sin preferencia circular.** Lo que decide si una canción entra en la
+ruta no puede ser que ya esté descargada o analizada. Ideas para cumplirlo:
+elegir el conjunto que se analiza antes de mirar la caché; no puntuar a una
+canción sin analizar como peor que una analizada (o no elegir hasta que todo el
+conjunto esté medido); y comprobarlo con un test que compare dos pools idénticos
+salvo en el estado de la caché.
 
 ## P6. Compatibilidad de tonalidad mal puntuada
 
@@ -438,6 +585,11 @@ por par sin perfiles, permitiendo también `echo_cut` y `long_blend` cuando el
 material lo pida (por ejemplo, echo_cut si el tempo no encaja pero la confianza es
 alta). La opción (b) encaja con "la mezcla es automática".
 
+Desde 2026-10-22: sin arco ni energía única, el diálogo de dirección
+(`direction.energy`) pierde su base, y el usuario considera que la dirección de la
+sesión ya la dan las fuentes y el recomendador. Confirmar con el usuario si eso
+cierra la parte de dirección de P7 antes de quitarla.
+
 ## P8. Secciones medidas y no usadas
 
 **Qué pasa.** `_sections_from_features` etiqueta bloques de 8 compases (intro,
@@ -473,7 +625,8 @@ punto depende de esa decisión.
   ni el de Android: los dos deciden por `technique`.
 - `docs/AUTO_MODE.md` habla de "DJ style" (tabla de partes y "Depending on the
   material and DJ style").
-- `docs/ARCHITECTURE.md` describe "recency decay" de las fuentes (ver P3).
+- `docs/ARCHITECTURE.md` describe "recency decay" de las fuentes (ver P3) y un
+  "energy arc" que se elimina.
 
 Según las preferencias del usuario, el código 100 % sin uso se elimina sin
 preguntar; hacerlo junto con P7, porque la decisión de P7 cambia qué queda vivo.
