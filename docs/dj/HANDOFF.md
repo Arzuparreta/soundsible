@@ -30,17 +30,20 @@ de estado y en su sección; el resto sigue siendo diagnóstico.
 
 ## Síntoma que el usuario oye
 
-Las transiciones suelen caer en el sitio correcto, pero con unos milisegundos de
-desfase: cuando los kicks de las dos canciones coinciden en el pulso 1, se oye el
-kick de una y muy poco después el de la otra (efecto "flam"). Las causas
-encontradas están en P1 y P2.
+Antes de #377: las transiciones solían caer en el sitio correcto, pero con unos
+milisegundos de desfase: cuando los kicks de las dos canciones coincidían en el
+pulso 1, se oía el kick de una y muy poco después el de la otra (efecto "flam").
+La causa medida estaba en P1.
+
+Después de #377 el usuario (músico) no oye ningún desfase. P2 queda aparcado:
+no hay síntoma que lo justifique.
 
 ## Estado
 
 | Punto | Tema | Evidencia | Estado |
 | --- | --- | --- | --- |
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
-| P2 | Alineación de fase en el navegador | Lectura de código | Pendiente |
+| P2 | Alineación de fase en el navegador | Lectura de código | Sin síntoma tras #377; se retoma solo si vuelve a oírse desfase |
 | P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente |
 | P4 | La "energía" no mide intensidad | Lectura de código | Pendiente |
 | P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente |
@@ -50,8 +53,9 @@ encontradas están en P1 y P2.
 | P9 | Eco no sincronizado con el tempo | Lectura de código | Pendiente |
 | P10 | Código muerto y documentación desactualizada | Lectura de código | Pendiente |
 
-Orden recomendado: P1 → P2 (el síntoma), después P5 y P3 (más mezclas reales y
-mejor orden), después P4, P6, P8, P9. P7 y P10 son decisiones y limpieza.
+Orden recomendado: P5 y P3 (más mezclas reales y mejor orden), después P4, P6,
+P8, P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja salvo que vuelva el
+síntoma.
 
 ---
 
@@ -269,6 +273,10 @@ cualquiera, lo que sacaba la entrada del compás cuando el corte llegaba a aplic
   hay ningún transitorio en el pulso; con clic, en el clic.
 
 ## P2. Alineación de fase en el navegador
+
+**Estado: sin síntoma.** Tras #377 el usuario no oye desfase en las mezclas. Lo
+que sigue es diagnóstico por lectura de código, sin medir; se retoma solo si
+vuelve a oírse un desfase entre los golpes de las dos canciones.
 
 **Qué pasa.** `mixer.ts` (`tick`, fase `prerolling`) mueve `currentTime` del
 `<audio>` entrante una sola vez, mientras está en silencio, con un temporizador
