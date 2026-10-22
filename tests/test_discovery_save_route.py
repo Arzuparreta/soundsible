@@ -1310,8 +1310,11 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
     _make_runtime(tmp_path)
     measured = {
         "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "analysed": True},
-        "t0": {"duration": 220, "bpm": 128, "key": "D", "mode": "major", "confidence": 0.9, "analysed": True},
-        "bridge01": {"duration": 220, "bpm": 113, "key": "G", "mode": "major", "confidence": 0.9, "analysed": True},
+        # Two adjacent Camelot steps, each with a beatmatchable tempo gap.
+        # At 100 -> 113 -> 128 neither leg could beatmatch; that old fixture
+        # only passed because C -> D was incorrectly scored as unrelated.
+        "t0": {"duration": 220, "bpm": 115, "key": "D", "mode": "major", "confidence": 0.9, "analysed": True},
+        "bridge01": {"duration": 220, "bpm": 107, "key": "G", "mode": "major", "confidence": 0.9, "analysed": True},
     }
 
     def analysis(_metadata, item, *, schedule=False):
@@ -1339,7 +1342,7 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
 
     items = response.get_json()["items"]
     bridges = [item for item in items if item["route_kind"] == "bridge"]
-    assert bridges, "a bridge should have been admitted between a 100 BPM seed and a 128 BPM pin"
+    assert bridges, "a bridge should have been admitted between a 100 BPM seed and a 115 BPM pin"
     assert all(bridge["owner_queue_id"] == "q-0" for bridge in bridges)
     assert items[-1]["route_kind"] == "user"
 
@@ -1480,6 +1483,43 @@ def test_dj_transition_validates_its_pair(tmp_path):
         "/api/discovery/music/dj-transition",
         json={"dj_profile": "mystery", "from": {}, "to": {}},
     ).status_code == 400
+
+
+def test_dj_transition_prefers_relative_keys_over_parallel_and_mixed_mode_fifths(tmp_path):
+    """The same measured plan reaches both web and Android via this endpoint."""
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    common = {"duration": 240, "confidence": .9, "outro_cue": 200,
+              "intro_cue": 0, "bar_seconds": 2, "analysed": True}
+    measured = {
+        "current": {**common, "bpm": 120, "key": "C", "mode": "major"},
+        "relative": {**common, "bpm": 124, "key": "A", "mode": "minor"},
+        "parallel": {**common, "bpm": 124, "key": "C", "mode": "minor"},
+        "mixed-fifth": {**common, "bpm": 124, "key": "G", "mode": "minor"},
+    }
+    client = _make_app().test_client()
+    plans = {}
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_dj_source_path", side_effect=lambda metadata, item: item["id"]),
+        patch.object(_auto_mode, "cached_analysis", side_effect=lambda path, identity: measured[path]),
+        patch.object(_auto_mode, "request_analysis", side_effect=AssertionError("already measured")),
+    ):
+        for incoming in ("relative", "parallel", "mixed-fifth"):
+            response = client.post("/api/discovery/music/dj-transition", json={
+                "dj_profile": "adaptive", "from": {"id": "current"}, "to": {"id": incoming},
+            })
+            assert response.status_code == 200
+            body = response.get_json()
+            assert body["measured"] is True
+            assert body["analysis"]["to"] == measured[incoming]
+            plans[incoming] = body["transition"]
+    assert plans["relative"]["technique"] == "bass_swap"
+    assert plans["parallel"]["technique"] == plans["mixed-fifth"]["technique"] == "filter_blend"
+    assert plans["relative"]["score"] > plans["mixed-fifth"]["score"] > plans["parallel"]["score"]
 
 
 def test_dj_collection_places_every_occurrence_beyond_the_analysis_window(tmp_path):
