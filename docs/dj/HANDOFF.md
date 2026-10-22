@@ -58,14 +58,14 @@ no hay síntoma que lo justifique.
 | --- | --- | --- | --- |
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
 | P2 | Alineación de fase en el navegador | Lectura de código | Sin síntoma tras #377; se retoma solo si vuelve a oírse desfase |
-| P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente; diseño decidido (continuidad). El arco ya se quitó (#PR_P4): hoy el orden es el barajado |
-| P4 | La "energía" no mide intensidad | Medido | Cerrado (#PR_P4): notas/s, LUFS y planitud; `energy` eliminado |
+| P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente; diseño decidido (continuidad). El arco ya se quitó (#385): hoy el orden es el barajado |
+| P4 | La "energía" no mide intensidad | Medido | Cerrado (#385): notas/s, LUFS y planitud; `energy` eliminado |
 | P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente; ampliado a pool analizado y puentes |
 | P6 | Compatibilidad de tonalidad mal puntuada | Lectura de código | Pendiente |
-| P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#PR_P4); queda decidir la opción (b) en el servidor |
+| P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#385); queda decidir la opción (b) en el servidor |
 | P8 | Secciones medidas y no usadas | Lectura de código | Pendiente |
 | P9 | Eco no sincronizado con el tempo | Lectura de código | Pendiente |
-| P10 | Código muerto y documentación desactualizada | Lectura de código | En parte (#PR_P4): queda `automation` |
+| P10 | Código muerto y documentación desactualizada | Lectura de código | En parte (#385): queda `automation` |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
@@ -89,7 +89,7 @@ sube el cliente en cada recarga (`ui_web/src/lib/generatedQueue.ts`,
 
 El usuario lo quita: no aporta nada que no haga ya el recomendador (con techno de
 fiesta, la reproducción normal ya sigue dando techno de fiesta). Eliminados en
-#PR_P4: `_auto_set_arc_position`, el orden por energía de
+#385: `_auto_set_arc_position`, el orden por energía de
 `_build_music_set_route`, la elección de la primera canción por energía y el
 campo `arc` de la respuesta.
 
@@ -405,7 +405,7 @@ entrante llegaría hasta 23 ms adelantada o retrasada. Se puede comprobar con el
 
 ## P3. El orden de la ruta ignora la calidad de la transición
 
-**Qué pasa (desde #PR_P4).** En la ruta v6 (`_build_music_set_route`, la que usa
+**Qué pasa (desde #385).** En la ruta v6 (`_build_music_set_route`, la que usa
 siempre la web porque envía `sources`, y Android cuando tiene fuentes):
 
 1. `rng.shuffle(available)`, con semilla por sesión y segmento.
@@ -413,7 +413,7 @@ siempre la web porque envía `sources`, y Android cuando tiene fuentes):
 
 El arco de energía (`_auto_set_arc_position`, el orden por energía, la elección
 de la primera canción por energía y el campo `arc` de la respuesta) se eliminó
-en #PR_P4; el test que lo fijaba también. No cuentan: la calidad de la
+en #385; el test que lo fijaba también. No cuentan: la calidad de la
 transición, `score`, `semantic_score` ni el peso de la fuente
 (`weight = 0.38 + 0.62·…`; solo se usa para elegir la primera canción).
 
@@ -424,11 +424,11 @@ sin fuentes), en Fix mix (`dj-repair`) y al colocar canciones (`dj-place`).
 **Cuándo falla.** En cada recarga de la ruta. Dos canciones seguidas pueden ser
 incompatibles en tempo o tonalidad aunque haya candidatas compatibles en el pool.
 `docs/ARCHITECTURE.md`, `docs/PLAYBACK_QUEUE_CONTRACT.md` y `README.md` ya no
-dicen "recency decay" ni "orders songs by tempo, key and energy" (#PR_P4).
+dicen "recency decay" ni "orders songs by tempo, key and energy" (#385).
 
 **Diseño decidido (2026-10-22).**
 
-- Sin arco (hecho en #PR_P4).
+- Sin arco (hecho en #385).
 - La ruta v6 ordena por calidad de transición (`order_route` o su lógica) y por
   **continuidad**: la siguiente canción cerca de la actual en cada magnitud de P4
   (notas/s, LUFS, timbre, tempo). Cada magnitud se escala por su dispersión
@@ -499,7 +499,7 @@ sintéticos (`tests/test_dj_energy.py`) y el benchmark (`docs/PERFORMANCE.md`,
 elección de la primera canción por energía y los cambios de `energy or 0.5`
 (dejan de tener sentido sin energía única).
 
-**Estado: cerrado en #PR_P4.** `ANALYSER_VERSION` 6. `energy` y `loudness_db`
+**Estado: cerrado en #385.** `ANALYSER_VERSION` 6. `energy` y `loudness_db`
 desaparecen del análisis; en su lugar:
 
 - `note_rate` (notas/s). `_note_onsets` en `shared/dj_engine.py`, sección
@@ -643,7 +643,7 @@ después.
 
 ## P7. Perfiles de DJ y dirección sin efecto en la ruta
 
-**Hecho en #PR_P4 (decisión del usuario, 2026-10-22: Android igual que la web).**
+**Hecho en #385 (decisión del usuario, 2026-10-22: Android igual que la web).**
 
 - La dirección se eliminó entera: `direction` en `dj-plan` (la ruta antigua ya
   no lee energía, familiaridad, incluir ni excluir; una petición antigua que la
@@ -693,7 +693,7 @@ punto depende de esa decisión.
 
 ## P10. Código muerto y documentación desactualizada
 
-Hecho en #PR_P4: `api.interpretDjCommand`, `/api/discovery/music/dj-command`,
+Hecho en #385: `api.interpretDjCommand`, `/api/discovery/music/dj-command`,
 `_dj_command_direction`, `setAutoDjProfile`, `setAutoDirection`,
 `setAutoProfile` (sin llamadores; además pedía claves `autoMode.note.crate.*`
 que no existían), 76 claves de texto de `autoMode` sin uso en los cuatro
