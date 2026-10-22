@@ -51,7 +51,7 @@ open source (MIT).
 | **Search and play** | Search YouTube and YouTube Music, or paste a link. Play a result at once, save it to your library to stream later, or download it to the server. |
 | **Library** | Browse by artist, album, genre or year. Playlists and favourites. Files you add to the music folder are picked up on a rescan. |
 | **Keep listening** | Autoplay continues when your queue ends; Radio plays endlessly from one song. Recommendations learn from your listening, on your server only, and can be turned off. |
-| **DJ mode** (beta) | Plays an automatic mixed set: it orders songs by tempo, key and energy and blends between them. [DJ guide](docs/AUTO_MODE.md) |
+| **DJ mode** (beta) | Plays an automatic mixed set: it measures each song's tempo, beat grid and key and blends between them. [DJ guide](docs/AUTO_MODE.md) |
 | **Live** | Broadcasts what you are playing to a public web room anyone can open without an account. [Live guide](docs/LIVE.md) |
 | **Lyrics** | Time-synced lyrics, or plain text when that is all there is. |
 | **Podcasts** | Search, browse charts by country, subscribe and play episodes. |

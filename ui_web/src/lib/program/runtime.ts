@@ -1,11 +1,11 @@
-import type { DjDirection, DjMusicSetSource, DjProfile, PreviewPreparation } from '../api';
+import type { DjMusicSetSource, PreviewPreparation } from '../api';
 /** Single-output async contract. Independent of Solid, Capacitor and the Web Audio mixer. */
 export interface ProgramState {
   generation: number; sequence: number; ready: boolean; playing: boolean;
   playWhenReady: boolean; errorKind: '' | 'connection' | 'server' | 'auth' | 'permission' | 'source';
   state: number; index: number; id: string; title: string; artist: string;
   items: ProgramOccurrence[]; queueToken: string; programToken?: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
-  dj?: { active: boolean; phase: string; profile: DjProfile; editRevision?: number; editableFrom?: number; protectedKeys?: string[]; editOutcome?: string; requestTitle?: string; direction?: DjDirection; sources?: DjMusicSetSource[] } | null;
+  dj?: { active: boolean; phase: string; editRevision?: number; editableFrom?: number; protectedKeys?: string[]; editOutcome?: string; requestTitle?: string; sources?: DjMusicSetSource[] } | null;
   radio?: { active: boolean; phase: string; profile: 'familiar' | 'balanced' | 'explore' } | null;
   leveling?: { enabled: boolean | null; settingsPhase: string } | null;
   mixing?: { enabled: boolean | null; settingsPhase: string } | null;
@@ -19,9 +19,9 @@ export interface ProgramOccurrence extends ProgramTrack { key: string; routeOwne
 export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbtp?: number | null; duration?: number; offline?: boolean; source: 'local' | 'preview' | 'podcast' | 'pending'; pendingResolve?: import('../playbackQueue').PendingCatalogReference; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string; album_artist?: string | null; track_number?: number | null; disc_number?: number | null; year?: number | null }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
-  | { action: 'dj'; profile: DjProfile; fromCurrent: boolean; queueToken: string; key?: string; direction?: DjDirection; sources?: DjMusicSetSource[] }
+  | { action: 'dj'; fromCurrent: boolean; queueToken: string; key?: string; sources?: DjMusicSetSource[] }
   | { action: 'djContext'; tracks: ProgramTrack[]; queueToken: string; programToken?: string; key?: string }
-  | { action: 'djSettings'; resetRequestGroups?: boolean; programToken: string; profile?: DjProfile; direction?: DjDirection; sources?: DjMusicSetSource[] }
+  | { action: 'djSettings'; resetRequestGroups?: boolean; programToken: string; sources?: DjMusicSetSource[] }
   | { action: 'djRepair'; programToken: string; queueToken: string }
   | { action: 'djRequest'; programToken: string; queueToken: string; tracks: ProgramTrack[]; beforeKey?: string }
   | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string; key?: string }

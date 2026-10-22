@@ -94,7 +94,7 @@ class ProgramDjRecoveryTest {
             if (measured) {
                 lateinit var body: JSONObject
                 instrumentation.runOnMainSync {
-                    planner = ProgramDjPlanner(connection, session!!.player, android.os.Handler(android.os.Looper.getMainLooper()), { emptySet() }, { _, _, _ -> }, { _, _, _ -> })
+                    planner = ProgramDjPlanner(connection, session!!.player, android.os.Handler(android.os.Looper.getMainLooper()), { emptySet() }, { _, _ -> }, { _, _, _ -> })
                     body = JSONObject().put("dj_profile", "adaptive").put("from", planner!!.reference(session!!.items()[0])).put("to", planner!!.reference(session!!.items()[1]))
                 }
                 var answer: JSONObject? = null
@@ -122,7 +122,7 @@ class ProgramDjRecoveryTest {
                     assertFalse(session!!.player.playWhenReady)
                     val snapshot = session!!.routeSnapshot()
                     assertTrue(session!!.editFuture(snapshot, snapshot.rows.drop(snapshot.floor + 1).map { it.copy(proposal = null) }))
-                    planner!!.start("long_blend", JSONObject(), JSONArray(), true, ProgramDjPlanner.Kind.REPLACE)
+                    planner!!.start(JSONArray(), true, ProgramDjPlanner.Kind.REPLACE)
                     planner!!.clear()
                     revision = session!!.routeSnapshot().revision
                     refiner!!.refine(session!!)

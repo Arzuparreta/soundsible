@@ -37,7 +37,6 @@ class PlaybackService : MediaLibraryService() {
     private var dj: ProgramDjSession? = null
     private var djRouteEditor: ProgramDjRouteEditor? = null
     private var djPhase = "idle"
-    private var djProfile = "adaptive"
     private var djError = 0
     private var djRefiner: ProgramDjRefiner? = null
     private var refillAnchor = ""
@@ -90,7 +89,7 @@ class PlaybackService : MediaLibraryService() {
         catalogCache.clear()
         djPlanner.clear(); refillAnchor = ""
         restoreNormal()
-        publishDj("idle", djProfile, 0)
+        publishDj("idle", 0)
         savePodcast()
         autoplay.clear()
         leveling.clear(); mixing.clear()
@@ -106,19 +105,18 @@ class PlaybackService : MediaLibraryService() {
         // Media3 removes the notification/foreground when its timeline is empty.
         triggerNotificationUpdate()
     }
-    private fun orgJson(value: String) = org.json.JSONObject(value)
-    private fun publishDj(phase: String, profile: String, code: Int) {
-        djPhase = phase; djProfile = profile; djError = code
+    private fun publishDj(phase: String, code: Int) {
+        djPhase = phase; djError = code
         if (::deviceSession.isInitialized) deviceSession.changed()
         session?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply {
             putLong("djGeneration", connection.generation); putBoolean("djActive", dj != null)
-            putString("djPhase", phase); putString("djProfile", profile); putInt("djErrorStatus", code)
+            putString("djPhase", phase); putInt("djErrorStatus", code)
             putLong("djEditRevision", djRouteEditor?.revision ?: 0)
             putInt("djEditableFrom", dj?.editableFrom() ?: 0)
             putString("djProtectedKeys", org.json.JSONArray(dj?.protectedKeys()?.toList() ?: emptyList<String>()).toString())
             putString("djEditOutcome", djRouteEditor?.outcome ?: "idle")
             putString("djRequestTitle", djRouteEditor?.requestTitle ?: "")
-            putString("djDirection", djPlanner.direction.toString()); putString("djSources", djPlanner.sources.toString())
+            putString("djSources", djPlanner.sources.toString())
         }) }
     }
     private fun maybeRefill() {
@@ -129,7 +127,7 @@ class PlaybackService : MediaLibraryService() {
         val marker = key + ":" + ProgramQueue.token(player)
         if (refillAnchor == marker) return
         refillAnchor = marker
-        djPlanner.start(djPlanner.profile, djPlanner.direction, djPlanner.sources, true, ProgramDjPlanner.Kind.APPEND, anchor)
+        djPlanner.start(djPlanner.sources, true, ProgramDjPlanner.Kind.APPEND, anchor)
     }
     private fun restoreNormal() {
         djRefiner?.clear()
@@ -274,7 +272,7 @@ class PlaybackService : MediaLibraryService() {
             val epoch = connection.generation
             val identity = connection.sessionIdentity(epoch)
             val next = ProgramDjSession(this, epoch, { epoch == connection.generation && runCatching { connection.sessionIdentity(epoch) }.getOrNull() == identity },
-                sources, pcmTap, leveling::active, rows, position, mixing = mixing::active, refine = { djRefiner?.refine(it) }, changed = { publishDj(djPhase, djProfile, djError) }, startIndex = index, initialHeard = heard)
+                sources, pcmTap, leveling::active, rows, position, mixing = mixing::active, refine = { djRefiner?.refine(it) }, changed = { publishDj(djPhase, djError) }, startIndex = index, initialHeard = heard)
             autoplay.clear(); radio.clear()
             val resume = player.playWhenReady || rows.firstOrNull()?.kind != "user"
             val previousDj = dj; dj = next
@@ -284,20 +282,20 @@ class PlaybackService : MediaLibraryService() {
             if (previousDj != null) previousDj.close() else previous.release()
             next.player.volume = volume
             if (resume) next.player.play()
-            publishDj(djPhase, djProfile, djError); refillAnchor = ""
+            publishDj(djPhase, djError); refillAnchor = ""
         }
         djPlanner = ProgramDjPlanner(connection, player, main, { dj?.heardIds() ?: emptySet() }, ::publishDj) { rows, position, kind ->
             if (kind != ProgramDjPlanner.Kind.START) {
                 dj?.let { owner ->
                     if (kind == ProgramDjPlanner.Kind.APPEND) owner.append(rows.drop(1)) else { owner.replaceFuture(rows); refillAnchor = "" }
-                    publishDj(djPhase, djProfile, djError)
+                    publishDj(djPhase, djError)
                 }
             } else {
             installDj(rows, position, 0, emptySet())
             }
         }
         djRefiner = ProgramDjRefiner(connection, main, { dj }, djPlanner)
-        djRouteEditor = ProgramDjRouteEditor(connection, main, { dj }, djPlanner) { phase, code -> publishDj(phase, djPlanner.profile, code) }
+        djRouteEditor = ProgramDjRouteEditor(connection, main, { dj }, djPlanner) { phase, code -> publishDj(phase, code) }
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 // Only matcher 400/404 means this retained recording cannot be played.
@@ -421,7 +419,7 @@ class PlaybackService : MediaLibraryService() {
                     require(startIndex == C.INDEX_UNSET || startIndex in selected.items.indices)
                     require(carLibrary.owns(selected))
                     djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
-                    restoreNormal(); publishDj("idle", djProfile, 0)
+                    restoreNormal(); publishDj("idle", 0)
                     autoplay.clear(); radio.clear(); previews.clear()
                     pendingCarRadio = if (selected.radio) selected.items.single().mediaMetadata.extras!!.getString(ProgramQueue.KEY) else null
                     val index = if (startIndex == C.INDEX_UNSET) 0 else startIndex
@@ -515,9 +513,9 @@ class PlaybackService : MediaLibraryService() {
                         djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
                         if (dj != null) {
                             dj!!.changeContext(track)
-                            djPlanner.start(djPlanner.profile, djPlanner.direction, org.json.JSONArray().put(source), true, ProgramDjPlanner.Kind.REPLACE)
+                            djPlanner.start(org.json.JSONArray().put(source), true, ProgramDjPlanner.Kind.REPLACE)
                         } else {
-                            djPlanner.start(djPlanner.profile, djPlanner.direction, org.json.JSONArray().put(source), player.mediaItemCount > 0,
+                            djPlanner.start(org.json.JSONArray().put(source), player.mediaItemCount > 0,
                                 lead = track.takeIf { player.mediaItemCount > 0 })
                         }
                     } else if (args.getString("action") == "djRequest") {
@@ -544,22 +542,18 @@ class PlaybackService : MediaLibraryService() {
                         refillAnchor = ""
                         djRouteEditor?.clear()
                         if (args.getBoolean("resetRequestGroups")) dj!!.dropRequestGroups()
-                        djPlanner.start(args.getString("profile") ?: djPlanner.profile,
-                            args.getString("direction")?.let(::orgJson) ?: djPlanner.direction,
-                            args.getString("sources")?.let { org.json.JSONArray(it) } ?: djPlanner.sources,
+                        djPlanner.start(args.getString("sources")?.let { org.json.JSONArray(it) } ?: djPlanner.sources,
                             true, ProgramDjPlanner.Kind.REPLACE)
                     } else if (args.getString("action") == "dj") {
                         require(args.getLong("generation", -1) == connection.generation)
                         if (args.getBoolean("fromCurrent", true)) require(args.getString("queueToken") == ProgramQueue.token(player) && args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
                         djRouteEditor?.clear()
-                        djPlanner.start(args.getString("profile") ?: "adaptive",
-                            org.json.JSONObject(args.getString("direction") ?: "{\"energy\":0,\"familiarity\":0,\"prompt\":\"\",\"include\":[],\"exclude\":[]}"),
-                            org.json.JSONArray(args.getString("sources") ?: "[]"), args.getBoolean("fromCurrent", true))
+                        djPlanner.start(org.json.JSONArray(args.getString("sources") ?: "[]"), args.getBoolean("fromCurrent", true))
                     } else if (args.getString("action") == "queue") {
                         require(args.getLong("generation", -1) == connection.generation)
                         val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"), lane = "context")
                         val index = args.getInt("index", -1); require(index in items.indices)
-                        djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", djProfile, 0)
+                        djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", 0)
                         autoplay.clear()
                         radio.clear()
                         player.shuffleModeEnabled = args.getBoolean("shuffle")
@@ -585,7 +579,7 @@ class PlaybackService : MediaLibraryService() {
                                 val position = player.currentPosition
                                 val requested = player.playWhenReady
                                 djRouteEditor?.clear(); djPlanner.clear(); refillAnchor = ""
-                                restoreNormal(); publishDj("idle", djProfile, 0)
+                                restoreNormal(); publishDj("idle", 0)
                                 player.setMediaItem(seed, position); player.prepare()
                                 if (requested) player.play()
                             }
@@ -650,13 +644,13 @@ class PlaybackService : MediaLibraryService() {
                     djPlanner.restoreWorkspace(restored.workspace)
                     djRouteEditor?.clear(); djRefiner?.clear(); refillAnchor = ""
                     installDj(rows, restored.positionMs, restored.index, heardIds)
-                    player.play(); publishDj("ready", djPlanner.profile, 0)
+                    player.play(); publishDj("ready", 0)
                     return
                 }
                 val items = ProgramDeviceState.items(connection, restored)
                 val continuation = restored.radio?.optBoolean("active") == true || items.any { it.mediaMetadata.extras?.getBoolean("autoplayGenerated") == true }
                 if (continuation) require(items[restored.index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
-                djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", djProfile, 0)
+                djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", 0)
                 autoplay.clear(); radio.clear()
                 player.shuffleModeEnabled = restored.shuffle; player.repeatMode = restored.repeat
                 player.setMediaItems(items, restored.index, restored.positionMs)

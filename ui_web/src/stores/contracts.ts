@@ -1,6 +1,6 @@
-import { type DjDirection, type DjProfile, type LibraryScanStatus } from "../lib/api";
+import { type LibraryScanStatus } from "../lib/api";
 import { type ProgramTransportOrigin } from "../lib/audio";
-import { type AutoActivity, type AutoProfile } from "../lib/generatedQueue";
+import { type AutoActivity } from "../lib/generatedQueue";
 import { type ContextTrack, type PlaybackContextDescriptor } from "../lib/playbackQueue";
 import { type PlaybackSessionSnapshot } from "../lib/playbackSession";
 import type { Track, SavedEntry } from "../types/music";
@@ -102,9 +102,6 @@ export interface PlayerActions {
   removeAutoSource: (id: string) => void;
   removeAutoRouteOccurrence: (queueId: string) => void;
   avoidAutoTrackForSession: (queueId: string) => void;
-  setAutoProfile: (profile: AutoProfile) => void;
-  setAutoDjProfile: (profile: DjProfile) => void;
-  setAutoDirection: (direction: Partial<DjDirection>, note?: string) => void;
   reportAutoActivity: (key: string, status: AutoActivity['status'], values?: Record<string, string | number>) => void;
   autoSessionToken: () => number;
   placeAutoTracks: (tracks: Track[], beforeQueueId?: string, requestGroup?: string) => Promise<void>;

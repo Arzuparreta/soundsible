@@ -220,14 +220,8 @@ export interface DiscoveryMusicFeed {
 export type ListeningPlanIntent = 'autoplay' | 'radio' | 'auto_mode';
 export type ListeningPlanProfile = 'familiar' | 'balanced' | 'explore';
 export type DjProfile = 'adaptive' | 'long_blend' | 'cuts_drops' | 'open_format';
-
-export interface DjDirection {
-  energy: number;
-  familiarity: number;
-  prompt: string;
-  include: string[];
-  exclude: string[];
-}
+/** The mix is automatic: every client asks for this one profile. */
+export const DJ_PROFILE: DjProfile = 'adaptive';
 
 export interface DjTransitionPlan {
   technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade';
@@ -260,15 +254,6 @@ export interface DjMusicSetSource {
   label: string;
   tracks: Track[];
   activation: number;
-}
-
-export interface DjCommandResponse {
-  v: 1;
-  understood: boolean;
-  direction_patch: Partial<DjDirection>;
-  request: null
-    | { kind: 'artist'; label: string; artist: { name: string } }
-    | { kind: 'query'; label: string; query: string };
 }
 
 /** How the DJ endpoints identify one track's audio. */
@@ -319,7 +304,12 @@ export interface ListeningPlanItem {
     bpm: number;
     key?: string | null;
     mode?: string | null;
-    energy: number;
+    /** Notes per second of sounding music; null until measured. */
+    note_rate?: number | null;
+    /** EBU R128 integrated loudness. */
+    loudness_lufs?: number | null;
+    /** 0 for a pure tone, about 0.56 for white noise. */
+    spectral_flatness?: number | null;
     confidence: number;
     analysed: boolean;
   };
@@ -354,7 +344,7 @@ export interface DjPlanResponse extends ListeningPlanResponse {
   source_profile: ListeningPlanProfile;
   /** Features of the track the route continues from — the only reading the
    * player has for a song it did not plan itself. */
-  seed_analysis?: { bpm?: number; key?: string | null; energy?: number; analysed?: boolean };
+  seed_analysis?: { bpm?: number; key?: string | null; note_rate?: number | null; analysed?: boolean };
   /** Present only when a source-only DJ session asked the server to choose its
    * opening. It is not repeated in `items`; those are the route after it. */
   opening?: ListeningPlanItem;
@@ -1045,7 +1035,6 @@ export const api = {
   planDjQueue: (
     body: {
       dj_profile: DjProfile;
-      direction: DjDirection;
       session_id?: string;
       segment_index?: number;
       context?: DjItemRef[];
@@ -1135,13 +1124,6 @@ export const api = {
     timeoutMs: 20000,
     signal,
   }),
-  interpretDjCommand: (text: string, signal?: AbortSignal) =>
-    request<DjCommandResponse>('/api/discovery/music/dj-command', {
-      method: 'POST',
-      body: { text },
-      timeoutMs: 12000,
-      signal,
-    }),
   /** Re-plan one transition once its analysis has landed. Cache-only server
    * side, so it is cheap enough to ask for shortly before every handoff. */
   refineDjTransition: (

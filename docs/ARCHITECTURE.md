@@ -163,12 +163,12 @@ An account without a canonical marker is migrated once using the previous manife
 - Radio remains the explicit “more of this now” mode and continuously refills.
   DJ uses the v6 compositional contract: route occurrences determine
   what will sound, while visible ephemeral sources independently steer the
-  generated runway. Sources accumulate with recency decay; heard tracks provide
-  rolling one-hop context only after they actually sound. Exact placement and
-  exclusions remain session-local, with no waypoint state or hard musical
-  boundary. The director builds an energy arc from signal analysis and
-  stochastic graph walks; it does not use an LLM or silently apply the
-  account's global taste profile.
+  generated runway. Sources accumulate, and the most recent one opens a
+  session; heard tracks provide rolling one-hop context only after they
+  actually sound. Exact placement and exclusions remain session-local, with no
+  waypoint state or hard musical boundary. The route comes from stochastic
+  graph walks over the sources, and signal analysis shapes each transition; it
+  does not use an LLM or silently apply the account's global taste profile.
   Autoplay remains an invisible finite-context continuation. Search does not
   use the queue planner and its UI is unchanged.
 - **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (the same `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:

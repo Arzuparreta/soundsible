@@ -7,8 +7,6 @@ import type { ProgramState, ProgramCommand } from '../lib/program/runtime';
 import styles from './ProgramTransport.module.css';
 import { openContextMenu } from '../lib/contextMenu';
 import { vibrate } from '../lib/haptics';
-import type { DjProfile } from '../lib/api';
-import type { MenuAction } from './ActionMenu';
 
 /** Stateless ownership: presentation observes a program; commands never create audio here. */
 export default function ProgramTransport(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onLyrics?: () => void }) {
@@ -29,12 +27,6 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
       const key = props.state.items[props.state.index]?.key;
       const programToken = props.state.programToken;
       const queueToken = props.state.queueToken;
-      const profiles: { profile: DjProfile; label: string }[] = [
-        { profile: 'adaptive', label: t('autoMode.dj.adaptive') },
-        { profile: 'long_blend', label: t('autoMode.dj.longBlend') },
-        { profile: 'cuts_drops', label: t('autoMode.dj.cutsDrops') },
-        { profile: 'open_format', label: t('autoMode.dj.openFormat') },
-      ];
       const enabled = props.state.autoplay?.enabled;
       const known = typeof enabled === 'boolean';
       openContextMenu({ title: props.state.title, actions: [...(!live() && props.onLyrics && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' ? [{ label: t('nowPlaying.showLyrics'), onSelect: () => { if (props.state.generation === generation && !disabled()) props.onLyrics?.(); } }] : []), ...(!live() ? [{
@@ -48,30 +40,15 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
         disabled: ['planning', 'warming'].includes(props.state.dj?.phase ?? ''),
         onSelect: () => {
           if (disabled() || props.state.generation !== generation || props.state.items[props.state.index]?.key !== key) return;
-          void run({ action: 'dj', profile: 'adaptive', fromCurrent: true, queueToken: props.state.queueToken, key });
+          void run({ action: 'dj', fromCurrent: true, queueToken: props.state.queueToken, key });
         },
-      }] : []), ...(props.state.dj?.active && programToken ? profiles.map<MenuAction>(({ profile, label }) => ({
-        label, selected: props.state.dj?.profile === profile,
-        onSelect: () => {
-          if (disabled() || props.state.generation !== generation || props.state.programToken !== programToken || !props.state.dj?.active) return;
-          void run({ action: 'djSettings', programToken, profile });
-        },
-      })).concat([{
+      }] : []), ...(props.state.dj?.active && programToken ? ([{
         label: t('autoMode.source.title'), selected: false,
         onSelect: () => {
           const current = () => props.state.generation === generation && props.state.programToken === programToken && props.state.dj?.active === true;
           if (disabled() || !current()) return;
           void import('../mobile/DjSources').then(({ openNativeDjSources }) => {
             if (current()) openNativeDjSources(() => props.state, () => props.pending, props.command);
-          });
-        },
-      }, {
-        label: t('autoMode.dj.direction'), selected: false,
-        onSelect: () => {
-          const current = () => props.state.generation === generation && props.state.programToken === programToken && props.state.dj?.active === true;
-          if (disabled() || !current()) return;
-          void import('../mobile/DjDirection').then(({ openNativeDjDirection }) => {
-            openNativeDjDirection(props.state.dj?.direction, current, direction => props.command({ action: 'djSettings', programToken, direction }));
           });
         },
       }, {

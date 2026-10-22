@@ -97,11 +97,11 @@ class DjContextTest {
                 command("action:'djRequest',tracks:[{source:'local',id:'member-pcm-soft',title:'Collection request one',artist:'member artist',duration:20},{source:'local',id:'member-pcm-loud',title:'Collection request two',artist:'member artist',duration:20}]")
                 waitFor("window.__dj.items.filter(i=>i.title.startsWith('Collection request')).length===2 && window.__dj.dj.editOutcome==='placed'")
                 retained()
-                // All two fixture recordings are already queued: a profile replan may exhaust,
+                // All two fixture recordings are already queued: a settings replan may exhaust,
                 // but it must keep both grouped requests.
-                command("action:'djSettings',profile:'adaptive'")
+                command("action:'djSettings'")
                 waitFor("['ready','degraded','exhausted'].includes(window.__dj.dj.phase)")
-                assertEquals("Profile edits dropped collection requests", "true", web.evaluate(scenario, "window.__dj.items.filter(i=>i.title.startsWith('Collection request')).length===2"))
+                assertEquals("Settings replans dropped collection requests", "true", web.evaluate(scenario, "window.__dj.items.filter(i=>i.title.startsWith('Collection request')).length===2"))
                 // Groups travel in the same autoRoute contract used by web/native handoffs.
                 waitFor("['ready','degraded','exhausted'].includes(window.__dj.dj.phase)")
                 menu("member softer PCM song", "Start DJ from current song")

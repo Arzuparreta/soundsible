@@ -25,7 +25,10 @@ de estado y en su sección; el resto sigue siendo diagnóstico.
   - La nivelación de volumen es una ganancia constante por canción: nunca cambiar
     el volumen de una canción mientras suena.
   - Android debe igualar las funciones de la web, con la mejor implementación
-    nativa, no copiar soluciones provisionales de la web.
+    nativa, no copiar soluciones provisionales de la web. La lógica del DJ está
+    en el servidor; Android solo ejecuta la mezcla. Una diferencia de interfaz
+    con la web solo se acepta si la impone el port, y si un cambio rompe
+    Android se arregla en la misma PR (2026-10-22).
 - Decisiones del 2026-10-22 (ver *Decisiones de diseño* más abajo):
   - Se elimina el arco de energía. El DJ no dirige la sesión: la dirigen las
     fuentes y el recomendador. El DJ ordena para que las transiciones sean
@@ -55,18 +58,18 @@ no hay síntoma que lo justifique.
 | --- | --- | --- | --- |
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
 | P2 | Alineación de fase en el navegador | Lectura de código | Sin síntoma tras #377; se retoma solo si vuelve a oírse desfase |
-| P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente; diseño decidido (continuidad, sin arco) |
-| P4 | La "energía" no mide intensidad | Medido | Rehacer: el enfoque de #384 se descartó; diseño decidido |
+| P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente; diseño decidido (continuidad). El arco ya se quitó (#PR_P4): hoy el orden es el barajado |
+| P4 | La "energía" no mide intensidad | Medido | Cerrado (#PR_P4): notas/s, LUFS y planitud; `energy` eliminado |
 | P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente; ampliado a pool analizado y puentes |
 | P6 | Compatibilidad de tonalidad mal puntuada | Lectura de código | Pendiente |
-| P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Pendiente (necesita decisión) |
+| P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#PR_P4); queda decidir la opción (b) en el servidor |
 | P8 | Secciones medidas y no usadas | Lectura de código | Pendiente |
 | P9 | Eco no sincronizado con el tempo | Lectura de código | Pendiente |
-| P10 | Código muerto y documentación desactualizada | Lectura de código | Pendiente |
+| P10 | Código muerto y documentación desactualizada | Lectura de código | En parte (#PR_P4): queda `automation` |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
-salvo que vuelva el síntoma.
+salvo que vuelva el síntoma. P4 está cerrado: **el siguiente es P6**.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -85,9 +88,10 @@ sube el cliente en cada recarga (`ui_web/src/lib/generatedQueue.ts`,
 `"arc": {"target", "phase"}` y ningún cliente lo lee.
 
 El usuario lo quita: no aporta nada que no haga ya el recomendador (con techno de
-fiesta, la reproducción normal ya sigue dando techno de fiesta). Hay que eliminar
-`_auto_set_arc_position`, el orden por energía de `_build_music_set_route`, la
-elección de la primera canción por energía y el campo `arc` de la respuesta.
+fiesta, la reproducción normal ya sigue dando techno de fiesta). Eliminados en
+#PR_P4: `_auto_set_arc_position`, el orden por energía de
+`_build_music_set_route`, la elección de la primera canción por energía y el
+campo `arc` de la respuesta.
 
 ### Medir, no calibrar
 
@@ -118,11 +122,17 @@ previews de todas las candidatas. Se quitó por dos razones, escritas en
 descargadas (analizadas → elegidas más → siguen descargadas). La condición del
 usuario es eliminar o mitigar al máximo esa ventaja. Ver P5.
 
-### Pendiente de decisión
+### Dirección y estilos: eliminados (2026-10-22)
 
-La dirección de la ruta antigua (`direction.energy`, `djDirection.ts`,
-`mobile/DjDirection.tsx`) depende de una energía única que deja de existir. Su
-destino es parte de P7, que sigue necesitando decisión del usuario.
+Decisión del usuario: sin energía única, la dirección (`direction.energy`) se
+quita; y Android debe ser igual que la web. El menú de estilos (4 perfiles) y el
+diálogo de dirección los había añadido el port de Android (#300) al menú `⋯` de
+`ProgramTransport.tsx`, dos meses después de que la web los quitara
+(`ae161f0`): nadie lo había decidido. Se eliminan en los dos clientes, y la
+dirección entera (energía, familiaridad, texto, incluir, excluir) en servidor,
+web y Android, porque ya nada puede fijarla. Los dos clientes envían siempre
+`dj_profile: "adaptive"` (`DJ_PROFILE` en `api.ts`, `ProgramDjPlanner.PROFILE`).
+El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
 
 ---
 
@@ -153,8 +163,9 @@ destino es parte de P7, que sigue necesitando decisión del usuario.
    canciones de cada fuente, más las related de las últimas 4 canciones
    automáticas que llegaron a sonar ("exploration"). Se quitan excluidas, ya
    oídas y grabaciones de más de 20 minutos.
-3. **Orden**: barajado con semilla fija por sesión y segmento, ordenación por
-   distancia a una energía objetivo, se cogen las 8 primeras (ver P3).
+3. **Orden**: barajado con semilla fija por sesión y segmento; se cogen las 8
+   primeras (ver P3). La primera canción de una sesión sin semilla es la de la
+   fuente más reciente que sale primero en ese barajado.
 4. **Transición de cada par** (`plan_transition`, `dj_engine.py:671`), con perfil
    `"adaptive"` fijo.
 5. **Ejecución** en el navegador (`stores/dj.ts`, `mixer.ts`).
@@ -167,12 +178,13 @@ destino es parte de P7, que sigue necesitando decisión del usuario.
 | `beat_grid` | Rejilla ajustada y alineada al inicio del ataque, 4 decimales; ver P1 | Sí |
 | `downbeats` | De las 4 fases del compás, la de mayor cambio armónico y ataque más fuerte; asume 4/4 | Sí |
 | `key`, `mode` | Perfiles Krumhansl sobre el croma del espectro medio | Sí |
-| `energy` | Media de `rms / percentil95(rms)` dentro de la misma canción | Sí (orden) |
+| `note_rate` | Ataques por segundo de música que suena (P4) | No (lo usará P3) |
+| `loudness_lufs` | Sonoridad integrada EBU R128 de FFmpeg, en la misma decodificación (P4) | No (lo usará P3) |
+| `spectral_flatness` | Planitud espectral 100–5000 Hz de los fotogramas fuertes, ponderada por potencia (P4) | No (lo usará P3) |
 | `intro_cue` | Primer instante con energía sobre el percentil 35 | Sí (punto de entrada) |
 | `outro_cue` | Primer límite de frase unos 64 golpes antes del último sonido | Sí (punto de salida) |
-| `sections` | Etiquetas intro/build/drop/breakdown/body/outro por bloques de 8 compases | No (P8) |
+| `sections` | Etiquetas intro/build/drop/breakdown/body/outro por bloques de 8 compases; `level` es el nivel medio frente al de la propia canción | No (P8) |
 | `tempo_confidence` | Parte de golpes que encajan en la rejilla; ≤ 0,6 si el tempo deriva | Sí, dentro de `confidence` |
-| `loudness_db` | — | No |
 | `confidence` | `0,38 + 0,36·tempo_conf + min(0,2, margen_tonalidad/8)` | Sí |
 
 ### Cálculo de la transición (`plan_transition`)
@@ -393,21 +405,17 @@ entrante llegaría hasta 23 ms adelantada o retrasada. Se puede comprobar con el
 
 ## P3. El orden de la ruta ignora la calidad de la transición
 
-**Qué pasa.** En la ruta v6 (`_build_music_set_route`, la que usa siempre la web
-porque envía `sources`):
+**Qué pasa (desde #PR_P4).** En la ruta v6 (`_build_music_set_route`, la que usa
+siempre la web porque envía `sources`, y Android cuando tiene fuentes):
 
-1. `rng.shuffle(available)` (`auto_mode.py:1335`).
-2. Energía objetivo: una de seis fases `(0.34, 0.52, 0.74, 0.9, 0.78, 0.58)`
-   (`_auto_set_arc_position`), tomada como percentil de las energías medidas de
-   las candidatas. Avanza en cada recarga de hasta 8 canciones.
-3. `analysed.sort(...)` por distancia a esa energía (`auto_mode.py:1343`).
-4. Se cogen las 8 primeras y se calcula la transición de cada par
-   (`auto_mode.py:1378`).
+1. `rng.shuffle(available)`, con semilla por sesión y segmento.
+2. Se cogen las 8 primeras y se calcula la transición de cada par.
 
-No cuentan: la calidad de la transición, `score`, `semantic_score` ni el peso de
-la fuente (`weight = 0.38 + 0.62·…`, línea 1254; solo se usa para elegir la
-primera canción). Si ninguna candidata está analizada, el orden es el barajado.
-Las canciones sin análisis usan energía 0,5.
+El arco de energía (`_auto_set_arc_position`, el orden por energía, la elección
+de la primera canción por energía y el campo `arc` de la respuesta) se eliminó
+en #PR_P4; el test que lo fijaba también. No cuentan: la calidad de la
+transición, `score`, `semantic_score` ni el peso de la fuente
+(`weight = 0.38 + 0.62·…`; solo se usa para elegir la primera canción).
 
 `order_route` (`dj_engine.py:767`) sí ordena con `0,42·transición + 0,38·semántica
 + 0,20·relevancia`, pero solo se usa en la ruta antigua sin `sources` (Android
@@ -415,25 +423,24 @@ sin fuentes), en Fix mix (`dj-repair`) y al colocar canciones (`dj-place`).
 
 **Cuándo falla.** En cada recarga de la ruta. Dos canciones seguidas pueden ser
 incompatibles en tempo o tonalidad aunque haya candidatas compatibles en el pool.
-`docs/ARCHITECTURE.md` afirma que las fuentes se acumulan "with recency decay":
-el peso se calcula pero no influye en la selección.
-
-`README.md` dice que el modo DJ "orders songs by tempo, key and energy": hasta
-P3, el tempo y la tonalidad no intervienen en el orden.
+`docs/ARCHITECTURE.md`, `docs/PLAYBACK_QUEUE_CONTRACT.md` y `README.md` ya no
+dicen "recency decay" ni "orders songs by tempo, key and energy" (#PR_P4).
 
 **Diseño decidido (2026-10-22).**
 
-- Sin arco (ver *Decisiones de diseño*).
+- Sin arco (hecho en #PR_P4).
 - La ruta v6 ordena por calidad de transición (`order_route` o su lógica) y por
   **continuidad**: la siguiente canción cerca de la actual en cada magnitud de P4
   (notas/s, LUFS, timbre, tempo). Cada magnitud se escala por su dispersión
   entre las candidatas de esa ruta; pesan igual tras escalarlas. No hay pesos
   ajustados a gusto.
-- Mantener el peso de la fuente donde ya cuenta (elegir la primera canción), y
-  revisar si `docs/ARCHITECTURE.md` ("recency decay") debe describir otra cosa.
-- Revisar los tests de `tests/test_discovery_save_route.py` que fijan el
-  comportamiento de v6 y quitar los que fijan el arco
-  (`test_explicit_dj_arc_follows_the_recent_window_not_the_whole_history`).
+- Mantener el peso de la fuente donde ya cuenta (elegir la primera canción).
+- `test_dj_plan_v6_does_not_steer_by_energy` fija que hoy el orden no depende
+  del análisis; P3 lo cambiará a propósito.
+- Las magnitudes están en el análisis: `note_rate`, `loudness_lufs`,
+  `spectral_flatness`, `bpm`. `loudness_lufs` puede ser `None` (silencio o
+  menos de 400 ms); `note_rate` y `spectral_flatness` son 0 en silencio. Una
+  canción sin analizar no tiene ninguna (P5: no puntuarla peor por eso).
 
 ## P4. La "energía" no mide intensidad
 
@@ -491,6 +498,79 @@ sintéticos (`tests/test_dj_energy.py`) y el benchmark (`docs/PERFORMANCE.md`,
 `scripts/benchmark_dj_analysis.py --allow-changes`). Qué no: la escala a 0–1, la
 elección de la primera canción por energía y los cambios de `energy or 0.5`
 (dejan de tener sentido sin energía única).
+
+**Estado: cerrado en #PR_P4.** `ANALYSER_VERSION` 6. `energy` y `loudness_db`
+desaparecen del análisis; en su lugar:
+
+- `note_rate` (notas/s). `_note_onsets` en `shared/dj_engine.py`, sección
+  *Notes*: flujo espectral al estilo SuperFlux (Böck y Widmer, 2013). Ventana
+  de 512 muestras (46 ms) y paso 128 (11,6 ms) a 11025 Hz; bandas de un cuarto
+  de tono de 40 Hz a 5 kHz (por debajo de ~400 Hz cada bin es una banda);
+  logaritmo con suelo −60 dB del nivel fuerte; media de 3 fotogramas; cada
+  banda contra el máximo de sus vecinas 2 fotogramas antes (anula el vibrato);
+  a cada banda se le resta su propia fluctuación (mediana del cambio en bloques
+  de 3 s), para que el ruido no cuente. Picos: máximo local ±30 ms, 2 por
+  encima de la media de −50 a +70 ms, 60 ms entre ataques. Se cuenta sobre los
+  segundos a menos de 20 dB del nivel fuerte, con silencios de hasta 1 s
+  incluidos (los silencios de una pieza son música). Memoria acotada a bloques
+  de 256 fotogramas.
+- `loudness_lufs`: el medidor `ebur128` de FFmpeg en la misma decodificación
+  (`_decode_measured`, una rama del `asplit` acaba en `anullsink`). Mide los
+  canales y la frecuencia originales, igual que `shared/loudness` (mismo valor
+  que el almacén de nivelación para la misma canción) y también sirve para las
+  previews, que el almacén no mide. El PCM sale idéntico byte a byte a una
+  decodificación sin medidor (test). Canciones de más de 8 min: suma en
+  potencia de las dos ventanas medidas (90 s + 120 s). Coste: +0,2 s de CPU en
+  una canción de 8 min.
+- `spectral_flatness`: media geométrica entre aritmética de la potencia, 100–
+  5000 Hz, en los fotogramas a menos de 20 dB del nivel fuerte, ponderada por su
+  potencia. Sin escala: 0 para un tono puro, e^−γ ≈ 0,56 para ruido blanco.
+
+Las constantes del detector se eligieron solo con señales sintéticas de
+respuesta conocida (`tests/test_dj_note_rate.py`), con una búsqueda en rejilla
+sobre 63 señales. La música real se midió después, sin notas puestas por nadie.
+
+**Resultados sintéticos (medidos, en los tests).** Melodías de 1, 2, 4, 8 y 12
+notas/s, ligadas y picadas, con y sin vibrato de 50 cents y reverberación de
+sala (RT60 2 s, reverberación 6 dB por debajo del directo): todas dentro de
+±25 %. Acordes de cuatro voces repetidos de 2 a 8 veces/s con caídas de 12 dB:
+±25 %. Coro sostenido que cambia de acorde 0,25–1 vez/s: ±0,3. Batería: ±25 %.
+Ruido blanco: < 1 nota/s (0,6). Tono fijo: 0. Nivel ×0,02: mismo valor ±5 %.
+
+**Resultados reales (medidos, `analyse_audio` completo con FFmpeg).**
+
+| Grabación | notas/s | LUFS | planitud |
+| --- | ---: | ---: | ---: |
+| Bach, «Little» Fugue BWV 578, flautas de pico graves | 5,00 | −14,5 | 0,0023 |
+| Barber, Agnus Dei, VOCES8 | 0,42 | −14,7 | 0,0017 |
+| Lumen Valo, Aestimatus sum (canto) | 0,79 | −31,5 | 0,0013 |
+| Mozart, Concierto K. 488, II. Adagio | 1,46 | −25,8 | 0,0028 |
+| Wagner, Lohengrin, preludio del acto 3 | 1,53 | −13,0 | 0,0502 |
+| Mozart, Sinfonía 25, I. Allegro con brio | 2,46 | −20,9 | 0,0162 |
+| Bach, Concierto BWV 1052, I. Allegro (clave) | 4,80 | −25,7 | 0,0229 |
+| Radiohead, Everything In Its Right Place | 2,53 | −9,4 | 0,0144 |
+| Soundgarden, Black Hole Sun | 2,75 | −7,9 | 0,1200 |
+| Oliver Heldens, Ruins | 4,32 | −7,0 | 0,1050 |
+| Sonora Ponceña, Fuego en el 23 | 5,20 | −9,7 | 0,0421 |
+| Skrillex, Smoke | 7,56 | −6,0 | 0,1490 |
+
+Criterio de aceptación cumplido: la fuga mide 12 veces más notas por segundo
+que el Agnus Dei (con #384 la planitud de las dos era casi igual). La fuga va
+en semicorcheas a unas 75 negras por minuto (≈ 5 notas/s): coincide.
+
+**Límites que quedan (medidos).**
+
+- Acordes repetidos en la misma nota con caídas de solo 6 dB y una sala que
+  rellena el hueco: se cuenta ~40 % de los golpes (test
+  `test_shallow_repeated_strokes_are_undercounted_but_still_ordered`). Es lo
+  que pasa con los tresillos del preludio de Lohengrin (1,53 frente a ~6 de la
+  partitura) y en parte con la Sinfonía 25 de Mozart. Siguen ordenadas: más
+  golpes miden más.
+- Ligado rápido (12 notas/s) en una catedral (reverberación al nivel del
+  directo): ~45 %. Con la sala del test (−6 dB), dentro de ±25 %.
+- Ruido blanco puro da 0,6 notas/s.
+- La planitud mide timbre (ruido o tonos limpios), no actividad: es una
+  magnitud de continuidad para P3, no una intensidad.
 
 ## P5. Canciones de YouTube sin caché: fundido simple
 
@@ -563,39 +643,37 @@ después.
 
 ## P7. Perfiles de DJ y dirección sin efecto en la ruta
 
-**Qué pasa.**
+**Hecho en #PR_P4 (decisión del usuario, 2026-10-22: Android igual que la web).**
 
-- La ruta v6 fija `"adaptive"` (`auto_mode.py:1378`) y no lee `direction`
-  (energía, familiaridad, incluir/excluir).
-- Con `adaptive` nunca salen `echo_cut` ni `long_blend`.
-- Web: no hay selector. El perfil viene de `localStorage` `auto:dj-profile`
-  (por defecto `adaptive`) y solo llega a `dj-transition`, `dj-place` y `dj-repair`.
-- Android: `ProgramTransport.tsx:32` muestra un menú con los 4 perfiles y un
-  diálogo de dirección (`mobile/DjDirection.tsx`). El perfil solo afecta a las
-  transiciones que se recalculan, a Fix mix y a las colocaciones. La dirección
-  solo se usa en la ruta antigua (petición sin `sources`).
+- La dirección se eliminó entera: `direction` en `dj-plan` (la ruta antigua ya
+  no lee energía, familiaridad, incluir ni excluir; una petición antigua que la
+  envía obtiene la misma ruta, test
+  `test_dj_plan_ignores_the_direction_older_clients_still_send`), el endpoint
+  `dj-command`, `api.interpretDjCommand`, `lib/djDirection.ts`,
+  `mobile/DjDirection.tsx`, `setAutoDirection`, el estado `direction` de la web
+  y de Android y su paso por las sesiones entre dispositivos (una sesión antigua
+  que la trae se lee sin ella).
+- El menú de 4 estilos del `⋯` de Android (`ProgramTransport.tsx`) se quitó. El
+  menú DJ de Android ofrece lo mismo que la web: fuentes y Fix mix.
+- Web y Android envían siempre `dj_profile: "adaptive"`: se quitaron
+  `localStorage` `auto:dj-profile`, `setAutoDjProfile`, el perfil del estado de
+  Android (`ProgramDjPlanner.profile`, `djProfile` de `PlaybackService` y de
+  `PlaybackPlugin`) y su validación en `ProgramDeviceState`.
 
-**Cuándo falla.** En Android, cambiar de estilo o de dirección no cambia la ruta
-generada ni la mayoría de sus transiciones.
-
-**Necesita decisión del usuario.** La decisión vigente es "sin selector de
-estilo". Opciones: (a) quitar el menú de estilo y de dirección de Android y fijar
-el perfil en todos los endpoints; (b) dejar que el planificador elija la técnica
-por par sin perfiles, permitiendo también `echo_cut` y `long_blend` cuando el
-material lo pida (por ejemplo, echo_cut si el tempo no encaja pero la confianza es
-alta). La opción (b) encaja con "la mezcla es automática".
-
-Desde 2026-10-22: sin arco ni energía única, el diálogo de dirección
-(`direction.energy`) pierde su base, y el usuario considera que la dirección de la
-sesión ya la dan las fuentes y el recomendador. Confirmar con el usuario si eso
-cierra la parte de dirección de P7 antes de quitarla.
+**Queda (necesita decisión del usuario).** El servidor conserva los cuatro
+perfiles (`DJ_PROFILES`, `_PROFILE_POLICY`). Con `adaptive` nunca salen
+`echo_cut` ni `long_blend`. Opción (b): que el planificador elija la técnica por
+par sin perfiles, permitiendo también `echo_cut` y `long_blend` cuando el
+material lo pida (por ejemplo, echo_cut si el tempo no encaja pero la confianza
+es alta). Encaja con "la mezcla es automática". Si se descarta, quitar los
+perfiles del servidor y el parámetro `dj_profile`.
 
 ## P8. Secciones medidas y no usadas
 
 **Qué pasa.** `_sections_from_features` etiqueta bloques de 8 compases (intro,
 build, drop, breakdown, body, outro), pero nadie lee las etiquetas. `outro_cue`
 solo usa los límites de frase; `intro_cue` es el primer instante con sonido.
-`loudness_db` no se usa al planificar; `tempo_confidence` solo entra en `confidence`.
+`loudness_db` se eliminó en P4 (lo sustituye `loudness_lufs`); `tempo_confidence` solo entra en `confidence`.
 
 **Posibles soluciones.** Colocar la salida al inicio de un outro o antes de un
 breakdown, y la entrada de forma que el drop de la entrante caiga en un límite de
@@ -615,18 +693,14 @@ punto depende de esa decisión.
 
 ## P10. Código muerto y documentación desactualizada
 
-- `api.interpretDjCommand` (`ui_web/src/lib/api.ts`) no tiene llamadores; el
-  endpoint `/api/discovery/music/dj-command` y `_dj_command_direction` solo son
-  alcanzables por él.
-- `setAutoDjProfile` y `setAutoDirection` (`ui_web/src/stores/dj.ts`, declarados en
-  `stores/contracts.ts`) no se llaman desde la web; `setAutoDirection` solo
-  aparece en `stores/index.test.ts`.
-- El campo `automation` que devuelve `plan_transition` no lo lee el mezclador web
-  ni el de Android: los dos deciden por `technique`.
-- `docs/AUTO_MODE.md` habla de "DJ style" (tabla de partes y "Depending on the
-  material and DJ style").
-- `docs/ARCHITECTURE.md` describe "recency decay" de las fuentes (ver P3) y un
-  "energy arc" que se elimina.
+Hecho en #PR_P4: `api.interpretDjCommand`, `/api/discovery/music/dj-command`,
+`_dj_command_direction`, `setAutoDjProfile`, `setAutoDirection`,
+`setAutoProfile` (sin llamadores; además pedía claves `autoMode.note.crate.*`
+que no existían), 76 claves de texto de `autoMode` sin uso en los cuatro
+idiomas, "DJ style" en `docs/AUTO_MODE.md`, "recency decay" y "energy arc" en
+`docs/ARCHITECTURE.md` y `docs/PLAYBACK_QUEUE_CONTRACT.md`, y el "orders songs by
+tempo, key and energy" de `README.md`.
 
-Según las preferencias del usuario, el código 100 % sin uso se elimina sin
-preguntar; hacerlo junto con P7, porque la decisión de P7 cambia qué queda vivo.
+Queda: el campo `automation` que devuelve `plan_transition` no lo lee el
+mezclador web ni el de Android (los dos deciden por `technique`). Quitarlo con
+la decisión de P7 (b), que puede cambiar qué técnicas salen.

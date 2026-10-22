@@ -10,7 +10,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 it('reports DJ planning, bounded retries and exhaustion while preserving playback controls', async () => {
   const command = vi.fn(async () => {});
-  const [state, setState] = createSignal<ProgramState>({ ...initial, playWhenReady: true, dj: { active: true, phase: 'planning', profile: 'adaptive' } });
+  const [state, setState] = createSignal<ProgramState>({ ...initial, playWhenReady: true, dj: { active: true, phase: 'planning' } });
   render(() => <ProgramTransport state={state()} pending={false} command={command} />);
   for (const [phase, message] of [['planning', 'autoMode.route.preparing'], ['warming', 'autoMode.route.retryingHint'], ['degraded', 'autoMode.route.mixPending'], ['exhausted', 'autoMode.route.exhausted']]) {
     setState({ ...state(), dj: { ...state().dj!, phase } });
@@ -23,7 +23,7 @@ it('reports DJ planning, bounded retries and exhaustion while preserving playbac
 });
 
 it('surfaces terminal DJ planning failure and clears it after confirmed recovery', () => {
-  const [state, setState] = createSignal<ProgramState>({ ...initial, dj: { active: true, phase: 'unavailable', profile: 'adaptive' } });
+  const [state, setState] = createSignal<ProgramState>({ ...initial, dj: { active: true, phase: 'unavailable' } });
   render(() => <ProgramTransport state={state()} pending={false} command={async () => {}} />);
   for (const phase of ['unavailable', 'invalid', 'blocked']) {
     setState({ ...state(), dj: { ...state().dj!, phase } });
@@ -34,7 +34,7 @@ it('surfaces terminal DJ planning failure and clears it after confirmed recovery
   expect(screen.queryByRole('status')).toBeNull();
 });
 it('shows that a request remains queued when musical placement falls back', () => {
-  const [state, setState] = createSignal<ProgramState>({ ...initial, dj: { active: true, phase: 'placing', profile: 'adaptive', editOutcome: 'pending' } });
+  const [state, setState] = createSignal<ProgramState>({ ...initial, dj: { active: true, phase: 'placing', editOutcome: 'pending' } });
   render(() => <ProgramTransport state={state()} pending={false} command={async () => {}} />);
   expect(screen.getByRole('status').textContent).toBe('autoMode.route.preparing');
   setState({ ...state(), dj: { ...state().dj!, phase: 'degraded', editOutcome: 'placement_fallback', requestTitle: 'Requested song' } });
@@ -43,16 +43,15 @@ it('shows that a request remains queued when musical placement falls back', () =
   expect(screen.queryByRole('status')).toBeNull();
 });
 
-it('changes DJ profile within the captured programme and rejects a stale menu', async () => {
+it('offers the DJ actions the web has: sources and Fix mix, no style or direction', async () => {
   const command = vi.fn(async () => {});
-  const [state, setState] = createSignal<ProgramState>({ ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } });
+  const [state] = createSignal<ProgramState>({ ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready' } });
   render(() => <ProgramTransport state={state()} pending={false} command={command} />);
   await fireEvent.click(document.querySelector('[data-program-menu]')!);
-  const action = vi.mocked(openContextMenu).mock.calls[0][0].actions!.find(item => item.label === 'autoMode.dj.longBlend')!;
-  setState({ ...state(), queueToken: 'refilled' }); action.onSelect();
-  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'djSettings', programToken: 'dj-owner', profile: 'long_blend' });
-  setState({ ...state(), programToken: 'another-programme' }); action.onSelect();
-  expect(command).toHaveBeenCalledTimes(1);
+  const labels = vi.mocked(openContextMenu).mock.calls[0][0].actions!.map(item => item.label);
+  expect(labels).toEqual(expect.arrayContaining(['autoMode.source.title', 'autoMode.route.fix']));
+  expect(labels.filter(label => label.startsWith('autoMode.dj.'))).toEqual([]);
+  expect(command).not.toHaveBeenCalled();
 });
 
 it('starts DJ from the captured song and rejects a menu after its occurrence changes', async () => {
@@ -62,14 +61,14 @@ it('starts DJ from the captured song and rejects a menu after its occurrence cha
   await fireEvent.click(document.querySelector('[data-program-menu]')!);
   const action = vi.mocked(openContextMenu).mock.calls[0][0].actions!.find(item => item.label === 'musicExplorer.startDjFromCurrent')!;
   action.onSelect();
-  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'dj', profile: 'adaptive', fromCurrent: true, queueToken: 'token', key: 'second' });
+  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'dj', fromCurrent: true, queueToken: 'token', key: 'second' });
   setState({ ...initial, index: 0 }); action.onSelect();
   expect(command).toHaveBeenCalledTimes(1);
 });
 const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ source: 'local', key: 'first', id: 'a', title: 'a', artist: '' }, { source: 'local', key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
 it('repairs the captured DJ future from the overflow menu and rejects a changed route', async () => {
   const command = vi.fn(async () => {});
-  const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0, items: [...initial.items, { ...initial.items[0], key: 'third' }], programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } });
+  const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0, items: [...initial.items, { ...initial.items[0], key: 'third' }], programToken: 'dj-owner', dj: { active: true, phase: 'ready' } });
   render(() => <ProgramTransport state={state()} pending={false} command={command} />);
   await fireEvent.click(document.querySelector('[data-program-menu]')!);
   const action = vi.mocked(openContextMenu).mock.calls[0][0].actions!.find(item => item.label === 'autoMode.route.fix')!;

@@ -113,7 +113,8 @@ Unmatched occurrences travel in published sessions and are matched on play.
   occurrence ids and order; any bridge belongs to the placed occurrence.
 - Adding or removing a source replans generated runway after the committed
   handoff. User occurrences survive; fixed ones keep their slot. Sources
-  accumulate with recency decay and never impose a hard genre or set boundary.
+  accumulate, the most recent one opens a session, and none imposes a hard
+  genre or set boundary.
 - **Reordering the route never re-plans.** A moved occurrence loses the plan
   entry it can no longer honour, so the seams it disturbed fall back to a plain
   fade. This is the safe reading, not a defect: a listener rearranging their set
@@ -147,7 +148,7 @@ Unmatched occurrences travel in published sessions and are matched on play.
   survive as ordinary manual queue entries.
 - **The committed handoff** is the one upcoming entry DJ has already
   loaded and cued. It survives additive replans, and manual insertions land behind
-  it rather than in front of it. DJ, direction and request changes are debounced
+  it rather than in front of it. Source and request changes are debounced
   and source changes rewrite only the runway past that point — a session can be steered at any
   moment without disturbing the mix that is already prepared.
 - DJ's plans are **chained**: an entry's transition records which track

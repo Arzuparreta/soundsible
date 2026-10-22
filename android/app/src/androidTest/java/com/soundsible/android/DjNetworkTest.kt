@@ -85,7 +85,7 @@ class DjNetworkTest {
                     .post("{}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(403, it.code) }
                 connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/dj-network").header("X-Android-Fixture", "isolated")
                     .post("{\"track\":\"member-pcm-loud\",\"afterBytes\":600000,\"delaySeconds\":22}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
-                command("action:'dj',profile:'adaptive',fromCurrent:true,key:window.__dj.items[window.__dj.index].key,sources:[{id:'pcm',label:'PCM',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
+                command("action:'dj',fromCurrent:true,key:window.__dj.items[window.__dj.index].key,sources:[{id:'pcm',label:'PCM',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
                 waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>1")
                 waitFor("window.__dj.dj.editableFrom>window.__dj.index+1")
                 incomingKey.set(web.evaluate(scenario, "window.__dj.items[1].key").trim('"'))

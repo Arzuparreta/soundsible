@@ -155,7 +155,6 @@ internal object ProgramDeviceState {
         }
         val workspace = if (session?.optString("mode") == "auto") session.optJSONObject("auto") ?: error("REMOTE_DJ_WORKSPACE_MISSING") else null
         if (workspace != null) {
-            require(workspace.optString("djProfile", "adaptive") in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
             require(workspace.toString().length <= 131072)
             require(session != null && session.optInt("v") == 1 && session.optJSONArray("queue")?.length() in 1..46)
         }

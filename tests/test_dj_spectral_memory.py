@@ -14,10 +14,13 @@ def test_bounded_fft_matches_whole_matrix(count):
     spectrum = np.abs(np.fft.rfft(samples * np.hanning(2048), axis=1))
     expected_rms = np.sqrt(np.mean(samples * samples, axis=1) + 1e-12)
     expected_flux = np.maximum(0.0, np.diff(spectrum, axis=0)).sum(axis=1)
-    rms, mean, flux = _spectral_features(samples)
+    power = spectrum[:, 9:465] ** 2 + 1e-12
+    expected_flatness = np.exp(np.log(power).mean(axis=1)) / power.mean(axis=1)
+    rms, mean, flux, flatness = _spectral_features(samples, flatness_bins=slice(9, 465))
     np.testing.assert_array_equal(rms, expected_rms)
     np.testing.assert_allclose(mean, spectrum.mean(axis=0), rtol=1e-12)
     np.testing.assert_allclose(flux, expected_flux, rtol=1e-12)
+    np.testing.assert_allclose(flatness, expected_flatness, rtol=1e-12)
 
 
 def test_fft_working_set_does_not_grow_with_track_length(monkeypatch):
@@ -75,11 +78,13 @@ def test_complete_analysis_matches_whole_spectrum(monkeypatch, kind):
     }[kind].astype(np.float32)
     actual = dj_engine._compose(samples, samples, rate, duration=18, tail_start=0)
 
-    def whole_matrix(frames):
+    def whole_matrix(frames, *, flatness_bins):
         spectrum = np.abs(np.fft.rfft(frames * np.hanning(frames.shape[1]), axis=1))
         rms = np.sqrt(np.mean(frames * frames, axis=1) + 1e-12)
         flux = np.maximum(0.0, np.diff(spectrum, axis=0)).sum(axis=1)
-        return rms, spectrum.mean(axis=0), flux
+        power = spectrum[:, flatness_bins] ** 2 + 1e-12
+        flatness = np.exp(np.log(power).mean(axis=1)) / power.mean(axis=1)
+        return rms, spectrum.mean(axis=0), flux, flatness
 
     monkeypatch.setattr(dj_engine, '_spectral_features', whole_matrix)
     expected = dj_engine._compose(samples, samples, rate, duration=18, tail_start=0)

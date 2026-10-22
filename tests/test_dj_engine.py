@@ -16,12 +16,11 @@ from shared.dj_engine import (
 )
 
 
-def analysis(*, bpm=120, key="C", mode="major", energy=0.5, confidence=0.9, duration=240):
+def analysis(*, bpm=120, key="C", mode="major", confidence=0.9, duration=240):
     return {
         "bpm": bpm,
         "key": key,
         "mode": mode,
-        "energy": energy,
         "confidence": confidence,
         "duration": duration,
         "outro_cue": duration - 8,

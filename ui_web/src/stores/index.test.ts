@@ -3426,7 +3426,6 @@ describe('cross-device sessions', () => {
     actions.playFrom([current], 0);
     actions.enterAutoMode();
     actions.addAutoSource([seed], 'Björk');
-    actions.setAutoDirection({ energy: 2, prompt: 'darker' });
     await vi.waitFor(() => expect(state.playback.queue.length).toBeGreaterThan(1));
 
     actions.seek(42);
@@ -3448,7 +3447,8 @@ describe('cross-device sessions', () => {
 
     expect(body.session.mode).toBe('auto');
     expect(body.session.auto.sources.map((source: { label: string }) => source.label)).toEqual(['Björk', 'Current']);
-    expect(body.session.auto.direction).toMatchObject({ energy: 2, prompt: 'darker' });
+    expect(body.session.auto).not.toHaveProperty('direction');
+    expect(body.session.auto).not.toHaveProperty('djProfile');
     expect(body.session.queue.length).toBeGreaterThan(1);
     expect(body.session.queue[body.session.index].id).toBe('current');
   });
@@ -3504,7 +3504,6 @@ describe('cross-device sessions', () => {
 
     expect(state.autoMode.active).toBe(true);
     expect(state.autoMode.sources.map((source) => source.label)).toEqual(['Björk', 'Current']);
-    expect(state.autoMode.direction).toMatchObject({ energy: 2, prompt: 'darker' });
     expect(state.playback.queue.map((entry) => entry.id)).toEqual(queue);
     expect(state.playback.currentTrack?.id).toBe('current');
     expect(state.playback.index).toBe(0);

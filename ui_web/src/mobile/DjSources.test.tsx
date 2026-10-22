@@ -8,7 +8,7 @@ vi.mock('../lib/overlay', () => ({ openOverlay: mocks.overlay }));
 vi.mock('../lib/i18n', () => ({ t: (key: string, args?: { title: string }) => key + (args?.title ? ':' + args.title : '') }));
 const sources = [{ id: 'first', label: 'First', activation: 1, tracks: [{ id: 'a', title: 'A', artist: 'Artist' }] },
   { id: 'second', label: 'Second', activation: 2, tracks: [{ id: 'b', title: 'B', artist: 'Artist' }] }];
-const initial = { ready: true, generation: 1, programToken: 'dj', dj: { active: true, profile: 'adaptive', phase: 'ready', sources } } as ProgramState;
+const initial = { ready: true, generation: 1, programToken: 'dj', dj: { active: true, phase: 'ready', sources } } as ProgramState;
 beforeEach(() => { cleanup(); vi.clearAllMocks(); });
 function picker() {
   const [state, change] = createSignal(initial); const [pending, setPending] = createSignal(false);

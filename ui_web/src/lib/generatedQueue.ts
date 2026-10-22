@@ -1,6 +1,4 @@
 import type {
-  DjDirection,
-  DjProfile,
   DjTransitionPlan,
   ListeningPlanIntent,
   ListeningPlanProfile,
@@ -55,8 +53,6 @@ export interface AutoPlanItem {
 export interface AutoModeState {
   active: boolean;
   profile: AutoProfile;
-  djProfile: DjProfile;
-  direction: DjDirection;
   sources: AutoMusicSet[];
   heard: Track[];
   exploration?: Track[];

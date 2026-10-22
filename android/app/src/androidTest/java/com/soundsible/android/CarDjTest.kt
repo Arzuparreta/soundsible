@@ -89,7 +89,7 @@ class CarDjTest {
                 NativeProgramOutput.subscribe(connection.generation) { block ->
                     if (block.sampleRate == 48000 && block.channels == 2 && block.bytes.any { it != 0.toByte() }) pcm.set(true)
                 }.use { capture ->
-                    command("action:'dj',profile:'adaptive',fromCurrent:true,key:window.__carDj.items[window.__carDj.index].key,sources:[{id:'pcm',label:'PCM',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
+                    command("action:'dj',fromCurrent:true,key:window.__carDj.items[window.__carDj.index].key,sources:[{id:'pcm',label:'PCM',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
                     waitFor("window.__carDj.dj?.active && window.__carDj.playing && window.__carDj.items.length>1")
                     web.evaluate(scenario, "window.__carProgram=window.__carDj.programToken;window.__carKeys=window.__carDj.items.map(i=>i.key).join(',')")
                     assertEquals(SessionResult.RESULT_SUCCESS, call { active.getLibraryRoot(null) }.resultCode)

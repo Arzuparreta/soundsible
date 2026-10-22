@@ -40,15 +40,18 @@ The three parts of the workspace have separate jobs:
 | Part | What it controls |
 | --- | --- |
 | **Session** | The musical material and direction DJ should draw from |
-| **Stage / Booth** | What is on air, what comes next, energy, depth, and DJ style |
+| **Stage / Booth** | What is on air and what comes next |
 | **Route** | The actual upcoming order, including your fixed tracks and DJ's generated bridges |
 
 ## What the DJ listens for
 
 When a track can be analysed, Soundsible measures its tempo and beat grid, key,
-energy, musical sections, intro, and outro. It uses those features both to order
-candidates and to choose a transition. Depending on the material and DJ style,
-the two-deck engine can perform:
+musical sections, intro and outro, and three magnitudes that can be compared
+between songs: notes per second, integrated loudness (EBU R128, in LUFS) and
+spectral flatness, which tells a pure tone (0) from noise (about 0.56). The DJ
+does not steer the session by any of them: the sources and the recommender
+choose the music, and the DJ mixes it. Depending on the material, the two-deck
+engine can perform:
 
 - beatmatched long blends;
 - bass swaps and filter blends;

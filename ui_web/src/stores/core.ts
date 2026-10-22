@@ -15,8 +15,6 @@ import { createStore, reconcile } from 'solid-js/store';
 
 import type {
   DeviceRegistration,
-  DjDirection,
-  DjProfile,
   PreviewPreparation,
   RemotePlaybackState,
 } from '../lib/api';
@@ -171,21 +169,6 @@ function initialAutoProfile(): AutoProfile {
   return value === 'familiar' || value === 'explore' ? value : 'balanced';
 }
 
-function initialDjProfile(): DjProfile {
-  const value = localStorage.getItem('auto:dj-profile');
-  return value === 'long_blend' || value === 'cuts_drops' || value === 'open_format'
-    ? value
-    : 'adaptive';
-}
-
-const initialDjDirection = (): DjDirection => ({
-  energy: 0,
-  familiarity: 0,
-  prompt: '',
-  include: [],
-  exclude: [],
-});
-
 /**
  * UUID v4 that also works in insecure contexts (LAN/Tailscale over plain HTTP),
  * where `crypto.randomUUID` is undefined — only secure contexts (HTTPS /
@@ -290,8 +273,6 @@ function initialState(): AppState {
   autoMode: {
     active: false,
     profile: initialAutoProfile(),
-    djProfile: initialDjProfile(),
-    direction: initialDjDirection(),
     sources: [],
     heard: [],
     avoidedIdentities: [],
