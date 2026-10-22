@@ -680,7 +680,7 @@ tonalidades contra un recorrido independiente del grafo, selección de ruta,
 respuesta HTTP y elección de técnica, límites de memoria, decodificación PCM y
 AAC y sustitución de la caché anterior. La fixture de puentes de `dj-repair`
 usaba 100 → 113 → 128 BPM: ninguno de los dos tramos podía hacer beatmatch y
-solo pasaba porque Do → Re se puntuaba mal. Se corrige a 100 → 107 → 115 BPM,
+solo pasaba porque Do → Re se puntuaba mal. Se corrige a 100 → 106 → 112 BPM,
 con dos tramos mezclables, sin cambiar el umbral de admisión de puentes.
 
 **Música real (FFmpeg y análisis completo, sin caché).** Se midió después de

@@ -1310,11 +1310,11 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
     _make_runtime(tmp_path)
     measured = {
         "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "analysed": True},
-        # Two adjacent Camelot steps, each with a beatmatchable tempo gap.
+        # Two adjacent Camelot steps, each inside the mixer's 6% rate limit.
         # At 100 -> 113 -> 128 neither leg could beatmatch; that old fixture
         # only passed because C -> D was incorrectly scored as unrelated.
-        "t0": {"duration": 220, "bpm": 115, "key": "D", "mode": "major", "confidence": 0.9, "analysed": True},
-        "bridge01": {"duration": 220, "bpm": 107, "key": "G", "mode": "major", "confidence": 0.9, "analysed": True},
+        "t0": {"duration": 220, "bpm": 112, "key": "D", "mode": "major", "confidence": 0.9, "analysed": True},
+        "bridge01": {"duration": 220, "bpm": 106, "key": "G", "mode": "major", "confidence": 0.9, "analysed": True},
     }
 
     def analysis(_metadata, item, *, schedule=False):
@@ -1342,9 +1342,12 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
 
     items = response.get_json()["items"]
     bridges = [item for item in items if item["route_kind"] == "bridge"]
-    assert bridges, "a bridge should have been admitted between a 100 BPM seed and a 115 BPM pin"
+    assert bridges, "a bridge should have been admitted between a 100 BPM seed and a 112 BPM pin"
     assert all(bridge["owner_queue_id"] == "q-0" for bridge in bridges)
     assert items[-1]["route_kind"] == "user"
+    assert len(items) == 2
+    assert items[0]["transition"]["playback_rate"] == pytest.approx(100 / 106, abs=1e-6)
+    assert items[1]["transition"]["playback_rate"] == pytest.approx(106 / 112, abs=1e-6)
 
 
 def test_dj_repair_never_decodes_audio_on_the_interaction_path(tmp_path):
