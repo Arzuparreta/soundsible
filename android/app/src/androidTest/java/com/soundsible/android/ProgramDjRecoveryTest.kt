@@ -122,7 +122,9 @@ class ProgramDjRecoveryTest {
                     assertFalse(session!!.player.playWhenReady)
                     val snapshot = session!!.routeSnapshot()
                     assertTrue(session!!.editFuture(snapshot, snapshot.rows.drop(snapshot.floor + 1).map { it.copy(proposal = null) }))
-                    planner!!.start(JSONArray(), true, ProgramDjPlanner.Kind.REPLACE)
+                    // Sources are the only DJ setting; changing them must refine the retained pair again.
+                    planner!!.start(JSONArray().put(JSONObject().put("id", "settings-change").put("label", "Settings change")
+                        .put("activation", 1).put("tracks", JSONArray())), true, ProgramDjPlanner.Kind.REPLACE)
                     planner!!.clear()
                     revision = session!!.routeSnapshot().revision
                     refiner!!.refine(session!!)
