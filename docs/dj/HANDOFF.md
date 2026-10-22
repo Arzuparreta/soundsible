@@ -42,7 +42,7 @@ encontradas están en P1 y P2.
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
 | P2 | Alineación de fase en el navegador | Lectura de código | Pendiente |
 | P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente |
-| P4 | La "energía" no mide intensidad | Medido | Cerrado (este PR) |
+| P4 | La "energía" no mide intensidad | Medido | Cerrado (#384) |
 | P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente |
 | P6 | Compatibilidad de tonalidad mal puntuada | Lectura de código | Pendiente |
 | P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Pendiente (necesita decisión) |
@@ -362,7 +362,7 @@ Además, la primera canción de una sesión sin semilla se elegía comparando la
 energía bruta con la posición del arco (0,34–0,9), mientras que el resto de la
 ruta convierte esa posición en un percentil de las candidatas.
 
-**Estado: cerrado.** `ANALYSER_VERSION` 5. Cambios:
+**Estado: cerrado en #384.** `ANALYSER_VERSION` 5. Cambios:
 
 - `energy` es la planitud espectral (media geométrica entre media aritmética de
   la potencia, 100–5000 Hz) de los fotogramas a menos de 20 dB del nivel fuerte
