@@ -1335,12 +1335,23 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     rng.shuffle(available)
     analysed = [(item, _dj_item_analysis(metadata, item)) for item in available]
     measured_energies = sorted(
-        float(analysis.get("energy") or 0.5) for _, analysis in analysed if analysis.get("analysed")
+        float(analysis.get("energy") or 0) for _, analysis in analysed if analysis.get("analysed")
     )
     arc = _auto_set_arc_position(len(heard), segment_index)
+    # The arc is a position among these candidates, not an absolute energy, and
+    # a song not measured yet sits in the middle of them.
+    target = 0.5
+    unmeasured = 0.5
     if measured_energies:
         target = measured_energies[min(len(measured_energies) - 1, int(arc * len(measured_energies)))]
-        analysed.sort(key=lambda pair: abs(float(pair[1].get("energy") or 0.5) - target))
+        unmeasured = measured_energies[len(measured_energies) // 2]
+
+    def energy_distance(analysis: dict) -> float:
+        energy = float(analysis.get("energy") or 0) if analysis.get("analysed") else unmeasured
+        return abs(energy - target)
+
+    if measured_energies:
+        analysed.sort(key=lambda pair: energy_distance(pair[1]))
 
     opening: dict | None = None
     opening_analysis: dict | None = None
@@ -1358,7 +1369,7 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
             return {"error": "sources contain no playable opening tracks"}, 400
         root_pairs.sort(key=lambda pair: (
             -float(pair[0].get("source_weight") or 0),
-            abs(float(pair[1].get("energy") or 0.5) - arc),
+            energy_distance(pair[1]),
         ))
         opening, opening_analysis = root_pairs[0]
         opening = dict(opening)
@@ -1487,7 +1498,9 @@ def discovery_music_dj_plan():
         energy_delta = max(-1.0, min(1.0, float(direction.get("energy") or 0)))
     except (TypeError, ValueError):
         return jsonify({"error": "direction energy must be numeric"}), 400
-    desired_energy = max(0.0, min(1.0, float(seed_analysis.get("energy") or 0.5) + energy_delta * 0.35))
+    # A measured 0 is a calm song, not a missing value.
+    seed_energy = float(seed_analysis.get("energy") or 0) if seed_analysis.get("analysed") else 0.5
+    desired_energy = max(0.0, min(1.0, seed_energy + energy_delta * 0.35))
     include_terms = [
         str(value).strip().casefold()
         for value in (direction.get("include") if isinstance(direction.get("include"), list) else [])
@@ -1505,7 +1518,7 @@ def discovery_music_dj_plan():
             continue
         candidate_analysis = _dj_item_analysis(metadata, candidate)
         energy_fit = (
-            1 - abs(float(candidate_analysis.get("energy") or 0.5) - desired_energy)
+            1 - abs(float(candidate_analysis.get("energy") or 0) - desired_energy)
             if candidate_analysis.get("analysed")
             else 0.5
         )

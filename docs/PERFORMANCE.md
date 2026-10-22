@@ -195,6 +195,22 @@ CPU time equals wall time: the pass stays on one thread. Two concurrent
 delay at 1.4–3.1 ms (reference 3.8–6.9 ms). The 53 cached previews on the
 workstation took 18.2 s in total, against 11.5 s before, FFmpeg included.
 
+### Energy (analysis version 5)
+
+Measured against `origin/main` at `f0135129` with `--allow-changes`. Spectral
+flatness is computed from the spectra `_spectral_features` already takes, in the
+same bounded blocks. Three-run medians on this Linux workstation:
+
+| Synthetic audio | Features, reference → current | Full pipeline with FFmpeg | Peak RSS |
+| --- | ---: | ---: | ---: |
+| 18 seconds | 20 → 22 ms | 52 → 55 ms | 64.3 → 66.2 MiB |
+| 120 seconds | 86 → 92 ms | 122 → 129 ms | 73.6 → 75.9 MiB |
+| 480 seconds | 289 → 316 ms | 336 → 362 ms | 134.1 → 134.1 MiB |
+| 900 seconds (head and tail windows) | — | 199 → 213 ms | 205.0 → 204.5 MiB |
+
+The 221 library songs under eight minutes took 24.7 s with eight processes,
+FFmpeg included.
+
 ## Reproduce safely
 
 Run resource comparisons separately from tests, builds and analysis benchmarks.

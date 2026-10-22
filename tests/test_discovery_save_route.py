@@ -270,6 +270,54 @@ def test_dj_plan_eventually_places_an_exact_request_and_prefers_it_next(tmp_path
     assert all(row.get("transition") for row in body["items"])
 
 
+def test_dj_plan_direction_reads_a_measured_zero_energy_as_calm(tmp_path):
+    """A calm song measures 0 energy; that is a value, not a missing one."""
+    _make_runtime(tmp_path)
+
+    def candidate(key):
+        return {
+            "id": key, "youtube_id": key, "title": key.title(), "artist": f"Artist {key}",
+            "duration": 180, "source": "preview", "source_pool": "related",
+            "recommendation_identity": f"music:youtube:{key}", "recommendation_source": "auto_mode",
+            "score": 0.6, "semantic_score": 0.6,
+        }
+
+    base = {
+        "v": 1, "profile": "balanced", "seed_identity": "seed",
+        "items": [candidate("middling"), candidate("calm")],
+        "degraded": False, "pool_counts": {"local": 0, "related": 2, "discovery": 0}, "generated_at": 1,
+    }
+    energies = {"seed": 0.0, "calm": 0.0, "middling": 0.5}
+
+    def analysis(_metadata, item, *, schedule=False):
+        return {
+            "duration": 180, "bpm": 120, "key": "C", "mode": "major", "confidence": 0.9,
+            "outro_cue": 130, "intro_cue": 8, "bar_seconds": 2, "analysed": True,
+            "energy": energies[str(item.get("id"))],
+        }
+
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
+        patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "dj_profile": "adaptive",
+                "seed": {"id": "seed", "title": "Seed", "artist": "Artist", "duration": 180},
+                "direction": {"energy": 0},
+                "limit": 3,
+            },
+        )
+    assert response.status_code == 200
+    assert response.get_json()["items"][0]["id"] == "calm"
+
+
 def test_dj_plan_keeps_an_artist_request_until_a_playable_track_fulfils_it(tmp_path):
     _make_runtime(tmp_path)
     base = {
@@ -1119,6 +1167,51 @@ def test_dj_plan_v6_chooses_an_opening_from_a_source_when_there_is_no_seed(tmp_p
     assert body["opening"]["source_set_id"] == "album:chosen"
     assert body["seed_identity"] == body["opening"]["id"]
     assert all(item["id"] != body["opening"]["id"] for item in body["items"])
+
+
+def test_dj_plan_v6_opens_at_the_arc_position_among_the_source_songs(tmp_path):
+    """The arc is a position among the candidates, not an absolute energy.
+
+    The opening phase is 0.34: of four measured songs, the second calmest. The
+    arc value compared directly with energies would pick the calmest one.
+    """
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    energies = {"calmest": 0.2, "second": 0.6, "third": 0.7, "loudest": 0.9}
+
+    def analysis(_metadata, item, *, schedule=False):
+        key = str(item.get("track_id") or item.get("id") or "")
+        if key not in energies:
+            return _auto_mode._dj_fallback_analysis(float(item.get("duration") or 0))
+        return {"duration": 220, "bpm": 120, "key": "C", "mode": "major", "energy": energies[key],
+                "confidence": 0.9, "analysed": True}
+
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+        patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "session_id": "arc-opening",
+                "sources": [{
+                    "id": "album:chosen",
+                    "label": "Chosen album",
+                    "tracks": [
+                        {"id": key, "track_id": key, "title": key.title(), "artist": f"Artist {key}"}
+                        for key in energies
+                    ],
+                }],
+                "limit": 4,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()["opening"]["id"] == "second"
 
 
 def test_dj_plan_v6_walks_from_sources_and_applies_exact_exclusions(tmp_path):

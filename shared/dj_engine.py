@@ -24,7 +24,7 @@ from typing import Any
 from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
 
-ANALYSER_VERSION = 4
+ANALYSER_VERSION = 5
 # A normal song is decoded in full so the grid and the musical sections come
 # from the recording, not from arithmetic projected from its first transient.
 # Very long mixes remain bounded: their head and tail still provide everything
@@ -41,6 +41,21 @@ _PROFILE_POLICY = {
 }
 # Seconds kept between a planned blend start and `duration - overlap`.
 _OUT_CUE_MARGIN = 1.5
+# Energy is how intense a song sounds, comparable between songs: the spectral
+# flatness of its loud frames, on a log scale. Distorted guitars, cymbals and
+# dense electronic mixes spread their power across the spectrum; a voice, a
+# piano or a string section concentrates it in harmonics. Across 75 library
+# songs rated by ear from 1 (calm) to 5 (intense) it ranks them with a Spearman
+# correlation of 0.84; level, bass share, onset density and tempo added
+# nothing under cross-validation. The old per-song level ratio scored 0.23.
+# docs/dj/HANDOFF.md, P4, has the comparison and the known limits.
+_FLATNESS_BAND = (100.0, 5000.0)
+_FLATNESS_CALM = 0.002
+_FLATNESS_INTENSE = 0.25
+# Frames more than 20 dB under the song's loud level (fades, gaps) and
+# windows quieter than -80 dBFS say nothing about how the music sounds.
+_LOUD_FRAME_RATIO = 0.1
+_SILENT_RMS = 1e-4
 _KEY_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 _MAJOR_PROFILE = (6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88)
 _MINOR_PROFILE = (6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17)
@@ -326,8 +341,6 @@ def _compose(
     *out* of. `head` only has to say where the music starts, which is what the
     next track mixes *into*.
     """
-    import numpy as np
-
     features = _window_features(tail, sample_rate)
     if features is None:
         return _fallback(duration)
@@ -366,8 +379,10 @@ def _compose(
     # A long mix enters on its head grid and leaves on its tail grid: the
     # weaker of the two is how far either can be trusted.
     tempo_confidence = features["tempo_confidence"]
+    log_flatness = features["log_flatness"]
     if tail_start and head_features is not None:
         tempo_confidence = min(tempo_confidence, head_features["tempo_confidence"])
+        log_flatness = (log_flatness + head_features["log_flatness"]) / 2
     confidence = min(0.98, 0.38 + tempo_confidence * 0.36 + min(0.2, features["key_margin"] / 8))
     return {
         "version": ANALYSER_VERSION,
@@ -378,7 +393,7 @@ def _compose(
         "key": features["key"],
         "mode": features["mode"],
         "loudness_db": round(features["loudness_db"], 3),
-        "energy": round(float(np.clip(features["energy"], 0, 1)), 3),
+        "energy": round(_intensity(log_flatness), 3),
         "intro_cue": round(max(0.0, min(intro_local, duration * 0.25)), 3),
         "outro_cue": round(max(0.0, min(outro, duration - period * 4)), 3),
         # Tenths of a millisecond: the mixers align these points to the sample.
@@ -390,6 +405,12 @@ def _compose(
         "confidence": round(confidence, 3),
         "analysed": True,
     }
+
+
+def _intensity(log_flatness: float) -> float:
+    """0 for a solo voice or a piano, 1 for breakcore or distorted metal."""
+    span = math.log(_FLATNESS_INTENSE / _FLATNESS_CALM)
+    return min(1.0, max(0.0, (log_flatness - math.log(_FLATNESS_CALM)) / span))
 
 
 def _sections_from_features(
@@ -466,15 +487,24 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     # Only the mean spectrum and adjacent-frame flux survive this calculation.
     # Keep a small FFT working set instead of several full-song matrices (over
     # 400 MiB for an eight-minute track, multiplied by concurrent analyses).
-    rms, mean_spectrum, flux = _spectral_features(frames)
-    energy = rms / max(float(np.percentile(rms, 95)), 1e-7)
+    frequencies = np.fft.rfftfreq(frame, 1 / sample_rate)
+    band = np.searchsorted(frequencies, _FLATNESS_BAND)
+    rms, mean_spectrum, flux, flatness = _spectral_features(frames, flatness_bins=slice(int(band[0]), int(band[1])))
+    loud_level = float(np.percentile(rms, 95))
+    loud = rms >= loud_level * _LOUD_FRAME_RATIO
+    if loud_level < _SILENT_RMS:
+        log_flatness = math.log(_FLATNESS_CALM)
+    else:
+        log_flatness = math.log(max(1e-9, float(np.average(flatness[loud], weights=rms[loud] ** 2))))
+    # Relative to the song's own loud level: where it starts and how its
+    # sections rise and fall, not how intense it is.
+    energy = rms / max(loud_level, 1e-7)
     flux /= max(float(np.percentile(flux, 95)), 1e-7)
     rhythm = _rhythm(samples, sample_rate)
 
     # A compact chroma estimator.  It is deliberately confidence-gated: the
     # route planner treats uncertain keys as neutral rather than inventing a
     # harmonic incompatibility.
-    frequencies = np.fft.rfftfreq(frame, 1 / sample_rate)
     chroma = np.zeros(12, dtype=float)
     valid = frequencies > 55
     midi = np.rint(69 + 12 * np.log2(np.maximum(frequencies[valid], 1e-6) / 440)).astype(int)
@@ -512,7 +542,7 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
         "mode": mode,
         "key_margin": key_margin,
         "loudness_db": loudness_db,
-        "energy": float(np.mean(energy)),
+        "log_flatness": log_flatness,
         "intro": intro,
         "last_active": last_active,
         "hop_seconds": hop / sample_rate,
@@ -522,13 +552,19 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     }
 
 
-def _spectral_features(frames):
-    """Same per-frame measures as a whole-matrix FFT, with bounded scratch space."""
+def _spectral_features(frames, *, flatness_bins: slice = slice(1, None)):
+    """Same per-frame measures as a whole-matrix FFT, with bounded scratch space.
+
+    Returns per-frame RMS, the mean magnitude spectrum, the positive spectral
+    flux between frames, and per-frame spectral flatness (geometric over
+    arithmetic mean of the power) across `flatness_bins`.
+    """
     import numpy as np
 
     count, frame_size = frames.shape
     rms = np.empty(count, dtype=frames.dtype if frames.dtype.kind == "f" else float)
     flux = np.empty(max(0, count - 1), dtype=float)
+    flatness = np.empty(count, dtype=float)
     spectrum_sum = np.zeros(frame_size // 2 + 1, dtype=float)
     window = np.hanning(frame_size)
     previous = None
@@ -538,11 +574,13 @@ def _spectral_features(frames):
         rms[start:end] = np.sqrt(np.mean(block * block, axis=1) + 1e-12)
         spectrum = np.abs(np.fft.rfft(block * window, axis=1))
         spectrum_sum += spectrum.sum(axis=0)
+        power = spectrum[:, flatness_bins] ** 2 + 1e-12
+        flatness[start:end] = np.exp(np.log(power).mean(axis=1)) / power.mean(axis=1)
         if previous is not None:
             flux[start - 1] = np.maximum(0.0, spectrum[0] - previous).sum()
         flux[start:end - 1] = np.maximum(0.0, np.diff(spectrum, axis=0)).sum(axis=1)
         previous = spectrum[-1].copy()
-    return rms, spectrum_sum / count, flux
+    return rms, spectrum_sum / count, flux, flatness
 
 
 # Rhythm ----------------------------------------------------------------------

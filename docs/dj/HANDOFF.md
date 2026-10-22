@@ -42,7 +42,7 @@ encontradas están en P1 y P2.
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
 | P2 | Alineación de fase en el navegador | Lectura de código | Pendiente |
 | P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente |
-| P4 | La "energía" no mide intensidad | Lectura de código | Pendiente |
+| P4 | La "energía" no mide intensidad | Medido | Cerrado (este PR) |
 | P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente |
 | P6 | Compatibilidad de tonalidad mal puntuada | Lectura de código | Pendiente |
 | P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Pendiente (necesita decisión) |
@@ -96,7 +96,7 @@ mejor orden), después P4, P6, P8, P9. P7 y P10 son decisiones y limpieza.
 | `beat_grid` | Rejilla ajustada y alineada al inicio del ataque, 4 decimales; ver P1 | Sí |
 | `downbeats` | De las 4 fases del compás, la de mayor cambio armónico y ataque más fuerte; asume 4/4 | Sí |
 | `key`, `mode` | Perfiles Krumhansl sobre el croma del espectro medio | Sí |
-| `energy` | Media de `rms / percentil95(rms)` dentro de la misma canción | Sí (orden) |
+| `energy` | Planitud espectral de los fotogramas fuertes, en escala logarítmica; comparable entre canciones; ver P4 | Sí (orden y primera canción) |
 | `intro_cue` | Primer instante con energía sobre el percentil 35 | Sí (punto de entrada) |
 | `outro_cue` | Primer límite de frase unos 64 golpes antes del último sonido | Sí (punto de salida) |
 | `sections` | Etiquetas intro/build/drop/breakdown/body/outro por bloques de 8 compases | No (P8) |
@@ -332,7 +332,11 @@ porque envía `sources`):
 No cuentan: la calidad de la transición, `score`, `semantic_score` ni el peso de
 la fuente (`weight = 0.38 + 0.62·…`, línea 1254; solo se usa para elegir la
 primera canción). Si ninguna candidata está analizada, el orden es el barajado.
-Las canciones sin análisis usan energía 0,5.
+Las canciones sin análisis usan la mediana de las energías medidas de las
+candidatas (desde P4; antes, 0,5).
+
+`README.md` dice que el modo DJ "orders songs by tempo, key and energy": hasta
+P3, el tempo y la tonalidad no intervienen en el orden.
 
 `order_route` (`dj_engine.py:767`) sí ordena con `0,42·transición + 0,38·semántica
 + 0,20·relevancia`, pero solo se usa en la ruta antigua sin `sources` (Android
@@ -349,18 +353,69 @@ de distancia al arco de energía y el peso de la fuente. Revisar los tests de
 
 ## P4. La "energía" no mide intensidad
 
-**Qué pasa.** `energy = rms / percentil95(rms)` dentro de la misma canción
-(`dj_engine.py:486`), y se guarda la media (línea 549). Mide lo uniforme que es
-el nivel de la canción, no lo intensa que es.
+**Qué pasaba.** `energy = rms / percentil95(rms)` dentro de la misma canción, y
+se guardaba la media. Medía lo uniforme que es el nivel de la canción, no lo
+intensa que es: una canción acústica de nivel constante y un tema de EDM
+comprimido podían dar el mismo valor.
 
-**Cuándo falla.** Una canción acústica tranquila de nivel constante y un tema de
-EDM comprimido pueden dar el mismo valor (~0,9). El arco de energía (P3) ordena
-con un dato que no separa tranquilo de intenso.
+Además, la primera canción de una sesión sin semilla se elegía comparando la
+energía bruta con la posición del arco (0,34–0,9), mientras que el resto de la
+ruta convierte esa posición en un percentil de las candidatas.
 
-**Posibles soluciones.** Una medida comparable entre canciones: sonoridad
-absoluta (ya existe `loudness_db`, o LUFS del módulo de nivelación), densidad de
-onsets, energía en graves, brillo espectral (centroide). Normalizar sobre toda la
-biblioteca, no por canción. Subir `ANALYSER_VERSION`.
+**Estado: cerrado.** `ANALYSER_VERSION` 5. Cambios:
+
+- `energy` es la planitud espectral (media geométrica entre media aritmética de
+  la potencia, 100–5000 Hz) de los fotogramas a menos de 20 dB del nivel fuerte
+  de la canción, ponderada por su potencia, en escala logarítmica:
+  0,002 → 0 y 0,25 → 1. Una ventana por debajo de −80 dBFS vale 0. En grabaciones
+  de más de 8 minutos, media de los logaritmos de las dos ventanas.
+- `frame_energy` (nivel relativo a la propia canción) no cambia: lo siguen usando
+  `intro_cue` y `_sections_from_features`.
+- `_build_music_set_route`: la primera canción se elige por distancia a la misma
+  energía objetivo que el resto (el percentil del arco entre las candidatas), y
+  las canciones sin medir cuentan como la mediana de las medidas.
+- No hace falta normalizar sobre toda la biblioteca: la ruta ya ordena por
+  posición entre las candidatas del momento.
+- `energy` 0 es ahora un valor real (un coro, un piano solo). Los sitios que
+  leían `analysis.get("energy") or 0.5` lo convertían en 0,5; ahora solo una
+  canción sin medir cuenta como neutra (ruta v6 y dirección de la ruta antigua).
+
+**Cómo se eligió (medido).** 221 canciones de menos de 8 minutos de la biblioteca
+del usuario. 75 con una nota de intensidad de 1 (tranquila) a 5 (intensa) puesta
+de oído antes de calcular nada. Correlación de rangos (Spearman) con esas notas:
+
+| Medida | Spearman |
+| --- | ---: |
+| `energy` anterior | 0,23 |
+| Planitud espectral (la nueva `energy`) | 0,84 |
+| Nivel medio de los fotogramas fuertes (dB) | 0,54 |
+| Media del flujo de ataques de `_rhythm_stft` | 0,49 |
+| Parte de la potencia por encima de 2 kHz | 0,46 |
+| Parte de la potencia por debajo de 150 Hz | 0,40 |
+| Ataques por segundo | −0,06 |
+| BPM | 0,19 |
+
+Ninguna combinación de dos a cuatro medidas mejoró a la planitud sola en
+validación cruzada dejando una fuera (la mejor, planitud + BPM, 0,830 frente a
+0,829). La nota de cada canción la puso el asistente; el usuario revisa el orden
+resultante de oído.
+
+**Límites que quedan (medidos).**
+
+- La música orquestal fuerte queda por debajo de lo que suena: la orquesta es
+  tonal. Lohengrin, preludio del acto 3: 0,67, al nivel de una balada pop;
+  Mozart, Sinfonía 25, 1.er movimiento: 0,43.
+- La producción lo-fi con ruido o saturación sube: algunas canciones tranquilas
+  de Joji dan 0,65–0,83.
+- Un ruido sostenido (lluvia, ruido blanco) se mide como máxima intensidad.
+
+**Coste.** Entre un 5 % y un 10 % más de tiempo de análisis, sin cambio de memoria
+pico; ver `docs/PERFORMANCE.md`, *Energy (analysis version 5)*.
+
+**Tests.** `tests/test_dj_energy.py` (acordes sostenidos contra batería densa,
+independencia del nivel de máster, silencio, pausas con ruido de fondo, dos
+ventanas), `test_dj_plan_v6_opens_at_the_arc_position_among_the_source_songs` y
+`test_dj_plan_direction_reads_a_measured_zero_energy_as_calm`.
 
 ## P5. Canciones de YouTube sin caché: fundido simple
 
