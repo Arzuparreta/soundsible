@@ -215,6 +215,27 @@ The note counter alone takes 0.19 s of an eight-minute song. Two concurrent
 delay at 2.8–2.9 ms (reference 2.3–3.7 ms). The 224 library songs under eight
 minutes took 42.7 s with eight processes, FFmpeg included.
 
+### Tonality analyser (analysis version 7)
+
+Measured against `956e5344` with `--allow-changes`. The additional Hann FFT
+uses 16384 samples to resolve bass semitones, half-window hops and blocks of at
+most 32 frames. Key estimation uses Pearson correlation with the existing
+Krumhansl profiles. Three-run medians, synthetic PCM, feature extraction only:
+
+| Synthetic audio | Wall time, reference → current | Python CPU, reference → current | Peak RSS, reference → current |
+| --- | ---: | ---: | ---: |
+| 18 seconds | 33.8 → 32.1 ms | 33.6 → 32.0 ms | 55.7 → 56.8 MiB |
+| 120 seconds | 145.5 → 150.9 ms | 145.1 → 150.4 ms | 63.9 → 65.3 MiB |
+| 480 seconds | 506.6 → 528.5 ms | 505.4 → 527.3 ms | 123.4 → 123.3 MiB |
+
+Reproduce with `OPENBLAS_NUM_THREADS=1 python scripts/benchmark_dj_analysis.py
+--reference 956e5344 --seconds 18 120 480 --repeats 3 --allow-changes`.
+This excludes FFmpeg and provider/network traffic; small differences at 18 s
+are measurement variation. Analysis output changes intentionally and invalidates
+the prior cache. Known-key measurements and remaining detector limitations are
+in `docs/dj/HANDOFF.md`, P6; `docs/dj/key_probe.py` reproduces them without
+writing to the station cache.
+
 ## Reproduce safely
 
 Run resource comparisons separately from tests, builds and analysis benchmarks.
