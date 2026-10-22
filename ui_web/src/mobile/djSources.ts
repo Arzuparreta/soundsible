@@ -46,7 +46,7 @@ export function nativeDjSourceActions(id: string, label: string, tracks: Track[]
       if (!valid() || payload.length > 64 || JSON.stringify(payload).length > 65536) return;
       void execute(active && captured.programToken
         ? { action: 'djSettings', programToken: captured.programToken, sources: next }
-        : { action: 'dj', profile: 'adaptive', fromCurrent: false, queueToken: captured.queueToken, sources: [source] }).catch(() => {});
+        : { action: 'dj', fromCurrent: false, queueToken: captured.queueToken, sources: [source] }).catch(() => {});
     },
   }];
 }

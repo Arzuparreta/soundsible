@@ -199,8 +199,6 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
       setState('autoMode', {
         active: true,
         profile: auto.profile,
-        djProfile: auto.djProfile,
-        direction: auto.direction,
         sources: auto.sources,
         heard: auto.heard,
         exploration: auto.exploration ?? [],

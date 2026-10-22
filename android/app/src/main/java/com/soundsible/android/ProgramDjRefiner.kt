@@ -31,9 +31,8 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
         clear(); pair = identity
         val token = serial; val generation = connection.generation
         val account = connection.sessionIdentity(generation)
-        val profile = planner.profile
         val settingsRevision = planner.settingsRevision
-        val body = JSONObject().put("dj_profile", profile).put("from", planner.reference(from)).put("to", planner.reference(next.item))
+        val body = JSONObject().put("dj_profile", ProgramDjPlanner.PROFILE).put("from", planner.reference(from)).put("to", planner.reference(next.item))
         val id = "dj-refine:" + java.util.UUID.randomUUID(); requestId = id
         worker.execute {
             if (closed || token != serial) return@execute
@@ -51,7 +50,7 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
             main.post {
                 if (closed || token != serial) return@post
                 requestId = null
-                if (generation != connection.generation || session() !== owner || profile != planner.profile || settingsRevision != planner.settingsRevision ||
+                if (generation != connection.generation || session() !== owner || settingsRevision != planner.settingsRevision ||
                     runCatching { connection.sessionIdentity(generation) }.getOrNull() != account) return@post
                 val answer = response ?: return@post
                 if (!answer.optBoolean("measured")) return@post

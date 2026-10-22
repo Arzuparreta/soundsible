@@ -51,7 +51,7 @@ it('removes a stale rendered row without retaining the previous occurrence', asy
 it('marks the cued DJ occurrence and keeps edits outside the committed pair', async () => {
   const command = vi.fn(async () => {});
   const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0,
-    items: [...initial.items, { ...initial.items[0], key: 'third' }], dj: { active: true, phase: 'ready', profile: 'adaptive', editableFrom: 2 } });
+    items: [...initial.items, { ...initial.items[0], key: 'third' }], dj: { active: true, phase: 'ready', editableFrom: 2 } });
   const { container } = render(() => <ProgramQueue state={state()} pending={false} command={command} />);
   expect(screen.getByText('autoMode.dj.cued')).toBeTruthy();
   await fireEvent.click(screen.getByText('musicExplorer.edit'));
@@ -81,7 +81,7 @@ it('opens shared actions for the selected occurrence without playing and rejects
 });
 it('allows song actions on cued DJ rows but forbids removal when a handoff becomes committed', async () => {
   const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0, programToken: 'dj',
-    dj: { active: true, phase: 'ready', profile: 'adaptive', editableFrom: 1 } });
+    dj: { active: true, phase: 'ready', editableFrom: 1 } });
   const command = vi.fn(async () => {}); const onMenu = vi.fn();
   const { container } = render(() => <ProgramQueue state={state()} pending={false} command={command} onMenu={onMenu} />);
   await fireEvent.click(container.querySelector('[data-queue-key=second] [data-row-menu]')!);
@@ -97,7 +97,7 @@ it('moves a requested block past its own bridge and locks the owner of a prepare
   const items = [{ ...song, key: 'seed' }, { ...song, key: 'filler' }, { ...song, key: 'bridge', routeOwnerKey: 'request' },
     { ...song, key: 'request' }, { ...song, key: 'last' }];
   const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0, items,
-    dj: { active: true, phase: 'ready', profile: 'adaptive', editableFrom: 1, protectedKeys: ['seed'] } });
+    dj: { active: true, phase: 'ready', editableFrom: 1, protectedKeys: ['seed'] } });
   const command = vi.fn(async () => {}); const onMenu = vi.fn();
   const { container } = render(() => <ProgramQueue state={state()} pending={false} command={command} onMenu={onMenu} />);
   await fireEvent.click(screen.getByText('musicExplorer.edit'));

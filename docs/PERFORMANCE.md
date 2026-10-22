@@ -195,6 +195,26 @@ CPU time equals wall time: the pass stays on one thread. Two concurrent
 delay at 1.4–3.1 ms (reference 3.8–6.9 ms). The 53 cached previews on the
 workstation took 18.2 s in total, against 11.5 s before, FFmpeg included.
 
+### Measured magnitudes (analysis version 6)
+
+Measured against `origin/main` at `f0135129` with `--allow-changes`, because the
+output changes on purpose: notes per second (`_note_onsets`, its own 46 ms
+STFT in blocks of 256 frames), spectral flatness from the spectra
+`_spectral_features` already takes, and EBU R128 loudness from FFmpeg's meter
+on a branch of the same decode. Three-run medians on this Linux workstation:
+
+| Synthetic audio | Features, reference → current | Full pipeline with FFmpeg | Peak RSS |
+| --- | ---: | ---: | ---: |
+| 18 seconds | 20 → 31 ms | 51 → 71 ms | 65.8 → 68.5 MiB |
+| 120 seconds | 85 → 138 ms | 120 → 190 ms | 75.4 → 78.9 MiB |
+| 480 seconds | 289 → 495 ms | 337 → 607 ms | 137.6 → 137.4 MiB |
+| 900 seconds (head and tail windows) | — | 199 → 330 ms | 210.0 → 209.7 MiB |
+
+The note counter alone takes 0.19 s of an eight-minute song. Two concurrent
+480-second analyses under the gevent HTTP benchmark left the largest response
+delay at 2.8–2.9 ms (reference 2.3–3.7 ms). The 224 library songs under eight
+minutes took 42.7 s with eight processes, FFmpeg included.
+
 ## Reproduce safely
 
 Run resource comparisons separately from tests, builds and analysis benchmarks.

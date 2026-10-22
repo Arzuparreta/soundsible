@@ -15,12 +15,14 @@ import java.util.concurrent.TimeUnit
 /** Scoped Core planning; temporary failures retain the programme and have a total retry budget. */
 @UnstableApi
 internal class ProgramDjPlanner(private val connection: EngineConnection, private val player: Player,
-    private val main: Handler, private val heardIds: () -> Set<String>, private val status: (String, String, Int) -> Unit,
+    private val main: Handler, private val heardIds: () -> Set<String>, private val status: (String, Int) -> Unit,
     private val ready: (List<ProgramDjSession.Row>, Long, Kind) -> Unit) : AutoCloseable {
     enum class Kind { START, REPLACE, APPEND }
+    companion object {
+        /** The mix is automatic: the web sends this one profile too, and nothing chooses another. */
+        const val PROFILE = "adaptive"
+    }
     var settingsRevision = 0L; private set
-    var profile = "adaptive"; private set
-    var direction = JSONObject(); private set
     var sources = JSONArray(); private set
     private var restoredWorkspace = JSONObject()
     private var sessionId = ""
@@ -33,18 +35,17 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
     private var retry: Runnable? = null
     @Volatile private var closed = false
     fun restoreWorkspace(workspace: JSONObject) {
-        val nextProfile = workspace.optString("djProfile", "adaptive")
-        require(nextProfile in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
-        val nextDirection = workspace.optJSONObject("direction") ?: JSONObject()
         val nextSources = workspace.optJSONArray("sources") ?: JSONArray()
-        require(nextDirection.toString().length <= 16384 && nextSources.length() <= 6 && nextSources.toString().length <= 65536)
+        require(nextSources.length() <= 6 && nextSources.toString().length <= 65536)
         for (i in 0 until nextSources.length()) require(nextSources.getJSONObject(i).getJSONArray("tracks").length() <= 15)
-        clear(); profile = nextProfile; direction = JSONObject(nextDirection.toString()); sources = JSONArray(nextSources.toString())
-        restoredWorkspace = JSONObject(workspace.toString()); settingsRevision++
+        clear(); sources = JSONArray(nextSources.toString())
+        // A workspace from an older client may still carry a DJ style and a
+        // direction; neither exists any more.
+        restoredWorkspace = JSONObject(workspace.toString()).apply { remove("djProfile"); remove("direction") }; settingsRevision++
         sessionId = java.util.UUID.randomUUID().toString(); segment = 0; revision = workspace.optInt("directionRevision", 0).coerceIn(0, 1000000)
     }
     fun workspace(): JSONObject = JSONObject(restoredWorkspace.toString()).put("profile", restoredWorkspace.optString("profile", "balanced"))
-        .put("djProfile", profile).put("direction", JSONObject(direction.toString())).put("sources", JSONArray().apply {
+        .put("sources", JSONArray().apply {
             for (i in maxOf(0, sources.length() - 6) until sources.length()) {
                 val source = JSONObject(sources.getJSONObject(i).toString())
                 val tracks = source.optJSONArray("tracks") ?: JSONArray()
@@ -56,18 +57,17 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
             if (!has("avoidedIdentities")) put("avoidedIdentities", JSONArray())
             if (!has("exploration")) put("exploration", JSONArray())
         }
-    fun start(profile: String, direction: JSONObject, sources: JSONArray, fromCurrent: Boolean,
+    fun start(sources: JSONArray, fromCurrent: Boolean,
         kind: Kind = Kind.START, anchor: MediaItem? = null, lead: MediaItem? = null) {
-        require(profile in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
-        require(direction.toString().length <= 16384 && sources.length() <= 64 && sources.toString().length <= 65536)
+        require(sources.length() <= 64 && sources.toString().length <= 65536)
         val seed = anchor ?: player.currentMediaItem.takeIf { fromCurrent }
         require(seed?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) != "pending")
         require(!fromCurrent || seed != null && seed.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
         require(seed != null || sources.length() > 0)
         clear()
         if (kind == Kind.START) restoredWorkspace = JSONObject()
-        if (this.profile != profile || this.direction.toString() != direction.toString() || this.sources.toString() != sources.toString()) settingsRevision++
-        this.profile = profile; this.direction = JSONObject(direction.toString()); this.sources = JSONArray(sources.toString())
+        if (this.sources.toString() != sources.toString()) settingsRevision++
+        this.sources = JSONArray(sources.toString())
         if (kind == Kind.START) { sessionId = java.util.UUID.randomUUID().toString(); segment = 0; revision = 0 }
         else if (kind == Kind.REPLACE) revision++
         else segment++
@@ -76,7 +76,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         val owner = ProgramQueue.programToken(player)
         val queue = ProgramQueue.token(player)
         val seedKey = seed?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
-        val body = JSONObject().put("dj_profile", profile).put("direction", direction)
+        val body = JSONObject().put("dj_profile", PROFILE)
             .put("limit", 8).put("session_id", sessionId)
             .put("segment_index", segment).put("direction_revision", revision)
         if (sources.length() > 0 || restoredWorkspace.optString("sourcePolicy") == "explicit") body.put("sources", sources).put("source_policy", "explicit")
@@ -101,9 +101,9 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         lateinit var request: Runnable
         request = Runnable {
             retry = null
-            if (!valid()) { if (token == serial) status("cancelled", profile, 0); return@Runnable }
+            if (!valid()) { if (token == serial) status("cancelled", 0); return@Runnable }
             val id = "dj-plan:" + java.util.UUID.randomUUID(); requestId = id
-            status("planning", profile, 0)
+            status("planning", 0)
             worker.execute {
                 if (closed || token != serial || generation != connection.generation) return@execute
                 var answer: JSONObject? = null; var code = 0
@@ -118,9 +118,9 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
                     }
                 } catch (_: Exception) { }
                 main.post result@{
-                    if (!valid()) { if (token == serial) { requestId = null; status("cancelled", profile, 0) }; return@result }
+                    if (!valid()) { if (token == serial) { requestId = null; status("cancelled", 0) }; return@result }
                     requestId = null
-                    if (code in listOf(401, 403)) { status("blocked", profile, code); return@result }
+                    if (code in listOf(401, 403)) { status("blocked", code); return@result }
                     val response = answer
                     try {
                         if (response != null) {
@@ -134,12 +134,12 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
                                 planned.take(1) + ProgramDjSession.Row(marked) + planned.drop(1).filter { !sameReference(it.item, lead) }
                             } else planned
                             if (parsed.size > if (seed == null) 0 else 1) {
-                                status(if (response.optBoolean("degraded")) "degraded" else "ready", profile, 0)
+                                status(if (response.optBoolean("degraded")) "degraded" else "ready", 0)
                                 ready(parsed, if (seed == null) 0 else player.currentPosition, kind)
                                 return@result
                             }
                         }
-                    } catch (_: Exception) { status("invalid", profile, code); return@result }
+                    } catch (_: Exception) { status("invalid", code); return@result }
                     val temporary = response == null || response.optBoolean("warming") || response.optString("empty_reason") == "temporary_failure"
                     val elapsed = android.os.SystemClock.elapsedRealtime() - started
                     if (temporary && elapsed < 60000 && attempt < 5) {
@@ -147,10 +147,10 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
                         val serverDelay = response?.optDouble("retry_after", 0.0)?.takeIf { it.isFinite() } ?: 0.0
                         val delay = maxOf(delays[attempt++], (serverDelay.coerceIn(0.0, 60.0) * 1000).toLong())
                         if (elapsed + delay < 60000) {
-                            status("warming", profile, code); retry = request; main.postDelayed(request, delay); return@result
+                            status("warming", code); retry = request; main.postDelayed(request, delay); return@result
                         }
                     }
-                    status(if (temporary) "unavailable" else "exhausted", profile, code)
+                    status(if (temporary) "unavailable" else "exhausted", code)
                 }
             }
         }

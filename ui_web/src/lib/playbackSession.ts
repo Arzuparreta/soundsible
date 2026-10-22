@@ -1,4 +1,3 @@
-import type { DjDirection, DjProfile } from './api';
 import type { AutoModeState, AutoMusicSet, AutoPlanItem, AutoProfile } from './generatedQueue';
 import type { PlaybackQueueEntry } from './playbackQueue';
 import type { Track } from '../types/music';
@@ -47,8 +46,6 @@ export type SessionRepeat = 'off' | 'all' | 'one';
  * a transition being mixed, an activity line, a debounce waiting to fire. */
 export interface PlaybackSessionAuto {
   profile: AutoProfile;
-  djProfile: DjProfile;
-  direction: DjDirection;
   sourcePolicy?: 'explicit';
   sources: AutoMusicSet[];
   heard: Track[];
@@ -177,8 +174,6 @@ export function buildPlaybackSession(input: PlaybackSessionInput): PlaybackSessi
     auto: auto.active
       ? {
           profile: auto.profile,
-          djProfile: auto.djProfile,
-          direction: auto.direction,
           sourcePolicy: 'explicit',
           sources: sources(auto.sources),
           heard: auto.heard.slice(-MAX_HEARD),
@@ -211,7 +206,6 @@ export function readPlaybackSession(value: unknown): PlaybackSessionSnapshot | n
   const queueIds = new Set(queue.map((entry) => entry.queueId));
   const rawAuto = raw.auto && typeof raw.auto === 'object' ? raw.auto as Partial<PlaybackSessionAuto> : null;
   const mode: SessionMode = raw.mode === 'auto' && rawAuto ? 'auto' : 'now_playing';
-  const direction = rawAuto?.direction && typeof rawAuto.direction === 'object' ? rawAuto.direction : null;
   return {
     v: PLAYBACK_SESSION_VERSION,
     mode,
@@ -228,18 +222,6 @@ export function readPlaybackSession(value: unknown): PlaybackSessionSnapshot | n
           profile: rawAuto.profile === 'familiar' || rawAuto.profile === 'explore'
             ? rawAuto.profile
             : 'balanced',
-          djProfile: rawAuto.djProfile === 'long_blend'
-            || rawAuto.djProfile === 'cuts_drops'
-            || rawAuto.djProfile === 'open_format'
-            ? rawAuto.djProfile
-            : 'adaptive',
-          direction: {
-            energy: typeof direction?.energy === 'number' ? direction.energy : 0,
-            familiarity: typeof direction?.familiarity === 'number' ? direction.familiarity : 0,
-            prompt: typeof direction?.prompt === 'string' ? direction.prompt : '',
-            include: stringList(direction?.include, MAX_AVOIDED),
-            exclude: stringList(direction?.exclude, MAX_AVOIDED),
-          },
           sourcePolicy: 'explicit',
           sources: (() => {
             const saved = readSources(rawAuto.sources);

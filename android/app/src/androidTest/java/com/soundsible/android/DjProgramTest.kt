@@ -94,7 +94,7 @@ class DjProgramTest {
                 val incoming = hypot(real[1], imaginary[1]) * 2 / count
                 if (block.sampleRate == 48000 && block.channels == 2 && outgoing > 1000 && incoming > 2500) mixed.set(true)
             }.use { capture ->
-                command("action:'dj',profile:'adaptive',fromCurrent:true,key:window.__dj.items[window.__dj.index].key,sources:[{id:'pcm',label:'PCM',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
+                command("action:'dj',fromCurrent:true,key:window.__dj.items[window.__dj.index].key,sources:[{id:'pcm',label:'PCM',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
                 waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>1")
                 assertEquals(key, web.evaluate(scenario, "window.__dj.items[0].key"))
                 assertEquals("false", web.evaluate(scenario, "!!document.querySelector('audio')"))
@@ -157,8 +157,8 @@ class DjProgramTest {
                 command("action:'remove',index:3,key:window.__dj.items[3].key")
                 waitFor("window.__dj.items.length===3")
                 assertEquals("Route edit replaced the playing occurrence", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index].key===window.__retainedKey && window.__dj.programToken===window.__retainedProgram && !window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-window.__djPaused)<100"))
-                command("action:'djSettings',profile:'long_blend',direction:{energy:0,familiarity:0,prompt:'',include:[],exclude:[]}")
-                waitFor("window.__dj.dj?.profile==='long_blend' && !['planning','warming'].includes(window.__dj.dj.phase)")
+                command("action:'djSettings',sources:[{id:'pcm',label:'PCM replanned',activation:1,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
+                waitFor("window.__dj.dj?.sources?.[0]?.label==='PCM replanned' && !['planning','warming'].includes(window.__dj.dj.phase)")
                 assertEquals("Settings changed paused playback", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index].key===window.__retainedKey && !window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-window.__djPaused)<100"))
                 web.evaluate(scenario, "clearInterval(window.__djTimer)")
                 scenario.recreate()
@@ -191,9 +191,9 @@ class DjProgramTest {
                 instrumentation.runOnMainSync { assertEquals("member-track", controller.currentMediaItem?.mediaId) }
                 command("action:'stop'")
                 waitFor("window.__dj.items.length===0 && !window.__dj.dj?.active")
-                command("action:'dj',profile:'open_format',fromCurrent:false,sources:[{id:'pcm-only',label:'PCM collection',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
+                command("action:'dj',fromCurrent:false,sources:[{id:'pcm-only',label:'PCM collection',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
                 waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>=2")
-                assertEquals("true", web.evaluate(scenario, "window.__dj.dj.profile==='open_format' && window.__dj.dj.sources[0].id==='pcm-only' && window.__dj.programToken!==window.__retainedProgram"))
+                assertEquals("true", web.evaluate(scenario, "window.__dj.dj.sources[0].id==='pcm-only' && window.__dj.programToken!==window.__retainedProgram"))
                 web.evaluate(scenario, "window.__offFirst=window.__dj.id;window.__offDuration=window.__dj.durationMs")
                 command("action:'seek',positionMs:Math.max(0,window.__offDuration-6000)")
                 waitFor("window.__dj.playing && window.__dj.positionMs>=window.__offDuration-6000")
@@ -207,7 +207,7 @@ class DjProgramTest {
                 waitFor("window.__dj.mixing?.settingsPhase==='ready' && window.__dj.mixing.enabled===true")
                 connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/radio-seed").header("X-Android-Fixture", "isolated")
                     .post("{}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
-                command("action:'dj',profile:'adaptive',fromCurrent:false,sources:[{id:'refill',label:'Refill collection',activation:0,tracks:Array.from({length:10},(_,i)=>({id:'member-radio-'+i,title:'Radio '+i,artist:'member artist',duration:600}))}]")
+                command("action:'dj',fromCurrent:false,sources:[{id:'refill',label:'Refill collection',activation:0,tracks:Array.from({length:10},(_,i)=>({id:'member-radio-'+i,title:'Radio '+i,artist:'member artist',duration:600}))}]")
                 waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>=8")
                 web.evaluate(scenario, "window.__beforeRefill=window.__dj.items.length")
                 command("action:'select',index:window.__dj.items.length-3,key:window.__dj.items[window.__dj.items.length-3].key")

@@ -49,7 +49,7 @@ describe('request abort handling', () => {
     vi.useFakeTimers();
     hangingFetch();
     const caller = new AbortController();
-    const pending = api.planDjQueue({ dj_profile: 'adaptive', direction: { energy: 0, familiarity: 0, prompt: '', include: [], exclude: [] } }, caller.signal, 5000);
+    const pending = api.planDjQueue({ dj_profile: 'adaptive' }, caller.signal, 5000);
     const assertion = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     await vi.advanceTimersByTimeAsync(4999);
     expect(caller.signal.aborted).toBe(false);

@@ -25,8 +25,6 @@ const entry: PlaybackQueueEntry = {
 const auto: AutoModeState = {
   active: true,
   profile: 'balanced',
-  djProfile: 'adaptive',
-  direction: { energy: 0, familiarity: 0, prompt: '', include: [], exclude: [] },
   sources: [],
   heard: [],
   avoidedIdentities: [],

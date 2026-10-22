@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
-import re
 import threading
 import time
 import uuid
@@ -1035,8 +1034,8 @@ def _dj_source_path(metadata, item: dict) -> str | None:
 def _dj_item_analysis(metadata, item: dict, *, schedule: bool = False) -> dict:
     """Features for one route item, without ever blocking on FFmpeg.
 
-    Planning is on the interaction path: a listener nudging the energy control
-    must not wait on a decode. Whatever has already been measured is used, the
+    Planning is on the interaction path: a listener adding a source must not
+    wait on a decode. Whatever has already been measured is used, the
     rest is queued, and the route is built from a conservative fallback that the
     player is required to treat as such. The refinement endpoint picks up the
     real numbers once they land, before the transition is ever committed.
@@ -1101,59 +1100,6 @@ def _normalise_dj_request(raw: dict) -> dict | None:
     }
 
 
-def _dj_command_direction(text: str) -> tuple[dict, str | None]:
-    """Interpret the small, useful command language locally and predictably."""
-    folded = text.casefold()
-    patch: dict = {}
-    if re.search(r"\b(m[aá]s energ\w*|sube|ca[nñ]a|intens\w*|banger|harder|energ\w*)\b", folded):
-        patch["energy"] = 0.7
-    elif re.search(r"\b(m[aá]s tranquil|baja|relaja|suave|calm|chill|menos energ)\b", folded):
-        patch["energy"] = -0.7
-    if re.search(r"\b(conocid|familiar|cl[aá]sic|hits?|popular)\b", folded):
-        patch["familiarity"] = 0.7
-    elif re.search(r"\b(descubr|nuevo|sorpr[eé]nd|menos conocid|underground)\b", folded):
-        patch["familiarity"] = -0.7
-
-    request_match = re.search(
-        r"(?:^|\b)(?:pon(?:me)?|mete|quiero|toca|play|escuchar|escucha)\s+(?:algo\s+de\s+|una\s+de\s+|a\s+)?(.+?)(?:\s+(?:por favor|cuando puedas))?[.!?]*$",
-        text,
-        flags=re.IGNORECASE,
-    )
-    name = request_match.group(1).strip(" \t,.;:!?\"'") if request_match else None
-    if name:
-        name = re.split(r"\s+(?:pero|aunque|but|mais|however)\b", name, maxsplit=1, flags=re.IGNORECASE)[0].strip()
-    return patch, name or None
-
-
-@discovery_bp.route("/api/discovery/music/dj-command", methods=["POST"])
-@rate_limit("discovery_music_dj_command", limit=60, window_sec=60)
-def discovery_music_dj_command():
-    """Understand booth commands without an LLM or an external prompt service."""
-    data = request.get_json(silent=True) or {}
-    text = str(data.get("text") or "").strip()
-    if not text:
-        return jsonify({"error": "text is required"}), 400
-    direction, requested_name = _dj_command_direction(text)
-    target = None
-    if requested_name:
-        try:
-            rows = _deezer_artist_top_rows(requested_name, 1)
-        except Exception:
-            rows = []
-        artist_row = rows[0].get("artist") if rows and isinstance(rows[0].get("artist"), dict) else {}
-        resolved_name = str(artist_row.get("name") or "").strip()
-        if resolved_name and resolved_name.casefold() == requested_name.casefold():
-            target = {"kind": "artist", "label": resolved_name, "artist": {"name": resolved_name}}
-        else:
-            target = {"kind": "query", "label": requested_name, "query": requested_name}
-    return jsonify({
-        "v": 1,
-        "understood": bool(direction or target),
-        "direction_patch": direction,
-        "request": target,
-    })
-
-
 def _music_set_item(raw: dict, *, source_id: str, label: str, weight: float = 1.0) -> dict | None:
     """Turn a browser track into a planner item without consulting taste history."""
     track = dict(raw)
@@ -1188,12 +1134,6 @@ def _song_sized(item: dict) -> bool:
     except (TypeError, ValueError):
         return True
     return duration <= 0 or duration <= _DJ_MAX_SONG_SECONDS
-
-
-def _auto_set_arc_position(heard_count: int, segment_index: int) -> float:
-    """A repeating club-shaped arc, with session-stable phase variation."""
-    phases = (0.34, 0.52, 0.74, 0.9, 0.78, 0.58)
-    return phases[(heard_count + segment_index) % len(phases)]
 
 
 def _exploration_related(metadata, heard_roots: list[dict]) -> _GraphWalk:
@@ -1333,33 +1273,24 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     entropy = int.from_bytes(hashlib.blake2s(seed_material.encode(), digest_size=8).digest(), "big")
     rng = random.Random(entropy)
     rng.shuffle(available)
+    # The DJ does not steer the session: the sources and the recommender do.
+    # Until the route is ordered by transition quality (docs/dj/HANDOFF.md,
+    # P3), this shuffle is the order.
     analysed = [(item, _dj_item_analysis(metadata, item)) for item in available]
-    measured_energies = sorted(
-        float(analysis.get("energy") or 0.5) for _, analysis in analysed if analysis.get("analysed")
-    )
-    arc = _auto_set_arc_position(len(heard), segment_index)
-    if measured_energies:
-        target = measured_energies[min(len(measured_energies) - 1, int(arc * len(measured_energies)))]
-        analysed.sort(key=lambda pair: abs(float(pair[1].get("energy") or 0.5) - target))
 
     opening: dict | None = None
     opening_analysis: dict | None = None
     if not seed:
         # An empty session must open *inside the collection the listener just
         # handed to the DJ*, never on a related walk or implicit taste history.
-        # Recent sources win; within that source the opening arc favours a
-        # measured, moderate-energy start. The earlier deterministic shuffle is
-        # the stable tie-breaker for otherwise equivalent roots.
+        # Recent sources win; within a source the deterministic shuffle picks.
         root_pairs = [
             pair for pair in analysed
             if pair[0].get("reason_code") == "music_set_source"
         ]
         if not root_pairs:
             return {"error": "sources contain no playable opening tracks"}, 400
-        root_pairs.sort(key=lambda pair: (
-            -float(pair[0].get("source_weight") or 0),
-            abs(float(pair[1].get("energy") or 0.5) - arc),
-        ))
+        root_pairs.sort(key=lambda pair: -float(pair[0].get("source_weight") or 0))
         opening, opening_analysis = root_pairs[0]
         opening = dict(opening)
         opening["analysis"] = opening_analysis
@@ -1441,7 +1372,6 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         "generated_at": int(time.time()),
         "session_id": data.get("session_id"),
         "segment_index": segment_index,
-        "arc": {"target": arc, "phase": (len(heard) + segment_index) % 6},
     }, 200
 
 
@@ -1459,13 +1389,11 @@ def discovery_music_dj_plan():
     seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
     if not seed:
         return jsonify({"error": "seed is required"}), 400
-    direction = data.get("direction") if isinstance(data.get("direction"), dict) else {}
     try:
-        familiarity = float(direction.get("familiarity") or 0)
         requested_limit = min(8, max(3, int(data.get("limit") or 8)))
     except (TypeError, ValueError):
-        return jsonify({"error": "direction and limit must be numeric"}), 400
-    source_profile = "familiar" if familiarity >= 0.35 else "explore" if familiarity <= -0.35 else "balanced"
+        return jsonify({"error": "limit must be numeric"}), 400
+    source_profile = "balanced"
     base, status = _build_music_plan({
         "intent": "auto_mode",
         "profile": source_profile,
@@ -1483,33 +1411,9 @@ def discovery_music_dj_plan():
     lib, _, _ = api["get_core"]()
     metadata = getattr(lib, "metadata", None)
     seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
-    try:
-        energy_delta = max(-1.0, min(1.0, float(direction.get("energy") or 0)))
-    except (TypeError, ValueError):
-        return jsonify({"error": "direction energy must be numeric"}), 400
-    desired_energy = max(0.0, min(1.0, float(seed_analysis.get("energy") or 0.5) + energy_delta * 0.35))
-    include_terms = [
-        str(value).strip().casefold()
-        for value in (direction.get("include") if isinstance(direction.get("include"), list) else [])
-        if str(value).strip()
-    ]
-    exclude_terms = [
-        str(value).strip().casefold()
-        for value in (direction.get("exclude") if isinstance(direction.get("exclude"), list) else [])
-        if str(value).strip()
-    ]
     candidates = []
     for candidate in base.get("items") or []:
-        haystack = f"{candidate.get('artist', '')} {candidate.get('title', '')} {candidate.get('album', '')}".casefold()
-        if any(term in haystack for term in exclude_terms):
-            continue
         candidate_analysis = _dj_item_analysis(metadata, candidate)
-        energy_fit = (
-            1 - abs(float(candidate_analysis.get("energy") or 0.5) - desired_energy)
-            if candidate_analysis.get("analysed")
-            else 0.5
-        )
-        include_fit = 1.0 if include_terms and any(term in haystack for term in include_terms) else 0.0
         semantic_fit = max(0.0, min(1.0, float(candidate.get("semantic_score") or 0.5)))
         personal_fit = max(0.0, min(1.0, float(candidate.get("personal_score") or 0.5)))
         candidate["score"] = max(
@@ -1517,10 +1421,8 @@ def discovery_music_dj_plan():
             min(
                 1.0,
                 semantic_fit * 0.5
-                + energy_fit * 0.2
                 + personal_fit * 0.15
-                + float(candidate.get("score") or 0.5) * 0.05
-                + include_fit * 0.1,
+                + float(candidate.get("score") or 0.5) * 0.05,
             ),
         )
         candidates.append((candidate, candidate_analysis))

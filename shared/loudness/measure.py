@@ -124,8 +124,8 @@ def _finite(raw: str) -> float | None:
     return value if math.isfinite(value) else None
 
 
-def parse_ebur128_summary(stderr: str) -> LoudnessMeasurement | None:
-    """Read the meter's final summary, or ``None`` if it cannot be trusted.
+def _summary_values(stderr: str) -> tuple[float | None, float | None, float | None] | None:
+    """(integrated LUFS, true peak, LRA) from the meter's last summary.
 
     Scans from the *last* ``Summary:`` — a filter graph that was re-initialised
     prints more than one, and only the last describes the whole file.
@@ -158,6 +158,30 @@ def parse_ebur128_summary(stderr: str) -> LoudnessMeasurement | None:
             found = _PEAK_RE.match(line)
             if found:
                 peak = _finite(found.group(1))
+    return lufs, peak, lra
+
+
+def parse_integrated_loudness(stderr: str) -> float | None:
+    """Integrated loudness alone, from a meter run without ``peak=true``.
+
+    The DJ analyser reads it to compare songs, never to turn it into a gain,
+    so it does not need the true peak the player's clipping guard does.
+    """
+    values = _summary_values(stderr)
+    if values is None or values[0] is None:
+        return None
+    lufs = values[0]
+    if not (UNMEASURABLE_LUFS < lufs <= MAX_VALID_LUFS):
+        return None
+    return lufs
+
+
+def parse_ebur128_summary(stderr: str) -> LoudnessMeasurement | None:
+    """Read the meter's final summary, or ``None`` if it cannot be trusted."""
+    values = _summary_values(stderr)
+    if values is None:
+        return None
+    lufs, peak, lra = values
 
     # No `True peak:` section at all means an ffmpeg too old for `peak=true`.
     # Proceeding without a ceiling would let a boost clip, so we do not proceed.

@@ -1,5 +1,5 @@
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
-import { api, type DjDirection, type DjItemRef, type DjPlanResponse, type DjProfile, type DjRouteKind, type ListeningPlanItem, type PreviewPreparation } from "../lib/api";
+import { api, DJ_PROFILE, type DjItemRef, type DjPlanResponse, type DjRouteKind, type ListeningPlanItem, type PreviewPreparation } from "../lib/api";
 import { audioService, type LiveTransitionPlan, type ProgramPlaybackSnapshot } from "../lib/audio";
 import { type MediaSessionSyncReason } from "../lib/mediaSession";
 import { playbackYoutubeId } from "../lib/media";
@@ -9,7 +9,7 @@ import { toast } from "../lib/toast";
 import { confirmDialog } from "../lib/confirm";
 import { isPodcastTrack } from "../lib/track";
 import { queueIdentity, queueIndexOf } from "../lib/queueDiscovery";
-import { GeneratedQueueController, type AutoActivity, type AutoMusicSet, type AutoPlanItem, type AutoProfile } from "../lib/generatedQueue";
+import { GeneratedQueueController, type AutoActivity, type AutoMusicSet, type AutoPlanItem } from "../lib/generatedQueue";
 import { t as tr } from "../lib/i18n";
 import { ListeningLearning } from "../lib/listeningLearning";
 import { createQueueEntry, futureEntries, isPendingEntry, type PlaybackQueueEntry } from "../lib/playbackQueue";
@@ -323,7 +323,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     if ((item.transition?.confidence ?? 0) >= TRUSTED_CONFIDENCE) return;
     refinedPair = pair;
     void api.refineDjTransition({
-      dj_profile: state.autoMode.djProfile,
+      dj_profile: DJ_PROFILE,
       from: djItemRef(current),
       to: djItemRef(next)
     }).then(lifetime.guard(result => {
@@ -561,8 +561,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     });
     try {
       const response = await api.planDjQueue({
-        dj_profile: state.autoMode.djProfile,
-        direction: state.autoMode.direction,
+        dj_profile: DJ_PROFILE,
         session_id: randomId(),
         segment_index: 0,
         source_policy: 'explicit',
@@ -1064,7 +1063,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         index: state.playback.index
       }),
       identity: queueIdentity,
-      planningContext: () => JSON.stringify([state.autoMode.directionRevision, state.autoMode.sources.map(source => [source.id, source.activation, source.tracks.map(queueIdentity)]), (state.autoMode.exploration ?? []).map(queueIdentity), state.autoMode.avoidedIdentities, state.autoMode.direction]),
+      planningContext: () => JSON.stringify([state.autoMode.directionRevision, state.autoMode.sources.map(source => [source.id, source.activation, source.tracks.map(queueIdentity)]), (state.autoMode.exploration ?? []).map(queueIdentity), state.autoMode.avoidedIdentities]),
       isCommitted: entry => committedTransition?.queueId === entry.queueId,
       requestPlan: (intent, profile, seed, limit, exclude, signal, generatedSession) => {
         const seedBody = {
@@ -1080,8 +1079,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         };
         if (intent === 'auto_mode' && typeof api.planDjQueue === 'function') {
           return api.planDjQueue({
-            dj_profile: state.autoMode.djProfile,
-            direction: state.autoMode.direction,
+            dj_profile: DJ_PROFILE,
             session_id: generatedSession?.id,
             segment_index: generatedSession?.segmentIndex,
             context: state.autoMode.heard.slice(-8).map(djItemRef),
@@ -1466,31 +1464,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       const track = dropAutoRouteOccurrence(queueId);
       if (track) avoidAutoIdentity(track);
     },
-    setAutoProfile(profile: AutoProfile): void {
-      try {
-        localStorage.setItem('auto:profile', profile);
-      } catch {
-        /* private mode / storage disabled */
-      }
-      setState('autoMode', 'profile', profile);
-      scheduleRunwayReplan(tr(`autoMode.note.crate.${profile}`));
-    },
-    setAutoDjProfile(profile: DjProfile): void {
-      try {
-        localStorage.setItem('auto:dj-profile', profile);
-      } catch {
-        /* private mode / storage disabled */
-      }
-      setState('autoMode', 'djProfile', profile);
-      scheduleRunwayReplan(tr(`autoMode.note.dj.${profile}`));
-    },
-    setAutoDirection(direction: Partial<DjDirection>, note?: string): void {
-      setState('autoMode', 'direction', current => ({
-        ...current,
-        ...direction
-      }));
-      scheduleRunwayReplan(note ?? tr('autoMode.note.direction'));
-    },
     reportAutoActivity(key: string, status: AutoActivity['status'], values?: Record<string, string | number>): void {
       if (!state.autoMode.active) return;
       setState('autoMode', 'activity', {
@@ -1543,7 +1516,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       };
       try {
         const response = await api.placeDjTracks({
-          dj_profile: state.autoMode.djProfile,
+          dj_profile: DJ_PROFILE,
           seed: djItemRef(seed),
           route: route.map(row => ({
             ...djItemRef(row),
@@ -1678,7 +1651,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       });
       try {
         const response = await api.placeDjTrack({
-          dj_profile: state.autoMode.djProfile,
+          dj_profile: DJ_PROFILE,
           seed: djItemRef(seed),
           route: route.map(entry => ({
             ...djItemRef(entry),
@@ -1830,7 +1803,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       });
       try {
         const response = await api.repairDjRoute({
-          dj_profile: state.autoMode.djProfile,
+          dj_profile: DJ_PROFILE,
           seed: djItemRef(seed),
           route: route.map(entry => ({
             ...djItemRef(entry),

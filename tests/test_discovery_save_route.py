@@ -229,7 +229,6 @@ def test_dj_plan_eventually_places_an_exact_request_and_prefers_it_next(tmp_path
         "bpm": 120,
         "key": "C",
         "mode": "major",
-        "energy": 0.5,
         "confidence": 0.9,
         "outro_cue": 130,
         "intro_cue": 8,
@@ -300,7 +299,6 @@ def test_dj_plan_keeps_an_artist_request_until_a_playable_track_fulfils_it(tmp_p
         "bpm": 126,
         "key": "C",
         "mode": "major",
-        "energy": 0.7,
         "confidence": 0.9,
         "outro_cue": 130,
         "intro_cue": 8,
@@ -381,26 +379,6 @@ def test_auto_library_pool_only_promotes_tracks_inside_the_session_path(tmp_path
     assert all(item["title"] != "Aestimatus sum" for item in pools["local"])
 
 
-def test_dj_command_recognises_an_exact_artist_without_an_llm(tmp_path):
-    _make_runtime(tmp_path)
-    with patch.object(
-        _auto_mode,
-        "_deezer_artist_top_rows",
-        return_value=[{"artist": {"id": 1, "name": "Oliver Heldens"}}],
-    ):
-        response = _make_app().test_client().post(
-            "/api/discovery/music/dj-command",
-            json={"text": "pon Oliver Heldens pero con más energía"},
-        )
-
-    assert response.status_code == 200
-    body = response.get_json()
-    assert body["request"] == {
-        "kind": "artist",
-        "label": "Oliver Heldens",
-        "artist": {"name": "Oliver Heldens"},
-    }
-    assert body["direction_patch"]["energy"] == 0.7
 def test_music_plan_returns_server_ordered_playable_radio_items(tmp_path):
     runtime = _make_runtime(tmp_path)
     init_telemetry(runtime)
@@ -1121,6 +1099,87 @@ def test_dj_plan_v6_chooses_an_opening_from_a_source_when_there_is_no_seed(tmp_p
     assert all(item["id"] != body["opening"]["id"] for item in body["items"])
 
 
+def test_dj_plan_v6_does_not_steer_by_energy(tmp_path):
+    """The sources and the recommender steer the session; the DJ only orders.
+
+    Measured songs open where an unmeasured one would: the opening of a source
+    is the session's deterministic shuffle, whatever the analysis says.
+    """
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    tracks = [
+        {"id": key, "track_id": key, "title": key.title(), "artist": f"Artist {key}"}
+        for key in ("calm", "middle", "busy", "loud")
+    ]
+
+    def plan(analysed: bool) -> dict:
+        def analysis(_metadata, item, *, schedule=False):
+            if not analysed:
+                return _auto_mode._dj_fallback_analysis(220)
+            rates = {"calm": 0.5, "middle": 2.0, "busy": 5.0, "loud": 8.0}
+            return {"duration": 220, "bpm": 120, "key": "C", "mode": "major", "confidence": 0.9,
+                    "note_rate": rates.get(str(item.get("track_id") or item.get("id")), 3.0), "analysed": True}
+
+        with (
+            patch.object(_auto_mode, "_get_api", return_value=mock_api),
+            patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+            patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+        ):
+            response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
+                "session_id": "no-arc", "sources": [{"id": "album:chosen", "label": "Chosen", "tracks": tracks}],
+                "limit": 4,
+            })
+        assert response.status_code == 200
+        return response.get_json()
+
+    measured, unmeasured = plan(True), plan(False)
+    assert "arc" not in measured
+    assert measured["opening"]["id"] == unmeasured["opening"]["id"]
+    assert [row["id"] for row in measured["items"]] == [row["id"] for row in unmeasured["items"]]
+
+
+def test_dj_plan_ignores_the_direction_older_clients_still_send(tmp_path):
+    _make_runtime(tmp_path)
+    base = {
+        "v": 1, "plan_id": "base-plan", "intent": "auto_mode", "profile": "balanced", "seed_identity": "seed",
+        "items": [
+            {"id": f"cand000000{i}", "youtube_id": f"cand000000{i}", "title": f"Candidate {i}",
+             "artist": f"Artist {i}", "duration": 180, "source": "preview", "source_pool": "related",
+             "recommendation_identity": f"music:youtube:cand000000{i}", "recommendation_source": "auto_mode",
+             "score": 0.5 + i / 10, "semantic_score": 0.4 + i / 10}
+            for i in range(4)
+        ],
+        "degraded": False, "pool_counts": {"local": 0, "related": 4, "discovery": 0}, "generated_at": 1,
+    }
+    features = {"duration": 180, "bpm": 120, "key": "C", "mode": "major", "confidence": 0.9,
+                "outro_cue": 130, "intro_cue": 8, "bar_seconds": 2, "analysed": True}
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+
+    def plan(extra: dict) -> list[str]:
+        with (
+            patch.object(_auto_mode, "_get_api", return_value=mock_api),
+            patch.object(_auto_mode, "_build_music_plan", return_value=(json.loads(json.dumps(base)), 200)) as built,
+            patch.object(_auto_mode, "_dj_item_analysis", return_value=features),
+        ):
+            response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
+                "dj_profile": "adaptive", "seed": {"id": "seed", "title": "Seed", "artist": "Artist", "duration": 180},
+                "limit": 4, **extra,
+            })
+        assert response.status_code == 200
+        assert built.call_args.args[0]["profile"] == "balanced"
+        return [row["id"] for row in response.get_json()["items"]]
+
+    old_direction = {"direction": {"energy": 1, "familiarity": 0.9, "prompt": "más caña",
+                                   "include": ["Artist 0"], "exclude": ["Artist 3"]}}
+    assert plan(old_direction) == plan({})
+
+
 def test_dj_plan_v6_walks_from_sources_and_applies_exact_exclusions(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
@@ -1250,9 +1309,9 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
     # the one thing no existing endpoint can do.
     _make_runtime(tmp_path)
     measured = {
-        "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "energy": 0.4, "confidence": 0.9, "analysed": True},
-        "t0": {"duration": 220, "bpm": 128, "key": "D", "mode": "major", "energy": 0.8, "confidence": 0.9, "analysed": True},
-        "bridge01": {"duration": 220, "bpm": 113, "key": "G", "mode": "major", "energy": 0.6, "confidence": 0.9, "analysed": True},
+        "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "analysed": True},
+        "t0": {"duration": 220, "bpm": 128, "key": "D", "mode": "major", "confidence": 0.9, "analysed": True},
+        "bridge01": {"duration": 220, "bpm": 113, "key": "G", "mode": "major", "confidence": 0.9, "analysed": True},
     }
 
     def analysis(_metadata, item, *, schedule=False):
@@ -1375,7 +1434,6 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
         "bpm": 120,
         "key": "C",
         "mode": "major",
-        "energy": 0.6,
         "confidence": 0.9,
         "outro_cue": 190,
         "intro_cue": 6,
@@ -1591,43 +1649,6 @@ def test_explicit_dj_bridges_use_sources_and_confirmed_exploration(tmp_path):
     assert graph.call_count == 1
     assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens", "Extremoduro"]
     assert [item["recommendation_identity"] for item, _ in candidates] == ["music:track:seam"]
-
-
-def test_explicit_dj_arc_follows_the_recent_window_not_the_whole_history(tmp_path):
-    """Energy pacing reads the last few songs, however long the session has run.
-
-    The arc is a six-phase cycle. Feeding it the whole `heard` list — which the
-    client grows to forty entries — would walk the session's energy target
-    around the table by session length instead of by segment.
-    """
-    _make_runtime(tmp_path)
-    mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
-    long_history = [
-        {"id": f"h{index:02d}", "track_id": f"h{index:02d}", "title": f"H{index}", "artist": "Extremoduro"}
-        for index in range(40)
-    ]
-    source = {"id": "house", "label": "Oliver Heldens", "tracks": [
-        {"id": "oliver", "track_id": "oliver", "title": "Gecko", "artist": "Oliver Heldens"},
-    ]}
-
-    def arc_for(heard: list[dict]) -> dict:
-        with (
-            patch.object(_auto_mode, "_get_api", return_value=mock_api),
-            patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(_house_related(), False, False)),
-        ):
-            response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
-                "source_policy": "explicit", "session_id": "session-arc", "segment_index": 0,
-                "seed": {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"},
-                "sources": [source], "heard": heard,
-            })
-        assert response.status_code == 200
-        return response.get_json()["arc"]
-
-    assert arc_for(long_history) == arc_for(long_history[-4:])
-    assert arc_for(long_history) != arc_for(long_history[-1:])
 
 
 def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):

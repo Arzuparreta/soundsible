@@ -24,7 +24,7 @@ from typing import Any
 from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
 
-ANALYSER_VERSION = 4
+ANALYSER_VERSION = 6
 # A normal song is decoded in full so the grid and the musical sections come
 # from the recording, not from arithmetic projected from its first transient.
 # Very long mixes remain bounded: their head and tail still provide everything
@@ -41,6 +41,12 @@ _PROFILE_POLICY = {
 }
 # Seconds kept between a planned blend start and `duration - overlap`.
 _OUT_CUE_MARGIN = 1.5
+# Spectral flatness is read where music has its harmonics. Frames more than
+# 20 dB under the song's loud level (fades, gaps) and windows quieter than
+# -80 dBFS say nothing about how the music sounds.
+_FLATNESS_BAND = (100.0, 5000.0)
+_LOUD_FRAME_RATIO = 0.1
+_SILENT_RMS = 1e-4
 _KEY_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 _MAJOR_PROFILE = (6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88)
 _MINOR_PROFILE = (6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17)
@@ -123,8 +129,9 @@ def _fallback(duration: float = 0.0) -> dict[str, Any]:
         "bar_seconds": 2.0,
         "key": None,
         "mode": None,
-        "loudness_db": -14.0,
-        "energy": 0.5,
+        "note_rate": None,
+        "loudness_lufs": None,
+        "spectral_flatness": None,
         "intro_cue": 0.0,
         "outro_cue": round(outro, 3) if outro else None,
         "beat_grid": [],
@@ -251,18 +258,37 @@ def _probe_duration(path: Path) -> float:
 
 def _decode(path: Path, sample_rate: int, *, start: float = 0.0, length: float = 0.0):
     """Decode one window to mono float PCM. Returns None on any failure."""
+    return _decode_measured(path, sample_rate, start=start, length=length)[0]
+
+
+def _decode_measured(path: Path, sample_rate: int, *, start: float = 0.0, length: float = 0.0):
+    """Mono float PCM of one window, and its integrated loudness in LUFS.
+
+    The loudness comes from FFmpeg's EBU R128 meter on the original channels
+    and sample rate, in the same pass: the meter on a branch of the decoded
+    stream that ends in a sink, the PCM on the other. The PCM is the same,
+    sample for sample, as a decode without the meter. Returns (None, None) on
+    any failure and a None loudness when the meter has no reading (silence,
+    under one 400 ms gating block).
+    """
     try:
         import numpy as np
     except ImportError:
-        return None
-    command = [ffmpeg_executable(), "-v", "error"]
+        return None, None
+    from shared.loudness.measure import parse_integrated_loudness
+
+    command = [ffmpeg_executable(), "-nostdin", "-hide_banner", "-nostats", "-v", "info"]
     if start > 0:
         # Before -i, so FFmpeg seeks instead of decoding and discarding.
         command += ["-ss", f"{start:.3f}"]
     command += ["-i", str(path)]
     if length > 0:
         command += ["-t", f"{length:.3f}"]
-    command += ["-vn", "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "pipe:1"]
+    command += [
+        "-filter_complex", "[0:a:0]asplit=2[meter][pcm];[meter]ebur128=framelog=quiet,anullsink",
+        "-map", "[pcm]",
+        "-vn", "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "pipe:1",
+    ]
     try:
         proc = subprocess.run(
             command,
@@ -272,8 +298,9 @@ def _decode(path: Path, sample_rate: int, *, start: float = 0.0, length: float =
             timeout=180,
         )
     except (OSError, subprocess.SubprocessError):
-        return None
-    return np.frombuffer(proc.stdout, dtype="<f4")
+        return None, None
+    lufs = parse_integrated_loudness((proc.stderr or b"").decode("utf-8", "ignore"))
+    return np.frombuffer(proc.stdout, dtype="<f4"), lufs
 
 
 def _analyse_pcm(path: Path, *, duration_hint: float) -> dict[str, Any]:
@@ -283,26 +310,46 @@ def _analyse_pcm(path: Path, *, duration_hint: float) -> dict[str, Any]:
         duration = _probe_duration(path)
 
     if duration > WINDOWED_ABOVE_SECONDS:
-        head = _decode(path, sample_rate, length=HEAD_WINDOW_SECONDS)
+        head, head_lufs = _decode_measured(path, sample_rate, length=HEAD_WINDOW_SECONDS)
         tail_start = max(0.0, duration - TAIL_WINDOW_SECONDS)
-        tail = _decode(path, sample_rate, start=tail_start, length=TAIL_WINDOW_SECONDS)
+        tail, tail_lufs = _decode_measured(path, sample_rate, start=tail_start, length=TAIL_WINDOW_SECONDS)
         if tail is None or tail.size < sample_rate * 4:
             return _fallback(duration)
-        return _compose_off_loop(tail, head, sample_rate, duration=duration, tail_start=tail_start)
+        lufs = _combined_lufs([(head_lufs, HEAD_WINDOW_SECONDS), (tail_lufs, TAIL_WINDOW_SECONDS)])
+        return _compose_off_loop(
+            tail, head, sample_rate, duration=duration, tail_start=tail_start, loudness_lufs=lufs,
+        )
 
-    samples = _decode(path, sample_rate)
+    samples, lufs = _decode_measured(path, sample_rate)
     if samples is None or samples.size < sample_rate * 4:
         return _fallback(duration or (0.0 if samples is None else samples.size / sample_rate))
-    return _compose_off_loop(samples, samples, sample_rate, duration=samples.size / sample_rate, tail_start=0.0)
+    return _compose_off_loop(
+        samples, samples, sample_rate, duration=samples.size / sample_rate, tail_start=0.0, loudness_lufs=lufs,
+    )
 
 
-def _compose_off_loop(tail, head, sample_rate: int, *, duration: float, tail_start: float):
+def _combined_lufs(windows: list[tuple[float | None, float]]) -> float | None:
+    """Integrated loudness of several measured windows, as one programme.
+
+    Loudness adds as power, weighted by duration (BS.1770). This is the mean
+    of the two windows a long mix is measured over, not of the whole mix.
+    """
+    measured = [(lufs, seconds) for lufs, seconds in windows if lufs is not None and seconds > 0]
+    if not measured:
+        return None
+    seconds = sum(length for _, length in measured)
+    power = sum(length * 10 ** ((lufs + 0.691) / 10) for lufs, length in measured)
+    return -0.691 + 10 * math.log10(power / seconds)
+
+
+def _compose_off_loop(tail, head, sample_rate: int, *, duration: float, tail_start: float,
+                      loudness_lufs: float | None = None):
     # The daemon monkey-patches threading: its concurrent.futures workers are
     # greenlets, so NumPy on those workers otherwise stalls every HTTP request.
     # Offload only pure PCM computation. SQLite and cooperative subprocess I/O
     # stay on their owning thread; the two analysis jobs still bound concurrency.
     args = (tail, head, sample_rate)
-    kwargs = {"duration": duration, "tail_start": tail_start}
+    kwargs = {"duration": duration, "tail_start": tail_start, "loudness_lufs": loudness_lufs}
     # Plain CLI/desktop analyses do not need to initialize gevent at all.
     monkey = sys.modules.get("gevent.monkey")
     if monkey is not None and monkey.is_module_patched("threading"):
@@ -319,15 +366,16 @@ def _compose(
     *,
     duration: float,
     tail_start: float,
+    loudness_lufs: float | None = None,
 ) -> dict[str, Any]:
     """Build the stored analysis from the measured windows.
 
     `tail` carries the pulse, key and outro — everything a transition mixes
     *out* of. `head` only has to say where the music starts, which is what the
     next track mixes *into*.
-    """
-    import numpy as np
 
+    `loudness_lufs` is measured by the decoder, on the original channels.
+    """
     features = _window_features(tail, sample_rate)
     if features is None:
         return _fallback(duration)
@@ -366,8 +414,16 @@ def _compose(
     # A long mix enters on its head grid and leaves on its tail grid: the
     # weaker of the two is how far either can be trusted.
     tempo_confidence = features["tempo_confidence"]
+    measured_windows = [features]
     if tail_start and head_features is not None:
         tempo_confidence = min(tempo_confidence, head_features["tempo_confidence"])
+        measured_windows.append(head_features)
+    # Both windows of a long mix count as one sample of it: notes over the
+    # seconds that sound, flatness over the loud frames' power.
+    notes = sum(window["note_count"] for window in measured_windows)
+    sounding = sum(window["sounding_seconds"] for window in measured_windows)
+    flatness_power = sum(window["flatness_power"] for window in measured_windows)
+    loud_power = sum(window["loud_power"] for window in measured_windows)
     confidence = min(0.98, 0.38 + tempo_confidence * 0.36 + min(0.2, features["key_margin"] / 8))
     return {
         "version": ANALYSER_VERSION,
@@ -377,8 +433,13 @@ def _compose(
         "bar_seconds": round(period * 4, 4),
         "key": features["key"],
         "mode": features["mode"],
-        "loudness_db": round(features["loudness_db"], 3),
-        "energy": round(float(np.clip(features["energy"], 0, 1)), 3),
+        # Physical magnitudes, comparable between songs: notes per second of
+        # sounding music, EBU R128 integrated loudness, and the spectral
+        # flatness of the loud frames (0 for a pure tone, about 0.56 for white
+        # noise). docs/dj/HANDOFF.md, P4.
+        "note_rate": round(notes / sounding, 3) if sounding > 0 else 0.0,
+        "loudness_lufs": round(float(loudness_lufs), 2) if loudness_lufs is not None else None,
+        "spectral_flatness": round(flatness_power / loud_power, 4) if loud_power > 0 else 0.0,
         "intro_cue": round(max(0.0, min(intro_local, duration * 0.25)), 3),
         "outro_cue": round(max(0.0, min(outro, duration - period * 4)), 3),
         # Tenths of a millisecond: the mixers align these points to the sample.
@@ -442,7 +503,8 @@ def _sections_from_features(
             "start": round(float(start), 3),
             "end": round(float(end), 3),
             "label": label,
-            "energy": round(max(0.0, min(1.5, energy)), 3),
+            # Mean frame level against the song's loud level, not between songs.
+            "level": round(max(0.0, min(1.5, energy)), 3),
         })
     return result
 
@@ -466,15 +528,22 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     # Only the mean spectrum and adjacent-frame flux survive this calculation.
     # Keep a small FFT working set instead of several full-song matrices (over
     # 400 MiB for an eight-minute track, multiplied by concurrent analyses).
-    rms, mean_spectrum, flux = _spectral_features(frames)
-    energy = rms / max(float(np.percentile(rms, 95)), 1e-7)
+    frequencies = np.fft.rfftfreq(frame, 1 / sample_rate)
+    band = np.searchsorted(frequencies, _FLATNESS_BAND)
+    rms, mean_spectrum, flux, flatness = _spectral_features(frames, flatness_bins=slice(int(band[0]), int(band[1])))
+    loud_level = float(np.percentile(rms, 95))
+    # Level against the song's own loud level: where it starts and how its
+    # sections rise and fall. Not comparable between songs.
+    energy = rms / max(loud_level, 1e-7)
+    loud = rms >= loud_level * _LOUD_FRAME_RATIO if loud_level >= _SILENT_RMS else np.zeros(rms.size, dtype=bool)
+    loud_weights = rms[loud].astype(float) ** 2
+    note_count, sounding_seconds = _note_onsets(samples, sample_rate)
     flux /= max(float(np.percentile(flux, 95)), 1e-7)
     rhythm = _rhythm(samples, sample_rate)
 
     # A compact chroma estimator.  It is deliberately confidence-gated: the
     # route planner treats uncertain keys as neutral rather than inventing a
     # harmonic incompatibility.
-    frequencies = np.fft.rfftfreq(frame, 1 / sample_rate)
     chroma = np.zeros(12, dtype=float)
     valid = frequencies > 55
     midi = np.rint(69 + 12 * np.log2(np.maximum(frequencies[valid], 1e-6) / 440)).astype(int)
@@ -496,7 +565,6 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     active_frames = np.flatnonzero(energy >= threshold)
     intro = float(active_frames[0] * hop / sample_rate) if active_frames.size else 0.0
     last_active = float(active_frames[-1] * hop / sample_rate) if active_frames.size else window_seconds
-    loudness_db = 20 * math.log10(max(float(np.sqrt(np.mean(samples * samples))), 1e-8))
 
     return {
         # Without a measurable pulse (silence, a drone) the tempo is reported
@@ -511,8 +579,10 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
         "key": _KEY_NAMES[tonic],
         "mode": mode,
         "key_margin": key_margin,
-        "loudness_db": loudness_db,
-        "energy": float(np.mean(energy)),
+        "note_count": note_count,
+        "sounding_seconds": sounding_seconds,
+        "flatness_power": float(np.dot(flatness[loud], loud_weights)),
+        "loud_power": float(loud_weights.sum()),
         "intro": intro,
         "last_active": last_active,
         "hop_seconds": hop / sample_rate,
@@ -522,13 +592,19 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     }
 
 
-def _spectral_features(frames):
-    """Same per-frame measures as a whole-matrix FFT, with bounded scratch space."""
+def _spectral_features(frames, *, flatness_bins: slice = slice(1, None)):
+    """Same per-frame measures as a whole-matrix FFT, with bounded scratch space.
+
+    Returns per-frame RMS, the mean magnitude spectrum, the positive spectral
+    flux between frames, and per-frame spectral flatness (geometric over
+    arithmetic mean of the power) across `flatness_bins`.
+    """
     import numpy as np
 
     count, frame_size = frames.shape
     rms = np.empty(count, dtype=frames.dtype if frames.dtype.kind == "f" else float)
     flux = np.empty(max(0, count - 1), dtype=float)
+    flatness = np.empty(count, dtype=float)
     spectrum_sum = np.zeros(frame_size // 2 + 1, dtype=float)
     window = np.hanning(frame_size)
     previous = None
@@ -538,11 +614,133 @@ def _spectral_features(frames):
         rms[start:end] = np.sqrt(np.mean(block * block, axis=1) + 1e-12)
         spectrum = np.abs(np.fft.rfft(block * window, axis=1))
         spectrum_sum += spectrum.sum(axis=0)
+        power = spectrum[:, flatness_bins] ** 2 + 1e-12
+        flatness[start:end] = np.exp(np.log(power).mean(axis=1)) / power.mean(axis=1)
         if previous is not None:
             flux[start - 1] = np.maximum(0.0, spectrum[0] - previous).sum()
         flux[start:end - 1] = np.maximum(0.0, np.diff(spectrum, axis=0)).sum(axis=1)
         previous = spectrum[-1].copy()
-    return rms, spectrum_sum / count, flux
+    return rms, spectrum_sum / count, flux, flatness
+
+
+# Notes -----------------------------------------------------------------------
+#
+# Notes per second counts attacks: a new pitch, or the same one struck again.
+# The onset function is a spectral flux in the manner of SuperFlux (Böck and
+# Widmer, 2013): log magnitudes in quarter-tone bands, each compared with the
+# loudest of its neighbours two frames earlier, so a vibrato that moves a
+# partial within a quarter tone either way rises nowhere. A band rises only by
+# more than it fluctuates by itself: a noisy band (cymbals, a choir's breath,
+# hiss) has to rise more than a steady partial does.
+#
+# The constants are signal-processing constants, set so that synthetic
+# signals with a known number of notes measure it: tests/test_dj_note_rate.py
+# has melodies of 1 to 12 notes per second played legato and staccato, with
+# and without vibrato and hall reverberation, repeated orchestral chords,
+# choral chords, drum patterns, noise and a drone.
+
+_NOTE_FRAME = 512  # 46 ms at 11025 Hz
+_NOTE_HOP = 128  # 11.6 ms
+_NOTE_BAND = (40.0, 5000.0)
+_NOTE_BANDS_PER_OCTAVE = 24
+_NOTE_LAG = 2  # frames between the compared spectra
+_NOTE_SMOOTHING = 3  # frames averaged before the comparison
+# Floor of the log compression, against the loud frame level: -60 dB.
+_NOTE_FLOOR = 1e-3
+# Peak picking: a local maximum over +-30 ms, `_NOTE_DELTA` above the mean of
+# the onset function from 50 ms before to 70 ms after, 60 ms after the last.
+_NOTE_DELTA = 2.0
+_NOTE_PEAK_SECONDS = 0.03
+_NOTE_MEAN_BEFORE = 0.05
+_NOTE_MEAN_AFTER = 0.07
+_NOTE_MIN_GAP = 0.06
+# A band's own fluctuation is its median change over a block of 256 frames
+# (3 s); counting is over the seconds within 20 dB of the loud level, rests
+# of up to a second either side included.
+_NOTE_BLOCK = 256
+_NOTE_SOUNDING_RATIO = 0.1
+_NOTE_REST_SECONDS = 1.0
+
+
+def _note_onsets(samples, sample_rate: int) -> tuple[int, float]:
+    """Number of note attacks in one window, and the seconds that sound.
+
+    Memory is bounded by `_NOTE_BLOCK` frames whatever the window's length.
+    """
+    import numpy as np
+
+    signal = np.ascontiguousarray(samples, dtype=np.float32)
+    count = 1 + (signal.size - _NOTE_FRAME) // _NOTE_HOP if signal.size >= _NOTE_FRAME else 0
+    if count < 16:
+        return 0, 0.0
+    frames = np.lib.stride_tricks.as_strided(
+        signal,
+        shape=(count, _NOTE_FRAME),
+        strides=(signal.strides[0] * _NOTE_HOP, signal.strides[0]),
+        writeable=False,
+    )
+    level = np.empty(count, dtype=np.float64)
+    for start in range(0, count, _NOTE_BLOCK):
+        block = frames[start:start + _NOTE_BLOCK].astype(np.float64)
+        level[start:start + len(block)] = np.sqrt(np.mean(block * block, axis=1))
+    loud_level = float(np.percentile(level, 95))
+    if loud_level < _SILENT_RMS:
+        return 0, 0.0
+
+    frequencies = np.fft.rfftfreq(_NOTE_FRAME, 1 / sample_rate)
+    selected = np.flatnonzero((frequencies >= _NOTE_BAND[0]) & (frequencies <= min(_NOTE_BAND[1], sample_rate * 0.475)))
+    band_index = np.rint(_NOTE_BANDS_PER_OCTAVE * np.log2(frequencies[selected] / _NOTE_BAND[0])).astype(int)
+    # Below about 400 Hz a bin is wider than a quarter tone: each bin is a band.
+    band_starts = np.flatnonzero(np.r_[True, np.diff(band_index) > 0])
+    band_sizes = np.diff(np.r_[band_starts, selected.size]).astype(np.float32)
+    # A unit sinusoid in a Hann frame peaks at N/4 in its bin.
+    scale = np.float32(1.0 / (_NOTE_FLOOR * loud_level * math.sqrt(2) * _NOTE_FRAME / 4))
+    window = np.hanning(_NOTE_FRAME).astype(np.float32)
+    history = _NOTE_SMOOTHING - 1 + _NOTE_LAG
+    carried = None
+    onset = np.zeros(count, dtype=np.float64)
+    for start in range(0, count, _NOTE_BLOCK):
+        block = frames[start:start + _NOTE_BLOCK] * window
+        magnitude = np.abs(np.fft.rfft(block, axis=1))[:, selected]
+        bands = np.log1p(np.add.reduceat(magnitude, band_starts, axis=1) / band_sizes * scale)
+        if carried is not None:
+            bands = np.concatenate([carried, bands])
+        offset = 0 if carried is None else carried.shape[0]
+        carried = bands[-history:]
+        # Causal moving mean over `_NOTE_SMOOTHING` frames.
+        cumulative = np.cumsum(np.pad(bands, ((1, 0), (0, 0))), axis=0)
+        smooth = np.empty_like(bands)
+        width = np.minimum(np.arange(1, bands.shape[0] + 1), _NOTE_SMOOTHING)[:, None]
+        rows = np.arange(bands.shape[0])
+        smooth[:] = (cumulative[rows + 1] - cumulative[np.maximum(rows + 1 - _NOTE_SMOOTHING, 0)]) / width
+        padded = np.pad(smooth, ((0, 0), (1, 1)), mode="edge")
+        widest = np.maximum(np.maximum(padded[:, :-2], padded[:, 1:-1]), padded[:, 2:])
+        rise = smooth[_NOTE_LAG:] - widest[:-_NOTE_LAG]
+        jitter = np.median(np.abs(smooth[_NOTE_LAG:] - smooth[:-_NOTE_LAG]), axis=0)
+        flux = np.maximum(0.0, rise - jitter).sum(axis=1)
+        # Row r of `flux` describes block-relative frame r + _NOTE_LAG.
+        first = max(offset, _NOTE_LAG)
+        stop = start + len(block)
+        onset[start + first - offset:stop] = flux[first - _NOTE_LAG:]
+
+    frame_rate = sample_rate / _NOTE_HOP
+    peak = int(round(_NOTE_PEAK_SECONDS * frame_rate))
+    before = int(round(_NOTE_MEAN_BEFORE * frame_rate))
+    after = int(round(_NOTE_MEAN_AFTER * frame_rate))
+    view = np.lib.stride_tricks.sliding_window_view
+    local_max = view(np.pad(onset, peak, mode="edge"), 2 * peak + 1).max(axis=1)
+    local_mean = view(np.pad(onset, (before, after), mode="edge"), before + after + 1).mean(axis=1)
+    candidates = np.flatnonzero((onset == local_max) & (onset >= local_mean + _NOTE_DELTA))
+    rest = int(round(_NOTE_REST_SECONDS * frame_rate))
+    sounding = view(np.pad(level, rest, mode="edge"), 2 * rest + 1).max(axis=1) >= loud_level * _NOTE_SOUNDING_RATIO
+    gap = _NOTE_MIN_GAP * frame_rate
+    notes = 0
+    last = -math.inf
+    for index in candidates:
+        if index - last >= gap:
+            last = index
+            notes += int(sounding[index])
+    return notes, float(sounding.sum() / frame_rate)
 
 
 # Rhythm ----------------------------------------------------------------------

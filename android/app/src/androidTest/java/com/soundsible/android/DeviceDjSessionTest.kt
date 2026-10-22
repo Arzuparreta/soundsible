@@ -57,6 +57,7 @@ class DeviceDjSessionTest {
                 .put("tracks", JSONArray().put(JSONObject().put("id", "member-track").put("title", "Source song").put("artist", "member artist")))
             val transition = JSONObject().put("technique", "safe_fade").put("out_cue", 300).put("in_cue", 0).put("overlap_seconds", 6)
                 .put("playback_rate", 1).put("confidence", 0.9)
+            // Written by an older client: a DJ style and a direction no longer exist and are dropped.
             val workspace = JSONObject().put("profile", "balanced").put("djProfile", "cuts_drops").put("direction", JSONObject().put("energy", 0.4))
                 .put("sourcePolicy", "explicit").put("sources", JSONArray().put(source)).put("heard", JSONArray().put(JSONObject().put("id", "heard-before")))
                 .put("avoidedIdentities", JSONArray().put("music:track:avoided-before")).put("exploration", JSONArray()).put("directionRevision", 7)
@@ -76,7 +77,7 @@ class DeviceDjSessionTest {
             await("DJ workspace not published") { core("/api/playback/state").optJSONObject("session")?.optString("mode") == "auto" }
             val published = core("/api/playback/state").getJSONObject("session")
             val auto = published.getJSONObject("auto")
-            assertEquals("cuts_drops", auto.getString("djProfile")); assertEquals(0.4, auto.getJSONObject("direction").getDouble("energy"), 0.0001)
+            assertFalse(auto.has("djProfile")); assertFalse(auto.has("direction"))
             assertEquals("Direction fixture", auto.getJSONArray("sources").getJSONObject(0).getString("label"))
             assertEquals("explicit", auto.getString("sourcePolicy")); assertTrue(auto.getJSONArray("heard").toString().contains("heard-before"))
             assertTrue(auto.getJSONArray("avoidedIdentities").toString().contains("avoided-before"))
@@ -95,28 +96,28 @@ class DeviceDjSessionTest {
             val result = main { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply { putString("action", "deviceHandoff"); putLong("generation", epoch); putString("device_id", peerId) }) }.get(20, TimeUnit.SECONDS)
             assertEquals("Native DJ outgoing handoff failed", 0, result.resultCode)
             await("Peer did not receive DJ workspace") { transferred.get()?.optJSONObject("state")?.optJSONObject("session")?.optString("mode") == "auto" }
-            assertEquals("cuts_drops", transferred.get()!!.getJSONObject("state").getJSONObject("session").getJSONObject("auto").getString("djProfile"))
+            assertEquals("Direction fixture", transferred.get()!!.getJSONObject("state").getJSONObject("session").getJSONObject("auto").getJSONArray("sources").getJSONObject(0).getString("label"))
             assertEquals("remote-collection", transferred.get()!!.getJSONObject("state").getJSONObject("session").getJSONArray("queue").getJSONObject(4).getJSONObject("autoRoute").getString("requestGroup"))
             assertFalse("Native credentials entered public workspace", transferred.get().toString().contains("sb_session"))
             assertFalse(main { active.playWhenReady })
             // The peer edits the workspace while retaining this queue's original occurrence IDs.
             val returned = JSONObject(transferred.get()!!.getJSONObject("state").toString()).put("device_id", peerId).put("position_sec", 2)
-            returned.getJSONObject("session").getJSONObject("auto").getJSONObject("direction").put("energy", 0.8)
             returned.getJSONObject("session").getJSONObject("auto").getJSONArray("sources").getJSONObject(0).put("label", "Updated direction")
             core("/api/playback/state", "PUT", returned)
             pcm.set(false)
             core("/api/playback/handoff", "POST", JSONObject().put("from_device_id", peerId).put("to_device_id", id))
-            await("Returned same-queue handoff ignored changed DJ direction") {
+            await("Returned same-queue handoff ignored changed DJ sources") {
                 val received = core("/api/playback/state").optJSONObject("session")?.optJSONObject("auto")
-                received?.optJSONObject("direction")?.optDouble("energy") == 0.8 && received.optJSONArray("sources")?.optJSONObject(0)?.optString("label") == "Updated direction" && main { active.isPlaying } && pcm.get()
+                received?.optJSONArray("sources")?.optJSONObject(0)?.optString("label") == "Updated direction" && main { active.isPlaying } && pcm.get()
             }
             remote("pause"); await("Returned DJ pause failed") { main { !active.playWhenReady } }
             val validKey = main { ProgramQueue.key(active, active.currentMediaItemIndex) }
             val bad = JSONObject(returned.toString())
-            bad.getJSONObject("session").getJSONObject("auto").put("djProfile", "unsupported")
+            // More sources than a workspace holds.
+            bad.getJSONObject("session").getJSONObject("auto").put("sources", JSONArray().apply { repeat(7) { put(JSONObject(source.toString()).put("id", "too-many-$it")) } })
             core("/api/playback/state", "PUT", bad)
             core("/api/playback/handoff", "POST", JSONObject().put("from_device_id", peerId).put("to_device_id", id))
-            await("Invalid workspace did not leave the valid native workspace intact") { core("/api/playback/state").optJSONObject("session")?.optJSONObject("auto")?.optString("djProfile") == "cuts_drops" }
+            await("Invalid workspace did not leave the valid native workspace intact") { core("/api/playback/state").optJSONObject("session")?.optJSONObject("auto")?.optJSONArray("sources")?.optJSONObject(0)?.optString("label") == "Updated direction" }
             assertEquals(validKey, main { ProgramQueue.key(active, active.currentMediaItemIndex) })
             assertFalse("Malformed handoff resumed paused native programme", main { active.playWhenReady })
 

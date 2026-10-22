@@ -8,7 +8,7 @@ vi.mock('../lib/overlay', () => ({ openOverlay: mocks.overlay }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 const song: ProgramTrack = { source: 'local', id: 'song', title: 'Requested', artist: 'Artist' };
 const initial = { generation: 1, ready: true, programToken: 'dj', queueToken: 'order', index: 0,
-  dj: { active: true, profile: 'adaptive', phase: 'ready', editableFrom: 2 },
+  dj: { active: true, phase: 'ready', editableFrom: 2 },
   items: [{ ...song, key: 'current' }, { ...song, key: 'cued' }, { ...song, key: 'future' }] } as ProgramState;
 beforeEach(() => { cleanup(); vi.clearAllMocks(); });
 function picker() {
