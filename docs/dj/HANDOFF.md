@@ -61,7 +61,7 @@ no hay síntoma que lo justifique.
 | P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente; diseño decidido (continuidad). El arco ya se quitó (#385): hoy el orden es el barajado |
 | P4 | La "energía" no mide intensidad | Medido | Cerrado (#385): notas/s, LUFS y planitud; `energy` eliminado |
 | P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente; ampliado a pool analizado y puentes |
-| P6 | Compatibilidad de tonalidad mal puntuada | Lectura de código | Pendiente |
+| P6 | Compatibilidad de tonalidad mal puntuada | Medido: 576 pares y cadencias conocidas | Cerrado (`af6521f1`); detector y límites documentados abajo |
 | P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#385); queda decidir la opción (b) en el servidor |
 | P8 | Secciones medidas y no usadas | Lectura de código | Pendiente |
 | P9 | Eco no sincronizado con el tempo | Lectura de código | Pendiente |
@@ -69,7 +69,7 @@ no hay síntoma que lo justifique.
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
-salvo que vuelva el síntoma. P4 está cerrado: **el siguiente es P6**.
+salvo que vuelva el síntoma. P4 y P6 están cerrados: **el siguiente es P3**.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -177,7 +177,7 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
 | `bpm` | Recta (o curva local) ajustada a todos los golpes de la ventana; ver P1 | Sí |
 | `beat_grid` | Rejilla ajustada y alineada al inicio del ataque, 4 decimales; ver P1 | Sí |
 | `downbeats` | De las 4 fases del compás, la de mayor cambio armónico y ataque más fuerte; asume 4/4 | Sí |
-| `key`, `mode` | Perfiles Krumhansl sobre el croma del espectro medio | Sí |
+| `key`, `mode` | Correlación de Pearson con los perfiles Krumhansl; croma con resolución para graves (P6) | Sí |
 | `note_rate` | Ataques por segundo de música que suena (P4) | No (lo usará P3) |
 | `loudness_lufs` | Sonoridad integrada EBU R128 de FFmpeg, en la misma decodificación (P4) | No (lo usará P3) |
 | `spectral_flatness` | Planitud espectral 100–5000 Hz de los fotogramas fuertes, ponderada por potencia (P4) | No (lo usará P3) |
@@ -192,7 +192,7 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
 ```
 ratio = bpm_sale / bpm_entra   (si < 0,7 se multiplica por 2; si > 1,4 se divide por 2)
 tempo     = 1 − |1−ratio| / max_stretch_del_perfil
-armonía   = misma tónica y modo 1.0 · misma tónica, otro modo 0.82 · 4ª/5ª 0.86 · 3ª/6ª 0.68 · resto 0.35 · sin tonalidad 0.55
+armonía   = 1 − pasos_Camelot / 7 (±1 en el mismo modo o cambio relativo = un paso; sin tonalidad conocida 0.55)
 confianza = mínimo de las dos canciones
 score     = 0.46·tempo + 0.32·armonía + 0.22·confianza
 ```
@@ -624,7 +624,7 @@ salvo en el estado de la caché.
 
 ## P6. Compatibilidad de tonalidad mal puntuada
 
-**Qué pasa.** `_harmonic_score` (`dj_engine.py:619`) solo mira la distancia entre
+**Qué pasaba.** `_harmonic_score` solo miraba la distancia entre
 tónicas y usa el modo solo cuando la distancia es 0:
 
 - La menor relativa (La menor ↔ Do mayor, distancia 3): 0,68. En la rueda Camelot
@@ -632,14 +632,77 @@ tónicas y usa el modo solo cuando la distancia es 0:
 - Do mayor ↔ Do menor (paralela): 0,82. En Camelot está a 3 posiciones.
 - Quinta con distinto modo (Do mayor ↔ Sol menor): 0,86.
 
-La detección (`_window_features`) usa el espectro medio de toda la canción sin
+La detección (`_window_features`) usaba el espectro medio de toda la canción sin
 compensar armónicos, con bins de 5,4 Hz, que no separan semitonos por debajo de
-~130 Hz. Esto último no se ha medido.
+~130 Hz. Además comparaba los perfiles con un producto escalar sin centrar ni
+normalizar: el perfil menor tiene mayor media y norma, y ganaba incluso con
+cadencias mayores.
 
-**Posibles soluciones.** Puntuar con la rueda Camelot (misma posición, ±1, cambio
-relativo mayor/menor). Mejorar el croma (pesos por armónicos, ignorar graves
-ambiguos, o croma por tramos). Medir con canciones de tonalidad conocida antes y
-después.
+**Estado: cerrado en `af6521f1`.** `ANALYSER_VERSION` 7 invalida las medidas
+anteriores. La planificación sigue en el servidor; web y Android reciben el
+mismo contrato y la misma corrección a través de `dj-plan`, `dj-place`,
+`dj-repair` y `dj-transition`.
+
+- Compatibilidad: distancia mínima en el grafo de la
+  [rueda Camelot oficial](https://mixedinkey.com/camelot-wheel/0/). Las aristas
+  son ±1 posición en el mismo modo y cambio al relativo mayor/menor. Se
+  normaliza por el diámetro del grafo (7): `1 − pasos / 7`. No hay una tabla de
+  notas de gusto por intervalo. Misma tonalidad: 1; relativo o cuarta/quinta en
+  el mismo modo: 6/7; Do mayor → Sol menor: 4/7; Do mayor → Do menor: 3/7.
+  Tonalidad o modo ausente/desconocido: se conserva el neutral 0,55.
+- Croma: FFT Hann de 16384 muestras (0,67 Hz a 11025 Hz), salto de media
+  ventana, espectro medio entre 32,7 Hz (Do1) y 5 kHz. Bins plegados por clase
+  de altura; bloques de 32 ventanas, sin matriz espectral de toda la canción.
+  Resuelve las notas graves en lugar de descartarlas. No añade dependencias.
+- Detector: correlación de Pearson, como el
+  [algoritmo Krumhansl–Schmuckler](https://extras.humdrum.org/man/keycor/), con
+  los perfiles publicados que ya había, centrados y normalizados. `key_margin`
+  es ahora la diferencia de correlación entre los dos primeros. Un silencio
+  queda sin tonalidad; antes devolvía Si menor por el desempate.
+- Las constantes de resolución se validan con cadencias sintéticas de respuesta
+  conocida, sin notas humanas ni ajustes con música de la biblioteca. No cambia
+  el seguidor de golpes de P1 ni la ejecución de las mezclas.
+
+**Medición reproducible.** `python -I docs/dj/key_probe.py --reference 956e5344`
+compara el código de antes con el actual, sin escribir en la caché personal.
+Cadencias I–IV–ii–V–I e i–iv–ii°–V–i, dos segundos por acorde, transpuestas a
+las 24 tonalidades. Tonos puros y timbre de seis parciales de amplitud 1/h:
+
+| Registro y timbre | Aciertos antes | Aciertos ahora |
+| --- | ---: | ---: |
+| Do3–Si3, tonos puros | 20/24 | 24/24 |
+| Do1–Si1, tonos puros | 1/24 | 24/24 |
+| Do3–Si3, seis parciales | 12/24 | 24/24 |
+| Do1–Si1, seis parciales | 9/24 | 24/24 |
+
+Además: 48/48 cadencias a ±20 cents. Los tests comprueban los 576 pares de
+tonalidades contra un recorrido independiente del grafo, selección de ruta,
+respuesta HTTP y elección de técnica, límites de memoria, decodificación PCM y
+AAC y sustitución de la caché anterior. La fixture de puentes de `dj-repair`
+usaba 100 → 113 → 128 BPM: ninguno de los dos tramos podía hacer beatmatch y
+solo pasaba porque Do → Re se puntuaba mal. Se corrige a 100 → 106 → 112 BPM,
+con dos tramos mezclables, sin cambiar el umbral de admisión de puentes.
+
+**Música real (FFmpeg y análisis completo, sin caché).** Se midió después de
+fijar las señales sintéticas. `key_probe.py --audio <archivo>` admite varios
+archivos y `--reference` para repetir la comparación. No se sube el audio.
+
+| Grabación de la biblioteca | Antes | Ahora | Referencia |
+| --- | --- | --- | --- |
+| Bach, BWV 578, flautas de pico graves | Re menor | Sol menor | Sol menor, título de la grabación |
+| Mozart, K. 488, II. Adagio | Fa♯ menor | Fa♯ menor | Fa♯ menor, [catálogo Mozarteum](https://kv.mozarteum.at/en/work/concerto-in-a-5654) |
+| Mozart, Sinfonía 25, I. Allegro con brio | Sol menor | Sol menor | Sol menor, título de la grabación |
+| Bach, BWV 1052, I. Allegro, Bob van Asperen | Do♯ menor | Sol♯ menor | Re menor en el título; afinación de la grabación no verificada |
+
+**Límites.** El clavecín no se cuenta como acierto: sigue habiendo ambigüedad
+entre tónica y dominante, y el análisis no verifica la afinación histórica ni
+compensa los armónicos de cada instrumento. Tampoco modela modulaciones,
+tonalidades distintas en la entrada y salida o material atonal; conserva una
+estimación por ventana. Los 96 aciertos sintéticos no son una tasa de acierto
+general sobre música real. No se han retocado los perfiles para estos ejemplos.
+
+Coste medido: +22 ms de CPU al analizar ocho minutos de PCM, con memoria pico
+equivalente; método y reproducción en `docs/PERFORMANCE.md`, *Tonality analyser*.
 
 ## P7. Perfiles de DJ y dirección sin efecto en la ruta
 

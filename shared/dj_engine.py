@@ -24,7 +24,7 @@ from typing import Any
 from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
 
-ANALYSER_VERSION = 6
+ANALYSER_VERSION = 7
 # A normal song is decoded in full so the grid and the musical sections come
 # from the recording, not from arithmetic projected from its first transient.
 # Very long mixes remain bounded: their head and tail still provide everything
@@ -530,7 +530,7 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     # 400 MiB for an eight-minute track, multiplied by concurrent analyses).
     frequencies = np.fft.rfftfreq(frame, 1 / sample_rate)
     band = np.searchsorted(frequencies, _FLATNESS_BAND)
-    rms, mean_spectrum, flux, flatness = _spectral_features(frames, flatness_bins=slice(int(band[0]), int(band[1])))
+    rms, _, flux, flatness = _spectral_features(frames, flatness_bins=slice(int(band[0]), int(band[1])))
     loud_level = float(np.percentile(rms, 95))
     # Level against the song's own loud level: where it starts and how its
     # sections rise and fall. Not comparable between songs.
@@ -541,24 +541,7 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     flux /= max(float(np.percentile(flux, 95)), 1e-7)
     rhythm = _rhythm(samples, sample_rate)
 
-    # A compact chroma estimator.  It is deliberately confidence-gated: the
-    # route planner treats uncertain keys as neutral rather than inventing a
-    # harmonic incompatibility.
-    chroma = np.zeros(12, dtype=float)
-    valid = frequencies > 55
-    midi = np.rint(69 + 12 * np.log2(np.maximum(frequencies[valid], 1e-6) / 440)).astype(int)
-    bins = np.mod(midi, 12)
-    mean_spectrum = mean_spectrum[valid]
-    for pitch_class in range(12):
-        chroma[pitch_class] = float(mean_spectrum[bins == pitch_class].sum())
-    chroma /= max(float(chroma.sum()), 1e-9)
-    candidates: list[tuple[float, int, str]] = []
-    for tonic in range(12):
-        candidates.append((float(np.dot(chroma, np.roll(_MAJOR_PROFILE, tonic))), tonic, "major"))
-        candidates.append((float(np.dot(chroma, np.roll(_MINOR_PROFILE, tonic))), tonic, "minor"))
-    candidates.sort(reverse=True)
-    key_score, tonic, mode = candidates[0]
-    key_margin = max(0.0, key_score - candidates[1][0])
+    key, mode, key_margin = _tonal_features(samples, sample_rate) if loud_level >= _SILENT_RMS else (None, None, 0.0)
 
     window_seconds = samples.size / sample_rate
     threshold = max(0.08, float(np.percentile(energy, 35)))
@@ -576,7 +559,7 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
         "beats": rhythm["beats"] if rhythm else [],
         "downbeat_phase": rhythm["downbeat_phase"] if rhythm else 0,
         "tempo_confidence": rhythm["tempo_confidence"] if rhythm else 0.0,
-        "key": _KEY_NAMES[tonic],
+        "key": key,
         "mode": mode,
         "key_margin": key_margin,
         "note_count": note_count,
@@ -621,6 +604,56 @@ def _spectral_features(frames, *, flatness_bins: slice = slice(1, None)):
         flux[start:end - 1] = np.maximum(0.0, np.diff(spectrum, axis=0)).sum(axis=1)
         previous = spectrum[-1].copy()
     return rms, spectrum_sum / count, flux, flatness
+
+
+# Tonality --------------------------------------------------------------------
+# The section/rhythm FFT cannot separate low semitones: its 5.4 Hz bins exceed
+# the 1.94 Hz between C1 and C#1. Here 16384 samples give 0.67 Hz bins at the
+# decoder's 11025 Hz. Half-window hops and 32-frame blocks keep cost and scratch
+# memory bounded. Cadences across all 24 keys, registers and harmonic timbres
+# establish this resolution (tests/test_dj_harmony.py).
+_TONAL_FRAME = 16384
+_TONAL_BLOCK = 32
+_TONAL_BAND = (32.7, 5000.0)  # C1 through the analysed musical spectrum, Hz.
+
+
+def _tonal_features(samples, sample_rate: int) -> tuple[str | None, str | None, float]:
+    """Chroma with resolved bass notes; Krumhansl-Schmuckler correlation.
+
+    Pearson correlation centres and normalises *both* profiles. A raw dot
+    product favours the minor profile's larger mean and norm even for major
+    cadences. These are the existing published profiles, without taste weights.
+    https://extras.humdrum.org/man/keycor/
+    """
+    import numpy as np
+
+    if samples.size < _TONAL_FRAME:
+        return None, None, 0.0
+    frames = np.lib.stride_tricks.sliding_window_view(samples, _TONAL_FRAME)[::_TONAL_FRAME // 2]
+    frequencies = np.fft.rfftfreq(_TONAL_FRAME, 1 / sample_rate)
+    valid = (frequencies >= _TONAL_BAND[0]) & (frequencies <= _TONAL_BAND[1])
+    pitch_classes = np.rint(69 + 12 * np.log2(frequencies[valid] / 440)).astype(int) % 12
+    spectrum_sum = np.zeros(_TONAL_FRAME // 2 + 1, dtype=float)
+    window = np.hanning(_TONAL_FRAME)
+    for start in range(0, len(frames), _TONAL_BLOCK):
+        spectrum_sum += np.abs(np.fft.rfft(frames[start:start + _TONAL_BLOCK] * window, axis=1)).sum(axis=0)
+    chroma = np.bincount(pitch_classes, weights=spectrum_sum[valid], minlength=12)
+    # A uniform chroma (including silence) has no tonal centre.
+    chroma /= max(float(chroma.sum()), 1e-12)
+    chroma -= chroma.mean()
+    norm = float(np.linalg.norm(chroma))
+    if norm <= 1e-12:
+        return None, None, 0.0
+    candidates = []
+    for mode, values in (("major", _MAJOR_PROFILE), ("minor", _MINOR_PROFILE)):
+        profile = np.asarray(values) - np.mean(values)
+        profile /= np.linalg.norm(profile)
+        for tonic in range(12):
+            candidates.append((float(np.dot(chroma, np.roll(profile, tonic)) / norm), tonic, mode))
+    candidates.sort(reverse=True)
+    score, tonic, mode = candidates[0]
+    margin = max(0.0, score - candidates[1][0])
+    return _KEY_NAMES[tonic], mode, margin
 
 
 # Notes -----------------------------------------------------------------------
@@ -1238,18 +1271,25 @@ def _downbeat_phase(samples, sample_rate: int, grid, chroma, centre: float) -> i
 
 
 def _harmonic_score(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
-    if not left.get("key") or not right.get("key"):
-        return 0.55
-    a = _KEY_NAMES.index(str(left["key"]))
-    b = _KEY_NAMES.index(str(right["key"]))
-    distance = min((a - b) % 12, (b - a) % 12)
-    if distance == 0:
-        return 1.0 if left.get("mode") == right.get("mode") else 0.82
-    if distance in {5, 7}:
-        return 0.86
-    if distance in {3, 4, 8, 9}:
-        return 0.68
-    return 0.35
+    """Closeness on the Camelot graph, normalised by its diameter (7).
+
+    Edges are a fourth/fifth within one mode or the relative major/minor:
+    https://mixedinkey.com/camelot-wheel/0/
+    No hand-picked scores for individual intervals. C major and A minor are
+    one edge apart, C major and C minor four, C major and G minor three.
+    """
+    positions = []
+    for analysis in (left, right):
+        key, mode = analysis.get("key"), analysis.get("mode")
+        if key not in _KEY_NAMES or mode not in {"major", "minor"}:
+            return 0.55  # Preserve the neutral fallback when tonality is unknown.
+        tonic = _KEY_NAMES.index(key)
+        relative_major = (tonic + 3) % 12 if mode == "minor" else tonic
+        # Seven is its own inverse modulo twelve: semitones -> fifths.
+        positions.append((7 * relative_major) % 12)
+    distance = abs(positions[0] - positions[1])
+    steps = min(distance, 12 - distance) + (left["mode"] != right["mode"])
+    return 1.0 - steps / 7
 
 
 def _nearest_grid_point(
