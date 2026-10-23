@@ -60,7 +60,7 @@ no hay síntoma que lo justifique.
 | P2 | Alineación de fase en el navegador | Lectura de código | Sin síntoma tras #377; se retoma solo si vuelve a oírse desfase |
 | P3 | El orden de la ruta ignora la calidad de la transición | Tests de magnitudes, audio sintético → HTTP y replay de análisis locales | Cerrado (implementación `0e62b0fb`) |
 | P4 | La "energía" no mide intensidad | Medido | Cerrado (#385): notas/s, LUFS y planitud; `energy` eliminado |
-| P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente; ampliado a pool analizado y puentes |
+| P5 | Pool analizado, previews y canciones puente | AAC → caché → HTTP, pools fríos/calientes y adquisición real de 16 previews | Cerrado (implementación `31f696bc`) |
 | P6 | Compatibilidad de tonalidad mal puntuada | Medido: 576 pares y cadencias conocidas | Cerrado (`af6521f1`); detector y límites documentados abajo |
 | P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#385); queda decidir la opción (b) en el servidor |
 | P8 | Secciones medidas y no usadas | Lectura de código | Pendiente |
@@ -69,8 +69,8 @@ no hay síntoma que lo justifique.
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
-salvo que vuelva el síntoma. P4, P6 y P3 están cerrados: **el siguiente es P5
-ampliado**.
+salvo que vuelva el síntoma. P4, P6, P3 y P5 están cerrados: **el siguiente es P8**.
+P9 sigue dependiendo de la decisión pendiente de P7.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -153,8 +153,10 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
 
 ### Flujo
 
-1. **Análisis** (`analyse_audio`). Solo se analizan archivos que ya están en disco:
-   biblioteca local o caché de previews de YouTube. FFmpeg decodifica a mono,
+1. **Análisis** (`analyse_audio`). La biblioteca local de todas las cuentas se
+   recorre en segundo plano al arrancar y cada cinco minutos (sin podcasts ni
+   audio disponible solo en la nube). Las previews se analizan al completar su
+   adquisición. Cada recarga prepara un conjunto acotado de candidatas (P5). FFmpeg decodifica a mono,
    11025 Hz; NumPy calcula las medidas; solo se guardan las medidas en SQLite. En
    segundo plano, 2 hilos (`request_analysis`). Canciones de más de 8 minutos: solo
    los primeros 90 s y los últimos 120 s. Mientras no hay análisis se usa
@@ -165,11 +167,13 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
    automáticas que llegaron a sonar ("exploration"). Se quitan excluidas, ya
    oídas y grabaciones de más de 20 minutos.
 3. **Selección y orden**: barajado con semilla fija por sesión y segmento; se
-   eligen hasta 8 canciones antes de leer su análisis. Las posiciones medidas se
-   ordenan por calidad de transición y continuidad en las cuatro magnitudes de
-   P4 (ver P3). Las no analizadas conservan su posición. La primera canción de
-   una sesión sin semilla sigue siendo la de la fuente más reciente que sale
-   primero en el barajado.
+   elige un conjunto de hasta 16 candidatas antes de leer su análisis. Las
+   primeras 8 (o el `limit` pedido) son los destinos de la ruta; el resto son
+   posibles puentes. Las posiciones medidas se ordenan por calidad de transición
+   y continuidad en las cuatro magnitudes de P4 (P3). Las no analizadas conservan
+   su posición. Solo con todo el conjunto y la semilla medidos se pueden insertar
+   puentes, sin retirar destinos originales (P5). Una sesión sin semilla abre
+   desde la fuente más reciente, según el barajado.
 4. **Transición de cada par** (`plan_transition`, `dj_engine.py:671`), con perfil
    `"adaptive"` fijo.
 5. **Ejecución** en el navegador (`stores/dj.ts`, `mixer.ts`).
@@ -182,9 +186,9 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
 | `beat_grid` | Rejilla ajustada y alineada al inicio del ataque, 4 decimales; ver P1 | Sí |
 | `downbeats` | De las 4 fases del compás, la de mayor cambio armónico y ataque más fuerte; asume 4/4 | Sí |
 | `key`, `mode` | Correlación de Pearson con los perfiles Krumhansl; croma con resolución para graves (P6) | Sí |
-| `note_rate` | Ataques por segundo de música que suena (P4) | No (lo usará P3) |
-| `loudness_lufs` | Sonoridad integrada EBU R128 de FFmpeg, en la misma decodificación (P4) | No (lo usará P3) |
-| `spectral_flatness` | Planitud espectral 100–5000 Hz de los fotogramas fuertes, ponderada por potencia (P4) | No (lo usará P3) |
+| `note_rate` | Ataques por segundo de música que suena (P4) | Sí, continuidad de ruta (P3) |
+| `loudness_lufs` | Sonoridad integrada EBU R128 de FFmpeg, en la misma decodificación (P4) | Sí, continuidad de ruta (P3) |
+| `spectral_flatness` | Planitud espectral 100–5000 Hz de los fotogramas fuertes, ponderada por potencia (P4) | Sí, continuidad de ruta (P3) |
 | `intro_cue` | Primer instante con energía sobre el percentil 35 | Sí (punto de entrada) |
 | `outro_cue` | Primer límite de frase unos 64 golpes antes del último sonido | Sí (punto de salida) |
 | `sections` | Etiquetas intro/build/drop/breakdown/body/outro por bloques de 8 compases; `level` es el nivel medio frente al de la propia canción | No (P8) |
@@ -219,8 +223,10 @@ score     = 0.46·tempo + 0.32·armonía + 0.22·confianza
 
 `stores/dj.ts`:
 
-- 65 s antes de `out_cue`: si la transición tiene `confidence < 0,35`, pide
-  `dj-transition` **una sola vez** (solo lee la caché).
+- De 65 a 45 s antes de `out_cue`: si la transición tiene `confidence < 0,35`,
+  pide `dj-transition`, con una petición en vuelo y reintentos cada 2 s mientras
+  siga pendiente o falle la red. Se detiene al obtener medida o comprometer la
+  transición. Las respuestas tardías no cambian una mezcla comprometida.
 - 45 s antes de `out_cue`: carga la siguiente canción en el segundo reproductor
   (`armTransition`).
 - Transición con `confidence < 0,35`: se convierte en `safe_fade` de 6 s como
@@ -639,9 +645,9 @@ en semicorcheas a unas 75 negras por minuto (≈ 5 notas/s): coincide.
 - La planitud mide timbre (ruido o tonos limpios), no actividad: es una
   magnitud de continuidad para P3, no una intensidad.
 
-## P5. Canciones de YouTube sin caché: fundido simple
+## P5. Pool analizado, previews y canciones puente
 
-**Qué pasa.**
+**Diagnóstico original (antes de `31f696bc`).**
 
 - Al planificar, `_dj_item_analysis(..., schedule=True)` solo encarga el análisis
   si el archivo ya existe (`_dj_source_path`). Para una preview que aún no se ha
@@ -688,6 +694,90 @@ elegir el conjunto que se analiza antes de mirar la caché; no puntuar a una
 canción sin analizar como peor que una analizada (o no elegir hasta que todo el
 conjunto esté medido); y comprobarlo con un test que compare dos pools idénticos
 salvo en el estado de la caché.
+
+**Estado: cerrado en `31f696bc`.** Implementación:
+
+- **Conjunto independiente de la caché.** La semilla de sesión y segmento fija
+  hasta 16 candidatas. Las primeras `limit` (máximo 8) siguen siendo los destinos
+  originales, aunque estén frías; se preparan también las restantes como posibles
+  puentes. La descarga y el análisis nunca deciden qué canciones entran en ese
+  conjunto. Se conservan exclusiones, historial y fuentes explícitas.
+- **Preparación en servidor.** `_dj_prepare_cohort` encarga el análisis local y
+  la adquisición de previews por la misma cola de prefetch que la reproducción:
+  una vía de descarga, deduplicación por vídeo, contexto de cuenta, refresco tras
+  rechazo del CDN, límite LRU y prioridad de reproducción existentes. No espera
+  a red ni a FFmpeg dentro de `dj-plan`. Caché desactivada: no descarga; los
+  destinos siguen entrando con fundidos conservadores. La cola de análisis
+  admite hasta 64 identidades pendientes, con dos trabajadores.
+- **Publicación inmediata.** `CacheWriter.commit` encarga el análisis tras guardar
+  bytes completos y validados, tanto si los pidió la web como Android o el pool.
+  La firma de una preview usa tamaño y revisión del contenido. Su `mtime` es el
+  reloj LRU, cambia al servir rangos y ya no invalida el análisis. Sustituir el
+  contenido o remuxarlo sí lo invalida. `ANALYSER_VERSION` 8 renueva la caché;
+  las medidas musicales de P1/P4/P6 no cambian.
+- **Biblioteca entera.** `shared/dj_library.py` hace un recorrido serial de todas
+  las cuentas, deduplica archivos compartidos y revalida cada cinco minutos.
+  Un error de archivo no aborta el resto. Arranque y parada pertenecen al motor;
+  no se crea una cola de trabajos del tamaño de la biblioteca.
+- **Puentes medidos.** `shared/dj_pool.py`: solo si la semilla y **todo** el
+  conjunto están analizados. Una candidata fría bloquea la inserción, aunque
+  otra ya descargada sirva de puente. Se admite como máximo un puente por tramo,
+  sin repetirlo ni retirar destinos, cuando sustituye una transición sin
+  beatmatch por dos tramos cuyo ajuste real de velocidad mantiene el desfase
+  acumulado dentro de la tolerancia del plan (5 ms), y mejora la peor puntuación de ambas
+  frente al tramo directo. Se elige la mejor de esas puntuaciones; los empates
+  siguen el barajado, sin nuevas notas ni pesos de gusto. Máximo: 16 canciones
+  de ruta. Las fuentes del recomendador siguen siendo las explícitas y las
+  canciones que realmente sonaron.
+- **Refinado web/iPhone y Android.** Reintentos cada 2 s dentro de la ventana
+  65–45 s, una petición en vuelo por tramo. Terminan al recibir una medida o al
+  comprometer la transición; se mantienen las guardas de cuenta, sesión, cambios
+  de ruta y respuestas tardías. Una medición pendiente o un fallo de red conserva
+  el fundido seguro.
+- **Contrato y observabilidad.** `analysis_coverage` en la respuesta y campos
+  `analysis_candidates`, `analysis_ready`, `analysis_cohort`,
+  `analysis_cohort_ready`, `bridges` en el registro. `cache_hit`/`cache_miss`
+  siguen contando related, no análisis. La respuesta v6 lleva medidas resumidas;
+  rejillas y secciones completas quedan en el servidor. Dieciséis rejillas de
+  ocho minutos a 220 BPM más la semilla superarían 256 KiB, el límite nativo.
+
+**Medición real reproducible (2026-10-23).**
+`.venv/bin/python -I docs/dj/pool_probe.py --previews ~/.cache/soundsible/previews`
+elige 16 previews con semilla 0 y escribe las medidas en un runtime temporal;
+no cambia la biblioteca ni la caché personal. Con `--download` usa la resolución
+normal y adquisiciones nuevas en ese runtime. No imprime identidades ni URLs.
+
+| Recorrido de las 16 previews | Bytes de audio | Adquisición | Análisis: pared / CPU |
+| --- | ---: | ---: | ---: |
+| Archivos ya presentes, análisis frío | 78.863.763 (75,2 MiB) | — | 11,50 s / 8,36 s |
+| Resolución + descarga real + análisis frío | 78.867.963 (75,2 MiB) | 59,74 s; mediana 3,39 s por preview | 10,69 s / 7,83 s |
+
+Las 16 descargas y los 16 análisis terminaron. Mediana por archivo: 4,90 MB y
+0,50 s de CPU. Se descargan archivos completos, no muestras recortadas. La
+adquisición incluye resolución, transferencia, validación y remux; estas cifras
+son de esta máquina y esta conexión, no una promesa de latencia general. El
+límite de 16 evita descargar las 17–46 candidatas de una recarga típica.
+
+**Validación.** Tests de pools idénticos fríos/calientes verifican la misma
+apertura, destinos y conjunto preparado, con límite, exclusiones e historial;
+una caché parcial no añade puentes. Tests de puentes comprueban ambas
+transiciones, ausencia de duplicados y conservación de destinos. AAC real →
+commit de preview → análisis → SQLite → HTTP medido, con lectura LRU y
+sustitución del contenido. Biblioteca de varias cuentas, podcasts, archivos
+rotos y parada. Web: peticiones pendientes y fallos de red, respuesta después de
+comprometer la carga del segundo plato y suite browser4 completa. Android: política JVM de
+reintentos y `DjRefinementTest` HTTP con motor, servicio y decodificadores reales
+(dos respuestas pendientes y la tercera medida); ejecución nativa en los checks
+de Android de la PR. No hay aceptación física de escucha en esta entrega.
+
+**Límites.** Una recarga fría responde inmediatamente con el orden conservador;
+el refinado mejora cada transición antes de cargar el segundo plato. Los puentes
+se consideran en una planificación que encuentre el conjunto completo medido:
+no se rehace una ruta ya cargada cuando acaba el trabajo en segundo plano. Si
+una descarga falla de forma persistente o la caché no retiene todo el conjunto,
+no hay puentes en esa recarga. No se penaliza ni se retira esa canción por ello.
+
+---
 
 ## P6. Compatibilidad de tonalidad mal puntuada
 

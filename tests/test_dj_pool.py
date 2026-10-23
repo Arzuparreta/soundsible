@@ -82,3 +82,27 @@ def test_library_inventory_spans_accounts_and_skips_podcasts_missing_audio_and_d
         inventory = list(dj_library.library_inventory())
     assert accounts == ["a", "b"]
     assert [row[1] for row in inventory] == [analysis_identity({"track_id": key}) for key in ("one", "two")]
+
+
+def test_bridge_legs_must_actually_match_tempo_not_just_name_a_blend_technique():
+    seed, target, spare = measured(100), measured(114), measured(107)
+    assert plan_transition(seed, spare)["technique"] == "filter_blend"
+    assert plan_transition(seed, spare)["playback_rate"] == 1
+    route = order_continuous_route(seed, [({"id": "target"}, target)])
+    assert add_measured_bridges(seed, route, [({"id": "spare"}, spare)]) == route
+
+
+def test_bridge_can_repair_a_blend_whose_rate_was_clamped_by_the_player():
+    seed, target = measured(100), measured(107)
+    route = order_continuous_route(seed, [({"id": "target"}, target)])
+    assert route[0]["transition"]["technique"] == "filter_blend"
+    assert route[0]["transition"]["playback_rate"] == 1
+    result = add_measured_bridges(seed, route, [({"id": "bridge"}, measured(103.5))])
+    assert [row["id"] for row in result] == ["bridge", "target"]
+    assert all(row["transition"]["playback_rate"] != 1 for row in result)
+
+
+def test_unknown_tempo_cannot_bridge_using_the_fallback_120_bpm_period():
+    seed, target = measured(114), measured(126)
+    route = order_continuous_route(seed, [({"id": "target"}, target)])
+    assert add_measured_bridges(seed, route, [({"id": "unknown"}, measured(0))]) == route
