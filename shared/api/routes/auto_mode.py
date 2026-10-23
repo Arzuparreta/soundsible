@@ -37,6 +37,7 @@ from shared.dj_engine import (
     request_analysis,
     route_to_request,
 )
+from shared.dj_pool import ANALYSIS_COHORT_SIZE, add_measured_bridges
 from shared.hardening import rate_limit
 from shared.listening_planner import (
     AUTO_PROFILES,
@@ -1013,9 +1014,8 @@ def discovery_music_plan():
 def _dj_source_path(metadata, item: dict) -> str | None:
     """Where this item's audio already lives locally, if anywhere.
 
-    Candidate evaluation is read-only. Prefetching every preview considered by
-    the router made a wider crate expensive and gave already cached songs a
-    circular advantage. The browser prefetches only the accepted runway.
+    Looking up analysis is read-only. Only the frozen, cache-independent DJ
+    cohort may request speculative acquisition, via `_dj_prepare_cohort`.
     """
     track_id = str(item.get("track_id") or "").strip()
     video_id = str(item.get("youtube_id") or (item.get("id") if item.get("source") == "preview" else "") or "").strip()
@@ -1052,6 +1052,41 @@ def _dj_item_analysis(metadata, item: dict, *, schedule: bool = False) -> dict:
     if schedule:
         request_analysis(path, identity, duration_hint=duration_hint)
     return _dj_fallback_analysis(duration_hint)
+
+
+def _dj_analysis_summary(analysis: dict) -> dict:
+    # Players execute the already computed transition and display BPM/key.
+    # Keeping full grids on up to sixteen starts would exceed Android's 256 KiB
+    # response budget. The complete measurements stay in the server cache.
+    return {key: value for key, value in analysis.items()
+            if key not in {"beat_grid", "downbeats", "phrase_boundaries", "sections"}}
+
+
+def _dj_prepare_cohort(metadata, items: list[dict]) -> None:
+    """Queue a bounded, already chosen cohort; never rank by cache state."""
+    from shared import preview_cache
+    from .playback import _get_preview_stream_cached, _invalidate_stream
+
+    video_ids = []
+    for item in items:
+        _dj_item_analysis(metadata, item, schedule=True)
+        if not item.get("track_id"):
+            video_id = _planner_video_id(metadata, item)
+            if validate_youtube_video_id(video_id):
+                video_ids.append(video_id)
+    if not video_ids or preview_cache.cache_limit_bytes() <= 0:
+        return
+    api = _get_api()
+
+    def refresh(video_id):
+        _invalidate_stream(video_id)
+        return _get_preview_stream_cached(api, video_id, skip_fast_path=True)
+
+    preview_cache.request_prefetch(
+        video_ids, download=True,
+        resolver=lambda video_id: _get_preview_stream_cached(api, video_id),
+        refresh_resolver=refresh,
+    )
 
 
 def _dj_fallback_analysis(duration_hint: float) -> dict:
@@ -1296,11 +1331,22 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     # Sources and recommendation walks choose the music. Freeze membership
     # before reading any analysis so measured/local audio cannot displace cold
     # external songs. The DJ only orders this short, cache-independent set.
-    analysed = [(item, _dj_item_analysis(metadata, item)) for item in available[:limit]]
+    cohort = available[:ANALYSIS_COHORT_SIZE]
+    # Membership and the possible bridge pool are fixed before *any* cache read.
+    # Coverage is observational: it cannot change who gets analysed or selected.
+    snapshots = {id(item): _dj_item_analysis(metadata, item) for item in available}
+    analysed = [(item, snapshots[id(item)]) for item in cohort[:limit]]
+    spares = [(item, snapshots[id(item)]) for item in cohort[limit:]]
     previous = opening_analysis or _dj_item_analysis(metadata, seed, schedule=True)
-    route = order_continuous_route(previous, analysed)
-    for item in route:
-        _dj_item_analysis(metadata, item, schedule=True)
+    route = add_measured_bridges(previous, order_continuous_route(previous, analysed), spares)
+    _dj_prepare_cohort(metadata, [seed, *cohort])
+    coverage = {
+        "candidates": len(available),
+        "analysed": sum(bool(analysis.get("analysed")) for analysis in snapshots.values()),
+        "cohort": len(cohort),
+        "cohort_analysed": sum(bool(snapshots[id(item)].get("analysed")) for item in cohort),
+        "bridges": sum(item.get("route_kind") == "bridge" for item in route),
+    }
     # Read ahead of the listener. The seeds that will anchor the next refill are
     # the head of this route, and the sources it is steered by; warming them now
     # is the difference between the next call being a cache hit and it being
@@ -1321,7 +1367,8 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         empty_reason = "exhausted"
     logger.info(
         "dj-plan session=%s segment=%d sources=%d candidates=%d unique=%d "
-        "excluded=%d heard=%d cache_hit=%d cache_miss=%d warming=%s degraded=%s empty_reason=%s route=%d",
+        "excluded=%d heard=%d cache_hit=%d cache_miss=%d warming=%s degraded=%s empty_reason=%s route=%d "
+        "analysis_candidates=%d analysis_ready=%d analysis_cohort=%d analysis_cohort_ready=%d bridges=%d",
         data.get("session_id") or "-",
         segment_index,
         len(ordered_sources),
@@ -1335,18 +1382,20 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         degraded,
         empty_reason,
         len(route),
+        *coverage.values(),
     )
     return {
         "v": 6,
+        "analysis_coverage": coverage,
         "plan_id": str(uuid.uuid4()),
         "intent": "auto_mode",
         "profile": "balanced",
         "dj_profile": "adaptive",
         "source_profile": "balanced",
         "seed_identity": str(seed.get("id") or seed.get("youtube_id") or ""),
-        "seed_analysis": opening_analysis or _dj_item_analysis(metadata, seed, schedule=True),
-        **({"opening": opening} if opening else {}),
-        "items": route,
+        "seed_analysis": _dj_analysis_summary(previous),
+        **({"opening": {**opening, "analysis": _dj_analysis_summary(opening_analysis)}} if opening else {}),
+        "items": [{**item, "analysis": _dj_analysis_summary(item["analysis"])} for item in route],
         "degraded": degraded,
         "warming": warming,
         "retry_after": _AUTO_GRAPH_RETRY_AFTER_SEC if warming else None,

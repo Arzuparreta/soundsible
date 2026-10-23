@@ -15,6 +15,7 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
     private val session: () -> ProgramDjSession?, private val planner: ProgramDjPlanner) : AutoCloseable {
     private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(1))
     private var pair = ""
+    private val retry = ProgramDjRefineRetry()
     @Volatile private var serial = 0L
     @Volatile private var closed = false
     private var requestId: String? = null
@@ -27,8 +28,8 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
         val toKey = next.item.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: return
         if (next.proposal?.let { it.fromKey == fromKey && it.confidence.isFinite() && it.confidence >= 0.35 } == true) return
         val identity = "${snapshot.epoch}:${planner.settingsRevision}:$fromKey>$toKey"
-        if (pair == identity) return
-        clear(); pair = identity
+        if (pair != identity) { clear(); pair = identity }
+        if (!retry.begin(identity, android.os.SystemClock.elapsedRealtime())) return
         val token = serial; val generation = connection.generation
         val account = connection.sessionIdentity(generation)
         val settingsRevision = planner.settingsRevision
@@ -50,17 +51,20 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
             main.post {
                 if (closed || token != serial) return@post
                 requestId = null
+                retry.finish(identity, false)
                 if (generation != connection.generation || session() !== owner || settingsRevision != planner.settingsRevision ||
                     runCatching { connection.sessionIdentity(generation) }.getOrNull() != account) return@post
                 val answer = response ?: return@post
                 if (!answer.optBoolean("measured")) return@post
-                planner.proposal(answer, fromKey)?.let { owner.applyRefinement(snapshot, it) }
+                planner.proposal(answer, fromKey)?.let {
+                    retry.finish(identity, owner.applyRefinement(snapshot, it))
+                }
             }
         }
     }
     fun clear() {
         serial++; requestId?.let(connection::cancel); requestId = null
-        pair = ""; worker.queue.clear()
+        pair = ""; retry.clear(); worker.queue.clear()
     }
     override fun close() { closed = true; clear(); worker.shutdownNow() }
 }

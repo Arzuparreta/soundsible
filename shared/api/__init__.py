@@ -1853,6 +1853,9 @@ def stop_api() -> None:
     except Exception:
         logger.exception("API: Error stopping loudness idle worker")
 
+    from shared import dj_library
+    dj_library.stop()
+
     try:
         orchestrator.drain_downloads(timeout=5.0)
         orchestrator.shutdown(wait=False)
@@ -2068,6 +2071,9 @@ def start_api(
             logger.info("API: Loudness idle worker scheduled.")
         except Exception:
             logger.debug("API: Loudness idle worker start skipped", exc_info=True)
+
+        from shared import dj_library
+        dj_library.start()
 
         # Note: Pre-warm the discover node feed's persistent related-mix cache
         # for the top likely seeds (favourites + most-recent additions). This

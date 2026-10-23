@@ -1096,6 +1096,72 @@ describe('Playback load coalescing', () => {
     expect(armTransition.mock.calls[0][0]).toBe('/preview/route-00002');
   });
 
+  it('retries pending analysis and network errors until a measured seam arrives, with one request in flight', async () => {
+    let now = 10_000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const pending = deferred<{ measured: boolean }>();
+    const measured = { technique: 'bass_swap', out_cue: 170, in_cue: 2, overlap_seconds: 8,
+      overlap_bars: 4, playback_rate: 1.01, confidence: .9 };
+    const refineDjTransition = vi.fn().mockReturnValueOnce(pending.promise)
+      .mockRejectedValueOnce(new Error('temporary network failure'))
+      .mockResolvedValue({ measured: true, transition: measured });
+    const armTransition = vi.fn();
+    const { actions, state, initStore, fireDeckEvent, deck } = await loadStore(
+      { planDjQueue: vi.fn().mockResolvedValue(autoPlan(['route-00001'])), refineDjTransition,
+        __previewPreparationState: () => 'ready' }, { armTransition });
+    try {
+      initStore();
+      actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', duration: 180 }], 0);
+      fireDeckEvent('playing'); actions.enterAutoMode();
+      await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+      (deck as unknown as { currentTime: number }).currentTime = 110;
+      fireDeckEvent('timeupdate');
+      expect(refineDjTransition).toHaveBeenCalledTimes(1);
+      now += 2_000; fireDeckEvent('timeupdate');
+      expect(refineDjTransition).toHaveBeenCalledTimes(1);
+      pending.resolve({ measured: false }); await flush();
+      fireDeckEvent('timeupdate'); await flush();
+      expect(refineDjTransition).toHaveBeenCalledTimes(2);
+      fireDeckEvent('timeupdate');
+      expect(refineDjTransition).toHaveBeenCalledTimes(2);
+      now += 2_000; fireDeckEvent('timeupdate'); await flush();
+      expect(refineDjTransition).toHaveBeenCalledTimes(3);
+      const next = state.playback.queue[1];
+      expect(state.autoMode.plan[next.queueId].transition).toMatchObject(measured);
+      now += 2_000; fireDeckEvent('timeupdate');
+      expect(refineDjTransition).toHaveBeenCalledTimes(3);
+      (deck as unknown as { currentTime: number }).currentTime = 126;
+      fireDeckEvent('timeupdate');
+      expect(armTransition).toHaveBeenCalledOnce();
+      expect(armTransition.mock.calls[0][1]).toMatchObject({ technique: 'bass_swap', confidence: .9 });
+    } finally { actions.exitAutoMode(); clock.mockRestore(); }
+  });
+
+  it('ignores analysis that arrives after the conservative seam is committed', async () => {
+    const pending = deferred<{ measured: boolean; transition: { confidence: number } }>();
+    const refineDjTransition = vi.fn().mockReturnValue(pending.promise);
+    const armTransition = vi.fn();
+    const { actions, state, initStore, fireDeckEvent, deck } = await loadStore(
+      { planDjQueue: vi.fn().mockResolvedValue(autoPlan(['route-00001'])), refineDjTransition,
+        __previewPreparationState: () => 'ready' }, { armTransition });
+    initStore();
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', duration: 180 }], 0);
+    fireDeckEvent('playing'); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    (deck as unknown as { currentTime: number }).currentTime = 110;
+    fireDeckEvent('timeupdate');
+    expect(refineDjTransition).toHaveBeenCalledOnce();
+    (deck as unknown as { currentTime: number }).currentTime = 130;
+    fireDeckEvent('timeupdate');
+    expect(armTransition).toHaveBeenCalledOnce();
+    const next = state.playback.queue[1];
+    const original = state.autoMode.plan[next.queueId].transition;
+    pending.resolve({ measured: true, transition: { confidence: .9 } }); await flush();
+    expect(state.autoMode.plan[next.queueId].transition).toBe(original);
+    expect(armTransition.mock.calls[0][1]).toMatchObject({ technique: 'safe_fade' });
+    actions.exitAutoMode();
+  });
+
   it('plays each Auto song to the end of its file and cuts into the next when mixing is off', async () => {
     const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
       'route-00001', 'route-00002', 'route-00003', 'route-00004',
