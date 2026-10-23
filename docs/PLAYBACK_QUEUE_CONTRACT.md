@@ -95,6 +95,13 @@ Unmatched occurrences travel in published sessions and are matched on play.
   session's source; they never expand it into requests. Requesting every song of
   a collection stays available by name in its menu, and creates occurrences that
   share one `autoRoute.requestGroup`.
+- A source-driven refill samples up to eight songs before reading their audio
+  analysis. Transition quality and continuity (notes/s, LUFS, timbre and tempo,
+  each scaled by the sampled set's dispersion) order the measured slots.
+  Unmeasured songs keep their sampled slots, and a seam out of unmeasured audio
+  retains sample order. Analysis availability never changes membership or the
+  opening chosen from the most recent source. Plans describe the final adjacent
+  pairs for both web and Android.
 - **Change session** and **Start DJ from…** are immediate and generative. They
   commit the new single source, an empty exploration and the next
   `directionRevision`, then drop the old runway: generated entries, bridges and

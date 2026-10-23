@@ -167,7 +167,11 @@ An account without a canonical marker is migrated once using the previous manife
   session; heard tracks provide rolling one-hop context only after they
   actually sound. Exact placement and exclusions remain session-local, with no
   waypoint state or hard musical boundary. The route comes from stochastic
-  graph walks over the sources, and signal analysis shapes each transition; it
+  graph walks over the sources. A deterministic sample is chosen before reading
+  analysis; measured songs are then ordered by transition quality and continuity
+  in notes/s, LUFS, spectral flatness and tempo, scaled by the sample's own
+  dispersion. Unmeasured songs retain their sampled slots. Signal analysis
+  also shapes each transition; it
   does not use an LLM or silently apply the account's global taste profile.
   Autoplay remains an invisible finite-context continuation. Search does not
   use the queue planner and its UI is unchanged.

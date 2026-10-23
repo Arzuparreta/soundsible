@@ -59,6 +59,13 @@ engine can perform:
 - conservative fades when the analysis is missing or a more elaborate mix
   would sound worse.
 
+For each refill, DJ chooses up to eight songs before looking at their analysis,
+then orders the measured songs for transition quality and continuity in notes
+per second, loudness, timbre and tempo. The scales come from that refill's own
+measurements, with equal influence after scaling. Songs without analysis keep
+their shuffled positions, so already downloaded music cannot crowd them out.
+An empty session still opens inside the most recently added source.
+
 The engine limits tempo stretching and falls back safely instead of forcing two
 incompatible recordings together. Loudness levelling sits inside the same
 program path, so a transition does not need a sudden volume jump to feel alive.
