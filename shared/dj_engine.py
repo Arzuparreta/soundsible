@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import sqlite3
+import statistics
 import subprocess
 import sys
 import threading
@@ -1440,6 +1441,93 @@ def plan_transition(
             "echo_out": technique == "echo_cut",
         },
     }
+
+
+def order_continuous_route(
+    current_analysis: Mapping[str, Any],
+    candidates: Iterable[tuple[dict[str, Any], Mapping[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Order an already chosen set, without selecting for cache availability.
+
+    Each measured slot takes the nearest remaining measured song. Distance has
+    five equally scaled components: transition-score deficit and changes in
+    notes/s, LUFS, flatness and tempo. Each component uses its population
+    standard deviation in this set, rather than a hand-tuned unit or weight.
+    Constant or incomplete dimensions contribute nothing. Tempo is folded onto
+    the seed's octave so half/double-time measurements describe the same pulse.
+
+    Unmeasured songs retain their shuffled slots. After an unmeasured song we
+    keep shuffle order too: there is no evidence for ranking its next seam.
+    Callers must choose the set *before* inspecting analysis; otherwise even a
+    neutral missing-data score would favour the already downloaded catalogue.
+    """
+    selected = list(candidates)
+    measured = [analysis for _, analysis in selected if analysis.get("analysed")]
+    features = ("note_rate", "loudness_lufs", "spectral_flatness", "bpm")
+
+    def value(analysis: Mapping[str, Any], name: str) -> float | None:
+        raw = analysis.get(name)
+        if not isinstance(raw, (int, float)) or not math.isfinite(raw):
+            return None
+        if name == "bpm" and raw <= 0:
+            return None
+        return float(raw)
+
+    tempo_reference = next(
+        (bpm for analysis in [current_analysis, *measured] if (bpm := value(analysis, "bpm")) is not None),
+        None,
+    )
+
+    def coordinate(analysis: Mapping[str, Any], name: str) -> float | None:
+        result = value(analysis, name)
+        if name == "bpm" and result is not None and tempo_reference is not None:
+            result *= 2 ** round(math.log2(tempo_reference / result))
+        return result
+
+    scales = {}
+    for name in features:
+        values = [coordinate(analysis, name) for analysis in measured]
+        if len(values) >= 2 and all(number is not None for number in values):
+            scale = statistics.pstdev(values)
+            if scale > 0:
+                scales[name] = scale
+
+    remaining = list(range(len(selected)))
+    route: list[dict[str, Any]] = []
+    previous = current_analysis
+    for slot_index, (_, slot_analysis) in enumerate(selected):
+        # Cold rows are anchors, never competitors against measured rows.
+        eligible = [index for index in remaining if selected[index][1].get("analysed")]
+        if not slot_analysis.get("analysed"):
+            eligible = [slot_index]
+        transitions = {
+            index: plan_transition(previous, selected[index][1], profile="adaptive")
+            for index in eligible
+        }
+        chosen = eligible[0]
+        if slot_analysis.get("analysed") and previous.get("analysed") and len(eligible) > 1:
+            qualities = [transitions[index]["score"] for index in eligible]
+            quality_scale = statistics.pstdev(qualities)
+            best_quality = max(qualities)
+            coordinates = {name: coordinate(previous, name) for name in scales}
+
+            def distance(index: int) -> float:
+                analysis = selected[index][1]
+                components = [
+                    (coordinate(analysis, name) - origin) / scales[name]
+                    for name, origin in coordinates.items() if origin is not None
+                ]
+                if quality_scale > 0:
+                    components.append((best_quality - transitions[index]["score"]) / quality_scale)
+                return sum(component * component for component in components)
+
+            # min is stable: ties retain the session/segment shuffle.
+            chosen = min(eligible, key=distance)
+        item, analysis = selected[chosen]
+        route.append({**item, "analysis": dict(analysis), "transition": transitions[chosen]})
+        remaining.remove(chosen)
+        previous = analysis
+    return route
 
 
 def order_route(

@@ -1099,7 +1099,7 @@ def test_dj_plan_v6_chooses_an_opening_from_a_source_when_there_is_no_seed(tmp_p
     assert all(item["id"] != body["opening"]["id"] for item in body["items"])
 
 
-def test_dj_plan_v6_does_not_steer_by_energy(tmp_path):
+def test_dj_plan_v6_analysis_does_not_select_music_or_steer_the_opening(tmp_path):
     """The sources and the recommender steer the session; the DJ only orders.
 
     Measured songs open where an unmeasured one would: the opening of a source
@@ -1138,7 +1138,117 @@ def test_dj_plan_v6_does_not_steer_by_energy(tmp_path):
     measured, unmeasured = plan(True), plan(False)
     assert "arc" not in measured
     assert measured["opening"]["id"] == unmeasured["opening"]["id"]
-    assert [row["id"] for row in measured["items"]] == [row["id"] for row in unmeasured["items"]]
+    assert {row["id"] for row in measured["items"]} == {row["id"] for row in unmeasured["items"]}
+
+
+@pytest.mark.parametrize("with_seed", [False, True])
+def test_dj_plan_v6_selects_before_analysis_and_preserves_cold_slots(tmp_path, with_seed):
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    def track(key):
+        return {"id": key, "track_id": key, "title": key, "artist": "Artist"}
+
+    data = {"session_id": "membership", "segment_index": 3, "limit": 4,
+            "sources": [{"id": "older", "activation": 1, "tracks": [track("old")]},
+                        {"id": "newer", "activation": 2, "tracks": [track(f"t{i}") for i in range(12)]}]}
+    if with_seed:
+        data["seed"] = track("seed")
+    known = set()
+    read = []
+    def analysis(_metadata, item, *, schedule=False):
+        key = item["id"]
+        read.append(key)
+        if key not in known:
+            return _auto_mode._dj_fallback_analysis(240)
+        return {"analysed": True, "bpm": 120, "key": "C", "mode": "major", "duration": 240,
+                "confidence": .9, "note_rate": float(len(key)), "loudness_lufs": -14., "spectral_flatness": .05}
+
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+        patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+    ):
+        client = _make_app().test_client()
+        def plan():
+            read.clear()
+            response = client.post("/api/discovery/music/dj-plan", json=data)
+            assert response.status_code == 200
+            body = response.get_json()
+            chosen = {row["id"] for row in body["items"]}
+            opening = body.get("opening", data.get("seed"))
+            # Even the read set excludes the rest of the candidate catalogue.
+            assert set(read) == chosen | {opening["id"]}
+            assert len(chosen) == 4
+            return body
+
+        cold = plan()
+        opening = cold.get("opening", data.get("seed"))
+        chosen = [row["id"] for row in cold["items"]]
+        # All downloaded alternatives outside the cohort still cannot get in.
+        known.update({"old", "seed", *(f"t{i}" for i in range(12))} - set(chosen))
+        assert [row["id"] for row in plan()["items"]] == chosen
+        known.update(chosen[::2])
+        mixed = plan()
+        assert {row["id"] for row in mixed["items"]} == set(chosen)
+        for index in (1, 3):
+            assert mixed["items"][index]["id"] == chosen[index]
+        known.update(chosen)
+        warm = plan()
+        assert {row["id"] for row in warm["items"]} == set(chosen)
+        assert warm.get("opening", data.get("seed"))["id"] == opening["id"]
+        if not with_seed:
+            assert warm["opening"]["source_set_id"] == "newer"
+        assert warm == {**plan(), "plan_id": warm["plan_id"], "generated_at": warm["generated_at"]}
+
+
+def test_dj_plan_v6_reorders_decoded_audio_and_returns_chained_plans(tmp_path):
+    """Known WAVs -> FFmpeg -> real SQLite cache -> HTTP, without a provider."""
+    import wave
+    from docs.dj.key_probe import cadence
+    from shared.dj_engine import analyse_audio, analysis_identity, plan_transition
+
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    tracks = {key: {"id": key, "track_id": key, "title": key, "artist": "Synthetic"}
+              for key in ("seed", "a", "b")}
+    paths = {key: tmp_path / f"{key}.wav" for key in tracks}
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+        patch.object(_auto_mode, "_dj_source_path", side_effect=lambda _, item: paths[item["id"]]),
+        patch.object(_auto_mode, "request_analysis"),
+    ):
+        client = _make_app().test_client()
+        payload = {"session_id": "decoded", "seed": tracks["seed"],
+                   "sources": [{"id": "cadences", "tracks": [tracks["a"], tracks["b"]]}]}
+        cold = client.post("/api/discovery/music/dj-plan", json=payload).get_json()
+        bad, good = [row["id"] for row in cold["items"]]
+        features = {}
+        for key in tracks:
+            signal = cadence(6 if key == bad else 0, "major")
+            with wave.open(str(paths[key]), "wb") as output:
+                output.setnchannels(1)
+                output.setsampwidth(2)
+                output.setframerate(11025)
+                output.writeframes((signal * 32767).astype("<i2").tobytes())
+            features[key] = analyse_audio(paths[key], analysis_identity(tracks[key]))
+        with patch("shared.dj_engine._analyse_pcm", side_effect=AssertionError("decoded during planning")):
+            response = client.post("/api/discovery/music/dj-plan", json=payload)
+        assert response.status_code == 200
+        body = response.get_json()
+        assert [row["id"] for row in body["items"]] == [good, bad]
+        assert body["seed_analysis"] == features["seed"]
+        previous = features["seed"]
+        for row in body["items"]:
+            assert row["analysis"] == features[row["id"]]
+            assert row["transition"] == plan_transition(previous, features[row["id"]])
+            previous = features[row["id"]]
 
 
 def test_dj_plan_ignores_the_direction_older_clients_still_send(tmp_path):

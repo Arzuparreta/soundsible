@@ -31,6 +31,7 @@ from shared.dj_engine import (
     analyse_audio,
     analysis_identity,
     cached_analysis,
+    order_continuous_route,
     order_route,
     plan_transition,
     request_analysis,
@@ -1273,44 +1274,31 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     entropy = int.from_bytes(hashlib.blake2s(seed_material.encode(), digest_size=8).digest(), "big")
     rng = random.Random(entropy)
     rng.shuffle(available)
-    # The DJ does not steer the session: the sources and the recommender do.
-    # Until the route is ordered by transition quality (docs/dj/HANDOFF.md,
-    # P3), this shuffle is the order.
-    analysed = [(item, _dj_item_analysis(metadata, item)) for item in available]
-
     opening: dict | None = None
     opening_analysis: dict | None = None
     if not seed:
         # An empty session must open *inside the collection the listener just
         # handed to the DJ*, never on a related walk or implicit taste history.
         # Recent sources win; within a source the deterministic shuffle picks.
-        root_pairs = [
-            pair for pair in analysed
-            if pair[0].get("reason_code") == "music_set_source"
+        roots = [
+            item for item in available
+            if item.get("reason_code") == "music_set_source"
         ]
-        if not root_pairs:
+        if not roots:
             return {"error": "sources contain no playable opening tracks"}, 400
-        root_pairs.sort(key=lambda pair: -float(pair[0].get("source_weight") or 0))
-        opening, opening_analysis = root_pairs[0]
-        opening = dict(opening)
+        roots.sort(key=lambda item: -float(item.get("source_weight") or 0))
+        opening = dict(roots[0])
+        available = [item for item in available if item is not roots[0]]
+        opening_analysis = _dj_item_analysis(metadata, opening, schedule=True)
         opening["analysis"] = opening_analysis
         opening.pop("transition", None)
         seed = opening
-        analysed = [pair for pair in analysed if pair[0] is not root_pairs[0][0]]
-
-    ordered: list[tuple[dict, dict]] = []
-    pool = analysed
+    # Sources and recommendation walks choose the music. Freeze membership
+    # before reading any analysis so measured/local audio cannot displace cold
+    # external songs. The DJ only orders this short, cache-independent set.
+    analysed = [(item, _dj_item_analysis(metadata, item)) for item in available[:limit]]
     previous = opening_analysis or _dj_item_analysis(metadata, seed, schedule=True)
-    for item, analysis in pool:
-        if len(ordered) >= limit:
-            break
-        row = dict(item)
-        row["analysis"] = analysis
-        row["transition"] = plan_transition(previous, analysis, profile="adaptive")
-        ordered.append((row, analysis))
-        previous = analysis
-
-    route = [row for row, _ in ordered]
+    route = order_continuous_route(previous, analysed)
     for item in route:
         _dj_item_analysis(metadata, item, schedule=True)
     # Read ahead of the listener. The seeds that will anchor the next refill are
