@@ -1071,7 +1071,10 @@ def _dj_prepare_cohort(metadata, items: list[dict]) -> None:
     for item in items:
         _dj_item_analysis(metadata, item, schedule=True)
         if not item.get("track_id"):
-            video_id = _planner_video_id(metadata, item)
+            # Acquisition follows the playback upload; discovery_youtube_id
+            # belongs to the recommendation graph and can name another upload.
+            video_id = str(item.get("youtube_id") or
+                           (item.get("id") if item.get("source") == "preview" else "") or "").strip()
             if validate_youtube_video_id(video_id):
                 video_ids.append(video_id)
     if not video_ids or preview_cache.cache_limit_bytes() <= 0:

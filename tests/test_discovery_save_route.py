@@ -2159,7 +2159,7 @@ def test_dj_preparation_queues_only_the_frozen_previews_and_keeps_refresh_contra
     _make_runtime(tmp_path)
     api = _mock_api()
     rows = [{"id": "local", "track_id": "local"},
-            {"id": "candidate01", "youtube_id": "candidate01", "source": "preview"},
+            {"id": "candidate01", "youtube_id": "candidate01", "discovery_youtube_id": "discovery01", "source": "preview"},
             {"id": "candidate02", "youtube_id": "candidate02", "source": "preview"}]
     with (patch.object(_auto_mode, "_get_api", return_value=api),
           patch.object(_auto_mode, "_dj_item_analysis") as analyse,
