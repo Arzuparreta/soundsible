@@ -58,7 +58,7 @@ no hay síntoma que lo justifique.
 | --- | --- | --- | --- |
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
 | P2 | Alineación de fase en el navegador | Lectura de código | Sin síntoma tras #377; se retoma solo si vuelve a oírse desfase |
-| P3 | El orden de la ruta ignora la calidad de la transición | Lectura de código | Pendiente; diseño decidido (continuidad). El arco ya se quitó (#385): hoy el orden es el barajado |
+| P3 | El orden de la ruta ignora la calidad de la transición | Tests de magnitudes, audio sintético → HTTP y replay de análisis locales | Cerrado (implementación `0e62b0fb`) |
 | P4 | La "energía" no mide intensidad | Medido | Cerrado (#385): notas/s, LUFS y planitud; `energy` eliminado |
 | P5 | Canciones de YouTube sin caché: fundido simple | Lectura de código | Pendiente; ampliado a pool analizado y puentes |
 | P6 | Compatibilidad de tonalidad mal puntuada | Medido: 576 pares y cadencias conocidas | Cerrado (`af6521f1`); detector y límites documentados abajo |
@@ -69,7 +69,8 @@ no hay síntoma que lo justifique.
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
-salvo que vuelva el síntoma. P4 y P6 están cerrados: **el siguiente es P3**.
+salvo que vuelva el síntoma. P4, P6 y P3 están cerrados: **el siguiente es P5
+ampliado**.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -163,9 +164,12 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
    canciones de cada fuente, más las related de las últimas 4 canciones
    automáticas que llegaron a sonar ("exploration"). Se quitan excluidas, ya
    oídas y grabaciones de más de 20 minutos.
-3. **Orden**: barajado con semilla fija por sesión y segmento; se cogen las 8
-   primeras (ver P3). La primera canción de una sesión sin semilla es la de la
-   fuente más reciente que sale primero en ese barajado.
+3. **Selección y orden**: barajado con semilla fija por sesión y segmento; se
+   eligen hasta 8 canciones antes de leer su análisis. Las posiciones medidas se
+   ordenan por calidad de transición y continuidad en las cuatro magnitudes de
+   P4 (ver P3). Las no analizadas conservan su posición. La primera canción de
+   una sesión sin semilla sigue siendo la de la fuente más reciente que sale
+   primero en el barajado.
 4. **Transición de cada par** (`plan_transition`, `dj_engine.py:671`), con perfil
    `"adaptive"` fijo.
 5. **Ejecución** en el navegador (`stores/dj.ts`, `mixer.ts`).
@@ -405,7 +409,7 @@ entrante llegaría hasta 23 ms adelantada o retrasada. Se puede comprobar con el
 
 ## P3. El orden de la ruta ignora la calidad de la transición
 
-**Qué pasa (desde #385).** En la ruta v6 (`_build_music_set_route`, la que usa
+**Qué pasaba (desde #385, antes de P3).** En la ruta v6 (`_build_music_set_route`, la que usa
 siempre la web porque envía `sources`, y Android cuando tiene fuentes):
 
 1. `rng.shuffle(available)`, con semilla por sesión y segmento.
@@ -435,12 +439,75 @@ dicen "recency decay" ni "orders songs by tempo, key and energy" (#385).
   entre las candidatas de esa ruta; pesan igual tras escalarlas. No hay pesos
   ajustados a gusto.
 - Mantener el peso de la fuente donde ya cuenta (elegir la primera canción).
-- `test_dj_plan_v6_does_not_steer_by_energy` fija que hoy el orden no depende
-  del análisis; P3 lo cambiará a propósito.
+- El antiguo `test_dj_plan_v6_does_not_steer_by_energy` fijaba que el orden no
+  dependía del análisis; P3 cambia esa parte a propósito y conserva las guardas
+  de selección y de apertura.
 - Las magnitudes están en el análisis: `note_rate`, `loudness_lufs`,
   `spectral_flatness`, `bpm`. `loudness_lufs` puede ser `None` (silencio o
   menos de 400 ms); `note_rate` y `spectral_flatness` son 0 en silencio. Una
   canción sin analizar no tiene ninguna (P5: no puntuarla peor por eso).
+
+**Estado: cerrado, implementación `0e62b0fb`, sobre `main` en `6bb1af5d`.**
+
+- `_build_music_set_route` fija primero el conjunto (hasta 8 canciones), sin
+  consultar ninguna medida para elegir sus miembros. La apertura conserva el
+  peso de la fuente y el desempate por barajado; ahora también encarga su
+  análisis si falta. No se añaden candidatas ni puentes en P3.
+- `order_continuous_route` ordena ese conjunto de forma voraz. Para cada
+  posición medida calcula la distancia a las restantes: diferencias de
+  `note_rate`, `loudness_lufs`, `spectral_flatness` y `bpm`, divididas cada una
+  por su desviación típica poblacional en el conjunto elegido. Añade el déficit
+  de calidad respecto a la mejor transición de ese paso, dividido por la
+  desviación típica de esas puntuaciones. Minimiza la suma de los cinco
+  cuadrados, con coeficiente 1 para todos; no hay nuevos pesos ajustados a gusto.
+  La puntuación de transición sigue siendo la de `plan_transition`.
+- Las escalas de las cuatro magnitudes se mantienen durante toda la ruta. El
+  tempo se lleva a la octava del pulso de la semilla (o de la primera medida
+  disponible): 60, 120 y 240 BPM representan el mismo pulso. Las dimensiones
+  constantes o incompletas se omiten para todas las candidatas; un cero medido
+  sí cuenta. Los empates conservan el barajado.
+- Una canción sin analizar conserva su posición. Después de ella tampoco se
+  compara la transición hacia la siguiente: se mantiene el orden del barajado
+  entre las medidas que quedan. Así no se inventa una mala nota para la canción
+  fría, ni una canción descargada puede expulsarla del conjunto o retrasarla.
+- Cada transición de la respuesta corresponde al predecesor que realmente
+  queda delante, incluida la semilla o la apertura. Web y Android consumen el
+  mismo contrato sin cambios de cliente. La ruta antigua sin fuentes, `dj-place`
+  y `dj-repair` conservan su política existente de `order_route`.
+
+**Validación.** `tests/test_dj_route_continuity.py` comprueba las cuatro
+magnitudes por separado, tonalidad, igualdad de influencia al cambiar unidades
+y permutar ejes, medio/doble tempo, ceros, datos ausentes, empates, canciones
+frías y encadenado. `tests/test_discovery_save_route.py` comprueba el límite y
+la selección independiente de la caché con más candidatas que posiciones,
+apertura en la fuente reciente, determinismo y los mismos miembros en frío,
+mixto y caliente. Incluye una prueba con WAVs sintéticos que pasa por FFmpeg,
+la caché SQLite real y HTTP; la petición final no puede volver a decodificar.
+
+**Medición de lectura, 2026-10-23.** Reproducible con
+`python -I docs/dj/route_probe.py --cache ~/.cache/soundsible/dj/analysis.sqlite3`.
+10 análisis vigentes, 1024 muestras de 8 canciones y semilla aleatoria 0; mismo
+conjunto y misma canción de salida en las dos variantes. SHA-256 de las medidas:
+`a7d3361172d784b6196619c0c942003986a17e172acf31623c94aa3e9a5f927d`.
+Sin proveedores, descodificación, escritura de caché ni reproducción.
+
+| Media por transición (CPU por ruta) | Barajado anterior | P3 |
+| --- | ---: | ---: |
+| Puntuación interna de transición | 0,383 | 0,484 |
+| Transiciones de fallback | 82,0 % | 60,8 % |
+| Salto de notas/s | 0,537 | 0,514 |
+| Salto de LUFS | 2,162 | 2,048 |
+| Salto de planitud | 0,0160 | 0,0142 |
+| Salto de pulso en BPM (octava equivalente) | 18,66 | 10,20 |
+| CPU por ruta de 8 canciones | 0,63 ms | 3,29 ms |
+
+**Límites.** Diez análisis no representan una biblioteca completa; son una
+comprobación de las medidas y del coste, no una evaluación de escucha. El orden
+voraz no garantiza el óptimo global ni maximiza solo la puntuación de mezcla:
+también preserva la continuidad. Con todo el conjunto frío, el orden sigue
+siendo el barajado y se mantienen los fundidos conservadores; ampliar la
+cobertura de análisis y añadir puentes corresponde a P5. No hay aceptación
+física de audio web, iPhone o Android en esta entrega.
 
 ## P4. La "energía" no mide intensidad
 
