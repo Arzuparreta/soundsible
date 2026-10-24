@@ -64,15 +64,16 @@ no hay síntoma que lo justifique.
 | P6 | Compatibilidad de tonalidad mal puntuada | Medido: 576 pares y cadencias conocidas | Cerrado (`af6521f1`); detector y límites documentados abajo |
 | P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#385); queda decidir la opción (b) en el servidor |
 | P8 | Secciones medidas y no usadas | AAC → SQLite → HTTP; vectores comunes ejecutados por web y Android | Cerrado (implementación `90b6c7e9`) |
-| P9 | Eco no sincronizado con el tempo | Lectura de código | Pendiente |
+| P9 | Eco no sincronizado con el tempo | AAC → SQLite → HTTP; impulsos en Web Audio real y PCM nativo | Cerrado (`a8a22618`); la activación automática sigue en P7 |
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Implementado en esta PR |
 | P10 | Código muerto y documentación desactualizada | Lectura de código | En parte (#385): queda `automation` |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
-salvo que vuelva el síntoma. P4, P6, P3, P5 y P8 están cerrados:
-**el siguiente es P9**, que sigue dependiendo de
-la decisión pendiente de P7. No se cambia aquí la política de perfiles ni el eco.
+salvo que vuelva el síntoma. P4, P6, P3, P5, P8 y la sincronización de P9 están
+cerrados. **Quedan P7 (decisión de técnicas automáticas) y P10 (`automation`).**
+P9 corrige la ejecución del eco existente sin resolver por su cuenta P7: el
+perfil automático `adaptive` sigue sin elegir `echo_cut`.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -976,13 +977,68 @@ de velocidad durante la reproducción (P2 sigue aparcado).
 
 ## P9. Eco no sincronizado con el tempo
 
-**Qué pasa.** `ensureEcho` (`graph.ts:320`) usa `delayTime = 0.28` s fijo y
-realimentación 0,32 con cualquier BPM. Android repite la curva en
-`ProgramMixCurve.kt`.
+**Diagnóstico original.** `ensureEcho` usaba 280 ms con cualquier BPM; Android
+repetía ese retardo fijo en `ProgramDeckEffects`. Cambiar solo el `delayTime`
+por un golpe tampoco bastaba: en Chromium y WebKit el bucle de realimentación
+añade un bloque de 128 muestras en cada vuelta posterior a la primera.
 
-**Posibles soluciones.** Pasar el periodo del golpe en el plan y usar un retardo
-de 1/2, 3/4 o 1 golpe. Hoy `echo_cut` no sale nunca en la web (P7), así que este
-punto depende de esa decisión.
+**Estado: sincronización cerrada en `a8a22618`.** El contrato HTTP
+existente permite `echo_cut` con los perfiles `cuts_drops` y `open_format`.
+La ruta de fuentes explícitas y ambos clientes siguen usando `adaptive`, que
+no elige eco: habilitarlo automáticamente es la decisión de P7 y queda pendiente.
+No se añade un selector ni se cambia la política de técnicas para cerrar P9.
+
+- **Retardo medido.** `plan_transition` incluye `echo_delay_seconds`: un golpe
+  de la canción saliente, medido cerca del punto de salida y durante el tramo
+  mezclado. No usa el tempo entrante ni inventa un periodo a partir de
+  `bar_seconds`. Requiere audio analizado, rejilla, BPM conocido y
+  `tempo_confidence > 0,6`; sin ello sustituye el eco por `structural_fade`.
+  Solo cambia el plan: no se modifican medidas ni la versión de su caché.
+- **Web.** Store → plan ejecutable → mezclador → grafo conserva el retardo y
+  lo divide por la velocidad real del plato saliente. El grafo resta un bloque
+  del retardo del bucle y lo añade antes de la primera entrada: tanto el primer
+  eco como los siguientes caen en el golpe. La ruta del eco fija dos canales
+  para que la negociación del bucle no cancele estéreo en oposición de fase.
+  Al retirarlo desconecta también la entrada del efecto.
+- **Android.** El mismo campo pasa por `ProgramDjPlanner`, `ProgramDjPlan`,
+  `ProgramDjSession` y `ProgramMixOutput` hasta el búfer PCM. Se ajusta a la
+  velocidad saliente y se redondea a la muestra más próxima de la salida.
+  El búfer se prepara fuera del bucle de muestras, solo para eco y con un
+  máximo de dos segundos. Cambiar el retardo o reiniciar el plato vacía la
+  cola anterior. La exportación de sesión conserva el campo.
+- **Reserva y niveles.** Plan antiguo sin retardo, valor inválido, origen
+  distinto, poca confianza o mezcla apagada: no se inventan 280 ms. El eco sigue
+  tomando la señal nivelada antes del fundido; se conservan realimentación
+  0,32 y la curva de envío existentes. No se ajustan valores de gusto.
+
+**Medición reproducible (2026-10-24).**
+`PYTHONPATH=. .venv/bin/pytest -q -s tests/test_discovery_save_route.py -k measured_aac_echo`
+genera música sintética de pulso conocido, codifica AAC, analiza, guarda en
+SQLite y pide `dj-plan` legacy y `dj-transition` con `cuts_drops`. Los dos
+endpoints entregan el mismo plan:
+
+| BPM de la señal saliente | Periodo esperado | Retardo HTTP |
+| --- | ---: | ---: |
+| 90 | 0,666667 s | 0,666668 s |
+| 137 | 0,437956 s | 0,437956 s |
+
+`shared/contracts/dj_echo_plans.json` fija cinco casos: 55, 90, 120, 137 y
+220 BPM frente a una entrada de 173 BPM. Las stores web conservan el campo.
+`dj-echo.spec.ts` ejecuta el grafo real con impulsos estéreo de polaridad opuesta
+en Chromium y WebKit: 44,1/48 kHz, velocidades 1/1,04 y tres repeticiones por
+caso, 60 repeticiones por perfil. Comprueba posición y amplitud de cada canal;
+la tolerancia es tres muestras (0,068 ms a 44,1 kHz), muy por debajo de los 5 ms
+del plan. `ProgramDeckEffectsTest` ejecuta los mismos periodos en PCM nativo y
+comprueba las tres repeticiones, nivelación, realimentación y vaciado de cola.
+`ProgramDjPlanTest` comprueba confianza, pertenencia, mezcla apagada y valores
+ausentes o inválidos. `ProgramMixOutputTest` conserva eco con decodificadores y
+salida reales, con periodo explícito de 0,5 s, en los checks de Android.
+
+**Límites.** Sin escucha física en esta entrega. Un periodo constante no sigue
+rubato: el eco no se aplica con pulso no fiable. La compensación web corresponde
+al bloque de 128 muestras de los contextos predeterminados verificados en los
+dos motores. P9 no habilita eco automático ni retira perfiles (`P7`) ni el campo
+`automation` (`P10`).
 
 ## P10. Código muerto y documentación desactualizada
 
