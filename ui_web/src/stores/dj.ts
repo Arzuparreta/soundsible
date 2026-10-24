@@ -297,7 +297,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     });
   }
   const REFINE_LEAD_SECONDS = 20;
-  let refinedPair = '';
+  let refinement = { pair: '', inFlight: false, nextAt: 0, measured: false };
+  const REFINE_RETRY_MS = 2_000;
   function djItemRef(track: Track): DjItemRef {
     return {
       id: track.id,
@@ -317,22 +318,28 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   function maybeRefineTransition(current: Track, next: PlaybackQueueEntry, fromKey: string): void {
     const toKey = queueIdentity(next);
     const pair = `${fromKey}>${toKey}`;
-    if (refinedPair === pair) return;
+    if (committedTransition || audioService.mixPhase() !== 'idle') return;
+    if (refinement.pair !== pair) refinement = { pair, inFlight: false, nextAt: 0, measured: false };
+    const attempt = refinement;
+    if (attempt.inFlight || attempt.measured || performance.now() < attempt.nextAt) return;
     const item = state.autoMode.plan[next.queueId];
     if (!item || item.fromKey !== fromKey) return;
     if ((item.transition?.confidence ?? 0) >= TRUSTED_CONFIDENCE) return;
-    refinedPair = pair;
+    attempt.inFlight = true;
+    attempt.nextAt = performance.now() + REFINE_RETRY_MS;
+    const revision = state.autoMode.directionRevision;
     void api.refineDjTransition({
       dj_profile: DJ_PROFILE,
       from: djItemRef(current),
       to: djItemRef(next)
     }).then(lifetime.guard(result => {
-      if (!result.measured || !state.autoMode.active) return;
-      if (state.autoMode.plan[next.queueId]?.fromKey !== fromKey) return;
+      if (!result.measured || !state.autoMode.active || refinement !== attempt || committedTransition) return;
+      if (state.autoMode.directionRevision !== revision || state.autoMode.plan[next.queueId] !== item) return;
+      attempt.measured = true;
       setState('autoMode', 'plan', next.queueId, 'transition', result.transition);
     })).catch(lifetime.guard(() => {
-      /* the conservative plan stands */
-    }));
+      /* the conservative plan stands until the next bounded attempt */
+    })).finally(() => { attempt.inFlight = false; });
   }
   function evaluateDjRunway(): void {
     if (!state.autoMode.active || committedTransition || audioService.mixPhase() !== 'idle') return;
@@ -351,7 +358,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[next.queueId]);
     if (!plan) return;
     // A measured blend is only worth asking for when there will be a blend.
-    if (state.playback.djMixing && pb.currentTime >= plan.out_cue - COMMIT_LEAD_SECONDS - REFINE_LEAD_SECONDS) {
+    if (state.playback.djMixing && pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS
+        && pb.currentTime >= plan.out_cue - COMMIT_LEAD_SECONDS - REFINE_LEAD_SECONDS) {
       maybeRefineTransition(current, next, fromKey);
     }
     if (pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS) return;

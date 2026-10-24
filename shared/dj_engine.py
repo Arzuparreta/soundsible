@@ -25,7 +25,7 @@ from typing import Any
 from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
 
-ANALYSER_VERSION = 7
+ANALYSER_VERSION = 8
 # A normal song is decoded in full so the grid and the musical sections come
 # from the recording, not from arithmetic projected from its first transient.
 # Very long mixes remain bounded: their head and tail still provide everything
@@ -109,6 +109,15 @@ def _connect() -> sqlite3.Connection:
 
 def _source_stamp(path: Path) -> str:
     stat = path.stat()
+    # Preview mtime is an LRU clock: serving a Range touches it. The commit's
+    # revision identifies its bytes and also changes on a layout replacement.
+    if path.parent == get_cache_dir() / "previews" and path.suffix == ".audio":
+        try:
+            meta = json.loads(path.with_suffix(".meta.json").read_text())
+            if meta.get("revision"):
+                return f"{stat.st_size}:{meta['revision']}"
+        except (OSError, ValueError, AttributeError):
+            pass
     return f"{stat.st_size}:{stat.st_mtime_ns}"
 
 
@@ -217,7 +226,7 @@ def request_analysis(path: str | Path, identity: str, *, duration_hint: float = 
     if not source.is_file() or not identity:
         return
     with _pending_lock:
-        if identity in _pending:
+        if identity in _pending or len(_pending) >= 64:
             return
         _pending.add(identity)
 

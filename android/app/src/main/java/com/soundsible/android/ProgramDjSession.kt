@@ -157,7 +157,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val duration = outgoing.duration.takeIf { it > 0 } ?: return
         val resolved = plan ?: ProgramDjPlan.resolve(key(current), duration * 1000, route[current + 1].proposal, mixing()) ?: return
         val remainingUs = resolved.outCueUs - outgoing.currentPosition * 1000
-        if (plan == null && mixing() && remainingUs <= 65000000) refine(this)
+        if (plan == null && mixing() && remainingUs in 45000001L..65000000L) refine(this)
         if (remainingUs > 45000000) return
         val standby = 1 - slot
         if (indices[standby] != current + 1) {
