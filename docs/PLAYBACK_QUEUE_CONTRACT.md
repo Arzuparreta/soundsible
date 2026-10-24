@@ -170,6 +170,17 @@ Unmatched occurrences travel in published sessions and are matched on play.
   its cue was planned out of, and a refill continues the route from the tail of
   what survives. A cue whose origin does not match what is playing is never
   performed.
+- **Measured sections place the handoff.** The server chooses an outro start
+  or a blend ending at a breakdown, inside both players' playback window. It
+  can shorten the overlap to fit a late outro. With a predictable pulse, the
+  incoming drop may finish the overlap on an outgoing phrase boundary, using
+  the executed playback rate and a 5 ms alignment tolerance. Missing or
+  unusable sections retain the ordinary phrase/intro cues. The server applies
+  the players' 25% overlap limit before this alignment; clients execute these
+  cues without reading section labels. A followed or unknown pulse
+  (`tempo_confidence <= 0.6`, the analyser's ceiling for a locally followed
+  grid) uses a structural or safe fade at normal speed, even with confident
+  tonality. This does not alter live playback-rate correction.
 - **Every handoff resolves.** Nothing fades until the incoming deck is sounding,
   and the outgoing song's `ended` always decides what follows: an incoming deck
   that is already sounding takes over; one that cannot play fails the handoff and
