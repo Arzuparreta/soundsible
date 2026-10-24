@@ -32,7 +32,8 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
       onSelect: () => {
         const observed = state();
         if (disabled || pending() || !observed?.ready || observed.generation !== captured?.generation ||
-          observed.programToken !== captured.programToken || observed.queueToken !== captured.queueToken ||
+          observed.programToken !== captured.programToken ||
+          (shell || !captured.dj?.active) && observed.queueToken !== captured.queueToken ||
           observed.items[observed.index]?.mediaKind === 'podcast_episode') return;
         void execute(!shell && captured.dj?.active
           ? { action: 'djSelection', tracks, label: track.title, queueToken: captured.queueToken, programToken: captured.programToken }

@@ -17,7 +17,7 @@ export function nativeDjSourceActions(_id: string, label: string, tracks: Track[
   return [{
     label: t('autoMode.startDj'), disabled: pending() || !fits,
     onSelect: () => {
-      if (!valid() || !fits || state()?.queueToken !== captured.queueToken) return;
+      if (!valid() || !fits) return;
       void execute({ action: 'djSelection', tracks: requested, label,
         queueToken: captured.queueToken, programToken: captured.programToken }).catch(() => {});
     },

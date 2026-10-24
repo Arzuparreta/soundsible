@@ -509,8 +509,9 @@ class PlaybackService : MediaLibraryService() {
                 }
                 return Futures.immediateFuture(try {
                     if (args.getString("action") == "djSelection") {
-                        require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
-                        if (dj != null) require(args.getString("programToken") == ProgramQueue.programToken(player))
+                        // Refilling a route does not change the programme the listener chose from.
+                        require(args.getLong("generation", -1) == connection.generation &&
+                            args.getString("programToken").orEmpty() == ProgramQueue.programToken(player))
                         val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")))
                         startDjSelection(items, args.getString("label") ?: items.first().mediaMetadata.title?.toString().orEmpty())
                     } else if (args.getString("action") == "djContext") {

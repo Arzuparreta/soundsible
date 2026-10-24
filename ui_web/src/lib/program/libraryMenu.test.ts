@@ -141,12 +141,13 @@ it('allows deferred recordings in NORMAL but never converts them into DJ referen
   menu.actions!.forEach(action => action.onSelect()); expect(execute).not.toHaveBeenCalled();
 });
 
-it('external DJ menus start a new selection and keep session controls in the shell', () => {
-  const state = { ...initial, items: Array(1000).fill({ key: 'old' }), programToken: 'dj', dj: { active: true, phase: 'ready' } } as ProgramState;
+it('external DJ menus start across route refills and keep session controls in the shell', () => {
+  let state = { ...initial, items: Array(1000).fill({ key: 'old' }), programToken: 'dj', dj: { active: true, phase: 'ready' } } as ProgramState;
   const execute = vi.fn(async () => {});
   const menu = programLibraryMenu(track, () => state, () => false, execute);
   expect(menu.actions!.map(action => action.label)).toEqual(['musicExplorer.startDjFromSong']);
   expect(menu.actions![0].disabled).toBe(false);
+  state = { ...state, queueToken: 'refilled' };
   menu.actions![0].onSelect();
   expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'djSelection', tracks: [{ ...track, source: 'local' }], label: 'Song', queueToken: 'order', programToken: 'dj' });
 });
