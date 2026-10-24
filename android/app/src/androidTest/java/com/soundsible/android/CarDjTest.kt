@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-/** Car protocols observe/control the existing DJ programme, without replacing its route. */
+/** Car transport retains DJ; selecting music starts a fresh DJ programme. */
 @UnstableApi
 class CarDjTest {
     @Test fun httpCarDjControlAndMetadata() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"))
@@ -93,7 +93,8 @@ class CarDjTest {
                     waitFor("window.__carDj.dj?.active && window.__carDj.playing && window.__carDj.items.length>1")
                     web.evaluate(scenario, "window.__carProgram=window.__carDj.programToken;window.__carKeys=window.__carDj.items.map(i=>i.key).join(',')")
                     assertEquals(SessionResult.RESULT_SUCCESS, call { active.getLibraryRoot(null) }.resultCode)
-                    assertEquals(SessionResult.RESULT_SUCCESS, call { active.getChildren("all-tracks", 0, 200, null) }.resultCode)
+                    val carTracks = call { active.getChildren("all-tracks", 0, 200, null) }
+                    assertEquals(SessionResult.RESULT_SUCCESS, carTracks.resultCode)
                     assertEquals("Browse replaced DJ route", "true", web.evaluate(scenario, "window.__carDj.dj.active && window.__carDj.programToken===window.__carProgram && window.__carDj.items.map(i=>i.key).join(',')===window.__carKeys"))
                     waitFor("window.__carDj.id==='member-pcm-loud' && window.__carDj.index===1 && window.__carDj.playing")
                     val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
@@ -118,6 +119,14 @@ class CarDjTest {
                     waitFor("!window.__carDj.playWhenReady")
                     instrumentation.runOnMainSync { controls.get().transportControls.play() }
                     waitFor("window.__carDj.playing && window.__carDj.dj.active && window.__carDj.programToken===window.__carProgram")
+                    val picked = carTracks.value!!.single { it.mediaId == "soundsible:track:member-pcm-soft" }
+                    instrumentation.runOnMainSync { active.setMediaItem(picked); active.prepare(); active.play() }
+                    waitFor("window.__carDj.dj?.active && window.__carDj.playing && window.__carDj.id==='member-pcm-soft' && window.__carDj.programToken!==window.__carProgram")
+                    waitFor("window.__carDj.dj.sources.length===1 && window.__carDj.dj.sources[0].tracks[0].id==='member-pcm-soft'")
+                    assertTrue("Car selection retained the old seek", web.evaluate(scenario, "window.__carDj.positionMs").toDouble() < 6000)
+                    web.evaluate(scenario, "window.__carPickedProgram=window.__carDj.programToken")
+                    instrumentation.runOnMainSync { controls.get().transportControls.playFromMediaId("soundsible:track:member-pcm-loud", null) }
+                    waitFor("window.__carDj.dj?.active && window.__carDj.playing && window.__carDj.id==='member-pcm-loud' && window.__carDj.programToken!==window.__carPickedProgram")
                     command("action:'stop'")
                     waitFor("window.__carDj.items.length===0")
                 }

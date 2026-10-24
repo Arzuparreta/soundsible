@@ -418,13 +418,22 @@ class PlaybackService : MediaLibraryService() {
                     val selected = carLibrary.select(items)
                     require(startIndex == C.INDEX_UNSET || startIndex in selected.items.indices)
                     require(carLibrary.owns(selected))
-                    djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
-                    restoreNormal(); publishDj("idle", 0)
-                    autoplay.clear(); radio.clear(); previews.clear()
-                    pendingCarRadio = if (selected.radio) selected.items.single().mediaMetadata.extras!!.getString(ProgramQueue.KEY) else null
                     val index = if (startIndex == C.INDEX_UNSET) 0 else startIndex
-                    val position = if (startPositionMs == C.TIME_UNSET) podcasts.position(selected.items[index]) else startPositionMs.coerceAtLeast(0)
-                    Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(selected.items, index, position))
+                    val opening = selected.items[index]
+                    if ((dj != null || djPlanner.busy()) && !selected.radio && opening.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
+                        pendingCarRadio = null
+                        startDjSelection(listOf(opening), opening.mediaMetadata.title?.toString().orEmpty())
+                        // MediaSession applies this result to the new backend;
+                        // retain its opening rather than reinstating the car's context queue.
+                        Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(listOf(opening), 0, 0))
+                    } else {
+                        djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
+                        restoreNormal(); publishDj("idle", 0)
+                        autoplay.clear(); radio.clear(); previews.clear()
+                        pendingCarRadio = if (selected.radio) selected.items.single().mediaMetadata.extras!!.getString(ProgramQueue.KEY) else null
+                        val position = if (startPositionMs == C.TIME_UNSET) podcasts.position(opening) else startPositionMs.coerceAtLeast(0)
+                        Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(selected.items, index, position))
+                    }
                 } catch (_: Exception) { Futures.immediateFailedFuture(IllegalArgumentException("Unsupported car selection")) }
                 if (query != null) return Futures.transformAsync(carLibrary.search(query, 0, 200, null), { result ->
                     if (result!!.resultCode != SessionResult.RESULT_SUCCESS || result.value!!.isEmpty())
@@ -558,7 +567,7 @@ class PlaybackService : MediaLibraryService() {
                         require(args.getLong("generation", -1) == connection.generation)
                         val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"), lane = "context")
                         val index = args.getInt("index", -1); require(index in items.indices)
-                        if (dj != null && items[index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
+                        if ((dj != null || djPlanner.busy()) && items[index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
                             startDjSelection(listOf(items[index]), items[index].mediaMetadata.title?.toString().orEmpty())
                             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                         }

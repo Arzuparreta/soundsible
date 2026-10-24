@@ -86,7 +86,7 @@ la canción seleccionada arranca desde cero y es la única fuente; elegir una
 colección usa esa colección como fuente y empieza por su primera canción.
 Se descartan las fuentes, peticiones, exclusiones, exploración y ruta anteriores;
 el planificador nuevo tiene otra identidad. Las respuestas y callbacks de la
-sesión anterior no pueden reponerla. Web y Android comparten esta regla.
+sesión anterior no pueden reponerla. Web y Android comparten esta regla, incluida la selección desde Android Auto.
 
 La gestión de una sesión en curso queda dentro del shell: añadir fuentes,
 pedir/colocar canciones, cambiar el material sin cortar la actual y reparar la
