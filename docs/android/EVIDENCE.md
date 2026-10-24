@@ -6,7 +6,7 @@ commit son la referencia. «Normal» = APK normal + APK de test + JVM + lint del
 
 | Fecha | Bloque | Commit | Nativo | Otras | Log |
 | --- | --- | --- | --- | --- | --- |
-| 2026-10-24 | Selección externa con DJ activo: sesión nueva inmediata; fuentes y colocación sólo en el shell | Esta PR | DjContextTest y CarDjTest comprueban edición del shell y reemplazo por clic/menú externo y selección del coche; build, JVM y emuladores en los checks de esta PR (sin SDK local) | UI 1741; browser4 en esta PR | /tmp/soundsible-dj-unit.log, /tmp/soundsible-dj-chromium.log, /tmp/soundsible-dj-webkit.log |
+| 2026-10-24 | Selección externa con DJ activo: sesión nueva inmediata; fuentes y colocación sólo en el shell | Esta PR | DjContextTest y CarDjTest comprueban edición del shell y reemplazo por clic/menú externo y selección del coche; build, JVM y emuladores en los checks de esta PR (sin SDK local; corregida la suposición del test de colocación: compara la canción elegida en la ruta, cuyo primer título puede variar) | UI 1741; browser4 en esta PR | /tmp/soundsible-dj-unit.log, /tmp/soundsible-dj-chromium.log, /tmp/soundsible-dj-webkit.log |
 | 2026-10-06 | S2at invitaciones SEND + menú de pendiente | bf9fac69 | 8/0 HTTP/TLS 66.4s + normal | UI 211/1620 | /tmp/soundsible-incoming-invite-native.log |
 | 2026-10-06 | S2au Ajustes de servidor y dispositivo | 90e9d1ef | 22/0 HTTP/TLS 280.5s + normal | UI 213/1631 | /tmp/soundsible-settings-block-native.log |
 | 2026-10-06 | S2av sesión por QR/código | 118b2389 | 20/0 HTTP/TLS 235.8s + normal (JVM 59) | Core 78, UI 215/1637 | /tmp/soundsible-pairing-block-native.log |

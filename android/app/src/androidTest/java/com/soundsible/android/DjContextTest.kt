@@ -131,7 +131,7 @@ class DjContextTest {
                 retained()
                 command("action:'append',tracks:Array.from({length:20},(_,i)=>({source:'local',id:'member-pcm-soft',title:'Future '+i,artist:'member artist',duration:20}))")
                 waitFor("window.__dj.items.length>=21")
-                web.evaluate(scenario, "window.__fixedTarget=window.__dj.items[18].key;window.__fixedBefore=window.__dj.items.map(i=>i.key);window.__fixedRevision=window.__dj.dj.editRevision")
+                web.evaluate(scenario, "window.__fixedTarget=window.__dj.items[18].key;window.__fixedSong=window.__dj.items[1].id;window.__fixedBefore=window.__dj.items.map(i=>i.key);window.__fixedRevision=window.__dj.dj.editRevision")
                 // Placement is a shell action, reached from a route occurrence.
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-queue-key]')).find(row=>row.dataset.queueKey===window.__dj.items[1].key).querySelector('[data-row-menu]').click()")
                 waitFor("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to route')")
@@ -139,7 +139,7 @@ class DjContextTest {
                 waitFor("!!document.querySelector('[data-testid=android-dj-placement] select')")
                 web.evaluate(scenario, "let select=document.querySelector('[data-testid=android-dj-placement] select');select.value=window.__fixedTarget;select.dispatchEvent(new Event('change',{bubbles:true}));select.form.requestSubmit()")
                 waitFor("window.__dj.dj.editRevision>window.__fixedRevision && window.__dj.dj.editOutcome==='placed'")
-                assertEquals("true", web.evaluate(scenario, "(()=>{let target=window.__dj.items.findIndex(i=>i.key===window.__fixedTarget);let placed=window.__dj.items[target-1];return target>0 && placed.id==='member-pcm-soft' && !window.__fixedBefore.includes(placed.key)})()"))
+                assertEquals("true", web.evaluate(scenario, "(()=>{let target=window.__dj.items.findIndex(i=>i.key===window.__fixedTarget);let placed=window.__dj.items[target-1];return target>0 && placed.id===window.__fixedSong && !window.__fixedBefore.includes(placed.key)})()"))
                 retained()
                 web.evaluate(scenario, "window.__fixedRequest=window.__dj.items[window.__dj.items.findIndex(i=>i.key===window.__fixedTarget)-1].key;document.querySelector('[data-program-menu]').click()")
                 waitFor("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Sources')")
