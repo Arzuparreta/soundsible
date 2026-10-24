@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProgramTransportEvent } from '../lib/audio';
+import type { DjTransitionPlan } from '../lib/api';
 import type { Track } from '../types/music';
 import { UNMEASURED_GAIN_DB, gainToLinear } from '../lib/loudness';
+import { readFileSync } from 'node:fs';
+import { URL as NodeURL } from 'node:url';
 
 /** What levelling plays anything unmeasured at: the fixtures carry no loudness
  * readings, so every track here gets this rather than unity. */
 const UNMEASURED_LEVEL = gainToLinear(UNMEASURED_GAIN_DB);
+const structuralVectors: Array<{ name: string; duration: number; transition: DjTransitionPlan & { out_cue: number } }> =
+  JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_structural_plans.json', import.meta.url), 'utf8'));
 
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
 const t2: Track = { id: 't2', title: 'Two', artist: 'Artist', duration: 200 };
@@ -1135,6 +1140,29 @@ describe('Playback load coalescing', () => {
       expect(armTransition).toHaveBeenCalledOnce();
       expect(armTransition.mock.calls[0][1]).toMatchObject({ technique: 'bass_swap', confidence: .9 });
     } finally { actions.exitAutoMode(); clock.mockRestore(); }
+  });
+
+  it.each(structuralVectors)('executes the shared server section plan $name without moving its cues', async (vector) => {
+    const armTransition = vi.fn();
+    const response = autoPlan(['route-00001']);
+    const planDjQueue = vi.fn().mockResolvedValue({ ...response,
+      items: response.items.map(item => ({ ...item, transition: vector.transition })) });
+    const { actions, state, initStore, fireDeckEvent, deck } = await loadStore(
+      { planDjQueue, __previewPreparationState: () => 'ready' }, { armTransition });
+    initStore();
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Synthetic', duration: vector.duration }], 0);
+    (deck as unknown as { duration: number }).duration = vector.duration;
+    fireDeckEvent('playing'); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    (deck as unknown as { currentTime: number }).currentTime = vector.transition.out_cue - 44;
+    fireDeckEvent('timeupdate');
+    expect(armTransition, vector.name).toHaveBeenCalledOnce();
+    expect(armTransition.mock.calls[0][1], vector.name).toMatchObject({
+      technique: vector.transition.technique, out_cue: vector.transition.out_cue,
+      in_cue: vector.transition.in_cue, overlap_seconds: vector.transition.overlap_seconds,
+      playback_rate: vector.transition.playback_rate,
+    });
+    actions.exitAutoMode();
   });
 
   it('ignores analysis that arrives after the conservative seam is committed', async () => {

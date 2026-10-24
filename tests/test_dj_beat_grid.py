@@ -143,6 +143,11 @@ def test_a_drifting_performance_gets_a_following_grid_and_less_trust(analysed):
     assert np.percentile(np.abs(errors), 90) < 0.015
     # Followed, not predicted: one playback rate cannot hold it for a whole blend.
     assert result["tempo_confidence"] < 0.7
+    # Even two harmonically identical analyses must not promote a followed
+    # clock to a fixed-rate beatmatch. This is analysis from real PCM.
+    plan = plan_transition(result, result)
+    assert plan["technique"] == "structural_fade"
+    assert plan["playback_rate"] == 1
 
 
 def test_a_sustained_sound_has_no_tempo(tmp_path, monkeypatch):
@@ -166,8 +171,9 @@ def test_a_sustained_sound_has_no_tempo(tmp_path, monkeypatch):
 
 
 def test_two_mixed_songs_keep_their_kicks_together_for_the_whole_overlap(analysed):
-    outgoing, out_onsets, _ = analysed("out", 124.0, seconds=90.0, kick="sharp", seed=3)
-    incoming, in_onsets, _ = analysed("in", 126.3, seconds=90.0, kick="soft", first=0.83, seed=4)
+    # Long enough for a 16-bar blend inside both players' 25% duration limit.
+    outgoing, out_onsets, _ = analysed("out", 124.0, seconds=128.0, kick="sharp", seed=3)
+    incoming, in_onsets, _ = analysed("in", 126.3, seconds=128.0, kick="soft", first=0.83, seed=4)
 
     plan = plan_transition(outgoing, incoming, profile="adaptive")
     assert plan["technique"] == "bass_swap"
@@ -179,6 +185,8 @@ def test_two_mixed_songs_keep_their_kicks_together_for_the_whole_overlap(analyse
     mixed_out = mixed_out[mixed_out <= plan["overlap_seconds"]]
     mixed_in = (in_onsets - plan["in_cue"]) / rate
     flam = grid_errors(mixed_in, mixed_out)
+    # The server now applies the same 25% runway limit as both players.
+    assert plan["overlap_seconds"] <= outgoing["duration"] * .25
     assert mixed_out.size >= 60
     assert np.max(np.abs(flam)) < 0.003
 

@@ -14,7 +14,7 @@ from shared.dj_pool import add_measured_bridges
 
 def measured(bpm=120):
     return {"analysed": True, "duration": 240, "bpm": bpm, "key": "C", "mode": "major",
-            "confidence": .9, "note_rate": 2., "loudness_lufs": -14., "spectral_flatness": .05}
+            "confidence": .9, "tempo_confidence": 1., "note_rate": 2., "loudness_lufs": -14., "spectral_flatness": .05}
 
 
 def test_bridge_improves_both_seams_and_preserves_every_original_start():

@@ -1350,6 +1350,79 @@ def _local_period(analysis: Mapping[str, Any], cue: float, span: float = 0.0) ->
     return slope if slope > 0 else coarse
 
 
+def _section_starts(analysis: Mapping[str, Any], labels: set[str]) -> list[float]:
+    """Starts of contiguous measured roles, not every eight-bar block in one."""
+    if not analysis.get("analysed"):
+        return []
+    result = []
+    previous = None
+    for section in analysis.get("sections") or []:
+        label = section["label"]
+        if label in labels and (previous is None or previous["label"] != label
+                                or abs(previous["end"] - section["start"]) > 0.001):
+            result.append(float(section["start"]))
+        previous = section
+    return result
+
+
+def _structural_exit(analysis: Mapping[str, Any], proposed: float, overlap: float,
+                     earliest: float, duration: float) -> tuple[float, float]:
+    # Leave at an outro's start, or finish the blend before a breakdown.
+    # Use the nearest such opportunity to the existing end-of-song cue; there
+    # are no role weights or human ratings. Never move a measured section just
+    # to squeeze it inside the players' permitted window.
+    targets = [(start, min(overlap, duration - start - _OUT_CUE_MARGIN))
+               for start in _section_starts(analysis, {"outro"})]
+    targets += [(start - overlap, overlap) for start in _section_starts(analysis, {"breakdown"})]
+    candidates = []
+    for target, span in targets:
+        cue = _nearest_grid_point(analysis, target)
+        if span >= 4 and earliest <= cue <= duration - span - _OUT_CUE_MARGIN + 0.001 and abs(cue - target) <= 0.005:
+            candidates.append((cue, span))
+    return min(candidates, key=lambda pair: abs(pair[0] - proposed)) if candidates else (proposed, overlap)
+
+
+def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
+                out_cue: float, intro: float, overlap: float, max_stretch: float) -> tuple[float, float] | None:
+    """Finish on a measured outgoing phrase as the incoming drop arrives.
+
+    Only align actual downbeats, within the existing overlap/intro limits. The
+    playback rate is the one the players will execute, not the global BPM
+    ratio. If those constraints do not meet within 5 ms, retain the normal intro.
+    """
+    if not outgoing.get("downbeats") or not incoming.get("downbeats"):
+        return None
+    phrases = sorted({float(value) for value in outgoing.get("phrase_boundaries") or []
+                      if 4 <= float(value) - out_cue <= overlap + 0.001}, reverse=True)
+    for drop in _section_starts(incoming, {"drop"}):
+        if abs(_nearest_grid_point(incoming, drop) - drop) > 0.005:
+            continue
+        for end in phrases:
+            if abs(_nearest_grid_point(outgoing, end) - end) > 0.005:
+                continue
+            span = end - out_cue
+            out_period = _local_period(outgoing, out_cue, span)
+
+            def ratio_at(cue: float) -> float:
+                ratio = _local_period(incoming, cue, span) / out_period
+                if ratio < 0.7:
+                    ratio *= 2
+                elif ratio > 1.4:
+                    ratio /= 2
+                return ratio
+
+            cue = intro
+            # Refit at the proposed entry rather than measuring a different
+            # part of a long recording. Constant grids converge immediately.
+            for _ in range(2):
+                cue = _nearest_grid_point(incoming, drop - span * ratio_at(cue))
+            ratio = ratio_at(cue)
+            if (abs(1 - ratio) <= max_stretch and intro <= cue <= float(incoming.get("duration") or 0) * 0.25
+                    and abs((drop - cue) / round(ratio, 6) - span) <= 0.005):
+                return cue, span
+    return None
+
+
 def plan_transition(
     outgoing: Mapping[str, Any],
     incoming: Mapping[str, Any],
@@ -1381,12 +1454,24 @@ def plan_transition(
         technique = "echo_cut" if cut_bias >= 0.55 else "structural_fade"
     else:
         technique = "safe_fade"
+    # _rhythm caps a locally followed (drifting) grid's reliability at 0.7,
+    # then maps (reliability - 0.4) / 0.5 to tempo_confidence: at most 0.6.
+    # Tonal confidence cannot turn that into a predictable beatmatch clock.
+    steady = all(float(analysis.get("bpm") or 0) > 0
+                 and float(analysis.get("tempo_confidence") or 0) > 0.6
+                 for analysis in (outgoing, incoming))
+    if not steady and technique in {"bass_swap", "long_blend", "filter_blend"}:
+        technique = "structural_fade" if confidence >= 0.42 else "safe_fade"
     bars = int(policy["bars"])
     if technique in {"echo_cut", "safe_fade", "structural_fade"}:
         bars = min(bars, 8)
     bar_seconds = float(outgoing.get("bar_seconds") or 2.0)
     overlap = max(4.0, min(48.0, bars * bar_seconds))
     duration = float(outgoing.get("duration") or 0)
+    if duration:
+        # Match both players' runtime limit before aligning a drop to the end
+        # of the overlap. A later shortening would invalidate that alignment.
+        overlap = max(1.5, min(overlap, duration * 0.25))
     # `None` means "place it against the real duration". The player knows what it
     # actually loaded; a cue invented here from an unknown length is worse than
     # no cue at all, because it looks authoritative.
@@ -1397,6 +1482,7 @@ def plan_transition(
     # between this measured duration and the one the player loaded, so a
     # measured downbeat reaches the mix unmoved.
     latest = max(0.0, duration - overlap - _OUT_CUE_MARGIN)
+    earliest = min(90.0, duration * 0.6, latest) if duration else 0.0
     if outro is None and not duration:
         out_cue = None
     else:
@@ -1406,9 +1492,21 @@ def plan_transition(
         out_cue = _nearest_grid_point(outgoing, float(out_cue))
         if duration and out_cue > latest:
             out_cue = _grid_point_at_or_before(outgoing, latest)
+        if duration:
+            out_cue, overlap = _structural_exit(outgoing, out_cue, overlap, earliest, duration)
+            if out_cue < earliest:
+                grid = outgoing.get("downbeats") or outgoing.get("beat_grid") or []
+                valid = [float(value) for value in grid if earliest <= float(value) <= latest]
+                out_cue = min(valid) if valid else earliest
     in_cue = float(incoming.get("intro_cue") or 0)
     if incoming.get("analysed"):
         in_cue = _nearest_grid_point(incoming, in_cue)
+
+    if technique in {"bass_swap", "long_blend", "filter_blend"} and out_cue is not None:
+        entry = _drop_entry(outgoing, incoming, out_cue, in_cue, overlap,
+                            min(0.06, float(policy["max_stretch"])))
+        if entry is not None:
+            in_cue, overlap = entry
 
     # The tempo across the stretch that is actually mixed, not at one point.
     out_period = _local_period(outgoing, float(out_cue or 0), overlap)
@@ -1431,7 +1529,7 @@ def plan_transition(
         "out_cue": round(out_cue, 4) if out_cue is not None else None,
         "in_cue": round(in_cue, 4),
         "overlap_seconds": round(overlap, 3),
-        "overlap_bars": bars,
+        "overlap_bars": round(overlap / (4 * out_period), 3),
         # Over a 48 s overlap, 1e-6 of rate error is 0.05 ms of drift.
         "playback_rate": round(playback_rate, 6),
         "score": round(blend_score, 3),

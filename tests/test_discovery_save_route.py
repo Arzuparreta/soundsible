@@ -1427,12 +1427,12 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
     # the one thing no existing endpoint can do.
     _make_runtime(tmp_path)
     measured = {
-        "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "analysed": True},
+        "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
         # Two adjacent Camelot steps, each inside the mixer's 6% rate limit.
         # At 100 -> 113 -> 128 neither leg could beatmatch; that old fixture
         # only passed because C -> D was incorrectly scored as unrelated.
-        "t0": {"duration": 220, "bpm": 112, "key": "D", "mode": "major", "confidence": 0.9, "analysed": True},
-        "bridge01": {"duration": 220, "bpm": 106, "key": "G", "mode": "major", "confidence": 0.9, "analysed": True},
+        "t0": {"duration": 220, "bpm": 112, "key": "D", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
+        "bridge01": {"duration": 220, "bpm": 106, "key": "G", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
     }
 
     def analysis(_metadata, item, *, schedule=False):
@@ -1559,6 +1559,7 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
         "key": "C",
         "mode": "major",
         "confidence": 0.9,
+        "tempo_confidence": 1.0,
         "outro_cue": 190,
         "intro_cue": 6,
         "bar_seconds": 2,
@@ -1606,6 +1607,53 @@ def test_dj_transition_validates_its_pair(tmp_path):
     ).status_code == 400
 
 
+@pytest.mark.parametrize("outro", [False, True])
+def test_measured_audio_sections_reach_route_and_refinement_without_client_replanning(tmp_path, outro):
+    """Synthetic AAC -> real analysis/cache -> the common web/Android HTTP plan."""
+    import subprocess
+    from shared import dj_engine
+    from shared.ffmpeg_runtime import ffmpeg_executable
+    from test_dj_sections import section_song
+
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    refs, paths, analyses = {}, {}, {}
+    for key in ("outgoing", "incoming"):
+        wav, aac = tmp_path / f"{key}.wav", tmp_path / f"{key}.m4a"
+        section_song(wav, incoming=key == "incoming", outro=outro)
+        subprocess.run([ffmpeg_executable(), "-v", "error", "-i", str(wav), "-c:a", "aac", str(aac)], check=True)
+        refs[key] = {"id": key, "track_id": key, "title": key, "artist": "Synthetic", "duration": 240}
+        paths[key] = aac
+        analyses[key] = dj_engine.analyse_audio(aac, dj_engine.analysis_identity(refs[key]))
+    with (patch.object(_auto_mode, "_get_api", return_value=api),
+          patch.object(_auto_mode, "_dj_source_path", side_effect=lambda _, item: paths[item["id"]]),
+          patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False))):
+        client = _make_app().test_client()
+        route = client.post("/api/discovery/music/dj-plan", json={"session_id": "sections", "seed": refs["outgoing"],
+            "sources": [{"id": "source", "tracks": [refs["incoming"]]}], "limit": 1})
+        refined = client.post("/api/discovery/music/dj-transition", json={"from": refs["outgoing"], "to": refs["incoming"]})
+    assert route.status_code == refined.status_code == 200
+    body = refined.get_json()
+    assert body["measured"] is True
+    plan = body["transition"]
+    assert plan == route.get_json()["items"][0]["transition"]
+    assert "sections" not in route.get_json()["items"][0]["analysis"]
+    assert plan["technique"] == "bass_swap"
+    if outro:
+        start = next(s["start"] for s in analyses["outgoing"]["sections"] if s["label"] == "outro")
+        assert plan["out_cue"] == pytest.approx(start, abs=.005)
+        assert plan["overlap_seconds"] < 16
+        assert plan["out_cue"] + plan["overlap_seconds"] <= 240 - 1.5
+    else:
+        breakdown = next(s["start"] for s in analyses["outgoing"]["sections"] if s["label"] == "breakdown")
+        drop = next(s["start"] for s in analyses["incoming"]["sections"] if s["label"] == "drop")
+        assert plan["out_cue"] + plan["overlap_seconds"] == pytest.approx(breakdown, abs=.005)
+        assert (drop - plan["in_cue"]) / plan["playback_rate"] == pytest.approx(plan["overlap_seconds"], abs=.005)
+        assert plan["in_cue"] > 30
+    print({key: plan[key] for key in ("out_cue", "in_cue", "overlap_seconds", "playback_rate")})
+
+
 def test_dj_transition_prefers_relative_keys_over_parallel_and_mixed_mode_fifths(tmp_path):
     """The same measured plan reaches both web and Android via this endpoint."""
     _make_runtime(tmp_path)
@@ -1613,7 +1661,7 @@ def test_dj_transition_prefers_relative_keys_over_parallel_and_mixed_mode_fifths
     mock_api["get_core"].return_value = (
         _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
     )
-    common = {"duration": 240, "confidence": .9, "outro_cue": 200,
+    common = {"duration": 240, "confidence": .9, "tempo_confidence": 1., "outro_cue": 200,
               "intro_cue": 0, "bar_seconds": 2, "analysed": True}
     measured = {
         "current": {**common, "bpm": 120, "key": "C", "mode": "major"},
@@ -2092,7 +2140,7 @@ def test_dj_plan_v6_inserts_a_bridge_only_when_every_frozen_candidate_is_measure
         key = item["id"]
         if key not in known:
             return _auto_mode._dj_fallback_analysis(240)
-        return {"analysed": True, "duration": 240, "bpm": tempos[key], "key": "C", "mode": "major", "confidence": .9}
+        return {"analysed": True, "duration": 240, "bpm": tempos[key], "key": "C", "mode": "major", "confidence": .9, "tempo_confidence": 1.}
     cohort = []
     with (patch.object(_auto_mode, "_get_api", return_value=api),
           patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
