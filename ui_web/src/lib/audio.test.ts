@@ -35,6 +35,10 @@ class FakeAnalyserNode extends FakeAudioNode {
 
 const contexts: FakeAudioContext[] = [];
 
+class FakeDelayNode extends FakeAudioNode {
+  delayTime = new FakeAudioParam();
+}
+
 class FakeAudioContext {
   constructor() {
     contexts.push(this);
@@ -50,6 +54,12 @@ class FakeAudioContext {
   destination = new FakeAudioNode();
   analyser = new FakeAnalyserNode();
   gains: FakeGainNode[] = [];
+  delays: FakeDelayNode[] = [];
+  createDelay = () => {
+    const delay = new FakeDelayNode();
+    this.delays.push(delay);
+    return delay;
+  };
   mediaTracks: Array<{ contentHint: string; stop: ReturnType<typeof vi.fn> }> = [];
   get broadcastTrack() {
     return this.mediaTracks.at(-1)!;
@@ -1836,4 +1846,41 @@ it('disposing audio detaches old deck events and recreates decks only on demand'
   expect(audioEl()).not.toBe(old);
   expect(created.length).toBeGreaterThan(count);
   disposeAudio();
+});
+
+describe('measured echo delay', () => {
+  beforeEach(() => { vi.stubGlobal('AudioContext', FakeAudioContext); });
+  it.each([0.375, 0.5, 60 / 55])('uses the outgoing media period %s at its actual playback speed', async (period) => {
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await module.audioService.load('/current', 1);
+    const outgoing = module.audioEl() as unknown as FakeAudio;
+    outgoing.currentTime = 100;
+    outgoing.playbackRate = 1.04;
+    module.audioService.armTransition('/next', { ...plan, technique: 'echo_cut', echo_delay_seconds: period }, callbacks(), { level: 1 });
+    const incoming = created.find(deck => deck !== outgoing && deck.src === '/next')!;
+    await play(outgoing, 108);
+    await play(incoming, 1);
+    await play(outgoing, 110);
+    await play(incoming, 2);
+    expect(module.audioService.mixPhase()).toBe('crossfading');
+    expect(contexts[0].delays).toHaveLength(2);
+    expect(contexts[0].delays[0].delayTime.value + contexts[0].delays[1].delayTime.value).toBeCloseTo(period / 1.04, 6);
+    module.audioService.cancelMix('stop');
+    expect(contexts[0].delays[0].disconnect).toHaveBeenCalled();
+  });
+
+  it.each([undefined, NaN, Infinity, 0, -0.5, 2.1])('does not invent an echo for an invalid or old plan (%s)', async (delay) => {
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await module.audioService.load('/current', 1);
+    const outgoing = module.audioEl() as unknown as FakeAudio;
+    outgoing.currentTime = 100;
+    module.audioService.armTransition('/next', { ...plan, technique: 'echo_cut', echo_delay_seconds: delay }, callbacks(), { level: 1 });
+    const incoming = created.find(deck => deck !== outgoing && deck.src === '/next')!;
+    await play(outgoing, 108); await play(incoming, 1);
+    await play(outgoing, 110); await play(incoming, 2);
+    expect(module.audioService.mixPhase()).toBe('crossfading');
+    expect(contexts[0].delays).toHaveLength(0);
+  });
 });

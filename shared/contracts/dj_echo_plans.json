@@ -1,0 +1,147 @@
+[
+  {
+    "name": "outgoing-55-bpm",
+    "bpm": 55,
+    "duration": 240,
+    "transition": {
+      "technique": "echo_cut",
+      "out_cue": 192.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 34.909,
+      "overlap_bars": 8.0,
+      "playback_rate": 1.0,
+      "echo_delay_seconds": 1.090909,
+      "score": 0.518,
+      "confidence": 0.9,
+      "fallback": true,
+      "sync": {
+        "out_period": 1.090909,
+        "in_period": 0.346821,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "neutral",
+        "filter": false,
+        "echo_out": true
+      }
+    }
+  },
+  {
+    "name": "outgoing-90-bpm",
+    "bpm": 90,
+    "duration": 240,
+    "transition": {
+      "technique": "echo_cut",
+      "out_cue": 192.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 21.333,
+      "overlap_bars": 8.0,
+      "playback_rate": 1.0,
+      "echo_delay_seconds": 0.666667,
+      "score": 0.792,
+      "confidence": 0.9,
+      "fallback": true,
+      "sync": {
+        "out_period": 0.666667,
+        "in_period": 0.346821,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "neutral",
+        "filter": false,
+        "echo_out": true
+      }
+    }
+  },
+  {
+    "name": "outgoing-120-bpm",
+    "bpm": 120,
+    "duration": 240,
+    "transition": {
+      "technique": "echo_cut",
+      "out_cue": 192.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 16.0,
+      "overlap_bars": 8.0,
+      "playback_rate": 1.0,
+      "echo_delay_seconds": 0.5,
+      "score": 0.518,
+      "confidence": 0.9,
+      "fallback": true,
+      "sync": {
+        "out_period": 0.5,
+        "in_period": 0.346821,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "neutral",
+        "filter": false,
+        "echo_out": true
+      }
+    }
+  },
+  {
+    "name": "outgoing-137-bpm",
+    "bpm": 137,
+    "duration": 240,
+    "transition": {
+      "technique": "echo_cut",
+      "out_cue": 192.9507,
+      "in_cue": 0.25,
+      "overlap_seconds": 14.015,
+      "overlap_bars": 8.0,
+      "playback_rate": 1.0,
+      "echo_delay_seconds": 0.437956,
+      "score": 0.518,
+      "confidence": 0.9,
+      "fallback": true,
+      "sync": {
+        "out_period": 0.437956,
+        "in_period": 0.346821,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "neutral",
+        "filter": false,
+        "echo_out": true
+      }
+    }
+  },
+  {
+    "name": "outgoing-220-bpm",
+    "bpm": 220,
+    "duration": 240,
+    "transition": {
+      "technique": "echo_cut",
+      "out_cue": 192.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 8.727,
+      "overlap_bars": 8.0,
+      "playback_rate": 1.0,
+      "echo_delay_seconds": 0.272727,
+      "score": 0.518,
+      "confidence": 0.9,
+      "fallback": true,
+      "sync": {
+        "out_period": 0.272727,
+        "in_period": 0.346821,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "neutral",
+        "filter": false,
+        "echo_out": true
+      }
+    }
+  }
+]

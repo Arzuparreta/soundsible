@@ -12,7 +12,7 @@ export interface MixerPorts {
   setBlendLimiter: (active: boolean) => void;
   scheduleCurve: (param: AudioParam | undefined, values: number[], duration: number) => void;
   deckEffects: DeckEffects[] | null;
-  ensureEcho: (index: number) => void;
+  ensureEcho: (index: number, delaySeconds: number) => void;
   setDeckGain: (index: number, value: number) => void;
   resetDeckEffects: (index: number) => void;
   releaseDeck: (index: number) => void;
@@ -104,8 +104,9 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       ports.scheduleCurve(outEffect?.filter?.frequency, [22000, 18000, 9000, 3500, 1200, 700], current.overlap);
       ports.scheduleCurve(inEffect?.filter?.frequency, [900, 1600, 4200, 10000, 18000, 22000], current.overlap);
     }
-    if (current.technique === 'echo_cut') {
-      ports.ensureEcho(current.fromIndex);
+    if (current.technique === 'echo_cut' && current.echoDelay != null) {
+      // The delay runs on the output clock; the server measures media time.
+      ports.ensureEcho(current.fromIndex, current.echoDelay / ports.decks()[current.fromIndex].playbackRate);
       ports.scheduleCurve(outEffect?.echoWet?.gain, [0, 0.05, 0.12, 0.24, 0.32, 0.18], current.overlap);
     }
   }
@@ -507,6 +508,8 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         preroll,
         mixStart: null,
         technique: plan.technique,
+        echoDelay: Number.isFinite(plan.echo_delay_seconds) && plan.echo_delay_seconds! > 0 && plan.echo_delay_seconds! <= 2
+          ? plan.echo_delay_seconds : undefined,
         phaseTolerance: Math.max(0.001, Math.min(0.012, Number(plan.sync?.phase_tolerance_ms || 5) / 1000)),
         phaseCorrected: false,
         dominant: false,

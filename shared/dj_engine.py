@@ -1524,6 +1524,17 @@ def plan_transition(
     playback_rate = local_ratio if abs(1 - local_ratio) <= min(0.06, float(policy["max_stretch"])) else 1.0
     if technique not in {"bass_swap", "long_blend", "filter_blend"}:
         playback_rate = 1.0
+    # Echo repeats one measured outgoing beat at the actual exit, never an
+    # invented period from bar_seconds or the incoming song. Two seconds is
+    # the bounded delay supported by both renderers (30 BPM at normal speed).
+    echo_delay = None
+    if technique == "echo_cut":
+        if (outgoing.get("analysed") and outgoing.get("beat_grid")
+                and out_bpm > 0 and float(outgoing.get("tempo_confidence") or 0) > 0.6
+                and math.isfinite(out_period) and 0 < out_period <= 2):
+            echo_delay = round(out_period, 6)
+        else:
+            technique = "structural_fade"
     return {
         "technique": technique,
         "out_cue": round(out_cue, 4) if out_cue is not None else None,
@@ -1532,6 +1543,7 @@ def plan_transition(
         "overlap_bars": round(overlap / (4 * out_period), 3),
         # Over a 48 s overlap, 1e-6 of rate error is 0.05 ms of drift.
         "playback_rate": round(playback_rate, 6),
+        **({"echo_delay_seconds": echo_delay} if echo_delay is not None else {}),
         "score": round(blend_score, 3),
         "confidence": round(confidence, 3),
         "fallback": technique in {"echo_cut", "safe_fade", "structural_fade"},

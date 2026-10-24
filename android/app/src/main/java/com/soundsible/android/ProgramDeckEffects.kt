@@ -20,8 +20,14 @@ internal class ProgramDeckEffects(private val rate: Int, private val channels: I
         fun reset() { z1.fill(0.0); z2.fill(0.0) }
     }
     private val low = Filter(channels); private val filter = Filter(channels)
-    private val delay = DoubleArray((rate * 0.28).roundToInt() * channels)
+    private var delay = DoubleArray(0)
     private var delayFrame = 0
+    /** Set once before a transition; no retiming or allocation in the sample loop. */
+    fun configureEcho(seconds: Double?) {
+        require(seconds == null || seconds.isFinite() && seconds > 0 && seconds <= 2)
+        delay = DoubleArray(if (seconds == null) 0 else maxOf(1, (rate * seconds).roundToInt()) * channels)
+        delayFrame = 0
+    }
     private var lowDb = 0.0; private var cutoff = rate.toDouble() / 2
     private var lowActive = false; private var filterActive = false
     fun configure(lowDb: Double, cutoff: Double) {
@@ -60,11 +66,11 @@ internal class ProgramDeckEffects(private val rate: Int, private val channels: I
             if (lowActive) value = low.sample(value, channel)
             if (filterActive) value = filter.sample(value, channel)
             value *= level
-            val delayed = delay[delayFrame + channel]
-            delay[delayFrame + channel] = value + delayed * 0.32
+            val delayed = if (delay.isEmpty()) 0.0 else delay[delayFrame + channel]
+            if (delay.isNotEmpty()) delay[delayFrame + channel] = value + delayed * 0.32
             output[outputOffset + channel] = (value * dryGain + delayed * echoWet).toFloat()
         }
-        delayFrame += channels; if (delayFrame == delay.size) delayFrame = 0
+        if (delay.isNotEmpty()) { delayFrame += channels; if (delayFrame == delay.size) delayFrame = 0 }
     }
     fun reset() { low.reset(); filter.reset(); delay.fill(0.0); delayFrame = 0 }
 }
