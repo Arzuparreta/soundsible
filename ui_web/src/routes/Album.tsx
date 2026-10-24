@@ -143,8 +143,8 @@ export default function Album() {
     const context = albumContext();
     if (state.autoMode.active) {
       // An album is one source for the DJ, never a list of requests.
-      if (view() === 'library') void actions.changeAutoSession(libraryTrackList(), title());
-      else void useCatalogCollection(tracklist(), title(), 'change');
+      if (view() === 'library') void actions.startDjSelection(libraryTrackList(), title());
+      else void useCatalogCollection(tracklist(), title(), 'start');
       return;
     }
     if (view() === 'library') {
@@ -160,8 +160,8 @@ export default function Album() {
   const shuffle = () => {
     const context = albumContext();
     if (state.autoMode.active) {
-      if (view() === 'library') void actions.changeAutoSession(libraryTrackList(), title());
-      else void useCatalogCollection(tracklist(), title(), 'change');
+      if (view() === 'library') void actions.startDjSelection(libraryTrackList(), title());
+      else void useCatalogCollection(tracklist(), title(), 'start');
       return;
     }
     if (view() === 'library') {

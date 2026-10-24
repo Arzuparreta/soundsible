@@ -4557,3 +4557,55 @@ describe('desktop paused queue navigation', () => {
     expect(audioService.load).not.toHaveBeenCalled();
   });
 });
+
+describe('external music selections in DJ', () => {
+  it.each(['track', 'context', 'shuffle', 'collection'] as const)('starts a fresh session for a %s selection and rejects the old plan', async kind => {
+    const oldPlan = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockReturnValueOnce(oldPlan.promise).mockResolvedValue(autoPlan(['new-runway']));
+    const { actions, state, audioService } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0);
+    actions.enterAutoMode();
+    actions.playNext({ ...t1, id: 'old-request' });
+    actions.addAutoSource([{ ...t1, id: 'old-source' }], 'Old');
+    if (kind === 'track') actions.playTrack(t2);
+    if (kind === 'context') actions.playFrom([t1, t2], 1);
+    if (kind === 'shuffle') actions.playShuffled([t2]);
+    if (kind === 'collection') actions.startDjSelection([t2, { ...t1, id: 'collection-other' }], 'Collection');
+    expect(state.playback.currentTrack?.id).toBe(t2.id);
+    expect(state.playback.currentTime).toBe(0);
+    expect(state.autoMode.active).toBe(true);
+    expect(state.autoMode.sources).toHaveLength(1);
+    expect(state.autoMode.sources[0].tracks.map(track => track.id)).toEqual(kind === 'collection' ? ['t2', 'collection-other'] : ['t2']);
+    expect(state.autoMode.heard.map(track => track.id)).toEqual(['t2']);
+    expect(audioService.load).toHaveBeenLastCalledWith('/stream/t2', expect.any(Number));
+    oldPlan.resolve(autoPlan(['old-runway']));
+    await flush();
+    expect(state.playback.queue.map(track => track.id)).toEqual(['t2', 'new-runway']);
+    expect(planDjQueue.mock.calls[0][0].session_id).not.toBe(planDjQueue.mock.calls.at(-1)![0].session_id);
+    expect(planDjQueue.mock.calls.at(-1)![0].seed.id).toBe('t2');
+    actions.exitAutoMode();
+  });
+  it('starts again even when the selected song is the one playing', async () => {
+    const { actions, state, audioService } = await loadStore();
+    actions.playTrack(t1); actions.enterAutoMode();
+    actions.seek(60);
+    audioService.load.mockClear();
+    actions.playTrack(t1);
+    expect(state.playback.currentTime).toBe(0);
+    expect(audioService.load).toHaveBeenCalledOnce();
+    actions.exitAutoMode();
+  });
+  it('retires callbacks from an interrupted blend when selecting externally', async () => {
+    let callbacks!: { onDominant: () => void; onComplete: (position: number) => void };
+    const { actions, state } = await loadStore({}, {
+      armTransition: vi.fn((_url: string, _plan: unknown, next: typeof callbacks) => { callbacks = next; }),
+    });
+    actions.playTrack(t1); actions.enterAutoMode(); actions.playNow(t2);
+    expect(callbacks).toBeDefined();
+    actions.playTrack({ ...t1, id: 'selection' });
+    callbacks.onDominant(); callbacks.onComplete(15);
+    expect(state.playback.currentTrack?.id).toBe('selection');
+    expect(state.playback.currentTime).toBe(0);
+    actions.exitAutoMode();
+  });
+});

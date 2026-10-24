@@ -65,6 +65,7 @@ no hay síntoma que lo justifique.
 | P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#385); queda decidir la opción (b) en el servidor |
 | P8 | Secciones medidas y no usadas | Lectura de código | Pendiente |
 | P9 | Eco no sincronizado con el tempo | Lectura de código | Pendiente |
+| UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Implementado en esta PR |
 | P10 | Código muerto y documentación desactualizada | Lectura de código | En parte (#385): queda `automation` |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
@@ -77,6 +78,21 @@ tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confia
 así que va después de los dos. P5 amplía el pool que P3 ordena.
 
 ## Decisiones de diseño (2026-10-22)
+
+### Selección externa y control de sesión (2026-10-24)
+
+Con DJ activo, reproducir música desde fuera del shell inicia una sesión nueva:
+la canción seleccionada arranca desde cero y es la única fuente; elegir una
+colección usa esa colección como fuente y empieza por su primera canción.
+Se descartan las fuentes, peticiones, exclusiones, exploración y ruta anteriores;
+el planificador nuevo tiene otra identidad. Las respuestas y callbacks de la
+sesión anterior no pueden reponerla. Web y Android comparten esta regla, incluida la selección desde Android Auto.
+
+La gestión de una sesión en curso queda dentro del shell: añadir fuentes,
+pedir/colocar canciones, cambiar el material sin cortar la actual y reparar la
+ruta. Los menús externos ofrecen empezar DJ, sin acciones para editar la sesión
+actual. Entrar en DJ desde NORMAL y los cambios pedidos desde el propio shell
+conservan su contrato anterior.
 
 ### Sin arco de energía
 

@@ -70,7 +70,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   const queueable = (!isPodcast || isLibrary) && !inAuto;
   const list: MenuAction[] = [];
 
-  if (inAuto && !isPodcast && !inRoute) {
+  if (ctx.auto && !isPodcast && !inRoute) {
     list.push({ icon: icons.playNext(), label: t('musicExplorer.playNow'), onSelect: () => actions.playNow(track) });
     list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void actions.placeAutoTrack(track) });
     list.push({ icon: icons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) });
@@ -82,7 +82,10 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({
       icon: icons.changeSession(),
       label: t(state.playback.currentTrack?.id === track.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
-      onSelect: () => void actions.startDjFromTrack(track),
+      onSelect: () => {
+        if (state.autoMode.active && !ctx.auto) actions.startDjSelection([track], track.title);
+        else void actions.startDjFromTrack(track);
+      },
     });
   if (ctx.onAddToPlaylist && !isPodcast)
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });

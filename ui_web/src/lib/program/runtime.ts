@@ -20,6 +20,7 @@ export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbt
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'dj'; fromCurrent: boolean; queueToken: string; key?: string; sources?: DjMusicSetSource[] }
+  | { action: 'djSelection'; tracks: ProgramTrack[]; queueToken: string; programToken?: string; label: string }
   | { action: 'djContext'; tracks: ProgramTrack[]; queueToken: string; programToken?: string; key?: string }
   | { action: 'djSettings'; resetRequestGroups?: boolean; programToken: string; sources?: DjMusicSetSource[] }
   | { action: 'djRepair'; programToken: string; queueToken: string }

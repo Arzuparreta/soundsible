@@ -3,7 +3,7 @@ import { useParams, useNavigate } from '@solidjs/router';
 import { state, actions, musicLibrary } from '../stores';
 import TrackList from '../components/TrackList';
 import Button from '../components/Button';
-import { BackIcon, ChangeSessionIcon, MoreIcon, PlayIcon } from '../components/icons';
+import { BackIcon, MoreIcon, PlayIcon } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { openPlaylistMenu } from '../components/playlistActions';
@@ -36,7 +36,7 @@ export default function PlaylistDetail() {
     if (tracks().length > 0) {
       if (state.autoMode.active) {
         // A playlist is one source for the DJ, never a list of requests.
-        void actions.changeAutoSession(tracks(), name());
+        void actions.startDjSelection(tracks(), name());
         return;
       }
       actions.playFrom(tracks(), 0, { context: context() });
@@ -72,8 +72,8 @@ export default function PlaylistDetail() {
           <span class={styles.count}>{trackCount(trackIds().length)}</span>
         </div>
         <Button onClick={playAll} disabled={tracks().length === 0}>
-          {state.autoMode.active ? <ChangeSessionIcon size={16} /> : <PlayIcon size={16} />}
-          {state.autoMode.active ? t('musicExplorer.change') : t('playlistDetail.play')}
+          <PlayIcon size={16} />
+          {state.autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}
         </Button>
         <Show when={desktopShell()}>
           <button class={styles.menu} type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={openMenu}>

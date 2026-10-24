@@ -110,3 +110,37 @@ test('a NORMAL song menu starts DJ from that song: it comes next, and the curren
   expect(references).toEqual([TRACKS[318].id]);
   await expect(page.locator('[data-auto-tile="stage"]')).toContainText(TRACKS[319].title);
 });
+
+test('an external song click starts a new DJ session immediately and its menu cannot edit the old session', async ({ page }) => {
+  await mockMusicEngine(page);
+  const requests: Array<{ seed: { id: string }; sources: Array<{ tracks: Array<{ id: string }> }>; session_id: string }> = [];
+  await page.route('**/api/discovery/music/dj-plan', async route => {
+    const request = route.request().postDataJSON();
+    requests.push(request);
+    await route.fulfill({ json: plan(request, false) });
+  });
+  await page.goto('/player/#/library?view=songs');
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  await openMiniPlayer(page, /^NORMAL:/);
+  await page.getByRole('tab', { name: 'DJ', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  await page.locator('[data-player-surface-open]').getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  const selected = page.locator('[data-music-list-row], [data-song-row]').filter({
+    has: page.getByRole('button', { name: /Reproducir Canción de biblioteca 319/ }),
+  });
+  await selected.getByRole('button', { name: /Más opciones/ }).click();
+  const menu = page.getByRole('dialog');
+  for (const name of ['Reproducir ahora', 'Añadir a la ruta', 'Mezclar con la sesión']) {
+    await expect(menu.getByRole('button', { name, exact: true })).toHaveCount(0);
+  }
+  await page.keyboard.press('Escape');
+  await selected.getByRole('button', { name: /Reproducir Canción de biblioteca 319/ }).click();
+  await expect(page.locator('[data-omni-player]')).toContainText(TRACKS[318].title);
+  await expect(page.locator('[data-omni-player]')).toContainText('DJ');
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1].seed.id).toBe(TRACKS[318].id);
+  expect(requests[1].sources[0].tracks.map(track => track.id)).toEqual([TRACKS[318].id]);
+  expect(requests[1].session_id).not.toBe(requests[0].session_id);
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+});

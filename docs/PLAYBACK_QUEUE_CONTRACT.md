@@ -102,7 +102,15 @@ Unmatched occurrences travel in published sessions and are matched on play.
   retains sample order. Analysis availability never changes membership or the
   opening chosen from the most recent source. Plans describe the final adjacent
   pairs for both web and Android.
-- **Change session** and **Start DJ from…** are immediate and generative. They
+- **External DJ selection** starts a new session immediately at 0:00, including
+  selecting the song already playing. A song becomes the sole source; a whole
+  collection becomes one source and opens on its first song. Previous requests,
+  sources, exclusions, exploration and route are discarded. A new planner
+  session identity and retired handoff callbacks prevent stale answers or decks
+  from reviving the previous session. This applies in web and Android.
+  External menus do not offer source edits or route placement; those belong to
+  the shell. NORMAL song-menu starts retain the continuation contract below.
+- Inside the shell, **Change session** and **Start DJ from…** are immediate and generative. They
   commit the new single source, an empty exploration and the next
   `directionRevision`, then drop the old runway: generated entries, bridges and
   grouped requests. Requests made one song at a time (`manual`, or `user`

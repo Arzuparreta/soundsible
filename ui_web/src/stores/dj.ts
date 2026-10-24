@@ -1417,6 +1417,48 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     beginAutoSessionChange(): number {
       return ++autoSessionEpoch;
     },
+    startDjSelection(tracks: Track[], label: string): boolean {
+      const music = tracks.filter(track => !isPodcastTrack(track));
+      if (!music.length || !state.autoMode.active) return false;
+      // External selection owns a new session, including its transport. Drop
+      // the old planner and both decks before loading the chosen opening.
+      cancelRunwayReplan();
+      autoOpeningAborter?.abort();
+      autoOpeningAborter = null;
+      if (autoOpeningRetry) lifetime.clearTimeout(autoOpeningRetry);
+      autoOpeningRetry = null;
+      generatedQueue?.stop();
+      pendingImmediateAutoTrack = null;
+      autoSessionEpoch += 1;
+      autoHandoffFailures = 0;
+      autoHandoffCooldownUntil = 0;
+      ports.discardFutureAutoplay();
+      ports.cancelPendingRadio();
+      ports.abandonContextMatches();
+      commitSeq += 1;
+      committedTransition = null;
+      ports.stagedEntry = null;
+      audioService.cancelMix('superseded');
+      audioService.clearStaged();
+      audioService.unlockAudio();
+      const revision = (state.autoMode.directionRevision ?? 0) + 1;
+      const opening = { ...createQueueEntry(music[0], 'generated', 'auto_mode'),
+        autoRoute: { kind: 'generated' as const, directionRevision: revision } };
+
+      setState('autoMode', {
+        sources: [{ id: randomId(), label: label.trim() || music[0].title, tracks: music, activation: 1 }],
+        heard: [], exploration: [], avoidedIdentities: [], plan: {}, staleSeams: [],
+        directionRevision: revision,
+        transition: IDLE_TRANSITION, pendingDirection: false, repairing: false,
+        phase: 'planning', activity: null,
+      });
+      setState('playback', { queue: [opening], index: -1, shuffle: false, repeat: 'off',
+        radioMode: false, radioLoading: false, radioSeedId: null });
+      ports.loadIndex(0);
+      void ensureGeneratedQueue().start('auto_mode', opening, state.autoMode.profile);
+      ports.pushPlaybackState();
+      return true;
+    },
     async startDjFromTrack(track: Track): Promise<boolean> {
       if (isPodcastTrack(track) || state.playback.currentTrack && isPodcastTrack(state.playback.currentTrack)) {
         return false;

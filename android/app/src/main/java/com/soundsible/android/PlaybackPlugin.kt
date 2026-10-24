@@ -182,11 +182,12 @@ class PlaybackPlugin : Plugin() {
             require((call.getInt("generation")?.toLong() ?: -1L) == connection.generation)
             val p = controller ?: error("NOT_READY")
             when (call.getString("action")) {
-                "djContext", "djRequest", "djRepair", "djSettings", "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "clearManual", "retry", "stop", "skip", "radio", "autoplay", "leveling", "mixing", "metadata", "retireSource" -> {
+                "djSelection", "djContext", "djRequest", "djRepair", "djSettings", "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "clearManual", "retry", "stop", "skip", "radio", "autoplay", "leveling", "mixing", "metadata", "retireSource" -> {
                     val args = Bundle().apply {
                         if (call.getString("action") == "metadata") putString("metadataRevision", java.util.UUID.randomUUID().toString())
                         putBoolean("resetRequestGroups", call.getBoolean("resetRequestGroups") ?: false)
                         putBoolean("fromCurrent", call.getBoolean("fromCurrent") ?: true)
+                        putString("label", call.getString("label"))
                         putString("sources", call.getArray("sources")?.toString())
                         putBoolean("shuffle", call.getBoolean("shuffle") ?: false)
                         putBoolean("reload", call.getBoolean("reload") ?: false); putBoolean("enabled", call.getBoolean("enabled") ?: false); putString("profile", call.getString("profile"))
@@ -259,6 +260,9 @@ class PlaybackPlugin : Plugin() {
     private fun awaitQueue(call: PluginCall, player: MediaController, connection: EngineConnection, args: Bundle, deadline: Long) {
         if (!alive || controller !== player || connection.generation != args.getLong("generation")) { call.reject("Session changed", "PLAYBACK_COMMAND"); return }
         val rows = org.json.JSONArray(args.getString("tracks"))
+        val selected = rows.getJSONObject(args.getInt("index"))
+        val djSelection = player.sessionExtras.getBoolean("djActive") && player.currentMediaItem?.mediaId == selected.getString("id")
+        if (ProgramQueue.token(player) != args.getString("queueToken") && djSelection) { call.resolve(snapshot()); return }
         if (ProgramQueue.token(player) != args.getString("queueToken") && player.mediaItemCount == rows.length() && player.currentMediaItemIndex == args.getInt("index") && (0 until rows.length()).all { player.getMediaItemAt(it).mediaId == rows.getJSONObject(it).getString("id") }) { call.resolve(snapshot()); return }
         if (android.os.SystemClock.elapsedRealtime() >= deadline) { call.reject("Queue replacement was not observed", "PLAYBACK_COMMAND"); return }
         main.postDelayed({ awaitQueue(call, player, connection, args, deadline) }, 20)
