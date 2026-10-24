@@ -499,7 +499,12 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
                 return Futures.immediateFuture(try {
-                    if (args.getString("action") == "djContext") {
+                    if (args.getString("action") == "djSelection") {
+                        require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
+                        if (dj != null) require(args.getString("programToken") == ProgramQueue.programToken(player))
+                        val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")))
+                        startDjSelection(items, args.getString("label") ?: items.first().mediaMetadata.title?.toString().orEmpty())
+                    } else if (args.getString("action") == "djContext") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
                         if (player.mediaItemCount > 0) require(args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
                         if (dj != null) require(args.getString("programToken") == ProgramQueue.programToken(player))
@@ -553,6 +558,10 @@ class PlaybackService : MediaLibraryService() {
                         require(args.getLong("generation", -1) == connection.generation)
                         val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"), lane = "context")
                         val index = args.getInt("index", -1); require(index in items.indices)
+                        if (dj != null && items[index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
+                            startDjSelection(listOf(items[index]), items[index].mediaMetadata.title?.toString().orEmpty())
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
                         djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", 0)
                         autoplay.clear()
                         radio.clear()
@@ -604,6 +613,19 @@ class PlaybackService : MediaLibraryService() {
             }
         }).setBitmapLoader(artwork).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
         main.post(progressTicker)
+    }
+    /** A library selection starts fresh immediately; route edits stay within the shell. */
+    private fun startDjSelection(items: List<androidx.media3.common.MediaItem>, label: String) {
+        require(items.isNotEmpty() && items.none { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
+            it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" })
+        val source = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString())
+            .put("label", label).put("activation", 1)
+            .put("tracks", org.json.JSONArray(items.map(djPlanner::reference)))
+        val sources = org.json.JSONArray().put(source)
+        require(sources.toString().length <= 65536)
+        djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
+        installDj(listOf(ProgramDjSession.Row(items.first(), kind = "generated")), 0, 0, emptySet())
+        djPlanner.start(sources, true)
     }
     private fun remoteDeviceCommand(event: String, payload: org.json.JSONObject) {
         when (event) {

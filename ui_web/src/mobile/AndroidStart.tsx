@@ -399,7 +399,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   }
   function songMenu(track: Track, event?: MouseEvent, context?: { playlist: string; index: number }, catalogActions: MenuAction[] = [], inRoute = false) {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
-            const menu = programLibraryMenu(track, program, programPending, runtime.execute, candidate => openNativeDjPlacement(candidate, program, programPending, runtime.execute));
+            const menu = programLibraryMenu(track, program, programPending, runtime.execute, candidate => openNativeDjPlacement(candidate, program, programPending, runtime.execute), inRoute);
             openContextMenu({ ...menu, actions: [...catalogActions, ...(menu.actions ?? []),
               ...nativeMusicLinkActions(trackMusic(track), path => { if (current()) openEntityPath(path); }, !current()),
               ...(canPlayOnDevice(track) && !inRoute ? [{ label: t('trackActions.playOnDevice'), disabled: !current(), onSelect: () => {

@@ -15,6 +15,7 @@ export interface PlaylistMenuHooks {
   /** Called after the playlist is deleted (e.g. to navigate away). */
   onDeleted?: () => void;
   onEdit?: () => void;
+  shell?: boolean;
   beforeQueueId?: string;
   onPlaced?: () => void;
 }
@@ -28,7 +29,7 @@ function playlistTracks(name: string): Track[] {
 
 /** Play / rename / duplicate / change-cover / delete menu definition for a playlist. */
 export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {}): ActionMenuOptions {
-  const inAuto = state.autoMode.active;
+  const inAuto = state.autoMode.active && hooks.shell === true;
   return {
     title: name,
     actions: [
@@ -41,10 +42,12 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
         onSelect: async () => {
           const t = playlistTracks(name);
           if (t.length) {
-            if (state.autoMode.active) {
+            if (inAuto) {
               const epoch = actions.autoSessionToken();
               await actions.placeAutoTracks(t, hooks.beforeQueueId);
               if (actions.autoSessionToken() === epoch) hooks.onPlaced?.();
+            } else if (state.autoMode.active) {
+              actions.startDjSelection(t, name);
             } else {
               actions.playFrom(t, 0, { context: playlistContext(name, t, state.librarySettings) });
             }

@@ -7,7 +7,7 @@ const track = { id: 'a', title: 'Song', artist: 'Artist', album: 'Album' } as Tr
 const initial = { ready: true, generation: 1, index: 1, queueToken: 'order', items: [{ key: 'first' }, { key: 'second' }] } as ProgramState;
 it('captures the current occurrence and sends only metadata', () => {
   let state = initial; const execute = vi.fn(async (_command: unknown) => {});
-  const menu = programLibraryMenu({ ...track, url: 'https://untrusted.invalid' } as Track, () => state, () => false, execute);
+  const menu = programLibraryMenu({ ...track, url: 'https://untrusted.invalid' } as Track, () => state, () => false, execute, undefined, true);
   state = { ...initial, index: 0, queueToken: 'changed' };
   menu.actions![0].onSelect(); menu.actions![1].onSelect();
   expect(execute.mock.calls).toEqual([
@@ -43,7 +43,7 @@ it('allows a valid saved preview and forwards its source without external metada
 it('places a DJ request in the captured programme and keeps external URLs out of the command', () => {
   let state = { ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } } as ProgramState;
   const execute = vi.fn(async () => {});
-  const menu = programLibraryMenu({ ...track, url: 'https://untrusted.invalid' } as Track, () => state, () => false, execute);
+  const menu = programLibraryMenu({ ...track, url: 'https://untrusted.invalid' } as Track, () => state, () => false, execute, undefined, true);
   const action = menu.actions!.find(item => item.label === 'autoMode.dj.routeAction')!;
   action.onSelect();
   expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'djRequest', programToken: 'dj-owner', queueToken: 'order', tracks: [{ ...track, source: 'local' }] });
@@ -101,7 +101,7 @@ it('rejects a deferred context after the current programme or order changed', ()
 it('adds a source from normalized metadata while preserving newer directions', () => {
   let state = { ...initial, programToken: 'dj', dj: { active: true, phase: 'ready', profile: 'adaptive', sources: [] } } as ProgramState;
   const execute = vi.fn(async () => {});
-  const action = programLibraryMenu(track, () => state, () => false, execute).actions!.find(action => action.label === 'musicExplorer.reference')!;
+  const action = programLibraryMenu(track, () => state, () => false, execute, undefined, true).actions!.find(action => action.label === 'musicExplorer.reference')!;
   state = { ...state, dj: { ...state.dj!, sources: [{ id: 'newer', label: 'Newer', activation: 4, tracks: [{ ...track, id: 'other' }] }] } };
   action.onSelect();
   expect(execute).toHaveBeenCalledWith({ action: 'djSettings', programToken: 'dj', sources: [state.dj!.sources![0], { id: expect.any(String), label: 'Song', activation: 5, tracks: [{ ...track, source: undefined }] }] });
@@ -109,7 +109,7 @@ it('adds a source from normalized metadata while preserving newer directions', (
 it('keeps duplicate sources and podcasts out of context actions', () => {
   const execute = vi.fn(async () => {});
   const state = { ...initial, programToken: 'dj', dj: { active: true, phase: 'ready', profile: 'adaptive', sources: [{ id: 'existing', label: 'Song', activation: 1, tracks: [track] }] } } as ProgramState;
-  const reference = programLibraryMenu(track, () => state, () => false, execute).actions!.find(action => action.label === 'musicExplorer.reference')!;
+  const reference = programLibraryMenu(track, () => state, () => false, execute, undefined, true).actions!.find(action => action.label === 'musicExplorer.reference')!;
   expect(reference.selected).toBe(true); expect(reference.disabled).toBe(true); reference.onSelect();
   expect(execute).not.toHaveBeenCalled();
   const podcastState = { ...initial, index: 0, items: [{ ...track, id: 'episode-id', source: 'podcast', mediaKind: 'podcast_episode', key: 'episode' }] } as ProgramState;
@@ -121,7 +121,7 @@ it('keeps duplicate sources and podcasts out of context actions', () => {
 it('delegates route placement to the native chooser after checking the captured programme', () => {
   let state = { ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } } as ProgramState;
   const execute = vi.fn(async () => {}); const place = vi.fn();
-  const action = programLibraryMenu(track, () => state, () => false, execute, place).actions!.find(action => action.label === 'autoMode.dj.routeAction')!;
+  const action = programLibraryMenu(track, () => state, () => false, execute, place, true).actions!.find(action => action.label === 'autoMode.dj.routeAction')!;
   action.onSelect(); expect(place).toHaveBeenCalledExactlyOnceWith({ ...track, source: 'local' });
   expect(execute).not.toHaveBeenCalled(); state = { ...state, programToken: 'other' }; action.onSelect();
   expect(place).toHaveBeenCalledTimes(1);
@@ -139,4 +139,14 @@ it('allows deferred recordings in NORMAL but never converts them into DJ referen
   const menu = programLibraryMenu(song, () => dj, () => false, execute);
   expect(menu.actions!.every(action => action.disabled)).toBe(true);
   menu.actions!.forEach(action => action.onSelect()); expect(execute).not.toHaveBeenCalled();
+});
+
+it('external DJ menus start a new selection and keep session controls in the shell', () => {
+  const state = { ...initial, items: Array(1000).fill({ key: 'old' }), programToken: 'dj', dj: { active: true, phase: 'ready' } } as ProgramState;
+  const execute = vi.fn(async () => {});
+  const menu = programLibraryMenu(track, () => state, () => false, execute);
+  expect(menu.actions!.map(action => action.label)).toEqual(['musicExplorer.startDjFromSong']);
+  expect(menu.actions![0].disabled).toBe(false);
+  menu.actions![0].onSelect();
+  expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'djSelection', tracks: [{ ...track, source: 'local' }], label: 'Song', queueToken: 'order', programToken: 'dj' });
 });

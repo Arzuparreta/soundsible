@@ -10,6 +10,7 @@ import styles from './CollectionActions.module.css';
 
 /** Placement context is shared by every collection nested inside the explorer. */
 export const CollectionPlacementContext = createContext<{
+  shell?: boolean;
   beforeQueueId?: string;
   referenceOnly?: boolean;
   changeSession?: boolean;
@@ -52,6 +53,11 @@ export function CollectionActions(props: {
     };
     setBusy(true);
     try {
+      if (!placement.shell) {
+        if (props.items) await useCatalogCollection(props.items, props.title, 'start', undefined, isCurrent, epoch);
+        else actions.startDjSelection(props.tracks ?? [], props.title);
+        return;
+      }
       if (props.items) {
         if (!await useCatalogCollection(props.items, props.title, purpose, before, isCurrent, epoch, changeStarted)) return;
       }
@@ -74,7 +80,8 @@ export function CollectionActions(props: {
     : placement.referenceOnly ? 'reference'
     : placement.intent === 'auto-route' ? 'request'
     : 'change';
-  const primary = () => props.auto ? PRIMARY[purpose()] : PRIMARY.play;
+  const primary = () => !props.auto ? PRIMARY.play
+    : placement.shell ? PRIMARY[purpose()] : { icon: PlayIcon, label: 'autoMode.startDj' };
   const secondary = () => purpose() === 'change'
     ? { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), onSelect: () => void use('request') }
     : { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void use('change') };
@@ -85,7 +92,7 @@ export function CollectionActions(props: {
         {busy() ? t('collection.resolving') : t(primary().label)}
       </span>
     </button>
-    <Show when={props.auto && !placement.referenceOnly && placement.intent !== 'auto-route' && !props.hideReferenceMenu}>
+    <Show when={props.auto && placement.shell && !placement.referenceOnly && placement.intent !== 'auto-route' && !props.hideReferenceMenu}>
       <button type="button" disabled={busy() || !count()} aria-label={t('autoMode.route.actions', { title: props.title })} onClick={() => openActionMenu({ title: props.title, actions: [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => void use('reference') }, secondary()] })}><MoreIcon size={18} /></button>
     </Show>
   </>;

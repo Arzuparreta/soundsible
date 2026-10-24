@@ -19,20 +19,25 @@ planning and interface are still being refined.
   the route there.
 - With a track playing, open the player and switch from **NORMAL** to **DJ**.
   The current track becomes the first visible influence in **Session**.
-- From any song's menu, **Start DJ from this song** makes that song the
+- From a song's menu in NORMAL or inside the shell, **Start DJ from this song** makes that song the
   session's source. It is the next song the DJ mixes into, the way it mixes any
   other, and the music comes from it after that.
+- While DJ is active, playing a song anywhere outside the player shell starts
+  a fresh DJ session immediately from that song at 0:00. Its source and route
+  replace the previous session, including all previous requests and influences.
+  Playing a collection starts from its first song and uses the collection as
+  the source. Session controls are inside the shell.
 - In **Session**, use **Mix with…** to add an influence or **Change…** to
   choose a new direction using the same music browser.
 
 ### A source is one piece of music
 
 A song, an album, an artist, a playlist or the favourites is **one source**.
-Choosing a collection while DJ is on — its primary button, on its page or in
-the music browser — moves the session onto it: the DJ draws the next songs from
-it. It never turns the collection into a list of requests. Asking for every song
+Choosing a collection outside the shell starts a new DJ session from it.
+Inside the shell, its primary button moves the current session onto it while
+the playing song continues: the DJ draws the next songs from it. It never turns the collection into a list of requests. Asking for every song
 of a collection is still there, by name (**Add to session**) in the
-collection's menu, and those songs travel together: they belong to the session
+collection's menu inside the shell, and those songs travel together: they belong to the session
 they were asked for in.
 
 The three parts of the workspace have separate jobs:
@@ -94,7 +99,7 @@ not prepared yet; a mix already prepared still plays.
 
 - **Add to session** requests specific songs without changing the musical direction.
 - **Mix into session** adds an influence alongside the existing ones.
-- **Change session** (and **Start DJ from…**) moves the session onto a new
+- Inside the shell, **Change session** (and **Start DJ from…**) moves the session onto a new
   source at once. The old sources, the DJ's own picks and bridges, and songs
   that were requested as a whole collection go with the old session; songs you
   requested one at a time stay. The current song continues and the DJ mixes out

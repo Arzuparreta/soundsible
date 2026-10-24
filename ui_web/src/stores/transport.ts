@@ -37,7 +37,7 @@ export interface TransportPorts {
   ensureAutoplay: (force?: boolean) => Promise<boolean>;
   generatedQueue: GeneratedQueueController | null;
   savePodcastProgress: (completed?: boolean, position?: number) => void;
-  actions: Pick<PlayerActions, 'addAutoSource' | 'exitAutoMode' | 'next' | 'pausePlayback' | 'playFrom' | 'playNow' | 'playTrack' | 'resumePlayback' | 'retryCurrent' | 'seek'>;
+  actions: Pick<PlayerActions, 'startDjSelection' | 'exitAutoMode' | 'next' | 'pausePlayback' | 'playFrom' | 'playNow' | 'playTrack' | 'resumePlayback' | 'retryCurrent' | 'seek'>;
   pushEmptyPlaybackState: (opts?: {
     keepalive?: boolean;
   }) => void;
@@ -727,7 +727,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         if (isPodcastTrack(selected)) {
           void ports.confirmNormalMode('podcast', () => ports.actions.playFrom(tracks, i, opts));
         } else {
-          ports.mixAutoTrackNow(selected);
+          ports.actions.startDjSelection([selected], selected.title);
         }
         return;
       }
@@ -757,8 +757,8 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     },
     playShuffled(tracks: Track[], context?: PlaybackContextDescriptor): void {
       if (tracks.length === 0) return;
-      if (state.autoMode.active) {
-        ports.actions.addAutoSource(tracks, context?.label || tr('autoMode.source.selection'));
+      if (state.autoMode.active && !tracks.some(isPodcastTrack)) {
+        ports.actions.startDjSelection(shuffled(tracks), context?.label || tr('autoMode.source.selection'));
         return;
       }
       ports.actions.playFrom(shuffled(tracks), 0, {

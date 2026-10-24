@@ -568,6 +568,7 @@ export function NowPlayingBrowser(props: {
 
   return (
     <CollectionPlacementContext.Provider value={{
+      shell: true,
       get beforeQueueId() { return props.routeBeforeQueueId; },
       get referenceOnly() { return referenceMode(); },
       get changeSession() { return changeMode(); },
@@ -1081,7 +1082,7 @@ function PlaylistsView(props: {
             const track = pickPlaylistCoverTrack(name, ids(), props.byId, state.librarySettings);
             return track ? trackCoverUrl(track, 'thumb') : undefined;
           };
-          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onMenu={picking() ? undefined : (event) => openPlaylistMenu(name, {}, event)} onClick={() => props.onOpen(name)} />;
+          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onMenu={picking() ? undefined : (event) => openPlaylistMenu(name, { shell: true }, event)} onClick={() => props.onOpen(name)} />;
         }}
       </For>}>
         <MusicReorderList items={props.names} label={(name) => name} render={(name) => <span>{name}</span>} onChange={actions.reorderPlaylists} />
@@ -1115,7 +1116,7 @@ function PlaylistView(props: {
       onUse={props.onUse}
       headerActions={<>
         <Show when={editing()}><button type="button" aria-label={t('musicExplorer.done')} onClick={() => setEditing(false)}><CheckIcon /></button></Show>
-        <button type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={(event) => openPlaylistMenu(props.name, { beforeQueueId: placement.beforeQueueId, onPlaced: placement.onCompleted, onEdit: () => setEditing(true), onRenamed: (name) => navigation.renamePlaylist(props.name, name), onDeleted: () => { navigation.back(); } }, event)}><MoreIcon /></button>
+        <button type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={(event) => openPlaylistMenu(props.name, { shell: true, beforeQueueId: placement.beforeQueueId, onPlaced: placement.onCompleted, onEdit: () => setEditing(true), onRenamed: (name) => navigation.renamePlaylist(props.name, name), onDeleted: () => { navigation.back(); } }, event)}><MoreIcon /></button>
       </>}
       editContent={editing() ? <MusicReorderList items={state.playlists[props.name] ?? []} label={(id) => props.byId.get(id)?.title ?? id} render={(id) => <span>{props.byId.get(id)?.title ?? id}</span>} onChange={(ids) => actions.reorderPlaylistTracks(props.name, ids)} /> : undefined}
     />

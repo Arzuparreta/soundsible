@@ -95,6 +95,7 @@ export interface PlayerActions {
   exitAutoMode: () => void;
   addAutoSource: (tracks: Track[], label: string) => void;
   beginAutoSessionChange: () => number;
+  startDjSelection: (tracks: Track[], label: string) => boolean;
   startDjFromTrack: (track: Track) => Promise<boolean>;
   changeAutoSession: (tracks: Track[], label: string) => Promise<boolean>;
   retryAutoRoute: () => void;

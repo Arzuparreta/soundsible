@@ -166,8 +166,8 @@ export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSigna
   };
 }
 
-export async function useCatalogCollection(items: CatalogItem[], label: string, purpose: 'reference' | 'request' | 'change', beforeQueueId?: string, isCurrent: () => boolean = () => true, reservedEpoch?: number, onChangeStarted?: () => void): Promise<boolean> {
-  const epoch = reservedEpoch ?? (purpose === 'change' ? actions.beginAutoSessionChange() : actions.autoSessionToken());
+export async function useCatalogCollection(items: CatalogItem[], label: string, purpose: 'reference' | 'request' | 'change' | 'start', beforeQueueId?: string, isCurrent: () => boolean = () => true, reservedEpoch?: number, onChangeStarted?: () => void): Promise<boolean> {
+  const epoch = reservedEpoch ?? ((purpose === 'change' || purpose === 'start') ? actions.beginAutoSessionChange() : actions.autoSessionToken());
   const progress = toast.loading(t('collection.resolving'));
   const tracks: Track[] = [];
   const failed: string[] = [];
@@ -185,9 +185,10 @@ export async function useCatalogCollection(items: CatalogItem[], label: string, 
   }
   if (!state.autoMode.active || actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
   progress.dismiss();
-  if (purpose === 'change') {
+  if (purpose === 'start' || purpose === 'change') {
     if (failed.length) toast.error(t('musicExplorer.collectionFailed', { titles: failed.join(', ') }));
     if (!tracks.length) return false;
+    if (purpose === 'start') return actions.startDjSelection(tracks, label);
     const changing = actions.changeAutoSession(tracks, label);
     onChangeStarted?.();
     return changing;

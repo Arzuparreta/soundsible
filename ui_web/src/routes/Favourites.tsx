@@ -1,7 +1,5 @@
 import { createMemo, Show } from 'solid-js';
 import { actions, favouriteRows, state } from '../stores';
-import { openActionMenu } from '../components/ActionMenu';
-import { menuIcons, MoreIcon } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { ViewHeader } from '../components/ViewHeader';
@@ -64,19 +62,7 @@ export default function Favourites() {
 
   useAppBar({
     title: () => t('favourites.title'),
-    actions: () => state.autoMode.active ? [{
-      label: t('nav.more'),
-      icon: () => <MoreIcon />,
-      opensDialog: true,
-      onSelect: () => openActionMenu({
-        title: t('nav.favourites'),
-        actions: [
-          { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), disabled: !favTracks().length, onSelect: () => void actions.changeAutoSession(favTracks(), t('favourites.title')) },
-          { icon: menuIcons.source(), label: t('musicExplorer.reference'), disabled: !favTracks().length, onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) },
-          { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), disabled: !favTracks().length, onSelect: () => void actions.placeAutoTracks(favTracks()) },
-        ],
-      }),
-    }] : [],
+
   });
 
   return (

@@ -33,35 +33,16 @@ function artistContext(artist: string): PlaybackContextDescriptor {
 
 /** Play / shuffle / go-to-artist menu definition for an artist. */
 export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}): ActionMenuOptions {
-  const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
-    // In DJ an artist is one source: choosing it moves the session onto it.
-    ...(inAuto ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(artistTracks(artist), artist) }] : []),
-    {
-      icon: inAuto ? menuIcons.queue() : menuIcons.play(),
-      label: inAuto ? t('musicExplorer.requestAll') : t('artistActions.play'),
-      onSelect: () => {
-        const t = artistTracks(artist);
-        if (t.length) {
-          if (state.autoMode.active) void actions.placeAutoTracks(t);
-          else {
-            actions.playFrom(t, 0, { context: artistContext(artist) });
-          }
-        }
-      },
-    },
+    { icon: menuIcons.play(), label: t('artistActions.play'), onSelect: () => {
+      const tracks = artistTracks(artist);
+      if (state.autoMode.active) actions.startDjSelection(tracks, artist);
+      else actions.playFrom(tracks, 0, { context: artistContext(artist) });
+    } },
+    { icon: menuIcons.shuffle(), label: t('artistActions.shuffle'), onSelect: () => {
+      actions.playShuffled(artistTracks(artist), artistContext(artist));
+    } },
   ];
-  if (inAuto) list.push({ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.addAutoSource(artistTracks(artist), artist) });
-  if (!inAuto) list.push({
-      icon: menuIcons.shuffle(),
-      label: t('artistActions.shuffle'),
-      onSelect: () => {
-        const t = artistTracks(artist);
-        if (t.length) {
-          actions.playShuffled(t, artistContext(artist));
-        }
-      },
-    });
   list.push({ icon: menuIcons.artist(), label: t('artistActions.goToArtist'), onSelect: () => navigateMusic(artistDestination({ artist, view: 'library' }, artist)) });
   list.push(savedEntityAction({ kind: 'artist', name: artist, cover: _ctx.cover, destination: artistPath(artist, { view: 'library', artistId: _ctx.artistId }) }));
   return { title: artist, actions: list };

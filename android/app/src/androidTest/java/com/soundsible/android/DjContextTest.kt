@@ -11,7 +11,7 @@ import org.junit.Assume.assumeNotNull
 import org.junit.Test
 import java.util.concurrent.TimeUnit
 
-/** Real library menus change DJ context while preserving paused playback and listener requests. */
+/** Shell edits retain playback; external selections replace the session and start immediately. */
 @UnstableApi
 class DjContextTest {
     @Test fun httpSongContext() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"))
@@ -104,7 +104,8 @@ class DjContextTest {
                 assertEquals("Settings replans dropped collection requests", "true", web.evaluate(scenario, "window.__dj.items.filter(i=>i.title.startsWith('Collection request')).length===2"))
                 // Groups travel in the same autoRoute contract used by web/native handoffs.
                 waitFor("['ready','degraded','exhausted'].includes(window.__dj.dj.phase)")
-                menu("member softer PCM song", "Start DJ from current song")
+                // A shell context edit retains the transport and individual requests.
+                command("action:'djContext',tracks:[{source:'local',id:'member-pcm-soft',title:'member softer PCM song',artist:'member artist',duration:20}],key:window.__dj.items[window.__dj.index].key")
                 waitFor("window.__dj.dj.sources.length===1 && window.__dj.dj.sources[0].tracks[0].id==='member-pcm-soft' && !window.__dj.items.some(i=>i.key===" + lead + ")")
                 retained()
                 assertEquals("true", web.evaluate(scenario, "window.__dj.items.some(i=>i.key===" + request + ")"))
@@ -116,7 +117,7 @@ class DjContextTest {
                 retained()
                 assertEquals("true", web.evaluate(scenario, "window.__dj.items.some(i=>i.key===" + request + ")"))
                 val revision = web.evaluate(scenario, "window.__dj.dj.editRevision")
-                menu("member louder PCM song", "Mix into session")
+                command("action:'djSettings',sources:[...window.__dj.dj.sources,{id:'loud-source',label:'member louder PCM song',activation:2,tracks:[{id:'member-pcm-loud',title:'member louder PCM song',artist:'member artist',duration:20}]}]")
                 waitFor("window.__dj.dj.sources.length===2")
                 retained()
                 assertEquals(revision, web.evaluate(scenario, "window.__dj.dj.editRevision"))
@@ -131,11 +132,14 @@ class DjContextTest {
                 command("action:'append',tracks:Array.from({length:20},(_,i)=>({source:'local',id:'member-pcm-soft',title:'Future '+i,artist:'member artist',duration:20}))")
                 waitFor("window.__dj.items.length>=21")
                 web.evaluate(scenario, "window.__fixedTarget=window.__dj.items[18].key;window.__fixedBefore=window.__dj.items.map(i=>i.key);window.__fixedRevision=window.__dj.dj.editRevision")
-                menu("member louder PCM song", "Add to route")
+                // Placement is a shell action, reached from a route occurrence.
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-queue-key]')).find(row=>row.dataset.queueKey===window.__dj.items[1].key).querySelector('[data-row-menu]').click()")
+                waitFor("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to route')")
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to route').click()")
                 waitFor("!!document.querySelector('[data-testid=android-dj-placement] select')")
                 web.evaluate(scenario, "let select=document.querySelector('[data-testid=android-dj-placement] select');select.value=window.__fixedTarget;select.dispatchEvent(new Event('change',{bubbles:true}));select.form.requestSubmit()")
                 waitFor("window.__dj.dj.editRevision>window.__fixedRevision && window.__dj.dj.editOutcome==='placed'")
-                assertEquals("true", web.evaluate(scenario, "(()=>{let target=window.__dj.items.findIndex(i=>i.key===window.__fixedTarget);let placed=window.__dj.items[target-1];return target>0 && placed.id==='member-pcm-loud' && !window.__fixedBefore.includes(placed.key)})()"))
+                assertEquals("true", web.evaluate(scenario, "(()=>{let target=window.__dj.items.findIndex(i=>i.key===window.__fixedTarget);let placed=window.__dj.items[target-1];return target>0 && placed.id==='member-pcm-soft' && !window.__fixedBefore.includes(placed.key)})()"))
                 retained()
                 web.evaluate(scenario, "window.__fixedRequest=window.__dj.items[window.__dj.items.findIndex(i=>i.key===window.__fixedTarget)-1].key;document.querySelector('[data-program-menu]').click()")
                 waitFor("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Sources')")
@@ -146,6 +150,16 @@ class DjContextTest {
                 assertEquals("true", web.evaluate(scenario, "document.querySelector('[data-testid=android-dj-sources] button').disabled"))
                 assertEquals("true", web.evaluate(scenario, "window.__dj.items.some(i=>i.key===window.__fixedRequest)"))
                 retained()
+                // A real library click now owns a fresh native DJ programme,
+                // even while the old programme was paused with requests.
+                web.evaluate(scenario, "document.querySelector('[role=dialog] button[aria-label=Close]')?.click();window.__oldProgram=window.__dj.programToken;window.__oldKeys=window.__dj.items.map(i=>i.key)")
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member louder PCM song').click()")
+                waitFor("window.__dj.dj?.active && window.__dj.id==='member-pcm-loud' && window.__dj.playing && window.__dj.playWhenReady && window.__dj.programToken!==window.__oldProgram")
+                waitFor("window.__dj.dj.sources.length===1 && window.__dj.dj.sources[0].tracks[0].id==='member-pcm-loud'")
+                assertEquals("Old route occurrences survived external selection", "false", web.evaluate(scenario, "window.__dj.items.some(i=>window.__oldKeys.includes(i.key))"))
+                assertTrue("External selection retained the old seek", web.evaluate(scenario, "window.__dj.positionMs").toDouble() < 3000)
+                menu("member softer PCM song", "Start DJ from this song")
+                waitFor("window.__dj.dj?.active && window.__dj.id==='member-pcm-soft' && window.__dj.playWhenReady")
             } finally {
                 web.evaluate(scenario, "clearInterval(window.__djTimer)")
                 val generation = connection.generation

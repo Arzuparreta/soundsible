@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   reference: vi.fn(),
   change: vi.fn().mockResolvedValue(true),
+  start: vi.fn().mockReturnValue(true),
   error: vi.fn(),
   dismiss: vi.fn(),
 }));
@@ -21,6 +22,7 @@ vi.mock('../stores', () => ({
     autoSessionToken: () => mocks.epoch,
     beginAutoSessionChange: () => ++mocks.epoch,
     changeAutoSession: mocks.change,
+    startDjSelection: mocks.start,
     linkCatalogItem: vi.fn(),
     placeAutoTracks: mocks.request,
     addAutoSource: mocks.reference,
@@ -44,6 +46,22 @@ describe('catalog collection commands', () => {
     mocks.epoch = 1;
     mocks.state.autoMode.active = true;
     mocks.resolve.mockImplementation(async ({ title }: { title: string }) => ({ video_id: title }));
+  });
+
+  it('starts a new external DJ session from the resolved collection instead of editing its sources or requests', async () => {
+    expect(await useCatalogCollection([item(1), item(2)], 'Album', 'start')).toBe(true);
+    expect(mocks.start).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'Song 1' }), expect.objectContaining({ id: 'Song 2' }),
+    ], 'Album');
+    expect(mocks.change).not.toHaveBeenCalled();
+    expect(mocks.reference).not.toHaveBeenCalled();
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+
+  it('cannot start an obsolete collection after another music selection', async () => {
+    mocks.resolve.mockImplementation(async () => { mocks.epoch++; return { video_id: 'old' }; });
+    expect(await useCatalogCollection([item(1)], 'Obsolete album', 'start')).toBe(false);
+    expect(mocks.start).not.toHaveBeenCalled();
   });
 
   it('requests the entire collection, retains repeated songs, and reports unresolved titles', async () => {

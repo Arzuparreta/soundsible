@@ -147,8 +147,8 @@ export default function Artist() {
     const context = artistContext();
     if (state.autoMode.active) {
       // An artist is one source for the DJ, never a list of requests.
-      if (view() === 'library') void actions.changeAutoSession(libraryTrackList(), name());
-      else void useCatalogCollection(topTracks(), name(), 'change');
+      if (view() === 'library') void actions.startDjSelection(libraryTrackList(), name());
+      else void useCatalogCollection(topTracks(), name(), 'start');
       return;
     }
     if (view() === 'library') {
@@ -164,8 +164,8 @@ export default function Artist() {
   const shuffle = () => {
     const context = artistContext();
     if (state.autoMode.active) {
-      if (view() === 'library') void actions.changeAutoSession(libraryTrackList(), name());
-      else void useCatalogCollection(topTracks(), name(), 'change');
+      if (view() === 'library') void actions.startDjSelection(libraryTrackList(), name());
+      else void useCatalogCollection(topTracks(), name(), 'start');
       return;
     }
     if (view() === 'library') {

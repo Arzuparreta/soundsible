@@ -43,41 +43,18 @@ function albumContext(album: CatalogAlbum): PlaybackContextDescriptor {
 
 /** Play / shuffle / go-to-album menu definition for a catalog album. */
 export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {}): ActionMenuOptions {
-  const inAuto = state.autoMode.active;
-  const list: MenuAction[] = [
-    // In DJ an album is one source: choosing it moves the session onto it.
-    ...(inAuto ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: async () => {
-      const epoch = actions.beginAutoSessionChange();
-      const tracks = await albumTracks(album);
-      if (actions.autoSessionToken() === epoch) await actions.changeAutoSession(tracks, album.title);
-    } }] : []),
-    {
-      icon: inAuto ? menuIcons.queue() : menuIcons.play(),
-      label: inAuto ? t('musicExplorer.requestAll') : t('albumActions.play'),
-      onSelect: () => {
-        const epoch = actions.autoSessionToken();
-        void albumTracks(album).then((tracks) => {
-          if (!tracks.length || actions.autoSessionToken() !== epoch || inAuto !== state.autoMode.active) return;
-          if (state.autoMode.active) void actions.placeAutoTracks(tracks);
-          else actions.playFrom(tracks, 0, { context: albumContext(album) });
-        });
-      },
-    },
-  ];
-  if (inAuto) list.push({ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: async () => {
-    const epoch = actions.autoSessionToken();
+  const play = async (shuffle = false) => {
+    const epoch = actions.beginAutoSessionChange();
     const tracks = await albumTracks(album);
-    if (actions.autoSessionToken() === epoch) actions.addAutoSource(tracks, album.title);
-  } });
-  if (!inAuto) list.push({
-      icon: menuIcons.shuffle(),
-      label: t('albumActions.shuffle'),
-      onSelect: () => {
-        void albumTracks(album).then((tracks) => {
-          if (tracks.length) actions.playShuffled(tracks, albumContext(album));
-        });
-      },
-    });
+    if (!tracks.length || actions.autoSessionToken() !== epoch) return;
+    if (shuffle) actions.playShuffled(tracks, albumContext(album));
+    else if (state.autoMode.active) actions.startDjSelection(tracks, album.title);
+    else actions.playFrom(tracks, 0, { context: albumContext(album) });
+  };
+  const list: MenuAction[] = [
+    { icon: menuIcons.play(), label: t('albumActions.play'), onSelect: () => void play() },
+    { icon: menuIcons.shuffle(), label: t('albumActions.shuffle'), onSelect: () => void play(true) },
+  ];
   {
     list.push({
       icon: menuIcons.album(),
