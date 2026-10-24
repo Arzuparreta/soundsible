@@ -959,6 +959,9 @@ y pide `dj-plan` y `dj-transition`. Los dos endpoints dan el mismo plan:
 El primer caso hace coincidir drop y breakdown dentro de 5 ms; el segundo
 conserva el intro y termina antes de agotar el archivo. Las pruebas de rejilla
 con deriva sintética también comprueban el fundido sin beatmatch.
+La cota de final usa la duración realmente decodificada y la precisión de
+serialización de 1 ms: AAC puede conservar muestras adicionales respecto a los
+240 s nominales de la señal (observado en el decodificador de CI).
 `shared/contracts/dj_structural_plans.json` fija cuatro vectores comunes
 (120→125 BPM con drop, outro corto, pulso no fiable y archivo de 90 s): Python
 comprueba el plan y las suites web y JVM de Android lo ejecutan sin mover

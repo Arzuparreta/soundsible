@@ -51,13 +51,15 @@ def section_song(path, *, incoming=False, outro=False, drift=0):
         output.writeframes((samples * envelope).astype("<i2").tobytes())
 
 
-def test_exit_at_outro_shortens_blend_to_fit_without_moving_the_section():
-    out = measured()
-    out["sections"] = [section(224.25, 240, "outro")]
+@pytest.mark.parametrize("duration", [240., 240.001])
+def test_exit_at_outro_shortens_blend_to_fit_without_moving_the_section(duration):
+    # AAC decoders can retain one more millisecond than the original PCM.
+    out = measured(duration=duration)
+    out["sections"] = [section(224.25, duration, "outro")]
     plan = plan_transition(out, measured())
     assert plan["out_cue"] == 224.25
-    assert plan["overlap_seconds"] == 14.25
-    assert plan["out_cue"] + plan["overlap_seconds"] == 238.5
+    assert plan["overlap_seconds"] == round(duration - 224.25 - 1.5, 3)
+    assert plan["out_cue"] + plan["overlap_seconds"] == pytest.approx(duration - 1.5)
 
 
 def test_finish_before_breakdown_and_treat_contiguous_blocks_as_one_section():

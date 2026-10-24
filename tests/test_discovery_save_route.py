@@ -1644,7 +1644,9 @@ def test_measured_audio_sections_reach_route_and_refinement_without_client_repla
         start = next(s["start"] for s in analyses["outgoing"]["sections"] if s["label"] == "outro")
         assert plan["out_cue"] == pytest.approx(start, abs=.005)
         assert plan["overlap_seconds"] < 16
-        assert plan["out_cue"] + plan["overlap_seconds"] <= 240 - 1.5
+        # AAC padding/resampling can retain extra samples: validate the
+        # decoded duration, with the plan's millisecond serialization precision.
+        assert plan["out_cue"] + plan["overlap_seconds"] <= analyses["outgoing"]["duration"] - 1.5 + .001
     else:
         breakdown = next(s["start"] for s in analyses["outgoing"]["sections"] if s["label"] == "breakdown")
         drop = next(s["start"] for s in analyses["incoming"]["sections"] if s["label"] == "drop")
