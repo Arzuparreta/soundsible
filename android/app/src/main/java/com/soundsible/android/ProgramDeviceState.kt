@@ -93,6 +93,7 @@ internal object ProgramDeviceState {
                     .put("playback_rate", proposal.rate.takeIf { it.isFinite() } ?: 1.0).put("confidence", proposal.confidence.takeIf { it.isFinite() } ?: 0.0)
                     .put("overlap_bars", 0).put("score", 0).put("fallback", proposal.confidence < 0.35)
                     .put("sync", JSONObject().put("out_period", 0).put("in_period", 0).put("phase_tolerance_ms", proposal.phaseToleranceMs.takeIf { it.isFinite() } ?: 5.0).put("grid_source", "estimated"))
+                proposal.echoDelaySeconds?.takeIf { it.isFinite() && it > 0 && it <= 2 }?.let { transition.put("echo_delay_seconds", it) }
                 val previous = route[proposal.fromKey]?.item?.let(::track)
                 if (previous != null) {
                     val inherited = native.item.mediaMetadata.extras?.getString(DEVICE_PLAN)?.let(::JSONObject) ?: JSONObject()

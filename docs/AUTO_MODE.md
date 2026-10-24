@@ -64,6 +64,12 @@ engine can perform:
 - conservative fades when the analysis is missing or a more elaborate mix
   would sound worse.
 
+When an existing server profile selects an echo cut, its delay is one measured
+outgoing beat near the exit, corrected for the deck's playback speed. Without
+a reliable outgoing pulse it uses a structural fade. The automatic `adaptive`
+profile still does not select echo cuts; changing that policy remains P7 in
+`docs/dj/HANDOFF.md`.
+
 For each refill, DJ chooses up to eight songs before looking at their analysis,
 then orders the measured songs for transition quality and continuity in notes
 per second, loudness, timbre and tempo. The scales come from that refill's own

@@ -181,6 +181,16 @@ Unmatched occurrences travel in published sessions and are matched on play.
   (`tempo_confidence <= 0.6`, the analyser's ceiling for a locally followed
   grid) uses a structural or safe fade at normal speed, even with confident
   tonality. This does not alter live playback-rate correction.
+- **Echo timing is server-owned.** An echo cut includes `echo_delay_seconds`,
+  one measured outgoing beat in media seconds near `out_cue`. Web and Android
+  convert it to output time with the outgoing deck's actual playback speed.
+  It requires analysed audio, a measured grid and `tempo_confidence > 0.6`;
+  otherwise the server chooses a structural fade. Missing or invalid delays
+  from older plans produce a dry fade, never a fixed guessed delay. Android
+  preserves the field when exporting a session to another device. The web
+  graph compensates the feedback render quantum so later repeats stay on the
+  beat; native PCM uses an integer sample delay. Wet/feedback gains and the
+  automatic profile's choice of techniques are unchanged.
 - **Every handoff resolves.** Nothing fades until the incoming deck is sounding,
   and the outgoing song's `ended` always decides what follows: an incoming deck
   that is already sounding takes over; one that cannot play fails the handoff and

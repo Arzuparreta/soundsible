@@ -11,6 +11,8 @@ import { URL as NodeURL } from 'node:url';
 const UNMEASURED_LEVEL = gainToLinear(UNMEASURED_GAIN_DB);
 const structuralVectors: Array<{ name: string; duration: number; transition: DjTransitionPlan & { out_cue: number } }> =
   JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_structural_plans.json', import.meta.url), 'utf8'));
+const echoVectors: typeof structuralVectors =
+  JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_echo_plans.json', import.meta.url), 'utf8'));
 
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
 const t2: Track = { id: 't2', title: 'Two', artist: 'Artist', duration: 200 };
@@ -1142,7 +1144,7 @@ describe('Playback load coalescing', () => {
     } finally { actions.exitAutoMode(); clock.mockRestore(); }
   });
 
-  it.each(structuralVectors)('executes the shared server section plan $name without moving its cues', async (vector) => {
+  it.each([...structuralVectors, ...echoVectors])('executes the shared server plan $name without moving its cues', async (vector) => {
     const armTransition = vi.fn();
     const response = autoPlan(['route-00001']);
     const planDjQueue = vi.fn().mockResolvedValue({ ...response,
@@ -1161,6 +1163,7 @@ describe('Playback load coalescing', () => {
       technique: vector.transition.technique, out_cue: vector.transition.out_cue,
       in_cue: vector.transition.in_cue, overlap_seconds: vector.transition.overlap_seconds,
       playback_rate: vector.transition.playback_rate,
+      ...(vector.transition.echo_delay_seconds != null ? { echo_delay_seconds: vector.transition.echo_delay_seconds } : {}),
     });
     actions.exitAutoMode();
   });

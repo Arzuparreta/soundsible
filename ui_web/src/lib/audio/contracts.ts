@@ -8,6 +8,7 @@ export interface DeckEffects {
    * so an echo tail is levelled like the programme it came from. */
   level?: GainNode;
   delay?: DelayNode;
+  echoInput?: DelayNode;
   echoWet?: GainNode;
   echoFeedback?: GainNode;
 }
@@ -70,6 +71,7 @@ export interface LiveTransitionPlan {
   overlap_seconds: number;
   overlap_bars: number;
   playback_rate: number;
+  echo_delay_seconds?: number;
   confidence: number;
   sync?: {
     phase_tolerance_ms?: number;
@@ -130,6 +132,7 @@ export interface ActiveMix {
   /** Incoming media position at which the crossfade started. */
   mixStart: number | null;
   technique: LiveTransitionPlan['technique'];
+  echoDelay?: number;
   phaseTolerance: number;
   phaseCorrected: boolean;
   dominant: boolean;
