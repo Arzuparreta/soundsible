@@ -63,15 +63,16 @@ no hay síntoma que lo justifique.
 | P5 | Pool analizado, previews y canciones puente | AAC → caché → HTTP, pools fríos/calientes y adquisición real de 16 previews | Cerrado (implementación `31f696bc`) |
 | P6 | Compatibilidad de tonalidad mal puntuada | Medido: 576 pares y cadencias conocidas | Cerrado (`af6521f1`); detector y límites documentados abajo |
 | P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#385); queda decidir la opción (b) en el servidor |
-| P8 | Secciones medidas y no usadas | Lectura de código | Pendiente |
+| P8 | Secciones medidas y no usadas | AAC → SQLite → HTTP; vectores comunes ejecutados por web y Android | Cerrado (implementación `90b6c7e9`) |
 | P9 | Eco no sincronizado con el tempo | Lectura de código | Pendiente |
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Implementado en esta PR |
 | P10 | Código muerto y documentación desactualizada | Lectura de código | En parte (#385): queda `automation` |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
-salvo que vuelva el síntoma. P4, P6, P3 y P5 están cerrados: **el siguiente es P8**.
-P9 sigue dependiendo de la decisión pendiente de P7.
+salvo que vuelva el síntoma. P4, P6, P3, P5 y P8 están cerrados:
+**el siguiente es P9**, que sigue dependiendo de
+la decisión pendiente de P7. No se cambia aquí la política de perfiles ni el eco.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -207,8 +208,8 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
 | `spectral_flatness` | Planitud espectral 100–5000 Hz de los fotogramas fuertes, ponderada por potencia (P4) | Sí, continuidad de ruta (P3) |
 | `intro_cue` | Primer instante con energía sobre el percentil 35 | Sí (punto de entrada) |
 | `outro_cue` | Primer límite de frase unos 64 golpes antes del último sonido | Sí (punto de salida) |
-| `sections` | Etiquetas intro/build/drop/breakdown/body/outro por bloques de 8 compases; `level` es el nivel medio frente al de la propia canción | No (P8) |
-| `tempo_confidence` | Parte de golpes que encajan en la rejilla; ≤ 0,6 si el tempo deriva | Sí, dentro de `confidence` |
+| `sections` | Etiquetas intro/build/drop/breakdown/body/outro por bloques de 8 compases; `level` es el nivel medio frente al de la propia canción | Sí, salida en outro/antes de breakdown y llegada al drop (P8) |
+| `tempo_confidence` | Parte de golpes que encajan en la rejilla; ≤ 0,6 si el tempo deriva | Sí, dentro de `confidence` y como requisito independiente de beatmatch (P8) |
 | `confidence` | `0,38 + 0,36·tempo_conf + min(0,2, margen_tonalidad/8)` | Sí |
 
 ### Cálculo de la transición (`plan_transition`)
@@ -229,9 +230,14 @@ score     = 0.46·tempo + 0.32·armonía + 0.22·confianza
 | `open_format` | 8 | 12 % | bass_swap | filter_blend | echo_cut | safe_fade |
 
 - Solapamiento: compases × duración del compás de la canción que sale, entre 4 y
-  48 s. Las técnicas de corte o fundido se limitan a 8 compases.
+  48 s, con el mismo límite del 25 % de duración que los reproductores (mínimo
+  1,5 s en archivos cortos). Las técnicas de corte o fundido se limitan a 8 compases.
 - `out_cue` = `outro_cue` ajustado al downbeat más cercano. `in_cue` =
-  `intro_cue` ajustado al downbeat más cercano.
+  `intro_cue` ajustado al downbeat más cercano. Son los puntos de reserva:
+  P8 usa las secciones cuando caben en la ventana y puede acortar el solapamiento.
+- Beatmatch solo con BPM conocido y `tempo_confidence > 0,6` en ambas canciones.
+  Por debajo se usa `structural_fade` o `safe_fade`, a velocidad normal,
+  independientemente de la puntuación de tonalidad de la tabla.
 - `playback_rate` = relación entre los periodos medidos cerca de cada punto. Solo
   en bass_swap, long_blend y filter_blend, y solo si el cambio es ≤ 6 %. Si no, 1,0.
 
@@ -906,16 +912,67 @@ perfiles del servidor y el parámetro `dj_profile`.
 
 ## P8. Secciones medidas y no usadas
 
-**Qué pasa.** `_sections_from_features` etiqueta bloques de 8 compases (intro,
+**Diagnóstico original.** `_sections_from_features` etiqueta bloques de 8 compases (intro,
 build, drop, breakdown, body, outro), pero nadie lee las etiquetas. `outro_cue`
 solo usa los límites de frase; `intro_cue` es el primer instante con sonido.
 `loudness_db` se eliminó en P4 (lo sustituye `loudness_lufs`); `tempo_confidence` solo entra en `confidence`.
 
-**Posibles soluciones.** Colocar la salida al inicio de un outro o antes de un
-breakdown, y la entrada de forma que el drop de la entrante caiga en un límite de
-frase de la que sale. Usar `tempo_confidence` para decidir si se intenta un
-beatmatch: desde P1 vale ≥ 0,9 en canciones de tempo fijo y ≤ 0,6 en las que
-derivan, pero hoy solo entra en `confidence` y casi no cambia la técnica elegida.
+**Estado: cerrado en `90b6c7e9`.** Solo cambia la planificación, no las medidas
+guardadas ni su formato; no hace falta invalidar la caché de análisis.
+
+- **Salida por secciones.** `plan_transition` lee los comienzos de outro y
+  breakdown. Puede comenzar la mezcla en el outro o terminarla al llegar a un
+  breakdown. Elige la oportunidad válida más cercana al punto de salida
+  anterior; los bloques contiguos con la misma etiqueta forman una sola
+  sección. No añade notas humanas ni pesos de gusto. Un outro corto reduce
+  el solapamiento para dejar los 1,5 s de margen del servidor.
+- **Entrada al drop.** Con pulso fiable, busca el primer drop que admita una
+  entrada medida y la frase saliente más lejana dentro del solapamiento máximo.
+  El final de esa frase y el drop coinciden en el reloj de reproducción con
+  tolerancia de 5 ms. La velocidad se calcula cerca de los puntos elegidos y se
+  comprueba con el redondeo que ejecutan los clientes. No se permite empezar
+  antes del intro ni saltar más del primer cuarto de la canción entrante.
+  Si no encajan frases, rejillas o límite de velocidad, conserva el intro.
+- **Ventana ejecutable.** El servidor aplica antes el límite del 25 % del archivo
+  y la salida no anterior a `min(90 s, 60 % de duración)`, como web y Android.
+  Así los clientes no acortan después una mezcla que estaba alineada al drop.
+  `overlap_bars` describe ahora el solapamiento efectivo.
+- **Pulso independiente de tonalidad.** BPM ausente o `tempo_confidence ≤ 0,6`
+  impiden bass_swap, filter_blend y long_blend: se usa fundido estructural o
+  seguro a velocidad normal. El 0,6 es el techo que ya tiene la rejilla local
+  en P1 (`(0,7 − 0,4) / 0,5`), no una nota nueva ajustada con canciones.
+- **Mismo contrato.** Todas las rutas y el refinado usan `plan_transition`.
+  El servidor conserva secciones y rejillas; v6 continúa enviando resúmenes
+  compactos y el plan final. Web y Android no interpretan etiquetas musicales.
+
+**Medición reproducible (2026-10-24).**
+`PYTHONPATH=. .venv/bin/pytest -q -s tests/test_discovery_save_route.py -k measured_audio_sections`
+genera canciones de cuatro minutos con golpes a 120 BPM y regiones de ocho
+compases de nivel conocido, codifica AAC con FFmpeg, analiza, guarda en SQLite
+y pide `dj-plan` y `dj-transition`. Los dos endpoints dan el mismo plan:
+
+| Caso medido | Salida | Entrada | Solapamiento | Velocidad |
+| --- | ---: | ---: | ---: | ---: |
+| Breakdown en 208,25 s, drop entrante en 64,25 s | 176,2499 s | 32,2498 s | 32 s | 0,999998 |
+| Outro en 224,25 s, sin frase posterior que quepa | 224,2499 s | 0,2498 s | 14,25 s | 1 |
+
+El primer caso hace coincidir drop y breakdown dentro de 5 ms; el segundo
+conserva el intro y termina antes de agotar el archivo. Las pruebas de rejilla
+con deriva sintética también comprueban el fundido sin beatmatch.
+La cota de final usa la duración realmente decodificada y la precisión de
+serialización de 1 ms: AAC puede conservar muestras adicionales respecto a los
+240 s nominales de la señal (observado en el decodificador de CI).
+`shared/contracts/dj_structural_plans.json` fija cuatro vectores comunes
+(120→125 BPM con drop, outro corto, pulso no fiable y archivo de 90 s): Python
+comprueba el plan y las suites web y JVM de Android lo ejecutan sin mover
+puntos ni acortar el solapamiento. No hay escucha física en esta entrega.
+
+**Límites.** Se conservan las etiquetas heurísticas de ocho compases y los
+límites de detección de P1; estas señales no prueban la clasificación de todos
+los géneros. No se inventan secciones en el hueco central de los archivos largos
+analizados por ventanas. Sin sección utilizable se mantienen los puntos de
+reserva; sin una rejilla fiable se funde sin beatmatch. No se añade corrección
+de velocidad durante la reproducción (P2 sigue aparcado).
 
 ## P9. Eco no sincronizado con el tempo
 

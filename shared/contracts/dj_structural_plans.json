@@ -1,0 +1,163 @@
+[
+  {
+    "name": "drop-at-phrase-125",
+    "outgoing": {
+      "sections": [
+        {
+          "start": 208.25,
+          "end": 224.25,
+          "label": "breakdown",
+          "level": 0.5
+        }
+      ]
+    },
+    "incoming": {
+      "bpm": 125,
+      "offset": 0.75,
+      "sections": [
+        {
+          "start": 62.19,
+          "end": 77.55,
+          "label": "drop",
+          "level": 0.5
+        }
+      ]
+    },
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 176.25,
+      "in_cue": 31.47,
+      "overlap_seconds": 32.0,
+      "overlap_bars": 16.0,
+      "playback_rate": 0.96,
+      "score": 0.748,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "out_period": 0.5,
+        "in_period": 0.48,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "bass_swap",
+        "filter": false,
+        "echo_out": false
+      }
+    },
+    "duration": 240
+  },
+  {
+    "name": "outro-runway",
+    "outgoing": {
+      "sections": [
+        {
+          "start": 224.25,
+          "end": 240,
+          "label": "outro",
+          "level": 0.5
+        }
+      ]
+    },
+    "incoming": {},
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 224.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 14.25,
+      "overlap_bars": 7.125,
+      "playback_rate": 1.0,
+      "score": 0.978,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "out_period": 0.5,
+        "in_period": 0.5,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "bass_swap",
+        "filter": false,
+        "echo_out": false
+      }
+    },
+    "duration": 240
+  },
+  {
+    "name": "drifting-pulse",
+    "outgoing": {
+      "tempo_confidence": 0.3
+    },
+    "incoming": {
+      "bpm": 125
+    },
+    "transition": {
+      "technique": "structural_fade",
+      "out_cue": 192.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 16.0,
+      "overlap_bars": 8.0,
+      "playback_rate": 1.0,
+      "score": 0.748,
+      "confidence": 0.9,
+      "fallback": true,
+      "sync": {
+        "out_period": 0.5,
+        "in_period": 0.48,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "neutral",
+        "filter": false,
+        "echo_out": false
+      }
+    },
+    "duration": 240
+  },
+  {
+    "name": "short-recording",
+    "outgoing": {
+      "duration": 90,
+      "outro_cue": 48.25
+    },
+    "incoming": {
+      "sections": [
+        {
+          "start": 32.25,
+          "end": 48.25,
+          "label": "drop",
+          "level": 0.5
+        }
+      ]
+    },
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 54.25,
+      "in_cue": 22.25,
+      "overlap_seconds": 10.0,
+      "overlap_bars": 5.0,
+      "playback_rate": 1.0,
+      "score": 0.978,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "out_period": 0.5,
+        "in_period": 0.5,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      },
+      "automation": {
+        "curve": "equal_power",
+        "eq": "bass_swap",
+        "filter": false,
+        "echo_out": false
+      }
+    },
+    "duration": 90
+  }
+]

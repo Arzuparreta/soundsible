@@ -22,6 +22,7 @@ def analysis(*, bpm=120, key="C", mode="major", confidence=0.9, duration=240):
         "key": key,
         "mode": mode,
         "confidence": confidence,
+        "tempo_confidence": 1.0,
         "duration": duration,
         "outro_cue": duration - 8,
         "intro_cue": 8,

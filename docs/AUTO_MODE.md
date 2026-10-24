@@ -86,11 +86,17 @@ The engine limits tempo stretching and falls back safely instead of forcing two
 incompatible recordings together. Loudness levelling sits inside the same
 program path, so a transition does not need a sudden volume jump to feel alive.
 
+Measured sections help place the mix: it can start at an outro or finish before
+a breakdown. When the pulse is reliable and the measured phrases fit, the
+incoming song enters so its drop lands on a phrase boundary of the outgoing
+song at the end of the blend. Otherwise it keeps the ordinary intro. Both web
+and Android follow the same server plan.
+
 Tempo is measured across the whole song to a few thousandths of a BPM, and each
 beat is placed where its attack starts, so the kicks of two blended songs land
 together instead of one just after the other. A recording whose tempo drifts,
-such as a live band, gets a grid that follows the performance and counts as
-less certain when the DJ chooses how to mix it. After an update that changes
+such as a live band, gets a grid that follows the performance and a fade at
+normal speed instead of a fixed-rate beatmatch. After an update that changes
 the analysis, the library and selected previews are measured again in the
 background; until those measurements land, their transitions are plain fades.
 

@@ -3,6 +3,7 @@ package com.soundsible.android
 import kotlin.math.roundToLong
 import org.junit.Assert.*
 import org.junit.Test
+import org.json.JSONArray
 
 class ProgramDjPlanTest {
     private val confident = ProgramDjPlan.Proposal("current", ProgramMixCurve.Technique.BASS_SWAP,
@@ -77,5 +78,24 @@ class ProgramDjPlanTest {
         assertEquals(1.06, plan.rate.toDouble(), 0.0001)
         assertEquals(0L, plan.inCueUs)
         assertEquals(12000L, plan.phaseToleranceUs)
+    }
+    @Test fun sharedServerSectionPlansKeepTheirCuesAndDropAlignment() {
+        val vectors = javaClass.classLoader!!.getResourceAsStream("dj_structural_plans.json")!!.bufferedReader().use { JSONArray(it.readText()) }
+        for (index in 0 until vectors.length()) {
+            val vector = vectors.getJSONObject(index)
+            val transition = vector.getJSONObject("transition")
+            val sync = transition.getJSONObject("sync")
+            val proposal = ProgramDjPlan.Proposal("current",
+                ProgramMixCurve.Technique.valueOf(transition.getString("technique").uppercase(java.util.Locale.ROOT)),
+                transition.getDouble("out_cue"), transition.getDouble("in_cue"), transition.getDouble("overlap_seconds"),
+                transition.getDouble("playback_rate"), transition.getDouble("confidence"),
+                sync.getDouble("phase_tolerance_ms"), sync.getDouble("out_period"))
+            val plan = ProgramDjPlan.resolve("current", (vector.getDouble("duration") * 1000000).roundToLong(), proposal, true)!!
+            assertEquals(vector.getString("name"), proposal.technique, plan.technique)
+            assertEquals((proposal.outCue * 1000000).roundToLong(), plan.outCueUs)
+            assertEquals((proposal.inCue * 1000000).roundToLong(), plan.inCueUs)
+            assertEquals((proposal.overlap * 1000000).roundToLong(), plan.overlapUs)
+            assertEquals(proposal.rate, plan.rate.toDouble(), 0.000001)
+        }
     }
 }

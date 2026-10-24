@@ -171,8 +171,12 @@ An account without a canonical marker is migrated once using the previous manife
   analysis; measured songs are then ordered by transition quality and continuity
   in notes/s, LUFS, spectral flatness and tempo, scaled by the sample's own
   dispersion. Unmeasured songs retain their sampled slots. Signal analysis
-  also shapes each transition; it
-  does not use an LLM or silently apply the account's global taste profile.
+  also shapes each transition: measured outros/breakdowns place the exit, and
+  an incoming drop can land on an outgoing phrase at the executed playback
+  rate. Tempo reliability gates beatmatch independently of tonal confidence.
+  Section interpretation stays in the server; web and Android execute the
+  same bounded cues. It does not use an LLM or silently apply the account's
+  global taste profile.
   Autoplay remains an invisible finite-context continuation. Search does not
   use the queue planner and its UI is unchanged.
 - **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (the same `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:
