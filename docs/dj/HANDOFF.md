@@ -1027,8 +1027,8 @@ endpoints entregan el mismo plan:
 `dj-echo.spec.ts` ejecuta el grafo real con impulsos estéreo de polaridad opuesta
 en Chromium y WebKit: 44,1/48 kHz, velocidades 1/1,04 y tres repeticiones por
 caso, 60 repeticiones por perfil. Comprueba posición y amplitud de cada canal;
-la tolerancia es tres muestras (0,068 ms a 44,1 kHz), muy por debajo de los 5 ms
-del plan. `ProgramDeckEffectsTest` ejecuta los mismos periodos en PCM nativo y
+el error máximo observado es una muestra. La tolerancia es tres muestras
+(0,068 ms a 44,1 kHz), muy por debajo de los 5 ms del plan. `ProgramDeckEffectsTest` ejecuta los mismos periodos en PCM nativo y
 comprueba las tres repeticiones, nivelación, realimentación y vaciado de cola.
 `ProgramDjPlanTest` comprueba confianza, pertenencia, mezcla apagada y valores
 ausentes o inválidos. `ProgramMixOutputTest` conserva eco con decodificadores y
