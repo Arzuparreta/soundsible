@@ -1,11 +1,10 @@
-/** Decision-gate characterization, not a guarantee that one-shot refinement
- * should be preserved. Update this evidence if a retry contract is introduced.
- * Real app/store/audio in Chromium; controlled API, silent local WAV. */
+/** Real app/store/audio, controlled API and silent WAV: pending analysis must
+ * be retried before the seam is committed, and stop once it is measured. */
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer, silentWav, TRACKS } from './music-browser-fixture';
 
 for (const initiallyReady of [false, true]) {
-  test(`audit: refinement consumes only the first response (initially ready: ${initiallyReady})`, async ({ page }) => {
+  test(`refinement retries until measured (initially ready: ${initiallyReady})`, async ({ page }) => {
     await mockMusicEngine(page);
     await page.route('**/api/static/stream/**', async (route) => {
       const match = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '');
@@ -74,6 +73,12 @@ for (const initiallyReady of [false, true]) {
         return state.playback.currentTime;
       })).toBeGreaterThanOrEqual(position);
     }
+    await expect.poll(async () => page.evaluate(async () => {
+      const modulePath = '/player/src/stores/index.ts';
+      const { state } = await import(/* @vite-ignore */ modulePath);
+      const next = state.playback.queue[state.playback.index + 1];
+      return state.autoMode.plan[next.queueId]?.transition?.confidence;
+    })).toBe(0.95);
     const observation = await page.evaluate(async () => {
       const modulePath = '/player/src/stores/index.ts';
       const { state } = await import(/* @vite-ignore */ modulePath);
@@ -81,9 +86,9 @@ for (const initiallyReady of [false, true]) {
       return { currentId: state.playback.currentTrack?.id,
         transition: state.autoMode.plan[next.queueId]?.transition };
     });
-    expect(refinements).toBe(1);
+    expect(refinements).toBe(initiallyReady ? 1 : 2);
     expect(observation.currentId).toBe(TRACKS[319].id);
-    expect(observation.transition.confidence).toBe(initiallyReady ? 0.95 : 0.18);
+    expect(observation.transition.confidence).toBe(0.95);
     await test.info().attach('refinement-observation.json', {
       body: JSON.stringify({ initiallyReady, refinements, serverReadyAfterFirstResponse: ready, ...observation }),
       contentType: 'application/json',

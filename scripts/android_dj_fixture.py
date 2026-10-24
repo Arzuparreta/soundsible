@@ -11,6 +11,7 @@ def install(app):
     state = {"fail_next": 0, "delay_next": 0.0, "calls": 0, "pending": 0}
     lock = threading.Lock()
     install_network(app)
+    install_refinement(app)
 
     @app.before_request
     def intercept_placement():
@@ -136,4 +137,59 @@ def install_network(app):
 
         response.direct_passthrough = False
         response.response = body()
+        return response
+
+
+def install_refinement(app):
+    """Controlled pending measurements for the native HTTP retry contract."""
+    import threading
+    from flask import jsonify, request
+
+    lock = threading.Lock()
+    state = {"active": False, "calls": 0, "pending": 0}
+
+    @app.route("/__fixture/dj-refinement", methods=["GET", "POST"])
+    def refinement_control():
+        if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
+            return jsonify(error="fixture only"), 403
+        with lock:
+            if request.method == "POST":
+                body = request.get_json(silent=True) or {}
+                pending = body.get("pending", 0)
+                if type(pending) is not int or not 0 <= pending <= 3:
+                    return jsonify(error="invalid bounded refinement control"), 400
+                state.update(active=bool(body.get("active", True)), calls=0, pending=pending)
+            return jsonify(state)
+
+    def transition(ready):
+        return {"technique": "structural_fade" if ready else "safe_fade", "out_cue": 60,
+                "in_cue": 0, "overlap_seconds": 6, "overlap_bars": 0, "playback_rate": 1,
+                "confidence": 0.9 if ready else 0.18}
+
+    @app.before_request
+    def pending_refinement():
+        if request.path != "/api/discovery/music/dj-transition" or request.method != "POST":
+            return None
+        body = request.get_json(silent=True) or {}
+        if body.get("from", {}).get("id") != "member-pcm-soft":
+            return None
+        with lock:
+            if not state["active"]:
+                return None
+            state["calls"] += 1
+            ready = state["calls"] > state["pending"]
+        return jsonify(measured=ready, transition=transition(ready))
+
+    @app.after_request
+    def cold_plan(response):
+        if request.path != "/api/discovery/music/dj-plan" or response.status_code != 200:
+            return response
+        with lock:
+            active = state["active"]
+        body = request.get_json(silent=True) or {}
+        if active and body.get("seed", {}).get("id") == "member-pcm-soft":
+            result = response.get_json()
+            for row in result.get("items", []):
+                row["transition"] = transition(False)
+            response.set_data(app.json.dumps(result))
         return response

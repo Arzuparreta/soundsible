@@ -594,6 +594,14 @@ class CacheWriter:
             if committed != self._part:
                 self._part.unlink(missing_ok=True)
             enforce_cache_limit()
+            # Every acquisition path (playback, web/native prefetch, DJ cohort)
+            # publishes analysis as soon as complete validated bytes exist.
+            try:
+                from shared.dj_engine import analysis_identity, request_analysis
+
+                request_analysis(target, analysis_identity({"youtube_id": self.video_id}))
+            except Exception:
+                logger.debug("[PreviewCache] Could not queue DJ analysis", exc_info=True)
             return True
         except OSError as e:
             logger.warning("[PreviewCache] Commit failed for %s: %s", self.video_id, e)

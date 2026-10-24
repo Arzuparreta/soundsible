@@ -71,6 +71,17 @@ measurements, with equal influence after scaling. Songs without analysis keep
 their shuffled positions, so already downloaded music cannot crowd them out.
 An empty session still opens inside the most recently added source.
 
+The server prepares up to sixteen candidates per refill in the background,
+including previews that have not been downloaded yet. The choice follows the
+session shuffle, so a downloaded song gets no advantage in joining the route.
+Once the entire chosen pool is measured, DJ can insert a compatible bridge
+between two songs that would otherwise mix poorly, while keeping every original
+song. It also analyses the whole local music library in the background.
+
+A newly acquired preview is analysed as soon as its complete audio is ready.
+Web and Android retry pending transition measurements before loading the next
+deck; an unavailable measurement keeps its conservative fade.
+
 The engine limits tempo stretching and falls back safely instead of forcing two
 incompatible recordings together. Loudness levelling sits inside the same
 program path, so a transition does not need a sudden volume jump to feel alive.
@@ -80,9 +91,8 @@ beat is placed where its attack starts, so the kicks of two blended songs land
 together instead of one just after the other. A recording whose tempo drifts,
 such as a live band, gets a grid that follows the performance and counts as
 less certain when the DJ chooses how to mix it. After an update that changes
-the analysis, each song is measured again in the background when the DJ next
-puts it in the route; until that measurement lands, its transitions are plain
-fades.
+the analysis, the library and selected previews are measured again in the
+background; until those measurements land, their transitions are plain fades.
 
 ### Whole songs, without mixing
 

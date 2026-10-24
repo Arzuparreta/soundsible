@@ -63,6 +63,13 @@ from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.telemetry import init_telemetry, reset_telemetry
 
 
+@pytest.fixture(autouse=True)
+def no_speculative_network(monkeypatch):
+    # Route tests isolate providers. Acquisition itself has integration coverage
+    # in test_dj_pool; no daemon may outlive this test's disposable runtime.
+    monkeypatch.setattr("shared.preview_cache.request_prefetch", lambda *a, **kw: [])
+
+
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
 def _make_runtime(tmp_path) -> RuntimeConfig:
@@ -1179,8 +1186,9 @@ def test_dj_plan_v6_selects_before_analysis_and_preserves_cold_slots(tmp_path, w
             body = response.get_json()
             chosen = {row["id"] for row in body["items"]}
             opening = body.get("opening", data.get("seed"))
-            # Even the read set excludes the rest of the candidate catalogue.
-            assert set(read) == chosen | {opening["id"]}
+            # Coverage reads the whole candidate catalogue, but membership and
+            # the bounded acquisition cohort were frozen before those reads.
+            assert set(read) == {"old", *(f"t{i}" for i in range(12)), opening["id"]}
             assert len(chosen) == 4
             return body
 
@@ -1243,10 +1251,10 @@ def test_dj_plan_v6_reorders_decoded_audio_and_returns_chained_plans(tmp_path):
         assert response.status_code == 200
         body = response.get_json()
         assert [row["id"] for row in body["items"]] == [good, bad]
-        assert body["seed_analysis"] == features["seed"]
+        assert body["seed_analysis"] == _auto_mode._dj_analysis_summary(features["seed"])
         previous = features["seed"]
         for row in body["items"]:
-            assert row["analysis"] == features[row["id"]]
+            assert row["analysis"] == _auto_mode._dj_analysis_summary(features[row["id"]])
             assert row["transition"] == plan_transition(previous, features[row["id"]])
             previous = features[row["id"]]
 
@@ -2040,3 +2048,150 @@ def test_an_artists_top_tracks_are_found_through_a_plain_artist_search():
 def test_an_artist_deezer_does_not_know_has_no_top_tracks():
     with patch.object(_disc_feed, "_deezer_json", return_value={"data": []}):
         assert _disc_feed._deezer_artist_top_rows("Nobody", 5) == []
+
+
+def test_dj_cohort_is_bounded_identical_for_cold_and_warm_pools_and_reports_coverage(tmp_path, caplog):
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    tracks = [{"id": f"video{i:06d}", "youtube_id": f"video{i:06d}", "source": "preview",
+               "title": str(i), "artist": "Artist"} for i in range(40)]
+    data = {"session_id": "bounded", "seed": {"id": "seed", "track_id": "seed"},
+            "sources": [{"id": "source", "tracks": tracks}], "limit": 4}
+    prepared = []
+    def features(_metadata, item, *, schedule=False):
+        return {"analysed": ready, "duration": 240, "bpm": 120, "key": "C", "mode": "major", "confidence": .9}
+    with (patch.object(_auto_mode, "_get_api", return_value=api),
+          patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+          patch.object(_auto_mode, "_dj_item_analysis", side_effect=features),
+          patch.object(_auto_mode, "_dj_prepare_cohort", side_effect=lambda _, rows: prepared.append([r["id"] for r in rows])),
+          caplog.at_level("INFO", logger=_auto_mode.__name__)):
+        client = _make_app().test_client()
+        ready = False
+        cold = client.post("/api/discovery/music/dj-plan", json=data).get_json()
+        ready = True
+        warm = client.post("/api/discovery/music/dj-plan", json=data).get_json()
+    assert prepared[0] == prepared[1]
+    assert len(prepared[0]) == 17  # seed + bounded 16, regardless of cache
+    assert [row["id"] for row in cold["items"]] == [row["id"] for row in warm["items"]]
+    assert cold["analysis_coverage"] == {"candidates": 40, "analysed": 0, "cohort": 16, "cohort_analysed": 0, "bridges": 0}
+    assert warm["analysis_coverage"]["analysed"] == 40
+    assert "analysis_candidates=40 analysis_ready=0 analysis_cohort=16 analysis_cohort_ready=0" in caplog.text
+
+
+def test_dj_plan_v6_inserts_a_bridge_only_when_every_frozen_candidate_is_measured(tmp_path):
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    tracks = [{"id": key, "track_id": key, "title": key, "artist": "Synthetic"} for key in ("a", "b", "c")]
+    data = {"session_id": "bridges", "seed": {"id": "seed", "track_id": "seed"},
+            "sources": [{"id": "source", "tracks": tracks}], "limit": 1}
+    tempos = {"seed": 100}
+    known = set()
+    def features(_metadata, item, *, schedule=False):
+        key = item["id"]
+        if key not in known:
+            return _auto_mode._dj_fallback_analysis(240)
+        return {"analysed": True, "duration": 240, "bpm": tempos[key], "key": "C", "mode": "major", "confidence": .9}
+    cohort = []
+    with (patch.object(_auto_mode, "_get_api", return_value=api),
+          patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+          patch.object(_auto_mode, "_dj_item_analysis", side_effect=features),
+          patch.object(_auto_mode, "_dj_prepare_cohort", side_effect=lambda _, rows: cohort.extend(r["id"] for r in rows))):
+        client = _make_app().test_client()
+        cold = client.post("/api/discovery/music/dj-plan", json=data).get_json()
+        target = cold["items"][0]["id"]
+        spares = [key for key in cohort if key not in {"seed", target}]
+        tempos.update({target: 112, spares[0]: 106, spares[1]: 106})
+        known.update({"seed", target, spares[0]})
+        partial = client.post("/api/discovery/music/dj-plan", json=data).get_json()
+        assert [row["id"] for row in partial["items"]] == [target]
+        known.add(spares[1])
+        warm = client.post("/api/discovery/music/dj-plan", json=data).get_json()
+    assert [row["id"] for row in warm["items"]] == [spares[0], target]
+    assert warm["items"][0]["route_kind"] == "bridge"
+    assert warm["analysis_coverage"]["bridges"] == 1
+
+
+def test_committed_preview_is_analysed_before_refinement_and_serving_ranges_keeps_it_valid(tmp_path):
+    """Real AAC -> cache commit -> analyser -> SQLite -> HTTP measured plan."""
+    import os
+    import subprocess
+    from shared import dj_engine, preview_cache
+    from shared.ffmpeg_runtime import ffmpeg_executable
+
+    runtime = _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    video = "candidate01"
+    source = tmp_path / "source.m4a"
+    subprocess.run([ffmpeg_executable(), "-v", "error", "-f", "lavfi", "-i",
+                    "aevalsrc=0.2*sin(2*PI*220*t)+0.5*exp(-mod(t\\,0.5)*80):s=11025:d=12",
+                    "-c:a", "aac", str(source)], check=True)
+    ref = {"id": video, "youtube_id": video, "source": "preview", "duration": 12}
+    queued = []
+    def measure(path, identity, **kwargs):
+        queued.append(identity)
+        dj_engine.analyse_audio(path, identity, **kwargs)
+    with (patch.object(_auto_mode, "_get_api", return_value=api),
+          patch.object(dj_engine, "request_analysis", side_effect=measure)):
+        client = _make_app().test_client()
+        assert client.post("/api/discovery/music/dj-transition", json={"from": ref, "to": ref}).get_json()["measured"] is False
+        writer = preview_cache.open_writer(video, "audio/mp4", source.stat().st_size)
+        writer.write(source.read_bytes())
+        assert writer.commit(preview_cache._preview_is_decodable)
+        assert queued == [dj_engine.analysis_identity(ref)]
+        path = runtime.cache_dir / "previews" / f"{video}.audio"
+        stamp = path.stat()
+        os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns + 1000000000))
+        body = client.post("/api/discovery/music/dj-transition", json={"from": ref, "to": ref}).get_json()
+    assert body["measured"] is True
+    assert body["analysis"]["to"]["analysed"] is True
+    assert body["transition"]["confidence"] >= .35
+    # Replacing the committed bytes must invalidate the old analysis.
+    preview_cache._write_meta(video, {**preview_cache.cached_metadata(video), "revision": "replacement"})
+    assert dj_engine.cached_analysis(path, dj_engine.analysis_identity(ref)) is None
+
+
+def test_dj_preparation_queues_only_the_frozen_previews_and_keeps_refresh_contract(tmp_path):
+    from shared import preview_cache
+    from shared.api.routes import playback
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    rows = [{"id": "local", "track_id": "local"},
+            {"id": "candidate01", "youtube_id": "candidate01", "discovery_youtube_id": "discovery01", "source": "preview"},
+            {"id": "candidate02", "youtube_id": "candidate02", "source": "preview"}]
+    with (patch.object(_auto_mode, "_get_api", return_value=api),
+          patch.object(_auto_mode, "_dj_item_analysis") as analyse,
+          patch.object(preview_cache, "request_prefetch") as prefetch,
+          patch.object(playback, "_get_preview_stream_cached", return_value="resolved") as resolve,
+          patch.object(playback, "_invalidate_stream") as invalidate):
+        _auto_mode._dj_prepare_cohort(None, rows)
+        assert [call.args[1] for call in analyse.call_args_list] == rows
+        assert all(call.kwargs == {"schedule": True} for call in analyse.call_args_list)
+        assert prefetch.call_args.args == (["candidate01", "candidate02"],)
+        assert prefetch.call_args.kwargs["download"] is True
+        assert prefetch.call_args.kwargs["resolver"]("candidate01") == "resolved"
+        prefetch.call_args.kwargs["refresh_resolver"]("candidate01")
+        invalidate.assert_called_once_with("candidate01")
+        resolve.assert_called_with(api, "candidate01", skip_fast_path=True)
+        prefetch.reset_mock()
+        with patch.object(preview_cache, "cache_limit_bytes", return_value=0):
+            _auto_mode._dj_prepare_cohort(None, rows)
+        prefetch.assert_not_called()
+
+
+def test_v6_analysis_summary_keeps_sixteen_fast_long_starts_within_native_response_budget():
+    # Eight-minute songs at 220 BPM need 1760 grid points each. Sixteen full
+    # grids plus the seed alone exceed the native 256 KiB response limit.
+    from shared.dj_engine import _fallback
+    beats = [round(i * 60 / 220, 4) for i in range(1760)]
+    analysis = {**_fallback(480), "analysed": True, "bpm": 220, "key": "C", "mode": "major",
+                "beat_grid": beats, "downbeats": beats[::4], "phrase_boundaries": beats[::32]}
+    full = {"seed_analysis": analysis, "items": [{"analysis": analysis}] * 16}
+    assert len(json.dumps(full).encode()) > 262144
+    summary = _auto_mode._dj_analysis_summary(analysis)
+    compact = {"seed_analysis": summary, "items": [{"analysis": summary}] * 16}
+    assert len(json.dumps(compact).encode()) < 16384
+    assert summary["bpm"] == 220 and summary["key"] == "C" and summary["analysed"] is True
+    assert analysis["beat_grid"] == beats

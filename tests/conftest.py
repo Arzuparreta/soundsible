@@ -45,6 +45,8 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
         monkeypatch.setenv(name, str(path))
     # A real API boot in a test must not start network recovery against later
     # tests' runtimes. Recovery itself is exercised with an explicit worker.
+    from shared import dj_library
+    monkeypatch.setattr(dj_library, "start", lambda: None)
     from shared.artwork_recovery import recovery
     monkeypatch.setattr(recovery, "start", lambda: None)
     # The checkout's own pre-move settings file is the developer's, not a test's.
