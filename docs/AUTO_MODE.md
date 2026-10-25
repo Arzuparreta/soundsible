@@ -64,11 +64,16 @@ engine can perform:
 - conservative fades when the analysis is missing or a more elaborate mix
   would sound worse.
 
-When an existing server profile selects an echo cut, its delay is one measured
-outgoing beat near the exit, corrected for the deck's playback speed. Without
-a reliable outgoing pulse it uses a structural fade. The automatic `adaptive`
-profile still does not select echo cuts; changing that policy remains P7 in
-`docs/dj/HANDOFF.md`.
+The server chooses the technique automatically for each pair, with the same
+plan for web and Android. A beatmatched blend must fit the local tempo within
+the players' speed limit. A longer blend also needs compatible keys and enough
+measured quiet opening and tail in both songs, with a straight beat grid
+throughout; it never crosses an unmeasured gap to extend the mix.
+
+When reliable pulses cannot be blended at the permitted speed, DJ can choose
+an echo cut. Its delay is one measured outgoing beat near the exit, corrected
+for the deck's playback speed. An unreliable pulse uses a structural fade;
+missing analysis keeps a conservative fade.
 
 For each refill, DJ chooses up to eight songs before looking at their analysis,
 then orders the measured songs for transition quality and continuity in notes

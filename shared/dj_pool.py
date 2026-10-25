@@ -19,9 +19,8 @@ def _beatmatched(plan, outgoing, incoming):
         ratio *= 2
     elif ratio > 1.4:
         ratio /= 2
-    # A blend technique can still have rate=1 when its local tempo exceeded
-    # the player's stretch limit. Require the *executed* rate to keep drift
-    # within the planner's phase tolerance across the entire overlap.
+    # Independently require the executed rate to keep drift within the
+    # planner's phase tolerance across the entire overlap.
     drift = abs(plan["playback_rate"] / ratio - 1) * plan["overlap_seconds"]
     return drift <= sync["phase_tolerance_ms"] / 1000
 
@@ -43,12 +42,12 @@ def add_measured_bridges(previous, route, spares):
     result = []
     for row in route:
         target = row["analysis"]
-        direct = plan_transition(previous, target, profile="adaptive")
+        direct = plan_transition(previous, target)
         options = []
         if not _beatmatched(direct, previous, target):
             for index, (item, analysis) in enumerate(remaining):
-                before = plan_transition(previous, analysis, profile="adaptive")
-                after = plan_transition(analysis, target, profile="adaptive")
+                before = plan_transition(previous, analysis)
+                after = plan_transition(analysis, target)
                 quality = min(before["score"], after["score"])
                 if (_beatmatched(before, previous, analysis) and _beatmatched(after, analysis, target)
                         and quality > direct["score"]):

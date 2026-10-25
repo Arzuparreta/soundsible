@@ -84,18 +84,18 @@ def test_library_inventory_spans_accounts_and_skips_podcasts_missing_audio_and_d
     assert [row[1] for row in inventory] == [analysis_identity({"track_id": key}) for key in ("one", "two")]
 
 
-def test_bridge_legs_must_actually_match_tempo_not_just_name_a_blend_technique():
+def test_bridge_legs_must_fit_the_players_rate_limit():
     seed, target, spare = measured(100), measured(114), measured(107)
-    assert plan_transition(seed, spare)["technique"] == "filter_blend"
+    assert plan_transition(seed, spare)["technique"] == "structural_fade"
     assert plan_transition(seed, spare)["playback_rate"] == 1
     route = order_continuous_route(seed, [({"id": "target"}, target)])
     assert add_measured_bridges(seed, route, [({"id": "spare"}, spare)]) == route
 
 
-def test_bridge_can_repair_a_blend_whose_rate_was_clamped_by_the_player():
+def test_bridge_can_repair_a_pair_beyond_the_players_rate_limit():
     seed, target = measured(100), measured(107)
     route = order_continuous_route(seed, [({"id": "target"}, target)])
-    assert route[0]["transition"]["technique"] == "filter_blend"
+    assert route[0]["transition"]["technique"] == "structural_fade"
     assert route[0]["transition"]["playback_rate"] == 1
     result = add_measured_bridges(seed, route, [({"id": "bridge"}, measured(103.5))])
     assert [row["id"] for row in result] == ["bridge", "target"]

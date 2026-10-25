@@ -33,13 +33,9 @@ ANALYSER_VERSION = 8
 WINDOWED_ABOVE_SECONDS = 480.0
 HEAD_WINDOW_SECONDS = 90.0
 TAIL_WINDOW_SECONDS = 120.0
-DJ_PROFILES = {"adaptive", "long_blend", "cuts_drops", "open_format"}
-_PROFILE_POLICY = {
-    "adaptive": {"bars": 16, "max_stretch": 0.08, "cut": 0.45},
-    "long_blend": {"bars": 32, "max_stretch": 0.06, "cut": 0.15},
-    "cuts_drops": {"bars": 8, "max_stretch": 0.1, "cut": 0.8},
-    "open_format": {"bars": 8, "max_stretch": 0.12, "cut": 0.7},
-}
+# One automatic policy; these are the existing adaptive mix limits.
+_MAX_STRETCH = 0.06
+_TEMPO_SCORE_RANGE = 0.08
 # Seconds kept between a planned blend start and `duration - overlap`.
 _OUT_CUE_MARGIN = 1.5
 # Spectral flatness is read where music has its harmonics. Frames more than
@@ -1423,48 +1419,106 @@ def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     return None
 
 
-def plan_transition(
-    outgoing: Mapping[str, Any],
-    incoming: Mapping[str, Any],
-    *,
-    profile: str = "adaptive",
-) -> dict[str, Any]:
-    if profile not in DJ_PROFILES:
-        profile = "adaptive"
-    policy = _PROFILE_POLICY[profile]
+def plan_transition(outgoing: Mapping[str, Any], incoming: Mapping[str, Any]) -> dict[str, Any]:
+    """Choose effects from the pair's measured pulse and available sections.
+
+    Scores retain their route-ordering meaning. Technique choice also checks
+    the actual local rate: a good harmonic score cannot make an impossible
+    beatmatch safe. No client style or random effect selection is involved.
+    """
     out_bpm = float(outgoing.get("bpm") or 0)
     in_bpm = float(incoming.get("bpm") or 0)
     ratio = out_bpm / in_bpm if out_bpm > 0 and in_bpm > 0 else 1.0
-    # Half/double-time pairs represent the same pulse grid.
     if ratio < 0.7:
         ratio *= 2
     elif ratio > 1.4:
         ratio /= 2
-    stretch = abs(1 - ratio)
-    tempo_score = max(0.0, 1 - stretch / max(float(policy["max_stretch"]), 0.01))
+    tempo_score = max(0.0, 1 - abs(1 - ratio) / _TEMPO_SCORE_RANGE)
     harmonic = _harmonic_score(outgoing, incoming)
     confidence = min(float(outgoing.get("confidence") or 0), float(incoming.get("confidence") or 0))
-    blend_score = 0.46 * tempo_score + 0.32 * harmonic + 0.22 * confidence
-    cut_bias = float(policy["cut"])
-    if blend_score >= 0.72 and cut_bias < 0.75:
-        technique = "bass_swap" if profile != "long_blend" else "long_blend"
-    elif blend_score >= 0.55 and profile != "cuts_drops":
-        technique = "filter_blend"
-    elif confidence >= 0.42:
-        technique = "echo_cut" if cut_bias >= 0.55 else "structural_fade"
-    else:
-        technique = "safe_fade"
-    # _rhythm caps a locally followed (drifting) grid's reliability at 0.7,
-    # then maps (reliability - 0.4) / 0.5 to tempo_confidence: at most 0.6.
-    # Tonal confidence cannot turn that into a predictable beatmatch clock.
+    score = 0.46 * tempo_score + 0.32 * harmonic + 0.22 * confidence
+    # A followed (drifting) grid has tempo_confidence <= 0.6 (see _rhythm).
     steady = all(float(analysis.get("bpm") or 0) > 0
                  and float(analysis.get("tempo_confidence") or 0) > 0.6
                  for analysis in (outgoing, incoming))
-    if not steady and technique in {"bass_swap", "long_blend", "filter_blend"}:
-        technique = "structural_fade" if confidence >= 0.42 else "safe_fade"
-    bars = int(policy["bars"])
-    if technique in {"echo_cut", "safe_fade", "structural_fade"}:
-        bars = min(bars, 8)
+    if steady and score >= 0.55:
+        technique = "bass_swap" if score >= 0.72 else "filter_blend"
+        plan = _transition_plan(outgoing, incoming, technique, 16, score, confidence)
+        if _rate_fits(plan):
+            # A longer blend requires actual intro/outro runway in BOTH tracks,
+            # and neighbouring Camelot keys. Missing sections never invent it.
+            if technique == "bass_swap" and harmonic >= 6 / 7:
+                exit_run = _section_run(outgoing, "outro")
+                entry_run = _section_run(incoming, "intro")
+                if exit_run is None or entry_run is None:
+                    return plan
+                extended = _transition_plan({**outgoing, "outro_cue": exit_run[0]}, incoming,
+                                            "long_blend", 32, score, confidence)
+                if (extended["overlap_seconds"] > plan["overlap_seconds"] and _rate_fits(extended)
+                        and exit_run[0] - 0.001 <= extended["out_cue"]
+                        and extended["out_cue"] + extended["overlap_seconds"] <= exit_run[1] + 0.001
+                        and entry_run[0] - 0.001 <= extended["in_cue"]
+                        and extended["in_cue"] + extended["overlap_seconds"] * extended["playback_rate"] <= entry_run[1] + 0.001
+                        and _grid_runway(outgoing, extended["out_cue"], extended["overlap_seconds"])
+                        and _grid_runway(incoming, extended["in_cue"],
+                                         extended["overlap_seconds"] * extended["playback_rate"])):
+                    return extended
+            return plan
+    technique = "safe_fade" if confidence < 0.42 else "echo_cut" if steady else "structural_fade"
+    return _transition_plan(outgoing, incoming, technique, 8, score, confidence)
+
+
+def _rate_fits(plan: Mapping[str, Any]) -> bool:
+    ratio = plan["sync"]["in_period"] / plan["sync"]["out_period"]
+    if ratio < 0.7:
+        ratio *= 2
+    elif ratio > 1.4:
+        ratio /= 2
+    # Use the rounded values actually sent to both players and the existing
+    # five-millisecond phase budget, including the six-percent rate boundary.
+    return abs(plan["playback_rate"] / ratio - 1) * plan["overlap_seconds"] <= 0.005
+
+
+def _section_run(analysis: Mapping[str, Any], anchor: str) -> tuple[float, float] | None:
+    """Intro/outro extended only through adjacent measured quiet blocks.
+
+    The analyser labels intro/outro on one eight-bar block; a longer quiet
+    opening/tail has neighbouring breakdown blocks. Never cross a body, build,
+    drop or unmeasured gap to claim more runway.
+    """
+    if not analysis.get("analysed") or not analysis.get("beat_grid"):
+        return None
+    sections = analysis.get("sections") or []
+    for index, section in enumerate(sections):
+        if section["label"] != anchor:
+            continue
+        start, end = float(section["start"]), float(section["end"])
+        neighbours = reversed(sections[:index]) if anchor == "outro" else iter(sections[index + 1:])
+        for neighbour in neighbours:
+            gap = start - neighbour["end"] if anchor == "outro" else neighbour["start"] - end
+            if neighbour["label"] not in {anchor, "breakdown"} or abs(gap) > 0.001:
+                break
+            start, end = min(start, neighbour["start"]), max(end, neighbour["end"])
+        return start, end
+    return None
+
+
+def _grid_runway(analysis: Mapping[str, Any], cue: float, span: float) -> bool:
+    """A long mix needs a measured, straight grid throughout, without gaps.
+
+    Each deck gets half the existing 5 ms phase budget. This also rejects
+    absent middle windows in long recordings and locally wandering grids.
+    """
+    period = _local_period(analysis, cue, span)
+    grid = analysis.get("beat_grid") or []
+    points = grid[bisect.bisect_left(grid, cue - 0.001):bisect.bisect_right(grid, cue + span + period)]
+    return bool(points and abs(points[0] - cue) <= 0.0025 and points[-1] >= cue + span - period
+                and all(0 < right - left <= 1.5 * period for left, right in zip(points, points[1:]))
+                and all(abs(point - cue - round((point - cue) / period) * period) <= 0.0025 for point in points))
+
+
+def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
+                     technique: str, bars: int, blend_score: float, confidence: float) -> dict[str, Any]:
     bar_seconds = float(outgoing.get("bar_seconds") or 2.0)
     overlap = max(4.0, min(48.0, bars * bar_seconds))
     duration = float(outgoing.get("duration") or 0)
@@ -1493,7 +1547,8 @@ def plan_transition(
         if duration and out_cue > latest:
             out_cue = _grid_point_at_or_before(outgoing, latest)
         if duration:
-            out_cue, overlap = _structural_exit(outgoing, out_cue, overlap, earliest, duration)
+            if technique != "long_blend":
+                out_cue, overlap = _structural_exit(outgoing, out_cue, overlap, earliest, duration)
             if out_cue < earliest:
                 grid = outgoing.get("downbeats") or outgoing.get("beat_grid") or []
                 valid = [float(value) for value in grid if earliest <= float(value) <= latest]
@@ -1504,7 +1559,7 @@ def plan_transition(
 
     if technique in {"bass_swap", "long_blend", "filter_blend"} and out_cue is not None:
         entry = _drop_entry(outgoing, incoming, out_cue, in_cue, overlap,
-                            min(0.06, float(policy["max_stretch"])))
+                            _MAX_STRETCH)
         if entry is not None:
             in_cue, overlap = entry
 
@@ -1513,7 +1568,7 @@ def plan_transition(
     in_period = _local_period(incoming, in_cue, overlap)
     # playbackRate scales the incoming tempo. A 125 BPM incoming track needs
     # 120/125 = 0.96 to sit on a 120 BPM outgoing grid.
-    local_ratio = in_period / out_period if out_period > 0 and in_period > 0 else ratio
+    local_ratio = in_period / out_period if out_period > 0 and in_period > 0 else 1.0
     if local_ratio < 0.7:
         local_ratio *= 2
     elif local_ratio > 1.4:
@@ -1521,7 +1576,7 @@ def plan_transition(
     # Above six percent, resampling is more audible than a structural cut. The
     # score can still select a safe technique, but never asks the player to
     # torture a recording merely to claim that it beatmatched.
-    playback_rate = local_ratio if abs(1 - local_ratio) <= min(0.06, float(policy["max_stretch"])) else 1.0
+    playback_rate = local_ratio if abs(1 - local_ratio) <= _MAX_STRETCH else 1.0
     if technique not in {"bass_swap", "long_blend", "filter_blend"}:
         playback_rate = 1.0
     # Echo repeats one measured outgoing beat at the actual exit, never an
@@ -1530,7 +1585,7 @@ def plan_transition(
     echo_delay = None
     if technique == "echo_cut":
         if (outgoing.get("analysed") and outgoing.get("beat_grid")
-                and out_bpm > 0 and float(outgoing.get("tempo_confidence") or 0) > 0.6
+                and float(outgoing.get("bpm") or 0) > 0 and float(outgoing.get("tempo_confidence") or 0) > 0.6
                 and math.isfinite(out_period) and 0 < out_period <= 2):
             echo_delay = round(out_period, 6)
         else:
@@ -1552,12 +1607,6 @@ def plan_transition(
             "in_period": round(in_period, 6),
             "phase_tolerance_ms": 5,
             "grid_source": "measured" if outgoing.get("beat_grid") and incoming.get("beat_grid") else "estimated",
-        },
-        "automation": {
-            "curve": "equal_power",
-            "eq": "bass_swap" if technique in {"bass_swap", "long_blend"} else "neutral",
-            "filter": technique in {"filter_blend", "long_blend"},
-            "echo_out": technique == "echo_cut",
         },
     }
 
@@ -1620,7 +1669,7 @@ def order_continuous_route(
         if not slot_analysis.get("analysed"):
             eligible = [slot_index]
         transitions = {
-            index: plan_transition(previous, selected[index][1], profile="adaptive")
+            index: plan_transition(previous, selected[index][1])
             for index in eligible
         }
         chosen = eligible[0]
@@ -1653,7 +1702,6 @@ def order_route(
     current_analysis: Mapping[str, Any],
     candidates: Iterable[tuple[dict[str, Any], Mapping[str, Any]]],
     *,
-    profile: str,
     limit: int = 3,
     source_sequence: Iterable[str] | None = None,
     source_offset: int = 0,
@@ -1680,7 +1728,7 @@ def order_route(
             eligible = remaining
         scored = []
         for index, (item, analysis) in enumerate(eligible):
-            transition = plan_transition(previous, analysis, profile=profile)
+            transition = plan_transition(previous, analysis)
             relevance = max(0.0, min(1.0, float(item.get("score") or 0.5)))
             transition_quality = (
                 float(transition["score"])
@@ -1702,7 +1750,6 @@ def route_to_request(
     bridges: Iterable[tuple[dict[str, Any], Mapping[str, Any]]],
     requested: tuple[dict[str, Any], Mapping[str, Any]],
     *,
-    profile: str,
     max_starts: int = 5,
 ) -> list[dict[str, Any]]:
     """Reach the request in positions 2–6, preferring position 2.
@@ -1712,7 +1759,7 @@ def route_to_request(
     """
     bridge_rows = list(bridges)[:12]
     requested_item, requested_analysis = requested
-    best_score = float(plan_transition(current_analysis, requested_analysis, profile=profile)["score"])
+    best_score = float(plan_transition(current_analysis, requested_analysis)["score"])
     best: tuple[tuple[dict[str, Any], Mapping[str, Any]], ...] = (requested,)
     max_bridges = max(0, min(4, max_starts - 1))
     # Beam search bounds the four-bridge case while retaining musically strong
@@ -1726,12 +1773,12 @@ def route_to_request(
             for index, row in enumerate(bridge_rows):
                 if index in used:
                     continue
-                quality = float(plan_transition(previous, row[1], profile=profile)["score"])
+                quality = float(plan_transition(previous, row[1])["score"])
                 expanded.append((accumulated + quality, (*prefix, row), row[1], used | {index}))
         expanded.sort(key=lambda state: state[0], reverse=True)
         beam = expanded[:48]
         for accumulated, prefix, previous, _ in beam:
-            final_quality = float(plan_transition(previous, requested_analysis, profile=profile)["score"])
+            final_quality = float(plan_transition(previous, requested_analysis)["score"])
             sequence_quality = (accumulated + final_quality) / (count + 1)
             delay_cost = 0.055 * count + 0.012 * count * count
             score = sequence_quality - delay_cost
@@ -1741,7 +1788,7 @@ def route_to_request(
     route: list[dict[str, Any]] = []
     previous = current_analysis
     for item, analysis in best:
-        transition = plan_transition(previous, analysis, profile=profile)
+        transition = plan_transition(previous, analysis)
         route.append({**item, "analysis": dict(analysis), "transition": transition})
         previous = analysis
     return route

@@ -33,7 +33,7 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
         val token = serial; val generation = connection.generation
         val account = connection.sessionIdentity(generation)
         val settingsRevision = planner.settingsRevision
-        val body = JSONObject().put("dj_profile", ProgramDjPlanner.PROFILE).put("from", planner.reference(from)).put("to", planner.reference(next.item))
+        val body = JSONObject().put("from", planner.reference(from)).put("to", planner.reference(next.item))
         val id = "dj-refine:" + java.util.UUID.randomUUID(); requestId = id
         worker.execute {
             if (closed || token != serial) return@execute

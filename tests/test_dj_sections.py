@@ -24,7 +24,7 @@ def section(start, end, label):
     return {"start": start, "end": end, "label": label, "level": .5}
 
 
-def section_song(path, *, incoming=False, outro=False, drift=0):
+def section_song(path, *, incoming=False, outro=False, drift=0, long=False):
     """Four-minute 120 BPM signal, eight-bar regions with known levels.
 
     The incoming build culminates in a louder rising region at 64 s; the
@@ -37,7 +37,9 @@ def section_song(path, *, incoming=False, outro=False, drift=0):
         samples = np.frombuffer(source.readframes(source.getnframes()), dtype="<i2").astype(float)
     times = np.arange(len(samples)) / RATE
     envelope = np.full(len(samples), .45)
-    if incoming:
+    if long:
+        envelope[times < 64.25 if incoming else times >= 176.25] = .12
+    elif incoming:
         region = (times >= 64.25) & (times < 80.25)
         envelope[region] = np.linspace(.6, 1., region.sum())
     elif outro:

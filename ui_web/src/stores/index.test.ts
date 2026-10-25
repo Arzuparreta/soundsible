@@ -100,7 +100,7 @@ function autoPlan(ids: string[]) {
   return {
     v: 5 as const,
     plan_id: 'auto-plan', intent: 'auto_mode' as const, profile: 'balanced' as const,
-    dj_profile: 'adaptive' as const, source_profile: 'balanced' as const,
+    source_profile: 'balanced' as const,
     seed_identity: 'seed', degraded: false, generated_at: 1,
     pool_counts: { local: 0, related: ids.length, discovery: 0 }, requests: [],
     items: ids.map((id) => ({

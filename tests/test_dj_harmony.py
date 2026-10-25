@@ -117,5 +117,5 @@ def test_route_quality_prefers_a_relative_key_even_when_parallel_is_listed_first
     current = {**common, "key": "C", "mode": "major"}
     candidates = [({"id": name, "score": .5}, {**common, "key": key, "mode": "minor"})
                   for name, key in (("parallel", "C"), ("relative", "A"))]
-    route = dj.order_route(current, candidates, profile="adaptive", limit=2)
+    route = dj.order_route(current, candidates, limit=2)
     assert route[0]["id"] == "relative"

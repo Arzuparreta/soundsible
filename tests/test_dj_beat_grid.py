@@ -175,7 +175,7 @@ def test_two_mixed_songs_keep_their_kicks_together_for_the_whole_overlap(analyse
     outgoing, out_onsets, _ = analysed("out", 124.0, seconds=128.0, kick="sharp", seed=3)
     incoming, in_onsets, _ = analysed("in", 126.3, seconds=128.0, kick="soft", first=0.83, seed=4)
 
-    plan = plan_transition(outgoing, incoming, profile="adaptive")
+    plan = plan_transition(outgoing, incoming)
     assert plan["technique"] == "bass_swap"
     rate = plan["playback_rate"]
     assert rate == pytest.approx(124.0 / 126.3, abs=2e-5)
@@ -202,7 +202,7 @@ def test_the_planned_cue_leaves_the_players_their_margin():
     }
     incoming = {**outgoing, "intro_cue": 0.25, "outro_cue": 120.0}
 
-    plan = plan_transition(outgoing, incoming, profile="adaptive")
+    plan = plan_transition(outgoing, incoming)
 
     assert plan["out_cue"] + plan["overlap_seconds"] <= 180.0 - 1.5
     assert plan["out_cue"] in grid[::4]

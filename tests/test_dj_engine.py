@@ -44,9 +44,8 @@ def test_transition_uses_phrase_runway_instead_of_running_past_the_file():
     transition = plan_transition(
         analysis(duration=180),
         analysis(bpm=121, key="G"),
-        profile="long_blend",
     )
-    assert transition["technique"] == "long_blend"
+    assert transition["technique"] == "bass_swap"
     assert transition["out_cue"] + transition["overlap_seconds"] <= 180
     assert 0.94 <= transition["playback_rate"] <= 1.06
 
@@ -55,7 +54,6 @@ def test_local_grid_rate_moves_the_incoming_tempo_in_the_right_direction():
     transition = plan_transition(
         analysis(bpm=120, key="C"),
         analysis(bpm=125, key="G"),
-        profile="long_blend",
     )
     assert transition["playback_rate"] == pytest.approx(0.96, abs=0.01)
 
@@ -64,7 +62,6 @@ def test_incompatible_pair_gets_a_structural_fallback():
     transition = plan_transition(
         analysis(bpm=72, key="C", confidence=0.6),
         analysis(bpm=137, key="F#", confidence=0.6),
-        profile="adaptive",
     )
     assert transition["fallback"] is True
     assert transition["technique"] in {"echo_cut", "structural_fade", "safe_fade"}
@@ -78,7 +75,7 @@ def test_request_is_eventually_reached_while_a_clean_direct_mix_stays_preferred(
         (item("bridge-c"), analysis(bpm=128, key="F#")),
     ]
     requested = (item("requested"), analysis(bpm=128, key="D"))
-    route = route_to_request(current, bridges, requested, profile="adaptive", max_starts=5)
+    route = route_to_request(current, bridges, requested, max_starts=5)
     assert 1 <= len(route) <= 5
     assert route[-1]["id"] == "requested"
 
@@ -86,7 +83,6 @@ def test_request_is_eventually_reached_while_a_clean_direct_mix_stays_preferred(
         analysis(bpm=128, key="D"),
         bridges,
         requested,
-        profile="adaptive",
         max_starts=5,
     )
     assert [row["id"] for row in direct] == ["requested"]
@@ -98,7 +94,7 @@ def test_route_order_considers_transition_quality_not_only_recommendation_score(
         (item("high-relevance-bad-mix", 1.0), analysis(bpm=173, key="F#")),
         (item("clean-mix", 0.65), analysis(bpm=121, key="G")),
     ]
-    route = order_route(current, candidates, profile="long_blend", limit=2)
+    route = order_route(current, candidates, limit=2)
     assert route[0]["id"] == "clean-mix"
 
 
@@ -120,7 +116,6 @@ def test_route_keeps_source_contract_and_does_not_penalise_cold_external_audio()
             (cached_local, {**analysis(), "analysed": True}),
             (cold_external, {**analysis(confidence=0.18), "analysed": False}),
         ],
-        profile="adaptive",
         limit=2,
         source_sequence=("related", "local"),
     )
@@ -174,7 +169,7 @@ def test_unknown_duration_yields_no_cue_rather_than_a_cue_at_zero():
     assert unmeasured["outro_cue"] is None
     assert unmeasured["analysed"] is False
 
-    transition = plan_transition(unmeasured, analysis(), profile="adaptive")
+    transition = plan_transition(unmeasured, analysis())
     assert transition["out_cue"] is None
     assert transition["confidence"] < 0.35
 
