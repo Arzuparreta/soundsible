@@ -19,14 +19,9 @@
         "in_period": 0.346821,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "neutral",
-        "filter": false,
-        "echo_out": true
       }
-    }
+    },
+    "incoming_bpm": 173
   },
   {
     "name": "outgoing-90-bpm",
@@ -40,22 +35,17 @@
       "overlap_bars": 8.0,
       "playback_rate": 1.0,
       "echo_delay_seconds": 0.666667,
-      "score": 0.792,
+      "score": 0.518,
       "confidence": 0.9,
       "fallback": true,
       "sync": {
         "out_period": 0.666667,
-        "in_period": 0.346821,
+        "in_period": 0.437956,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "neutral",
-        "filter": false,
-        "echo_out": true
       }
-    }
+    },
+    "incoming_bpm": 137
   },
   {
     "name": "outgoing-120-bpm",
@@ -77,14 +67,9 @@
         "in_period": 0.346821,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "neutral",
-        "filter": false,
-        "echo_out": true
       }
-    }
+    },
+    "incoming_bpm": 173
   },
   {
     "name": "outgoing-137-bpm",
@@ -106,14 +91,9 @@
         "in_period": 0.346821,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "neutral",
-        "filter": false,
-        "echo_out": true
       }
-    }
+    },
+    "incoming_bpm": 173
   },
   {
     "name": "outgoing-220-bpm",
@@ -135,13 +115,8 @@
         "in_period": 0.346821,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "neutral",
-        "filter": false,
-        "echo_out": true
       }
-    }
+    },
+    "incoming_bpm": 173
   }
 ]

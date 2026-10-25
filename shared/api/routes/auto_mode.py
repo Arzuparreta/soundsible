@@ -27,7 +27,6 @@ from shared.discovery_intelligence import (
     rank_recommendation_rows,
 )
 from shared.dj_engine import (
-    DJ_PROFILES,
     analyse_audio,
     analysis_identity,
     cached_analysis,
@@ -1393,7 +1392,6 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         "plan_id": str(uuid.uuid4()),
         "intent": "auto_mode",
         "profile": "balanced",
-        "dj_profile": "adaptive",
         "source_profile": "balanced",
         "seed_identity": str(seed.get("id") or seed.get("youtube_id") or ""),
         "seed_analysis": _dj_analysis_summary(previous),
@@ -1423,9 +1421,7 @@ def discovery_music_dj_plan():
     if isinstance(data.get("sources"), list):
         payload, status = _build_music_set_route(data)
         return jsonify(payload), status
-    profile = str(data.get("dj_profile") or "adaptive").strip()
-    if profile not in DJ_PROFILES:
-        return jsonify({"error": "unsupported dj_profile"}), 400
+    # Older clients may still send dj_profile; technique selection is automatic.
     seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
     if not seed:
         return jsonify({"error": "seed is required"}), 400
@@ -1500,7 +1496,6 @@ def discovery_music_dj_plan():
                 previous,
                 remaining,
                 (target, target_analysis),
-                profile=profile,
                 max_starts=min(5, max_items - len(route)),
             )
             if not target_segment:
@@ -1555,7 +1550,6 @@ def discovery_music_dj_plan():
         route.extend(order_route(
             previous,
             remaining,
-            profile=profile,
             limit=max_items - len(route),
             source_sequence=base.get("source_sequence") or auto_source_sequence(source_profile),
             source_offset=len(route),
@@ -1570,7 +1564,6 @@ def discovery_music_dj_plan():
     return jsonify({
         **base,
         "v": 4,
-        "dj_profile": profile,
         "source_profile": source_profile,
         "seed_analysis": seed_analysis,
         "items": route,
@@ -1663,9 +1656,7 @@ def _dj_place_one(data: dict) -> tuple[dict, int]:
     requested_queue_id = str(data.get("requested_queue_id") or "").strip()
     if not seed or not raw_track or not requested_queue_id:
         return ({"error": "seed, track and requested_queue_id are required"}), 400
-    profile = str(data.get("dj_profile") or "adaptive").strip()
-    if profile not in DJ_PROFILES:
-        return ({"error": "unsupported dj_profile"}), 400
+    # Older clients may still send dj_profile; technique selection is automatic.
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -1726,13 +1717,12 @@ def _dj_place_one(data: dict) -> tuple[dict, int]:
             previous,
             bridge_pool,
             (target, target_analysis),
-            profile=profile,
             max_starts=1 if fixed_index is not None else 3,
         )
         qualities = [float(row["transition"]["score"]) for row in segment]
         following = None
         if gap < len(route):
-            following = plan_transition(target_analysis, route[gap][1], profile=profile)
+            following = plan_transition(target_analysis, route[gap][1])
             qualities.append(float(following["score"]))
         score = sum(qualities) / max(1, len(qualities)) - gap * 0.009
         candidate = (score, -gap, gap, segment, following)
@@ -1833,9 +1823,7 @@ def discovery_music_dj_repair():
     raw_route = data.get("route") if isinstance(data.get("route"), list) else []
     if not seed or not raw_route:
         return jsonify({"error": "seed and route are required"}), 400
-    profile = str(data.get("dj_profile") or "adaptive").strip()
-    if profile not in DJ_PROFILES:
-        return jsonify({"error": "unsupported dj_profile"}), 400
+    # Older clients may still send dj_profile; technique selection is automatic.
     raw_limit = data.get("limit")
     if raw_limit is not None and not isinstance(raw_limit, int):
         return jsonify({"error": "limit must be an integer"}), 400
@@ -1898,7 +1886,7 @@ def discovery_music_dj_repair():
         # Room the anchors still to come have already claimed is not spendable.
         remaining = len(anchors) - position
         fill = order_route(
-            previous, pool, profile=profile,
+            previous, pool,
             limit=max(0, min(depths[position], target - len(built) - remaining)),
         )
         for row in fill:
@@ -1916,7 +1904,6 @@ def discovery_music_dj_repair():
             previous,
             pool,
             (anchor_item, anchor_analysis),
-            profile=profile,
             max_starts=1 + max(0, min(_DJ_REPAIR_MAX_BRIDGES, headroom)),
         )
         for row in segment[:-1]:
@@ -1930,7 +1917,7 @@ def discovery_music_dj_repair():
     # Repair re-seams a route, it does not grow one. When the pool runs dry the
     # tail comes back short and the browser's own refill tops it up at the next
     # natural moment; there should not be a second thing that lengthens a route.
-    tail = order_route(previous, pool, profile=profile, limit=max(0, target - len(built)))
+    tail = order_route(previous, pool, limit=max(0, target - len(built)))
     for row in tail:
         row["route_kind"] = "generated"
     built.extend(tail)
@@ -1964,9 +1951,7 @@ def discovery_music_dj_transition():
     cache-only by design — it never triggers a decode, so it always returns fast.
     """
     data = request.get_json(silent=True) or {}
-    profile = str(data.get("dj_profile") or "adaptive").strip()
-    if profile not in DJ_PROFILES:
-        return jsonify({"error": "unsupported dj_profile"}), 400
+    # Older clients may still send dj_profile; technique selection is automatic.
     outgoing = data.get("from") if isinstance(data.get("from"), dict) else None
     incoming = data.get("to") if isinstance(data.get("to"), dict) else None
     if not outgoing or not incoming:
@@ -1988,7 +1973,7 @@ def discovery_music_dj_transition():
     out_analysis, out_ready = measured(outgoing)
     in_analysis, in_ready = measured(incoming)
     return jsonify({
-        "transition": plan_transition(out_analysis, in_analysis, profile=profile),
+        "transition": plan_transition(out_analysis, in_analysis),
         "analysis": {"from": out_analysis, "to": in_analysis},
         "measured": out_ready and in_ready,
     })

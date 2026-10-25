@@ -18,10 +18,6 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
     private val main: Handler, private val heardIds: () -> Set<String>, private val status: (String, Int) -> Unit,
     private val ready: (List<ProgramDjSession.Row>, Long, Kind) -> Unit) : AutoCloseable {
     enum class Kind { START, REPLACE, APPEND }
-    companion object {
-        /** The mix is automatic: the web sends this one profile too, and nothing chooses another. */
-        const val PROFILE = "adaptive"
-    }
     var settingsRevision = 0L; private set
     var sources = JSONArray(); private set
     private var restoredWorkspace = JSONObject()
@@ -76,7 +72,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         val owner = ProgramQueue.programToken(player)
         val queue = ProgramQueue.token(player)
         val seedKey = seed?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
-        val body = JSONObject().put("dj_profile", PROFILE)
+        val body = JSONObject()
             .put("limit", 8).put("session_id", sessionId)
             .put("segment_index", segment).put("direction_revision", revision)
         if (sources.length() > 0 || restoredWorkspace.optString("sourcePolicy") == "explicit") body.put("sources", sources).put("source_policy", "explicit")

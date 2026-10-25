@@ -76,11 +76,6 @@ export interface LiveTransitionPlan {
   sync?: {
     phase_tolerance_ms?: number;
   };
-  automation?: {
-    eq?: 'bass_swap' | 'neutral';
-    filter?: boolean;
-    echo_out?: boolean;
-  };
 }
 export type MixPhase = 'idle' | 'armed' | 'prerolling' | 'crossfading';
 export type MixCancelReason = 'superseded' | 'load' | 'seek' | 'stop' | 'exit' | 'failed' | 'transport_pause';

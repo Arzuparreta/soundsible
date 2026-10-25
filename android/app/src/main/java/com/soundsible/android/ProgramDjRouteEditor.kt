@@ -87,7 +87,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
     }
     private fun reference(row: ProgramDjSession.Row) = planner.reference(row.item).put("queue_id", key(row.item)).put("route_kind", row.kind).apply { row.ownerKey?.let { put("owner_queue_id", it) } }
     private fun body(snapshot: ProgramDjSession.RouteSnapshot, seedIndex: Int = snapshot.floor) = JSONObject()
-        .put("dj_profile", ProgramDjPlanner.PROFILE).put("seed", planner.reference(snapshot.rows[seedIndex].item))
+        .put("seed", planner.reference(snapshot.rows[seedIndex].item))
         .put("source_policy", "explicit").put("sources", JSONArray(planner.sources.toString()))
         .put("exclude", JSONArray(snapshot.rows.take(seedIndex + 1).map { it.item.mediaId }))
     private fun submit(programme: ProgramDjSession, snapshot: ProgramDjSession.RouteSnapshot, body: JSONObject,

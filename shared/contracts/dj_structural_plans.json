@@ -38,12 +38,6 @@
         "in_period": 0.48,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "bass_swap",
-        "filter": false,
-        "echo_out": false
       }
     },
     "duration": 240
@@ -76,12 +70,6 @@
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "bass_swap",
-        "filter": false,
-        "echo_out": false
       }
     },
     "duration": 240
@@ -109,12 +97,6 @@
         "in_period": 0.48,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "neutral",
-        "filter": false,
-        "echo_out": false
       }
     },
     "duration": 240
@@ -150,14 +132,87 @@
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
-      },
-      "automation": {
-        "curve": "equal_power",
-        "eq": "bass_swap",
-        "filter": false,
-        "echo_out": false
       }
     },
     "duration": 90
+  },
+  {
+    "name": "automatic-long-blend-with-measured-runway",
+    "duration": 240,
+    "outgoing": {
+      "outro_cue": 176.25,
+      "sections": [
+        {
+          "start": 176.25,
+          "end": 192.25,
+          "label": "breakdown",
+          "level": 0.5
+        },
+        {
+          "start": 192.25,
+          "end": 208.25,
+          "label": "breakdown",
+          "level": 0.5
+        },
+        {
+          "start": 208.25,
+          "end": 224.25,
+          "label": "breakdown",
+          "level": 0.5
+        },
+        {
+          "start": 224.25,
+          "end": 240,
+          "label": "outro",
+          "level": 0.5
+        }
+      ]
+    },
+    "incoming": {
+      "bpm": 125,
+      "sections": [
+        {
+          "start": 0.25,
+          "end": 16.25,
+          "label": "intro",
+          "level": 0.5
+        },
+        {
+          "start": 16.25,
+          "end": 32.25,
+          "label": "breakdown",
+          "level": 0.5
+        },
+        {
+          "start": 32.25,
+          "end": 48.25,
+          "label": "breakdown",
+          "level": 0.5
+        },
+        {
+          "start": 48.25,
+          "end": 64.25,
+          "label": "breakdown",
+          "level": 0.5
+        }
+      ]
+    },
+    "transition": {
+      "technique": "long_blend",
+      "out_cue": 176.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 48.0,
+      "overlap_bars": 24.0,
+      "playback_rate": 0.96,
+      "score": 0.748,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "out_period": 0.5,
+        "in_period": 0.48,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    }
   }
 ]

@@ -62,18 +62,17 @@ no hay síntoma que lo justifique.
 | P4 | La "energía" no mide intensidad | Medido | Cerrado (#385): notas/s, LUFS y planitud; `energy` eliminado |
 | P5 | Pool analizado, previews y canciones puente | AAC → caché → HTTP, pools fríos/calientes y adquisición real de 16 previews | Cerrado (implementación `31f696bc`) |
 | P6 | Compatibilidad de tonalidad mal puntuada | Medido: 576 pares y cadencias conocidas | Cerrado (`af6521f1`); detector y límites documentados abajo |
-| P7 | Perfiles de DJ y dirección sin efecto en la ruta | Lectura de código | Dirección y menú de estilos eliminados (#385); queda decidir la opción (b) en el servidor |
+| P7 | Selección automática de técnicas, sin perfiles | AAC → SQLite → HTTP en planificación, colocación, reparación y refinado; vectores comunes web/Android | Cerrado (implementación `d678f625`): opción (b) |
 | P8 | Secciones medidas y no usadas | AAC → SQLite → HTTP; vectores comunes ejecutados por web y Android | Cerrado (implementación `90b6c7e9`) |
-| P9 | Eco no sincronizado con el tempo | AAC → SQLite → HTTP; impulsos en Web Audio real y PCM nativo | Cerrado (`a8a22618`); la activación automática sigue en P7 |
+| P9 | Eco no sincronizado con el tempo | AAC → SQLite → HTTP; impulsos en Web Audio real y PCM nativo | Cerrado (`a8a22618`); activación automática cerrada en P7 (`d678f625`) |
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Implementado en esta PR |
-| P10 | Código muerto y documentación desactualizada | Lectura de código | En parte (#385): queda `automation` |
+| P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
 salvo que vuelva el síntoma. P4, P6, P3, P5, P8 y la sincronización de P9 están
-cerrados. **Quedan P7 (decisión de técnicas automáticas) y P10 (`automation`).**
-P9 corrige la ejecución del eco existente sin resolver por su cuenta P7: el
-perfil automático `adaptive` sigue sin elegir `echo_cut`.
+cerrados. **P7 y P10 también están cerrados en `d678f625`.** P2 sigue
+aparcado: solo se retoma si vuelve el síntoma de desfase.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -149,9 +148,9 @@ diálogo de dirección los había añadido el port de Android (#300) al menú `�
 `ProgramTransport.tsx`, dos meses después de que la web los quitara
 (`ae161f0`): nadie lo había decidido. Se eliminan en los dos clientes, y la
 dirección entera (energía, familiaridad, texto, incluir, excluir) en servidor,
-web y Android, porque ya nada puede fijarla. Los dos clientes envían siempre
-`dj_profile: "adaptive"` (`DJ_PROFILE` en `api.ts`, `ProgramDjPlanner.PROFILE`).
-El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
+web y Android, porque ya nada puede fijarla. Tras #385 ambos clientes enviaban `dj_profile: "adaptive"`. P7 (`d678f625`)
+retira también ese parámetro de los clientes y los perfiles del servidor: la
+técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 
 ---
 
@@ -192,8 +191,8 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
    su posición. Solo con todo el conjunto y la semilla medidos se pueden insertar
    puentes, sin retirar destinos originales (P5). Una sesión sin semilla abre
    desde la fuente más reciente, según el barajado.
-4. **Transición de cada par** (`plan_transition`, `dj_engine.py:671`), con perfil
-   `"adaptive"` fijo.
+4. **Transición de cada par** (`plan_transition`, `dj_engine.py`), con selección
+   automática de técnica (P7), común a todos los endpoints.
 5. **Ejecución** en el navegador (`stores/dj.ts`, `mixer.ts`).
 
 ### Medidas por canción (`_compose`, `_window_features`)
@@ -217,18 +216,27 @@ El servidor mantiene sus cuatro perfiles para la opción (b) de P7.
 
 ```
 ratio = bpm_sale / bpm_entra   (si < 0,7 se multiplica por 2; si > 1,4 se divide por 2)
-tempo     = 1 − |1−ratio| / max_stretch_del_perfil
+tempo     = 1 − |1−ratio| / 0,08
 armonía   = 1 − pasos_Camelot / 7 (±1 en el mismo modo o cambio relativo = un paso; sin tonalidad conocida 0.55)
 confianza = mínimo de las dos canciones
 score     = 0.46·tempo + 0.32·armonía + 0.22·confianza
 ```
 
-| Perfil | Compases | Estiramiento máx. | score ≥ 0,72 | score ≥ 0,55 | conf ≥ 0,42 | resto |
-| --- | --- | --- | --- | --- | --- | --- |
-| `adaptive` | 16 | 8 % | bass_swap | filter_blend | structural_fade | safe_fade |
-| `long_blend` | 32 | 6 % | long_blend | filter_blend | structural_fade | safe_fade |
-| `cuts_drops` | 8 | 10 % | — | — | echo_cut | safe_fade |
-| `open_format` | 8 | 12 % | bass_swap | filter_blend | echo_cut | safe_fade |
+La puntuación conserva la escala de `adaptive` anterior para ordenar rutas.
+La técnica comprueba además el periodo local y la velocidad realmente ejecutada:
+
+| Condición | Técnica | Compases solicitados |
+| --- | --- | --- |
+| Pulso fiable, score ≥ 0,72 y ajuste local ejecutable | bass_swap | 16 |
+| Lo anterior, tonalidades iguales/vecinas/relativas y apertura/cola tranquilas medidas suficientemente largas, sin huecos ni deriva | long_blend | 32 |
+| Pulso fiable, score ≥ 0,55 y ajuste local ejecutable | filter_blend | 16 |
+| No hay mezcla ejecutable, confianza ≥ 0,42, pulso fiable en ambas canciones y golpe saliente medido válido | echo_cut | 8 |
+| Confianza ≥ 0,42 sin los requisitos anteriores | structural_fade | 8 |
+| Resto | safe_fade | 8 |
+
+El ajuste local no supera el 6 % y debe acumular como máximo 5 ms de desfase
+con los valores redondeados del contrato. Un score alto por tonalidad no puede
+eludir esa comprobación. Medio/doble tempo sigue representando el mismo pulso.
 
 - Solapamiento: compases × duración del compás de la canción que sale, entre 4 y
   48 s, con el mismo límite del 25 % de duración que los reproductores (mínimo
@@ -279,7 +287,7 @@ score     = 0.46·tempo + 0.32·armonía + 0.22·confianza
 | `bass_swap` | Lowshelf de 220 Hz: la que sale baja de 0 a −18 dB y la que entra sube de −18 a 0 dB, en 6 pasos repartidos por todo el solapamiento |
 | `filter_blend` | Paso bajo: la que sale baja de 22 kHz a 700 Hz; la que entra sube de 900 Hz a 22 kHz |
 | `long_blend` | `bass_swap` y `filter_blend` a la vez |
-| `echo_cut` | Retardo fijo de 0,28 s, realimentación 0,32, mezcla de eco hasta 0,32 sobre la que sale |
+| `echo_cut` | Un golpe saliente medido, corregido por velocidad; realimentación 0,32 y envío de eco hasta 0,32 (P9) |
 | `structural_fade`, `safe_fade` | Solo la curva de volumen; en el navegador son la misma operación |
 
 ---
@@ -903,13 +911,60 @@ equivalente; método y reproducción en `docs/PERFORMANCE.md`, *Tonality analyse
   Android (`ProgramDjPlanner.profile`, `djProfile` de `PlaybackService` y de
   `PlaybackPlugin`) y su validación en `ProgramDeviceState`.
 
-**Queda (necesita decisión del usuario).** El servidor conserva los cuatro
-perfiles (`DJ_PROFILES`, `_PROFILE_POLICY`). Con `adaptive` nunca salen
-`echo_cut` ni `long_blend`. Opción (b): que el planificador elija la técnica por
-par sin perfiles, permitiendo también `echo_cut` y `long_blend` cuando el
-material lo pida (por ejemplo, echo_cut si el tempo no encaja pero la confianza
-es alta). Encaja con "la mezcla es automática". Si se descarta, quitar los
-perfiles del servidor y el parámetro `dj_profile`.
+**Estado: cerrado en `d678f625`, opción (b).** La petición de implementar el
+siguiente P aplica la mezcla automática a cada par, sin recuperar menús de estilo.
+
+- **Una sola política.** Retirados `DJ_PROFILES`, `_PROFILE_POLICY`, el argumento
+  `profile` de los planificadores, `DjProfile`, `DJ_PROFILE` y
+  `ProgramDjPlanner.PROFILE`. Ningún cliente envía `dj_profile`; el servidor lo
+  ignora si lo manda un cliente antiguo, incluso con un valor desconocido.
+  Se conservan las escalas, umbrales y límites de ejecución de la política
+  anterior; no se calibran nuevas notas con canciones ni se añade azar.
+- **Técnica ejecutable.** Se construye el plan a sus puntos reales y se verifica
+  el ajuste local dentro del 6 % y del presupuesto de fase de 5 ms. Si no cabe,
+  no se etiqueta como beatmatch a velocidad 1: se vuelve a planificar un eco
+  de ocho compases con golpe saliente medido, o un fundido estructural/seguro
+  si no hay pulso o confianza suficientes. No cambia la sincronización de P9.
+- **Mezcla larga medible.** Reutiliza los 32 compases y el máximo de 48 s que ya
+  ejecutan los clientes. Requiere tonalidades iguales, vecinas en Camelot o
+  relativas, y más solapamiento que la mezcla ordinaria. La apertura intro y
+  la cola outro pueden prolongarse solo por bloques breakdown contiguos: el
+  detector etiqueta intro/outro en un único bloque de ocho compases. Body,
+  build, drop o un hueco interrumpen esa región. Ambas rejillas deben cubrir
+  todo el tramo; cada una dispone de la mitad de los 5 ms para desviarse de su
+  periodo local. No se extiende una mezcla atravesando una ventana sin medir.
+- **Todos los caminos.** Ruta de fuentes explícitas, ruta legacy, puentes,
+  peticiones, reparación y refinado usan el mismo planificador. Se retira
+  `automation` de respuesta, vectores y tipos (cierre de P10); los reproductores
+  siguen ejecutando `technique`. No cambian medidas ni caché del analizador.
+
+**Validación reproducible.**
+`PYTHONPATH=. .venv/bin/pytest -q -s tests/test_discovery_save_route.py -k 'measured_audio_sections or measured_aac_echo'`
+genera señales conocidas, codifica AAC, analiza y persiste en SQLite. La mezcla
+larga usa una apertura tranquila hasta 64,25 s y una cola tranquila desde
+176,25 s, con cuerpo de nivel superior entre ellas: el detector produce los
+bloques contiguos que permiten un solapamiento de 48 s. La planificación de
+fuentes, legacy, colocación, reparación y refinado devuelven el mismo plan,
+con y sin cada perfil antiguo. Las pruebas aíslan por runtime el contador HTTP
+en memoria: la matriz no consume el presupuesto de pruebas posteriores. Los
+casos de eco a 90 y 137 BPM contra 120 BPM
+lo eligen automáticamente en ambas rutas y en el refinado.
+
+`tests/test_dj_automatic.py` cubre las seis técnicas, medio/doble tempo,
+periodo local distinto del BPM global, ausencia de secciones, apertura corta,
+huecos entre secciones, body/drop, hueco de rejilla, deriva local, tonalidad ausente/distante y
+archivo corto. El nuevo vector largo de `dj_structural_plans.json` y los cinco
+vectores de eco son ejecutados por las stores web y `ProgramDjPlanTest` en
+Android sin mover puntos, acortar el tramo ni retirar efectos. Se mantienen
+las pruebas PCM nativas y de impulsos Web Audio real de P9. La regresión de
+navegador es completa en los cuatro perfiles; build, lint y emuladores Android
+se comprueban en los checks de la PR.
+
+**Límites.** No hay aceptación física de escucha. Las secciones conservan la
+heurística de ocho compases y los límites del analizador: sin evidencia de
+apertura/cola suficiente no se elige mezcla larga. No hay nuevo arco de
+energía, estilo, gusto escrito a mano ni corrección de velocidad durante la
+reproducción (P2 sigue aparcado).
 
 ## P8. Secciones medidas y no usadas
 
@@ -984,8 +1039,8 @@ añade un bloque de 128 muestras en cada vuelta posterior a la primera.
 
 **Estado: sincronización cerrada en `a8a22618`.** El contrato HTTP
 existente permite `echo_cut` con los perfiles `cuts_drops` y `open_format`.
-La ruta de fuentes explícitas y ambos clientes siguen usando `adaptive`, que
-no elige eco: habilitarlo automáticamente es la decisión de P7 y queda pendiente.
+En aquella entrega la ruta explícita y ambos clientes usaban `adaptive`, sin
+eco; la activación automática posterior está cerrada en P7 (`d678f625`).
 No se añade un selector ni se cambia la política de técnicas para cerrar P9.
 
 - **Retardo medido.** `plan_transition` incluye `echo_delay_seconds`: un golpe
@@ -1037,8 +1092,8 @@ salida reales, con periodo explícito de 0,5 s, en los checks de Android.
 **Límites.** Sin escucha física en esta entrega. Un periodo constante no sigue
 rubato: el eco no se aplica con pulso no fiable. La compensación web corresponde
 al bloque de 128 muestras de los contextos predeterminados verificados en los
-dos motores. P9 no habilita eco automático ni retira perfiles (`P7`) ni el campo
-`automation` (`P10`).
+dos motores. P9 por sí sola no habilitó eco automático ni retiró perfiles o
+`automation`: esos cambios posteriores están cerrados en P7 y P10 (`d678f625`).
 
 ## P10. Código muerto y documentación desactualizada
 
@@ -1050,6 +1105,7 @@ idiomas, "DJ style" en `docs/AUTO_MODE.md`, "recency decay" y "energy arc" en
 `docs/ARCHITECTURE.md` y `docs/PLAYBACK_QUEUE_CONTRACT.md`, y el "orders songs by
 tempo, key and energy" de `README.md`.
 
-Queda: el campo `automation` que devuelve `plan_transition` no lo lee el
-mezclador web ni el de Android (los dos deciden por `technique`). Quitarlo con
-la decisión de P7 (b), que puede cambiar qué técnicas salen.
+**Estado: cerrado en `d678f625` junto con P7 (b).** Retirado `automation` de
+`plan_transition`, los vectores compartidos y los tipos web; ningún reproductor
+lo leía y ambos siguen ejecutando `technique`. La documentación de usuario y
+las secciones de funcionamiento de este handoff describen la política vigente.

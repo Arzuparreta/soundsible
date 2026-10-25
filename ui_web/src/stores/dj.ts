@@ -1,5 +1,5 @@
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
-import { api, DJ_PROFILE, type DjItemRef, type DjPlanResponse, type DjRouteKind, type ListeningPlanItem, type PreviewPreparation } from "../lib/api";
+import { api, type DjItemRef, type DjPlanResponse, type DjRouteKind, type ListeningPlanItem, type PreviewPreparation } from "../lib/api";
 import { audioService, type LiveTransitionPlan, type ProgramPlaybackSnapshot } from "../lib/audio";
 import { type MediaSessionSyncReason } from "../lib/mediaSession";
 import { playbackYoutubeId } from "../lib/media";
@@ -330,7 +330,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     attempt.nextAt = performance.now() + REFINE_RETRY_MS;
     const revision = state.autoMode.directionRevision;
     void api.refineDjTransition({
-      dj_profile: DJ_PROFILE,
       from: djItemRef(current),
       to: djItemRef(next)
     }).then(lifetime.guard(result => {
@@ -570,7 +569,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     });
     try {
       const response = await api.planDjQueue({
-        dj_profile: DJ_PROFILE,
         session_id: randomId(),
         segment_index: 0,
         source_policy: 'explicit',
@@ -1088,7 +1086,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         };
         if (intent === 'auto_mode' && typeof api.planDjQueue === 'function') {
           return api.planDjQueue({
-            dj_profile: DJ_PROFILE,
             session_id: generatedSession?.id,
             segment_index: generatedSession?.segmentIndex,
             context: state.autoMode.heard.slice(-8).map(djItemRef),
@@ -1567,7 +1564,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       };
       try {
         const response = await api.placeDjTracks({
-          dj_profile: DJ_PROFILE,
           seed: djItemRef(seed),
           route: route.map(row => ({
             ...djItemRef(row),
@@ -1702,7 +1698,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       });
       try {
         const response = await api.placeDjTrack({
-          dj_profile: DJ_PROFILE,
           seed: djItemRef(seed),
           route: route.map(entry => ({
             ...djItemRef(entry),
@@ -1854,7 +1849,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       });
       try {
         const response = await api.repairDjRoute({
-          dj_profile: DJ_PROFILE,
           seed: djItemRef(seed),
           route: route.map(entry => ({
             ...djItemRef(entry),

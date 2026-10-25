@@ -219,9 +219,6 @@ export interface DiscoveryMusicFeed {
 
 export type ListeningPlanIntent = 'autoplay' | 'radio' | 'auto_mode';
 export type ListeningPlanProfile = 'familiar' | 'balanced' | 'explore';
-export type DjProfile = 'adaptive' | 'long_blend' | 'cuts_drops' | 'open_format';
-/** The mix is automatic: every client asks for this one profile. */
-export const DJ_PROFILE: DjProfile = 'adaptive';
 
 export interface DjTransitionPlan {
   technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade';
@@ -242,12 +239,6 @@ export interface DjTransitionPlan {
     in_period: number;
     phase_tolerance_ms: number;
     grid_source: 'measured' | 'estimated';
-  };
-  automation?: {
-    curve: 'equal_power';
-    eq: 'bass_swap' | 'neutral';
-    filter: boolean;
-    echo_out: boolean;
   };
 }
 
@@ -342,7 +333,6 @@ export interface ListeningPlanResponse {
 
 export interface DjPlanResponse extends ListeningPlanResponse {
   v: 2 | 3 | 4 | 5 | 6;
-  dj_profile: DjProfile;
   source_profile: ListeningPlanProfile;
   /** Features of the track the route continues from — the only reading the
    * player has for a song it did not plan itself. */
@@ -1036,7 +1026,6 @@ export const api = {
     }),
   planDjQueue: (
     body: {
-      dj_profile: DjProfile;
       session_id?: string;
       segment_index?: number;
       context?: DjItemRef[];
@@ -1071,7 +1060,6 @@ export const api = {
     }),
   placeDjTrack: (
     body: {
-      dj_profile: DjProfile;
       seed: DjItemRef;
       route: DjRouteRef[];
       track: Track;
@@ -1093,7 +1081,7 @@ export const api = {
   }),
   placeDjTracks: (
     body: {
-      dj_profile: DjProfile; seed: DjItemRef; route: DjRouteRef[];
+      seed: DjItemRef; route: DjRouteRef[];
       source_policy?: 'explicit';
       exploration?: Track[];
       direction_revision?: number;
@@ -1108,7 +1096,6 @@ export const api = {
    * anchor from filler it may replace. */
   repairDjRoute: (
     body: {
-      dj_profile: DjProfile;
       seed: DjItemRef;
       route: DjRouteRef[];
       source_policy?: 'explicit';
@@ -1130,7 +1117,6 @@ export const api = {
    * side, so it is cheap enough to ask for shortly before every handoff. */
   refineDjTransition: (
     body: {
-      dj_profile: DjProfile;
       from: DjItemRef;
       to: DjItemRef;
     },

@@ -95,7 +95,7 @@ class ProgramDjRecoveryTest {
                 lateinit var body: JSONObject
                 instrumentation.runOnMainSync {
                     planner = ProgramDjPlanner(connection, session!!.player, android.os.Handler(android.os.Looper.getMainLooper()), { emptySet() }, { _, _ -> }, { _, _, _ -> })
-                    body = JSONObject().put("dj_profile", "adaptive").put("from", planner!!.reference(session!!.items()[0])).put("to", planner!!.reference(session!!.items()[1]))
+                    body = JSONObject().put("from", planner!!.reference(session!!.items()[0])).put("to", planner!!.reference(session!!.items()[1]))
                 }
                 var answer: JSONObject? = null
                 val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)

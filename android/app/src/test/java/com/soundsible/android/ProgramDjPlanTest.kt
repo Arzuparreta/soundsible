@@ -79,8 +79,13 @@ class ProgramDjPlanTest {
         assertEquals(0L, plan.inCueUs)
         assertEquals(12000L, plan.phaseToleranceUs)
     }
-    @Test fun sharedServerSectionPlansKeepTheirCuesAndDropAlignment() {
-        val vectors = javaClass.classLoader!!.getResourceAsStream("dj_structural_plans.json")!!.bufferedReader().use { JSONArray(it.readText()) }
+    @Test fun sharedServerAutomaticPlansKeepTheirCuesAndEffects() {
+        val vectors = JSONArray().apply {
+            for (resource in listOf("dj_structural_plans.json", "dj_echo_plans.json")) {
+                val rows = ProgramDjPlanTest::class.java.classLoader!!.getResourceAsStream(resource)!!.bufferedReader().use { JSONArray(it.readText()) }
+                for (index in 0 until rows.length()) put(rows.getJSONObject(index))
+            }
+        }
         for (index in 0 until vectors.length()) {
             val vector = vectors.getJSONObject(index)
             val transition = vector.getJSONObject("transition")
@@ -89,13 +94,15 @@ class ProgramDjPlanTest {
                 ProgramMixCurve.Technique.valueOf(transition.getString("technique").uppercase(java.util.Locale.ROOT)),
                 transition.getDouble("out_cue"), transition.getDouble("in_cue"), transition.getDouble("overlap_seconds"),
                 transition.getDouble("playback_rate"), transition.getDouble("confidence"),
-                sync.getDouble("phase_tolerance_ms"), sync.getDouble("out_period"))
+                sync.getDouble("phase_tolerance_ms"), sync.getDouble("out_period"),
+                transition.optDouble("echo_delay_seconds").takeIf { it.isFinite() })
             val plan = ProgramDjPlan.resolve("current", (vector.getDouble("duration") * 1000000).roundToLong(), proposal, true)!!
             assertEquals(vector.getString("name"), proposal.technique, plan.technique)
             assertEquals((proposal.outCue * 1000000).roundToLong(), plan.outCueUs)
             assertEquals((proposal.inCue * 1000000).roundToLong(), plan.inCueUs)
             assertEquals((proposal.overlap * 1000000).roundToLong(), plan.overlapUs)
             assertEquals(proposal.rate, plan.rate.toDouble(), 0.000001)
+            assertEquals(proposal.echoDelaySeconds, plan.echoDelaySeconds)
         }
     }
     @Test fun echoDelayBelongsOnlyToATrustedMatchingOccurrenceWithMixingEnabled() {

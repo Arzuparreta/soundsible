@@ -64,6 +64,17 @@ from shared.telemetry import init_telemetry, reset_telemetry
 
 
 @pytest.fixture(autouse=True)
+def isolated_request_budgets():
+    # Every test creates its own runtime, but HTTP budgets live in process
+    # memory. The compatibility matrix must not spend later tests' budgets.
+    from shared.hardening import _reset_rate_limits_for_tests
+
+    _reset_rate_limits_for_tests()
+    yield
+    _reset_rate_limits_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def no_speculative_network(monkeypatch):
     # Route tests isolate providers. Acquisition itself has integration coverage
     # in test_dj_pool; no daemon may outlive this test's disposable runtime.
@@ -193,13 +204,13 @@ def test_music_plan_validates_intent_profile_and_seed(tmp_path):
     ).status_code == 400
 
 
-def test_dj_plan_validates_profile_and_requires_seed(tmp_path):
+def test_dj_plan_requires_seed_even_with_a_legacy_profile(tmp_path):
     _make_runtime(tmp_path)
     client = _make_app().test_client()
     assert client.post("/api/discovery/music/dj-plan", json={}).status_code == 400
     assert client.post(
         "/api/discovery/music/dj-plan",
-        json={"dj_profile": "mystery", "seed": {"title": "Song", "artist": "Artist"}},
+        json={"dj_profile": "mystery"},
     ).status_code == 400
 
 
@@ -1547,7 +1558,6 @@ def test_dj_repair_validates_its_body(tmp_path):
     route = _repair_route("user")
     assert _post_repair({"route": route}).status_code == 400
     assert _post_repair({"seed": _REPAIR_SEED, "route": []}).status_code == 400
-    assert _post_repair({"seed": _REPAIR_SEED, "route": route, "dj_profile": "nope"}).status_code == 400
     assert _post_repair({"seed": _REPAIR_SEED, "route": route, "limit": "many"}).status_code == 400
 
 
@@ -1583,7 +1593,7 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
     assert response.status_code == 200
     body = response.get_json()
     assert body["measured"] is True
-    assert body["transition"]["technique"] == "long_blend"
+    assert body["transition"]["technique"] == "bass_swap"
     # Pulled back from the measured outro so the whole blend fits in the file.
     assert body["transition"]["out_cue"] + body["transition"]["overlap_seconds"] <= 220
 
@@ -1607,8 +1617,8 @@ def test_dj_transition_validates_its_pair(tmp_path):
     ).status_code == 400
 
 
-@pytest.mark.parametrize("outro", [False, True])
-def test_measured_audio_sections_reach_route_and_refinement_without_client_replanning(tmp_path, outro):
+@pytest.mark.parametrize("outro,long", [(False, False), (True, False), (False, True)])
+def test_measured_audio_sections_reach_route_and_refinement_without_client_replanning(tmp_path, outro, long):
     """Synthetic AAC -> real analysis/cache -> the common web/Android HTTP plan."""
     import subprocess
     from shared import dj_engine
@@ -1621,7 +1631,7 @@ def test_measured_audio_sections_reach_route_and_refinement_without_client_repla
     refs, paths, analyses = {}, {}, {}
     for key in ("outgoing", "incoming"):
         wav, aac = tmp_path / f"{key}.wav", tmp_path / f"{key}.m4a"
-        section_song(wav, incoming=key == "incoming", outro=outro)
+        section_song(wav, incoming=key == "incoming", outro=outro, long=long)
         subprocess.run([ffmpeg_executable(), "-v", "error", "-i", str(wav), "-c:a", "aac", str(aac)], check=True)
         refs[key] = {"id": key, "track_id": key, "title": key, "artist": "Synthetic", "duration": 240}
         paths[key] = aac
@@ -1633,14 +1643,40 @@ def test_measured_audio_sections_reach_route_and_refinement_without_client_repla
         route = client.post("/api/discovery/music/dj-plan", json={"session_id": "sections", "seed": refs["outgoing"],
             "sources": [{"id": "source", "tracks": [refs["incoming"]]}], "limit": 1})
         refined = client.post("/api/discovery/music/dj-transition", json={"from": refs["outgoing"], "to": refs["incoming"]})
+        # The same measured plan must reach every route-editing entry point;
+        # obsolete styles from older clients cannot change it or reject it.
+        expected = refined.get_json()["transition"]
+        for profile in (None, "adaptive", "long_blend", "cuts_drops", "open_format", "mystery"):
+            common = {"seed": refs["outgoing"], **({"dj_profile": profile} if profile else {})}
+            row = {**refs["incoming"], "queue_id": "q-incoming", "route_kind": "user"}
+            requests = [
+                ("dj-place", {**common, "track": refs["incoming"], "requested_queue_id": "q-incoming"}),
+                ("dj-repair", {**common, "route": [row]}),
+                ("dj-plan", {**common, "sources": [{"id": "source", "tracks": [refs["incoming"]]}], "limit": 1}),
+            ]
+            for endpoint, payload in requests:
+                response = client.post(f"/api/discovery/music/{endpoint}", json=payload)
+                assert response.status_code == 200, (endpoint, profile, response.get_json())
+                assert response.get_json()["items"][0]["transition"] == expected, (endpoint, profile)
+            with patch.object(_auto_mode, "_build_music_plan", return_value=({"items": [refs["incoming"]]}, 200)):
+                legacy = client.post("/api/discovery/music/dj-plan", json={**common, "limit": 1})
+            assert legacy.status_code == 200
+            assert legacy.get_json()["items"][0]["transition"] == expected
+            again = client.post("/api/discovery/music/dj-transition", json={
+                **common, "from": refs["outgoing"], "to": refs["incoming"]})
+            assert again.status_code == 200
+            assert again.get_json()["transition"] == expected
     assert route.status_code == refined.status_code == 200
     body = refined.get_json()
     assert body["measured"] is True
     plan = body["transition"]
     assert plan == route.get_json()["items"][0]["transition"]
     assert "sections" not in route.get_json()["items"][0]["analysis"]
-    assert plan["technique"] == "bass_swap"
-    if outro:
+    assert plan["technique"] == ("long_blend" if long else "bass_swap")
+    if long:
+        assert plan["overlap_seconds"] == 48
+        assert abs(plan["playback_rate"] - 1) * plan["overlap_seconds"] <= .005
+    elif outro:
         start = next(s["start"] for s in analyses["outgoing"]["sections"] if s["label"] == "outro")
         assert plan["out_cue"] == pytest.approx(start, abs=.005)
         assert plan["overlap_seconds"] < 16
@@ -2259,7 +2295,7 @@ def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
     api = _mock_api()
     api["get_core"].return_value = (_FakeLibrary(None), None, None)
     refs, paths = {}, {}
-    for key, tempo in (("outgoing", bpm), ("incoming", 173)):
+    for key, tempo in (("outgoing", bpm), ("incoming", 120)):
         wav, aac = tmp_path / f"{key}.wav", tmp_path / f"{key}.m4a"
         song(wav, tempo, seconds=120)
         subprocess.run([ffmpeg_executable(), "-v", "error", "-i", str(wav), "-c:a", "aac", str(aac)], check=True)
@@ -2269,19 +2305,23 @@ def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
         assert measured["analysed"] is True
     with (patch.object(_auto_mode, "_get_api", return_value=api),
           patch.object(_auto_mode, "_dj_source_path", side_effect=lambda _, item: paths[item["id"]]),
+          patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
           patch.object(_auto_mode, "_build_music_plan", return_value=({"items": [refs["incoming"]]}, 200))):
         client = _make_app().test_client()
-        # The music-set route deliberately pins adaptive; the legacy route and
-        # pair refinement still accept the existing cuts_drops profile (P7).
+        # Both planning paths and refinement now choose echo without a profile.
         route = client.post("/api/discovery/music/dj-plan", json={"session_id": "echo", "seed": refs["outgoing"],
-            "limit": 3, "dj_profile": "cuts_drops"})
+            "limit": 3})
         refined = client.post("/api/discovery/music/dj-transition", json={"from": refs["outgoing"],
-            "to": refs["incoming"], "dj_profile": "cuts_drops"})
+            "to": refs["incoming"]})
+        explicit = client.post("/api/discovery/music/dj-plan", json={"session_id": "echo", "seed": refs["outgoing"],
+            "sources": [{"id": "source", "tracks": [refs["incoming"]]}], "limit": 1})
     assert route.status_code == refined.status_code == 200
     body = refined.get_json()
     assert body["measured"] is True
     plan = body["transition"]
     assert plan == route.get_json()["items"][0]["transition"]
+    assert explicit.status_code == 200
+    assert plan == explicit.get_json()["items"][0]["transition"]
     assert plan["technique"] == "echo_cut"
     assert plan["echo_delay_seconds"] == pytest.approx(60 / bpm, abs=.001)
     print({"bpm": bpm, "echo_delay_seconds": plan["echo_delay_seconds"]})
