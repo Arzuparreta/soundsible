@@ -25,12 +25,12 @@ sys.path.insert(0, str(ROOT))
 
 def load_engine(revision):
     if revision:
-        source = subprocess.check_output(['git', 'show', f'{revision}:shared/dj_engine.py'], cwd=ROOT, text=True)
-        engine = types.ModuleType('reference_dj_engine')
-        exec(compile(source, 'reference_dj_engine.py', 'exec'), engine.__dict__)
-    else:
-        from shared import dj_engine as engine
-    return engine
+        from docs.dj.reference import load_reference
+        return load_reference(revision)
+    from shared.dj import analysis, features, store
+    return types.SimpleNamespace(_window_features=features._window_features,
+                                 _analyse_pcm=store._analyse_pcm,
+                                 _compose=analysis._compose, _compose_off_loop=store._compose_off_loop)
 
 
 def synthetic_pcm(seconds):

@@ -54,6 +54,7 @@ def child(args):
         from shared.user_context import bind_user
         bind_user('queue-benchmark')
         from shared import dj_engine as engine
+        from shared.dj import store as analysis_store
         from shared.api.routes import auto_mode
         from shared.api.routes.discovery_bp import discovery_bp
         from flask import Flask
@@ -89,7 +90,7 @@ def child(args):
         events = {}
         requested = set()
         original_request = engine.request_analysis
-        original_analyse = engine.analyse_audio
+        original_analyse = analysis_store.analyse_audio
         maximum = {'active': 0, 'pending': 0}
         active = 0
         epoch = time.perf_counter()
@@ -143,7 +144,7 @@ def child(args):
 
         def drain():
             deadline = time.monotonic() + 120
-            while engine._pending:
+            while analysis_store._pending:
                 if time.monotonic() >= deadline:
                     raise TimeoutError('Analysis queue did not drain within 120 seconds')
                 gevent.sleep(0.005)
@@ -163,7 +164,7 @@ def child(args):
               patch.object(auto_mode, '_planner_warm_related'),
               patch.object(auto_mode, '_dj_source_path', return_value=str(source)),
               patch.object(auto_mode, 'request_analysis', side_effect=request),
-              patch.object(engine, 'analyse_audio', side_effect=analyse)):
+              patch.object(analysis_store, 'analyse_audio', side_effect=analyse)):
             if args.scenario == 'warm':
                 plan(0)
                 drain()
@@ -223,8 +224,8 @@ def child(args):
                     'pair_events': [events.get(identity) for identity in identities],
                     'jobs': list(events.values()),
                 })
-            if engine._pool is not None:
-                engine._pool.shutdown(wait=True)
+            if analysis_store._pool is not None:
+                analysis_store._pool.shutdown(wait=True)
             print(json.dumps(result), flush=True)
 
 

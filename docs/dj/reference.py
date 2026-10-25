@@ -51,7 +51,7 @@ def load_reference(revision: str):
         transitions = importlib.import_module(f'{name}.transitions')
         return types.SimpleNamespace(
             _KEY_NAMES=features._KEY_NAMES, _window_features=features._window_features,
-            _analyse_pcm=store._analyse_pcm, _compose=analysis._compose,
+            _analyse_pcm=store._analyse_pcm, _compose=analysis._compose, _compose_off_loop=store._compose_off_loop,
             plan_transition=transitions.plan_transition,
             order_continuous_route=routes.order_continuous_route,
             order_route=routes.order_route, route_to_request=routes.route_to_request,

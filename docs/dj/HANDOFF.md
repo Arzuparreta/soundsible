@@ -1235,6 +1235,10 @@ Mapa, unidades, dependencias, políticas y evidencia reproducible en
   sin decodificar, en ambos sentidos. Los vectores comunes no cambian.
   `key_probe.py` mantiene 96/96 cadencias, antes y después; también puede cargar
   una revisión posterior a la separación sin importar por error el código actual.
+  Los benchmarks de análisis y cola migran sus puntos privados al propietario;
+  se ejecutan extracción (18/480 s), pipeline WAV (18/900 s), HTTP con dos
+  análisis y los cuatro escenarios de cola con/sin instrumentación. Es una
+  comprobación funcional de las herramientas, no una mejora de coste medida.
 - Regresión local: 2.287 tests del motor aprobados, uno omitido y cobertura
   77,30 %; 1.762 tests de UI. Tras cerrar la extracción, 74 casos dirigidos
   incluyen las 13 pruebas de fronteras, adquisición acotada y gevent. Los checks

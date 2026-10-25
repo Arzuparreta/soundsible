@@ -126,7 +126,9 @@ web y Android. Los puntos privados de inyección migran al propietario:
 `store._compose` para almacenamiento/ejecución fuera del bucle;
 `features._spectral_features` para FFT y `analysis._compose` para PCM puro.
 Los imports públicos de la fachada siguen funcionando con una sola instancia
-del estado. Los probes de tempo y tonalidad usan esos propietarios.
+del estado. Los probes de tempo y tonalidad y los benchmarks de análisis/cola
+usan esos propietarios; la instrumentación de la cola observa el trabajo real
+de `store`, y las revisiones separadas se cargan en otro namespace.
 
 Se mantienen dos trabajadores de adquisición, hasta 64 identidades pendientes,
 deduplicación por identidad, conexiones SQLite por hilo, FFT por bloques y
