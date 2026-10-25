@@ -945,7 +945,9 @@ larga usa una apertura tranquila hasta 64,25 s y una cola tranquila desde
 176,25 s, con cuerpo de nivel superior entre ellas: el detector produce los
 bloques contiguos que permiten un solapamiento de 48 s. La planificación de
 fuentes, legacy, colocación, reparación y refinado devuelven el mismo plan,
-con y sin cada perfil antiguo. Los casos de eco a 90 y 137 BPM contra 120 BPM
+con y sin cada perfil antiguo. Las pruebas aíslan por runtime el contador HTTP
+en memoria: la matriz no consume el presupuesto de pruebas posteriores. Los
+casos de eco a 90 y 137 BPM contra 120 BPM
 lo eligen automáticamente en ambas rutas y en el refinado.
 
 `tests/test_dj_automatic.py` cubre las seis técnicas, medio/doble tempo,

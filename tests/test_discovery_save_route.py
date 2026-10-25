@@ -64,6 +64,17 @@ from shared.telemetry import init_telemetry, reset_telemetry
 
 
 @pytest.fixture(autouse=True)
+def isolated_request_budgets():
+    # Every test creates its own runtime, but HTTP budgets live in process
+    # memory. The compatibility matrix must not spend later tests' budgets.
+    from shared.hardening import _reset_rate_limits_for_tests
+
+    _reset_rate_limits_for_tests()
+    yield
+    _reset_rate_limits_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def no_speculative_network(monkeypatch):
     # Route tests isolate providers. Acquisition itself has integration coverage
     # in test_dj_pool; no daemon may outlive this test's disposable runtime.
