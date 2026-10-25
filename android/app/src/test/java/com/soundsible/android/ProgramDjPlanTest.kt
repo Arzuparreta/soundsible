@@ -81,7 +81,7 @@ class ProgramDjPlanTest {
     }
     @Test fun sharedServerAutomaticPlansKeepTheirCuesAndEffects() {
         val vectors = JSONArray().apply {
-            for (resource in listOf("dj_structural_plans.json", "dj_echo_plans.json")) {
+            for (resource in listOf("dj_structural_plans.json", "dj_echo_plans.json", "dj_metric_plans.json")) {
                 val rows = ProgramDjPlanTest::class.java.classLoader!!.getResourceAsStream(resource)!!.bufferedReader().use { JSONArray(it.readText()) }
                 for (index in 0 until rows.length()) put(rows.getJSONObject(index))
             }
@@ -95,14 +95,39 @@ class ProgramDjPlanTest {
                 transition.getDouble("out_cue"), transition.getDouble("in_cue"), transition.getDouble("overlap_seconds"),
                 transition.getDouble("playback_rate"), transition.getDouble("confidence"),
                 sync.getDouble("phase_tolerance_ms"), sync.getDouble("out_period"),
-                transition.optDouble("echo_delay_seconds").takeIf { it.isFinite() })
+                transition.optDouble("echo_delay_seconds").takeIf { it.isFinite() }, sync)
             val plan = ProgramDjPlan.resolve("current", (vector.getDouble("duration") * 1000000).roundToLong(), proposal, true)!!
-            assertEquals(vector.getString("name"), proposal.technique, plan.technique)
-            assertEquals((proposal.outCue * 1000000).roundToLong(), plan.outCueUs)
+            val resolved = vector.optJSONObject("resolved")
+            val expectedTechnique = resolved?.optString("technique")?.let { ProgramMixCurve.Technique.valueOf(it.uppercase(java.util.Locale.ROOT)) } ?: proposal.technique
+            assertEquals(vector.getString("name"), expectedTechnique, plan.technique)
+            assertEquals(((resolved?.optDouble("out_cue") ?: proposal.outCue) * 1000000).roundToLong(), plan.outCueUs)
             assertEquals((proposal.inCue * 1000000).roundToLong(), plan.inCueUs)
             assertEquals((proposal.overlap * 1000000).roundToLong(), plan.overlapUs)
             assertEquals(proposal.rate, plan.rate.toDouble(), 0.000001)
             assertEquals(proposal.echoDelaySeconds, plan.echoDelaySeconds)
+        }
+    }
+    @Test fun explicitUnknownBarNeverBecomesFourMeasuredPulses() {
+        val unknown = confident.copy(outPeriod = 0.5, metricSync = org.json.JSONObject().put("out_bar_seconds", org.json.JSONObject.NULL))
+        assertEquals(0.0, ProgramDjPlan.barSeconds(unknown), 0.0)
+        assertEquals(2.0, ProgramDjPlan.barSeconds(unknown.copy(metricSync = null)), 0.0)
+    }
+    @Test fun incompleteOrContradictoryMetricPlansDowngradeInsteadOfClaimingBeatmatch() {
+        val rows = ProgramDjPlanTest::class.java.classLoader!!.getResourceAsStream("dj_metric_plans.json")!!.bufferedReader().use { JSONArray(it.readText()) }
+        val transition = rows.getJSONObject(0).getJSONObject("transition")
+        for (field in listOf("out_metre", "out_bar_seconds", "in_bar_seconds", "in_period")) {
+            val sync = org.json.JSONObject(transition.getJSONObject("sync").toString())
+            sync.put(field, when (field) {
+                "in_bar_seconds" -> 2.0
+                "in_period" -> 0.55
+                else -> org.json.JSONObject.NULL
+            })
+            val proposal = confident.copy(outCue = transition.getDouble("out_cue"),
+                inCue = transition.getDouble("in_cue"), overlap = transition.getDouble("overlap_seconds"), rate = 1.0,
+                outPeriod = 0.5, metricSync = sync)
+            val plan = ProgramDjPlan.resolve("current", 240000000, proposal, true)!!
+            assertEquals(field, ProgramMixCurve.Technique.STRUCTURAL_FADE, plan.technique)
+            assertEquals(1.0, plan.rate.toDouble(), 0.0)
         }
     }
     @Test fun echoDelayBelongsOnlyToATrustedMatchingOccurrenceWithMixingEnabled() {

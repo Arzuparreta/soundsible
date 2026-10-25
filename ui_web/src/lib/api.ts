@@ -220,6 +220,18 @@ export interface DiscoveryMusicFeed {
 export type ListeningPlanIntent = 'autoplay' | 'radio' | 'auto_mode';
 export type ListeningPlanProfile = 'familiar' | 'balanced' | 'explore';
 
+export interface DjMetricCoverage {
+  start: number;
+  end: number;
+  pulse_unit: 'quarter' | 'dotted_quarter' | null;
+  beats_per_bar: number;
+  subdivision: number | null;
+  pulse_confidence: number;
+  metre_confidence: number;
+  downbeat_confidence: number;
+  subdivision_confidence: number;
+}
+
 export interface DjTransitionPlan {
   technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade';
   /** Null when the planner could not place the cue — the player owns the real
@@ -227,7 +239,7 @@ export interface DjTransitionPlan {
   out_cue: number | null;
   in_cue: number;
   overlap_seconds: number;
-  overlap_bars: number;
+  overlap_bars: number | null;
   playback_rate: number;
   /** One measured outgoing beat in media seconds; absent when echo is unsafe. */
   echo_delay_seconds?: number;
@@ -239,6 +251,12 @@ export interface DjTransitionPlan {
     in_period: number;
     phase_tolerance_ms: number;
     grid_source: 'measured' | 'estimated';
+    /** Absent only for the legacy four-pulse contract. */
+    alignment?: 'bars' | 'none';
+    out_bar_seconds?: number | null;
+    in_bar_seconds?: number | null;
+    out_metre?: DjMetricCoverage | null;
+    in_metre?: DjMetricCoverage | null;
   };
 }
 

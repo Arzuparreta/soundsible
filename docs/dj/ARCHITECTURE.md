@@ -1,9 +1,10 @@
-# Responsabilidades del DJ tras P11
+# Responsabilidades del DJ tras P12
 
-Extracción de `ad59b838`, sin cambiar medidas, órdenes ni planes. El punto de
+P11 extrajo `ad59b838` sin cambiar medidas, órdenes ni planes. El punto de
 entrada público sigue siendo `shared/dj_engine.py`: reexporta las funciones,
-sin copias del estado de caché o de los trabajos. P12 revisará el compás y el 1;
-P13, frases y secciones. Sus suposiciones actuales siguen vigentes.
+sin copias del estado de caché o de los trabajos. P12 añade medidas métricas
+locales y validación de ejecución; [P12](P12.md) documenta su contrato y sus
+límites reales. P13 sigue pendiente para frases y secciones.
 
 ## Propietarios y dependencias
 
@@ -14,12 +15,13 @@ cargar el almacenamiento ni Flask; una prueba lo comprueba en otro proceso.
 | Módulo | Responsabilidad y salida | Dependencias DJ |
 | --- | --- | --- |
 | `contracts` | `Analysis`, `AnalysisSummary`, `WindowFeatures`, `RhythmWindow`, `Structure`, `TransitionPlan`, unidades, versión de análisis y ausencia de evidencia | Ninguna |
-| `rhythm` | Pulso, rejilla y fase del compás de una ventana PCM | `contracts` |
+| `rhythm` | Hipótesis de pulso, rejilla, observaciones armónicas/ataques y subdivisión por región | `contracts`, `metre` |
+| `metre` | Agrupaciones de 2/3/4/6 pulsos, confianza del compás y del 1, regiones y abstenciones | Ninguna |
 | `features` | Ataques de notas, tonalidad, textura y medidas de una ventana | `rhythm`, `contracts` |
 | `structure` | Compases recibidos, frases, secciones y cues candidatos sobre las ventanas medidas | `contracts` |
 | `analysis` | Composición de las medidas completas; agrega ventanas sin rellenar huecos | `features`, `structure`, `contracts` |
 | `store` | Identidad, sello del contenido, SQLite, decodificación, LUFS en la misma pasada, trabajos acotados y despacho del DSP fuera de gevent | `analysis`, `contracts` |
-| `timing` | Periodo local, equivalencia de medio/doble pulso, coordenada de tempo y presupuesto de deriva ejecutada | `contracts` |
+| `timing` | Periodo y métrica locales, equivalencia de medio/doble pulso, deriva y admisión de beatmatch | `contracts` |
 | `transitions` | Único `plan_transition`: compatibilidad, técnica, cues, velocidad y eco | `timing`, `features` (nombres de notas), `contracts` |
 | `routes` | Continuidad, ruta legacy, llegada a peticiones, elección de hueco y reparación entre anclas | `transitions`, `timing`, `contracts` |
 | `shared/dj_pool.py` | Admisión de puentes dentro del conjunto fijado antes de consultar caché | `transitions`, `timing` |
@@ -41,20 +43,24 @@ lecturas parciales/antiguas; un tipo completo no da por validada esa entrada.
 - `WindowFeatures` y `RhythmWindow` usan segundos relativos a la ventana. Su
   cobertura es `[offset, offset + window_seconds]`. `Structure` transforma esos
   puntos a segundos absolutos, sin prolongar la rejilla entre cabeza y cola.
-- `Analysis` conserva las listas completas de golpes, unos, frases y secciones.
-  `AnalysisSummary` las omite para v6; no elimina campos escalares desconocidos,
+- `Analysis` conserva las listas completas de golpes, unos, frases, secciones
+  y `metric_regions`. `AnalysisSummary` las omite para v6; no elimina escalares desconocidos,
   ceros ni futuras medidas. Los demás endpoints conservan su respuesta previa.
 - `note_rate` y `spectral_flatness`: `None` significa sin medida; cero es válido.
   `loudness_lufs = None` también puede significar que el medidor no tiene
   lectura, por ejemplo en silencio. BPM cero expresa pulso desconocido.
   `outro_cue = None` requiere colocar el fundido con la duración cargada.
   Lista vacía expresa falta de evidencia de rejilla/estructura.
-- `confidence` sigue combinando tempo y tonalidad: no se convierte en confianza
-  métrica. `bar_seconds` mantiene el supuesto de cuatro pulsos y las frases y
-  secciones mantienen los bloques de ocho compases. P12/P13 los revisarán.
+- `confidence` sigue combinando tempo y tonalidad. `metric_regions` separa
+  confianza del pulso, agrupación, subdivisión y fase del 1; ninguna es una
+  probabilidad calibrada de acierto musical. `bar_seconds` puede ser `None`:
+  ya no rellena lo desconocido con cuatro pulsos. El resumen escalar también
+  distingue cambios o desconocidos. Frases y secciones conservan el supuesto
+  de ocho compases, ahora dentro de cada región conocida; P13 sigue pendiente.
 - `TransitionPlan` es la decisión ejecutable del servidor. `score` describe
   compatibilidad para ordenar; no certifica que se ejecute beatmatch. El eco
-  mantiene su periodo saliente medido. No se cambia ningún vector compartido.
+  mantiene su periodo saliente medido. P12 añade vectores métricos compartidos
+  sin regenerar los vectores legacy de P7/P8/P9.
 
 `timing.comparable_ratio` conserva el plegado de una octava en los límites
 0,7/1,4, compartido por puntuación, entrada al drop, velocidad final y admisión
@@ -64,17 +70,26 @@ la octava de la referencia de ruta: es otra operación y tiene otro objetivo.
 `rate_fits` usa los periodos y la velocidad redondeados y todo el solapamiento;
 el límite del planificador sigue siendo 5 ms. La admisión de puentes verifica
 además BPM y técnica, y rechaza planes antiguos incompletos o valores inválidos.
+P12 añade `metric_sync`: compara duración de los compases a la velocidad
+real, fase de ambos cues y rejillas estables en todo el tramo medido. Solo
+entonces declara `alignment: bars`; las reservas declaran `none`. El score
+musical anterior se conserva para mezclas ejecutables y pasa a cero en las
+reservas del contrato métrico. `beatmatch_fits` es la misma admisión para
+puentes de fuentes y de peticiones con medidas nuevas. Las entradas sin
+`metric_regions` conservan explícitamente el contrato legacy; P11-a sigue
+visible para esa política anterior.
+
 Las guardas propias de cada reproductor siguen comprobando identidad, duración,
 solapamiento, velocidad y pertenencia del plan; compartir una regla del servidor
 no sustituye esa frontera de ejecución.
 
-## Inventario de políticas conservadas
+## Inventario de políticas
 
 | Entrada | Orden/elección | Puentes y restricciones |
 | --- | --- | --- |
 | `dj-plan` con fuentes, v6 | Conjunto/barajado independiente de caché; `order_continuous_route`: déficit de `score` y diferencias de notas/s, LUFS, planitud y BPM, normalizados por dispersión; posiciones frías fijas | `add_measured_bridges`: semilla y conjunto entero medidos, ambos tramos con técnica de beatmatch y deriva ejecutada admisible; conserva todos los destinos |
 | `dj-plan` legacy, relleno v4 | `order_route`: 0,42 transición + 0,38 semántica + 0,20 relevancia; secuencia de fuentes; calidad neutra 0,62 ante análisis ausente | No amplía el conjunto como v6; analiza la ruta aceptada |
-| Peticiones legacy de canción/artista | `choose_request_segment` → `route_to_request`; media de `score`, relevancia del destino y costes de demora ya existentes | Beam de hasta 48 estados, 12 candidatas, hasta cuatro puentes; destino preferido a continuación. No exige beatmatch ejecutado: véase P11-a |
+| Peticiones legacy de canción/artista | `choose_request_segment` → `route_to_request`; media de `score`, relevancia del destino y costes de demora ya existentes | Beam de hasta 48 estados, 12 candidatas, hasta cuatro puentes; destino preferido a continuación. P12 exige `beatmatch_fits` en cada tramo métrico, incluido el final; sin contrato métrico conserva P11-a |
 | `dj-place` automático | `choose_placement`: media de transiciones de entrada y salida, menos 0,009 por hueco; empate favorece el hueco anterior | Hasta dos puentes; con posición fijada no se adquieren ni se admiten puentes |
 | `dj-repair` | `repair_route`: anclas y profundidad conservadas; relleno con `order_route`; bonificación de estabilidad 0,06 a las filas existentes | Llegada al ancla con `route_to_request`, hasta dos puentes; techo de 16; no crece por relleno. Las exclusiones no anulan anclas explícitas |
 | `dj-transition` | Solo `plan_transition` contra las medidas actuales de los dos archivos; sin elegir canciones ni reordenar | Lectura de caché y eventual programación asíncrona; sin decodificación dentro de la petición |
@@ -84,10 +99,12 @@ desajuste de BPM global para describir compatibilidad del par (junto con armoní
 y confianza); la distancia de continuidad usa BPM para mantener próximas las
 magnitudes de la ruta. La dispersión de cada dimensión determina su escala.
 No son dos confirmaciones independientes del pulso ni dos estimaciones del
-compás. P11 no añade pesos ni recalibra esa influencia. La diferencia entre
+compás. P11 no añade pesos ni recalibra esa influencia. P12 conserva los pesos
+y aplica la validez métrica como requisito binario, no como otro peso de gusto.
+La diferencia entre
 continuidad v6 y semántica/relevancia legacy es deliberada y ya figuraba en P3.
 
-### P11-a pendiente: puntuación frente a ejecución en puentes de peticiones
+### P11-a: resuelto para medidas métricas; pendiente en entradas legacy
 
 Contradicción confirmada que esta extracción conserva: `route_to_request`
 declara mejorar la seguridad pero compara solamente `score`. En la fixture
@@ -97,13 +114,14 @@ mismo conjunto, `add_measured_bridges` conserva el destino directo, porque
 ningún tramo hace beatmatch. Una puntuación armónica alta tampoco asegura una
 velocidad local ejecutable aunque los BPM globales coincidan.
 
-El subpunto deberá decidir y documentar si los puentes de petición tienen que
-superar la misma prueba de ejecución que los de fuentes, y cómo comparar las
+P12 exige ambos tramos ejecutables para las medidas nuevas y comparte su
+validador con `dj_pool`. La fixture histórica sin `metric_regions` conserva el
+resultado descrito. Para esas entradas legacy, el subpunto deberá decidir si
+todos los puentes de petición tienen que superar la misma prueba de ejecución que los de fuentes, y cómo comparar las
 técnicas de reserva sin presentar `score` como seguridad. Afecta a peticiones
 legacy, colocación y reparación. Tiene caso permanente en
 `test_dj_boundaries.py`; no se cambia de política dentro de P11. El siguiente
-punto de la secuencia acordada continúa siendo P12, con esta discrepancia
-identificada para que no quede oculta.
+punto de la secuencia acordada es P13; esta discrepancia legacy sigue visible.
 
 ## Evidencia de extracción
 

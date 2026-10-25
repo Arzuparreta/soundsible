@@ -1,0 +1,1375 @@
+{
+  "synthetic": {
+    "kind": "synthetic",
+    "cases": [
+      {
+        "size": 3,
+        "subdivision": 2,
+        "options": {},
+        "bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.25,
+        "pulse_error": {
+          "median_ms": 0.1,
+          "p90_ms": 0.1
+        },
+        "first_error": {
+          "median_ms": 0.1,
+          "p90_ms": 0.1
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          0.0
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.500001,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.500004,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.77,
+            "downbeat_confidence": 0.769,
+            "subdivision_confidence": 0.674
+          }
+        ],
+        "reference_subdivision": 2,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 3,
+        "subdivision": 2,
+        "options": {
+          "first": 0.83,
+          "pickup": 1,
+          "weak_first": true
+        },
+        "bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "evaluation_start": 0.83,
+        "evaluation_end": 71.33,
+        "pulse_error": {
+          "median_ms": 0.1,
+          "p90_ms": 0.1
+        },
+        "first_error": {
+          "median_ms": 0.1,
+          "p90_ms": 0.1
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          -0.0
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.499999,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.499997,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.77,
+            "downbeat_confidence": 0.672,
+            "subdivision_confidence": 0.62
+          }
+        ],
+        "reference_subdivision": 2,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 3,
+        "subdivision": 2,
+        "options": {
+          "syncopated": true
+        },
+        "bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.25,
+        "pulse_error": {
+          "median_ms": 0.1,
+          "p90_ms": 0.1
+        },
+        "first_error": {
+          "median_ms": 0.1,
+          "p90_ms": 0.1
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          0.0
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.500001,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.500004,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.77,
+            "downbeat_confidence": 0.769,
+            "subdivision_confidence": 0.646
+          }
+        ],
+        "reference_subdivision": 2,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 3,
+        "subdivision": 2,
+        "options": {
+          "drift": 0.015
+        },
+        "bpm": 119.886,
+        "tempo_error_percent": -0.095,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.26464366366098,
+        "pulse_error": {
+          "median_ms": 1.126,
+          "p90_ms": 2.603
+        },
+        "first_error": {
+          "median_ms": 1.146,
+          "p90_ms": 2.513
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          1.059,
+          0.099,
+          -1.416,
+          0.782,
+          -1.486
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 12.3791,
+            "period": 0.505984,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.517951,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 0.77,
+            "downbeat_confidence": 0.769,
+            "subdivision_confidence": 0.712
+          },
+          {
+            "start": 12.3791,
+            "end": 24.3949,
+            "period": 0.501177,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.503531,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.699
+          },
+          {
+            "start": 24.3949,
+            "end": 36.2488,
+            "period": 0.493591,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.480772,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.717
+          },
+          {
+            "start": 36.2488,
+            "end": 60.4078,
+            "period": 0.504597,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.513791,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.701
+          },
+          {
+            "start": 60.4078,
+            "end": 72.0,
+            "period": 0.493242,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.479725,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.701
+          }
+        ],
+        "reference_subdivision": 2,
+        "subdivision_correct_regions": 5,
+        "known_regions": 5
+      },
+      {
+        "size": 4,
+        "subdivision": 2,
+        "options": {},
+        "bpm": 119.999,
+        "tempo_error_percent": -0.001,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.25,
+        "pulse_error": {
+          "median_ms": 0.3,
+          "p90_ms": 0.5
+        },
+        "first_error": {
+          "median_ms": 0.3,
+          "p90_ms": 0.5
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          0.001
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.500004,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "bar_seconds": 2.000017,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.764,
+            "downbeat_confidence": 0.611,
+            "subdivision_confidence": 0.687
+          }
+        ],
+        "reference_subdivision": 2,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 4,
+        "subdivision": 2,
+        "options": {
+          "first": 0.83,
+          "pickup": 1,
+          "weak_first": true
+        },
+        "bpm": 119.999,
+        "tempo_error_percent": -0.001,
+        "evaluation_start": 0.83,
+        "evaluation_end": 71.33,
+        "pulse_error": {
+          "median_ms": 0.2,
+          "p90_ms": 0.3
+        },
+        "first_error": {
+          "median_ms": 0.2,
+          "p90_ms": 0.3
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          0.001
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.500002,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "bar_seconds": 2.00001,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.758,
+            "downbeat_confidence": 0.605,
+            "subdivision_confidence": 0.62
+          }
+        ],
+        "reference_subdivision": 2,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 4,
+        "subdivision": 2,
+        "options": {
+          "syncopated": true
+        },
+        "bpm": 119.999,
+        "tempo_error_percent": -0.001,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.25,
+        "pulse_error": {
+          "median_ms": 0.3,
+          "p90_ms": 0.5
+        },
+        "first_error": {
+          "median_ms": 0.3,
+          "p90_ms": 0.5
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          0.001
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.500004,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "bar_seconds": 2.000017,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.764,
+            "downbeat_confidence": 0.611,
+            "subdivision_confidence": 0.655
+          }
+        ],
+        "reference_subdivision": 2,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 4,
+        "subdivision": 2,
+        "options": {
+          "drift": 0.015
+        },
+        "bpm": 119.896,
+        "tempo_error_percent": -0.087,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.26464366366098,
+        "pulse_error": {
+          "median_ms": 1.263,
+          "p90_ms": 2.918
+        },
+        "first_error": {
+          "median_ms": 1.395,
+          "p90_ms": 2.935
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          0.812,
+          -0.027,
+          -1.534,
+          0.625,
+          -1.585
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 12.3792,
+            "period": 0.50531,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "bar_seconds": 2.021238,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 0.697,
+            "downbeat_confidence": 0.726,
+            "subdivision_confidence": 0.686
+          },
+          {
+            "start": 12.3792,
+            "end": 24.3947,
+            "period": 0.501107,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "bar_seconds": 2.004427,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.695
+          },
+          {
+            "start": 24.3947,
+            "end": 36.2493,
+            "period": 0.49355,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "bar_seconds": 1.9742,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.721
+          },
+          {
+            "start": 36.2493,
+            "end": 60.4078,
+            "period": 0.504375,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "bar_seconds": 2.017499,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.702
+          },
+          {
+            "start": 60.4078,
+            "end": 72.0,
+            "period": 0.493295,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "bar_seconds": 1.973178,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.684
+          }
+        ],
+        "reference_subdivision": 2,
+        "subdivision_correct_regions": 5,
+        "known_regions": 5
+      },
+      {
+        "size": 2,
+        "subdivision": 3,
+        "options": {},
+        "bpm": 120.001,
+        "tempo_error_percent": 0.001,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.25,
+        "pulse_error": {
+          "median_ms": 0.2,
+          "p90_ms": 0.3
+        },
+        "first_error": {
+          "median_ms": 0.2,
+          "p90_ms": 0.3
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          -0.001
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.499997,
+            "pulse_unit": "dotted_quarter",
+            "beats_per_bar": 2,
+            "subdivision": 3,
+            "bar_seconds": 0.999995,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.817,
+            "downbeat_confidence": 0.815,
+            "subdivision_confidence": 0.543
+          }
+        ],
+        "reference_subdivision": 3,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 2,
+        "subdivision": 3,
+        "options": {
+          "first": 0.83,
+          "pickup": 1,
+          "weak_first": true
+        },
+        "bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "evaluation_start": 0.83,
+        "evaluation_end": 71.33,
+        "pulse_error": {
+          "median_ms": 0.1,
+          "p90_ms": 0.2
+        },
+        "first_error": {
+          "median_ms": 0.1,
+          "p90_ms": 0.2
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          -0.0
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.499998,
+            "pulse_unit": "dotted_quarter",
+            "beats_per_bar": 2,
+            "subdivision": 3,
+            "bar_seconds": 0.999996,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.817,
+            "downbeat_confidence": 0.815,
+            "subdivision_confidence": 0.424
+          }
+        ],
+        "reference_subdivision": 3,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 2,
+        "subdivision": 3,
+        "options": {
+          "syncopated": true
+        },
+        "bpm": 120.001,
+        "tempo_error_percent": 0.001,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.25,
+        "pulse_error": {
+          "median_ms": 0.2,
+          "p90_ms": 0.3
+        },
+        "first_error": {
+          "median_ms": 0.2,
+          "p90_ms": 0.3
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          -0.001
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.499997,
+            "pulse_unit": null,
+            "beats_per_bar": 2,
+            "subdivision": null,
+            "bar_seconds": 0.999995,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.817,
+            "downbeat_confidence": 0.815,
+            "subdivision_confidence": 0.0
+          }
+        ],
+        "reference_subdivision": null,
+        "subdivision_correct_regions": 1,
+        "known_regions": 1
+      },
+      {
+        "size": 2,
+        "subdivision": 3,
+        "options": {
+          "drift": 0.015
+        },
+        "bpm": 119.989,
+        "tempo_error_percent": -0.009,
+        "evaluation_start": 0.25,
+        "evaluation_end": 71.26464366366098,
+        "pulse_error": {
+          "median_ms": 1.221,
+          "p90_ms": 2.743
+        },
+        "first_error": {
+          "median_ms": 1.29,
+          "p90_ms": 2.744
+        },
+        "first_precision": 1.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "first_coverage": 1.0,
+        "bar_duration_error_percent": [
+          1.109,
+          0.105,
+          -1.408,
+          0.756,
+          -1.473
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 12.3789,
+            "period": 0.506174,
+            "pulse_unit": "dotted_quarter",
+            "beats_per_bar": 2,
+            "subdivision": 3,
+            "bar_seconds": 1.012348,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 0.817,
+            "downbeat_confidence": 0.815,
+            "subdivision_confidence": 0.534
+          },
+          {
+            "start": 12.3789,
+            "end": 24.3957,
+            "period": 0.501148,
+            "pulse_unit": "dotted_quarter",
+            "beats_per_bar": 2,
+            "subdivision": 3,
+            "bar_seconds": 1.002296,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.555
+          },
+          {
+            "start": 24.3957,
+            "end": 36.2491,
+            "period": 0.493575,
+            "pulse_unit": "dotted_quarter",
+            "beats_per_bar": 2,
+            "subdivision": 3,
+            "bar_seconds": 0.987151,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.571
+          },
+          {
+            "start": 36.2491,
+            "end": 60.4079,
+            "period": 0.504409,
+            "pulse_unit": "dotted_quarter",
+            "beats_per_bar": 2,
+            "subdivision": 3,
+            "bar_seconds": 1.008817,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.517
+          },
+          {
+            "start": 60.4079,
+            "end": 72.0,
+            "period": 0.493249,
+            "pulse_unit": "dotted_quarter",
+            "beats_per_bar": 2,
+            "subdivision": 3,
+            "bar_seconds": 0.986497,
+            "pulse_confidence": 0.6,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.545
+          }
+        ],
+        "reference_subdivision": 3,
+        "subdivision_correct_regions": 5,
+        "known_regions": 5
+      }
+    ]
+  },
+  "real": {
+    "kind": "real_ballroom",
+    "annotations_revision": "826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e",
+    "cases": [
+      {
+        "file": "Albums-Ballroom_Classics4-06.wav",
+        "genre": "Tango",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-06.beats",
+        "audio_sha256": "f9856c4e96e76e54be887a3927fa53e5f6e6569a7099f1af2eef5580afe7fce9",
+        "annotation_sha256": "a7d8e846caebc9501f224959b161d1c8f0ed4ebf2ee6f8e65d0d6110ea64dccb",
+        "reference_bpm": 127.932,
+        "reference_pulses_per_bar": 4,
+        "reference_subdivision": null,
+        "bpm": 127.597,
+        "tempo_error_percent": -0.262,
+        "evaluation_start": 0.33,
+        "evaluation_end": 29.855,
+        "pulse_error": {
+          "median_ms": 24.4,
+          "p90_ms": 40.04
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.46,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [
+          -49.877
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 16.2622,
+            "period": 0.468936,
+            "pulse_unit": "quarter",
+            "beats_per_bar": null,
+            "subdivision": 2,
+            "bar_seconds": null,
+            "pulse_confidence": 0.526,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.051
+          },
+          {
+            "start": 16.2622,
+            "end": 31.7879,
+            "period": 0.471156,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 2,
+            "subdivision": 2,
+            "bar_seconds": 0.942311,
+            "pulse_confidence": 0.526,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.075
+          }
+        ]
+      },
+      {
+        "file": "Albums-Ballroom_Classics4-07.wav",
+        "genre": "Tango",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-07.beats",
+        "audio_sha256": "2b7d8a2395bfdd60c90507391c30d63007e02cf28ee5e15bbb3ff8254f6db1f2",
+        "annotation_sha256": "76c009d7a8d789244effe6c8edd413c28202e742706b28b75fd18fce1105bafa",
+        "reference_bpm": 128.205,
+        "reference_pulses_per_bar": 4,
+        "reference_subdivision": null,
+        "bpm": 128.353,
+        "tempo_error_percent": 0.115,
+        "evaluation_start": 0.424,
+        "evaluation_end": 29.873,
+        "pulse_error": {
+          "median_ms": 14.1,
+          "p90_ms": 35.44
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.46,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [
+          -25.313
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 16.317,
+            "period": 0.468042,
+            "pulse_unit": "quarter",
+            "beats_per_bar": null,
+            "subdivision": 2,
+            "bar_seconds": null,
+            "pulse_confidence": 0.424,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.082
+          },
+          {
+            "start": 16.317,
+            "end": 31.7879,
+            "period": 0.465547,
+            "pulse_unit": null,
+            "beats_per_bar": 3,
+            "subdivision": null,
+            "bar_seconds": 1.39664,
+            "pulse_confidence": 0.424,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          }
+        ]
+      },
+      {
+        "file": "Albums-Ballroom_Classics4-08.wav",
+        "genre": "Tango",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-08.beats",
+        "audio_sha256": "e64f08ed92c3eba5ab36aeb3fbc122d10049227d90a414eedba5220d93e46e66",
+        "annotation_sha256": "e532ff60baec7ab2309f7a415b13708c321237d399e8e7e4c5f6eb56afa7821b",
+        "reference_bpm": 128.397,
+        "reference_pulses_per_bar": 4,
+        "reference_subdivision": null,
+        "bpm": 127.555,
+        "tempo_error_percent": -0.656,
+        "evaluation_start": 0.550022675,
+        "evaluation_end": 29.671111111,
+        "pulse_error": {
+          "median_ms": 11.278,
+          "p90_ms": 39.237
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.468,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [
+          50.173
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 16.0416,
+            "period": 0.470384,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          },
+          {
+            "start": 16.0416,
+            "end": 31.7879,
+            "period": 0.470384,
+            "pulse_unit": null,
+            "beats_per_bar": 6,
+            "subdivision": null,
+            "bar_seconds": 2.822303,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.507,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          }
+        ]
+      },
+      {
+        "file": "Albums-Ballroom_Classics4-01.wav",
+        "genre": "Waltz",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-01.beats",
+        "audio_sha256": "adca0d4e512e3e0d7eae8785eaf727fa4fa5de493f3bbfee89849aa39c318754",
+        "annotation_sha256": "f33b49aed5d03e4c58931b28279bc1d6052dc384dc0f268dfd16bc35a2f3748c",
+        "reference_bpm": 86.948,
+        "reference_pulses_per_bar": 3,
+        "reference_subdivision": null,
+        "bpm": 173.469,
+        "tempo_error_percent": 99.509,
+        "evaluation_start": 1.4,
+        "evaluation_end": 29.765986394,
+        "pulse_error": {
+          "median_ms": 106.486,
+          "p90_ms": 322.331
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.28,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [
+          -34.214
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 11.1091,
+            "period": 0.347699,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 0.447,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          },
+          {
+            "start": 11.1091,
+            "end": 21.8177,
+            "period": 0.345913,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 0.447,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          },
+          {
+            "start": 21.8177,
+            "end": 31.7879,
+            "period": 0.342746,
+            "pulse_unit": null,
+            "beats_per_bar": 4,
+            "subdivision": null,
+            "bar_seconds": 1.370984,
+            "pulse_confidence": 0.447,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          }
+        ]
+      },
+      {
+        "file": "Albums-Ballroom_Classics4-02.wav",
+        "genre": "Waltz",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-02.beats",
+        "audio_sha256": "0672ab1f3185e8f90aed1ea85d4a7f93c124f1e9e5ff319ccb73681c0da57bb7",
+        "annotation_sha256": "51ca10104863361667464a72e4f0164bad65bde3c7543f8e5866bfb0755195ab",
+        "reference_bpm": 86.957,
+        "reference_pulses_per_bar": 3,
+        "reference_subdivision": null,
+        "bpm": 174.181,
+        "tempo_error_percent": 100.308,
+        "evaluation_start": 1.31,
+        "evaluation_end": 29.62,
+        "pulse_error": {
+          "median_ms": 173.1,
+          "p90_ms": 218.64
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.0,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 10.8466,
+            "period": 0.342627,
+            "pulse_unit": "quarter",
+            "beats_per_bar": null,
+            "subdivision": 2,
+            "bar_seconds": null,
+            "pulse_confidence": 0.461,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.279
+          },
+          {
+            "start": 10.8466,
+            "end": 31.7879,
+            "period": 0.346227,
+            "pulse_unit": "quarter",
+            "beats_per_bar": null,
+            "subdivision": 2,
+            "bar_seconds": null,
+            "pulse_confidence": 0.461,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.003
+          }
+        ]
+      },
+      {
+        "file": "Albums-Ballroom_Classics4-03.wav",
+        "genre": "Waltz",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-03.beats",
+        "audio_sha256": "6a5fca79ea404916a65a63613d0decf16160bd03e944712c9bdf07d0be67eced",
+        "annotation_sha256": "b3bb547a744ee7f1c16ccc4c825ae284c5623aaf5289a9cab0929de8a3c8e512",
+        "reference_bpm": 86.959,
+        "reference_pulses_per_bar": 3,
+        "reference_subdivision": null,
+        "bpm": 173.182,
+        "tempo_error_percent": 99.153,
+        "evaluation_start": 0.290249433,
+        "evaluation_end": 29.409977324,
+        "pulse_error": {
+          "median_ms": 99.445,
+          "p90_ms": 340.351
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.0,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 11.0301,
+            "period": 0.346147,
+            "pulse_unit": "quarter",
+            "beats_per_bar": null,
+            "subdivision": 2,
+            "bar_seconds": null,
+            "pulse_confidence": 0.443,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.019
+          },
+          {
+            "start": 11.0301,
+            "end": 21.4105,
+            "period": 0.346109,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 0.443,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          },
+          {
+            "start": 21.4105,
+            "end": 31.7879,
+            "period": 0.348635,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 0.443,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          }
+        ]
+      },
+      {
+        "file": "Albums-Ballroom_Classics4-11.wav",
+        "genre": "VienneseWaltz",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-11.beats",
+        "audio_sha256": "cde4cb99ee2aa5cd976bcce040bfa050925755b6aad44c0de627da14cbb7c4be",
+        "annotation_sha256": "5a91a34890d40e0ac75b560146ffa68dd8aa4e6d0fb5b94553d2d1916dca3a52",
+        "reference_bpm": 174.419,
+        "reference_pulses_per_bar": 3,
+        "reference_subdivision": null,
+        "bpm": 115.916,
+        "tempo_error_percent": -33.541,
+        "evaluation_start": 0.35,
+        "evaluation_end": 29.994,
+        "pulse_error": {
+          "median_ms": 121.3,
+          "p90_ms": 148.9
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.0,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 16.3684,
+            "period": 0.517614,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          },
+          {
+            "start": 16.3684,
+            "end": 31.7879,
+            "period": 0.517614,
+            "pulse_unit": "dotted_quarter",
+            "beats_per_bar": null,
+            "subdivision": 3,
+            "bar_seconds": null,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.016
+          }
+        ]
+      },
+      {
+        "file": "Albums-Ballroom_Classics4-12.wav",
+        "genre": "VienneseWaltz",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-12.beats",
+        "audio_sha256": "94be12bd72b5adc6311c32cc52c3bc82516b9e9cbcc28d7e3c83bf54e7206613",
+        "annotation_sha256": "872ca624c59af743c23dcc9ef20b329fdfe7111fcf3298674a3e3701d276afb0",
+        "reference_bpm": 171.429,
+        "reference_pulses_per_bar": 3,
+        "reference_subdivision": null,
+        "bpm": 115.556,
+        "tempo_error_percent": -32.592,
+        "evaluation_start": 0.33,
+        "evaluation_end": 29.69,
+        "pulse_error": {
+          "median_ms": 36.3,
+          "p90_ms": 173.82
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.453,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [
+          99.664
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 16.3764,
+            "period": 0.519528,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 0.376,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          },
+          {
+            "start": 16.3764,
+            "end": 31.7879,
+            "period": 0.519127,
+            "pulse_unit": null,
+            "beats_per_bar": 4,
+            "subdivision": null,
+            "bar_seconds": 2.076507,
+            "pulse_confidence": 0.376,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          }
+        ]
+      },
+      {
+        "file": "Albums-Ballroom_Classics4-13.wav",
+        "genre": "VienneseWaltz",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Ballroom_Classics4-13.beats",
+        "audio_sha256": "39a2999fa960069010be02350fc702db54175649eb6888f74b0f1f4843159312",
+        "annotation_sha256": "727404d79a5720c5570af06c33fe6e611a5c55c4e3dae0a32e65079d7b1e2849",
+        "reference_bpm": 174.927,
+        "reference_pulses_per_bar": 3,
+        "reference_subdivision": null,
+        "bpm": 116.192,
+        "tempo_error_percent": -33.577,
+        "evaluation_start": 0.29,
+        "evaluation_end": 29.753,
+        "pulse_error": {
+          "median_ms": 71.05,
+          "p90_ms": 163.08
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.0,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 16.3025,
+            "period": 0.517217,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 0.357,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          },
+          {
+            "start": 16.3025,
+            "end": 31.7879,
+            "period": 0.514899,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 0.357,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          }
+        ]
+      },
+      {
+        "file": "Albums-Pais_Tropical-08.wav",
+        "genre": "ChaChaCha",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-Pais_Tropical-08.beats",
+        "audio_sha256": "b83be9fc20e82a6d06e79080d60d07d349970ca4bac1ec4de9e48fbae73c77dd",
+        "annotation_sha256": "eb29f144f6233cacc52afdaaef8ae0b762ff2f0bbed0cdba63b6da5d33bcf6ad",
+        "reference_bpm": 123.711,
+        "reference_pulses_per_bar": 4,
+        "reference_subdivision": null,
+        "bpm": 185.57,
+        "tempo_error_percent": 50.002,
+        "evaluation_start": 0.85,
+        "evaluation_end": 29.95,
+        "pulse_error": {
+          "median_ms": 145.8,
+          "p90_ms": 177.7
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.328,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [
+          -66.667
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 20.3956,
+            "period": 0.323329,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 0.918,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          },
+          {
+            "start": 20.3956,
+            "end": 30.1436,
+            "period": 0.323329,
+            "pulse_unit": null,
+            "beats_per_bar": 2,
+            "subdivision": null,
+            "bar_seconds": 0.646657,
+            "pulse_confidence": 0.918,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0
+          }
+        ]
+      },
+      {
+        "file": "Albums-I_Like_It2-01.wav",
+        "genre": "ChaChaCha",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-I_Like_It2-01.beats",
+        "audio_sha256": "47aff871cfe916511be304f82936b28f66cb882adb30a36a87574e5fc6d72288",
+        "annotation_sha256": "7c69f4f8d7ba31a1392e3fdd05020e727a3643755420a11283a72f408f164a46",
+        "reference_bpm": 133.333,
+        "reference_pulses_per_bar": 4,
+        "reference_subdivision": null,
+        "bpm": 134.606,
+        "tempo_error_percent": 0.954,
+        "evaluation_start": 0.351201814,
+        "evaluation_end": 33.316281179,
+        "pulse_error": {
+          "median_ms": 10.041,
+          "p90_ms": 23.04
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.311,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [
+          -49.946
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 23.0546,
+            "period": 0.445746,
+            "pulse_unit": "quarter",
+            "beats_per_bar": null,
+            "subdivision": 2,
+            "bar_seconds": null,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.209
+          },
+          {
+            "start": 23.0546,
+            "end": 34.0635,
+            "period": 0.445746,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 2,
+            "subdivision": 2,
+            "bar_seconds": 0.891492,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.487
+          }
+        ]
+      },
+      {
+        "file": "Albums-I_Like_It2-02.wav",
+        "genre": "ChaChaCha",
+        "reference": "https://raw.githubusercontent.com/CPJKU/BallroomAnnotations/826c2eadb7d89e8fbcc655477416f8b3d3ff1c0e/Albums-I_Like_It2-02.beats",
+        "audio_sha256": "5382e25c3a937bb4f81eace355c060ec904441b4e0ad30f5d15f15878ca5f086",
+        "annotation_sha256": "f0224ded0866fb9b1431d471b43ffce191506cd84c99a6017eae2d3bd3b3b45f",
+        "reference_bpm": 120.0,
+        "reference_pulses_per_bar": 4,
+        "reference_subdivision": null,
+        "bpm": 120.971,
+        "tempo_error_percent": 0.809,
+        "evaluation_start": 0.78,
+        "evaluation_end": 29.56,
+        "pulse_error": {
+          "median_ms": 8.95,
+          "p90_ms": 19.13
+        },
+        "first_error": null,
+        "first_precision": null,
+        "grouping_coverage": 0.466,
+        "correct_grouping_coverage": 0.0,
+        "first_coverage": 0.0,
+        "bar_duration_error_percent": [
+          -24.851
+        ],
+        "regions": [
+          {
+            "start": 0.0,
+            "end": 16.1485,
+            "period": 0.495985,
+            "pulse_unit": "quarter",
+            "beats_per_bar": null,
+            "subdivision": 2,
+            "bar_seconds": null,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.207
+          },
+          {
+            "start": 16.1485,
+            "end": 31.7879,
+            "period": 0.495985,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 3,
+            "subdivision": 2,
+            "bar_seconds": 1.487956,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.238
+          }
+        ]
+      }
+    ]
+  }
+}
