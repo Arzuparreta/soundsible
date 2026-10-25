@@ -955,7 +955,7 @@ def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
         patch.object(_auto_mode, "_dj_source_path", return_value="/library/candidate.mp3"),
         patch.object(_auto_mode, "cached_analysis", return_value=None),
         patch.object(_auto_mode, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
-        patch("shared.dj_engine._decode", side_effect=AssertionError("decoded during a plan request")),
+        patch("shared.dj.store._decode_measured", side_effect=AssertionError("decoded during a plan request")),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -1257,7 +1257,7 @@ def test_dj_plan_v6_reorders_decoded_audio_and_returns_chained_plans(tmp_path):
                 output.setframerate(11025)
                 output.writeframes((signal * 32767).astype("<i2").tobytes())
             features[key] = analyse_audio(paths[key], analysis_identity(tracks[key]))
-        with patch("shared.dj_engine._analyse_pcm", side_effect=AssertionError("decoded during planning")):
+        with patch("shared.dj.store._analyse_pcm", side_effect=AssertionError("decoded during planning")):
             response = client.post("/api/discovery/music/dj-plan", json=payload)
         assert response.status_code == 200
         body = response.get_json()
@@ -1492,7 +1492,7 @@ def test_dj_repair_never_decodes_audio_on_the_interaction_path(tmp_path):
         patch.object(_auto_mode, "_dj_source_path", return_value="/library/candidate.mp3"),
         patch.object(_auto_mode, "cached_analysis", return_value=None),
         patch.object(_auto_mode, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
-        patch("shared.dj_engine._decode", side_effect=AssertionError("decoded during a repair request")),
+        patch("shared.dj.store._decode_measured", side_effect=AssertionError("decoded during a repair request")),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-repair",
@@ -2270,7 +2270,7 @@ def test_dj_preparation_queues_only_the_frozen_previews_and_keeps_refresh_contra
 def test_v6_analysis_summary_keeps_sixteen_fast_long_starts_within_native_response_budget():
     # Eight-minute songs at 220 BPM need 1760 grid points each. Sixteen full
     # grids plus the seed alone exceed the native 256 KiB response limit.
-    from shared.dj_engine import _fallback
+    from shared.dj.contracts import fallback_analysis as _fallback
     beats = [round(i * 60 / 220, 4) for i in range(1760)]
     analysis = {**_fallback(480), "analysed": True, "bpm": 220, "key": "C", "mode": "major",
                 "beat_grid": beats, "downbeats": beats[::4], "phrase_boundaries": beats[::32]}

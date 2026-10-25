@@ -5,7 +5,9 @@ import sys
 import numpy as np
 import pytest
 
-from shared.dj_engine import _spectral_features
+from shared.dj import features as dj_features
+from shared.dj import analysis as dj_analysis
+from shared.dj.features import _spectral_features
 
 
 @pytest.mark.parametrize("count", [1, 255, 256, 257, 513])
@@ -45,7 +47,7 @@ from gevent import monkey
 monkey.patch_all()
 import gevent
 import threading
-from shared import dj_engine
+from shared.dj import store as dj_store
 native_sleep = monkey.get_original("time", "sleep")
 native_id = monkey.get_original("_thread", "get_ident")
 main_id = native_id()
@@ -54,8 +56,8 @@ def compute(*args, **kwargs):
     assert native_id() != main_id
     native_sleep(0.15)
     return {"analysed": True}
-dj_engine._compose = compute
-job = gevent.spawn(dj_engine._compose_off_loop, None, None, 11025, duration=10, tail_start=0)
+dj_store._compose = compute
+job = gevent.spawn(dj_store._compose_off_loop, None, None, 11025, duration=10, tail_start=0)
 gevent.sleep(0.03)
 assert not job.ready(), "numerical work blocked the request loop"
 assert job.get(timeout=5) == {"analysed": True}
@@ -66,8 +68,6 @@ assert job.get(timeout=5) == {"analysed": True}
 
 @pytest.mark.parametrize("kind", ["silence", "tone", "pulse", "sweep"])
 def test_complete_analysis_matches_whole_spectrum(monkeypatch, kind):
-    from shared import dj_engine
-
     rate = 11025
     t = np.arange(rate * 18, dtype=np.float32) / rate
     samples = {
@@ -76,7 +76,7 @@ def test_complete_analysis_matches_whole_spectrum(monkeypatch, kind):
         "pulse": .25 * np.sin(2 * np.pi * 880 * t) * np.exp(-np.mod(t, .5) * 70),
         "sweep": .25 * np.sin(2 * np.pi * (110 * t + 30 * t * t)),
     }[kind].astype(np.float32)
-    actual = dj_engine._compose(samples, samples, rate, duration=18, tail_start=0)
+    actual = dj_analysis._compose(samples, samples, rate, duration=18, tail_start=0)
 
     def whole_matrix(frames, *, flatness_bins):
         spectrum = np.abs(np.fft.rfft(frames * np.hanning(frames.shape[1]), axis=1))
@@ -86,6 +86,6 @@ def test_complete_analysis_matches_whole_spectrum(monkeypatch, kind):
         flatness = np.exp(np.log(power).mean(axis=1)) / power.mean(axis=1)
         return rms, spectrum.mean(axis=0), flux, flatness
 
-    monkeypatch.setattr(dj_engine, '_spectral_features', whole_matrix)
-    expected = dj_engine._compose(samples, samples, rate, duration=18, tail_start=0)
+    monkeypatch.setattr(dj_features, '_spectral_features', whole_matrix)
+    expected = dj_analysis._compose(samples, samples, rate, duration=18, tail_start=0)
     assert actual == expected

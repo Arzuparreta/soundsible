@@ -4,7 +4,8 @@ import copy
 
 import pytest
 
-from shared.dj_engine import _fallback, order_continuous_route, plan_transition
+from shared.dj.contracts import fallback_analysis as _fallback
+from shared.dj_engine import order_continuous_route, plan_transition
 
 
 def measured(**features):

@@ -34,8 +34,15 @@ from shared.dj_engine import (
     order_route,
     plan_transition,
     request_analysis,
-    route_to_request,
 )
+from shared.dj.routes import (
+    REPAIR_ROUTE_CAP as _DJ_REPAIR_ROUTE_CAP,
+    choose_placement,
+    choose_request_segment,
+    repair_route,
+    route_identity as _dj_repair_identity,
+)
+from shared.dj.contracts import analysis_summary as _dj_analysis_summary
 from shared.dj_pool import ANALYSIS_COHORT_SIZE, add_measured_bridges
 from shared.hardening import rate_limit
 from shared.listening_planner import (
@@ -1053,14 +1060,6 @@ def _dj_item_analysis(metadata, item: dict, *, schedule: bool = False) -> dict:
     return _dj_fallback_analysis(duration_hint)
 
 
-def _dj_analysis_summary(analysis: dict) -> dict:
-    # Players execute the already computed transition and display BPM/key.
-    # Keeping full grids on up to sixteen starts would exceed Android's 256 KiB
-    # response budget. The complete measurements stay in the server cache.
-    return {key: value for key, value in analysis.items()
-            if key not in {"beat_grid", "downbeats", "phrase_boundaries", "sections"}}
-
-
 def _dj_prepare_cohort(metadata, items: list[dict]) -> None:
     """Queue a bounded, already chosen cohort; never rank by cache state."""
     from shared import preview_cache
@@ -1489,25 +1488,10 @@ def discovery_music_dj_plan():
                 })
         else:
             targets = [requested]
-        candidate_segments: list[tuple[float, list[dict], dict]] = []
-        for target in targets:
-            target_analysis = _dj_item_analysis(metadata, target)
-            target_segment = route_to_request(
-                previous,
-                remaining,
-                (target, target_analysis),
-                max_starts=min(5, max_items - len(route)),
-            )
-            if not target_segment:
-                continue
-            transition_quality = sum(float(row["transition"]["score"]) for row in target_segment) / len(target_segment)
-            position_cost = max(0, len(target_segment) - 1) * 0.025
-            candidate_segments.append((
-                transition_quality + float(target.get("score") or 0.5) * 0.08 - position_cost,
-                target_segment,
-                target_analysis,
-            ))
-        if not candidate_segments:
+        measured_targets = [(target, _dj_item_analysis(metadata, target)) for target in targets]
+        candidate_segment = choose_request_segment(previous, remaining, measured_targets,
+                                                   max_starts=min(5, max_items - len(route)))
+        if candidate_segment is None:
             request_statuses.append({
                 "id": requested["request_id"],
                 "kind": requested["kind"],
@@ -1518,7 +1502,7 @@ def discovery_music_dj_plan():
                 "failure_code": "unavailable",
             })
             continue
-        _, segment, requested_analysis = max(candidate_segments, key=lambda row: row[0])
+        segment, requested_analysis = candidate_segment
         route.extend(segment)
         used = {str(item.get("recommendation_identity") or item.get("id")) for item in segment}
         remaining = [
@@ -1704,34 +1688,14 @@ def _dj_place_one(data: dict) -> tuple[dict, int]:
     ) if before_queue_id else None
     if before_queue_id and fixed_index is None:
         return ({"error": "before_queue_id is not in the editable route"}), 409
-    gap_indexes = [fixed_index] if fixed_index is not None else list(range(len(route) + 1))
     bridge_pool = [] if fixed_index is not None else _dj_place_bridge_pool(metadata, data, occupied)
     seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
 
-    best = None
-    for gap in gap_indexes:
-        if gap is None:
-            continue
-        previous = seed_analysis if gap == 0 else route[gap - 1][1]
-        segment = route_to_request(
-            previous,
-            bridge_pool,
-            (target, target_analysis),
-            max_starts=1 if fixed_index is not None else 3,
-        )
-        qualities = [float(row["transition"]["score"]) for row in segment]
-        following = None
-        if gap < len(route):
-            following = plan_transition(target_analysis, route[gap][1])
-            qualities.append(float(following["score"]))
-        score = sum(qualities) / max(1, len(qualities)) - gap * 0.009
-        candidate = (score, -gap, gap, segment, following)
-        if best is None or candidate[:2] > best[:2]:
-            best = candidate
-
-    if best is None:
+    placement = choose_placement(seed_analysis, route, (target, target_analysis), bridge_pool,
+                                 fixed_index=fixed_index)
+    if placement is None:
         return ({"error": "route has no editable gap"}), 409
-    _, _, insert_at, segment, following = best
+    insert_at, segment, following = placement
     items = []
     for row in segment:
         placed = dict(row)
@@ -1750,11 +1714,6 @@ def _dj_place_one(data: dict) -> tuple[dict, int]:
         "following_transition": following,
         "degraded": not bool(target_analysis.get("analysed")),
     }), 200
-
-
-_DJ_REPAIR_ROUTE_CAP = 16
-_DJ_REPAIR_MAX_BRIDGES = 2
-_DJ_REPAIR_STABILITY_BONUS = 0.06
 
 
 def _dj_repair_anchor(raw: dict) -> dict:
@@ -1796,10 +1755,6 @@ def _dj_repair_anchor(raw: dict) -> dict:
         "source_weight": 1.0,
         "lineage": [recommendation_identity],
     }
-
-
-def _dj_repair_identity(item: dict) -> str:
-    return str(item.get("recommendation_identity") or item.get("id") or "")
 
 
 @discovery_bp.route("/api/discovery/music/dj-repair", methods=["POST"])
@@ -1846,81 +1801,13 @@ def discovery_music_dj_repair():
 
     anchors = [(item, analysis) for pinned, item, analysis in parsed if pinned]
     spares = [(item, analysis) for pinned, item, analysis in parsed if not pinned]
-    # How deep each pin sat, measured in songs before it. Holding only their
-    # relative order would let a song the listener dropped at slot nine surface
-    # as the very next one — order intact, intent destroyed. Repair re-chooses
-    # what fills a gap, never how long the gap is.
-    depths: list[int] = []
-    run = 0
-    for pinned, _, _ in parsed:
-        if pinned:
-            depths.append(run)
-            run = 0
-        else:
-            run += 1
-
-    # Avoided songs stay out of the filler, but never out of a pin: choosing a
-    # song you earlier waved away is a change of mind, and the pin wins.
     occupied = {str(value) for value in (data.get("exclude") or []) if value}
     occupied.update(_dj_repair_identity(item) for item, _ in (*anchors, *spares))
     occupied.discard("")
-
-    # An equal-quality seam should keep the row already on screen. `order_route`
-    # weights relevance at 0.20, so this is a tiebreak rather than a thumb on
-    # the scale — a genuinely bad seam still loses its slot.
-    pool: list[tuple[dict, dict]] = [
-        ({**item, "score": min(1.0, float(item.get("score") or 0.5) + _DJ_REPAIR_STABILITY_BONUS)}, analysis)
-        for item, analysis in spares
-    ]
-    pool.extend(_dj_place_bridge_pool(metadata, data, occupied))
-
+    extra_pool = _dj_place_bridge_pool(metadata, data, occupied)
     seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
     target = min(_DJ_REPAIR_ROUTE_CAP, max(len(refs), int(raw_limit or len(refs))))
-    built: list[dict] = []
-    previous = seed_analysis
-    def spend(rows: list[dict]) -> None:
-        spent = {_dj_repair_identity(row) for row in rows}
-        pool[:] = [row for row in pool if _dj_repair_identity(row[0]) not in spent]
-
-    for position, (anchor_item, anchor_analysis) in enumerate(anchors):
-        # Room the anchors still to come have already claimed is not spendable.
-        remaining = len(anchors) - position
-        fill = order_route(
-            previous, pool,
-            limit=max(0, min(depths[position], target - len(built) - remaining)),
-        )
-        for row in fill:
-            row["route_kind"] = "generated"
-        built.extend(fill)
-        spend(fill)
-        if fill:
-            previous = fill[-1]["analysis"]
-        # Bridges may push past the route's original length, and only bridges
-        # may. Measuring their room against that length instead meant a route
-        # the listener had filled entirely with their own songs — the exact case
-        # this endpoint exists for — could never be given a way into them.
-        headroom = _DJ_REPAIR_ROUTE_CAP - len(built) - remaining
-        segment = route_to_request(
-            previous,
-            pool,
-            (anchor_item, anchor_analysis),
-            max_starts=1 + max(0, min(_DJ_REPAIR_MAX_BRIDGES, headroom)),
-        )
-        for row in segment[:-1]:
-            row["route_kind"] = "bridge"
-            row["owner_queue_id"] = anchor_item.get("queue_id") or ""
-        segment[-1]["route_kind"] = "user"
-        built.extend(segment)
-        spend(segment)
-        previous = anchor_analysis
-
-    # Repair re-seams a route, it does not grow one. When the pool runs dry the
-    # tail comes back short and the browser's own refill tops it up at the next
-    # natural moment; there should not be a second thing that lengthens a route.
-    tail = order_route(previous, pool, limit=max(0, target - len(built)))
-    for row in tail:
-        row["route_kind"] = "generated"
-    built.extend(tail)
+    built = repair_route(seed_analysis, parsed, extra_pool, target=target)
 
     for row in built:
         row["queue_id"] = row.get("queue_id") or None

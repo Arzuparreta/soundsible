@@ -141,7 +141,7 @@ def test_analyser_decodes_in_memory_and_finds_a_real_pulse_grid(tmp_path, monkey
             )
             frames.append(struct.pack("<h", int(value * 32767)))
         output.writeframes(b"".join(frames))
-    monkeypatch.setattr("shared.dj_engine._cache_path", lambda: tmp_path / "analysis.sqlite3")
+    monkeypatch.setattr("shared.dj.store._cache_path", lambda: tmp_path / "analysis.sqlite3")
 
     result = analyse_audio(source, "synthetic-click")
 
@@ -176,14 +176,14 @@ def test_unknown_duration_yields_no_cue_rather_than_a_cue_at_zero():
 
 def test_analysis_is_cached_by_content_and_reused_without_decoding(tmp_path, monkeypatch):
     source = _click_track(tmp_path / "click.wav")
-    monkeypatch.setattr("shared.dj_engine._cache_path", lambda: tmp_path / "analysis.sqlite3")
+    monkeypatch.setattr("shared.dj.store._cache_path", lambda: tmp_path / "analysis.sqlite3")
 
     first = analyse_audio(source, "cache-me")
     assert cached_analysis(source, "cache-me") == first
 
     # A second read must not touch FFmpeg: planning depends on it being free.
     monkeypatch.setattr(
-        "shared.dj_engine._decode",
+        "shared.dj.store._decode_measured",
         lambda *args, **kwargs: pytest.fail("cached analysis decoded again"),
     )
     assert analyse_audio(source, "cache-me") == first
@@ -192,7 +192,7 @@ def test_analysis_is_cached_by_content_and_reused_without_decoding(tmp_path, mon
 
 def test_background_analysis_leaves_the_result_in_the_cache(tmp_path, monkeypatch):
     source = _click_track(tmp_path / "click.wav")
-    monkeypatch.setattr("shared.dj_engine._cache_path", lambda: tmp_path / "analysis.sqlite3")
+    monkeypatch.setattr("shared.dj.store._cache_path", lambda: tmp_path / "analysis.sqlite3")
 
     request_analysis(source, "queued-track")
     for _ in range(200):
@@ -231,8 +231,8 @@ def test_analysis_cache_survives_a_concurrent_reader(tmp_path, monkeypatch):
     come after `busy_timeout` and tolerate failure. Getting that order wrong
     made every background analysis die silently inside its worker.
     """
-    monkeypatch.setattr("shared.dj_engine._cache_path", lambda: tmp_path / "analysis.sqlite3")
-    from shared.dj_engine import _connect
+    monkeypatch.setattr("shared.dj.store._cache_path", lambda: tmp_path / "analysis.sqlite3")
+    from shared.dj.store import _connect
 
     reader = _connect()
     # Hold an open read against the same file.

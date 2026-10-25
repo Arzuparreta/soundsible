@@ -8,7 +8,8 @@ from unittest.mock import patch
 import pytest
 
 from shared import dj_library
-from shared.dj_engine import _fallback, analysis_identity, order_continuous_route, plan_transition
+from shared.dj.contracts import fallback_analysis as _fallback
+from shared.dj_engine import analysis_identity, order_continuous_route, plan_transition
 from shared.dj_pool import add_measured_bridges
 
 
