@@ -70,7 +70,7 @@ no hay síntoma que lo justifique.
 | P9 | Eco no sincronizado con el tempo | AAC → SQLite → HTTP; impulsos en Web Audio real y PCM nativo | Cerrado (`a8a22618`); activación automática cerrada en P7 (`d678f625`) |
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
-| P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Inventario de código en `ad59b838`; diferencias identificadas abajo | Pendiente; siguiente punto |
+| P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
 | P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Límites medidos de P1 y diagnóstico sintético 3/4 frente a 4/4 | Pendiente; depende de P11 |
 | P13 | Frases y secciones sobre una base métrica explícita | Lectura de `_compose` y `_sections_from_features`: bloques de ocho compases | Pendiente; depende de P12 |
 
@@ -86,6 +86,10 @@ pulso y P8 empezó a utilizar las secciones existentes; no resolvieron la
 detección general del compás, del 1 ni de las frases musicales. P2 corrige la
 alineación temporal de reproducción; no corrige una interpretación musical
 equivocada aunque los dos reproductores coincidan al milisegundo.
+
+**P11 está cerrado en `67d086cf`; el siguiente punto es P12.** El subpunto
+P11-a documenta una discrepancia preexistente entre puentes de peticiones y de
+fuentes; no se cambia la política musical durante esta extracción.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -173,7 +177,9 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 
 | Parte | Archivo |
 | --- | --- |
-| Análisis de audio y cálculo de cada transición | `shared/dj_engine.py` |
+| Entrada pública (reexports, sin estado propio) | `shared/dj_engine.py` |
+| Contratos, almacenamiento, análisis, estructura, reglas temporales, transiciones y rutas | `shared/dj/`; mapa de dependencias en [ARCHITECTURE](ARCHITECTURE.md) |
+| Admisión de puentes del conjunto medido | `shared/dj_pool.py` |
 | Endpoints `dj-plan`, `dj-place`, `dj-repair`, `dj-transition` | `shared/api/routes/auto_mode.py` |
 | Cuándo y cómo se lanza cada transición (navegador) | `ui_web/src/stores/dj.ts` |
 | Ejecución de la mezcla con dos reproductores | `ui_web/src/lib/audio/mixer.ts` |
@@ -190,7 +196,7 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
    11025 Hz; NumPy calcula las medidas; solo se guardan las medidas en SQLite. En
    segundo plano, 2 hilos (`request_analysis`). Canciones de más de 8 minutos: solo
    los primeros 90 s y los últimos 120 s. Mientras no hay análisis se usa
-   `_fallback()` con `confidence` 0,18.
+   `contracts.fallback_analysis()` con `confidence` 0,18.
 2. **Candidatas** (`_build_music_set_route`, `auto_mode.py:1219`): canciones de cada
    fuente, más las "related" de YouTube Music (25 por semilla) de las últimas 4
    canciones de cada fuente, más las related de las últimas 4 canciones
@@ -204,7 +210,7 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
    su posición. Solo con todo el conjunto y la semilla medidos se pueden insertar
    puentes, sin retirar destinos originales (P5). Una sesión sin semilla abre
    desde la fuente más reciente, según el barajado.
-4. **Transición de cada par** (`plan_transition`, `dj_engine.py`), con selección
+4. **Transición de cada par** (`plan_transition`, `shared/dj/transitions.py`), con selección
    automática de técnica (P7), común a todos los endpoints.
 5. **Ejecución** en el navegador (`stores/dj.ts`, `mixer.ts`).
 
@@ -1208,14 +1214,53 @@ caso y sus variantes en fixtures reproducibles con respuesta conocida.
 
 ## P11. Rewrite por responsabilidades, contratos y coherencia de políticas
 
-**Estado: pendiente; siguiente punto.** Preparar la base para P12 y P13 sin
-mezclar el traslado de responsabilidades con cambios de comportamiento musical.
-El objetivo es reorganizar las dependencias y los contratos, no reformatear
-el mismo archivo ni sustituir el DSP por otro algoritmo sin medidas.
+**Estado: cerrado, implementación `67d086cf`.** Separadas las responsabilidades
+y sus contratos sin cambiar resultados musicales ni el formato de caché.
+Mapa, unidades, dependencias, políticas y evidencia reproducible en
+[ARCHITECTURE](ARCHITECTURE.md). El siguiente punto es P12.
+
+- `shared/dj_engine.py` queda como fachada pública. `shared/dj/` separa modelos,
+  almacenamiento/adquisición, ritmo, medidas por ventana, composición, estructura,
+  reglas temporales, transiciones y rutas. SQLite y los trabajos tienen un único
+  propietario. Los módulos puros no cargan almacenamiento ni Flask.
+- Las búsquedas de peticiones, huecos y reparación se extraen de los endpoints.
+  Se centralizan equivalencia de tempo, periodo local y deriva ejecutada,
+  conservando las dos políticas de ruta y las guardas de web y Android.
+- `Analysis`, `AnalysisSummary`, `WindowFeatures`, `RhythmWindow`, `Structure` y
+  `TransitionPlan` distinguen medidas completas, resumen y ejecución. Conservan
+  segundos, BPM, ratio de reproducción, datos ausentes y ceros medidos. No se
+  rellena el hueco central entre ventanas ni se invalida la caché.
+- `python -I docs/dj/extraction_probe.py --reference ad59b838`: igualdad completa
+  de 7 análisis PCM, 784 planes, 168 rutas, WAV/AAC y cuatro lecturas de caché
+  sin decodificar, en ambos sentidos. Los vectores comunes no cambian.
+  `key_probe.py` mantiene 96/96 cadencias, antes y después; también puede cargar
+  una revisión posterior a la separación sin importar por error el código actual.
+- Regresión local: 2.287 tests del motor aprobados, uno omitido y cobertura
+  77,30 %; 1.762 tests de UI. Tras cerrar la extracción, 74 casos dirigidos
+  incluyen las 13 pruebas de fronteras, adquisición acotada y gevent. Los checks
+  de la PR cubren el conjunto final y los ejecutores web/Android. Sin aceptación
+  física de escucha; no se afirma una mejora de coste ni detección métrica nueva.
+
+### P11-a. Discrepancia conservada: puentes de petición basados solo en score
+
+**Pendiente explícito; no impide el cierre de la extracción.**
+`route_to_request` declara mejorar la seguridad pero no exige ejecución de
+beatmatch. Con medidas de 100 → 107 → 114 BPM elige un puente con dos `echo_cut`
+a velocidad 1, puntuaciones 0,602/0,625. Los dos ajustes exceden el límite del
+6 %. Con el mismo conjunto, `add_measured_bridges` no añade puente porque
+requiere dos tramos con beatmatch y deriva admisible. La fixture permanente es
+`test_preserved_request_bridge_policy_differs_from_measured_cohort_admission`.
+
+Revisar esa condición en peticiones legacy, colocación y reparación, y decidir
+cómo comparar la seguridad de técnicas de reserva frente a `score`. No basta
+con usar el mismo planificador para considerar iguales los objetivos de ruta.
+La doble influencia del tempo (compatibilidad global del par y continuidad de
+BPM) también queda inventariada, sin nuevos pesos ni recalibración. La secuencia
+acordada continúa con P12; P11-a queda visible para una decisión posterior.
 
 ### Alcance
 
-`shared/dj_engine.py` reúne unas 1800 líneas de SQLite, trabajos en segundo
+El diagnóstico de partida: `shared/dj_engine.py` reunía unas 1800 líneas de SQLite, trabajos en segundo
 plano, FFmpeg, DSP, composición del análisis, planificación y rutas. Además,
 `auto_mode.py` orquesta fuentes y endpoints, y los clientes poseen guardas de
 ejecución. Definir módulos con estas responsabilidades; los nombres y la
@@ -1273,7 +1318,7 @@ distribución concreta de archivos se deciden al implementarlo:
 
 ## P12. Compás, subdivisión, identificación del 1 y sus confianzas
 
-**Estado: pendiente; depende de P11.** P1 dejó medidos los límites del 1,
+**Estado: pendiente; siguiente punto tras P11.** P1 dejó medidos los límites del 1,
 del contratiempo y de algunas relaciones ternarias. Este punto los aborda
 sin reabrir P2: mejorar el conocimiento musical no exige cambiar el reloj
 del navegador ni introducir corrección continua de velocidad.
