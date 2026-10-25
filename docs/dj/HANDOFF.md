@@ -1,9 +1,10 @@
 # Traspaso: revisión del modo DJ
 
 Punto de entrada para revisar y mejorar el modo DJ punto por punto, en sesiones
-nuevas y sin el historial del chat. Estado del código revisado: `main` en
-`f1e79d30`. Los números de línea se refieren a ese commit; si el código ha
-cambiado, buscar por nombre de función.
+nuevas y sin el historial del chat. El diagnóstico original parte de `main` en
+`f1e79d30`; la segunda fase (P11–P13), acordada el 2026-10-25, se contrasta con
+`main` en `ad59b838`. Los números de línea de los diagnósticos originales son
+históricos; buscar por nombre de función en el código vigente.
 
 El documento empezó como diagnóstico. Los puntos cerrados lo indican en la tabla
 de estado y en su sección; el resto sigue siendo diagnóstico.
@@ -15,9 +16,11 @@ de estado y en su sección; el resto sigue siendo diagnóstico.
 - Respetar `AGENTS.md`: rama + PR, etiqueta `impact:*`, esperar CI, no merge sin
   permiso del usuario, no `npm run build`, suite completa de Playwright si se toca
   `ui_web/`.
-- Cualquier cambio en el análisis de `shared/dj_engine.py` debe subir
+- Cualquier cambio en las medidas o su significado debe subir
   `ANALYSER_VERSION`: la caché `cache/dj/analysis.sqlite3` está indexada por esa
-  versión y las medidas antiguas no se invalidan de otro modo.
+  versión y las medidas antiguas no se invalidan de otro modo. Esto sigue
+  aplicándose cuando P11 mueva el análisis a otros módulos; una extracción que
+  conserve exactamente las medidas y su formato no exige invalidarlas.
 - Decisiones del usuario que siguen vigentes:
   - La mezcla es automática: no hay selector de estilo ni de "booth" por diseño
     (eliminado en `ae161f0`). Solo existe el interruptor **Ajustes → DJ →
@@ -65,14 +68,28 @@ no hay síntoma que lo justifique.
 | P7 | Selección automática de técnicas, sin perfiles | AAC → SQLite → HTTP en planificación, colocación, reparación y refinado; vectores comunes web/Android | Cerrado (implementación `d678f625`): opción (b) |
 | P8 | Secciones medidas y no usadas | AAC → SQLite → HTTP; vectores comunes ejecutados por web y Android | Cerrado (implementación `90b6c7e9`) |
 | P9 | Eco no sincronizado con el tempo | AAC → SQLite → HTTP; impulsos en Web Audio real y PCM nativo | Cerrado (`a8a22618`); activación automática cerrada en P7 (`d678f625`) |
-| UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Implementado en esta PR |
+| UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
+| P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
+| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Límites medidos de P1 y diagnóstico sintético 3/4 frente a 4/4 | Pendiente; depende de P11 |
+| P13 | Frases y secciones sobre una base métrica explícita | Lectura de `_compose` y `_sections_from_features`: bloques de ocho compases | Pendiente; depende de P12 |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
 salvo que vuelva el síntoma. P4, P6, P3, P5, P8 y la sincronización de P9 están
-cerrados. **P7 y P10 también están cerrados en `d678f625`.** P2 sigue
-aparcado: solo se retoma si vuelve el síntoma de desfase.
+cerrados. **P7 y P10 también están cerrados en `d678f625`; UI1 está cerrado en
+#389.** P2 sigue aparcado: solo se retoma si vuelve el síntoma de desfase.
+
+**Siguiente trabajo acordado (2026-10-25): P11 → P12 → P13.** Los cierres de la
+primera fase se conservan con su alcance original: P1 mejoró la precisión del
+pulso y P8 empezó a utilizar las secciones existentes; no resolvieron la
+detección general del compás, del 1 ni de las frases musicales. P2 corrige la
+alineación temporal de reproducción; no corrige una interpretación musical
+equivocada aunque los dos reproductores coincidan al milisegundo.
+
+**P11 está cerrado en `67d086cf`; el siguiente punto es P12.** El subpunto
+P11-a documenta una discrepancia preexistente entre puentes de peticiones y de
+fuentes; no se cambia la política musical durante esta extracción.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -160,7 +177,9 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 
 | Parte | Archivo |
 | --- | --- |
-| Análisis de audio y cálculo de cada transición | `shared/dj_engine.py` |
+| Entrada pública (reexports, sin estado propio) | `shared/dj_engine.py` |
+| Contratos, almacenamiento, análisis, estructura, reglas temporales, transiciones y rutas | `shared/dj/`; mapa de dependencias en [ARCHITECTURE](ARCHITECTURE.md) |
+| Admisión de puentes del conjunto medido | `shared/dj_pool.py` |
 | Endpoints `dj-plan`, `dj-place`, `dj-repair`, `dj-transition` | `shared/api/routes/auto_mode.py` |
 | Cuándo y cómo se lanza cada transición (navegador) | `ui_web/src/stores/dj.ts` |
 | Ejecución de la mezcla con dos reproductores | `ui_web/src/lib/audio/mixer.ts` |
@@ -177,7 +196,7 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
    11025 Hz; NumPy calcula las medidas; solo se guardan las medidas en SQLite. En
    segundo plano, 2 hilos (`request_analysis`). Canciones de más de 8 minutos: solo
    los primeros 90 s y los últimos 120 s. Mientras no hay análisis se usa
-   `_fallback()` con `confidence` 0,18.
+   `contracts.fallback_analysis()` con `confidence` 0,18.
 2. **Candidatas** (`_build_music_set_route`, `auto_mode.py:1219`): canciones de cada
    fuente, más las "related" de YouTube Music (25 por semilla) de las últimas 4
    canciones de cada fuente, más las related de las últimas 4 canciones
@@ -191,7 +210,7 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
    su posición. Solo con todo el conjunto y la semilla medidos se pueden insertar
    puentes, sin retirar destinos originales (P5). Una sesión sin semilla abre
    desde la fuente más reciente, según el barajado.
-4. **Transición de cada par** (`plan_transition`, `dj_engine.py`), con selección
+4. **Transición de cada par** (`plan_transition`, `shared/dj/transitions.py`), con selección
    automática de técnica (P7), común a todos los endpoints.
 5. **Ejecución** en el navegador (`stores/dj.ts`, `mixer.ts`).
 
@@ -1109,3 +1128,309 @@ tempo, key and energy" de `README.md`.
 `plan_transition`, los vectores compartidos y los tipos web; ningún reproductor
 lo leía y ambos siguen ejecutando `technique`. La documentación de usuario y
 las secciones de funcionamiento de este handoff describen la política vigente.
+
+---
+
+## Segunda fase: responsabilidades y estructura musical (2026-10-25)
+
+**Decisión del usuario:** añadir el rewrite por responsabilidades y resolver
+la identificación del compás y del pulso 1, teniendo en cuenta sus dependencias
+con las frases, las secciones, la ordenación y los reproductores. Esta sección
+registra trabajo pendiente, no funciones ya implementadas. Orden: **P11 → P12
+→ P13**, un punto por sesión salvo indicación del usuario.
+
+### Qué se ha comprobado y qué se está suponiendo
+
+En `ad59b838` no hay otro pipeline que detecte el compás binario o ternario:
+
+- `_tempo_lag` contiene el comentario «Binary metre» y refuerza la
+  autocorrelación a uno, dos y cuatro periodos. Es una suposición del detector
+  de tempo, no un clasificador de compás o subdivisión.
+- `_downbeat_phase` elige entre cuatro posiciones por cambio armónico y fuerza
+  del ataque. Devuelve una posición, sin confianza específica ni posibilidad
+  de abstenerse ante un empate o una señal ambigua.
+- `_compose` toma uno de cada cuatro pulsos como inicio de compás y fija
+  `bar_seconds = period * 4`. El contrato no expresa los pulsos por compás ni
+  la subdivisión de cada pulso.
+- `phrase_boundaries` parte de uno de cada ocho inicios de compás.
+  `_sections_from_features` también divide en bloques de ocho compases y los
+  etiqueta por sus medidas de nivel y movimiento. Frases y secciones comparten
+  esa base heurística: no son dos detecciones independientes que confirmen el 1.
+- `confidence` combina confianza de tempo y margen de tonalidad. No mide la
+  certeza del compás, del 1 o de la frase. Un pulso muy regular no garantiza
+  ninguno de los otros tres.
+- La web (`planBarSeconds`, `djCue.ts`) y Android
+  (`ProgramDjPlan.resolve`) reconstruyen el compás como cuatro periodos del
+  pulso saliente. Cambiar solo el detector del servidor dejaría esta suposición
+  activa en ambos clientes.
+
+Separar conceptos musicales: **pulso**, **pulsos por compás**, **subdivisión del
+pulso**, **inicio de compás**, **inicio de frase** y **sección**. Por ejemplo,
+3/4 tiene tres pulsos de negra; 6/8 puede organizarse en dos pulsos de negra con
+puntillo, cada uno subdividido en tres. Una etiqueta «ternario» no distingue
+esos casos. Medio/doble tempo tampoco es una detección de compás: cambiar la
+unidad del pulso cambia cuántos pulsos describen un mismo compás.
+
+**Diagnóstico sintético puntual de esta revisión.** PCM mono a 11025 Hz,
+48 segundos, pulsos cada 0,5 s desde 0,25 s; bombo en todos los pulsos, acento
+y cambio de acorde cada tres o cuatro. Se ejecutó `_compose` directamente en
+memoria y después `plan_transition`; sin FFmpeg, caché, HTTP ni reproducción.
+Coincidencia del 1: distancia inferior a 10 ms respecto al inicio conocido.
+
+| Compás de la señal | BPM detectado | `tempo_confidence` | Compás real | `bar_seconds` | Unos detectados que coinciden con el real |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 3/4 | 120,001 | 1 | 1,5 s | 2 s | 8/24 |
+| 4/4 | 120,001 | 1 | 2 s | 2 s | 24/24 |
+
+El par 3/4 → 4/4 produjo `bass_swap`, `playback_rate = 1`, confianza 0,763 y
+`fallback = false`. Verifica la falta de una comprobación métrica; no demuestra
+que una mezcla entre compases distintos sea siempre imposible ni determina
+qué técnica debe usarse en cada caso. No es una tasa de acierto sobre música
+real, una prueba permanente ni una aceptación física. P12 debe convertir el
+caso y sus variantes en fixtures reproducibles con respuesta conocida.
+
+### Relaciones entre los puntos anteriores que deben quedar explícitas
+
+- **Tempo y orden:** `plan_transition.score` ya contiene tempo; P3 vuelve a
+  incluir BPM entre sus dimensiones de continuidad. Hay influencia por dos
+  caminos. No basta para declararlo un fallo: documentar qué objetivo cumple
+  cada camino y comprobar si el efecto conjunto es el decidido, sin nuevos
+  pesos ajustados a gusto.
+- **Políticas de ruta:** la ruta de fuentes usa `order_continuous_route`;
+  la ruta legacy y partes de peticiones/reparación usan `order_route`, que
+  combina transición, semántica y relevancia. Todos llaman a `plan_transition`,
+  pero compartir ese cálculo no hace iguales sus objetivos de ordenación.
+- **Validez de la mezcla:** el cálculo de relaciones de medio/doble tempo y
+  de deriva ejecutada aparece en planificación, entrada al drop y admisión de
+  puentes (`dj_pool._beatmatched`). Debe haber una definición coherente de
+  pulso comparable y mezcla ejecutable, no variantes que diverjan al cambiar
+  el modelo rítmico.
+- **Frases y secciones:** un 1 incorrecto puede desplazar ambas y sus cues.
+  P8 consume las etiquetas existentes; P13 revisará su detección y sus límites.
+- **Análisis de audio:** ritmo, ataques de notas, tonalidad y textura usan
+  ventanas y resoluciones diferentes por necesidades distintas. No fusionar
+  sus FFT o detectores solo porque todos parten del mismo PCM. Compartir
+  trabajo exige demostrar equivalencia de medidas y beneficio de coste.
+
+## P11. Rewrite por responsabilidades, contratos y coherencia de políticas
+
+**Estado: cerrado, implementación `67d086cf`.** Separadas las responsabilidades
+y sus contratos sin cambiar resultados musicales ni el formato de caché.
+Mapa, unidades, dependencias, políticas y evidencia reproducible en
+[ARCHITECTURE](ARCHITECTURE.md). El siguiente punto es P12.
+
+- `shared/dj_engine.py` queda como fachada pública. `shared/dj/` separa modelos,
+  almacenamiento/adquisición, ritmo, medidas por ventana, composición, estructura,
+  reglas temporales, transiciones y rutas. SQLite y los trabajos tienen un único
+  propietario. Los módulos puros no cargan almacenamiento ni Flask.
+- Las búsquedas de peticiones, huecos y reparación se extraen de los endpoints.
+  Se centralizan equivalencia de tempo, periodo local y deriva ejecutada,
+  conservando las dos políticas de ruta y las guardas de web y Android.
+- `Analysis`, `AnalysisSummary`, `WindowFeatures`, `RhythmWindow`, `Structure` y
+  `TransitionPlan` distinguen medidas completas, resumen y ejecución. Conservan
+  segundos, BPM, ratio de reproducción, datos ausentes y ceros medidos. No se
+  rellena el hueco central entre ventanas ni se invalida la caché.
+- `python -I docs/dj/extraction_probe.py --reference ad59b838`: igualdad completa
+  de 7 análisis PCM, 784 planes, 168 rutas, WAV/AAC y cuatro lecturas de caché
+  sin decodificar, en ambos sentidos. Los vectores comunes no cambian.
+  `key_probe.py` mantiene 96/96 cadencias, antes y después; también puede cargar
+  una revisión posterior a la separación sin importar por error el código actual.
+  Los benchmarks de análisis y cola migran sus puntos privados al propietario;
+  se ejecutan extracción (18/480 s), pipeline WAV (18/900 s), HTTP con dos
+  análisis y los cuatro escenarios de cola con/sin instrumentación. Es una
+  comprobación funcional de las herramientas, no una mejora de coste medida.
+- Regresión local: 2.287 tests del motor aprobados, uno omitido y cobertura
+  77,30 %; 1.762 tests de UI. Tras cerrar la extracción, 74 casos dirigidos
+  incluyen las 13 pruebas de fronteras, adquisición acotada y gevent. Los checks
+  de la PR cubren el conjunto final y los ejecutores web/Android. Sin aceptación
+  física de escucha; no se afirma una mejora de coste ni detección métrica nueva.
+
+### P11-a. Discrepancia conservada: puentes de petición basados solo en score
+
+**Pendiente explícito; no impide el cierre de la extracción.**
+`route_to_request` declara mejorar la seguridad pero no exige ejecución de
+beatmatch. Con medidas de 100 → 107 → 114 BPM elige un puente con dos `echo_cut`
+a velocidad 1, puntuaciones 0,602/0,625. Los dos ajustes exceden el límite del
+6 %. Con el mismo conjunto, `add_measured_bridges` no añade puente porque
+requiere dos tramos con beatmatch y deriva admisible. La fixture permanente es
+`test_preserved_request_bridge_policy_differs_from_measured_cohort_admission`.
+
+Revisar esa condición en peticiones legacy, colocación y reparación, y decidir
+cómo comparar la seguridad de técnicas de reserva frente a `score`. No basta
+con usar el mismo planificador para considerar iguales los objetivos de ruta.
+La doble influencia del tempo (compatibilidad global del par y continuidad de
+BPM) también queda inventariada, sin nuevos pesos ni recalibración. La secuencia
+acordada continúa con P12; P11-a queda visible para una decisión posterior.
+
+### Alcance
+
+El diagnóstico de partida: `shared/dj_engine.py` reunía unas 1800 líneas de SQLite, trabajos en segundo
+plano, FFmpeg, DSP, composición del análisis, planificación y rutas. Además,
+`auto_mode.py` orquesta fuentes y endpoints, y los clientes poseen guardas de
+ejecución. Definir módulos con estas responsabilidades; los nombres y la
+distribución concreta de archivos se deciden al implementarlo:
+
+| Responsabilidad | Produce / posee | No debe decidir |
+| --- | --- | --- |
+| Modelos y contratos | Medidas, cobertura temporal, unidades, ausencia de evidencia y plan ejecutable | Acceso a disco, proveedores o reproducción |
+| Almacenamiento y adquisición del análisis | Identidad, versión, SQLite, decodificación y trabajos acotados | Orden musical o técnica de mezcla |
+| Análisis musical | Ritmo, tonalidad, densidad de notas, sonoridad y textura por ventanas medidas | Fuentes, candidatos elegidos o controles del reproductor |
+| Estructura musical | Compases recibidos del análisis rítmico, frases, secciones y cues candidatos | Inventar un nuevo pulso o elegir canciones |
+| Transiciones | Compatibilidad del par, técnica, cues, velocidad, efectos y comprobación de ejecución | Adquirir música o modificar la sesión |
+| Rutas y puentes | Orden dentro del conjunto elegido y evaluación de sus transiciones | Redefinir las medidas o la validez de beatmatch |
+| Adaptadores HTTP y reproductores | Orquestación de sesión, contrato compacto y ejecución en cada plataforma | Volver a inferir compás o estructura musical |
+
+- Definir tipos y unidades explícitas en las fronteras, separando análisis
+  completo, resumen para clientes y plan de transición. Distinguir ausente,
+  desconocido y cero medido. Mantener cobertura por ventanas: no interpolar
+  el hueco central no analizado de grabaciones largas.
+- Centralizar las operaciones repetidas de equivalencia de tempo y de
+  validación del plan, conservando su resultado actual. Mantener una frontera
+  de validación al admitir puentes y al ejecutar; compartir la definición no
+  significa confiar ciegamente en un plan incompleto o antiguo.
+- Inventariar la política de cada entrada: planificación de fuentes, legacy,
+  peticiones, colocación, reparación y refinado. Registrar qué criterios son
+  comunes y qué diferencias son deliberadas. Revisar la doble influencia del
+  tempo y el uso de `score` frente a la técnica realmente ejecutable.
+- Conservar en esta extracción los resultados musicales y las diferencias de
+  política existentes. Si el inventario confirma una contradicción que exige
+  cambiar resultados, dejar un subpunto concreto y su evidencia en este handoff
+  antes de cerrar P11; no ocultarla como un cambio de organización.
+- Mantener las fronteras públicas y los puntos de inyección usados por las
+  pruebas, o migrar sus consumidores en la misma entrega. Evitar dependencias
+  circulares, estado global duplicado y accesos a SQLite desde el módulo puro.
+- El servidor sigue siendo dueño del plan musical; web y Android conservan
+  sus ejecutores apropiados. No incorporar las stores web al audio Android.
+
+### Criterios de cierre
+
+- Mapa de módulos y dependencias documentado, con propietario único para cada
+  medida y regla compartida. Los endpoints no contienen un segundo planificador.
+- Comparación antes/después sobre las mismas fixtures y análisis: mismas
+  medidas, caché compatible, mismos órdenes y planes, con los mismos límites
+  de redondeo, velocidad, fase y solapamiento. No regenerar expectativas para
+  hacer pasar una extracción que cambia comportamiento.
+- Mantener los vectores comunes de servidor, web y Android, las pruebas AAC →
+  SQLite → HTTP existentes y los casos fríos/calientes y de sesión externa.
+  Ejecutar las suites pertinentes al alcance real, incluida la regresión de
+  navegador completa si se toca `ui_web/`, según `AGENTS.md`.
+- Verificar que se mantienen decodificación única, memoria y concurrencia
+  acotadas, trabajo DSP fuera del bucle cooperativo y respuestas compactas.
+- Inventario de diferencias de políticas resuelto o con subpuntos explícitos;
+  actualizar la tabla y dejar P12 como siguiente trabajo. Una extracción sin
+  cambios de medidas no invalida la caché; si cambian, aplicar su versionado.
+
+## P12. Compás, subdivisión, identificación del 1 y sus confianzas
+
+**Estado: pendiente; siguiente punto tras P11.** P1 dejó medidos los límites del 1,
+del contratiempo y de algunas relaciones ternarias. Este punto los aborda
+sin reabrir P2: mejorar el conocimiento musical no exige cambiar el reloj
+del navegador ni introducir corrección continua de velocidad.
+
+### Alcance
+
+- Extender el modelo rítmico para expresar la unidad del pulso, su periodo,
+  los pulsos por compás, la subdivisión, los inicios de compás y la cobertura
+  temporal de cada estimación. Permitir ambigüedad, cambios por región y
+  «desconocido»; no rellenarlos con un 4/4 que parezca medido.
+- Separar confianza de pulso, de compás y de identificación del 1. Definir
+  qué evidencia permite afirmar cada cosa. Una tonalidad clara o un pulso
+  regular no deben elevar automáticamente la certeza del compás.
+- Evaluar hipótesis de agrupación y subdivisión con señales conocidas,
+  incluidos 3/4, 4/4 y 6/8. No limitarse a cambiar `range(4)` por otro número,
+  ni tratar subdivisión ternaria como una relación de medio/doble tempo.
+- Revisar conjuntamente selección de tempo, pulso/contratiempo y fase del
+  compás. El detector actual favorece repeticiones binarias antes de estimar
+  el 1; cambiar solo su última etapa deja ese sesgo intacto.
+- Ajustar cues, duración del compás y solapamientos a las medidas locales.
+  Medio/doble tempo debe conservar la interpretación del compás y la unidad
+  declarada; no puede convertir por accidente dos compases en uno.
+- Evaluar compatibilidad métrica por pareja y durante el tramo mezclado.
+  Hacer coincidir los dos unos al inicio no asegura que sigan coincidiendo
+  si los compases tienen distinta duración. Definir y verificar la alineación
+  que realmente promete cada técnica, incluida una salida conservadora cuando
+  no hay evidencia suficiente. No declarar incompatibles todos los compases
+  distintos por defecto ni prometer alineación de compás basándose solo en BPM.
+- Llevar la misma regla a ordenación, peticiones, reparación, refinado y
+  puentes; la elección de una técnica y su admisión deben usar la misma
+  validación métrica del par. Revisar el `score` y sus consumidores para que
+  la calidad declarada no oculte que la alineación solicitada no es ejecutable.
+- El servidor debe enviar la información necesaria para conservar el compás
+  al recolocar cues. Retirar el `out_period * 4` implícito de web y Android y
+  revisar `overlap_bars`, límites y tipos. Conservar compatibilidad explícita
+  con planes antiguos o incompletos, sin presentar su 4/4 como una medida nueva.
+- Mantener el eco ligado a un pulso saliente medido y a la velocidad real,
+  con unidad inequívoca. Un cambio de compás no autoriza convertir el retardo
+  en un compás ni deducirlo del tempo entrante.
+- Invalidar las medidas antiguas con `ANALYSER_VERSION` y adaptar persistencia
+  y resumen HTTP. Los clientes reciben el plan compacto, no las rejillas
+  completas de todo el conjunto ni un detector musical propio.
+
+### Criterios de cierre
+
+- Fixtures reproducibles con pulsos, compases y subdivisiones conocidos:
+  3/4, 4/4, 6/8, distintas posiciones iniciales, anacrusas, acentos débiles
+  en el 1, síncopas, contratiempos y ambigüedad de medio/doble tempo. Incluir
+  cambios de compás, deriva y material sin pulso o sin compás identificable.
+- Medir por separado error de tempo, error temporal de pulso, acierto del
+  compás/subdivisión, acierto del 1 y abstenciones. Fijar tolerancias con
+  señales conocidas, sin notas humanas, puntuaciones de gusto ni calibración
+  sobre canciones elegidas a posteriori.
+- Reproducir el diagnóstico 3/4 → 4/4 anterior: no exigir una técnica concreta
+  por su nombre; comprobar que el plan respeta la interpretación y garantías
+  de alineación que declara. Cubrir también parejas compatibles y periodos
+  locales distintos del BPM global.
+- AAC → análisis → SQLite → HTTP, con sustitución de la caché anterior y
+  casos fríos/calientes; vectores compartidos ejecutados por web y Android,
+  incluyendo recolocación de cues sin volver a asumir cuatro pulsos.
+- Evaluación separada con música real y referencia explícita, sin confundir
+  acuerdo con otro detector con verdad musical absoluta. Informar cobertura,
+  errores y límites por caso; la escucha física sigue siendo otra evidencia.
+- Actualizar el funcionamiento vigente y los límites de P1/P8; P13 queda
+  pendiente hasta comprobar frases y secciones sobre el nuevo modelo.
+
+## P13. Frases y secciones sobre una base métrica explícita
+
+**Estado: pendiente; depende de P12.** P8 cerró el uso de las secciones al
+planificar, no una detección general de forma musical. La agrupación actual
+en ocho compases no demuestra dónde empieza una frase ni dónde cambia una
+sección; ambas pueden parecer coherentes porque comparten la misma suposición.
+
+### Alcance
+
+- Distinguir la estimación del 1, el comienzo de frase y el límite de sección,
+  con su evidencia y cobertura. Consumir el modelo rítmico de P12, sin otro
+  detector de compás ni reconstrucción por módulos independientes.
+- Revisar la agrupación fija de ocho compases y la fase inicial de esa
+  agrupación. Contemplar frases de otras longitudes, anacrusas, extensiones
+  y cambios de métrica; no basta con contar desde el primer 1 disponible.
+- Estimar límites a partir de cambios medidos de estructura y contenido,
+  contrastados con la métrica disponible. Cuando se use un supuesto de ocho
+  compases como reserva, conservar su condición de supuesto y su incertidumbre.
+- Separar detección del límite y etiqueta musical. Un salto de nivel por sí
+  solo no prueba un drop; revisar intro, outro, build, breakdown y body con
+  señales que distingan sus condiciones, sin notas de gusto ni nuevos pesos
+  calibrados a oído. No forzar etiquetas cuando falta evidencia.
+- Revalidar salida en outro/antes de breakdown, llegada al drop y mezcla larga
+  de P7/P8: cues y solapamientos deben respetar la estructura medida y los
+  límites reales de ejecución, sin usar frases y secciones correlacionadas
+  como si fueran confirmaciones independientes.
+- Mantener las regiones sin medir de archivos largos como desconocidas.
+  No fabricar continuidad de frase, sección o compás a través del hueco.
+- Mantener un único planificador para todos los endpoints y paridad de
+  ejecución web/Android. Versionar la caché si cambian medidas o su significado.
+
+### Criterios de cierre
+
+- Señales conocidas con frases de cuatro, ocho y dieciséis compases, comienzos
+  desplazados y extensiones; 3/4, 4/4 y 6/8; cambios de sección dentro y fuera
+  del antiguo bloque fijo. Cubrir material ambiguo y ventanas discontinuas.
+- Medir por separado error de límite, longitud/fase de frase, etiqueta de
+  sección y abstenciones; distinguir el fallo heredado del pulso o compás del
+  fallo propio de estructura. Las pruebas no deben fijar solo nombres de etiquetas.
+- Probar que los límites y etiquetas cambian las decisiones correctas de
+  salida, entrada y duración a través de AAC → SQLite → HTTP, y que el mismo
+  plan llega ejecutable a web y Android sin ajustes que rompan la alineación.
+- Conservar los límites físicos, la selección sin sesgo de caché y las demás
+  decisiones vigentes. Registrar evaluación real y aceptación física por
+  separado; actualizar tabla, funcionamiento y limitaciones al cerrar.

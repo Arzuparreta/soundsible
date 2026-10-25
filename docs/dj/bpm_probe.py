@@ -21,6 +21,7 @@ import numpy as np
 
 sys.path.insert(0, os.getcwd())
 from shared import dj_engine  # noqa: E402
+from shared.dj import store as dj_store, timing as dj_timing
 
 SAMPLE_RATE = 44100
 DURATION = 60.0
@@ -49,7 +50,7 @@ def click_track(bpm: float) -> tuple[np.ndarray, np.ndarray]:
 
 def main() -> None:
     workdir = Path(tempfile.mkdtemp(prefix="dj-bpm-probe-"))
-    dj_engine._cache_path = lambda: workdir / "analysis.sqlite3"
+    dj_store._cache_path = lambda: workdir / "analysis.sqlite3"
     print(f"{'real':>6}  {'bpm':>9}  {'stretch period':>14}  grid − click (ms): median, worst")
     for bpm in TEMPOS:
         path = workdir / f"click-{bpm}.wav"
@@ -61,7 +62,7 @@ def main() -> None:
             out.writeframes((np.clip(samples, -1, 1) * 30000).astype("<i2").tobytes())
         analysis = dj_engine.analyse_audio(path, f"probe-{bpm}", duration_hint=DURATION)
         grid = np.array(analysis["beat_grid"])
-        period = dj_engine._local_period(analysis, float(grid[len(grid) // 2]), 30.0)
+        period = dj_timing.local_period(analysis, float(grid[len(grid) // 2]), 30.0)
         index = np.clip(np.searchsorted(grid, onsets), 1, grid.size - 1)
         nearest = np.where(np.abs(onsets - grid[index - 1]) < np.abs(onsets - grid[index]), grid[index - 1], grid[index])
         error = (nearest - onsets) * 1000

@@ -4,7 +4,8 @@ import copy
 
 import pytest
 
-from shared.dj_engine import _fallback, plan_transition
+from shared.dj.contracts import fallback_analysis as _fallback
+from shared.dj_engine import plan_transition
 from test_dj_sections import measured, section
 
 

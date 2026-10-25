@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 import types
 from pathlib import Path
@@ -17,7 +16,12 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from shared import dj_engine
+from shared.dj import features, store
+from docs.dj.reference import load_reference
+
+dj_engine = types.SimpleNamespace(_KEY_NAMES=features._KEY_NAMES,
+                                  _window_features=features._window_features,
+                                  _analyse_pcm=store._analyse_pcm)
 
 
 def cadence(tonic: int, mode: str, *, octave: int = 3, harmonics: int = 1, cents: float = 0.0):
@@ -43,13 +47,6 @@ def cadence(tonic: int, mode: str, *, octave: int = 3, harmonics: int = 1, cents
                 samples += np.sin(2 * np.pi * frequency * harmonic * t) / harmonic
         rows.append(samples * envelope / 20)
     return np.concatenate(rows).astype(np.float32)
-
-
-def load_reference(revision: str):
-    source = subprocess.check_output(["git", "show", f"{revision}:shared/dj_engine.py"], cwd=ROOT, text=True)
-    module = types.ModuleType("reference_dj_engine")
-    exec(compile(source, "reference_dj_engine.py", "exec"), module.__dict__)
-    return module
 
 
 def main():

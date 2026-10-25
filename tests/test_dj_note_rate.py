@@ -10,6 +10,9 @@ import wave
 import numpy as np
 import pytest
 
+from shared.dj import analysis as dj_analysis
+from shared.dj import features as dj_features
+from shared.dj import store as dj_store
 from shared import dj_engine
 
 RATE = 11025
@@ -133,7 +136,7 @@ def _drums(bpm, *, seconds=20.0, seed=3):
 
 
 def note_rate(samples):
-    notes, seconds = dj_engine._note_onsets(samples, RATE)
+    notes, seconds = dj_features._note_onsets(samples, RATE)
     return notes / seconds if seconds else 0.0
 
 
@@ -208,12 +211,12 @@ def test_note_counting_memory_does_not_grow_with_track_length(monkeypatch):
         return original(values, *args, **kwargs)
 
     monkeypatch.setattr(np.fft, "rfft", measured)
-    dj_engine._note_onsets(_melody(4, legato=True, seconds=60.0), RATE)
-    assert max(batches) <= dj_engine._NOTE_BLOCK
+    dj_features._note_onsets(_melody(4, legato=True, seconds=60.0), RATE)
+    assert max(batches) <= dj_features._NOTE_BLOCK
 
 
 def _compose(samples):
-    return dj_engine._compose(samples, samples, RATE, duration=samples.size / RATE, tail_start=0)
+    return dj_analysis._compose(samples, samples, RATE, duration=samples.size / RATE, tail_start=0)
 
 
 def test_spectral_flatness_is_zero_for_a_tone_and_that_of_white_noise_for_noise():
@@ -242,7 +245,7 @@ def test_silence_measures_nothing():
 def test_a_long_recording_pools_its_two_windows():
     slow, fast = _melody(2, legato=True, seed=41), _melody(8, legato=True, seed=43)
     duration = 900.0
-    both = dj_engine._compose(fast, slow, RATE, duration=duration, tail_start=duration - fast.size / RATE)
+    both = dj_analysis._compose(fast, slow, RATE, duration=duration, tail_start=duration - fast.size / RATE)
     assert both["note_rate"] == pytest.approx(5, rel=0.15)
 
 
@@ -256,7 +259,7 @@ def _write_stereo(path, samples, rate=48000):
 
 
 def test_integrated_loudness_is_measured_by_ebu_r128_in_the_same_decode(tmp_path, monkeypatch):
-    monkeypatch.setattr(dj_engine, "_cache_path", lambda: tmp_path / "analysis.sqlite3")
+    monkeypatch.setattr(dj_store, "_cache_path", lambda: tmp_path / "analysis.sqlite3")
     t = np.arange(12 * 48000) / 48000
     # A 997 Hz sine at -20 dBFS in both channels is -20 LUFS (BS.1770-4).
     tone = 10 ** (-20 / 20) * np.sin(2 * np.pi * 997 * t)
@@ -279,14 +282,14 @@ def test_the_meter_does_not_change_the_decoded_samples(tmp_path):
          "-f", "f32le", "pipe:1"],
         check=True, stdout=subprocess.PIPE,
     ).stdout
-    samples, lufs = dj_engine._decode_measured(tmp_path / "chirp.wav", RATE)
+    samples, lufs = dj_store._decode_measured(tmp_path / "chirp.wav", RATE)
     assert samples.tobytes() == plain
     assert lufs is not None
 
 
 def test_two_measured_windows_add_as_power():
-    assert dj_engine._combined_lufs([(-20.0, 90.0), (-20.0, 120.0)]) == pytest.approx(-20.0)
+    assert dj_store._combined_lufs([(-20.0, 90.0), (-20.0, 120.0)]) == pytest.approx(-20.0)
     # Equal lengths, 10 dB apart: the louder dominates, about 2.6 dB lower.
-    assert dj_engine._combined_lufs([(-10.0, 60.0), (-20.0, 60.0)]) == pytest.approx(-12.6, abs=0.05)
-    assert dj_engine._combined_lufs([(None, 90.0), (-14.0, 120.0)]) == pytest.approx(-14.0)
-    assert dj_engine._combined_lufs([(None, 90.0)]) is None
+    assert dj_store._combined_lufs([(-10.0, 60.0), (-20.0, 60.0)]) == pytest.approx(-12.6, abs=0.05)
+    assert dj_store._combined_lufs([(None, 90.0), (-14.0, 120.0)]) == pytest.approx(-14.0)
+    assert dj_store._combined_lufs([(None, 90.0)]) is None

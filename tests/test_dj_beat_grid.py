@@ -9,7 +9,8 @@ import wave
 import numpy as np
 import pytest
 
-from shared import dj_engine
+from shared.dj import store as dj_store
+from shared.dj import timing as dj_timing
 from shared.dj_engine import analyse_audio, plan_transition
 
 RATE = 22050
@@ -80,7 +81,7 @@ def song(path, bpm, *, seconds=40.0, kick="sharp", offbeat_bass=False, drift=0.0
 
 @pytest.fixture
 def analysed(tmp_path, monkeypatch):
-    monkeypatch.setattr(dj_engine, "_cache_path", lambda: tmp_path / "analysis.sqlite3")
+    monkeypatch.setattr(dj_store, "_cache_path", lambda: tmp_path / "analysis.sqlite3")
 
     def run(name, bpm, **options):
         path = tmp_path / f"{name}.wav"
@@ -153,7 +154,7 @@ def test_a_drifting_performance_gets_a_following_grid_and_less_trust(analysed):
 def test_a_sustained_sound_has_no_tempo(tmp_path, monkeypatch):
     # A drone gives the tracker nothing but rounding noise to follow; it must
     # not come back as a confident grid that the planner would beatmatch.
-    monkeypatch.setattr(dj_engine, "_cache_path", lambda: tmp_path / "analysis.sqlite3")
+    monkeypatch.setattr(dj_store, "_cache_path", lambda: tmp_path / "analysis.sqlite3")
     t = np.arange(int(20 * RATE)) / RATE
     path = tmp_path / "drone.wav"
     with wave.open(str(path), "wb") as output:
@@ -213,7 +214,7 @@ def test_local_period_resolves_tempo_below_the_grid_rounding():
     grid = [round(0.4 + true_period * index, 4) for index in range(300)]
     analysis = {"bpm": 121.4, "beat_grid": grid}
 
-    measured = dj_engine._local_period(analysis, 60.0, 30.0)
+    measured = dj_timing.local_period(analysis, 60.0, 30.0)
 
     # 1e-6 s per beat is 0.1 ms of drift over a 32-bar blend.
     assert measured == pytest.approx(true_period, abs=1e-6)
