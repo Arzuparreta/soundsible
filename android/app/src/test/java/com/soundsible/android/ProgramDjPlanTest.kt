@@ -98,4 +98,16 @@ class ProgramDjPlanTest {
             assertEquals(proposal.rate, plan.rate.toDouble(), 0.000001)
         }
     }
+    @Test fun echoDelayBelongsOnlyToATrustedMatchingOccurrenceWithMixingEnabled() {
+        val echo = confident.copy(technique = ProgramMixCurve.Technique.ECHO_CUT, echoDelaySeconds = 0.5)
+        assertEquals(0.5, ProgramDjPlan.resolve("current", 200000000, echo, true)!!.echoDelaySeconds!!, 0.0)
+        assertNull(ProgramDjPlan.resolve("replacement", 200000000, echo, true)!!.echoDelaySeconds)
+        assertNull(ProgramDjPlan.resolve("current", 200000000, echo.copy(confidence = 0.2), true)!!.echoDelaySeconds)
+        assertNull(ProgramDjPlan.resolve("current", 200000000, echo, false)!!.echoDelaySeconds)
+        for (delay in listOf(null, 0.0, -0.5, Double.NaN, Double.POSITIVE_INFINITY, 2.1)) {
+            val plan = ProgramDjPlan.resolve("current", 200000000, echo.copy(echoDelaySeconds = delay), true)!!
+            assertEquals(ProgramMixCurve.Technique.STRUCTURAL_FADE, plan.technique)
+            assertNull(plan.echoDelaySeconds)
+        }
+    }
 }

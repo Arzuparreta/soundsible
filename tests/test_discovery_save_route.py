@@ -2245,3 +2245,43 @@ def test_v6_analysis_summary_keeps_sixteen_fast_long_starts_within_native_respon
     assert len(json.dumps(compact).encode()) < 16384
     assert summary["bpm"] == 220 and summary["key"] == "C" and summary["analysed"] is True
     assert analysis["beat_grid"] == beats
+
+
+@pytest.mark.parametrize("bpm", [90, 137])
+def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
+    """Known pulse -> AAC -> SQLite -> the common plan for web and Android."""
+    import subprocess
+    from shared import dj_engine
+    from shared.ffmpeg_runtime import ffmpeg_executable
+    from test_dj_beat_grid import song
+
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    refs, paths = {}, {}
+    for key, tempo in (("outgoing", bpm), ("incoming", 173)):
+        wav, aac = tmp_path / f"{key}.wav", tmp_path / f"{key}.m4a"
+        song(wav, tempo, seconds=120)
+        subprocess.run([ffmpeg_executable(), "-v", "error", "-i", str(wav), "-c:a", "aac", str(aac)], check=True)
+        refs[key] = {"id": key, "track_id": key, "title": key, "artist": "Synthetic", "duration": 120}
+        paths[key] = aac
+        measured = dj_engine.analyse_audio(aac, dj_engine.analysis_identity(refs[key]))
+        assert measured["analysed"] is True
+    with (patch.object(_auto_mode, "_get_api", return_value=api),
+          patch.object(_auto_mode, "_dj_source_path", side_effect=lambda _, item: paths[item["id"]]),
+          patch.object(_auto_mode, "_build_music_plan", return_value=({"items": [refs["incoming"]]}, 200))):
+        client = _make_app().test_client()
+        # The music-set route deliberately pins adaptive; the legacy route and
+        # pair refinement still accept the existing cuts_drops profile (P7).
+        route = client.post("/api/discovery/music/dj-plan", json={"session_id": "echo", "seed": refs["outgoing"],
+            "limit": 3, "dj_profile": "cuts_drops"})
+        refined = client.post("/api/discovery/music/dj-transition", json={"from": refs["outgoing"],
+            "to": refs["incoming"], "dj_profile": "cuts_drops"})
+    assert route.status_code == refined.status_code == 200
+    body = refined.get_json()
+    assert body["measured"] is True
+    plan = body["transition"]
+    assert plan == route.get_json()["items"][0]["transition"]
+    assert plan["technique"] == "echo_cut"
+    assert plan["echo_delay_seconds"] == pytest.approx(60 / bpm, abs=.001)
+    print({"bpm": bpm, "echo_delay_seconds": plan["echo_delay_seconds"]})

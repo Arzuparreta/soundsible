@@ -8,9 +8,11 @@ internal object ProgramDjPlan {
     /** `outPeriod`: seconds per beat of the outgoing song at its cue, as measured; 0 when unknown. */
     data class Proposal(val fromKey: String, val technique: ProgramMixCurve.Technique,
         val outCue: Double, val inCue: Double, val overlap: Double, val rate: Double,
-        val confidence: Double, val phaseToleranceMs: Double = 5.0, val outPeriod: Double = 0.0)
+        val confidence: Double, val phaseToleranceMs: Double = 5.0, val outPeriod: Double = 0.0,
+        val echoDelaySeconds: Double? = null)
     data class Plan(val technique: ProgramMixCurve.Technique, val outCueUs: Long,
-        val inCueUs: Long, val overlapUs: Long, val rate: Float, val phaseToleranceUs: Long)
+        val inCueUs: Long, val overlapUs: Long, val rate: Float, val phaseToleranceUs: Long,
+        val echoDelaySeconds: Double? = null)
     fun resolve(fromKey: String, durationUs: Long, proposal: Proposal?, mixing: Boolean): Plan? {
         if (durationUs <= 4000000 || durationUs > 86400000000 || fromKey.isBlank()) return null
         if (!mixing) return Plan(ProgramMixCurve.Technique.DIRECT, durationUs, 0, 0, 1f, 5000)
@@ -28,9 +30,13 @@ internal object ProgramDjPlan {
         val inCue = if (trusted) chained!!.inCue.coerceIn(0.0, 86400.0) else 0.0
         val rate = if (trusted) chained!!.rate.coerceIn(0.94, 1.06).toFloat() else 1f
         val tolerance = chained?.phaseToleranceMs?.takeIf { it.isFinite() && it != 0.0 } ?: 5.0
-        return Plan(if (trusted) chained!!.technique else ProgramMixCurve.Technique.SAFE_FADE,
+        val echoDelay = chained?.echoDelaySeconds?.takeIf { trusted && chained.technique == ProgramMixCurve.Technique.ECHO_CUT && it.isFinite() && it > 0 && it <= 2 }
+        val technique = if (!trusted) ProgramMixCurve.Technique.SAFE_FADE
+            else if (chained!!.technique == ProgramMixCurve.Technique.ECHO_CUT && echoDelay == null) ProgramMixCurve.Technique.STRUCTURAL_FADE
+            else chained.technique
+        return Plan(technique,
             (outCue * 1000000).roundToLong(), (inCue * 1000000).roundToLong(),
-            (overlap * 1000000).roundToLong(), rate, (tolerance.coerceIn(1.0, 12.0) * 1000).roundToLong())
+            (overlap * 1000000).roundToLong(), rate, (tolerance.coerceIn(1.0, 12.0) * 1000).roundToLong(), echoDelay)
     }
 
     /**

@@ -185,7 +185,8 @@ internal class ProgramDjSession(private val context: Context, private val genera
         if (leadMs > 0) {
             val seekMs = streams[standby]?.positionOffsetUs ?: 0
             val prerollMs = ((resolved.inCueUs - seekMs) / resolved.rate / 1000).toLong().coerceIn(0, minOf(4000, leadMs))
-            output.arm(resolved.overlapUs / 1000, resolved.technique, leadMs.coerceAtMost(60000), prerollMs)
+            output.arm(resolved.overlapUs / 1000, resolved.technique, leadMs.coerceAtMost(60000), prerollMs,
+                resolved.echoDelaySeconds?.div(outgoing.playbackParameters.speed.toDouble()))
         } else output.blend(minOf(resolved.overlapUs / 1000, 1500), ProgramMixCurve.Technique.SAFE_FADE)
         armed = true
         changed()

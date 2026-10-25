@@ -317,32 +317,51 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
       param.value = target;
     }
   }
-  function ensureEcho(index: number): void {
+  function ensureEcho(index: number, delaySeconds: number): void {
     const effect = deckEffects?.[index];
     if (!effect || effect.echoWet || !audioContext || !masterGain) return;
+    if (!Number.isFinite(delaySeconds) || delaySeconds <= 0 || delaySeconds > 2) return;
     // Tapped after levelling, not at the raw element: an echo tail returns
     // straight into `masterGain`, so tapping `source` would put an un-levelled
     // copy of the track under a levelled programme.
     const source = effect.level ?? effect.source;
     if (!source || typeof audioContext.createDelay !== 'function') return;
-    const delay = audioContext.createDelay(1);
-    delay.delayTime.value = 0.28;
+    // Both browser engines add a render quantum on the feedback edge. Keep
+    // the loop to one beat by subtracting it here, then delay the initial
+    // feed by that same quantum so the first repeat is also one beat away.
+    const quantum = 128 / audioContext.sampleRate;
+    if (delaySeconds <= quantum) return;
+    const input = audioContext.createDelay(quantum);
+    input.delayTime.value = quantum;
+    const delay = audioContext.createDelay(2);
+    delay.delayTime.value = delaySeconds - quantum;
     const wet = audioContext.createGain();
     wet.gain.value = 0;
     const feedback = audioContext.createGain();
     feedback.gain.value = 0.32;
-    source.connect(delay).connect(wet).connect(masterGain);
+    // The feedback cycle starts silent. Its default channel negotiation can
+    // collapse an upstream delay to mono, cancelling opposite-polarity stereo.
+    for (const node of [input, delay, feedback]) {
+      node.channelCount = 2;
+      node.channelCountMode = 'explicit';
+    }
+    source.connect(input).connect(delay).connect(wet).connect(masterGain);
     delay.connect(feedback).connect(delay);
     effect.delay = delay;
+    effect.echoInput = input;
     effect.echoWet = wet;
     effect.echoFeedback = feedback;
   }
   function disposeEcho(effect: DeckEffects): void {
     if (!effect.echoWet) return;
+    const source = effect.level ?? effect.source;
+    if (effect.echoInput) source?.disconnect(effect.echoInput);
+    effect.echoInput?.disconnect();
     effect.echoFeedback?.disconnect();
     effect.echoWet.disconnect();
     effect.delay?.disconnect();
     effect.delay = undefined;
+    effect.echoInput = undefined;
     effect.echoWet = undefined;
     effect.echoFeedback = undefined;
   }

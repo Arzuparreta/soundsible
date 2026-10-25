@@ -232,6 +232,8 @@ export interface DjTransitionPlan {
   overlap_seconds: number;
   overlap_bars: number;
   playback_rate: number;
+  /** One measured outgoing beat in media seconds; absent when echo is unsafe. */
+  echo_delay_seconds?: number;
   score: number;
   confidence: number;
   fallback: boolean;
