@@ -11,8 +11,10 @@ de estado y en su sección; el resto sigue siendo diagnóstico.
 
 ## Cómo trabajar con este documento
 
-- Revisar **un punto por sesión** (o los que el usuario indique). Al cerrar uno,
-  actualizar su fila en la tabla de estado y su sección, con el commit o PR.
+- Revisar **un punto por sesión** (o los que el usuario indique). Para la
+  continuación de P12, el usuario autoriza bloques amplios y una comparativa
+  casi de extremo a extremo; ver P12-a/P12-b. Al cerrar un punto, actualizar
+  su fila en la tabla de estado y su sección, con el commit o PR.
 - Respetar `AGENTS.md`: rama + PR, etiqueta `impact:*`, esperar CI, no merge sin
   permiso del usuario, no `npm run build`, suite completa de Playwright si se toca
   `ui_web/`.
@@ -71,8 +73,10 @@ no hay síntoma que lo justifique.
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
 | P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
-| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Señales conocidas, AAC → SQLite → HTTP, ocho vectores web/Android y 12 fragmentos Ballroom con anotaciones fijadas | Cerrado (implementación `2ca8ccf2`); detección real limitada, ver [P12](P12.md) |
-| P13 | Frases y secciones sobre una base métrica explícita | Lectura de `_compose` y `_sections_from_features`: bloques de ocho compases dentro de las regiones conocidas | Pendiente; siguiente punto |
+| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en `2ca8ccf2`, PR #394; doce fragmentos reales sin compás y 1 acreditados | Parcial; cierre anterior rectificado. Detección musical pendiente |
+| P12-a | Estimación conjunta y comparativa de detectores abiertos | [Plan de comparación](DETECTOR_COMPARISON.md); sin resultados nuevos todavía | Autorizado; siguiente trabajo, casi de extremo a extremo |
+| P12-b | Integración del método elegido y cierre de P12 | Depende de los resultados de P12-a | Pendiente de decisión del usuario; reutilizar contratos y guardas |
+| P13 | Frases y secciones sobre una base métrica explícita | Agrupación actual en ocho compases; comparar también modelos que produzcan estructura | Preparar fixtures en P12-a; implementar sobre la métrica elegida, después o junto a P12-b |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
@@ -87,12 +91,21 @@ detección general del compás, del 1 ni de las frases musicales. P2 corrige la
 alineación temporal de reproducción; no corrige una interpretación musical
 equivocada aunque los dos reproductores coincidan al milisegundo.
 
-**P12 está cerrado en `2ca8ccf2`; el siguiente punto es P13.** El cierre cubre
-el modelo métrico local y las garantías de ejecución, con límites reales
-explícitos: los doce fragmentos Ballroom no acreditan compás y 1 correctos.
-P13 debe conservar esas abstenciones. P11-a queda resuelto para las medidas
-nuevas y pendiente para entradas sin contrato métrico; P11 no cambió esa
-política durante la extracción.
+**P12 queda parcial; el siguiente trabajo es P12-a, antes de P13.** El cierre
+anterior fue prematuro: `2ca8ccf2` y la PR #394 aportan contratos y guardas,
+pero los doce fragmentos Ballroom no acreditan compás y 1 correctos. El usuario
+acuerda probar estimación conjunta y varias soluciones abiertas mantenibles,
+compararlas y decidir con los resultados. No hay detector elegido ni
+comparativa nueva ejecutada todavía.
+
+**Orden de desarrollo acordado (2026-10-25): banco/adaptadores y comparativa
+P12-a → resultados y decisión del usuario → integración P12-b → P13.** Para
+ahorrar reescrituras, preparar fixtures de P13 durante la comparativa y poder
+entregar su implementación junto a P12-b si comparten una métrica ya elegida,
+con aceptaciones independientes. No cambiar producción por candidato. El plan
+operativo único está en [DETECTOR_COMPARISON](DETECTOR_COMPARISON.md).
+P11-a queda resuelto para medidas nuevas y pendiente para entradas sin
+contrato métrico; no es otro detector que haya que reescribir en la comparativa.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -1240,7 +1253,7 @@ caso y sus variantes en fixtures reproducibles con respuesta conocida.
 y sus contratos sin cambiar resultados musicales ni el formato de caché.
 Mapa, unidades, dependencias, políticas y evidencia reproducible en
 [ARCHITECTURE](ARCHITECTURE.md). P12 se implementó después en `2ca8ccf2`;
-el siguiente punto vigente es P13.
+el siguiente trabajo vigente es P12-a, la comparativa acordada con el usuario.
 
 - `shared/dj_engine.py` queda como fachada pública. `shared/dj/` separa modelos,
   almacenamiento/adquisición, ritmo, medidas por ventana, composición, estructura,
@@ -1289,7 +1302,7 @@ cómo comparar la seguridad de técnicas de reserva frente a `score`. No basta
 con usar el mismo planificador para considerar iguales los objetivos de ruta.
 La doble influencia del tempo (compatibilidad global del par y continuidad de
 BPM) también queda inventariada, sin nuevos pesos ni recalibración. La secuencia
-acordada continúa con P13; P11-a queda visible para esas entradas anteriores.
+acordada continúa con P12-a; P11-a queda visible para esas entradas anteriores.
 
 ### Alcance
 
@@ -1351,8 +1364,10 @@ distribución concreta de archivos se deciden al implementarlo:
 
 ## P12. Compás, subdivisión, identificación del 1 y sus confianzas
 
-**Estado: cerrado, implementación `2ca8ccf2`.** Contrato, método, medidas,
-reproducción y límites por caso en [P12](P12.md) y
+**Estado: parcial; cierre anterior rectificado el 2026-10-25.** La
+implementación `2ca8ccf2` (PR #394) aporta infraestructura métrica y guardas;
+la detección del compás y del 1 en música real sigue pendiente. Método,
+medidas y límites de ese baseline en [P12](P12.md) y
 [p12-results.json](p12-results.json). P2 sigue aparcado; no se cambia el reloj
 ni se introduce corrección continua de velocidad.
 
@@ -1393,6 +1408,42 @@ pases con concurrencia local tuvieron fallos intermitentes de navegación/carga
 que no se repiten con la configuración de CI; no se han relajado expectativas.
 Los checks de GitHub del último head de la PR completan la validación remota;
 la aceptación física de escucha no queda sustituida por estos resultados.
+
+### Continuación acordada: P12-a y P12-b
+
+El usuario autoriza **probar y comparar** estimación conjunta de pulso/compás/1
+y soluciones abiertas mantenibles, no solo Beat This!. **Con los resultados
+sobre la mesa decidirá el usuario** qué integrar. Este acuerdo no elige una
+librería ni autoriza saltar esa decisión por tener tests verdes.
+
+El [plan operativo](DETECTOR_COMPARISON.md) fija el orden para avanzar rápido:
+
+1. Congelar baselines, corpus/particiones y una frontera común de resultado;
+   desarrollar un solo runner y adaptadores en archivos separados. Incluir
+   el prototipo de seguimiento conjunto y las familias Beat This!, BeatNet,
+   madmom/origen y fork moderno, Beat Transformer y All-In-One; Essentia y
+   librosa sirven además como controles de pulso, sin atribuirles un detector
+   de primer tiempo que no proporcionan. Revisar disponibilidad, pesos,
+   licencias, dependencias y mantenimiento; registrar exclusiones con motivo.
+2. Ejecutar todos los admitidos y sus variantes sobre las mismas señales y
+   grabaciones. Separar errores de tempo/unidad, pulso, agrupación/subdivisión
+   y 1; medir cobertura, abstenciones, falsas certezas, CPU/RAM, carga, disco
+   y mantenibilidad. Declarar el solapamiento de entrenamiento por checkpoint:
+   Ballroom ya visto no es un test independiente de todos esos modelos.
+3. Llegar casi de extremo a extremo con el mismo adaptador hacia P12:
+   AAC/WAV → backend → normalización → SQLite experimental → planificador,
+   rutas y HTTP; contrastar los planes y ejecutores existentes. Conservar
+   producción y dependencias de distribución estables durante la comparativa.
+   No crear un detector, caché o interfaz de cliente por alternativa.
+4. Presentar matriz por método/caso, resultados, costes y compromisos al
+   usuario y esperar su decisión. P12-a no termina solo con un inventario ni
+   con cifras copiadas de artículos. Tampoco selecciona un ganador con pesos
+   manuales o convierte abstenerse siempre en detección resuelta.
+5. Tras la elección, integrar una sola vía en P12-b y desarrollar P13 sobre
+   ella. Preparar antes las fixtures de frases/secciones y registrar la salida
+   estructural de los modelos que la tengan; no reescribir todavía estructura
+   sobre una métrica que podría descartarse. Se permiten entregas amplias que
+   cierren P12-b y P13 juntas si evitan pisar código y demuestran cada criterio.
 
 El alcance y los criterios originales se conservan a continuación.
 
@@ -1460,7 +1511,10 @@ El alcance y los criterios originales se conservan a continuación.
 
 ## P13. Frases y secciones sobre una base métrica explícita
 
-**Estado: pendiente; depende de P12.** P8 cerró el uso de las secciones al
+**Estado: pendiente; depende de la métrica elegida en P12-a e integrada en
+P12-b.** Preparar fixtures durante la comparativa; implementar después de la
+decisión, pudiendo agrupar la entrega con P12-b para evitar reescrituras,
+con evidencia propia de frases y secciones. P8 cerró el uso de las secciones al
 planificar, no una detección general de forma musical. La agrupación actual
 en ocho compases no demuestra dónde empieza una frase ni dónde cambia una
 sección; ambas pueden parecer coherentes porque comparten la misma suposición.

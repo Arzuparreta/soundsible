@@ -1,10 +1,14 @@
-# Responsabilidades del DJ tras P12
+# Responsabilidades del DJ tras la infraestructura de P12
 
 P11 extrajo `ad59b838` sin cambiar medidas, órdenes ni planes. El punto de
 entrada público sigue siendo `shared/dj_engine.py`: reexporta las funciones,
 sin copias del estado de caché o de los trabajos. P12 añade medidas métricas
 locales y validación de ejecución; [P12](P12.md) documenta su contrato y sus
-límites reales. P13 sigue pendiente para frases y secciones.
+límites reales. **P12 sigue parcial**: primero se ejecuta la
+[comparativa P12-a](DETECTOR_COMPARISON.md), el usuario decide y P12-b integra
+una sola vía. Preparar fixtures de P13 en la comparativa; su implementación
+consume la métrica elegida. Los adaptadores experimentales permanecen fuera
+de estos propietarios de producción para evitar reescrituras por candidato.
 
 ## Propietarios y dependencias
 
@@ -121,7 +125,7 @@ todos los puentes de petición tienen que superar la misma prueba de ejecución 
 técnicas de reserva sin presentar `score` como seguridad. Afecta a peticiones
 legacy, colocación y reparación. Tiene caso permanente en
 `test_dj_boundaries.py`; no se cambia de política dentro de P11. El siguiente
-punto de la secuencia acordada es P13; esta discrepancia legacy sigue visible.
+trabajo de la secuencia acordada es P12-a; esta discrepancia legacy sigue visible.
 
 ## Evidencia de extracción
 
