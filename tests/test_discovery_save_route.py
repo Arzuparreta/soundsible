@@ -2406,5 +2406,18 @@ def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, 
             with patch.object(_auto_mode, '_build_music_plan', return_value=({'items': [refs['incoming']]}, 200)):
                 legacy = client.post('/api/discovery/music/dj-plan', json={**common, 'limit': 1})
             assert legacy.get_json()['items'][0]['transition'] == expected
+            # Requests enter a separate legacy orchestration path, retaining
+            # the same AAC/cache evidence and common metric planner.
+            for request_row in (
+                {'id': 'track-request', 'kind': 'track', 'track': refs['incoming']},
+                {'id': 'artist-request', 'kind': 'artist', 'artist': {'name': 'Metric fixture'}},
+            ):
+                with (patch.object(_auto_mode, '_build_music_plan', return_value=({'items': []}, 200)),
+                      patch.object(_auto_mode, '_planner_artist_candidates', return_value=[dict(refs['incoming'])])):
+                    requested = client.post('/api/discovery/music/dj-plan', json={
+                        **common, 'requests': [request_row], 'limit': 1})
+                assert requested.status_code == 200
+                assert requested.get_json()['requests'][0]['status'] == 'planned'
+                assert requested.get_json()['items'][0]['transition'] == expected
             for key in refs:
                 assert dj_engine.analyse_audio(paths[key], dj_engine.analysis_identity(refs[key]))['version'] == ANALYSER_VERSION
