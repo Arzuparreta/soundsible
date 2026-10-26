@@ -84,13 +84,15 @@ internal object ProgramDjPlan {
         if (!(step > 0)) return fallback to false
         val outPeriod = sync.optDouble("out_period", Double.NaN)
         val inPeriod = sync.optDouble("in_period", Double.NaN)
-        val left = maxOf(earliest, out.optDouble("start", Double.NaN))
-        val right = minOf(latest, out.optDouble("end", Double.NaN) - overlap)
+        // The server admits the overlap within its phase tolerance of the
+        // measured coverage; a stricter edge here moved a fitting cue.
+        val tolerance = minOf(0.005, sync.optDouble("phase_tolerance_ms", 5.0) / 1000)
+        val left = maxOf(earliest, out.optDouble("start", Double.NaN) - tolerance)
+        val right = minOf(latest, out.optDouble("end", Double.NaN) - overlap + tolerance)
         val inStart = incoming.optDouble("start", Double.NaN)
         val inEnd = incoming.optDouble("end", Double.NaN)
-        if (!listOf(left, right, inStart, inEnd).all(Double::isFinite) || left > right) return fallback to false
+        if (!listOf(left, right, inStart, inEnd, tolerance).all(Double::isFinite) || left > right) return fallback to false
         val cue = placeOutCue(proposed, left, right, step)
-        val tolerance = minOf(0.005, sync.optDouble("phase_tolerance_ms", 5.0) / 1000)
         val pulseRatio = inPeriod * n / (outPeriod * m)
         if (!listOf(proposal.rate, pulseRatio, tolerance).all(Double::isFinite) || proposal.rate !in 0.94..1.06 ||
             outPeriod <= 0 || inPeriod <= 0 || tolerance < 0 ||

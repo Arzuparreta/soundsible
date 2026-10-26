@@ -387,3 +387,32 @@ def test_no_common_cycle_within_the_speed_limit_is_not_beatmatched():
     assert plan['technique'] not in BEATMATCH_TECHNIQUES
     assert plan['sync']['alignment'] == 'none' and plan['sync']['cycle_beats'] is None
     assert plan['score'] == 0 and plan['playback_rate'] == 1
+
+
+def test_relocation_keeps_whole_bars_when_a_later_block_has_no_bar():
+    # User's session, 2026-10-26: a block without a regular model bar inside
+    # the overlap shrank the relocation step to one beat; the player moved a
+    # measured one to a beat 4 and the incoming one landed on it.
+    from shared.dj_engine import plan_transition
+    outgoing = metric_analysis(confirmed=False)
+    region = outgoing['metric_regions'][0]
+    bars = region['downbeats']
+    outgoing['metric_regions'] = [
+        {**region, 'end': 210., 'downbeats': [t for t in bars if t < 210]},
+        {**region, 'start': 210., 'end': 220., 'beats_per_bar': None, 'bar_seconds': None, 'downbeats': []},
+        {**region, 'start': 220., 'downbeats': [t for t in bars if t >= 220]},
+    ]
+    plan = plan_transition(outgoing, metric_analysis(confirmed=False))
+    sync = plan['sync']
+    assert plan['out_cue'] == 206.25 and sync['alignment'] == 'beats'
+    assert sync['relocation_seconds'] == pytest.approx(2.0)  # Four beats, not one.
+
+
+def test_overlap_within_the_phase_tolerance_of_coverage_is_admitted():
+    from shared.dj_engine import plan_transition
+    from shared.dj.timing import rate_fits
+    outgoing = metric_analysis(confirmed=False)
+    outgoing['metric_regions'][0]['end'] = 206.25 + 32 - 0.0009  # As measured: 0.9 ms short.
+    plan = plan_transition(outgoing, metric_analysis(confirmed=False))
+    assert plan['out_cue'] == 206.25 and plan['overlap_seconds'] == 32
+    assert plan['sync']['alignment'] == 'beats' and rate_fits(plan)

@@ -84,11 +84,13 @@ def _rhythm(samples, sample_rate: int, events) -> RhythmWindow | None:
     weights = _attack_weights(onset, beats, sample_rate, centre)
     duration = samples.size / sample_rate
 
-    # The model's beats are consecutive. Their least-squares slope averages
-    # the 20 ms frame rounding that a median interval would keep (24/25
-    # frames at 122 BPM is 2 % either side, the width of the phase search).
-    index = np.arange(beats.size)
-    period, phase, share = _phase_fit(times, weights, float(np.polyfit(index, beats, 1)[0]))
+    # The DBN can follow half time through a quiet passage, leaving beats out;
+    # number them across those gaps first. A least-squares slope over the
+    # numbers then averages the 20 ms frame rounding that a median interval
+    # keeps (24/25 frames at 122 BPM is 2 % either side, the width of the
+    # phase search).
+    numbers = _beat_numbers(beats, float(np.median(np.diff(beats))))
+    period, phase, share = _phase_fit(times, weights, float(np.polyfit(numbers, beats, 1)[0]))
     numbers = _beat_numbers(times, period)
     fitted, slopes = _local_lines(numbers, times, weights)
     # A programmed song keeps its locally fitted beats within a few ms of one

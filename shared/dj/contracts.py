@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Literal, NotRequired, TypeAlias, TypedDict
 
-ANALYSER_VERSION = 10
+ANALYSER_VERSION = 11
 
 # JSON numbers retain their wire representation. Aliases name units rather
 # than wrapping samples or changing the versioned SQLite payload.

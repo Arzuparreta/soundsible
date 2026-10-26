@@ -1535,6 +1535,24 @@ medido y corrige fase y periodo con los ataques a ±20 ms (una trama del
 modelo), no a ±35 ms: en `gtzan_rock_00001` la ventana de P1 saltaba a otro
 instrumento. La sesión ONNX desactiva la telemetría 1DS de ONNX Runtime.
 
+Prueba en la estación del usuario (2026-10-26, techno/house). Las
+transiciones suenan mucho mejor, pero en una mezcla `beats` el 2 de la
+entrante caía en el 1 de la saliente (medido por el usuario a mano y en las
+trazas: +0,47 s, un pulso a 125 BPM, constante toda la mezcla). Dos causas,
+corregidas con tests de regresión:
+
+- El navegador no aplicaba al borde de la cobertura los 5 ms que admite el
+  servidor; un solapamiento 0,9 ms más largo que lo medido hizo mover el cue.
+- El paso de recolocación tomaba el compás del tramo entero; un bloque sin
+  compás regular dentro del solapamiento lo reducía a un pulso. Ahora es el
+  compás de la región del cue.
+
+En la misma prueba: el DBN se salta pulsos en pasajes a medio tiempo, y la
+pendiente inicial suponía pulsos consecutivos. Canciones estables quedaban
+como «deriva» (confianza 0,34-0,49) y sin beatmatch. Se numeran los pulsos
+a través de los saltos antes de ajustar (confianza 1,0 en esas canciones) y
+`ANALYSER_VERSION` pasa a 11.
+
 Una sola vía, con las decisiones de arriba. Una entrega coherente (servidor,
 persistencia, endpoints, web, Android y empaquetado), apoyada en los contratos
 y guardas de #394. Evidencia de partida en

@@ -175,6 +175,9 @@ def local_pulse(analysis: AnalysisInput, cue: float, span: float = 0.0):
         return {
             'start': run[0]['start'], 'end': run[-1]['end'],
             'pulse_unit': region['pulse_unit'], 'beats_per_bar': size,
+            # The bar the cue itself sits on: its one, and whole bars from it
+            # within this region, are where a relocated cue may land.
+            'cue_beats_per_bar': region.get('beats_per_bar'),
             'subdivision': region['subdivision'],
             **{key: min(row[key] for row in run) for key in (
                 'pulse_confidence', 'metre_confidence', 'downbeat_confidence', 'subdivision_confidence')},
@@ -227,7 +230,10 @@ def metric_sync(outgoing: AnalysisInput, incoming: AnalysisInput, out_cue: float
     sides = ((outgoing, out_cue, span, out_period), (incoming, in_cue, span * rate, in_period))
 
     def step(region):
-        beats = region['beats_per_bar'] or 0
+        # Whole bars of the region the cue sits in, also whole cycles. A bar
+        # unknown elsewhere in the overlap does not shrink the step to a beat:
+        # that moved a measured one off its one (P12-b, user's session).
+        beats = region.get('cue_beats_per_bar', region['beats_per_bar']) or 0
         return round(out_period * (math.lcm(beats, cycle[0]) if beats else cycle[0]), 6)
 
     out, inc = local_metre(outgoing, out_cue, span), local_metre(incoming, in_cue, span * rate)

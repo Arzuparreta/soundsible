@@ -62,13 +62,15 @@ export function metricCuePlacement(proposed: number, earliest: number, latest: n
   const step = Number(sync.relocation_seconds);
   if (!out || !incoming || !plan || !Array.isArray(cycle) || cycle.length !== 2
     || !CYCLES.has(`${cycle[0]}:${cycle[1]}`) || !(step > 0)) return { cue: fallback, aligned: false };
-  const left = Math.max(earliest, out.start);
-  const right = Math.min(latest, out.end - overlap);
-  if (![left, right, incoming.start, incoming.end].every(Number.isFinite) || left > right) {
+  // The server admits the overlap within its phase tolerance of the measured
+  // coverage (`rate_fits`); a stricter edge here moved a fitting cue.
+  const tolerance = Math.min(.005, sync.phase_tolerance_ms / 1000);
+  const left = Math.max(earliest, out.start - tolerance);
+  const right = Math.min(latest, out.end - overlap + tolerance);
+  if (![left, right, incoming.start, incoming.end, tolerance].every(Number.isFinite) || left > right) {
     return { cue: fallback, aligned: false };
   }
   const cue = placeOutCue(proposed, left, right, step);
-  const tolerance = Math.min(.005, sync.phase_tolerance_ms / 1000);
   const pulseRatio = sync.in_period * cycle[1] / (sync.out_period * cycle[0]);
   const rate = plan.playback_rate;
   if (![rate, pulseRatio, tolerance].every(Number.isFinite) || rate < .94 || rate > 1.06

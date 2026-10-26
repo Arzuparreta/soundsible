@@ -99,3 +99,21 @@ describe('pulse alignment at execution', () => {
     }
   });
 });
+
+describe('coverage edge', () => {
+  it('keeps a cue whose overlap ends within the phase tolerance of the measured coverage', async () => {
+    // User's session, 2026-10-26: 0.9 ms past the coverage moved the cue one
+    // beat and the incoming one landed on the outgoing beat 4.
+    const { readFileSync } = await import('node:fs');
+    const { metricCuePlacement } = await import('./djCue');
+    const cases = JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_metric_plans.json', import.meta.url), 'utf8'));
+    for (const name of ['unconfirmed-four', 'three-quarter']) {
+      const original = cases.find((row: { name: string }) => row.name === name).transition;
+      const end = original.out_cue + original.overlap_seconds - 0.0009;
+      const plan = { ...original, sync: { ...original.sync, out_metre: { ...original.sync.out_metre, end } } };
+      expect(metricCuePlacement(original.out_cue, 90, 215, plan, plan.overlap_seconds), name).toEqual({ cue: original.out_cue, aligned: true });
+      const beyond = { ...original, sync: { ...original.sync, out_metre: { ...original.sync.out_metre, end: end - 0.01 } } };
+      expect(metricCuePlacement(original.out_cue, 90, 215, beyond, beyond.overlap_seconds).cue, name).not.toBe(original.out_cue);
+    }
+  });
+});

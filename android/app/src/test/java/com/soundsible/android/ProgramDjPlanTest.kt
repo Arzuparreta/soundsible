@@ -168,6 +168,22 @@ class ProgramDjPlanTest {
             }
         }
     }
+    @Test fun aCueWhoseOverlapEndsWithinThePhaseToleranceOfCoverageStays() {
+        // User's session, 2026-10-26: 0.9 ms past the coverage moved the cue one beat.
+        for (name in listOf("unconfirmed-four", "three-quarter")) {
+            val transition = metricVector(name)
+            val end = transition.getDouble("out_cue") + transition.getDouble("overlap_seconds") - 0.0009
+            val sync = org.json.JSONObject(transition.getJSONObject("sync").toString())
+            sync.put("out_metre", org.json.JSONObject(sync.getJSONObject("out_metre").toString()).put("end", end))
+            val proposal = metricProposal(transition, sync)
+            val placement = ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, 215.0, proposal, proposal.overlap)
+            assertEquals(name, proposal.outCue, placement.first, 0.0)
+            assertTrue(name, placement.second)
+            sync.put("out_metre", org.json.JSONObject(sync.getJSONObject("out_metre").toString()).put("end", end - 0.01))
+            val beyond = metricProposal(transition, sync)
+            assertNotEquals(name, beyond.outCue, ProgramDjPlan.metricCuePlacement(beyond.outCue, 90.0, 215.0, beyond, beyond.overlap).first, 0.0)
+        }
+    }
     @Test fun echoDelayBelongsOnlyToATrustedMatchingOccurrenceWithMixingEnabled() {
         val echo = confident.copy(technique = ProgramMixCurve.Technique.ECHO_CUT, echoDelaySeconds = 0.5)
         assertEquals(0.5, ProgramDjPlan.resolve("current", 200000000, echo, true)!!.echoDelaySeconds!!, 0.0)
