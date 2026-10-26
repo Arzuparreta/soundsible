@@ -165,6 +165,17 @@ def _analysis_pool() -> ThreadPoolExecutor:
     return _pool
 
 
+def requests_waiting() -> bool:
+    """Whether songs a DJ session asked for are queued or being measured.
+
+    The library sweep yields to them: with the beat model a song takes
+    seconds of CPU, and after an analyser update the session would otherwise
+    play unmeasured songs while the sweep works through the library.
+    """
+    with _pending_lock:
+        return bool(_pending)
+
+
 def request_analysis(path: str | Path, identity: str, *, duration_hint: float = 0.0) -> None:
     """Measure this source in the background.
 
