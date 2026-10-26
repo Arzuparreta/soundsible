@@ -74,8 +74,8 @@ no hay síntoma que lo justifique.
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
 | P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
 | P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector de P12-b medido de extremo a extremo sobre el corpus de P12-a (`integrated-p12b.json`) | Cerrado con P12-b; límites abajo |
-| P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado: mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
-| P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR de P12-a + P12-b) |
+| P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado (PR #395): mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
+| P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR #395, junto con P12-a) |
 | P13 | Frases y secciones sobre una base métrica explícita | Ocho compases contados desde los unos del modelo; fixtures `structure_*` en el corpus de P12-a | **Siguiente trabajo** |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
