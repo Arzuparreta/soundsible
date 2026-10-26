@@ -164,9 +164,13 @@ def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
 def plan_transition(outgoing: AnalysisInput, incoming: AnalysisInput) -> TransitionPlan:
     """Choose effects from the pair's measured pulse and available sections.
 
-    Scores retain their route-ordering meaning. Technique choice also checks
-    the actual local rate: a good harmonic score cannot make an impossible
-    beatmatch safe. No client style or random effect selection is involved.
+    Execution alone decides whether the pair is beatmatched: both pulses
+    measured and the actual local rate within the players' range and phase
+    budget. The score (tempo, key, confidence) orders routes and chooses
+    between blends; a distant key or tempo inside the range never forces a
+    fallback, and a good score cannot make an impossible beatmatch safe
+    (decision of the user, P12-b). No client style or random effect selection
+    is involved.
     """
     out_bpm = float(outgoing.get("bpm") or 0)
     in_bpm = float(incoming.get("bpm") or 0)
@@ -182,7 +186,7 @@ def plan_transition(outgoing: AnalysisInput, incoming: AnalysisInput) -> Transit
     steady = all(float(analysis.get("bpm") or 0) > 0
                  and float(analysis.get("tempo_confidence") or 0) > 0.6
                  for analysis in (outgoing, incoming))
-    if steady and score >= 0.55:
+    if steady:
         technique = "bass_swap" if score >= 0.72 else "filter_blend"
         plan = _transition_plan(outgoing, incoming, technique, 16, score, confidence)
         if _rate_fits(plan):

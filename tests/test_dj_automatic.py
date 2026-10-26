@@ -20,7 +20,7 @@ def long_pair():
 
 @pytest.mark.parametrize('incoming,technique', [
     (measured(), 'bass_swap'), (measured(bpm=126), 'filter_blend'),
-    (measured(bpm=130), 'echo_cut'),
+    (measured(bpm=132), 'echo_cut'),
     ({**measured(), 'tempo_confidence': .6}, 'structural_fade'),
     (_fallback(240), 'safe_fade'),
 ])
@@ -71,6 +71,17 @@ def test_long_blend_needs_measured_compatible_runway_on_both_sides(change):
         out.update(measured(duration=90))
     plan = plan_transition(out, inc)
     assert plan['technique'] != 'long_blend'
+
+
+def test_distant_key_inside_the_players_range_still_beatmatches():
+    # P12-b, decision of the user: key and tempo rank the pair; only execution
+    # decides a fallback. A tritone 6.25 % apart scores below every old gate.
+    out, inc = measured(), {**measured(bpm=128), 'key': 'F#'}
+    plan = plan_transition(out, inc)
+    assert plan['score'] < .55
+    assert plan['technique'] == 'filter_blend'
+    assert plan['playback_rate'] == pytest.approx(.9375, abs=1e-6)
+    assert plan['fallback'] is False
 
 
 def test_local_grid_overrules_a_matching_global_bpm_for_technique_choice():

@@ -67,6 +67,9 @@ engine can perform:
 The server chooses the technique automatically for each pair, with the same
 plan for web and Android. A beatmatched blend must fit the local tempo within
 the players' speed limit and keep a steady shared pulse throughout the overlap.
+Whether a pair can be beatmatched is all that decides it: any two keys can be
+mixed. Key and tempo closeness choose which song comes next and which blend
+is used, never an echo cut or fade instead of a blend.
 The incoming song may be stretched up to 8 % (a turntable's pitch range) and
 returns to its own tempo after the blend. Two songs share a pulse when whole
 numbers of their beats last the same: one

@@ -83,9 +83,11 @@ def test_onnx_runtime_telemetry_never_starts(tmp_path):
             's = weights.session()\n'
             "s.run(None, {'spect': np.zeros((1, 300, 128), np.float32)})\n")
     env = {key: value for key, value in os.environ.items() if key != 'ORT_DISABLE_TELEMETRY'}
+    # Another HOME hides user site-packages (pip install --user): the child
+    # imports from the same paths as this process.
     env.update(HOME=str(tmp_path), XDG_CACHE_HOME=str(tmp_path / 'xdg'),
                SOUNDSIBLE_BEAT_MODEL=str(weights.model_path(download=False)),
-               PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+               PYTHONPATH=os.pathsep.join([str(Path(__file__).resolve().parents[1]), *filter(None, sys.path)]))
     subprocess.run([sys.executable, '-c', code], env=env, check=True, cwd=tmp_path)
     assert not (tmp_path / '.cache' / 'Microsoft').exists()
     assert not (tmp_path / 'xdg' / 'Microsoft').exists()

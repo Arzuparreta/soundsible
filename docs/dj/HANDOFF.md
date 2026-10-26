@@ -118,6 +118,17 @@ Resultados y límites en [detector_comparison/RESULTS](detector_comparison/RESUL
   cambio de tempo entre las dos canciones durante la mezcla (cada una ≤ 8 %,
   hasta ~16 %, p. ej. 120 ↔ 140) y volver gradualmente; requiere variar la
   velocidad de ambas manteniendo la fase en web y Android.
+- Puerta del beatmatch: **solo la ejecución decide si hay fallback**. Si los
+  dos pulsos son estables y la velocidad local cabe en el 8 % con ≤ 5 ms de
+  desfase, hay beatmatch. Se quita la puerta `score ≥ 0,55`: con ella la
+  tonalidad provocaba fallbacks (120 La menor ↔ 128 Sol menor sacaba 0,495 y
+  sonaba en `echo_cut`) y la parte de tempo dejaba un límite oculto cerca del
+  7 %. Todos los intervalos entre tonalidades se consideran mezclables; la
+  clasificación Camelot se conserva para ordenar la ruta y elegir entre
+  bass_swap (≥ 0,72), filter_blend y long_blend (armonía ≥ 6/7). Medido en
+  6000 parejas de la biblioteca del usuario: entre un 6 y un 8 % de diferencia
+  de tempo, el beatmatch pasa del 2 % al 75 %; entre un 4 y un 6 %, del 26 % al
+  78 %.
 - Ciclo común: lecturas binarias y ternarias son equivalentes; dos canciones
   se mezclan con beatmatch en cualquier relación 2ᵃ·3ᵇ de pulsos que los
   reproductores puedan mantener (incluida 3:2, p. ej. 116 ↔ 174), alineando el
@@ -303,9 +314,10 @@ score      = score_base si hay alineación ejecutable (`bars` o `beats`); 0 si n
              (las entradas antiguas sin contrato métrico conservan score_base)
 ```
 
-La puntuación conserva la escala de `adaptive` anterior para ordenar rutas.
-La técnica comprueba además el periodo local, la velocidad y la métrica
-realmente ejecutadas. Las tres técnicas de beatmatch requieren alineación
+La puntuación conserva la escala de `adaptive` anterior para ordenar rutas y
+elegir entre bass_swap y filter_blend; no decide un fallback (P12-b). La
+técnica comprueba el periodo local, la velocidad y la métrica realmente
+ejecutadas. Las tres técnicas de beatmatch requieren alineación
 ejecutable durante todo el solapamiento, no solo BPM compatibles (P12-b):
 `bars` con unos confirmados en ambas canciones y compases ejecutados iguales;
 `beats` con pulso estable compartido (región con `pulse_confidence > 0,6`,
@@ -328,7 +340,7 @@ que sale que son también ciclos enteros, para no separar los dos unos.
 | --- | --- | --- |
 | Pulso fiable, score ≥ 0,72 y ajuste local ejecutable | bass_swap | 16 |
 | Lo anterior, tonalidades iguales/vecinas/relativas y apertura/cola tranquilas medidas suficientemente largas, sin huecos ni deriva | long_blend | 32 |
-| Pulso fiable, score ≥ 0,55 y ajuste local ejecutable | filter_blend | 16 |
+| Pulso fiable y ajuste local ejecutable, score < 0,72 | filter_blend | 16 |
 | No hay mezcla ejecutable, confianza ≥ 0,42, pulso fiable en ambas canciones y golpe saliente medido válido | echo_cut | 8 |
 | Confianza ≥ 0,42 sin los requisitos anteriores | structural_fade | 8 |
 | Resto | safe_fade | 8 |
