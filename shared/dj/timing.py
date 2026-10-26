@@ -16,7 +16,9 @@ import math
 
 from .contracts import AnalysisInput, PlanInput, PlaybackRatio, Seconds
 
-MAX_STRETCH = 0.06
+# The pitch range of a turntable or CDJ (decision of the user, P12-b: 120 and
+# 128 BPM were heard as mixable and are 6.7 % apart).
+MAX_STRETCH = 0.08
 PHASE_TOLERANCE_SECONDS = 0.005
 BEATMATCH_TECHNIQUES = frozenset({'bass_swap', 'filter_blend', 'long_blend'})
 

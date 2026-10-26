@@ -121,10 +121,13 @@ continuidad v6 y semántica/relevancia legacy es deliberada y ya figuraba en P3.
 
 Contradicción confirmada que esta extracción conserva: `route_to_request`
 declara mejorar la seguridad pero compara solamente `score`. En la fixture
-medida 100 → 107 → 114 BPM devuelve un puente con dos `echo_cut`, puntuaciones
-0,602/0,625 y velocidad 1; ambos desajustes superan el límite de 6 %. Para el
-mismo conjunto, `add_measured_bridges` conserva el destino directo, porque
-ningún tramo hace beatmatch. Una puntuación armónica alta tampoco asegura una
+medida 100 → 109 → 119 BPM, con tonalidades Do → La → Fa# mayor, devuelve un
+puente con dos `echo_cut`, puntuaciones 0,381/0,381 frente a 0,244 del paso
+directo, y velocidad 1; ambos desajustes superan el límite de 8 % y el puente
+gana solo por tonalidad. Hasta P12-b, con el límite de 6 %, la fixture era
+100 → 107 → 114 BPM (0,602/0,625). Para el mismo conjunto,
+`add_measured_bridges` conserva el destino directo, porque ningún tramo hace
+beatmatch. Una puntuación armónica alta tampoco asegura una
 velocidad local ejecutable aunque los BPM globales coincidan.
 
 P12 exige ambos tramos ejecutables para las medidas nuevas y comparte su

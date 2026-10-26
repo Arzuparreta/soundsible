@@ -459,7 +459,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       const to = ports.decks()[toIndex];
       ports.pendingDetach.delete(to);
       const manual = options.manual === true;
-      const rate = Math.min(1.06, Math.max(0.94, Number(plan.playback_rate) || 1));
+      const rate = Math.min(1.08, Math.max(0.92, Number(plan.playback_rate) || 1));  // shared/dj/timing.py MAX_STRETCH.
       const overlap = manual ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4)) : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6);
       const inCue = Math.max(0, Number(plan.in_cue) || 0);
       const preroll = manual ? 0 : Math.min(MAX_PREROLL, inCue / rate);

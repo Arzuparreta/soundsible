@@ -110,7 +110,8 @@ def test_library_inventory_spans_accounts_and_skips_podcasts_missing_audio_and_d
 
 
 def test_bridge_legs_must_fit_the_players_rate_limit():
-    seed, target, spare = measured(100), measured(114), measured(107)
+    # Each leg is more than 8 % apart, beyond the players' range.
+    seed, target, spare = measured(100), measured(119), measured(109)
     assert plan_transition(seed, spare)["technique"] == "structural_fade"
     assert plan_transition(seed, spare)["playback_rate"] == 1
     route = order_continuous_route(seed, [({"id": "target"}, target)])
@@ -118,11 +119,11 @@ def test_bridge_legs_must_fit_the_players_rate_limit():
 
 
 def test_bridge_can_repair_a_pair_beyond_the_players_rate_limit():
-    seed, target = measured(100), measured(107)
+    seed, target = measured(100), measured(109)
     route = order_continuous_route(seed, [({"id": "target"}, target)])
     assert route[0]["transition"]["technique"] == "structural_fade"
     assert route[0]["transition"]["playback_rate"] == 1
-    result = add_measured_bridges(seed, route, [({"id": "bridge"}, measured(103.5))])
+    result = add_measured_bridges(seed, route, [({"id": "bridge"}, measured(104.5))])
     assert [row["id"] for row in result] == ["bridge", "target"]
     assert all(row["transition"]["playback_rate"] != 1 for row in result)
 

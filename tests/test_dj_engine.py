@@ -47,7 +47,7 @@ def test_transition_uses_phrase_runway_instead_of_running_past_the_file():
     )
     assert transition["technique"] == "bass_swap"
     assert transition["out_cue"] + transition["overlap_seconds"] <= 180
-    assert 0.94 <= transition["playback_rate"] <= 1.06
+    assert 0.92 <= transition["playback_rate"] <= 1.08
 
 
 def test_local_grid_rate_moves_the_incoming_tempo_in_the_right_direction():

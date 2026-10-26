@@ -34,7 +34,8 @@ internal object ProgramDjPlan {
         val metricFallback = trusted && chained!!.technique in setOf(ProgramMixCurve.Technique.BASS_SWAP,
             ProgramMixCurve.Technique.FILTER_BLEND, ProgramMixCurve.Technique.LONG_BLEND) && !placement.second
         val inCue = if (trusted) chained!!.inCue.coerceIn(0.0, 86400.0) else 0.0
-        val rate = if (trusted && !metricFallback) chained!!.rate.coerceIn(0.94, 1.06).toFloat() else 1f
+        // The players' pitch range, shared/dj/timing.py MAX_STRETCH.
+        val rate = if (trusted && !metricFallback) chained!!.rate.coerceIn(0.92, 1.08).toFloat() else 1f
         val tolerance = chained?.phaseToleranceMs?.takeIf { it.isFinite() && it != 0.0 } ?: 5.0
         val echoDelay = chained?.echoDelaySeconds?.takeIf { trusted && chained.technique == ProgramMixCurve.Technique.ECHO_CUT && it.isFinite() && it > 0 && it <= 2 }
         val technique = if (!trusted) ProgramMixCurve.Technique.SAFE_FADE
@@ -94,7 +95,7 @@ internal object ProgramDjPlan {
         if (!listOf(left, right, inStart, inEnd, tolerance).all(Double::isFinite) || left > right) return fallback to false
         val cue = placeOutCue(proposed, left, right, step)
         val pulseRatio = inPeriod * n / (outPeriod * m)
-        if (!listOf(proposal.rate, pulseRatio, tolerance).all(Double::isFinite) || proposal.rate !in 0.94..1.06 ||
+        if (!listOf(proposal.rate, pulseRatio, tolerance).all(Double::isFinite) || proposal.rate !in 0.92..1.08 ||
             outPeriod <= 0 || inPeriod <= 0 || tolerance < 0 ||
             abs(proposal.rate / pulseRatio - 1) * overlap > tolerance) return fallback to false
         if (alignment == "bars" || !sync.isNull("out_bar_seconds") || !sync.isNull("in_bar_seconds")) {

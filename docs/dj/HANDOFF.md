@@ -112,6 +112,12 @@ Resultados y límites en [detector_comparison/RESULTS](detector_comparison/RESUL
   que hoy exige compases para cualquier beatmatch.
 - Versión: **no publicar ninguna versión hasta integrar P12-b**, en lugar de
   revertir #394.
+- Velocidad: el límite de estiramiento de la canción que entra pasa del 6 % al
+  8 %, el rango de pitch de un plato o CDJ (120 ↔ 128 BPM, 6,7 %, se oía
+  mezclable y caía en `echo_cut`). Pendiente como punto propio: repartir el
+  cambio de tempo entre las dos canciones durante la mezcla (cada una ≤ 8 %,
+  hasta ~16 %, p. ej. 120 ↔ 140) y volver gradualmente; requiere variar la
+  velocidad de ambas manteniendo la fase en web y Android.
 - Ciclo común: lecturas binarias y ternarias son equivalentes; dos canciones
   se mezclan con beatmatch en cualquier relación 2ᵃ·3ᵇ de pulsos que los
   reproductores puedan mantener (incluida 3:2, p. ej. 116 ↔ 174), alineando el
@@ -312,7 +318,7 @@ binario o en ternario es una elección de nivel: un 12/8 es un 4/4 con pulsos
 ternarios y un 6/8 se lee como dos pulsos o como tres. La mezcla no depende
 de esa lectura: busca la duración más corta que sea un número entero de
 pulsos de ambas canciones (`cycle_beats` = [m, n], relaciones 2ᵃ·3ᵇ dentro del
-6 % de velocidad) y la mantiene empezando en los dos unos. Ejemplos: 3 contra 4
+8 % de velocidad) y la mantiene empezando en los dos unos. Ejemplos: 3 contra 4
 pulsos al mismo pulso (unos juntos al empezar y cada 12 pulsos), 120 ↔ 180 BPM
 (2 pulsos = 3), 90 ↔ 120 (3 = 4), 116 ↔ 176 a velocidad 0,9886, 6/8 a 80 ↔ 4/4
 a 120. El cue solo se recoloca por `relocation_seconds`: compases enteros de la
@@ -327,7 +333,8 @@ que sale que son también ciclos enteros, para no separar los dos unos.
 | Confianza ≥ 0,42 sin los requisitos anteriores | structural_fade | 8 |
 | Resto | safe_fade | 8 |
 
-El ajuste local no supera el 6 % y debe acumular como máximo 5 ms de desfase
+El ajuste local no supera el 8 % (rango de pitch de un plato o CDJ; decisión
+del usuario, 2026-10-26, antes 6 %) y debe acumular como máximo 5 ms de desfase
 con los valores redondeados del contrato. Un score alto por tonalidad no puede
 eludir esa comprobación. Cualquier ciclo común mantiene alineados todos los
 niveles que comparten las dos canciones; medio/doble tempo es el caso 2:1.
@@ -346,7 +353,7 @@ niveles que comparten las dos canciones; medio/doble tempo es el caso 2:1.
   contrato métrico. La tonalidad no puede eludir la guarda.
 - `playback_rate` = velocidad que iguala el ciclo común con los periodos medidos
   cerca de cada punto (n · periodo_entra / (m · periodo_sale)). Solo en
-  bass_swap, long_blend y filter_blend, y solo si el cambio es ≤ 6 %. Si no, 1,0.
+  bass_swap, long_blend y filter_blend, y solo si el cambio es ≤ 8 %. Si no, 1,0.
 
 ### Ejecución en el navegador
 
@@ -374,7 +381,7 @@ niveles que comparten las dos canciones; medio/doble tempo es el caso 2:1.
 `mixer.ts` y `graph.ts`:
 
 - La canción entrante arranca en silencio hasta 4 s antes del punto de mezcla, a
-  `playback_rate` (0,94–1,06, `preservesPitch` activado). Mientras está en
+  `playback_rate` (0,92–1,08, `preservesPitch` activado). Mientras está en
   silencio se corrige **una vez** su posición para que `in_cue` coincida con
   `out_cue`, con tolerancia de 5 ms.
 - Volumen: curva de igual potencia (seno/coseno) durante el solapamiento,
@@ -1028,7 +1035,8 @@ siguiente P aplica la mezcla automática a cada par, sin recuperar menús de est
   Se conservan las escalas, umbrales y límites de ejecución de la política
   anterior; no se calibran nuevas notas con canciones ni se añade azar.
 - **Técnica ejecutable.** Se construye el plan a sus puntos reales y se verifica
-  el ajuste local dentro del 6 % y del presupuesto de fase de 5 ms. Si no cabe,
+  el ajuste local dentro del límite de velocidad (6 % entonces; 8 % desde
+  P12-b) y del presupuesto de fase de 5 ms. Si no cabe,
   no se etiqueta como beatmatch a velocidad 1: se vuelve a planificar un eco
   de ocho compases con golpe saliente medido, o un fundido estructural/seguro
   si no hay pulso o confianza suficientes. No cambia la sincronización de P9.
@@ -1348,9 +1356,12 @@ revisar esa compatibilidad y la comparación de técnicas de reserva sigue
 pendiente, sin bloquear el cierre de P11 ni el modelo métrico de P12.
 
 Antes de P12, `route_to_request` declara mejorar la seguridad pero no exige ejecución de
-beatmatch. Con medidas de 100 → 107 → 114 BPM elige un puente con dos `echo_cut`
-a velocidad 1, puntuaciones 0,602/0,625. Los dos ajustes exceden el límite del
-6 %. Con el mismo conjunto, `add_measured_bridges` no añade puente porque
+beatmatch. Con medidas de 100 → 109 → 119 BPM y tonalidades Do → La → Fa#
+mayor elige un puente con dos `echo_cut` a velocidad 1, puntuaciones
+0,381/0,381 frente a 0,244 del paso directo. Los dos ajustes exceden el límite
+del 8 %; el puente gana solo por tonalidad. Hasta P12-b, con el límite del 6 %,
+la fixture era 100 → 107 → 114 BPM (0,602/0,625). Con el mismo conjunto,
+`add_measured_bridges` no añade puente porque
 requiere dos tramos con beatmatch y deriva admisible. La fixture permanente es
 `test_preserved_request_bridge_policy_differs_from_measured_cohort_admission`.
 
@@ -1576,7 +1587,7 @@ y guardas de #394. Evidencia de partida en
    percentil 90 en 1,4 ms. Resultado: 0,845 de F1 sintético y 1,5 ms de
    percentil 90 con la rejilla de P12-b.
 5. **Guardas.** Nuevo nivel `alignment: beats`: beatmatch con pulso fiable en
-   ambos cues y todo el solapamiento, velocidad ≤ 6 % y 5 ms de fase. `bars`
+   ambos cues y todo el solapamiento, velocidad ≤ 8 % y 5 ms de fase. `bars`
    solo si el 1 del modelo coincide con evidencia independiente (agrupación
    y fase de `metre` sobre la misma rejilla); si no, `beats`. Web
    (`metricCuePlacement`) y Android (`ProgramDjPlan`) hoy degradan todo lo que

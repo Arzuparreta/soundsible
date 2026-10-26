@@ -2283,7 +2283,7 @@ def test_v6_analysis_summary_keeps_sixteen_fast_long_starts_within_native_respon
     assert analysis["beat_grid"] == beats
 
 
-@pytest.mark.parametrize("bpm", [100, 137])  # No common cycle with 120 within 6 %.
+@pytest.mark.parametrize("bpm", [100, 137])  # No common cycle with 120 within 8 %.
 def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
     """Known pulse -> AAC -> SQLite -> the common plan for web and Android."""
     import subprocess

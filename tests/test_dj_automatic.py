@@ -74,7 +74,8 @@ def test_long_blend_needs_measured_compatible_runway_on_both_sides(change):
 
 
 def test_local_grid_overrules_a_matching_global_bpm_for_technique_choice():
-    out, inc = measured(), measured(bpm=130)
+    # The grid is 9.1 % away, beyond the players' 8 % range.
+    out, inc = measured(), measured(bpm=132)
     inc['bpm'] = 120
     plan = plan_transition(out, inc)
     assert plan['technique'] == 'echo_cut'

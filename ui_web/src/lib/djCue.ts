@@ -73,7 +73,7 @@ export function metricCuePlacement(proposed: number, earliest: number, latest: n
   const cue = placeOutCue(proposed, left, right, step);
   const pulseRatio = sync.in_period * cycle[1] / (sync.out_period * cycle[0]);
   const rate = plan.playback_rate;
-  if (![rate, pulseRatio, tolerance].every(Number.isFinite) || rate < .94 || rate > 1.06
+  if (![rate, pulseRatio, tolerance].every(Number.isFinite) || rate < .92 || rate > 1.08
     || sync.out_period <= 0 || sync.in_period <= 0 || tolerance < 0
     || Math.abs(rate / pulseRatio - 1) * overlap > tolerance) return { cue: fallback, aligned: false };
   if (sync.alignment === 'bars' || sync.out_bar_seconds != null || sync.in_bar_seconds != null) {

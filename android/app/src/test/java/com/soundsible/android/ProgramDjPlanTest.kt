@@ -75,7 +75,7 @@ class ProgramDjPlanTest {
     @Test fun trustedTempoAndPhaseRemainInsideRuntimeBounds() {
         val plan = ProgramDjPlan.resolve("current", 200000000,
             confident.copy(rate = 2.0, inCue = -2.0, phaseToleranceMs = 30.0), true)!!
-        assertEquals(1.06, plan.rate.toDouble(), 0.0001)
+        assertEquals(1.08, plan.rate.toDouble(), 0.0001)
         assertEquals(0L, plan.inCueUs)
         assertEquals(12000L, plan.phaseToleranceUs)
     }

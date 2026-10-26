@@ -307,7 +307,7 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     # a 174 BPM one 0.9655 for three of its beats to last two at 112 BPM.
     local_ratio = in_period / out_period if out_period > 0 and in_period > 0 else 1.0
     local_ratio = _closest_rate(outgoing, incoming, local_ratio)
-    # Above six percent, resampling is more audible than a structural cut. The
+    # Beyond the players' 8 % pitch range, a fallback replaces the beatmatch. The
     # score can still select a safe technique, but never asks the player to
     # torture a recording merely to claim that it beatmatched.
     playback_rate = local_ratio if abs(1 - local_ratio) <= _MAX_STRETCH else 1.0
