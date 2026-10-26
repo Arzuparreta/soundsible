@@ -1,0 +1,1008 @@
+{
+  "small0": {
+    "cases": 62,
+    "identical": 62,
+    "median_cpu_seconds_per_audio_minute": 0.23836620758122773,
+    "rows": [
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-01",
+        "frames": 1590,
+        "identical": true,
+        "beats": 44,
+        "expected_beats": 44,
+        "cpu_seconds_per_audio_minute": 0.22818317358490559
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-02",
+        "frames": 1590,
+        "identical": true,
+        "beats": 44,
+        "expected_beats": 44,
+        "cpu_seconds_per_audio_minute": 0.22346128867924556
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-03",
+        "frames": 1590,
+        "identical": true,
+        "beats": 43,
+        "expected_beats": 43,
+        "cpu_seconds_per_audio_minute": 0.2255233245283017
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-06",
+        "frames": 1590,
+        "identical": true,
+        "beats": 64,
+        "expected_beats": 64,
+        "cpu_seconds_per_audio_minute": 0.2246541716981134
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-07",
+        "frames": 1590,
+        "identical": true,
+        "beats": 64,
+        "expected_beats": 64,
+        "cpu_seconds_per_audio_minute": 0.22263590754716986
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-08",
+        "frames": 1590,
+        "identical": true,
+        "beats": 64,
+        "expected_beats": 64,
+        "cpu_seconds_per_audio_minute": 0.22446837924528326
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-11",
+        "frames": 1590,
+        "identical": true,
+        "beats": 87,
+        "expected_beats": 87,
+        "cpu_seconds_per_audio_minute": 0.2259235132075473
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-12",
+        "frames": 1590,
+        "identical": true,
+        "beats": 88,
+        "expected_beats": 88,
+        "cpu_seconds_per_audio_minute": 0.22828857169811292
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-13",
+        "frames": 1590,
+        "identical": true,
+        "beats": 86,
+        "expected_beats": 86,
+        "cpu_seconds_per_audio_minute": 0.2232621528301889
+      },
+      {
+        "case": "ballroom_Albums-I_Like_It2-01",
+        "frames": 1704,
+        "identical": true,
+        "beats": 76,
+        "expected_beats": 76,
+        "cpu_seconds_per_audio_minute": 0.23715418309859185
+      },
+      {
+        "case": "ballroom_Albums-I_Like_It2-02",
+        "frames": 1590,
+        "identical": true,
+        "beats": 63,
+        "expected_beats": 63,
+        "cpu_seconds_per_audio_minute": 0.23184866415094335
+      },
+      {
+        "case": "ballroom_Albums-Pais_Tropical-08",
+        "frames": 1508,
+        "identical": true,
+        "beats": 62,
+        "expected_beats": 62,
+        "cpu_seconds_per_audio_minute": 0.23622646750663168
+      },
+      {
+        "case": "gtzan_blues_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 63,
+        "expected_beats": 63,
+        "cpu_seconds_per_audio_minute": 0.23632271352431686
+      },
+      {
+        "case": "gtzan_blues_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 51,
+        "expected_beats": 51,
+        "cpu_seconds_per_audio_minute": 0.2406268900732843
+      },
+      {
+        "case": "gtzan_blues_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 78,
+        "expected_beats": 78,
+        "cpu_seconds_per_audio_minute": 0.23907450299800143
+      },
+      {
+        "case": "gtzan_classical_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 47,
+        "expected_beats": 47,
+        "cpu_seconds_per_audio_minute": 0.2376570459693533
+      },
+      {
+        "case": "gtzan_classical_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 29,
+        "expected_beats": 29,
+        "cpu_seconds_per_audio_minute": 0.2399131399067292
+      },
+      {
+        "case": "gtzan_classical_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 50,
+        "expected_beats": 50,
+        "cpu_seconds_per_audio_minute": 0.24105732311792188
+      },
+      {
+        "case": "gtzan_country_00000",
+        "frames": 1505,
+        "identical": true,
+        "beats": 42,
+        "expected_beats": 42,
+        "cpu_seconds_per_audio_minute": 0.23244823455149544
+      },
+      {
+        "case": "gtzan_country_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 65,
+        "expected_beats": 65,
+        "cpu_seconds_per_audio_minute": 0.23814171885409766
+      },
+      {
+        "case": "gtzan_country_00002",
+        "frames": 1519,
+        "identical": true,
+        "beats": 83,
+        "expected_beats": 83,
+        "cpu_seconds_per_audio_minute": 0.2364232672811061
+      },
+      {
+        "case": "gtzan_disco_00000",
+        "frames": 1507,
+        "identical": true,
+        "beats": 58,
+        "expected_beats": 58,
+        "cpu_seconds_per_audio_minute": 0.23832299004645044
+      },
+      {
+        "case": "gtzan_disco_00001",
+        "frames": 1511,
+        "identical": true,
+        "beats": 59,
+        "expected_beats": 59,
+        "cpu_seconds_per_audio_minute": 0.23643990933156891
+      },
+      {
+        "case": "gtzan_disco_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 57,
+        "expected_beats": 57,
+        "cpu_seconds_per_audio_minute": 0.23776862958028003
+      },
+      {
+        "case": "gtzan_hiphop_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 60,
+        "expected_beats": 60,
+        "cpu_seconds_per_audio_minute": 0.23839501199200558
+      },
+      {
+        "case": "gtzan_hiphop_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 45,
+        "expected_beats": 45,
+        "cpu_seconds_per_audio_minute": 0.23875783211192467
+      },
+      {
+        "case": "gtzan_hiphop_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 50,
+        "expected_beats": 50,
+        "cpu_seconds_per_audio_minute": 0.23808036175882724
+      },
+      {
+        "case": "gtzan_jazz_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 61,
+        "expected_beats": 61,
+        "cpu_seconds_per_audio_minute": 0.23866827181878786
+      },
+      {
+        "case": "gtzan_jazz_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 68,
+        "expected_beats": 68,
+        "cpu_seconds_per_audio_minute": 0.23861482544970036
+      },
+      {
+        "case": "gtzan_jazz_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 50,
+        "expected_beats": 50,
+        "cpu_seconds_per_audio_minute": 0.24036468287808038
+      },
+      {
+        "case": "gtzan_metal_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 47,
+        "expected_beats": 47,
+        "cpu_seconds_per_audio_minute": 0.23687616455696303
+      },
+      {
+        "case": "gtzan_metal_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 78,
+        "expected_beats": 78,
+        "cpu_seconds_per_audio_minute": 0.2406858067954697
+      },
+      {
+        "case": "gtzan_metal_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 56,
+        "expected_beats": 56,
+        "cpu_seconds_per_audio_minute": 0.23965947101932
+      },
+      {
+        "case": "gtzan_pop_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 67,
+        "expected_beats": 67,
+        "cpu_seconds_per_audio_minute": 0.2388230666222521
+      },
+      {
+        "case": "gtzan_pop_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 54,
+        "expected_beats": 54,
+        "cpu_seconds_per_audio_minute": 0.2404106142571625
+      },
+      {
+        "case": "gtzan_pop_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 63,
+        "expected_beats": 63,
+        "cpu_seconds_per_audio_minute": 0.2392355736175883
+      },
+      {
+        "case": "gtzan_reggae_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 60,
+        "expected_beats": 60,
+        "cpu_seconds_per_audio_minute": 0.23786896269153832
+      },
+      {
+        "case": "gtzan_reggae_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 78,
+        "expected_beats": 78,
+        "cpu_seconds_per_audio_minute": 0.2385608874083945
+      },
+      {
+        "case": "gtzan_reggae_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 51,
+        "expected_beats": 51,
+        "cpu_seconds_per_audio_minute": 0.2340838880746174
+      },
+      {
+        "case": "gtzan_rock_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 61,
+        "expected_beats": 61,
+        "cpu_seconds_per_audio_minute": 0.23706565822784953
+      },
+      {
+        "case": "gtzan_rock_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 76,
+        "expected_beats": 76,
+        "cpu_seconds_per_audio_minute": 0.24016607328447764
+      },
+      {
+        "case": "gtzan_rock_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 53,
+        "expected_beats": 53,
+        "cpu_seconds_per_audio_minute": 0.23844076149233848
+      },
+      {
+        "case": "structure_16_bars",
+        "frames": 6601,
+        "identical": true,
+        "beats": 264,
+        "expected_beats": 264,
+        "cpu_seconds_per_audio_minute": 0.24102150977124653
+      },
+      {
+        "case": "structure_4_bars",
+        "frames": 6601,
+        "identical": true,
+        "beats": 264,
+        "expected_beats": 264,
+        "cpu_seconds_per_audio_minute": 0.24161466898954684
+      },
+      {
+        "case": "structure_8_bars",
+        "frames": 6601,
+        "identical": true,
+        "beats": 264,
+        "expected_beats": 264,
+        "cpu_seconds_per_audio_minute": 0.2406243976670199
+      },
+      {
+        "case": "synthetic_2_3_drift",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2396121302415998
+      },
+      {
+        "case": "synthetic_2_3_pickup_weak_one",
+        "frames": 3601,
+        "identical": true,
+        "beats": 145,
+        "expected_beats": 145,
+        "cpu_seconds_per_audio_minute": 0.2411235778950286
+      },
+      {
+        "case": "synthetic_2_3_plain",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2418968547625667
+      },
+      {
+        "case": "synthetic_2_3_syncopated",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2391985034712577
+      },
+      {
+        "case": "synthetic_3_2_drift",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2376138103304633
+      },
+      {
+        "case": "synthetic_3_2_pickup_weak_one",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2397569883365742
+      },
+      {
+        "case": "synthetic_3_2_plain",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23826035406831425
+      },
+      {
+        "case": "synthetic_3_2_syncopated",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23983213496250913
+      },
+      {
+        "case": "synthetic_4_2_drift",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23834722077200873
+      },
+      {
+        "case": "synthetic_4_2_pickup_weak_one",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23838519439044673
+      },
+      {
+        "case": "synthetic_4_2_plain",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23776685031935596
+      },
+      {
+        "case": "synthetic_4_2_syncopated",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2406371530130514
+      },
+      {
+        "case": "synthetic_change_aligned",
+        "frames": 3601,
+        "identical": true,
+        "beats": 145,
+        "expected_beats": 145,
+        "cpu_seconds_per_audio_minute": 0.23858657261871818
+      },
+      {
+        "case": "synthetic_change_unaligned",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23901243848930842
+      },
+      {
+        "case": "synthetic_silence",
+        "frames": 3601,
+        "identical": true,
+        "beats": 0,
+        "expected_beats": 0,
+        "cpu_seconds_per_audio_minute": 0.0002848292141068782
+      },
+      {
+        "case": "synthetic_tone",
+        "frames": 3601,
+        "identical": true,
+        "beats": 76,
+        "expected_beats": 76,
+        "cpu_seconds_per_audio_minute": 0.2418388800333243
+      },
+      {
+        "case": "synthetic_uniform_pulse",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2380128594834761
+      }
+    ]
+  },
+  "final0": {
+    "cases": 62,
+    "identical": 62,
+    "median_cpu_seconds_per_audio_minute": 0.23917579691887525,
+    "rows": [
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-01",
+        "frames": 1590,
+        "identical": true,
+        "beats": 44,
+        "expected_beats": 44,
+        "cpu_seconds_per_audio_minute": 0.22500543584905572
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-02",
+        "frames": 1590,
+        "identical": true,
+        "beats": 44,
+        "expected_beats": 44,
+        "cpu_seconds_per_audio_minute": 0.2237880396226423
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-03",
+        "frames": 1590,
+        "identical": true,
+        "beats": 43,
+        "expected_beats": 43,
+        "cpu_seconds_per_audio_minute": 0.22365832264150926
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-06",
+        "frames": 1590,
+        "identical": true,
+        "beats": 64,
+        "expected_beats": 64,
+        "cpu_seconds_per_audio_minute": 0.22393158490566
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-07",
+        "frames": 1590,
+        "identical": true,
+        "beats": 64,
+        "expected_beats": 64,
+        "cpu_seconds_per_audio_minute": 0.22701743962263976
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-08",
+        "frames": 1590,
+        "identical": true,
+        "beats": 63,
+        "expected_beats": 63,
+        "cpu_seconds_per_audio_minute": 0.2202552094339599
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-11",
+        "frames": 1590,
+        "identical": true,
+        "beats": 87,
+        "expected_beats": 87,
+        "cpu_seconds_per_audio_minute": 0.22546883396226586
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-12",
+        "frames": 1590,
+        "identical": true,
+        "beats": 86,
+        "expected_beats": 86,
+        "cpu_seconds_per_audio_minute": 0.22389715283018827
+      },
+      {
+        "case": "ballroom_Albums-Ballroom_Classics4-13",
+        "frames": 1590,
+        "identical": true,
+        "beats": 87,
+        "expected_beats": 87,
+        "cpu_seconds_per_audio_minute": 0.22653323018867905
+      },
+      {
+        "case": "ballroom_Albums-I_Like_It2-01",
+        "frames": 1704,
+        "identical": true,
+        "beats": 76,
+        "expected_beats": 76,
+        "cpu_seconds_per_audio_minute": 0.23575307218309885
+      },
+      {
+        "case": "ballroom_Albums-I_Like_It2-02",
+        "frames": 1590,
+        "identical": true,
+        "beats": 63,
+        "expected_beats": 63,
+        "cpu_seconds_per_audio_minute": 0.23472236603773491
+      },
+      {
+        "case": "ballroom_Albums-Pais_Tropical-08",
+        "frames": 1508,
+        "identical": true,
+        "beats": 62,
+        "expected_beats": 62,
+        "cpu_seconds_per_audio_minute": 0.23569418633952083
+      },
+      {
+        "case": "gtzan_blues_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 63,
+        "expected_beats": 63,
+        "cpu_seconds_per_audio_minute": 0.23914213590939534
+      },
+      {
+        "case": "gtzan_blues_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 34,
+        "expected_beats": 34,
+        "cpu_seconds_per_audio_minute": 0.239933288474351
+      },
+      {
+        "case": "gtzan_blues_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 79,
+        "expected_beats": 79,
+        "cpu_seconds_per_audio_minute": 0.24001685076615434
+      },
+      {
+        "case": "gtzan_classical_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 47,
+        "expected_beats": 47,
+        "cpu_seconds_per_audio_minute": 0.23768055029979795
+      },
+      {
+        "case": "gtzan_classical_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 55,
+        "expected_beats": 55,
+        "cpu_seconds_per_audio_minute": 0.2411178767488335
+      },
+      {
+        "case": "gtzan_classical_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 50,
+        "expected_beats": 50,
+        "cpu_seconds_per_audio_minute": 0.2422561778814152
+      },
+      {
+        "case": "gtzan_country_00000",
+        "frames": 1505,
+        "identical": true,
+        "beats": 42,
+        "expected_beats": 42,
+        "cpu_seconds_per_audio_minute": 0.23327041196013612
+      },
+      {
+        "case": "gtzan_country_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 65,
+        "expected_beats": 65,
+        "cpu_seconds_per_audio_minute": 0.2410057135243167
+      },
+      {
+        "case": "gtzan_country_00002",
+        "frames": 1519,
+        "identical": true,
+        "beats": 83,
+        "expected_beats": 83,
+        "cpu_seconds_per_audio_minute": 0.24101723897300883
+      },
+      {
+        "case": "gtzan_disco_00000",
+        "frames": 1507,
+        "identical": true,
+        "beats": 58,
+        "expected_beats": 58,
+        "cpu_seconds_per_audio_minute": 0.23792765295288582
+      },
+      {
+        "case": "gtzan_disco_00001",
+        "frames": 1511,
+        "identical": true,
+        "beats": 59,
+        "expected_beats": 59,
+        "cpu_seconds_per_audio_minute": 0.23679744937127573
+      },
+      {
+        "case": "gtzan_disco_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 57,
+        "expected_beats": 57,
+        "cpu_seconds_per_audio_minute": 0.23691825649567036
+      },
+      {
+        "case": "gtzan_hiphop_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 60,
+        "expected_beats": 60,
+        "cpu_seconds_per_audio_minute": 0.2397503704197176
+      },
+      {
+        "case": "gtzan_hiphop_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 45,
+        "expected_beats": 45,
+        "cpu_seconds_per_audio_minute": 0.23417546302464945
+      },
+      {
+        "case": "gtzan_hiphop_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 50,
+        "expected_beats": 50,
+        "cpu_seconds_per_audio_minute": 0.23939012858094563
+      },
+      {
+        "case": "gtzan_jazz_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 61,
+        "expected_beats": 61,
+        "cpu_seconds_per_audio_minute": 0.24148665289806837
+      },
+      {
+        "case": "gtzan_jazz_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 68,
+        "expected_beats": 68,
+        "cpu_seconds_per_audio_minute": 0.23797063491005915
+      },
+      {
+        "case": "gtzan_jazz_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 50,
+        "expected_beats": 50,
+        "cpu_seconds_per_audio_minute": 0.24160015522984774
+      },
+      {
+        "case": "gtzan_metal_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 47,
+        "expected_beats": 47,
+        "cpu_seconds_per_audio_minute": 0.23884807195203314
+      },
+      {
+        "case": "gtzan_metal_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 78,
+        "expected_beats": 78,
+        "cpu_seconds_per_audio_minute": 0.24060106528980185
+      },
+      {
+        "case": "gtzan_metal_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 56,
+        "expected_beats": 56,
+        "cpu_seconds_per_audio_minute": 0.23924510526315837
+      },
+      {
+        "case": "gtzan_pop_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 33,
+        "expected_beats": 33,
+        "cpu_seconds_per_audio_minute": 0.23188755029980465
+      },
+      {
+        "case": "gtzan_pop_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 54,
+        "expected_beats": 54,
+        "cpu_seconds_per_audio_minute": 0.24182304863424658
+      },
+      {
+        "case": "gtzan_pop_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 63,
+        "expected_beats": 63,
+        "cpu_seconds_per_audio_minute": 0.24025143837441917
+      },
+      {
+        "case": "gtzan_reggae_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 61,
+        "expected_beats": 61,
+        "cpu_seconds_per_audio_minute": 0.2364129933377753
+      },
+      {
+        "case": "gtzan_reggae_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 39,
+        "expected_beats": 39,
+        "cpu_seconds_per_audio_minute": 0.23526633977348266
+      },
+      {
+        "case": "gtzan_reggae_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 51,
+        "expected_beats": 51,
+        "cpu_seconds_per_audio_minute": 0.2338161245836054
+      },
+      {
+        "case": "gtzan_rock_00000",
+        "frames": 1501,
+        "identical": true,
+        "beats": 61,
+        "expected_beats": 61,
+        "cpu_seconds_per_audio_minute": 0.2398949740173191
+      },
+      {
+        "case": "gtzan_rock_00001",
+        "frames": 1501,
+        "identical": true,
+        "beats": 38,
+        "expected_beats": 38,
+        "cpu_seconds_per_audio_minute": 0.2384643877415043
+      },
+      {
+        "case": "gtzan_rock_00002",
+        "frames": 1501,
+        "identical": true,
+        "beats": 53,
+        "expected_beats": 53,
+        "cpu_seconds_per_audio_minute": 0.23992651299134002
+      },
+      {
+        "case": "structure_16_bars",
+        "frames": 6601,
+        "identical": true,
+        "beats": 264,
+        "expected_beats": 264,
+        "cpu_seconds_per_audio_minute": 0.2380079191031661
+      },
+      {
+        "case": "structure_4_bars",
+        "frames": 6601,
+        "identical": true,
+        "beats": 264,
+        "expected_beats": 264,
+        "cpu_seconds_per_audio_minute": 0.2393032064838662
+      },
+      {
+        "case": "structure_8_bars",
+        "frames": 6601,
+        "identical": true,
+        "beats": 264,
+        "expected_beats": 264,
+        "cpu_seconds_per_audio_minute": 0.24111369398576016
+      },
+      {
+        "case": "synthetic_2_3_drift",
+        "frames": 3601,
+        "identical": true,
+        "beats": 216,
+        "expected_beats": 216,
+        "cpu_seconds_per_audio_minute": 0.24033971146903593
+      },
+      {
+        "case": "synthetic_2_3_pickup_weak_one",
+        "frames": 3601,
+        "identical": true,
+        "beats": 215,
+        "expected_beats": 215,
+        "cpu_seconds_per_audio_minute": 0.2413893365731744
+      },
+      {
+        "case": "synthetic_2_3_plain",
+        "frames": 3601,
+        "identical": true,
+        "beats": 216,
+        "expected_beats": 216,
+        "cpu_seconds_per_audio_minute": 0.2423805379061375
+      },
+      {
+        "case": "synthetic_2_3_syncopated",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2404387497917259
+      },
+      {
+        "case": "synthetic_3_2_drift",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23949205526242603
+      },
+      {
+        "case": "synthetic_3_2_pickup_weak_one",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23920945792835513
+      },
+      {
+        "case": "synthetic_3_2_plain",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2400668297695098
+      },
+      {
+        "case": "synthetic_3_2_syncopated",
+        "frames": 3601,
+        "identical": true,
+        "beats": 145,
+        "expected_beats": 145,
+        "cpu_seconds_per_audio_minute": 0.24045342071646938
+      },
+      {
+        "case": "synthetic_4_2_drift",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2412808250485966
+      },
+      {
+        "case": "synthetic_4_2_pickup_weak_one",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23766396389891517
+      },
+      {
+        "case": "synthetic_4_2_plain",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.2405655137461791
+      },
+      {
+        "case": "synthetic_4_2_syncopated",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.24015931824493186
+      },
+      {
+        "case": "synthetic_change_aligned",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23861640516523147
+      },
+      {
+        "case": "synthetic_change_unaligned",
+        "frames": 3601,
+        "identical": true,
+        "beats": 143,
+        "expected_beats": 143,
+        "cpu_seconds_per_audio_minute": 0.2410698744793129
+      },
+      {
+        "case": "synthetic_silence",
+        "frames": 3601,
+        "identical": true,
+        "beats": 0,
+        "expected_beats": 0,
+        "cpu_seconds_per_audio_minute": 0.00024384893085192236
+      },
+      {
+        "case": "synthetic_tone",
+        "frames": 3601,
+        "identical": true,
+        "beats": 0,
+        "expected_beats": 0,
+        "cpu_seconds_per_audio_minute": 0.00024698972507515956
+      },
+      {
+        "case": "synthetic_uniform_pulse",
+        "frames": 3601,
+        "identical": true,
+        "beats": 144,
+        "expected_beats": 144,
+        "cpu_seconds_per_audio_minute": 0.23985525354068268
+      }
+    ]
+  }
+}

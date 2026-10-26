@@ -73,10 +73,10 @@ no hay síntoma que lo justifique.
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
 | P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
-| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en `2ca8ccf2`, PR #394; doce fragmentos reales sin compás y 1 acreditados. Su detector empeora el tempo real en `main` (P12-a) | Parcial; cierre anterior rectificado. Detección musical pendiente |
+| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector de P12-b medido de extremo a extremo sobre el corpus de P12-a (`integrated-p12b.json`) | Cerrado con P12-b; límites abajo |
 | P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado: mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
-| P12-b | Integración del método elegido y cierre de P12 | Decisiones del 2026-10-26 abajo; requisitos abiertos en el informe (DBN en NumPy, memoria, pesos) | **Siguiente trabajo**; reutilizar contratos y guardas |
-| P13 | Frases y secciones sobre una base métrica explícita | Agrupación actual en ocho compases; comparar también modelos que produzcan estructura | Preparar fixtures en P12-a; implementar sobre la métrica elegida, después o junto a P12-b |
+| P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR de P12-a + P12-b) |
+| P13 | Frases y secciones sobre una base métrica explícita | Ocho compases contados desde los unos del modelo; fixtures `structure_*` en el corpus de P12-a | **Siguiente trabajo** |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
@@ -91,7 +91,7 @@ detección general del compás, del 1 ni de las frases musicales. P2 corrige la
 alineación temporal de reproducción; no corrige una interpretación musical
 equivocada aunque los dos reproductores coincidan al milisegundo.
 
-**P12 queda parcial; el siguiente trabajo es P12-a, antes de P13.** El cierre
+**P12 se cierra con P12-b; el siguiente trabajo es P13.** Historia: el cierre
 anterior fue prematuro: `2ca8ccf2` y la PR #394 aportan contratos y guardas,
 pero los doce fragmentos Ballroom no acreditan compás y 1 correctos. El usuario
 acuerda probar estimación conjunta y varias soluciones abiertas mantenibles,
@@ -1402,29 +1402,50 @@ distribución concreta de archivos se deciden al implementarlo:
 
 ## P12. Compás, subdivisión, identificación del 1 y sus confianzas
 
-**Estado: parcial; cierre anterior rectificado el 2026-10-25.** La
-implementación `2ca8ccf2` (PR #394) aporta infraestructura métrica y guardas;
-la detección del compás y del 1 en música real sigue pendiente. Método,
-medidas y límites de ese baseline en [P12](P12.md) y
-[p12-results.json](p12-results.json). P2 sigue aparcado; no se cambia el reloj
-ni se introduce corrección continua de velocidad.
+**Estado: cerrado con P12-b (2026-10-26).** #394 (`2ca8ccf2`) aportó contratos
+y guardas, pero su detector no acreditó compás ni 1 en música real y empeoró el
+tempo en `main`. P12-a comparó alternativas abiertas y el usuario eligió
+Beat This! `final0`. P12-b lo integra: pulsos y unos del modelo (ONNX Runtime,
+DBN en NumPy), rejilla fijada a los ataques como en P1 y dos garantías de
+mezcla, `beats` y `bars`. Evidencia en
+[detector_comparison/RESULTS](detector_comparison/RESULTS.md) (sección P12-b) y
+en [P12](P12.md). P2 sigue aparcado; no se cambia el reloj ni se introduce
+corrección continua de velocidad.
+
+Límites vigentes tras P12-b:
+
+- El DBN solo modela compases de 3 y 4 pulsos. En las señales sintéticas de
+  3/4 el modelo suele dar 4, y en las de dos pulsos ternarios elige otro nivel
+  de pulso. La confirmación independiente evita prometer `bars` en esos casos,
+  pero el compás estimado es erróneo y frases y secciones cuentan sobre él.
+- La confirmación independiente no aparece en la música real medida (0 % en
+  GTZAN y Ballroom): en la práctica, las mezclas con música real son `beats`.
+- Sin anotaciones de la biblioteca del usuario, la comparación v8/v9/v10 de
+  una muestra solo mide concordancia (sección P12-b de RESULTS).
+- Sin aceptación física de escucha nueva.
+
+Lo siguiente describe el contrato de #394, que P12-b conserva:
 
 - `metric_regions` distingue periodo/unidad, pulsos por compás, subdivisión,
   cobertura y confianzas de pulso, agrupación, subdivisión y 1. Desconocidos y
   cambios no se rellenan con 4/4. Las confianzas describen evidencia del modelo,
   no probabilidades calibradas de verdad musical.
-- Se contrastan hipótesis binarias/ternarias de pulso y agrupaciones locales.
+- #394 contrastaba hipótesis binarias/ternarias de pulso; P12-b las retira
+  (eran la causa de los errores 3:2 y 4:3). Las agrupaciones locales de 2/3/4/6
+  pulsos quedan como confirmación independiente de los compases del modelo.
   Las fixtures incluyen anacrusas, 1 débil, contratiempos, dos subdivisiones
-  presentes, cambios dentro/fuera de un bloque, deriva, tono y pulso uniforme.
-  Se mantiene la precisión de P1; un pulso uniforme puede tener compás nulo.
+  presentes, cambios dentro/fuera de un bloque, deriva, tono, pulso uniforme y
+  unos del modelo equivocados de fase o de agrupación.
 - El plan certifica `alignment: bars` solo con ambos cues y todo el tramo
-  medidos y ejecutables. Igual BPM en 3/4 → 4/4 ya no promete coincidencia de
-  unos; 4 pulsos de 0,5 s y 2 de 1 s sí pueden compartir compases de 2 s.
-  Score cero y reserva explícita cuando falla la validación métrica.
+  medidos, confirmados y ejecutables; 4 pulsos de 0,5 s y 2 de 1 s sí pueden
+  compartir compases de 2 s. Desde P12-b, igual pulso en 3/4 → 4/4 da `beats`:
+  pulso alineado, sin prometer los unos. Score cero y reserva explícita solo
+  sin alineación ejecutable (`none`).
 - Rutas, peticiones, colocación, reparación, refinado y puentes comparten esa
   regla. Web y Android leen el compás local, conservan cobertura al recolocar
-  y degradan si no cabe. Ocho vectores comunes verifican ambos ejecutores;
-  el contrato antiguo conserva su reserva, sin presentarla como medida.
+  y degradan si no cabe. Once vectores comunes verifican ambos ejecutores
+  (tres de `beats` desde P12-b); el contrato antiguo conserva su reserva, sin
+  presentarla como medida.
 - Caché invalidada y resumen compacto con valores nulos explícitos. AAC →
   SQLite → HTTP cubre filas anteriores, estado frío/caliente, una decodificación
   por archivo y todos los endpoints sin redetectar música en clientes.
@@ -1437,7 +1458,7 @@ ni se introduce corrección continua de velocidad.
   el supuesto de ocho compases para frases/secciones. **P13 queda pendiente**:
   ni esas frases ni sus etiquetas prueban la forma musical.
 
-Validación local: suite principal de 2.330 casos (77,44 %), seguida de 201
+Validación local de #394: suite principal de 2.330 casos (77,44 %), seguida de 201
 casos dirigidos sobre los ajustes finales y tres casos AAC/HTTP de peticiones
 (sueltas y de artista); 1.772 tests de UI y 23 pruebas JVM. Chromium completo
 con un trabajador: 353 aprobados, 71 skips previstos; WebKit completo en imagen
@@ -1485,6 +1506,12 @@ El [plan operativo](DETECTOR_COMPARISON.md) fija el orden para avanzar rápido:
 
 ### P12-b: plan de integración (2026-10-26)
 
+**Ejecutado.** Diferencias respecto al plan: la rejilla toma el tiempo de cada
+pulso del pico de activación entre tramas, pondera la recta por el ataque
+medido y corrige fase y periodo con los ataques a ±20 ms (una trama del
+modelo), no a ±35 ms: en `gtzan_rock_00001` la ventana de P1 saltaba a otro
+instrumento. La sesión ONNX desactiva la telemetría 1DS de ONNX Runtime.
+
 Una sola vía, con las decisiones de arriba. Una entrega coherente (servidor,
 persistencia, endpoints, web, Android y empaquetado), apoyada en los contratos
 y guardas de #394. Evidencia de partida en
@@ -1505,7 +1532,8 @@ y guardas de #394. Evidencia de partida en
 4. **Rejilla.** El modelo decide tempo, octava, fase y el 1 candidato. El
    ajuste fino de P1 no puede mover un pulso a otro ataque: en la comparativa,
    el refinamiento local bajó el F1 sintético de 0,80 a 0,68 aunque dejó el
-   percentil 90 en 1,4 ms. Medir antes de elegir el modo de ajuste.
+   percentil 90 en 1,4 ms. Resultado: 0,845 de F1 sintético y 1,5 ms de
+   percentil 90 con la rejilla de P12-b.
 5. **Guardas.** Nuevo nivel `alignment: beats`: beatmatch con pulso fiable en
    ambos cues y todo el solapamiento, velocidad ≤ 6 % y 5 ms de fase. `bars`
    solo si el 1 del modelo coincide con evidencia independiente (agrupación

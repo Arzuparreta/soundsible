@@ -92,6 +92,32 @@ canciones son ~4 h de CPU de un hilo en un Ryzen 7 5800X (~2,5 h con
 `small0`), repartidas entre los dos hilos de análisis en segundo plano. En
 ARM64 de gama baja será varias veces más lento; no está medido.
 
+## Integración en el motor (P12-b)
+
+Medido después de la decisión con el analizador de producción completo
+(`integrated_probe.py`, `results/integrated-p12b.json`): FFmpeg a 22050 Hz
+desde los archivos, Beat This! en ONNX Runtime, DBN en NumPy y rejilla de P1.
+
+- El DBN NumPy del motor reproduce los eventos de madmom en las 62 entradas,
+  con ambos checkpoints (`results/dbn-port.json`), a 0,24 s de CPU por minuto
+  de audio.
+- Eventos del modelo en GTZAN test: F1 del pulso 0,820 y del 1 0,768, como
+  `beatthis-final0-dbn` en la comparativa (0,820 y 0,764), con otra
+  decodificación y el tiempo leído entre tramas.
+- Rejilla final: F1 del pulso 0,813 (test) y 0,915 (desarrollo); del 1, 0,770 y
+  0,892. Tempo a ±4 % en 24 de las 30 GTZAN. Una primera versión alineaba a
+  ataques en ±35 ms, como P1, y en `gtzan_rock_00001` saltaba a un ataque 32 ms
+  antes del pulso (F1 de 1,0 a 0,78). Se limita a una trama del modelo, 20 ms.
+  En señales sintéticas el percentil 90 del error de pulso es 1,5 ms.
+- Servidor durante el análisis (`scripts/benchmark_dj_analysis.py --http`,
+  `results/http-latency-p12b.json`): con dos análisis completos de 120 s a la
+  vez, 3129 peticiones respondidas con mediana de 0,39 ms, p95 de 0,99 ms y
+  máximo de 10,6 ms. La inferencia corre fuera del bucle de gevent.
+- Confirmación independiente del 1: 0 % de cobertura en GTZAN y Ballroom, y
+  54 % en señales sintéticas con precisión 1,0 (579 unos confirmados, ninguno
+  falso). Con música real todas las mezclas son `beats`; `bars` solo aparece
+  cuando la armonía y los acentos repiten de forma medible el compás del modelo.
+
 ## Lo que esta comparación no resuelve
 
 - **Confianza del 1.** La activación de la red no distingue aciertos de
@@ -103,8 +129,7 @@ ARM64 de gama baja será varias veces más lento; no está medido.
   en el pulso uniforme (`final0` DBN: 47 sin referencia). La guarda no puede
   certificar solo con la salida del modelo.
 - **DBN.** Es código de madmom. Integrarlo como dependencia no es viable (ver
-  tabla); P12-b debe portar a NumPy el decodificador de 3/4 pulsos y comprobar
-  igualdad con las salidas DBN retenidas de esta corrida.
+  tabla); P12-b lo porta a NumPy con igualdad comprobada (arriba).
 - **Compases de 2 y 6 pulsos y subdivisión.** El DBN de Beat This! solo
   admite 3 y 4. La variante 2/3/4/6 (`-common`) no mejora la música real:
   queda 0,040 por debajo del DBN 3/4 en las 30 GTZAN (IC [−0,097, +0,010]).

@@ -39,6 +39,13 @@ _ATTACK_WINDOW = 0.035
 _ATTACK_SMOOTHING = 0.002
 
 
+# One beat-model frame (50 frames/s). The model's beats sit within it of their
+# attack (P12-b: medians -4 to +10 ms on known kicks), so the alignment looks
+# no farther: a wider window can reach another instrument's attack, e.g. a
+# strum 32 ms before the beat that rises more than the beat itself.
+_MODEL_FRAME = 0.02
+
+
 # One straight grid fits a programmed song: for at least half of the window
 # its locally fitted beats stay within 12 ms of the line and its local tempo
 # within 0.3 % of the line's, and 55 % of the tracked beat weight sits on it.
@@ -404,7 +411,8 @@ def _align_attacks(samples, sample_rate: int, grid, floor: float, *, constant: b
     """
     import numpy as np
 
-    offsets, rows, usable = _attack_curves(samples, sample_rate, grid, floor, emphasis=_ATTACK_PREEMPHASIS)
+    offsets, rows, usable = _attack_curves(samples, sample_rate, grid, floor, emphasis=_ATTACK_PREEMPHASIS,
+                                           window=_MODEL_FRAME)
     if rows.shape[0] < 4:
         return grid
     if constant:

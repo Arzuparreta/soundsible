@@ -7,7 +7,7 @@ model's events, the final sample-aligned grid with its first beats, and the
 first beats inside regions confirmed by independent evidence. No cache, no
 network; reads the lab's manifest and audio.
 
-  .venv/bin/python -I docs/dj/detector_comparison/integrated_probe.py LAB OUTPUT.json
+  .venv/bin/python -I docs/dj/detector_comparison/integrated_probe.py LAB OUTPUT.json [DATASET ...]
 """
 from __future__ import annotations
 
@@ -92,7 +92,10 @@ def summary(rows, key):
 
 def main():
     lab, output = Path(sys.argv[1]), Path(sys.argv[2])
+    only = set(sys.argv[3:])  # Optional datasets, e.g. GTZAN Ballroom.
     manifest = json.loads((lab / 'corpus' / 'manifest.json').read_text())
+    if only:
+        manifest['cases'] = [case for case in manifest['cases'] if case['dataset'] in only]
     session = weights.session()
     if session is None:
         raise SystemExit('DJ beat model unavailable: run scripts/fetch_dj_model.py')

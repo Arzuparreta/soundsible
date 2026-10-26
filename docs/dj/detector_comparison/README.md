@@ -135,6 +135,21 @@ uv pip install --python "$DJ_LAB/onnx-runtime-venv/bin/python" numpy onnxruntime
 (`--onnx` para ONNX Runtime, `--checkpoint` para PyTorch); ejecutar una vez por
 configuración. Los resultados se copian a `results/onnx-*`.
 
+## Integración P12-b
+
+`dbn_probe.py` decodifica las activaciones retenidas de `beatthis-*-direct`
+con el DBN NumPy del motor (`shared/dj/dbn.py`) y las compara con los eventos
+que madmom produjo para `beatthis-*-dbn`. `integrated_probe.py` ejecuta el
+analizador de producción completo sobre el corpus fijado: FFmpeg a 22050 Hz,
+Beat This! en ONNX Runtime, DBN y medidas. Puntúa por separado los eventos del
+modelo, la rejilla final y los unos de las regiones confirmadas. Ambos corren
+en el entorno del motor, sin PyTorch ni madmom.
+
+```sh
+.venv/bin/python -I docs/dj/detector_comparison/dbn_probe.py "$DJ_LAB/results" dbn.json
+.venv/bin/python -I docs/dj/detector_comparison/integrated_probe.py "$DJ_LAB" integrated.json
+```
+
 ## Frontera P12 y límites de la comparación
 
 `normalize` es el único adaptador experimental al contrato de #394. Los
