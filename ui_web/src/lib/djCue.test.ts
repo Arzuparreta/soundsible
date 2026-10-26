@@ -59,3 +59,34 @@ describe('metric coverage at execution', () => {
     }
   });
 });
+
+describe('pulse alignment at execution', () => {
+  it('moves a pulse-only plan by whole beats and an estimated common bar by whole bars', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { metricCuePlacement } = await import('./djCue');
+    const cases = JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_metric_plans.json', import.meta.url), 'utf8'));
+    const pulse = cases.find((row: { name: string }) => row.name === 'three-to-four').transition;
+    const bars = cases.find((row: { name: string }) => row.name === 'unconfirmed-four').transition;
+    expect(pulse.sync.alignment).toBe('beats');
+    // 0.5 s beats: 213.25 -> 174.75, not a 1.5 s or 2 s bar away.
+    const moved = metricCuePlacement(pulse.out_cue, 90, 175, pulse, pulse.overlap_seconds);
+    expect(moved).toEqual({ cue: 174.75, aligned: true });
+    const estimated = metricCuePlacement(bars.out_cue, 90, 167, bars, bars.overlap_seconds);
+    expect(estimated).toEqual({ cue: 166.25, aligned: true });
+  });
+
+  it('rejects a pulse plan without coverage, a different pulse or a contradictory bar estimate', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { metricCuePlacement } = await import('./djCue');
+    const cases = JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_metric_plans.json', import.meta.url), 'utf8'));
+    for (const name of ['three-to-four', 'unconfirmed-four']) {
+      const original = cases.find((row: { name: string }) => row.name === name).transition;
+      expect(metricCuePlacement(original.out_cue, 90, 215, original, original.overlap_seconds).aligned).toBe(true);
+      for (const change of [{ out_metre: null }, { in_metre: null }, { in_period: .55 }, { out_period: 0 },
+        { out_metre: { ...original.sync.out_metre, end: 12 } }, { in_bar_seconds: 1.7 }, { alignment: 'none' }]) {
+        const plan = { ...original, sync: { ...original.sync, ...change } };
+        expect(metricCuePlacement(original.out_cue, 90, 215, plan, plan.overlap_seconds).aligned, JSON.stringify(change)).toBe(false);
+      }
+    }
+  });
+});

@@ -1,9 +1,13 @@
-"""Local grouping evidence; no notated time signature is inferred from BPM.
+"""Bars per region: the beat model's estimate and independent evidence for it.
 
-A profile must predict withheld repetitions better than a constant profile.
-The shortest statistically indistinguishable period wins (3, not its multiple
-6). Confidence is explained variance, not tempo/key confidence. These are
-conservative periodic-accent measurements, not a general music transcriber.
+The beat model (Beat This! + DBN) proposes how many pulses each bar has and
+where it starts. Its activations do not separate right from wrong first beats
+(P12-a), so they are no evidence of their own. `grouping` measures periodic
+harmony changes and accents on the same grid: a profile must predict withheld
+repetitions better than a constant profile, and the shortest statistically
+indistinguishable period wins (3, not its multiple 6). Only where both agree on
+size and phase do the bar and first-beat confidences leave zero. These are
+measurements, not probabilities of a notated time signature.
 """
 from __future__ import annotations
 
@@ -82,34 +86,44 @@ def grouping(observations):
     return size, phase if first > 0 else None, confidence, first
 
 
-def metric_regions(grid, novelty, strength, *, duration, period, pulse_confidence, subdivisions):
+def metric_regions(grid, novelty, strength, *, duration, period, pulse_confidence, subdivisions, first_beats):
     """Disjoint regions, each supported by at most 48 pulse observations.
 
-    24 observations contain four repetitions of every tested grouping. Blocks
-    straddling a change can abstain; no region or phase is extrapolated across
-    unknown blocks. Adjacent matching estimates are merged for the wire/cache.
+    `first_beats` are the grid indices of the beat model's first beats. A block
+    with one consistent bar length from the model carries it, its first beats
+    and its bar duration; the confidences stay zero unless `grouping` on the
+    same block finds that size and phase independently. 24 observations
+    contain four repetitions of every tested grouping. No region or phase is
+    extrapolated across unknown blocks. Adjacent matching estimates are merged
+    for the wire/cache.
     """
     import numpy as np
 
+    firsts = np.asarray(sorted(first_beats), dtype=int)
     # Balance the last block so a tiny trailing fragment cannot inherit metre.
     count = max(1, len(grid) // 24)
     blocks = np.array_split(np.arange(len(grid)), count)
     result = []
     for block, (subdivision, subdivision_confidence) in zip(blocks, subdivisions):
         first, stop = int(block[0]), int(block[-1]) + 1
-        observations = np.column_stack((novelty[first:stop], strength[first:stop]))
-        size, phase, confidence, first_confidence = grouping(observations)
         start = 0. if first == 0 else float(grid[first])
         end = float(grid[stop]) if stop < len(grid) else duration
         local_period = float(np.median(np.diff(grid[first:stop]))) if stop - first > 1 else period
-        downbeats = grid[first + phase:stop:size].tolist() if size and phase is not None else []
+        size, phase = _model_bars(firsts, first, stop)
+        downbeats = grid[first + phase:stop:size].tolist() if size else []
+        metre_confidence = first_confidence = 0.
+        if size:
+            observations = np.column_stack((novelty[first:stop], strength[first:stop]))
+            measured, measured_phase, confidence, first_measure = grouping(observations)
+            if measured == size and measured_phase == phase % size:
+                metre_confidence, first_confidence = confidence, first_measure
         row = {
             'start': round(start, 4), 'end': round(end, 4),
             'period': round(local_period, 6), 'pulse_unit': 'dotted_quarter' if subdivision == 3 else 'quarter' if subdivision == 2 else None,
             'beats_per_bar': size, 'subdivision': subdivision,
             'bar_seconds': round(local_period * size, 6) if size else None,
             'pulse_confidence': round(pulse_confidence, 3),
-            'metre_confidence': round(confidence, 3),
+            'metre_confidence': round(metre_confidence, 3),
             'downbeat_confidence': round(first_confidence, 3),
             'subdivision_confidence': round(subdivision_confidence, 3),
             'downbeats': [round(t, 4) for t in downbeats],
@@ -118,6 +132,8 @@ def metric_regions(grid, novelty, strength, *, duration, period, pulse_confidenc
         same = previous and all(previous[key] == row[key] for key in ('beats_per_bar', 'subdivision', 'pulse_unit'))
         if same and bool(previous['downbeats']) != bool(downbeats):
             same = False
+        if same and bool(previous['downbeat_confidence']) != bool(row['downbeat_confidence']):
+            same = False  # Confirmed and unconfirmed bars stay separate regions.
         if same and size and previous['downbeats'] and downbeats:
             expected = (downbeats[0] - previous['downbeats'][-1]) / (local_period * size)
             same = abs(expected - 1) <= .05
@@ -129,3 +145,26 @@ def metric_regions(grid, novelty, strength, *, duration, period, pulse_confidenc
         else:
             result.append(row)
     return result
+
+
+def _model_bars(firsts, first: int, stop: int):
+    """(pulses per bar, phase in the block) if the model's bars are regular there.
+
+    Every bar of known length that overlaps the block counts, including one
+    that enters it from the previous block and the one that leaves it; the
+    last first beat of a window starts a bar of unknown length. Mixed lengths
+    give (None, None): no estimate rather than a guessed one.
+    """
+    inside = firsts[(firsts >= first) & (firsts < stop)]
+    if inside.size == 0:
+        return None, None
+    starts = firsts[:-1]
+    ends = firsts[1:]
+    overlapping = (ends > first) & (starts < stop)
+    lengths = set((ends - starts)[overlapping].tolist())
+    if len(lengths) != 1:
+        return None, None
+    size = int(lengths.pop())
+    if size < 2:
+        return None, None
+    return size, int(inside[0] - first)

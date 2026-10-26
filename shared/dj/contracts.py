@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Literal, NotRequired, TypeAlias, TypedDict
 
-ANALYSER_VERSION = 9
+ANALYSER_VERSION = 10
 
 # JSON numbers retain their wire representation. Aliases name units rather
 # than wrapping samples or changing the versioned SQLite payload.
@@ -113,7 +113,7 @@ class WindowFeatures(TypedDict):
 
 
 class Sync(TypedDict):
-    alignment: NotRequired[Literal['bars', 'none']]
+    alignment: NotRequired[Literal['bars', 'beats', 'none']]
     out_bar_seconds: NotRequired[Seconds | None]
     in_bar_seconds: NotRequired[Seconds | None]
     out_metre: NotRequired[dict[str, Any] | None]

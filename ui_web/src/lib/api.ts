@@ -252,7 +252,7 @@ export interface DjTransitionPlan {
     phase_tolerance_ms: number;
     grid_source: 'measured' | 'estimated';
     /** Absent only for the legacy four-pulse contract. */
-    alignment?: 'bars' | 'none';
+    alignment?: 'bars' | 'beats' | 'none';
     out_bar_seconds?: number | null;
     in_bar_seconds?: number | null;
     out_metre?: DjMetricCoverage | null;

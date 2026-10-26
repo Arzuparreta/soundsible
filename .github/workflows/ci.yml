@@ -105,6 +105,15 @@ jobs:
           "$dir/ffmpeg" -hide_banner -version | head -1
       - name: Install dependencies
         run: pip install -r requirements.txt
+      # The Auto DJ beat model (84 MB release asset, SHA-256 in
+      # shared/dj/weights.py); the analyser tests run the real network.
+      - name: Restore DJ beat model
+        uses: actions/cache@v6.1.0
+        with:
+          path: models
+          key: dj-model-${{ hashFiles('shared/dj/weights.py') }}
+      - name: Fetch DJ beat model
+        run: python scripts/fetch_dj_model.py
       # One run, one signal. `--cov=.` used to include tests/ itself — ~12.5k
       # lines that are covered by construction — which inflated the total enough
       # that the 30% floor could not fail. Scoped to the source packages the

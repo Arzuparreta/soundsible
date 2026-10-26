@@ -130,6 +130,39 @@ class ProgramDjPlanTest {
             assertEquals(1.0, plan.rate.toDouble(), 0.0)
         }
     }
+    private fun metricVector(name: String): org.json.JSONObject {
+        val rows = ProgramDjPlanTest::class.java.classLoader!!.getResourceAsStream("dj_metric_plans.json")!!.bufferedReader().use { JSONArray(it.readText()) }
+        return (0 until rows.length()).map { rows.getJSONObject(it) }.first { it.getString("name") == name }.getJSONObject("transition")
+    }
+    private fun metricProposal(transition: org.json.JSONObject, sync: org.json.JSONObject = transition.getJSONObject("sync")) =
+        confident.copy(outCue = transition.getDouble("out_cue"), inCue = transition.getDouble("in_cue"),
+            overlap = transition.getDouble("overlap_seconds"), rate = transition.getDouble("playback_rate"),
+            outPeriod = sync.getDouble("out_period"), metricSync = sync)
+    @Test fun pulseOnlyPlansMoveByWholeBeatsAndEstimatedBarsByWholeBars() {
+        // 0.5 s beats move 213.25 to 174.75; a common 2 s bar estimate moves 206.25 to 166.25.
+        for ((name, latest, expected) in listOf(Triple("three-to-four", 175.0, 174.75), Triple("unconfirmed-four", 167.0, 166.25))) {
+            val transition = metricVector(name)
+            assertEquals(name, "beats", transition.getJSONObject("sync").getString("alignment"))
+            val proposal = metricProposal(transition)
+            val placement = ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, latest, proposal, proposal.overlap)
+            assertEquals(name, expected, placement.first, 1e-9)
+            assertTrue(name, placement.second)
+        }
+    }
+    @Test fun pulsePlansDowngradeWithoutCoverageOrWithContradictoryPeriods() {
+        for (name in listOf("three-to-four", "unconfirmed-four")) {
+            val transition = metricVector(name)
+            assertTrue(name, ProgramDjPlan.metricCuePlacement(transition.getDouble("out_cue"), 90.0, 215.0,
+                metricProposal(transition), transition.getDouble("overlap_seconds")).second)
+            for ((field, value) in listOf("out_metre" to org.json.JSONObject.NULL, "in_metre" to org.json.JSONObject.NULL,
+                    "in_period" to 0.55, "out_period" to 0.0, "in_bar_seconds" to 1.7, "alignment" to "none")) {
+                val sync = org.json.JSONObject(transition.getJSONObject("sync").toString()).put(field, value)
+                val proposal = metricProposal(transition, sync)
+                val placement = ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, 215.0, proposal, proposal.overlap)
+                assertFalse("$name $field", placement.second)
+            }
+        }
+    }
     @Test fun echoDelayBelongsOnlyToATrustedMatchingOccurrenceWithMixingEnabled() {
         val echo = confident.copy(technique = ProgramMixCurve.Technique.ECHO_CUT, echoDelaySeconds = 0.5)
         assertEquals(0.5, ProgramDjPlan.resolve("current", 200000000, echo, true)!!.echoDelaySeconds!!, 0.0)

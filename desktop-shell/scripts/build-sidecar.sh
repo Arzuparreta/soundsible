@@ -29,6 +29,8 @@ if [[ "${BUNDLE_FFMPEG:-0}" == "1" ]]; then
 fi
 
 "$PYTHON" -m pip install -q -r "$ROOT/desktop-shell/packaging/requirements-sidecar.txt"
+# The Auto DJ beat model, verified against shared/dj/weights.py, bundled as data.
+"$PYTHON" "$ROOT/scripts/fetch_dj_model.py"
 
 mkdir -p "$BIN_DIR"
 cd "$ROOT"

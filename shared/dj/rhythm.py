@@ -1,4 +1,10 @@
-"""Measured pulse and downbeat phase of one PCM window; no I/O."""
+"""Sample-accurate pulse grid and bar evidence of one PCM window; no I/O.
+
+The beat model (`beat_model`, Beat This! + DBN) decides which pulse the music
+has, its octave and phase, and where it puts each first beat. It works in
+20 ms frames; this module turns its beats into a grid precise to the sample
+(P1) and measures the independent evidence for bars that `metre` compares.
+"""
 
 from __future__ import annotations
 
@@ -9,10 +15,9 @@ from .metre import metric_regions
 # Rhythm ----------------------------------------------------------------------
 #
 # Two mixed songs share one clock, so a few milliseconds of disagreement
-# between their grids is heard as a flam. Tempo and beats therefore come from
-# a finer pass than the spectral features above: 11.6 ms steps instead of
-# 46 ms, one phase-consistent fit across the window instead of beats snapped to
-# whole frames, and a last alignment of the grid to where attacks start.
+# between their grids is heard as a flam. One phase-consistent line (or local
+# lines) runs through the model's beats, weighted by the attack at each, and
+# the grid is last aligned to where the attacks start.
 
 _RHYTHM_HOP = 128
 
@@ -21,13 +26,6 @@ _RHYTHM_FRAME = 1024
 
 
 _RHYTHM_BANDS = 24
-
-
-_TEMPO_RANGE = (60.0, 200.0)
-
-
-# Cost of a beat-to-beat step away from the tempo (Ellis 2007, "tightness").
-_TRACKER_TIGHTNESS = 100.0
 
 
 # Pre-emphasis makes the attack transient, rather than the slower bass body
@@ -58,62 +56,73 @@ _CONSTANT_DRIFT = 0.003
 _CONSTANT_SHARE = 0.55
 
 
-def _rhythm(samples, sample_rate: int) -> RhythmWindow | None:
-    """Tempo, beat grid and bar phase of one window, in window-relative seconds."""
+def _rhythm(samples, sample_rate: int, events) -> RhythmWindow | None:
+    """Tempo, beat grid and bar evidence of one window, in window-relative seconds.
+
+    `events` are the beat model's (beat times, first-beat times) for this
+    window. Without them there is no pulse: nothing else guesses one.
+    """
     import numpy as np
 
+    if events is None:
+        return None
+    beats, firsts = (np.asarray(values, dtype=float) for values in events)
+    if beats.size < 8:
+        return None
     measured = _rhythm_stft(samples, sample_rate)
     if measured is None:
         return None
-    onset, chroma, centre, pulse_onset = measured
-    frame_rate = sample_rate / _RHYTHM_HOP
-    lag = _tempo_lag(pulse_onset, frame_rate)
-    if lag is None:
-        return None
-    lag = _pulse_lag(pulse_onset, lag, frame_rate)
-    frames = _track_beats(onset, lag)
-    if frames.size < 8:
-        return None
-    times = (_peak_positions(onset, frames) * _RHYTHM_HOP + centre) / sample_rate
-    weights = np.maximum(onset[frames], 0.0)
+    onset, chroma, centre = measured
+    times = beats
+    weights = _attack_weights(onset, beats, sample_rate, centre)
     duration = samples.size / sample_rate
 
-    period, phase, share = _phase_fit(times, weights, lag / frame_rate)
-    # The tracker can follow the off-beat for a section and the beat for the
-    # rest; both lie on one constant grid of half the period.
-    half_period, half_phase, half_share = _phase_fit(times, weights, lag / frame_rate / 2)
-    if half_share > share + 0.15:
-        period, phase, share = 2 * half_period, half_phase, half_share
+    # The model's beats are consecutive. Their least-squares slope averages
+    # the 20 ms frame rounding that a median interval would keep (24/25
+    # frames at 122 BPM is 2 % either side, the width of the phase search).
+    index = np.arange(beats.size)
+    period, phase, share = _phase_fit(times, weights, float(np.polyfit(index, beats, 1)[0]))
     numbers = _beat_numbers(times, period)
     fitted, slopes = _local_lines(numbers, times, weights)
     # A programmed song keeps its locally fitted beats within a few ms of one
-    # line (the tracker's own section-dependent bias) and its local tempo on
-    # the line's; a performance that drifts does neither. The tempo test
-    # matters because a line allowed half-beat flips is close to any beat
-    # half of the time.
+    # line and its local tempo on the line's; a performance that drifts does
+    # neither. The tempo test matters because a line allowed half-beat flips
+    # is close to any beat half of the time.
     straight = phase + np.rint((fitted - phase) / (period / 2)) * (period / 2)
     wander = _weighted_quantile(np.abs(fitted - straight), weights, 0.5)
     known = np.isfinite(slopes)
     drift = _weighted_quantile(np.abs(slopes[known] / period - 1), weights[known], 0.5) if known.any() else 1.0
     constant = wander <= _CONSTANT_WANDER and drift <= _CONSTANT_DRIFT and share >= _CONSTANT_SHARE
+    # The grid covers where the model heard beats, not the whole window: an
+    # unpulsed intro or tail gets no invented continuation of the line.
+    first, last = beats[0] - period / 2, beats[-1] + period / 2
     if constant:
-        grid = phase + period * np.arange(math.ceil(-phase / period), math.floor((duration - phase) / period) + 1)
+        grid = phase + period * np.arange(math.ceil((first - phase) / period), math.floor((last - phase) / period) + 1)
         reliability = share
     else:
         grid = _local_grid(numbers, fitted, slopes, duration)
+        grid = grid[(grid >= first) & (grid <= last)]
         near = np.abs(times - fitted) <= 0.03
         # A drifting grid is followed, not predicted: the mix holds one rate
         # for its whole overlap while the song keeps moving.
         reliability = 0.7 * float(weights[near].sum() / max(float(weights.sum()), 1e-12))
     if grid.size < 4:
         return None
-
-    grid, pulse = _settle_beat_phase(samples, sample_rate, grid)
+    _, pulse = _mean_attack(samples, sample_rate, grid, _attack_floor(samples, 0.0), emphasis=0.0)
     if pulse < _MIN_PULSE_DB:
-        # A sustained sound: the tracker found only rounding noise to follow.
+        # A sustained sound: the model followed rounding noise.
         return None
+    # Each model first beat names the grid point it falls on; one it cannot
+    # name within half a beat is dropped rather than moved.
+    nearest = np.clip(np.searchsorted(grid, firsts), 1, grid.size - 1) if firsts.size else np.array([], dtype=int)
+    if firsts.size:
+        nearest = np.where(np.abs(grid[nearest - 1] - firsts) <= np.abs(grid[nearest] - firsts), nearest - 1, nearest)
+        nearest = nearest[np.abs(grid[nearest] - firsts) <= period / 2]
     grid = _align_attacks(samples, sample_rate, grid, _attack_floor(samples, _ATTACK_PREEMPHASIS), constant=constant)
-    grid = grid[(grid >= 0) & (grid <= duration)]
+    inside = (grid >= 0) & (grid <= duration)
+    index = np.cumsum(inside) - 1
+    first_beats = np.unique(index[nearest[inside[nearest]]]) if nearest.size else np.array([], dtype=int)
+    grid = grid[inside]
     if grid.size < 4:
         return None
     beat = period if constant else float(np.median(np.diff(grid)))
@@ -122,7 +131,8 @@ def _rhythm(samples, sample_rate: int) -> RhythmWindow | None:
     blocks = np.array_split(np.arange(len(grid)), max(1, len(grid) // 24))
     subdivisions = [_subdivision(onset, sample_rate, grid[block], centre) for block in blocks]
     regions = metric_regions(grid, novelty, strength, duration=duration, period=beat,
-                             pulse_confidence=pulse_confidence, subdivisions=subdivisions)
+                             pulse_confidence=pulse_confidence, subdivisions=subdivisions,
+                             first_beats=first_beats.tolist())
     return {
         "bpm": 60.0 / beat,
         "period": beat,
@@ -133,12 +143,25 @@ def _rhythm(samples, sample_rate: int) -> RhythmWindow | None:
     }
 
 
+def _attack_weights(onset, beats, sample_rate: int, centre: float):
+    """Onset strength at each model beat (largest within one 11.6 ms frame).
+
+    Beats the network carries through a break, with nothing attacking there,
+    weigh nothing in the fitted line.
+    """
+    import numpy as np
+
+    frames = np.rint((beats * sample_rate - centre) / _RHYTHM_HOP).astype(int)
+    span = np.clip(frames[:, None] + np.arange(-1, 2)[None, :], 0, onset.size - 1)
+    return np.maximum(onset[span].max(axis=1), 0.0)
+
+
 def _rhythm_stft(samples, sample_rate: int):
     """Onset strength and chroma from one bounded float32 STFT pass.
 
     `onset[k]` is the mean rise of log energy in 24 log-spaced bands into frame
     `k`; every band counts alike, so a quiet hi-hat and a loud bass note mark
-    time equally. Returns onset, chroma, frame-centre offset and low-band onset.
+    time equally. Returns onset, chroma and the frame-centre offset.
     """
     import numpy as np
 
@@ -178,119 +201,7 @@ def _rhythm_stft(samples, sample_rate: int):
     reference = max(float(np.percentile(bands, 99.5)), 1e-9)
     rise = np.maximum(0.0, np.diff(np.log1p(bands * np.float32(1000.0 / reference)), axis=0))
     onset = np.concatenate([[0.0], rise.mean(axis=1, dtype=np.float64)])
-    # Resolve the pulse octave before grouping. Low-band transients separate
-    # a bass/kick pulse from hi-hat subdivisions; use all bands for tracking.
-    # No preference for a 120 BPM octave or a binary bar is applied.
-    low = max(1, int(np.searchsorted(edges[1:], 180.)))
-    pulse_onset = np.concatenate([[0.], rise[:, :low].mean(axis=1, dtype=np.float64)])
-    return onset, chroma, _RHYTHM_FRAME / 2, pulse_onset
-
-
-def _tempo_lag(onset, frame_rate: float) -> float | None:
-    """Beat period in (fractional) frames from the onset autocorrelation."""
-    import numpy as np
-
-    width = max(1, int(frame_rate * 1.5))
-    envelope = np.maximum(0.0, onset - np.convolve(onset, np.ones(width) / width, mode="same"))
-    envelope -= envelope.mean()
-    size = 1 << int(math.ceil(math.log2(2 * envelope.size)))
-    spectrum = np.fft.rfft(envelope, size)
-    acf = np.fft.irfft(spectrum * np.conj(spectrum), size)[: envelope.size]
-    if acf[0] <= 1e-12:
-        return None
-    acf /= acf[0]
-    low, high = _TEMPO_RANGE
-    lags = np.arange(int(60 * frame_rate / high), int(math.ceil(60 * frame_rate / low)) + 1)
-    lags = lags[(lags > 0) & (lags * 4 < acf.size)]
-    if lags.size < 3:
-        return None
-    # Test both binary and ternary repetitions without preferring a bar size.
-    # Integer multiples miss narrow peaks: allow three frames of resolution.
-    reach = np.lib.stride_tricks.sliding_window_view(np.pad(acf, 3, constant_values=-1.0), 7).max(axis=1)
-    score = sum(reach[multiple * lags] / multiple for multiple in (1, 2, 3, 4))
-    best = int(np.argmax(score))
-    lag = float(lags[best])
-    if 0 < best < lags.size - 1:
-        left, centre, right = score[best - 1], score[best], score[best + 1]
-        curvature = left - 2 * centre + right
-        if curvature < 0:
-            lag += 0.5 * (left - right) / curvature
-    return lag
-
-
-def _pulse_lag(onset, proposed: float, frame_rate: float) -> float:
-    """Resolve pulse and subdivision hypotheses by low-band onset coverage.
-
-    Phase-consistent onset mass divided by sqrt(number of grid points) is the
-    normalized projection onto a pulse train. A half-time grid misses attacks;
-    a subdivision grid adds empty points. Equal binary/ternary hypotheses are
-    tested, without treating a ternary pulse as half/double tempo.
-    """
-    import numpy as np
-
-    peaks = np.flatnonzero((onset[1:-1] > onset[:-2]) & (onset[1:-1] >= onset[2:])) + 1
-    if len(peaks) < 8:
-        return proposed
-    times = _peak_positions(onset, peaks) / frame_rate
-    weights = np.maximum(onset[peaks], 0.)
-    candidates = []
-    for factor in (1., .5, 2., 2 / 3, 3 / 2):
-        period = proposed * factor / frame_rate
-        if not 60 / _TEMPO_RANGE[1] <= period <= 60 / _TEMPO_RANGE[0]:
-            continue
-        supports, periods = [], []
-        for start in np.arange(0., times[-1], 12.):
-            inside = (times >= start) & (times < start + 12.)
-            if inside.sum() < 8:
-                continue
-            fitted, _, share = _phase_fit(times[inside] - start, weights[inside], period)
-            supports.append(share * math.sqrt(fitted))
-            periods.append(fitted)
-        if supports:
-            candidates.append((float(np.median(supports)), float(np.median(periods))))
-    return max(candidates)[1] * frame_rate if candidates else proposed
-
-
-def _track_beats(onset, period: float):
-    """Ellis dynamic-programming beat tracker, in vectorised blocks.
-
-    A beat can only follow one at least `shortest` frames earlier, so every
-    block of `shortest` frames depends only on frames before it.
-    """
-    import numpy as np
-
-    spread = float(np.std(onset))
-    if onset.size < 4 or spread <= 0 or period < 2:
-        return np.array([], dtype=int)
-    reach = int(round(period))
-    offsets = np.arange(-reach, reach + 1)
-    local = np.convolve(onset / spread, np.exp(-0.5 * (offsets * 32.0 / period) ** 2), mode="same")
-    shortest = max(1, int(period * 0.7))
-    lags = np.arange(shortest, max(shortest + 1, int(math.ceil(period * 1.4))) + 1)
-    penalty = -_TRACKER_TIGHTNESS * np.log(lags / period) ** 2
-    score = local.copy()
-    previous = np.full(onset.size, -1, dtype=np.int64)
-    for start in range(shortest, onset.size, shortest):
-        index = np.arange(start, min(onset.size, start + shortest))
-        candidates = index[:, None] - lags[None, :]
-        options = np.where(candidates >= 0, score[np.maximum(candidates, 0)] + penalty, -np.inf)
-        best = np.argmax(options, axis=1)
-        gain = options[np.arange(index.size), best]
-        linked = np.isfinite(gain) & (gain > 0)
-        score[index] = local[index] + np.where(linked, gain, 0.0)
-        previous[index] = np.where(linked, candidates[np.arange(index.size), best], -1)
-    peaks = np.flatnonzero((score[1:-1] >= score[:-2]) & (score[1:-1] > score[2:])) + 1
-    if peaks.size == 0:
-        return np.array([], dtype=int)
-    strong = peaks[score[peaks] >= 0.5 * float(np.median(score[peaks]))]
-    beats = [int(strong[-1] if strong.size else peaks[-1])]
-    while previous[beats[-1]] >= 0:
-        beats.append(int(previous[beats[-1]]))
-    beats = np.array(beats[::-1], dtype=int)
-    # Leading and trailing beats the tracker merely coasted through.
-    strength = local[beats]
-    kept = np.flatnonzero(strength >= 0.5 * math.sqrt(float(np.mean(strength ** 2))))
-    return beats[kept[0]: kept[-1] + 1] if kept.size else beats
+    return onset, chroma, _RHYTHM_FRAME / 2
 
 
 def _peak_positions(values, frames):
@@ -483,29 +394,6 @@ def _mean_attack(samples, sample_rate: int, times, floor: float, *, emphasis: fl
     return float(offsets[best]), float(curve[best])
 
 
-def _halfway(grid):
-    import numpy as np
-
-    return np.concatenate([[grid[0] - (grid[1] - grid[0]) / 2], (grid[:-1] + grid[1:]) / 2])
-
-
-def _settle_beat_phase(samples, sample_rate: int, grid):
-    """Move the grid to the half beat when the attacks clearly live there.
-
-    Returns the grid and the mean attack height (dB) at its points.
-
-    The tracker locks onto the stronger of beat and off-beat in its own onset
-    measure, where an off-beat hi-hat or bass note counts as much as a kick
-    drum. The jump in overall level separates them: it belongs to the kick.
-    Without pre-emphasis, which would hand the decision back to the hi-hat.
-    """
-    floor = _attack_floor(samples, 0.0)
-    shifted = _halfway(grid)
-    _, on_beat = _mean_attack(samples, sample_rate, grid, floor, emphasis=0.0)
-    _, off_beat = _mean_attack(samples, sample_rate, shifted, floor, emphasis=0.0)
-    return (shifted, off_beat) if off_beat > 1.1 * on_beat else (grid, on_beat)
-
-
 def _align_attacks(samples, sample_rate: int, grid, floor: float, *, constant: bool):
     """Shift grid points onto where the attacks around them start.
 
@@ -521,7 +409,8 @@ def _align_attacks(samples, sample_rate: int, grid, floor: float, *, constant: b
         return grid
     if constant:
         curve = rows.mean(axis=0, dtype=np.float64)
-        return grid + float(offsets[int(np.argmax(curve))])
+        shift = float(offsets[int(np.argmax(curve))])
+        return _attack_line(grid, offsets, rows, usable, shift)
     count = rows.shape[0]
     cumulative = np.concatenate([np.zeros((1, rows.shape[1])), np.cumsum(rows, axis=0, dtype=np.float64)])
     lo = np.clip(np.arange(count) - 16, 0, count)
@@ -529,6 +418,36 @@ def _align_attacks(samples, sample_rate: int, grid, floor: float, *, constant: b
     local = (cumulative[hi] - cumulative[lo]) / (hi - lo)[:, None]
     shift = offsets[np.argmax(local, axis=1)]
     return grid + np.interp(np.arange(grid.size), np.flatnonzero(usable), shift)
+
+
+# Half of the shortest ripple period of a kick's body (about 160 Hz): each
+# beat's own attack is read this close to the mean one, never on a
+# neighbouring cycle of the same drum.
+_ATTACK_REFINE = 0.0015
+
+
+def _attack_line(grid, offsets, rows, usable, shift: float):
+    """A straight grid through each beat's attack near the mean attack.
+
+    The mean attack over all beats fixes the phase robustly; each beat's own
+    attack, searched within ±1.5 ms of it, then fixes the period to the
+    sample. Falls back to the mean shift alone when too few beats attack.
+    """
+    import numpy as np
+
+    near = np.flatnonzero(np.abs(offsets - shift) <= _ATTACK_REFINE)
+    local = rows[:, near]
+    best = np.argmax(local, axis=1)
+    heights = local[np.arange(local.shape[0]), best].astype(np.float64)
+    index = np.flatnonzero(usable).astype(np.float64)
+    positions = grid[usable] + offsets[near][best]
+    if heights.sum() <= 0 or np.count_nonzero(heights > 0) < 8 or np.ptp(index) <= 0:
+        return grid + shift
+    mean_x = np.average(index, weights=heights)
+    mean_y = np.average(positions, weights=heights)
+    variance = np.average((index - mean_x) ** 2, weights=heights)
+    slope = np.average((index - mean_x) * (positions - mean_y), weights=heights) / variance
+    return mean_y + slope * (np.arange(grid.size) - mean_x)
 
 
 def _bar_observations(samples, sample_rate: int, grid, chroma, centre: float):

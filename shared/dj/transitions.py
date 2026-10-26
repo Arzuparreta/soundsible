@@ -12,7 +12,7 @@ from .contracts import AnalysisInput, TransitionPlan
 from .timing import (
     MAX_STRETCH as _MAX_STRETCH,
     BEATMATCH_TECHNIQUES, PHASE_TOLERANCE_SECONDS,
-    comparable_ratio, local_period as _local_period, rate_fits as _rate_fits, local_metre, metric_sync,
+    comparable_ratio, local_period as _local_period, rate_fits as _rate_fits, metric_sync,
 )
 
 _TEMPO_SCORE_RANGE = 0.08
@@ -237,8 +237,12 @@ def _grid_runway(analysis: Mapping[str, Any], cue: float, span: float) -> bool:
 
 def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
                      technique: str, bars: int, blend_score: float, confidence: float) -> TransitionPlan:
-    # A missing grouping only chooses a bounded fade in seconds, never a bar.
-    region = local_metre(outgoing, float(outgoing.get('outro_cue') or 0))
+    # The beat model's bar at the exit sizes the overlap; promising that the
+    # bars align is `metric_sync`'s decision. A missing grouping only chooses
+    # a bounded fade in seconds, never a bar.
+    exit_at = float(outgoing.get('outro_cue') or 0)
+    region = next((row for row in outgoing.get('metric_regions') or []
+                   if row['start'] <= exit_at < row['end'] and row.get('bar_seconds')), None)
     bar_seconds = float(region['bar_seconds']) if region else float(outgoing.get("bar_seconds") or 2.0)
     overlap = max(4.0, min(48.0, bars * bar_seconds))
     duration = float(outgoing.get("duration") or 0)
@@ -316,8 +320,9 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     if technique not in BEATMATCH_TECHNIQUES and sync_metric:
         sync_metric['alignment'] = 'none'
     # For the measured metric contract, score ranks sustained, executable
-    # alignment. Absent/incompatible metre cannot retain a high blend score.
-    if sync_metric and sync_metric['alignment'] != 'bars':
+    # alignment of bars or of the pulse. Without either it cannot retain a
+    # high blend score.
+    if sync_metric and sync_metric['alignment'] == 'none':
         blend_score = 0.
     measured_bar = sync_metric.get('out_bar_seconds') if sync_metric else 4 * out_period
     return {
