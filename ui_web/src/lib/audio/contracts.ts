@@ -130,6 +130,10 @@ export interface ActiveMix {
   echoDelay?: number;
   phaseTolerance: number;
   phaseCorrected: boolean;
+  /** The one seek allowed at the cue, for an error too large to nudge. */
+  dueSeeked: boolean;
+  /** The incoming rate is being nudged back into phase. */
+  nudging: boolean;
   dominant: boolean;
   /** A listener-requested skip: hand over as soon as the blend begins. */
   manual: boolean;

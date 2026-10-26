@@ -38,6 +38,17 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   const MIN_OVERLAP = 1.2;
   const MIX_STALL_MS = 4_000;
   const RATE_RETURN_MS = 8_000;
+  // A beatmatched blend holds its phase the way a DJ rides the pitch: an
+  // incoming deck off by more than the plan's tolerance is nudged by at most
+  // 2 %, closing the error within about a second. A seek on a playing deck
+  // can stall it for hundreds of milliseconds (P2, user's session: a seek at
+  // the cue took 370 ms and left the incoming 115 ms behind for the whole
+  // 30 s blend). Only an error beyond PHASE_SEEK_SECONDS, which the nudge
+  // would take seconds to close, is sought once while the deck is silent.
+  const PHASE_NUDGE_MAX = 0.02;
+  const PHASE_NUDGE_SECONDS = 1;
+  const PHASE_SEEK_SECONDS = 0.1;
+  const HELD_TECHNIQUES = new Set<LiveTransitionPlan['technique']>(['bass_swap', 'filter_blend', 'long_blend']);
   function programMixSnapshot(): ProgramMixSnapshot {
     const list = ports.decks();
     let progress = 0;
@@ -236,6 +247,21 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     }
     current.inPosition = position;
   }
+  /** Keeps a beatmatched incoming deck on the outgoing beat through the blend. */
+  function holdPhase(current: ActiveMix, from: HTMLAudioElement, to: HTMLAudioElement): void {
+    if (current.manual || !HELD_TECHNIQUES.has(current.technique) || to.seeking || to.paused || from.paused) return;
+    const target = current.inCue + (from.currentTime - current.outCue) * current.rate;
+    const error = to.currentTime - target;
+    if (!Number.isFinite(error)) return;
+    if (Math.abs(error) > current.phaseTolerance) current.nudging = true;
+    else if (Math.abs(error) <= current.phaseTolerance / 2) current.nudging = false;
+    // Quarter-percent steps: few rate changes, and none at all once in phase.
+    const nudge = current.nudging
+      ? Math.round(Math.max(-PHASE_NUDGE_MAX, Math.min(PHASE_NUDGE_MAX, error / PHASE_NUDGE_SECONDS)) * 400) / 400
+      : 0;
+    const wanted = current.rate * from.playbackRate * (1 - nudge);
+    if (Math.abs(to.playbackRate - wanted) > 1e-6) to.playbackRate = wanted;
+  }
   function incomingSounding(current: ActiveMix, to: HTMLAudioElement): boolean {
     return current.phase !== 'armed' && current.inAdvanced && !to.paused && !to.seeking && to.readyState >= 3;
   }
@@ -371,11 +397,15 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       }
       const due = current.manual || outRemaining <= current.phaseTolerance && inRemaining <= current.phaseTolerance;
       if (!due) return;
-      if (!current.manual) {
+      // A seek is under way: the blend opens once the deck plays again.
+      if (to.seeking) return;
+      if (!current.manual && !current.dueSeeked) {
         const target = current.inCue + Math.max(0, from.currentTime - current.outCue) * current.rate;
-        if (Math.abs(to.currentTime - target) > current.phaseTolerance * current.rate) {
+        if (Math.abs(to.currentTime - target) > PHASE_SEEK_SECONDS) {
           to.currentTime = Math.max(0, target);
           current.inPosition = to.currentTime;
+          current.dueSeeked = true;
+          return;
         }
       }
       current.mixStart = to.currentTime;
@@ -392,6 +422,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       if (current.dominant) finishMix();else failMix(new Error('incoming deck stalled during the blend'));
       return;
     }
+    holdPhase(current, from, to);
     const span = Math.max(0.05, current.overlap * current.rate);
     const elapsed = to.currentTime - (current.mixStart ?? to.currentTime);
     const progress = Math.min(1, Math.max(0, elapsed / span));
@@ -512,6 +543,8 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
           ? plan.echo_delay_seconds : undefined,
         phaseTolerance: Math.max(0.001, Math.min(0.012, Number(plan.sync?.phase_tolerance_ms || 5) / 1000)),
         phaseCorrected: false,
+        dueSeeked: false,
+        nudging: false,
         dominant: false,
         manual,
         callbacks

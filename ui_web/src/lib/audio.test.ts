@@ -740,6 +740,76 @@ describe('two-deck mixer', () => {
     expect(audioService.mixPhase()).toBe('crossfading');
   });
 
+  /** The incoming deck's clock, with every seek recorded. */
+  function watchSeeks(deck: FakeAudio, start: number) {
+    const state = { position: start, seeks: [] as number[] };
+    Object.defineProperty(deck, 'currentTime', {
+      configurable: true,
+      get: () => state.position,
+      set: (value: number) => {
+        state.seeks.push(value);
+        state.position = value;
+        deck.seeking = true;
+      },
+    });
+    return state;
+  }
+
+  it('rides the incoming rate back onto the beat during the blend instead of seeking', async () => {
+    // User's session, 2026-10-26: a seek at the cue took 370 ms and left the
+    // incoming 115 ms behind for the whole blend, a doubled kick throughout.
+    const { audioService, outgoing, incoming } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    expect(audioService.mixPhase()).toBe('crossfading');
+
+    const clock = watchSeeks(incoming, 2.885);
+    await play(outgoing, 111);
+    expect(clock.seeks).toEqual([]);
+    expect(incoming.playbackRate).toBeCloseTo(1.02, 9);
+
+    // Back within half the tolerance: the planned rate exactly.
+    clock.position = 3.501;
+    await play(outgoing, 111.5);
+    expect(incoming.playbackRate).toBe(1);
+    expect(clock.seeks).toEqual([]);
+  });
+
+  it('opens the blend on time for a small error at the cue and nudges it away', async () => {
+    const { audioService, outgoing, incoming } = await armed();
+    await play(outgoing, 108.5);
+    const clock = watchSeeks(incoming, 2.03);
+    await play(outgoing, 110);
+    expect(audioService.mixPhase()).toBe('crossfading');
+    expect(clock.seeks).toEqual([]);
+    // 30 ms ahead: slowed by the 2 % limit.
+    expect(incoming.playbackRate).toBeCloseTo(0.98, 9);
+  });
+
+  it('seeks a silent incoming deck once for a large error and blends when the seek ends', async () => {
+    const { audioService, outgoing, incoming } = await armed();
+    await play(outgoing, 108.5);
+    const clock = watchSeeks(incoming, 2);
+    await play(outgoing, 110.3);
+    expect(clock.seeks).toHaveLength(1);
+    expect(clock.seeks[0]).toBeCloseTo(2.3, 9);
+    expect(audioService.mixPhase()).toBe('prerolling');
+    expect(incoming.volume).toBe(0);
+
+    // Still seeking: nothing opens, and no second seek is stacked on it.
+    await play(outgoing, 110.5);
+    expect(audioService.mixPhase()).toBe('prerolling');
+
+    // The seek landed 10 ms behind: the nudge closes it, not another seek.
+    incoming.seeking = false;
+    clock.position = 2.49;
+    await play(outgoing, 110.5);
+    expect(audioService.mixPhase()).toBe('crossfading');
+    expect(clock.seeks).toHaveLength(1);
+    expect(incoming.playbackRate).toBeCloseTo(1.01, 9);
+  });
+
   it('schedules one continuous equal-power curve on the audio graph', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');

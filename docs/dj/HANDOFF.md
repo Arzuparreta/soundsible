@@ -62,7 +62,7 @@ no hay síntoma que lo justifique.
 | Punto | Tema | Evidencia | Estado |
 | --- | --- | --- | --- |
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
-| P2 | Alineación de fase en el navegador | Lectura de código | Sin síntoma tras #377; se retoma solo si vuelve a oírse desfase |
+| P2 | Alineación de fase en el navegador | Traza de la estación: un `seek` en el cue dejó 115 ms de desfase 30 s, oído por el usuario | Cerrado en la web (PR #395): fase mantenida con `playbackRate` durante la mezcla; Android sin medir |
 | P3 | El orden de la ruta ignora la calidad de la transición | Tests de magnitudes, audio sintético → HTTP y replay de análisis locales | Cerrado (implementación `0e62b0fb`) |
 | P4 | La "energía" no mide intensidad | Medido | Cerrado (#385): notas/s, LUFS y planitud; `energy` eliminado |
 | P5 | Pool analizado, previews y canciones puente | AAC → caché → HTTP, pools fríos/calientes y adquisición real de 16 previews | Cerrado (implementación `31f696bc`) |
@@ -533,9 +533,24 @@ reales actuales. Las cifras de evaluación de #377 son históricas.
 
 ## P2. Alineación de fase en el navegador
 
-**Estado: sin síntoma.** Tras #377 el usuario no oye desfase en las mezclas. Lo
-que sigue es diagnóstico por lectura de código, sin medir; se retoma solo si
-vuelve a oírse un desfase entre los golpes de las dos canciones.
+**Estado: cerrado en la web (PR #395).** Síntoma medido y oído el 2026-10-26
+(«It's Not Right But It's Okay» → «Teardrops (Rules Remix)», web con
+plataforma `other` y la página oculta a ratos): en el cue, la entrante estaba 11 ms
+fuera de fase y `mixer.ts` la movió con un `seek` mientras sonaba. El `seek`
+tardó 370 ms (`media.seeking` → `media.seeked` en la traza) y la dejó 115 ms
+(−0,24 pulsos) detrás durante los 30 s de la mezcla; el usuario oyó los bombos
+desdoblados. Antes del arreglo nada corregía la fase después del cue.
+
+**Arreglo.** Durante una mezcla con beatmatch, cada tick compara la posición de
+la entrante con la que le corresponde según la saliente y, si se aparta más que
+la tolerancia del plan (5 ms), ajusta su `playbackRate` como un DJ con el pitch:
+error/1 s, como mucho ±2 %, en pasos de 0,25 %; vuelve a la velocidad exacta del
+plan al quedar dentro de la mitad de la tolerancia. En el cue solo se hace
+`seek` si el error supera 100 ms, una vez y con la entrante en silencio; la
+mezcla se abre cuando el `seek` termina y el pitch cierra lo que quede. Tests
+en `ui_web/src/lib/audio.test.ts`.
+
+Lo que sigue es el diagnóstico anterior al arreglo, por lectura de código.
 
 **Qué pasa.** `mixer.ts` (`tick`, fase `prerolling`) mueve `currentTime` del
 `<audio>` entrante una sola vez, mientras está en silencio, con un temporizador
