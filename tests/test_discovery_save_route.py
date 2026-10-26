@@ -1389,6 +1389,54 @@ def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_
     assert body["items"][0]["request_id"] == "q-wanted"
 
 
+def test_dj_place_never_bridges_through_the_requested_or_playing_song_under_another_identity(tmp_path):
+    # User's session, 2026-10-26: «Teardrops (Rules Remix)» came back as its own
+    # bridge. The library copy reached the pool through the heard songs as
+    # `music:youtube:<id>` while the request was `music:track:<id>`, and a song
+    # into itself is a perfect mix. The browser showed two rows that were
+    # deleted and moved together.
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    measured = {
+        "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
+        "wanted": {"duration": 220, "bpm": 130, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
+    }
+
+    def analysis(_metadata, item, *, schedule=False):
+        key = str(item.get("track_id") or item.get("youtube_id") or item.get("id") or "")
+        return measured.get(key, _auto_mode._dj_fallback_analysis(float(item.get("duration") or 0)))
+
+    def copy(track_id: str, video: str, title: str, artist: str) -> dict:
+        return {"id": video, "track_id": track_id, "youtube_id": video, "title": title, "artist": artist,
+                "duration": 220, "source": "preview", "source_pool": "related",
+                "recommendation_identity": f"music:youtube:{video}", "score": 0.9,
+                "external_ids": {"youtube_id": video}}
+
+    related = [copy("wanted", "wantedvid01", "Wanted", "Listener"), copy("seed", "seedvideo01", "Seed", "Artist")]
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)),
+        patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-place",
+            json={
+                "seed": {"id": "seed", "track_id": "seed", "title": "Seed", "artist": "Artist", "duration": 220},
+                "route": [],
+                "track": {"id": "wanted", "track_id": "wanted", "title": "Wanted", "artist": "Listener", "duration": 220},
+                "requested_queue_id": "q-wanted",
+                "heard": [{"id": "wanted", "track_id": "wanted", "title": "Wanted", "artist": "Listener"}],
+            },
+        )
+
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert [(item["route_kind"], item["track_id"]) for item in items] == [("user", "wanted")]
+
+
 def _repair_route(*kinds: str) -> list[dict]:
     return [
         {
@@ -1439,7 +1487,7 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
     _make_runtime(tmp_path)
     measured = {
         "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
-        # Two adjacent Camelot steps, each inside the mixer's 6% rate limit.
+        # Two adjacent Camelot steps, each inside the players' 8 % rate limit.
         # At 100 -> 113 -> 128 neither leg could beatmatch; that old fixture
         # only passed because C -> D was incorrectly scored as unrelated.
         "t0": {"duration": 220, "bpm": 112, "key": "D", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
