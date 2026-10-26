@@ -1,5 +1,8 @@
 package com.soundsible.android
 
+import org.json.JSONObject
+import kotlin.math.abs
+import kotlin.math.round
 import kotlin.math.ceil
 import kotlin.math.roundToLong
 
@@ -9,7 +12,7 @@ internal object ProgramDjPlan {
     data class Proposal(val fromKey: String, val technique: ProgramMixCurve.Technique,
         val outCue: Double, val inCue: Double, val overlap: Double, val rate: Double,
         val confidence: Double, val phaseToleranceMs: Double = 5.0, val outPeriod: Double = 0.0,
-        val echoDelaySeconds: Double? = null)
+        val echoDelaySeconds: Double? = null, val metricSync: JSONObject? = null)
     data class Plan(val technique: ProgramMixCurve.Technique, val outCueUs: Long,
         val inCueUs: Long, val overlapUs: Long, val rate: Float, val phaseToleranceUs: Long,
         val echoDelaySeconds: Double? = null)
@@ -26,17 +29,60 @@ internal object ProgramDjPlan {
         if (latest <= 0) return null
         val earliest = minOf(90.0, duration * 0.6, latest)
         val proposed = chained?.outCue?.takeIf { it.isFinite() && it > 0 } ?: latest
-        val outCue = placeOutCue(proposed, earliest, latest, if (trusted) 4 * chained!!.outPeriod else 0.0)
+        val placement = metricCuePlacement(proposed, earliest, latest, if (trusted) chained else null, overlap)
+        val outCue = placement.first
+        val metricFallback = trusted && chained!!.technique in setOf(ProgramMixCurve.Technique.BASS_SWAP,
+            ProgramMixCurve.Technique.FILTER_BLEND, ProgramMixCurve.Technique.LONG_BLEND) && !placement.second
         val inCue = if (trusted) chained!!.inCue.coerceIn(0.0, 86400.0) else 0.0
-        val rate = if (trusted) chained!!.rate.coerceIn(0.94, 1.06).toFloat() else 1f
+        val rate = if (trusted && !metricFallback) chained!!.rate.coerceIn(0.94, 1.06).toFloat() else 1f
         val tolerance = chained?.phaseToleranceMs?.takeIf { it.isFinite() && it != 0.0 } ?: 5.0
         val echoDelay = chained?.echoDelaySeconds?.takeIf { trusted && chained.technique == ProgramMixCurve.Technique.ECHO_CUT && it.isFinite() && it > 0 && it <= 2 }
         val technique = if (!trusted) ProgramMixCurve.Technique.SAFE_FADE
+            else if (metricFallback) ProgramMixCurve.Technique.STRUCTURAL_FADE
             else if (chained!!.technique == ProgramMixCurve.Technique.ECHO_CUT && echoDelay == null) ProgramMixCurve.Technique.STRUCTURAL_FADE
             else chained.technique
         return Plan(technique,
             (outCue * 1000000).roundToLong(), (inCue * 1000000).roundToLong(),
             (overlap * 1000000).roundToLong(), rate, (tolerance.coerceIn(1.0, 12.0) * 1000).roundToLong(), echoDelay)
+    }
+
+    /** Missing bar field is the old four-pulse prior; explicit null is unknown. */
+    fun barSeconds(proposal: Proposal?): Double {
+        val sync = proposal?.metricSync
+        if (sync?.has("out_bar_seconds") == true) {
+            return sync.optDouble("out_bar_seconds", Double.NaN).takeIf { it.isFinite() && it in 0.2..32.0 } ?: 0.0
+        }
+        return (4 * (proposal?.outPeriod ?: 0.0)).takeIf { it.isFinite() && it > 0 } ?: 0.0
+    }
+
+    fun metricCuePlacement(proposed: Double, earliest: Double, latest: Double, proposal: Proposal?, overlap: Double): Pair<Double, Boolean> {
+        val sync = proposal?.metricSync
+        val bar = barSeconds(proposal)
+        val fallback = placeOutCue(proposed, earliest, latest, bar)
+        if (sync?.has("alignment") != true) return fallback to (sync?.has("out_bar_seconds") != true)
+        if (sync.optString("alignment") != "bars") return fallback to false
+        val out = sync.optJSONObject("out_metre") ?: return fallback to false
+        val incoming = sync.optJSONObject("in_metre") ?: return fallback to false
+        if (bar <= 0) return fallback to false
+        val left = maxOf(earliest, out.optDouble("start", Double.NaN))
+        val right = minOf(latest, out.optDouble("end", Double.NaN) - overlap)
+        val inStart = incoming.optDouble("start", Double.NaN)
+        val inEnd = incoming.optDouble("end", Double.NaN)
+        if (!listOf(left, right, inStart, inEnd).all(Double::isFinite) || left > right) return fallback to false
+        val cue = placeOutCue(proposed, left, right, bar)
+        val tolerance = minOf(0.005, sync.optDouble("phase_tolerance_ms", 5.0) / 1000)
+        val outPeriod = sync.optDouble("out_period", Double.NaN)
+        val inPeriod = sync.optDouble("in_period", Double.NaN)
+        var pulseRatio = inPeriod / outPeriod
+        if (pulseRatio < 0.7) pulseRatio *= 2 else if (pulseRatio > 1.4) pulseRatio /= 2
+        val inBar = sync.optDouble("in_bar_seconds", Double.NaN)
+        if (!listOf(proposal.rate, pulseRatio, inBar, tolerance).all(Double::isFinite) || proposal.rate !in 0.94..1.06 ||
+            inBar <= 0 || outPeriod <= 0 || inPeriod <= 0 || tolerance < 0 ||
+            abs(proposal.rate / pulseRatio - 1) * overlap > tolerance ||
+            abs(inBar / proposal.rate / bar - 1) * overlap > tolerance) return fallback to false
+        val phaseError = abs(cue - proposed - round((cue - proposed) / bar) * bar)
+        return cue to (phaseError <= tolerance && proposal.inCue >= inStart - tolerance &&
+            proposal.inCue + overlap * proposal.rate <= inEnd + tolerance)
     }
 
     /**
@@ -49,7 +95,7 @@ internal object ProgramDjPlan {
     fun placeOutCue(proposed: Double, earliest: Double, latest: Double, barSeconds: Double): Double {
         if (proposed in earliest..latest) return proposed
         val clamped = proposed.coerceIn(earliest, latest)
-        if (!(barSeconds.isFinite() && barSeconds in 0.8..8.0)) return clamped
+        if (!(barSeconds.isFinite() && barSeconds in 0.2..32.0)) return clamped
         val moved = if (proposed > latest) proposed - ceil((proposed - latest) / barSeconds) * barSeconds
             else proposed + ceil((earliest - proposed) / barSeconds) * barSeconds
         return if (moved in earliest..latest) moved else clamped

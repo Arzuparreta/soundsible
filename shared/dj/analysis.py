@@ -28,7 +28,6 @@ def _compose(
     if features is None:
         return _fallback(duration)
     head_features = features if head is tail else _window_features(head, sample_rate)
-    period = features["period"]
     structure = structure_from_windows(features, head_features, duration=duration, tail_start=tail_start)
     beats = structure["beat_grid"]
     beat_offset = beats[0] if beats else 0.0
@@ -47,12 +46,32 @@ def _compose(
     flatness_power = sum(window["flatness_power"] for window in measured_windows)
     loud_power = sum(window["loud_power"] for window in measured_windows)
     confidence = min(0.98, 0.38 + tempo_confidence * 0.36 + min(0.2, features["key_margin"] / 8))
+    regions = []
+    windows = [(features, tail_start)]
+    if tail_start and head_features is not None:
+        windows.insert(0, (head_features, 0.0))
+    for window, offset in windows:
+        for region in window['metric_regions']:
+            regions.append({**region, 'start': round(offset + region['start'], 4),
+                            'end': round(offset + region['end'], 4),
+                            'downbeats': [round(offset + t, 4) for t in region['downbeats']]})
+    # A scalar is only a summary of one constant grouping, never a default 4/4.
+    bars = {region['bar_seconds'] for region in regions}
+    bar_seconds = next(iter(bars)) if len(bars) == 1 else None
+    summary = {}
+    for key in ('beats_per_bar', 'subdivision', 'pulse_unit'):
+        values = {region[key] for region in regions}
+        summary[key] = next(iter(values)) if len(values) == 1 else None
+    for key in ('metre_confidence', 'downbeat_confidence', 'subdivision_confidence'):
+        summary[key] = min((region[key] for region in regions), default=0.)
     return {
+        **summary,
         "version": ANALYSER_VERSION,
         "duration": round(duration, 3),
         "bpm": round(features["bpm"], 3),
         "beat_offset": round(beat_offset, 4),
-        "bar_seconds": round(period * 4, 4),
+        "bar_seconds": bar_seconds,
+        "metric_regions": regions,
         "key": features["key"],
         "mode": features["mode"],
         # Physical magnitudes, comparable between songs: notes per second of

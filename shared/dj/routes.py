@@ -9,7 +9,7 @@ from typing import Any
 
 from .contracts import AnalysisInput, Candidate
 from .transitions import plan_transition
-from .timing import tempo_coordinate
+from .timing import tempo_coordinate, beatmatch_fits
 
 def order_continuous_route(
     current_analysis: AnalysisInput,
@@ -173,12 +173,18 @@ def route_to_request(
             for index, row in enumerate(bridge_rows):
                 if index in used:
                     continue
-                quality = float(plan_transition(previous, row[1])["score"])
+                plan = plan_transition(previous, row[1])
+                if ('metric_regions' in previous or 'metric_regions' in row[1]) and not beatmatch_fits(plan, previous, row[1]):
+                    continue
+                quality = float(plan["score"])
                 expanded.append((accumulated + quality, (*prefix, row), row[1], used | {index}))
         expanded.sort(key=lambda state: state[0], reverse=True)
         beam = expanded[:48]
         for accumulated, prefix, previous, _ in beam:
-            final_quality = float(plan_transition(previous, requested_analysis)["score"])
+            plan = plan_transition(previous, requested_analysis)
+            if ('metric_regions' in previous or 'metric_regions' in requested_analysis) and not beatmatch_fits(plan, previous, requested_analysis):
+                continue
+            final_quality = float(plan["score"])
             sequence_quality = (accumulated + final_quality) / (count + 1)
             delay_cost = 0.055 * count + 0.012 * count * count
             score = sequence_quality - delay_cost

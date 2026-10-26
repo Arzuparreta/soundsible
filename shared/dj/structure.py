@@ -70,17 +70,14 @@ def structure_from_windows(
     duration: float,
     tail_start: float,
 ) -> Structure:
-    """Use the supplied pulse/coverage; keep the current 4-beat/8-bar priors.
-
-    P12/P13 will replace those musical assumptions. This extraction deliberately
-    preserves their current phase and boundary selection, including head/tail.
-    """
+    """Consume measured bars locally; eight-bar phrase/section prior awaits P13."""
     period = features["period"]
     intro_local = head_features["intro"] if head_features is not None else 0.0
 
     def window_grid(window_features: Mapping[str, Any], offset: float) -> tuple[list[float], list[float]]:
         beats = [offset + float(value) for value in window_features["beats"]]
-        return beats, beats[int(window_features["downbeat_phase"]):][::4]
+        return beats, [offset + value for region in window_features["metric_regions"]
+                       for value in region["downbeats"]]
 
     beats, downbeats = window_grid(features, tail_start)
     if tail_start and head_features is not None:
@@ -93,14 +90,27 @@ def structure_from_windows(
 
     # Eight bars is a useful phrase prior, but the additional section starts
     # below are derived from changes in measured bar energy and onset density.
-    boundaries = list(downbeats[::8])
-    sections = _sections_from_features(features, tail_start, duration, downbeats)
+    boundaries = []
+    windows = [(features, tail_start)]
     if tail_start and head_features is not None:
-        sections = _sections_from_features(head_features, 0.0, duration, downbeats) + sections
+        windows.insert(0, (head_features, 0.0))
+    for window, offset in windows:
+        for region in window['metric_regions']:
+            boundaries.extend(offset + t for t in region['downbeats'][::8])
+    sections = []
+    for window, offset in windows:
+        for region in window['metric_regions']:
+            local_bars = [offset + t for t in region['downbeats']]
+            section_rows = _sections_from_features(window, offset, duration, local_bars)
+            for row in section_rows:
+                row['end'] = min(row['end'], round(offset + region['end'], 3))
+            sections.extend(section_rows)
     boundaries.extend(float(section["start"]) for section in sections)
     boundaries = sorted({round(value, 3) for value in boundaries if 0 <= value < duration})
     last_active = tail_start + features["last_active"]
-    outro_limit = min(last_active, duration - period * 4)
+    last_regions = features['metric_regions']
+    reserve = float(last_regions[-1]['bar_seconds'] or 2.) if last_regions else 2.
+    outro_limit = min(last_active, duration - reserve)
     desired_outro = max(0.0, outro_limit - 64 * period)
     outro_candidates = [value for value in boundaries if desired_outro <= value <= outro_limit]
     outro = outro_candidates[0] if outro_candidates else max(0.0, duration - 32 * period)
@@ -111,5 +121,5 @@ def structure_from_windows(
         "phrase_boundaries": boundaries,
         "sections": sections,
         "intro_cue": round(max(0.0, min(intro_local, duration * 0.25)), 3),
-        "outro_cue": round(max(0.0, min(outro, duration - period * 4)), 3),
+        "outro_cue": round(max(0.0, min(outro, duration - reserve)), 3),
     }

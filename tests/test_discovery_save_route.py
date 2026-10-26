@@ -2325,3 +2325,99 @@ def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
     assert plan["technique"] == "echo_cut"
     assert plan["echo_delay_seconds"] == pytest.approx(60 / bpm, abs=.001)
     print({"bpm": bpm, "echo_delay_seconds": plan["echo_delay_seconds"]})
+
+
+@pytest.mark.parametrize('out_size,in_size,subdivision,aligned', [(3, 3, 2, True), (3, 4, 2, False), (2, 2, 3, True)])
+def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, monkeypatch, out_size, in_size, subdivision, aligned):
+    """Known PCM -> AAC -> versioned SQLite -> every planner, no client detector."""
+    import subprocess
+    import wave
+    import numpy as np
+    from shared.dj import store
+    from shared.dj.contracts import ANALYSER_VERSION
+    from shared.dj.timing import BEATMATCH_TECHNIQUES
+    from shared import dj_engine
+    from shared.ffmpeg_runtime import ffmpeg_executable
+    from test_dj_metre import metric_signal, RATE
+
+    _make_runtime(tmp_path)
+    monkeypatch.setattr(store, '_cache_path', lambda: tmp_path / 'metre.sqlite3')
+    api = _mock_api()
+    api['get_core'].return_value = (_FakeLibrary(None), None, None)
+    refs, paths = {}, {}
+    for key, size in [('outgoing', out_size), ('incoming', in_size)]:
+        samples, _, _ = metric_signal(beats_per_bar=size, subdivision=subdivision, seconds=120)
+        wav, aac = tmp_path / f'{key}.wav', tmp_path / f'{key}.m4a'
+        with wave.open(str(wav), 'wb') as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(RATE)
+            output.writeframes((samples * 16000).astype('<i2').tobytes())
+        subprocess.run([ffmpeg_executable(), '-v', 'error', '-i', str(wav), '-c:a', 'aac', str(aac)], check=True)
+        refs[key] = {'id': key, 'track_id': key, 'title': key, 'artist': 'Metric fixture', 'duration': 120}
+        paths[key] = aac
+        # A valid content stamp cannot promote the previous analyser's 4/4 prior.
+        with store._connect() as conn:
+            conn.execute('INSERT INTO audio_analysis VALUES (?, ?, ?, ?, ?)',
+                         (dj_engine.analysis_identity(refs[key]), store._source_stamp(aac), ANALYSER_VERSION - 1,
+                          json.dumps({'version': ANALYSER_VERSION - 1, 'bpm': 120, 'bar_seconds': 2., 'analysed': True}), 0))
+        assert dj_engine.cached_analysis(aac, dj_engine.analysis_identity(refs[key])) is None
+    with (patch.object(_auto_mode, '_get_api', return_value=api),
+          patch.object(_auto_mode, '_dj_source_path', side_effect=lambda _, item: paths[item['id']]),
+          patch.object(_auto_mode, 'request_analysis'),
+          patch.object(_auto_mode, '_planner_context_related', return_value=_auto_mode._GraphWalk([], False, False))):
+        client = _make_app().test_client()
+        pair = {'from': refs['outgoing'], 'to': refs['incoming']}
+        cold = client.post('/api/discovery/music/dj-transition', json=pair).get_json()
+        assert cold['measured'] is False
+        assert cold['transition']['sync']['alignment'] == 'none'
+        assert cold['transition']['sync']['out_bar_seconds'] is None
+        with patch.object(store, '_decode_measured', wraps=store._decode_measured) as decode:
+            for key in refs:
+                analysis = dj_engine.analyse_audio(paths[key], dj_engine.analysis_identity(refs[key]))
+                assert analysis['version'] == ANALYSER_VERSION
+                assert analysis['beats_per_bar'] == (out_size if key == 'outgoing' else in_size)
+            assert decode.call_count == 2
+        with patch.object(store, '_decode_measured', side_effect=AssertionError('warm HTTP must not decode')):
+            refined = client.post('/api/discovery/music/dj-transition', json=pair).get_json()
+            assert refined['measured'] is True
+            expected = refined['transition']
+            assert (expected['sync']['alignment'] == 'bars') == aligned
+            assert (expected['technique'] in BEATMATCH_TECHNIQUES) == aligned
+            if not aligned:
+                assert expected['echo_delay_seconds'] == pytest.approx(.5, abs=.001)
+                assert expected['score'] == 0
+            common = {'seed': refs['outgoing']}
+            for endpoint, payload in [
+                ('dj-plan', {**common, 'sources': [{'id': 's', 'tracks': [refs['incoming']]}], 'limit': 1}),
+                ('dj-place', {**common, 'track': refs['incoming'], 'requested_queue_id': 'requested'}),
+                ('dj-repair', {**common, 'route': [{**refs['incoming'], 'queue_id': 'requested', 'route_kind': 'user'}]}),
+            ]:
+                response = client.post(f'/api/discovery/music/{endpoint}', json=payload)
+                assert response.status_code == 200, response.get_json()
+                body = response.get_json()
+                assert body['items'][0]['transition'] == expected, endpoint
+                if endpoint == 'dj-plan':
+                    summary = body['items'][0]['analysis']
+                    assert 'metric_regions' not in summary
+                    assert 'beat_grid' not in summary
+                    assert summary['beats_per_bar'] == in_size
+                    assert summary['metre_confidence'] > 0
+            with patch.object(_auto_mode, '_build_music_plan', return_value=({'items': [refs['incoming']]}, 200)):
+                legacy = client.post('/api/discovery/music/dj-plan', json={**common, 'limit': 1})
+            assert legacy.get_json()['items'][0]['transition'] == expected
+            # Requests enter a separate legacy orchestration path, retaining
+            # the same AAC/cache evidence and common metric planner.
+            for request_row in (
+                {'id': 'track-request', 'kind': 'track', 'track': refs['incoming']},
+                {'id': 'artist-request', 'kind': 'artist', 'artist': {'name': 'Metric fixture'}},
+            ):
+                with (patch.object(_auto_mode, '_build_music_plan', return_value=({'items': []}, 200)),
+                      patch.object(_auto_mode, '_planner_artist_candidates', return_value=[dict(refs['incoming'])])):
+                    requested = client.post('/api/discovery/music/dj-plan', json={
+                        **common, 'requests': [request_row], 'limit': 1})
+                assert requested.status_code == 200
+                assert requested.get_json()['requests'][0]['status'] == 'planned'
+                assert requested.get_json()['items'][0]['transition'] == expected
+            for key in refs:
+                assert dj_engine.analyse_audio(paths[key], dj_engine.analysis_identity(refs[key]))['version'] == ANALYSER_VERSION

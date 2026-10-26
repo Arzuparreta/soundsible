@@ -76,7 +76,7 @@ def _window_features(samples, sample_rate: int) -> WindowFeatures | None:
         "bpm": rhythm["bpm"] if rhythm else 0.0,
         "period": rhythm["period"] if rhythm else 0.5,
         "beats": rhythm["beats"] if rhythm else [],
-        "downbeat_phase": rhythm["downbeat_phase"] if rhythm else 0,
+        "metric_regions": rhythm["metric_regions"] if rhythm else [],
         "tempo_confidence": rhythm["tempo_confidence"] if rhythm else 0.0,
         "key": key,
         "mode": mode,

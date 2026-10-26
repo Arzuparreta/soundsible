@@ -1,18 +1,11 @@
 """Cache-independent DJ cohorts and measured one-song bridges."""
 
 from shared.dj.transitions import plan_transition
-from shared.dj.timing import BEATMATCH_TECHNIQUES, rate_fits
+from shared.dj.timing import beatmatch_fits as _beatmatched
 
 # Eight ordinary starts plus at most eight possible bridges. This bounds both
 # speculative bandwidth and route work, independently of catalogue size.
 ANALYSIS_COHORT_SIZE = 16
-def _beatmatched(plan, outgoing, incoming):
-    if not all(float(analysis.get("bpm") or 0) > 0 for analysis in (outgoing, incoming)):
-        return False
-    if plan.get("technique") not in BEATMATCH_TECHNIQUES:
-        return False
-    # Admission still validates the executed plan, independently of its score.
-    return rate_fits(plan, tolerance=None)
 
 
 def add_measured_bridges(previous, route, spares):

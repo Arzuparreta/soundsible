@@ -12,7 +12,7 @@ from .contracts import AnalysisInput, TransitionPlan
 from .timing import (
     MAX_STRETCH as _MAX_STRETCH,
     BEATMATCH_TECHNIQUES, PHASE_TOLERANCE_SECONDS,
-    comparable_ratio, local_period as _local_period, rate_fits as _rate_fits,
+    comparable_ratio, local_period as _local_period, rate_fits as _rate_fits, local_metre, metric_sync,
 )
 
 _TEMPO_SCORE_RANGE = 0.08
@@ -50,6 +50,14 @@ def _nearest_grid_point(
     *,
     prefer_downbeat: bool = True,
 ) -> float:
+    if 'metric_regions' in analysis:
+        region = next((row for row in analysis.get('metric_regions') or [] if row['start'] <= target < row['end']), None)
+        if region is None:
+            return target
+        grid = region.get('downbeats') if prefer_downbeat else []
+        if not grid:
+            grid = [t for t in analysis.get('beat_grid') or [] if region['start'] <= t < region['end']]
+        return min(grid, key=lambda value: abs(value - target)) if grid else target
     grid = analysis.get("downbeats") if prefer_downbeat else analysis.get("beat_grid")
     if not isinstance(grid, list) or not grid:
         grid = analysis.get("beat_grid")
@@ -58,7 +66,13 @@ def _nearest_grid_point(
 
 
 def _grid_point_at_or_before(analysis: Mapping[str, Any], limit: float) -> float:
-    grid = analysis.get("downbeats") or analysis.get("beat_grid") or []
+    if 'metric_regions' in analysis:
+        region = next((row for row in analysis.get('metric_regions') or [] if row['start'] <= limit < row['end']), None)
+        if region is None:
+            return limit
+        grid = region.get('downbeats') or [t for t in analysis.get('beat_grid') or [] if region['start'] <= t < region['end']]
+    else:
+        grid = analysis.get("downbeats") or analysis.get("beat_grid") or []
     values = [
         float(value)
         for value in grid
@@ -223,7 +237,9 @@ def _grid_runway(analysis: Mapping[str, Any], cue: float, span: float) -> bool:
 
 def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
                      technique: str, bars: int, blend_score: float, confidence: float) -> TransitionPlan:
-    bar_seconds = float(outgoing.get("bar_seconds") or 2.0)
+    # A missing grouping only chooses a bounded fade in seconds, never a bar.
+    region = local_metre(outgoing, float(outgoing.get('outro_cue') or 0))
+    bar_seconds = float(region['bar_seconds']) if region else float(outgoing.get("bar_seconds") or 2.0)
     overlap = max(4.0, min(48.0, bars * bar_seconds))
     duration = float(outgoing.get("duration") or 0)
     if duration:
@@ -285,18 +301,31 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     # the bounded delay supported by both renderers (30 BPM at normal speed).
     echo_delay = None
     if technique == "echo_cut":
-        if (outgoing.get("analysed") and outgoing.get("beat_grid")
+        measured_pulse = ('metric_regions' not in outgoing or (
+            any(row['start'] <= float(out_cue or 0) < row['end'] and row['pulse_confidence'] > .6
+                for row in outgoing.get('metric_regions') or [])
+            and any(abs(float(out_cue or 0) - t) <= PHASE_TOLERANCE_SECONDS for t in outgoing.get('beat_grid') or [])))
+        if (measured_pulse and outgoing.get("analysed") and outgoing.get("beat_grid")
                 and float(outgoing.get("bpm") or 0) > 0 and float(outgoing.get("tempo_confidence") or 0) > 0.6
                 and math.isfinite(out_period) and 0 < out_period <= 2):
             echo_delay = round(out_period, 6)
         else:
             technique = "structural_fade"
+    sync_metric = metric_sync(outgoing, incoming, float(out_cue or 0), in_cue, overlap,
+                              round(playback_rate, 6), out_period, in_period)
+    if technique not in BEATMATCH_TECHNIQUES and sync_metric:
+        sync_metric['alignment'] = 'none'
+    # For the measured metric contract, score ranks sustained, executable
+    # alignment. Absent/incompatible metre cannot retain a high blend score.
+    if sync_metric and sync_metric['alignment'] != 'bars':
+        blend_score = 0.
+    measured_bar = sync_metric.get('out_bar_seconds') if sync_metric else 4 * out_period
     return {
         "technique": technique,
         "out_cue": round(out_cue, 4) if out_cue is not None else None,
         "in_cue": round(in_cue, 4),
         "overlap_seconds": round(overlap, 3),
-        "overlap_bars": round(overlap / (4 * out_period), 3),
+        "overlap_bars": round(overlap / measured_bar, 3) if measured_bar else None,
         # Over a 48 s overlap, 1e-6 of rate error is 0.05 ms of drift.
         "playback_rate": round(playback_rate, 6),
         **({"echo_delay_seconds": echo_delay} if echo_delay is not None else {}),
@@ -304,6 +333,7 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
         "confidence": round(confidence, 3),
         "fallback": technique in {"echo_cut", "safe_fade", "structural_fade"},
         "sync": {
+            **sync_metric,
             "out_period": round(out_period, 6),
             "in_period": round(in_period, 6),
             "phase_tolerance_ms": int(PHASE_TOLERANCE_SECONDS * 1000),

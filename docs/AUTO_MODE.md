@@ -66,7 +66,10 @@ engine can perform:
 
 The server chooses the technique automatically for each pair, with the same
 plan for web and Android. A beatmatched blend must fit the local tempo within
-the players' speed limit. A longer blend also needs compatible keys and enough
+the players' speed limit and keep the measured bar starts aligned throughout
+the overlap. Different pulse counts can describe the same bar duration; matching
+BPM alone does not establish this. Unknown or incompatible metre uses an echo
+cut or fade. A longer blend also needs compatible keys and enough
 measured quiet opening and tail in both songs, with a straight beat grid
 throughout; it never crosses an unmeasured gap to extend the mix.
 
@@ -103,9 +106,13 @@ incoming song enters so its drop lands on a phrase boundary of the outgoing
 song at the end of the blend. Otherwise it keeps the ordinary intro. Both web
 and Android follow the same server plan.
 
-Tempo is measured across the whole song to a few thousandths of a BPM, and each
-beat is placed where its attack starts, so the kicks of two blended songs land
-together instead of one just after the other. A recording whose tempo drifts,
+On known synthetic signals with a clear steady pulse, tempo and attack times
+are measured precisely enough to keep blended kicks together. Real music can
+have an ambiguous pulse, metre or first beat; these are separate estimates and
+may remain unknown. This is a conservative periodic-accent detector, with
+limited coverage on real music, rather than a general musical transcription.
+Phrase and section estimates still use an eight-bar grouping and remain hints.
+A recording whose tempo drifts,
 such as a live band, gets a grid that follows the performance and a fade at
 normal speed instead of a fixed-rate beatmatch. After an update that changes
 the analysis, the library and selected previews are measured again in the

@@ -4,7 +4,7 @@ import { audioService, type LiveTransitionPlan, type ProgramPlaybackSnapshot } f
 import { type MediaSessionSyncReason } from "../lib/mediaSession";
 import { playbackYoutubeId } from "../lib/media";
 import { createPreparationOwner } from "../lib/prefetch";
-import { placeOutCue, planBarSeconds } from "../lib/djCue";
+import { metricCuePlacement } from "../lib/djCue";
 import { toast } from "../lib/toast";
 import { confirmDialog } from "../lib/confirm";
 import { isPodcastTrack } from "../lib/track";
@@ -140,13 +140,16 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     if (latest <= 0) return null;
     const earliest = Math.min(Math.min(MIN_PLAY_SECONDS, duration * MIN_PLAY_FRACTION), latest);
     const proposed = chained && Number.isFinite(chained.out_cue) && (chained.out_cue ?? 0) > 0 ? Number(chained.out_cue) : latest;
+    const placement = metricCuePlacement(proposed, earliest, latest, trusted ? chained : undefined, overlap);
+    const beatmatch = chained && ['bass_swap', 'filter_blend', 'long_blend'].includes(chained.technique);
+    const metricFallback = trusted && beatmatch && !placement.aligned;
     return {
-      technique: trusted ? chained!.technique : 'safe_fade',
-      out_cue: placeOutCue(proposed, earliest, latest, trusted ? planBarSeconds(chained!.sync) : 0),
+      technique: metricFallback ? 'structural_fade' : trusted ? chained!.technique : 'safe_fade',
+      out_cue: placement.cue,
       in_cue: trusted ? chained!.in_cue : 0,
       overlap_seconds: overlap,
       overlap_bars: chained?.overlap_bars ?? 0,
-      playback_rate: trusted ? chained!.playback_rate : 1,
+      playback_rate: trusted && !metricFallback ? chained!.playback_rate : 1,
       confidence: chained?.confidence ?? 0,
       ...(trusted && chained!.echo_delay_seconds != null ? { echo_delay_seconds: chained!.echo_delay_seconds } : {}),
       // The planner's phase tolerance, as Android already receives it.

@@ -1,3 +1,5 @@
+import type { DjTransitionPlan } from './api';
+
 /**
  * Where a measured blend starts when its planned cue falls outside the window
  * the player allows.
@@ -19,12 +21,48 @@ export function placeOutCue(proposed: number, earliest: number, latest: number, 
   return moved >= earliest && moved <= latest ? moved : clamped;
 }
 
-/** Four beats of the outgoing song at its cue, as the planner measured them; 0 if unknown. */
-export function planBarSeconds(sync: { out_period?: number } | undefined): number {
+/** Explicit local bar, including unknown. Only old plans use the four-pulse prior. */
+export function planBarSeconds(sync: { out_period?: number; out_bar_seconds?: number | null } | undefined): number {
+  if (sync && Object.hasOwn(sync, 'out_bar_seconds')) {
+    const bar = Number(sync.out_bar_seconds);
+    return Number.isFinite(bar) && bar >= MIN_BAR_SECONDS && bar <= MAX_BAR_SECONDS ? bar : 0;
+  }
   const period = Number(sync?.out_period);
   return Number.isFinite(period) && period > 0 ? 4 * period : 0;
 }
 
-// 4/4 bars between 300 and 30 BPM: anything outside is not a measured beat.
-const MIN_BAR_SECONDS = 0.8;
-const MAX_BAR_SECONDS = 8;
+// Local bars may have different pulse counts; bounds reject pathological plans.
+const MIN_BAR_SECONDS = 0.2;
+const MAX_BAR_SECONDS = 32;
+
+/** A relocated measured plan must retain its complete coverage and bar phase. */
+export function metricCuePlacement(proposed: number, earliest: number, latest: number,
+  plan: DjTransitionPlan | undefined, overlap: number): { cue: number; aligned: boolean } {
+  const sync = plan?.sync;
+  const bar = planBarSeconds(sync);
+  const fallback = placeOutCue(proposed, earliest, latest, bar);
+  if (sync?.alignment === undefined) return { cue: fallback, aligned: !sync || !Object.hasOwn(sync, 'out_bar_seconds') }; // Legacy.
+  if (sync.alignment !== 'bars') return { cue: fallback, aligned: false };
+  const out = sync.out_metre;
+  const incoming = sync.in_metre;
+  if (!out || !incoming || !bar || !plan) return { cue: fallback, aligned: false };
+  const left = Math.max(earliest, out.start);
+  const right = Math.min(latest, out.end - overlap);
+  if (![left, right, incoming.start, incoming.end].every(Number.isFinite) || left > right) {
+    return { cue: fallback, aligned: false };
+  }
+  const cue = placeOutCue(proposed, left, right, bar);
+  const tolerance = Math.min(.005, sync.phase_tolerance_ms / 1000);
+  let pulseRatio = sync.in_period / sync.out_period;
+  if (pulseRatio < .7) pulseRatio *= 2;
+  else if (pulseRatio > 1.4) pulseRatio /= 2;
+  const rate = plan.playback_rate;
+  const inBar = Number(sync.in_bar_seconds);
+  if (![rate, pulseRatio, inBar, tolerance].every(Number.isFinite) || rate < .94 || rate > 1.06
+    || inBar <= 0 || sync.out_period <= 0 || sync.in_period <= 0 || tolerance < 0
+    || Math.abs(rate / pulseRatio - 1) * overlap > tolerance
+    || Math.abs(inBar / rate / bar - 1) * overlap > tolerance) return { cue: fallback, aligned: false };
+  const phaseError = Math.abs(cue - proposed - Math.round((cue - proposed) / bar) * bar);
+  return { cue, aligned: phaseError <= tolerance && plan.in_cue >= incoming.start - tolerance
+    && plan.in_cue + overlap * plan.playback_rate <= incoming.end + tolerance };
+}

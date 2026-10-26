@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from .contracts import RhythmWindow
+from .metre import metric_regions
 
 # Rhythm ----------------------------------------------------------------------
 #
@@ -64,11 +65,12 @@ def _rhythm(samples, sample_rate: int) -> RhythmWindow | None:
     measured = _rhythm_stft(samples, sample_rate)
     if measured is None:
         return None
-    onset, chroma, centre = measured
+    onset, chroma, centre, pulse_onset = measured
     frame_rate = sample_rate / _RHYTHM_HOP
-    lag = _tempo_lag(onset, frame_rate)
+    lag = _tempo_lag(pulse_onset, frame_rate)
     if lag is None:
         return None
+    lag = _pulse_lag(pulse_onset, lag, frame_rate)
     frames = _track_beats(onset, lag)
     if frames.size < 8:
         return None
@@ -115,12 +117,18 @@ def _rhythm(samples, sample_rate: int) -> RhythmWindow | None:
     if grid.size < 4:
         return None
     beat = period if constant else float(np.median(np.diff(grid)))
+    pulse_confidence = float(np.clip((reliability - 0.4) / 0.5, 0.0, 1.0))
+    novelty, strength = _bar_observations(samples, sample_rate, grid, chroma, centre)
+    blocks = np.array_split(np.arange(len(grid)), max(1, len(grid) // 24))
+    subdivisions = [_subdivision(onset, sample_rate, grid[block], centre) for block in blocks]
+    regions = metric_regions(grid, novelty, strength, duration=duration, period=beat,
+                             pulse_confidence=pulse_confidence, subdivisions=subdivisions)
     return {
         "bpm": 60.0 / beat,
         "period": beat,
         "beats": grid.tolist(),
-        "downbeat_phase": _downbeat_phase(samples, sample_rate, grid, chroma, centre),
-        "tempo_confidence": float(np.clip((reliability - 0.4) / 0.5, 0.0, 1.0)),
+        "metric_regions": regions,
+        "tempo_confidence": pulse_confidence,
         "grid": "constant" if constant else "local",
     }
 
@@ -130,7 +138,7 @@ def _rhythm_stft(samples, sample_rate: int):
 
     `onset[k]` is the mean rise of log energy in 24 log-spaced bands into frame
     `k`; every band counts alike, so a quiet hi-hat and a loud bass note mark
-    time equally. Returns (onset, chroma, offset of a frame's centre).
+    time equally. Returns onset, chroma, frame-centre offset and low-band onset.
     """
     import numpy as np
 
@@ -170,7 +178,12 @@ def _rhythm_stft(samples, sample_rate: int):
     reference = max(float(np.percentile(bands, 99.5)), 1e-9)
     rise = np.maximum(0.0, np.diff(np.log1p(bands * np.float32(1000.0 / reference)), axis=0))
     onset = np.concatenate([[0.0], rise.mean(axis=1, dtype=np.float64)])
-    return onset, chroma, _RHYTHM_FRAME / 2
+    # Resolve the pulse octave before grouping. Low-band transients separate
+    # a bass/kick pulse from hi-hat subdivisions; use all bands for tracking.
+    # No preference for a 120 BPM octave or a binary bar is applied.
+    low = max(1, int(np.searchsorted(edges[1:], 180.)))
+    pulse_onset = np.concatenate([[0.], rise[:, :low].mean(axis=1, dtype=np.float64)])
+    return onset, chroma, _RHYTHM_FRAME / 2, pulse_onset
 
 
 def _tempo_lag(onset, frame_rate: float) -> float | None:
@@ -191,13 +204,10 @@ def _tempo_lag(onset, frame_rate: float) -> float | None:
     lags = lags[(lags > 0) & (lags * 4 < acf.size)]
     if lags.size < 3:
         return None
-    # Binary metre: the beat also repeats at the half bar and the bar. Integer
-    # multiples of an integer lag miss those sharp peaks, so take the strongest
-    # value within three frames.
+    # Test both binary and ternary repetitions without preferring a bar size.
+    # Integer multiples miss narrow peaks: allow three frames of resolution.
     reach = np.lib.stride_tricks.sliding_window_view(np.pad(acf, 3, constant_values=-1.0), 7).max(axis=1)
-    bpm = 60 * frame_rate / lags
-    prior = np.exp(-0.5 * (np.log2(bpm / 120.0) / 0.9) ** 2)
-    score = (acf[lags] + 0.5 * reach[2 * lags] + 0.25 * reach[4 * lags]) * prior
+    score = sum(reach[multiple * lags] / multiple for multiple in (1, 2, 3, 4))
     best = int(np.argmax(score))
     lag = float(lags[best])
     if 0 < best < lags.size - 1:
@@ -206,6 +216,39 @@ def _tempo_lag(onset, frame_rate: float) -> float | None:
         if curvature < 0:
             lag += 0.5 * (left - right) / curvature
     return lag
+
+
+def _pulse_lag(onset, proposed: float, frame_rate: float) -> float:
+    """Resolve pulse and subdivision hypotheses by low-band onset coverage.
+
+    Phase-consistent onset mass divided by sqrt(number of grid points) is the
+    normalized projection onto a pulse train. A half-time grid misses attacks;
+    a subdivision grid adds empty points. Equal binary/ternary hypotheses are
+    tested, without treating a ternary pulse as half/double tempo.
+    """
+    import numpy as np
+
+    peaks = np.flatnonzero((onset[1:-1] > onset[:-2]) & (onset[1:-1] >= onset[2:])) + 1
+    if len(peaks) < 8:
+        return proposed
+    times = _peak_positions(onset, peaks) / frame_rate
+    weights = np.maximum(onset[peaks], 0.)
+    candidates = []
+    for factor in (1., .5, 2., 2 / 3, 3 / 2):
+        period = proposed * factor / frame_rate
+        if not 60 / _TEMPO_RANGE[1] <= period <= 60 / _TEMPO_RANGE[0]:
+            continue
+        supports, periods = [], []
+        for start in np.arange(0., times[-1], 12.):
+            inside = (times >= start) & (times < start + 12.)
+            if inside.sum() < 8:
+                continue
+            fitted, _, share = _phase_fit(times[inside] - start, weights[inside], period)
+            supports.append(share * math.sqrt(fitted))
+            periods.append(fitted)
+        if supports:
+            candidates.append((float(np.median(supports)), float(np.median(periods))))
+    return max(candidates)[1] * frame_rate if candidates else proposed
 
 
 def _track_beats(onset, period: float):
@@ -488,18 +531,11 @@ def _align_attacks(samples, sample_rate: int, grid, floor: float, *, constant: b
     return grid + np.interp(np.arange(grid.size), np.flatnonzero(usable), shift)
 
 
-def _downbeat_phase(samples, sample_rate: int, grid, chroma, centre: float) -> int:
-    """Which of every four beats starts the bar.
-
-    Bars start where the harmony changes and where the loudest hits land; on
-    songs whose beat grid was confirmed independently this chose the reference
-    downbeat almost twice as often as onset strength alone.
-    """
+def _bar_observations(samples, sample_rate: int, grid, chroma, centre: float):
+    """Harmonic change across one pulse and attack rise (dB), separately."""
     import numpy as np
 
-    if grid.size < 8:
-        return 0
-    offsets, rows, usable = _attack_curves(
+    _, rows, usable = _attack_curves(
         samples, sample_rate, grid, _attack_floor(samples, 0.0), emphasis=0.0, window=0.015,
     )
     strength = np.zeros(grid.size)
@@ -507,15 +543,41 @@ def _downbeat_phase(samples, sample_rate: int, grid, chroma, centre: float) -> i
         strength[usable] = rows.max(axis=1)
     frames = np.clip(np.rint((grid * sample_rate - centre) / _RHYTHM_HOP).astype(int), 0, chroma.shape[0] - 1)
     cumulative = np.vstack([np.zeros((1, 12)), np.cumsum(chroma, axis=0, dtype=np.float64)])
-    before = cumulative[frames[2:-2]] - cumulative[frames[:-4]]
-    after = cumulative[frames[4:]] - cumulative[frames[2:-2]]
-    norms = np.linalg.norm(before, axis=1) * np.linalg.norm(after, axis=1)
+    slices = cumulative[frames[1:]] - cumulative[frames[:-1]]
+    norms = np.linalg.norm(slices, axis=1)
+    normalized = slices / np.maximum(norms[:, None], 1e-12)
     novelty = np.zeros(grid.size)
-    novelty[2:-2] = np.where(norms > 0, 1 - (before * after).sum(axis=1) / np.where(norms > 0, norms, 1.0), 0.0)
+    novelty[1:-1] = np.maximum(0., 1 - (normalized[:-1] * normalized[1:]).sum(axis=1))
+    return novelty, strength
 
-    def standard(values):
-        spread = float(np.std(values))
-        return (values - float(np.mean(values))) / spread if spread > 0 else np.zeros_like(values)
 
-    score = standard(novelty) + standard(strength)
-    return int(max(range(4), key=lambda phase: float(np.mean(score[phase::4]))))
+def _subdivision(onset, sample_rate: int, grid, centre):
+    """Compare spectral attacks at halves and at both thirds of a pulse.
+
+    Three standard errors separate hypotheses; no tempo-octave folding can
+    turn a binary subdivision into a ternary one. Unknown includes mixtures.
+    Notated pulse units are a convention, since audio cannot prove a denominator.
+    """
+    import numpy as np
+
+    intervals = grid[1:] - grid[:-1]
+    values = []
+    for fraction in (.5, 1 / 3, 2 / 3):
+        frames = np.rint(((grid[:-1] + fraction * intervals) * sample_rate - centre) / _RHYTHM_HOP).astype(int)
+        positions = np.clip(frames[:, None] + np.arange(-2, 3), 0, len(onset) - 1)
+        values.append(onset[positions].max(axis=1))
+    means = np.array([float(np.mean(row)) for row in values])
+    uncertainty = 3 * max(float(np.std(row)) / len(row) ** .5 for row in values)
+    binary, first, second = means
+    first_frame = max(0, int((grid[0] * sample_rate - centre) / _RHYTHM_HOP))
+    last_frame = min(len(onset), int((grid[-1] * sample_rate - centre) / _RHYTHM_HOP) + 1)
+    background = onset[first_frame:last_frame]
+    baseline = float(np.mean(background))
+    uncertainty += 3 * float(np.std(background)) / max(1, len(background)) ** .5
+    binary_present = binary > baseline + uncertainty
+    ternary_present = min(first, second) > baseline + uncertainty
+    if ternary_present and not binary_present:
+        return 3, min(1., (min(first, second) - baseline - uncertainty) / max(min(first, second), 1e-12))
+    if binary_present and not ternary_present:
+        return 2, min(1., (binary - baseline - uncertainty) / max(binary, 1e-12))
+    return None, 0.
