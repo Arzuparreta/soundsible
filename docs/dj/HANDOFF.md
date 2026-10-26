@@ -73,9 +73,9 @@ no hay síntoma que lo justifique.
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
 | P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
-| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en `2ca8ccf2`, PR #394; doce fragmentos reales sin compás y 1 acreditados | Parcial; cierre anterior rectificado. Detección musical pendiente |
-| P12-a | Estimación conjunta y comparativa de detectores abiertos | [Plan de comparación](DETECTOR_COMPARISON.md); sin resultados nuevos todavía | Autorizado; siguiente trabajo, casi de extremo a extremo |
-| P12-b | Integración del método elegido y cierre de P12 | Depende de los resultados de P12-a | Pendiente de decisión del usuario; reutilizar contratos y guardas |
+| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en `2ca8ccf2`, PR #394; doce fragmentos reales sin compás y 1 acreditados. Su detector empeora el tempo real en `main` (P12-a) | Parcial; cierre anterior rectificado. Detección musical pendiente |
+| P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado: mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
+| P12-b | Integración del método elegido y cierre de P12 | Decisiones del 2026-10-26 abajo; requisitos abiertos en el informe (DBN en NumPy, memoria, pesos) | **Siguiente trabajo**; reutilizar contratos y guardas |
 | P13 | Frases y secciones sobre una base métrica explícita | Agrupación actual en ocho compases; comparar también modelos que produzcan estructura | Preparar fixtures en P12-a; implementar sobre la métrica elegida, después o junto a P12-b |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
@@ -95,8 +95,34 @@ equivocada aunque los dos reproductores coincidan al milisegundo.
 anterior fue prematuro: `2ca8ccf2` y la PR #394 aportan contratos y guardas,
 pero los doce fragmentos Ballroom no acreditan compás y 1 correctos. El usuario
 acuerda probar estimación conjunta y varias soluciones abiertas mantenibles,
-compararlas y decidir con los resultados. No hay detector elegido ni
-comparativa nueva ejecutada todavía.
+compararlas y decidir con los resultados. **La comparativa está medida y
+el usuario ha decidido (2026-10-26); el siguiente trabajo es P12-b.**
+Resultados y límites en [detector_comparison/RESULTS](detector_comparison/RESULTS.md).
+
+**Decisiones del usuario (2026-10-26):**
+
+- Detector: **Beat This! `final0`** con su DBN de 3/4 pulsos. Se ejecuta con
+  ONNX Runtime y frontend NumPy, sin PyTorch ni madmom en el motor: PyTorch no
+  publica Windows arm64 y madmom solo existe como código fuente de 2018 con
+  pesos CC BY-NC-SA. El DBN se porta a NumPy y se verifica contra las salidas
+  retenidas de la comparativa.
+- Guardas: **beatmatch por pulso cuando el pulso es fiable**; alineación de
+  compases solo con evidencia adicional del 1. La activación de la red no es
+  esa evidencia: no separa aciertos de errores. Cambia la política de P12,
+  que hoy exige compases para cualquier beatmatch.
+- Versión: **no publicar ninguna versión hasta integrar P12-b**, en lugar de
+  revertir #394.
+- Pesos: el `.onnx` de `final0` (84 MB, MIT) se publica como asset de una
+  release de GitHub de Soundsible con SHA256 fijado. La imagen Docker y el
+  instalador de escritorio lo incluyen; una instalación desde código lo
+  descarga la primera vez.
+
+**Regresión medida en `main` (#394, sin publicar todavía).** Con las 30
+grabaciones GTZAN no vistas, el tempo correcto baja de 21 a 10 y el 1 real no
+se identifica en ninguna (F1 0). En la caché local del usuario, 162 de 278
+canciones cambian de BPM respecto a v8 (66 ×1,5) y el 1 cubre de media el
+2,2 % de cada canción v9: casi todas las transiciones con música real son de
+reserva. El usuario decide retener la próxima versión hasta P12-b.
 
 **Orden de desarrollo acordado (2026-10-25): banco/adaptadores y comparativa
 P12-a → resultados y decisión del usuario → integración P12-b → P13.** Para
@@ -1444,6 +1470,41 @@ El [plan operativo](DETECTOR_COMPARISON.md) fija el orden para avanzar rápido:
    estructural de los modelos que la tengan; no reescribir todavía estructura
    sobre una métrica que podría descartarse. Se permiten entregas amplias que
    cierren P12-b y P13 juntas si evitan pisar código y demuestran cada criterio.
+
+### P12-b: plan de integración (2026-10-26)
+
+Una sola vía, con las decisiones de arriba. Una entrega coherente (servidor,
+persistencia, endpoints, web, Android y empaquetado), apoyada en los contratos
+y guardas de #394. Evidencia de partida en
+[detector_comparison/RESULTS](detector_comparison/RESULTS.md).
+
+1. **Runtime y pesos.** Sesión ONNX Runtime única y perezosa, un hilo,
+   exportación con atención partida (`onnx_probe.py --sliced-attention`),
+   frontend NumPy y troceado de Beat This!. `onnxruntime` entra en
+   `requirements.txt`, el lock de Docker y el sidecar PyInstaller. El asset
+   lleva SHA256; sin pesos válidos el análisis se abstiene, sin otro detector.
+2. **DBN en NumPy.** Port del `DBNDownBeatTrackingProcessor` que usa Beat
+   This! (3 y 4 pulsos, 55–215 BPM, 50 fps, λ 100, observación 16, umbral
+   0,05, corrección a picos). Igualdad contra las salidas `beatthis-final0-dbn`
+   retenidas, con fixtures de activaciones en los tests.
+3. **Una decodificación.** FFmpeg a 22050 Hz con el medidor LUFS en la misma
+   pasada; las medidas de 11025 Hz se derivan en NumPy. Comprobar P1/P4/P6
+   con sus señales sintéticas; `ANALYSER_VERSION` sube.
+4. **Rejilla.** El modelo decide tempo, octava, fase y el 1 candidato. El
+   ajuste fino de P1 no puede mover un pulso a otro ataque: en la comparativa,
+   el refinamiento local bajó el F1 sintético de 0,80 a 0,68 aunque dejó el
+   percentil 90 en 1,4 ms. Medir antes de elegir el modo de ajuste.
+5. **Guardas.** Nuevo nivel `alignment: beats`: beatmatch con pulso fiable en
+   ambos cues y todo el solapamiento, velocidad ≤ 6 % y 5 ms de fase. `bars`
+   solo si el 1 del modelo coincide con evidencia independiente (agrupación
+   y fase de `metre` sobre la misma rejilla); si no, `beats`. Web
+   (`metricCuePlacement`) y Android (`ProgramDjPlan`) hoy degradan todo lo que
+   no sea `bars`: deben recolocar por pulsos enteros. Vectores comunes nuevos.
+6. **Limpieza.** Retirar del pulso las hipótesis 3:2/4:3 de #394 y el código
+   que deje de tener lectores.
+7. **Evidencia.** Repetir la comparativa con el analizador integrado (debe
+   igualar `beatthis-final0-dbn`), AAC → SQLite → HTTP frío/caliente, suites
+   completas web/Android y comparación de la caché local v8/v9/v10.
 
 El alcance y los criterios originales se conservan a continuación.
 

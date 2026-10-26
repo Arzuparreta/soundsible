@@ -1,0 +1,26 @@
+{
+  "sliced_attention": true,
+  "small0": {
+    "checkpoint_sha256": "6074be2c4d490c5f6101fcc374a1ec72ae93456e23bb6019783b849f5dc7d47b",
+    "onnx_sha256": "a9ae3dc48c93cd9104115ee67b3d1de5fbc87e16841ca84c24efa6bdf8d8a55d",
+    "onnx_bytes": 11135124,
+    "torch": "2.5.1+cpu",
+    "opset": 17
+  },
+  "final0": {
+    "checkpoint_sha256": "8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331",
+    "onnx_sha256": "c31e46719845b8111259289885996629735ba0d2815bfcef2da4f7dc6224aa31",
+    "onnx_bytes": 84249656,
+    "torch": "2.5.1+cpu",
+    "opset": 17
+  },
+  "frontend": [
+    {
+      "derivative": "02ee70a0d91a1625b967fd081bfcf4cf9ffadbc5e6f547f818c426015e6371f4-mono-soxr-HQ-22050.npy",
+      "frames": 1501,
+      "same_shape": true,
+      "max_abs_difference": 0.00013158470392227173,
+      "reference_max": 7.83286714553833
+    }
+  ]
+}

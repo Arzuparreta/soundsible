@@ -1,0 +1,142 @@
+[
+  {
+    "file": "2016/downbeats_bgru_rhythmic_4.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_blstm_4.pkl",
+    "arrays": 152,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_harmonic_1.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_harmonic_5.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_rhythmic_0.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_blstm_8.pkl",
+    "arrays": 152,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_rhythmic_5.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_blstm_3.pkl",
+    "arrays": 152,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_rhythmic_2.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_harmonic_2.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_rhythmic_3.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_blstm_7.pkl",
+    "arrays": 152,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_harmonic_0.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_blstm_1.pkl",
+    "arrays": 152,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_blstm_6.pkl",
+    "arrays": 152,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_harmonic_4.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_rhythmic_1.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_blstm_5.pkl",
+    "arrays": 152,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_bgru_harmonic_3.pkl",
+    "arrays": 54,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  },
+  {
+    "file": "2016/downbeats_blstm_2.pkl",
+    "arrays": 152,
+    "array_paths_equal": true,
+    "parameters_equal": true,
+    "max_abs_delta": 0.0
+  }
+]

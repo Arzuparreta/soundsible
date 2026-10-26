@@ -1,0 +1,122 @@
+[
+  {
+    "repo": "CPJKU/beat_this",
+    "sha": "b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c",
+    "commit_date": "2026-05-28T21:14:47Z",
+    "archived": false,
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    },
+    "default_branch": "main",
+    "readme_path": "README.md"
+  },
+  {
+    "repo": "mjhydri/BeatNet",
+    "sha": "81cedd4beeb7235262db80969a0c9ce9a48a0ed4",
+    "commit_date": "2026-04-13T20:17:41Z",
+    "archived": false,
+    "license": {
+      "key": "cc-by-4.0",
+      "name": "Creative Commons Attribution 4.0 International",
+      "spdx_id": "CC-BY-4.0",
+      "url": "https://api.github.com/licenses/cc-by-4.0",
+      "node_id": "MDc6TGljZW5zZTI1"
+    },
+    "default_branch": "main",
+    "readme_path": "README.md"
+  },
+  {
+    "repo": "zhaojw1998/Beat-Transformer",
+    "sha": "063667fc9e4e11507f9d76dc1154d9db953a85eb",
+    "commit_date": "2024-04-07T03:20:33Z",
+    "archived": false,
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    },
+    "default_branch": "main",
+    "readme_path": "README.md"
+  },
+  {
+    "repo": "mir-aidj/all-in-one",
+    "sha": "18e78903c0365147a2c5d4e5e57ebf88cb7d800e",
+    "commit_date": "2023-10-10T06:39:49Z",
+    "archived": false,
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    },
+    "default_branch": "main",
+    "readme_path": "README.md"
+  },
+  {
+    "repo": "CPJKU/madmom",
+    "sha": "27f032e8947204902c675e5e341a3faf5dc86dae",
+    "commit_date": "2024-08-25T11:43:40Z",
+    "archived": false,
+    "license": {
+      "key": "other",
+      "name": "Other",
+      "spdx_id": "NOASSERTION",
+      "url": null,
+      "node_id": "MDc6TGljZW5zZTA="
+    },
+    "default_branch": "main",
+    "readme_path": "README.rst"
+  },
+  {
+    "repo": "imcmurray/madmom-modern",
+    "sha": "df718c704a3b460ac6c61b7e61663a0436b91bda",
+    "commit_date": "2026-02-16T01:13:08Z",
+    "archived": false,
+    "license": {
+      "key": "other",
+      "name": "Other",
+      "spdx_id": "NOASSERTION",
+      "url": null,
+      "node_id": "MDc6TGljZW5zZTA="
+    },
+    "default_branch": "main",
+    "readme_path": "README.md"
+  },
+  {
+    "repo": "MTG/essentia",
+    "sha": "33108c70929684ed14091dfb671a30264cf8bb84",
+    "commit_date": "2026-10-22T13:55:45Z",
+    "archived": false,
+    "license": {
+      "key": "agpl-3.0",
+      "name": "GNU Affero General Public License v3.0",
+      "spdx_id": "AGPL-3.0",
+      "url": "https://api.github.com/licenses/agpl-3.0",
+      "node_id": "MDc6TGljZW5zZTE="
+    },
+    "default_branch": "master",
+    "readme_path": "README.md"
+  },
+  {
+    "repo": "librosa/librosa",
+    "sha": "4ffed287f9044654cc4a1a7393f895cd716a0a5d",
+    "commit_date": "2026-10-22T18:07:50Z",
+    "archived": false,
+    "license": {
+      "key": "isc",
+      "name": "ISC License",
+      "spdx_id": "ISC",
+      "url": "https://api.github.com/licenses/isc",
+      "node_id": "MDc6TGljZW5zZTEw"
+    },
+    "default_branch": "main",
+    "readme_path": "README.md"
+  }
+]

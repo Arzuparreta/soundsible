@@ -1,0 +1,4561 @@
+{
+  "results": [
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008963713014964014,
+          "cpu_seconds": 0.008934461999999997
+        },
+        {
+          "wall_seconds": 0.003956557950004935,
+          "cpu_seconds": 0.003943490999999993
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.003359956026542932,
+          "cpu_seconds": 0.003345430999999996
+        },
+        {
+          "wall_seconds": 0.003700082015711814,
+          "cpu_seconds": 0.0036907610000000007
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0076738810166716576,
+          "cpu_seconds": 0.007650841999999991
+        },
+        {
+          "wall_seconds": 0.006864010996650904,
+          "cpu_seconds": 0.006844981
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.08463668200420216,
+          "cpu_seconds": 0.009865062000000008
+        },
+        {
+          "wall_seconds": 0.08255926897982135,
+          "cpu_seconds": 0.010085653
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004315053985919803,
+          "cpu_seconds": 0.00429693099999999
+        },
+        {
+          "wall_seconds": 0.0032985970028676093,
+          "cpu_seconds": 0.0032863100000000006
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025290570338256657,
+          "cpu_seconds": 0.0025225799999999965
+        },
+        {
+          "wall_seconds": 0.002391659014392644,
+          "cpu_seconds": 0.0023872199999999955
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006947330024559051,
+          "cpu_seconds": 0.006925523000000017
+        },
+        {
+          "wall_seconds": 0.007459682994522154,
+          "cpu_seconds": 0.007423212000000012
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06700538098812103,
+          "cpu_seconds": 0.00993820199999998
+        },
+        {
+          "wall_seconds": 0.08269305602880195,
+          "cpu_seconds": 0.010340351999999997
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004504671029280871,
+          "cpu_seconds": 0.004486251000000024
+        },
+        {
+          "wall_seconds": 0.003292757028248161,
+          "cpu_seconds": 0.0032784609999999825
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002526487980503589,
+          "cpu_seconds": 0.0025150710000000076
+        },
+        {
+          "wall_seconds": 0.0024096579873003066,
+          "cpu_seconds": 0.002400719999999995
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006782341981306672,
+          "cpu_seconds": 0.006765290999999979
+        },
+        {
+          "wall_seconds": 0.007619781012181193,
+          "cpu_seconds": 0.007596562000000001
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_blues_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07550352101679891,
+          "cpu_seconds": 0.009942112999999975
+        },
+        {
+          "wall_seconds": 0.08261764800408855,
+          "cpu_seconds": 0.010262453000000005
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00435612304136157,
+          "cpu_seconds": 0.004337650999999998
+        },
+        {
+          "wall_seconds": 0.0033555770060047507,
+          "cpu_seconds": 0.0033426409999999795
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002518827037420124,
+          "cpu_seconds": 0.0025123700000000138
+        },
+        {
+          "wall_seconds": 0.0023613590165041387,
+          "cpu_seconds": 0.0023571310000000123
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006931789976079017,
+          "cpu_seconds": 0.006908722000000006
+        },
+        {
+          "wall_seconds": 0.007586501946207136,
+          "cpu_seconds": 0.007556761999999995
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.0750676550087519,
+          "cpu_seconds": 0.010314101999999992
+        },
+        {
+          "wall_seconds": 0.15682655503042042,
+          "cpu_seconds": 0.010621562000000029
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0049503459595143795,
+          "cpu_seconds": 0.004929631000000045
+        },
+        {
+          "wall_seconds": 0.0033140070154331625,
+          "cpu_seconds": 0.003291990999999994
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002533786988351494,
+          "cpu_seconds": 0.0025184500000000054
+        },
+        {
+          "wall_seconds": 0.002394548966549337,
+          "cpu_seconds": 0.002387299999999981
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006841571012046188,
+          "cpu_seconds": 0.006817061999999985
+        },
+        {
+          "wall_seconds": 0.00752269197255373,
+          "cpu_seconds": 0.007492190999999981
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.14995704201282933,
+          "cpu_seconds": 0.010075591999999967
+        },
+        {
+          "wall_seconds": 0.07407766004325822,
+          "cpu_seconds": 0.010500632999999981
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0044381830375641584,
+          "cpu_seconds": 0.0044276309999999874
+        },
+        {
+          "wall_seconds": 0.00330079800914973,
+          "cpu_seconds": 0.0032749099999999642
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025341769796796143,
+          "cpu_seconds": 0.00252543999999999
+        },
+        {
+          "wall_seconds": 0.0024321079836227,
+          "cpu_seconds": 0.0024140609999999674
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006967469991650432,
+          "cpu_seconds": 0.0069349419999999995
+        },
+        {
+          "wall_seconds": 0.007489793002605438,
+          "cpu_seconds": 0.007465162000000025
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_classical_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06653304595965892,
+          "cpu_seconds": 0.009930551999999981
+        },
+        {
+          "wall_seconds": 0.07408808800391853,
+          "cpu_seconds": 0.010226393
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00000",
+      "duration": 30.081632653061224,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004300834960304201,
+          "cpu_seconds": 0.004280082000000018
+        },
+        {
+          "wall_seconds": 0.0032604970037937164,
+          "cpu_seconds": 0.003249229999999992
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00000",
+      "duration": 30.081632653061224,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002517678018193692,
+          "cpu_seconds": 0.0025109899999999907
+        },
+        {
+          "wall_seconds": 0.0023909679730422795,
+          "cpu_seconds": 0.002386460999999951
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00000",
+      "duration": 30.081632653061224,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0061593009741045535,
+          "cpu_seconds": 0.006136541999999967
+        },
+        {
+          "wall_seconds": 0.007424063980579376,
+          "cpu_seconds": 0.007399102000000046
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00000",
+      "duration": 30.081632653061224,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06806266499916092,
+          "cpu_seconds": 0.01003188300000002
+        },
+        {
+          "wall_seconds": 0.07426404702709988,
+          "cpu_seconds": 0.010131462999999952
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00001",
+      "duration": 30.011791383219954,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004350494011305273,
+          "cpu_seconds": 0.004325980999999979
+        },
+        {
+          "wall_seconds": 0.003260986995883286,
+          "cpu_seconds": 0.003249190000000013
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00001",
+      "duration": 30.011791383219954,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025244270218536258,
+          "cpu_seconds": 0.002515690000000015
+        },
+        {
+          "wall_seconds": 0.002394339011516422,
+          "cpu_seconds": 0.0023895999999999917
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00001",
+      "duration": 30.011791383219954,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006848821009043604,
+          "cpu_seconds": 0.00682450200000001
+        },
+        {
+          "wall_seconds": 0.007522962987422943,
+          "cpu_seconds": 0.007502371999999979
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00001",
+      "duration": 30.011791383219954,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06691829004557803,
+          "cpu_seconds": 0.009897082000000001
+        },
+        {
+          "wall_seconds": 0.07414365699514747,
+          "cpu_seconds": 0.010111142000000017
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00002",
+      "duration": 30.370975056689343,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004328713985159993,
+          "cpu_seconds": 0.004311560999999964
+        },
+        {
+          "wall_seconds": 0.003312337037641555,
+          "cpu_seconds": 0.003294801000000014
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00002",
+      "duration": 30.370975056689343,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0026402759831398726,
+          "cpu_seconds": 0.002632399999999979
+        },
+        {
+          "wall_seconds": 0.002455718000419438,
+          "cpu_seconds": 0.0024466400000000554
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00002",
+      "duration": 30.370975056689343,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006194450019393116,
+          "cpu_seconds": 0.006175322000000039
+        },
+        {
+          "wall_seconds": 0.007445394003298134,
+          "cpu_seconds": 0.0074168419999999236
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_country_00002",
+      "duration": 30.370975056689343,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06769556197104976,
+          "cpu_seconds": 0.01007171200000001
+        },
+        {
+          "wall_seconds": 0.07403724902542308,
+          "cpu_seconds": 0.010335912000000058
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00000",
+      "duration": 30.12154195011338,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004284875001758337,
+          "cpu_seconds": 0.004262181999999948
+        },
+        {
+          "wall_seconds": 0.0032631679787300527,
+          "cpu_seconds": 0.003251530999999974
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00000",
+      "duration": 30.12154195011338,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025117379846051335,
+          "cpu_seconds": 0.0025032000000000387
+        },
+        {
+          "wall_seconds": 0.0023856490151956677,
+          "cpu_seconds": 0.0023813000000000306
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00000",
+      "duration": 30.12154195011338,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.007324464968405664,
+          "cpu_seconds": 0.007293972000000037
+        },
+        {
+          "wall_seconds": 0.007712109014391899,
+          "cpu_seconds": 0.007683381999999961
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00000",
+      "duration": 30.12154195011338,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07443455199245363,
+          "cpu_seconds": 0.009849044999999945
+        },
+        {
+          "wall_seconds": 0.08237922901753336,
+          "cpu_seconds": 0.010017461999999977
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00001",
+      "duration": 30.211337868480726,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004430442990269512,
+          "cpu_seconds": 0.004413061000000051
+        },
+        {
+          "wall_seconds": 0.0033014279906637967,
+          "cpu_seconds": 0.003289000999999958
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00001",
+      "duration": 30.211337868480726,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025400369777344167,
+          "cpu_seconds": 0.0025338609999999706
+        },
+        {
+          "wall_seconds": 0.0024410790065303445,
+          "cpu_seconds": 0.0024318309999999954
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00001",
+      "duration": 30.211337868480726,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.007297836011275649,
+          "cpu_seconds": 0.0072711520000000585
+        },
+        {
+          "wall_seconds": 0.007606480969116092,
+          "cpu_seconds": 0.007583271999999974
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00001",
+      "duration": 30.211337868480726,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.09956375701585785,
+          "cpu_seconds": 0.009896824000000026
+        },
+        {
+          "wall_seconds": 0.07399151101708412,
+          "cpu_seconds": 0.010143901999999927
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004332543991040438,
+          "cpu_seconds": 0.004318980999999944
+        },
+        {
+          "wall_seconds": 0.00328092701965943,
+          "cpu_seconds": 0.003262730999999963
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025228879530914128,
+          "cpu_seconds": 0.0025164610000000254
+        },
+        {
+          "wall_seconds": 0.002367219014558941,
+          "cpu_seconds": 0.002362880999999928
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006877640029415488,
+          "cpu_seconds": 0.00685267200000006
+        },
+        {
+          "wall_seconds": 0.007402974006254226,
+          "cpu_seconds": 0.007373022000000007
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_disco_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07541128201410174,
+          "cpu_seconds": 0.010015932999999921
+        },
+        {
+          "wall_seconds": 0.07408925896743312,
+          "cpu_seconds": 0.010182733999999916
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004263104987330735,
+          "cpu_seconds": 0.004244541000000046
+        },
+        {
+          "wall_seconds": 0.003269797016400844,
+          "cpu_seconds": 0.0032580309999999946
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025117670302279294,
+          "cpu_seconds": 0.0025051809999999675
+        },
+        {
+          "wall_seconds": 0.0023868189891800284,
+          "cpu_seconds": 0.0023825210000000263
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006882009969558567,
+          "cpu_seconds": 0.006855312000000002
+        },
+        {
+          "wall_seconds": 0.007460502965841442,
+          "cpu_seconds": 0.007439122000000076
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.08381254004780203,
+          "cpu_seconds": 0.009842982999999972
+        },
+        {
+          "wall_seconds": 0.07419509900500998,
+          "cpu_seconds": 0.010205822000000087
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004288963973522186,
+          "cpu_seconds": 0.004271680999999972
+        },
+        {
+          "wall_seconds": 0.003267377964220941,
+          "cpu_seconds": 0.0032546799999999543
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002521488000638783,
+          "cpu_seconds": 0.0025152699999999584
+        },
+        {
+          "wall_seconds": 0.0024177380255423486,
+          "cpu_seconds": 0.002400729999999962
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00703643896849826,
+          "cpu_seconds": 0.0070134830000000425
+        },
+        {
+          "wall_seconds": 0.007461153028998524,
+          "cpu_seconds": 0.007432772000000032
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06710450898390263,
+          "cpu_seconds": 0.009890142000000046
+        },
+        {
+          "wall_seconds": 0.1158677950152196,
+          "cpu_seconds": 0.010379922000000041
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00429226498818025,
+          "cpu_seconds": 0.004273870999999985
+        },
+        {
+          "wall_seconds": 0.0032593480427749455,
+          "cpu_seconds": 0.0032482909999999032
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002536598010919988,
+          "cpu_seconds": 0.0025282099999999197
+        },
+        {
+          "wall_seconds": 0.002395838964730501,
+          "cpu_seconds": 0.0023913500000000143
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0068965310347266495,
+          "cpu_seconds": 0.006872621999999939
+        },
+        {
+          "wall_seconds": 0.007466803013812751,
+          "cpu_seconds": 0.007446641000000032
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_hiphop_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.11684702400816604,
+          "cpu_seconds": 0.009877222000000074
+        },
+        {
+          "wall_seconds": 0.07418331800727174,
+          "cpu_seconds": 0.010179942000000053
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004310944001190364,
+          "cpu_seconds": 0.004292292000000031
+        },
+        {
+          "wall_seconds": 0.003266177955083549,
+          "cpu_seconds": 0.0032539110000000537
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002853262994904071,
+          "cpu_seconds": 0.0028420209999999724
+        },
+        {
+          "wall_seconds": 0.002401017991360277,
+          "cpu_seconds": 0.002392129999999937
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0068644710117951035,
+          "cpu_seconds": 0.0068331609999999765
+        },
+        {
+          "wall_seconds": 0.007412373030092567,
+          "cpu_seconds": 0.007391542000000029
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07526018295902759,
+          "cpu_seconds": 0.009981342000000004
+        },
+        {
+          "wall_seconds": 0.07407545699970797,
+          "cpu_seconds": 0.010448263000000013
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004347964015323669,
+          "cpu_seconds": 0.004330461000000008
+        },
+        {
+          "wall_seconds": 0.0032792980200611055,
+          "cpu_seconds": 0.003266640999999959
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025153980241157115,
+          "cpu_seconds": 0.0025090909999999633
+        },
+        {
+          "wall_seconds": 0.002403309044893831,
+          "cpu_seconds": 0.002394220999999974
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006837921042460948,
+          "cpu_seconds": 0.006816941999999937
+        },
+        {
+          "wall_seconds": 0.007424803974572569,
+          "cpu_seconds": 0.0073906519999999976
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.0754552609869279,
+          "cpu_seconds": 0.009956513
+        },
+        {
+          "wall_seconds": 0.08292261202586815,
+          "cpu_seconds": 0.010158592000000022
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004345163994003087,
+          "cpu_seconds": 0.004327091000000061
+        },
+        {
+          "wall_seconds": 0.0032721780007705092,
+          "cpu_seconds": 0.0032604099999999914
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025211169850081205,
+          "cpu_seconds": 0.0025144799999998746
+        },
+        {
+          "wall_seconds": 0.002389038971159607,
+          "cpu_seconds": 0.0023850100000000207
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00682166195474565,
+          "cpu_seconds": 0.006799502000000013
+        },
+        {
+          "wall_seconds": 0.007542262959759682,
+          "cpu_seconds": 0.007511792000000073
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_jazz_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07528770202770829,
+          "cpu_seconds": 0.010133581999999919
+        },
+        {
+          "wall_seconds": 0.08227204997092485,
+          "cpu_seconds": 0.010226322000000065
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004286585026420653,
+          "cpu_seconds": 0.004269171000000016
+        },
+        {
+          "wall_seconds": 0.003277957031968981,
+          "cpu_seconds": 0.0032654709999999643
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002511066966690123,
+          "cpu_seconds": 0.0025049810000001838
+        },
+        {
+          "wall_seconds": 0.002423619036562741,
+          "cpu_seconds": 0.00241438099999991
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00680282199755311,
+          "cpu_seconds": 0.006782321999999841
+        },
+        {
+          "wall_seconds": 0.0076108420034870505,
+          "cpu_seconds": 0.0075792420000000416
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07551995001267642,
+          "cpu_seconds": 0.01016059299999994
+        },
+        {
+          "wall_seconds": 0.07403779902961105,
+          "cpu_seconds": 0.010195433000000031
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004306154965888709,
+          "cpu_seconds": 0.004288880999999911
+        },
+        {
+          "wall_seconds": 0.003265097038820386,
+          "cpu_seconds": 0.0032520609999999728
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002513177983928472,
+          "cpu_seconds": 0.0025069899999998757
+        },
+        {
+          "wall_seconds": 0.0023941289982758462,
+          "cpu_seconds": 0.002385291000000178
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006867349962703884,
+          "cpu_seconds": 0.006846471999999881
+        },
+        {
+          "wall_seconds": 0.007465263013727963,
+          "cpu_seconds": 0.007440021999999935
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.10047544603003189,
+          "cpu_seconds": 0.011031483000000009
+        },
+        {
+          "wall_seconds": 0.07396291004261002,
+          "cpu_seconds": 0.010266823999999897
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0043043739860877395,
+          "cpu_seconds": 0.004286801000000118
+        },
+        {
+          "wall_seconds": 0.0032677779672667384,
+          "cpu_seconds": 0.0032545809999999786
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025092869764193892,
+          "cpu_seconds": 0.0025030809999999626
+        },
+        {
+          "wall_seconds": 0.0024288389831781387,
+          "cpu_seconds": 0.002419680999999896
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.007019408978521824,
+          "cpu_seconds": 0.006998711999999907
+        },
+        {
+          "wall_seconds": 0.007572431000880897,
+          "cpu_seconds": 0.00755371199999999
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_metal_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.0918006889987737,
+          "cpu_seconds": 0.009952512999999996
+        },
+        {
+          "wall_seconds": 0.074082457984332,
+          "cpu_seconds": 0.010080571999999899
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004316884034778923,
+          "cpu_seconds": 0.0042961519999999975
+        },
+        {
+          "wall_seconds": 0.003277308016549796,
+          "cpu_seconds": 0.0032651909999998896
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025390670052729547,
+          "cpu_seconds": 0.002525649999999935
+        },
+        {
+          "wall_seconds": 0.002388208988122642,
+          "cpu_seconds": 0.0023831800000000403
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006887431023642421,
+          "cpu_seconds": 0.006862791999999951
+        },
+        {
+          "wall_seconds": 0.007447384006809443,
+          "cpu_seconds": 0.007425921999999918
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00000",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.10044845502125099,
+          "cpu_seconds": 0.009902052000000161
+        },
+        {
+          "wall_seconds": 0.074089728994295,
+          "cpu_seconds": 0.010325213
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004254614992532879,
+          "cpu_seconds": 0.004236222000000067
+        },
+        {
+          "wall_seconds": 0.0032607979956083,
+          "cpu_seconds": 0.0032486599999999033
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0026152560021728277,
+          "cpu_seconds": 0.0026089599999998825
+        },
+        {
+          "wall_seconds": 0.00239476899150759,
+          "cpu_seconds": 0.0023906209999999817
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006855131010524929,
+          "cpu_seconds": 0.006832021999999993
+        },
+        {
+          "wall_seconds": 0.007534492004197091,
+          "cpu_seconds": 0.007513442000000037
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00001",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06681695202132687,
+          "cpu_seconds": 0.010136992000000067
+        },
+        {
+          "wall_seconds": 0.09898311604047194,
+          "cpu_seconds": 0.010147023000000033
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0043462240137159824,
+          "cpu_seconds": 0.004322391000000092
+        },
+        {
+          "wall_seconds": 0.0032819280168041587,
+          "cpu_seconds": 0.003270461000000058
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025202269898727536,
+          "cpu_seconds": 0.002511480999999982
+        },
+        {
+          "wall_seconds": 0.0024055090034380555,
+          "cpu_seconds": 0.002401030999999998
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0069023899850435555,
+          "cpu_seconds": 0.006878962000000044
+        },
+        {
+          "wall_seconds": 0.007521932013332844,
+          "cpu_seconds": 0.0075018920000000655
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_pop_00002",
+      "duration": 30.00018140589569,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.10016144998371601,
+          "cpu_seconds": 0.009923703999999978
+        },
+        {
+          "wall_seconds": 0.07419773703441024,
+          "cpu_seconds": 0.010171281999999948
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004409352026414126,
+          "cpu_seconds": 0.004395230999999944
+        },
+        {
+          "wall_seconds": 0.003281278011854738,
+          "cpu_seconds": 0.003264661000000002
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025362769956700504,
+          "cpu_seconds": 0.00252504099999995
+        },
+        {
+          "wall_seconds": 0.0024013989605009556,
+          "cpu_seconds": 0.0023923009999999856
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006898209976498038,
+          "cpu_seconds": 0.006865311999999957
+        },
+        {
+          "wall_seconds": 0.007519021979533136,
+          "cpu_seconds": 0.0074965119999999
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06674579298123717,
+          "cpu_seconds": 0.010054822000000074
+        },
+        {
+          "wall_seconds": 0.09078662196407095,
+          "cpu_seconds": 0.01016667300000007
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0043250040034763515,
+          "cpu_seconds": 0.0043029719999998495
+        },
+        {
+          "wall_seconds": 0.0032626279862597585,
+          "cpu_seconds": 0.0032497810000000626
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00253236701246351,
+          "cpu_seconds": 0.0025258910000001134
+        },
+        {
+          "wall_seconds": 0.002402629004791379,
+          "cpu_seconds": 0.002398420999999873
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006873680977150798,
+          "cpu_seconds": 0.006850652000000013
+        },
+        {
+          "wall_seconds": 0.007479152991436422,
+          "cpu_seconds": 0.007454041999999994
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07533525198232383,
+          "cpu_seconds": 0.010123241999999921
+        },
+        {
+          "wall_seconds": 0.07405631797155365,
+          "cpu_seconds": 0.010596852000000156
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0045763609814457595,
+          "cpu_seconds": 0.004557922999999908
+        },
+        {
+          "wall_seconds": 0.003423705988097936,
+          "cpu_seconds": 0.0034164210000000583
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0025346759939566255,
+          "cpu_seconds": 0.002527610999999874
+        },
+        {
+          "wall_seconds": 0.002405870007351041,
+          "cpu_seconds": 0.002394250000000042
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006827672012150288,
+          "cpu_seconds": 0.0068065509999999385
+        },
+        {
+          "wall_seconds": 0.007916226983070374,
+          "cpu_seconds": 0.007888061999999918
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_reggae_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.09912650403566658,
+          "cpu_seconds": 0.010327782999999924
+        },
+        {
+          "wall_seconds": 0.09114576503634453,
+          "cpu_seconds": 0.011063233000000006
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.005068833997938782,
+          "cpu_seconds": 0.005037750999999924
+        },
+        {
+          "wall_seconds": 0.0033443369902670383,
+          "cpu_seconds": 0.0033306909999999412
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002529348013922572,
+          "cpu_seconds": 0.00252082099999984
+        },
+        {
+          "wall_seconds": 0.002402998972684145,
+          "cpu_seconds": 0.002391100999999951
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006964670028537512,
+          "cpu_seconds": 0.006942221999999942
+        },
+        {
+          "wall_seconds": 0.007760268985293806,
+          "cpu_seconds": 0.007729172000000117
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07332100794883445,
+          "cpu_seconds": 0.010501262000000011
+        },
+        {
+          "wall_seconds": 0.07370174396783113,
+          "cpu_seconds": 0.010466802999999913
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004333504009991884,
+          "cpu_seconds": 0.004316081000000027
+        },
+        {
+          "wall_seconds": 0.003271348017733544,
+          "cpu_seconds": 0.0032617310000000455
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.002514017978683114,
+          "cpu_seconds": 0.0025043810000000555
+        },
+        {
+          "wall_seconds": 0.0024250679998658597,
+          "cpu_seconds": 0.0024064109999999417
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006911789998412132,
+          "cpu_seconds": 0.006884572000000144
+        },
+        {
+          "wall_seconds": 0.007388893980532885,
+          "cpu_seconds": 0.007365701999999974
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00001",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07542303099762648,
+          "cpu_seconds": 0.009938642999999914
+        },
+        {
+          "wall_seconds": 0.07417951704701409,
+          "cpu_seconds": 0.010189373000000002
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.004306574002839625,
+          "cpu_seconds": 0.004289310999999962
+        },
+        {
+          "wall_seconds": 0.00325262697879225,
+          "cpu_seconds": 0.003238760999999979
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0026020659715868533,
+          "cpu_seconds": 0.0025909909999999314
+        },
+        {
+          "wall_seconds": 0.0023744889767840505,
+          "cpu_seconds": 0.0023657210000000983
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.007539372018072754,
+          "cpu_seconds": 0.007474611999999992
+        },
+        {
+          "wall_seconds": 0.007707229990046471,
+          "cpu_seconds": 0.007680051999999993
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "gtzan_rock_00002",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.0663569379830733,
+          "cpu_seconds": 0.009985161999999992
+        },
+        {
+          "wall_seconds": 0.09920374205103144,
+          "cpu_seconds": 0.01027875300000014
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-06",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009473716956563294,
+          "cpu_seconds": 0.009445032000000131
+        },
+        {
+          "wall_seconds": 0.008669998031109571,
+          "cpu_seconds": 0.00864678200000002
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-06",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009027293010149151,
+          "cpu_seconds": 0.008998842000000007
+        },
+        {
+          "wall_seconds": 0.009102431999053806,
+          "cpu_seconds": 0.009069843000000022
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-06",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00853681901935488,
+          "cpu_seconds": 0.008508192000000081
+        },
+        {
+          "wall_seconds": 0.00849510997068137,
+          "cpu_seconds": 0.008466772000000011
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-06",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.1009875179734081,
+          "cpu_seconds": 0.010800361999999897
+        },
+        {
+          "wall_seconds": 0.08162393199745566,
+          "cpu_seconds": 0.01114207200000017
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-07",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00947006803471595,
+          "cpu_seconds": 0.009443342000000188
+        },
+        {
+          "wall_seconds": 0.008687207999173552,
+          "cpu_seconds": 0.008624473000000021
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-07",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009120722010266036,
+          "cpu_seconds": 0.009091463000000077
+        },
+        {
+          "wall_seconds": 0.008986464003100991,
+          "cpu_seconds": 0.008964092000000035
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-07",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008425381034612656,
+          "cpu_seconds": 0.00839656199999994
+        },
+        {
+          "wall_seconds": 0.008458869997411966,
+          "cpu_seconds": 0.008428912999999927
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-07",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07717252901056781,
+          "cpu_seconds": 0.010847682999999941
+        },
+        {
+          "wall_seconds": 0.10670551500516012,
+          "cpu_seconds": 0.011030212999999955
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-08",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009292739967349917,
+          "cpu_seconds": 0.00926659299999999
+        },
+        {
+          "wall_seconds": 0.008703897008672357,
+          "cpu_seconds": 0.008677272999999985
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-08",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009042502962984145,
+          "cpu_seconds": 0.00900993200000011
+        },
+        {
+          "wall_seconds": 0.00902765296632424,
+          "cpu_seconds": 0.00899639200000002
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-08",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008450619992800057,
+          "cpu_seconds": 0.008422592000000062
+        },
+        {
+          "wall_seconds": 0.008363211003597826,
+          "cpu_seconds": 0.008331312000000146
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-08",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.10191607795422897,
+          "cpu_seconds": 0.01097194300000015
+        },
+        {
+          "wall_seconds": 0.07329391897656024,
+          "cpu_seconds": 0.011072653000000043
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-01",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009299690020270646,
+          "cpu_seconds": 0.009262901999999906
+        },
+        {
+          "wall_seconds": 0.008696727978531271,
+          "cpu_seconds": 0.008668311999999956
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-01",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009167490992695093,
+          "cpu_seconds": 0.00914141199999996
+        },
+        {
+          "wall_seconds": 0.00901813298696652,
+          "cpu_seconds": 0.008976912999999698
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-01",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008489969011861831,
+          "cpu_seconds": 0.008456181999999757
+        },
+        {
+          "wall_seconds": 0.008299341949168593,
+          "cpu_seconds": 0.008267682000000054
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-01",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07686071301577613,
+          "cpu_seconds": 0.010699623000000269
+        },
+        {
+          "wall_seconds": 0.0733805779600516,
+          "cpu_seconds": 0.01101645299999987
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-02",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009323719015810639,
+          "cpu_seconds": 0.009301151999999924
+        },
+        {
+          "wall_seconds": 0.008750847016926855,
+          "cpu_seconds": 0.008716651999999936
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-02",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009154051018413156,
+          "cpu_seconds": 0.009122542000000067
+        },
+        {
+          "wall_seconds": 0.008992274000775069,
+          "cpu_seconds": 0.00896536300000017
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-02",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00848168000811711,
+          "cpu_seconds": 0.008452342000000002
+        },
+        {
+          "wall_seconds": 0.008422400976996869,
+          "cpu_seconds": 0.008394092000000075
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-02",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06826657301280648,
+          "cpu_seconds": 0.010744081999999988
+        },
+        {
+          "wall_seconds": 0.08166466100374237,
+          "cpu_seconds": 0.011174672999999746
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-03",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009609505999833345,
+          "cpu_seconds": 0.009575761999999877
+        },
+        {
+          "wall_seconds": 0.008774756046477705,
+          "cpu_seconds": 0.008742322000000247
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-03",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009135831031017005,
+          "cpu_seconds": 0.009107222000000359
+        },
+        {
+          "wall_seconds": 0.008988204004708678,
+          "cpu_seconds": 0.008959293000000201
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-03",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008496310038026422,
+          "cpu_seconds": 0.008465302000000285
+        },
+        {
+          "wall_seconds": 0.008388941001612693,
+          "cpu_seconds": 0.008357161999999807
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-03",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07636264996835962,
+          "cpu_seconds": 0.010757542000000342
+        },
+        {
+          "wall_seconds": 0.10664950497448444,
+          "cpu_seconds": 0.011153193000000172
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-11",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009297310025431216,
+          "cpu_seconds": 0.009267491999999766
+        },
+        {
+          "wall_seconds": 0.0087325070053339,
+          "cpu_seconds": 0.00871083199999978
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-11",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009322648984380066,
+          "cpu_seconds": 0.00929582299999998
+        },
+        {
+          "wall_seconds": 0.00903570296941325,
+          "cpu_seconds": 0.009004632999999984
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-11",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0085049900226295,
+          "cpu_seconds": 0.008477402000000023
+        },
+        {
+          "wall_seconds": 0.008536059001926333,
+          "cpu_seconds": 0.008495481999999832
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-11",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.1011434179963544,
+          "cpu_seconds": 0.010750303000000017
+        },
+        {
+          "wall_seconds": 0.073171840980649,
+          "cpu_seconds": 0.01112953300000008
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-12",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009294888994190842,
+          "cpu_seconds": 0.009263593000000014
+        },
+        {
+          "wall_seconds": 0.00866355700418353,
+          "cpu_seconds": 0.008639082000000187
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-12",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009153560968115926,
+          "cpu_seconds": 0.009129562000000035
+        },
+        {
+          "wall_seconds": 0.009016563009936363,
+          "cpu_seconds": 0.008990072000000016
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-12",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008411440998315811,
+          "cpu_seconds": 0.008386232999999965
+        },
+        {
+          "wall_seconds": 0.008459399978164583,
+          "cpu_seconds": 0.008429411999999914
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-12",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.06835876399418339,
+          "cpu_seconds": 0.010795683
+        },
+        {
+          "wall_seconds": 0.07316018996061757,
+          "cpu_seconds": 0.011076022999999768
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-13",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009380398027133197,
+          "cpu_seconds": 0.009348981999999673
+        },
+        {
+          "wall_seconds": 0.008651867974549532,
+          "cpu_seconds": 0.008626001999999744
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-13",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009167201002128422,
+          "cpu_seconds": 0.009137543000000026
+        },
+        {
+          "wall_seconds": 0.008919415005948395,
+          "cpu_seconds": 0.008893093000000185
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-13",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008511260035447776,
+          "cpu_seconds": 0.00848032200000004
+        },
+        {
+          "wall_seconds": 0.008418951008934528,
+          "cpu_seconds": 0.008389011999999862
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Ballroom_Classics4-13",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.07670796301681548,
+          "cpu_seconds": 0.010783152000000129
+        },
+        {
+          "wall_seconds": 0.11494521098211408,
+          "cpu_seconds": 0.011169403000000244
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Pais_Tropical-08",
+      "duration": 30.143537414965987,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00836147100199014,
+          "cpu_seconds": 0.008336241999999938
+        },
+        {
+          "wall_seconds": 0.007762360037304461,
+          "cpu_seconds": 0.007735391999999841
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Pais_Tropical-08",
+      "duration": 30.143537414965987,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008102355001028627,
+          "cpu_seconds": 0.008076391999999988
+        },
+        {
+          "wall_seconds": 0.008083875000011176,
+          "cpu_seconds": 0.008061681999999681
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Pais_Tropical-08",
+      "duration": 30.143537414965987,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.006746562954504043,
+          "cpu_seconds": 0.006726761999999997
+        },
+        {
+          "wall_seconds": 0.006988879002165049,
+          "cpu_seconds": 0.006959641999999988
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-Pais_Tropical-08",
+      "duration": 30.143537414965987,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.076252339000348,
+          "cpu_seconds": 0.00937016299999982
+        },
+        {
+          "wall_seconds": 0.08160978101659566,
+          "cpu_seconds": 0.009598251999999974
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-I_Like_It2-01",
+      "duration": 34.06349206349206,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.00964787503471598,
+          "cpu_seconds": 0.009611932999999961
+        },
+        {
+          "wall_seconds": 0.009153211954981089,
+          "cpu_seconds": 0.00912189200000002
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-I_Like_It2-01",
+      "duration": 34.06349206349206,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.009535016026347876,
+          "cpu_seconds": 0.009503983000000105
+        },
+        {
+          "wall_seconds": 0.009810672956518829,
+          "cpu_seconds": 0.009769791999999722
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-I_Like_It2-01",
+      "duration": 34.06349206349206,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008866335032507777,
+          "cpu_seconds": 0.008840851999999622
+        },
+        {
+          "wall_seconds": 0.008836915018036962,
+          "cpu_seconds": 0.008811131999999944
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-I_Like_It2-01",
+      "duration": 34.06349206349206,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.09789582900702953,
+          "cpu_seconds": 0.011484821999999895
+        },
+        {
+          "wall_seconds": 0.07311788201332092,
+          "cpu_seconds": 0.011686723000000399
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-I_Like_It2-02",
+      "duration": 31.787936507936507,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008713766990695149,
+          "cpu_seconds": 0.008679603000000036
+        },
+        {
+          "wall_seconds": 0.00821802398422733,
+          "cpu_seconds": 0.008192541999999747
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-I_Like_It2-02",
+      "duration": 31.787936507936507,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.008554769039619714,
+          "cpu_seconds": 0.008530841999999872
+        },
+        {
+          "wall_seconds": 0.008682867977768183,
+          "cpu_seconds": 0.008647412999999826
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-I_Like_It2-02",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0071056989836506546,
+          "cpu_seconds": 0.00707831200000042
+        },
+        {
+          "wall_seconds": 0.0071179179940372705,
+          "cpu_seconds": 0.007091302000000077
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "ballroom_Albums-I_Like_It2-02",
+      "duration": 31.787936507936507,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.09839191299397498,
+          "cpu_seconds": 0.009637741999999783
+        },
+        {
+          "wall_seconds": 0.07340999803273007,
+          "cpu_seconds": 0.009942563000000071
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_plain",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.017570812022313476,
+          "cpu_seconds": 0.017518055000000032
+        },
+        {
+          "wall_seconds": 0.015335621021222323,
+          "cpu_seconds": 0.015296525000000116
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_plain",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01743127399822697,
+          "cpu_seconds": 0.01735963500000004
+        },
+        {
+          "wall_seconds": 0.017950056993868202,
+          "cpu_seconds": 0.0178932839999999
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014246384962461889,
+          "cpu_seconds": 0.014200423999999767
+        },
+        {
+          "wall_seconds": 0.014565419987775385,
+          "cpu_seconds": 0.014516683000000086
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.12278994498774409,
+          "cpu_seconds": 0.01979304500000012
+        },
+        {
+          "wall_seconds": 0.13472177198855206,
+          "cpu_seconds": 0.019025474999999847
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015618797042407095,
+          "cpu_seconds": 0.015573113999999944
+        },
+        {
+          "wall_seconds": 0.016614503983873874,
+          "cpu_seconds": 0.016564934999999892
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0173661740263924,
+          "cpu_seconds": 0.017315624000000085
+        },
+        {
+          "wall_seconds": 0.017442203999962658,
+          "cpu_seconds": 0.017385025999999915
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014530521992128342,
+          "cpu_seconds": 0.014479714000000143
+        },
+        {
+          "wall_seconds": 0.01457377104088664,
+          "cpu_seconds": 0.01452895399999976
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.12213271303335205,
+          "cpu_seconds": 0.01886115499999974
+        },
+        {
+          "wall_seconds": 0.13456667499849573,
+          "cpu_seconds": 0.018866724
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_syncopated",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015767065982799977,
+          "cpu_seconds": 0.01571797499999983
+        },
+        {
+          "wall_seconds": 0.01663153403205797,
+          "cpu_seconds": 0.016582695000000314
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_syncopated",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01730304502416402,
+          "cpu_seconds": 0.017251853999999955
+        },
+        {
+          "wall_seconds": 0.017334775009658188,
+          "cpu_seconds": 0.017282004999999767
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_syncopated",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014512180991005152,
+          "cpu_seconds": 0.014460993000000144
+        },
+        {
+          "wall_seconds": 0.013971019012387842,
+          "cpu_seconds": 0.013927103999999968
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_syncopated",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.11452108400408179,
+          "cpu_seconds": 0.019878734999999814
+        },
+        {
+          "wall_seconds": 0.12636412802385166,
+          "cpu_seconds": 0.018898215000000107
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_drift",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.017166928970254958,
+          "cpu_seconds": 0.017130084000000156
+        },
+        {
+          "wall_seconds": 0.016545625985600054,
+          "cpu_seconds": 0.016490763999999825
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_drift",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01726130599854514,
+          "cpu_seconds": 0.01720839399999985
+        },
+        {
+          "wall_seconds": 0.017679620999842882,
+          "cpu_seconds": 0.01762634399999996
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_drift",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014364523987751454,
+          "cpu_seconds": 0.014308503999999722
+        },
+        {
+          "wall_seconds": 0.014681399043183774,
+          "cpu_seconds": 0.014620772999999865
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_3_2_drift",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.12054398603504524,
+          "cpu_seconds": 0.020104755000000196
+        },
+        {
+          "wall_seconds": 0.16069311497267336,
+          "cpu_seconds": 0.0192621260000001
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_plain",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.016430296993348747,
+          "cpu_seconds": 0.016370353999999754
+        },
+        {
+          "wall_seconds": 0.016481985978316516,
+          "cpu_seconds": 0.016426805000000044
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_plain",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01750112301670015,
+          "cpu_seconds": 0.01743689599999998
+        },
+        {
+          "wall_seconds": 0.017449392995331436,
+          "cpu_seconds": 0.01738231499999987
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.013474984967615455,
+          "cpu_seconds": 0.013437483000000139
+        },
+        {
+          "wall_seconds": 0.014655329985544086,
+          "cpu_seconds": 0.014617395000000144
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.11356784601230174,
+          "cpu_seconds": 0.020093853999999745
+        },
+        {
+          "wall_seconds": 0.15132361801806837,
+          "cpu_seconds": 0.01914593500000006
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015849064977373928,
+          "cpu_seconds": 0.0157963539999999
+        },
+        {
+          "wall_seconds": 0.016442396969068795,
+          "cpu_seconds": 0.016386274999999895
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.017232727026566863,
+          "cpu_seconds": 0.01719183500000021
+        },
+        {
+          "wall_seconds": 0.01745606301119551,
+          "cpu_seconds": 0.017407856000000166
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014578840986359864,
+          "cpu_seconds": 0.014535674999999859
+        },
+        {
+          "wall_seconds": 0.013569684000685811,
+          "cpu_seconds": 0.013524783000000262
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.11442137596895918,
+          "cpu_seconds": 0.020012936000000092
+        },
+        {
+          "wall_seconds": 0.1177957720356062,
+          "cpu_seconds": 0.01913657599999974
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_syncopated",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015911713999230415,
+          "cpu_seconds": 0.01586663399999999
+        },
+        {
+          "wall_seconds": 0.016900840040761977,
+          "cpu_seconds": 0.01684718399999996
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_syncopated",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01731463597388938,
+          "cpu_seconds": 0.017264944999999976
+        },
+        {
+          "wall_seconds": 0.01620067999465391,
+          "cpu_seconds": 0.016154724999999814
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_syncopated",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014902515977155417,
+          "cpu_seconds": 0.014829954000000534
+        },
+        {
+          "wall_seconds": 0.014690998999867588,
+          "cpu_seconds": 0.01463900399999929
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_syncopated",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.13948025001445785,
+          "cpu_seconds": 0.02011203500000036
+        },
+        {
+          "wall_seconds": 0.15966263797599822,
+          "cpu_seconds": 0.019166994999999964
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_drift",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015820744971279055,
+          "cpu_seconds": 0.015774505999999633
+        },
+        {
+          "wall_seconds": 0.016075712046585977,
+          "cpu_seconds": 0.016019843999999672
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_drift",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01756395201664418,
+          "cpu_seconds": 0.017514004999999777
+        },
+        {
+          "wall_seconds": 0.016468646004796028,
+          "cpu_seconds": 0.01642003399999936
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_drift",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014680900028906763,
+          "cpu_seconds": 0.014643555000000141
+        },
+        {
+          "wall_seconds": 0.01465390995144844,
+          "cpu_seconds": 0.01460417400000047
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_4_2_drift",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.12288198596797884,
+          "cpu_seconds": 0.02018354500000008
+        },
+        {
+          "wall_seconds": 0.1512369469855912,
+          "cpu_seconds": 0.01903904500000042
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_plain",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015823584981262684,
+          "cpu_seconds": 0.015775575000000153
+        },
+        {
+          "wall_seconds": 0.015969422995112836,
+          "cpu_seconds": 0.015924185000000257
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_plain",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.016699023020919412,
+          "cpu_seconds": 0.016660274000000364
+        },
+        {
+          "wall_seconds": 0.017260965949390084,
+          "cpu_seconds": 0.017204265000000163
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014563901000656188,
+          "cpu_seconds": 0.014511403999999395
+        },
+        {
+          "wall_seconds": 0.014673059049528092,
+          "cpu_seconds": 0.014634774000000128
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.13183154998114333,
+          "cpu_seconds": 0.019949565000000113
+        },
+        {
+          "wall_seconds": 0.11789117002626881,
+          "cpu_seconds": 0.018969535000000093
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01580785500118509,
+          "cpu_seconds": 0.015764755000000186
+        },
+        {
+          "wall_seconds": 0.01674499304499477,
+          "cpu_seconds": 0.016694275000000758
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.017418075003661215,
+          "cpu_seconds": 0.017372925000000095
+        },
+        {
+          "wall_seconds": 0.017168558028060943,
+          "cpu_seconds": 0.017119765000000342
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014852807042188942,
+          "cpu_seconds": 0.01479255399999957
+        },
+        {
+          "wall_seconds": 0.014561321004293859,
+          "cpu_seconds": 0.014514304000000422
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_pickup_weak_one",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.13007366302190349,
+          "cpu_seconds": 0.02013486500000017
+        },
+        {
+          "wall_seconds": 0.11789716000203043,
+          "cpu_seconds": 0.019024964999999838
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_syncopated",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01600731204962358,
+          "cpu_seconds": 0.01596086500000027
+        },
+        {
+          "wall_seconds": 0.016770782007370144,
+          "cpu_seconds": 0.016719465000000433
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_syncopated",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01730650500394404,
+          "cpu_seconds": 0.017260614999999646
+        },
+        {
+          "wall_seconds": 0.01779446902219206,
+          "cpu_seconds": 0.017738564000000068
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_syncopated",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014625410025473684,
+          "cpu_seconds": 0.014584784000000184
+        },
+        {
+          "wall_seconds": 0.014153486001305282,
+          "cpu_seconds": 0.014103142999999818
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_syncopated",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.12979313702089712,
+          "cpu_seconds": 0.020171604999999815
+        },
+        {
+          "wall_seconds": 0.15982989699114114,
+          "cpu_seconds": 0.020852565999999406
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_drift",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.016132850956637412,
+          "cpu_seconds": 0.01608508499999939
+        },
+        {
+          "wall_seconds": 0.016858490998856723,
+          "cpu_seconds": 0.016769694999999807
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_drift",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.017264995956793427,
+          "cpu_seconds": 0.017218616000000075
+        },
+        {
+          "wall_seconds": 0.016386006958782673,
+          "cpu_seconds": 0.016343784000000028
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_drift",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014134616998489946,
+          "cpu_seconds": 0.014085253000000186
+        },
+        {
+          "wall_seconds": 0.01474132901057601,
+          "cpu_seconds": 0.014693423999999844
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_2_3_drift",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.130654381995555,
+          "cpu_seconds": 0.020238074999999967
+        },
+        {
+          "wall_seconds": 0.11790726199978963,
+          "cpu_seconds": 0.019164865000000475
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_change_aligned",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015841624001041055,
+          "cpu_seconds": 0.015794453999999902
+        },
+        {
+          "wall_seconds": 0.015660846955142915,
+          "cpu_seconds": 0.015611974999999667
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_change_aligned",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01717239699792117,
+          "cpu_seconds": 0.017126393999999934
+        },
+        {
+          "wall_seconds": 0.01744020398473367,
+          "cpu_seconds": 0.01737900499999956
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_change_aligned",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014728259004186839,
+          "cpu_seconds": 0.014678774000000061
+        },
+        {
+          "wall_seconds": 0.014646330033428967,
+          "cpu_seconds": 0.014599404000000149
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_change_aligned",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.13079463102621958,
+          "cpu_seconds": 0.02012738500000033
+        },
+        {
+          "wall_seconds": 0.1429637360270135,
+          "cpu_seconds": 0.018815105999999915
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_change_unaligned",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015821253997273743,
+          "cpu_seconds": 0.01577617500000006
+        },
+        {
+          "wall_seconds": 0.016282517986837775,
+          "cpu_seconds": 0.016221804000000617
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_change_unaligned",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.016806022031232715,
+          "cpu_seconds": 0.016766194000000567
+        },
+        {
+          "wall_seconds": 0.017528672993648797,
+          "cpu_seconds": 0.017477695000000182
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_change_unaligned",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.013770971039775759,
+          "cpu_seconds": 0.01373734399999993
+        },
+        {
+          "wall_seconds": 0.014633369981311262,
+          "cpu_seconds": 0.01458160399999997
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_change_unaligned",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.12374520301818848,
+          "cpu_seconds": 0.020132025999999748
+        },
+        {
+          "wall_seconds": 0.12626632198225707,
+          "cpu_seconds": 0.01908997499999998
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_silence",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01582276599947363,
+          "cpu_seconds": 0.015780566000000107
+        },
+        {
+          "wall_seconds": 0.016570344974752516,
+          "cpu_seconds": 0.016527234000000668
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_silence",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.017463113996200264,
+          "cpu_seconds": 0.017410274999999586
+        },
+        {
+          "wall_seconds": 0.017109358974266797,
+          "cpu_seconds": 0.01705986499999934
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_silence",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.01463017996866256,
+          "cpu_seconds": 0.014582062999999756
+        },
+        {
+          "wall_seconds": 0.014546821999829262,
+          "cpu_seconds": 0.014501934000000105
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_silence",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.12216013495344669,
+          "cpu_seconds": 0.020289775000000176
+        },
+        {
+          "wall_seconds": 0.14302831597160548,
+          "cpu_seconds": 0.019072866000000133
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_tone",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.016210679954383522,
+          "cpu_seconds": 0.016161285999999997
+        },
+        {
+          "wall_seconds": 0.016578655049670488,
+          "cpu_seconds": 0.016538425000000245
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_tone",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.017406913975719362,
+          "cpu_seconds": 0.017352824999999683
+        },
+        {
+          "wall_seconds": 0.017427354003302753,
+          "cpu_seconds": 0.017380124999999857
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_tone",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014628431003075093,
+          "cpu_seconds": 0.014583734000000348
+        },
+        {
+          "wall_seconds": 0.014144666958600283,
+          "cpu_seconds": 0.014097934000000478
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_tone",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.11353902600239962,
+          "cpu_seconds": 0.01976439599999935
+        },
+        {
+          "wall_seconds": 0.15979183797026053,
+          "cpu_seconds": 0.018907225000000416
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_uniform_pulse",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.015923313971143216,
+          "cpu_seconds": 0.015844483999999603
+        },
+        {
+          "wall_seconds": 0.016610983991995454,
+          "cpu_seconds": 0.016570224999999716
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_uniform_pulse",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.017463283031247556,
+          "cpu_seconds": 0.0174134549999998
+        },
+        {
+          "wall_seconds": 0.01723356597358361,
+          "cpu_seconds": 0.017179934999999702
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_uniform_pulse",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.014723639003932476,
+          "cpu_seconds": 0.014677704000000347
+        },
+        {
+          "wall_seconds": 0.014651350036729127,
+          "cpu_seconds": 0.014604953999999282
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "synthetic_uniform_pulse",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.12172648898558691,
+          "cpu_seconds": 0.020335355000000277
+        },
+        {
+          "wall_seconds": 0.16795537201687694,
+          "cpu_seconds": 0.019150615000000037
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_4_bars",
+      "duration": 132.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.031336254032794386,
+          "cpu_seconds": 0.03126598900000044
+        },
+        {
+          "wall_seconds": 0.028199193999171257,
+          "cpu_seconds": 0.028132386999999426
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_4_bars",
+      "duration": 132.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.04602172301383689,
+          "cpu_seconds": 0.03187118899999941
+        },
+        {
+          "wall_seconds": 0.041848687978927046,
+          "cpu_seconds": 0.03117533799999972
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_4_bars",
+      "duration": 132.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.04959468502784148,
+          "cpu_seconds": 0.02621183699999996
+        },
+        {
+          "wall_seconds": 0.02644476800924167,
+          "cpu_seconds": 0.026355237000000642
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_4_bars",
+      "duration": 132.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.43396413000300527,
+          "cpu_seconds": 0.03722015199999973
+        },
+        {
+          "wall_seconds": 0.5965837319963612,
+          "cpu_seconds": 0.03584638999999967
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_8_bars",
+      "duration": 132.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.028892075992189348,
+          "cpu_seconds": 0.028818798000000534
+        },
+        {
+          "wall_seconds": 0.02938656904734671,
+          "cpu_seconds": 0.029313368000000395
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_8_bars",
+      "duration": 132.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.031744778039865196,
+          "cpu_seconds": 0.03144013800000067
+        },
+        {
+          "wall_seconds": 0.030562413041479886,
+          "cpu_seconds": 0.030482017999999833
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_8_bars",
+      "duration": 132.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.026587705011479557,
+          "cpu_seconds": 0.02650677600000062
+        },
+        {
+          "wall_seconds": 0.03830269299214706,
+          "cpu_seconds": 0.02824800800000027
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_8_bars",
+      "duration": 132.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.40252550796139985,
+          "cpu_seconds": 0.03678710999999968
+        },
+        {
+          "wall_seconds": 0.5875888899900019,
+          "cpu_seconds": 0.03783219099999968
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_16_bars",
+      "duration": 132.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.042547998018562794,
+          "cpu_seconds": 0.028802437999999597
+        },
+        {
+          "wall_seconds": 0.029327199968975037,
+          "cpu_seconds": 0.02924849800000029
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_16_bars",
+      "duration": 132.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.03216700296616182,
+          "cpu_seconds": 0.031866928999999544
+        },
+        {
+          "wall_seconds": 0.03252748801605776,
+          "cpu_seconds": 0.03245143000000006
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_16_bars",
+      "duration": 132.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.027476783958263695,
+          "cpu_seconds": 0.02740046699999965
+        },
+        {
+          "wall_seconds": 0.02624536899384111,
+          "cpu_seconds": 0.026177087000000654
+        }
+      ]
+    },
+    {
+      "manifest": "manifest",
+      "case": "structure_16_bars",
+      "duration": 132.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.6642209650017321,
+          "cpu_seconds": 0.03789696099999951
+        },
+        {
+          "wall_seconds": 0.5707187289954163,
+          "cpu_seconds": 0.03674468999999991
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_gtzan_blues_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.06382036197464913,
+          "cpu_seconds": 0.07140308199999948
+        },
+        {
+          "wall_seconds": 0.06387904100120068,
+          "cpu_seconds": 0.06971785099999973
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_gtzan_blues_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.06249607901554555,
+          "cpu_seconds": 0.06843879100000008
+        },
+        {
+          "wall_seconds": 0.06207805499434471,
+          "cpu_seconds": 0.06889484099999996
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_gtzan_blues_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0674555060104467,
+          "cpu_seconds": 0.0738779120000004
+        },
+        {
+          "wall_seconds": 0.06647597800474614,
+          "cpu_seconds": 0.07356826099999937
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_gtzan_blues_00000",
+      "duration": 30.013333333333332,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.14130913704866543,
+          "cpu_seconds": 0.0756099729999997
+        },
+        {
+          "wall_seconds": 0.1326085280161351,
+          "cpu_seconds": 0.07577272199999975
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_3_2_plain",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.08706957200774923,
+          "cpu_seconds": 0.11984111500000014
+        },
+        {
+          "wall_seconds": 0.085949125001207,
+          "cpu_seconds": 0.11825861500000065
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_3_2_plain",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0881869459990412,
+          "cpu_seconds": 0.11871196499999978
+        },
+        {
+          "wall_seconds": 0.08604084397666156,
+          "cpu_seconds": 0.11942609399999943
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_3_2_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0843556160107255,
+          "cpu_seconds": 0.11761559500000007
+        },
+        {
+          "wall_seconds": 0.08412994898390025,
+          "cpu_seconds": 0.11638832500000018
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_3_2_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.19937223399756476,
+          "cpu_seconds": 0.12409548600000053
+        },
+        {
+          "wall_seconds": 0.19008596503408626,
+          "cpu_seconds": 0.12277445500000028
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_4_2_plain",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.08615349297178909,
+          "cpu_seconds": 0.11912461300000021
+        },
+        {
+          "wall_seconds": 0.08736244699684903,
+          "cpu_seconds": 0.12030037399999982
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_4_2_plain",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.08864461095072329,
+          "cpu_seconds": 0.12124142400000026
+        },
+        {
+          "wall_seconds": 0.08843407401582226,
+          "cpu_seconds": 0.120732744
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_4_2_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0857065090094693,
+          "cpu_seconds": 0.1190203030000006
+        },
+        {
+          "wall_seconds": 0.08353527699364349,
+          "cpu_seconds": 0.11608509500000075
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_4_2_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.18730723101180047,
+          "cpu_seconds": 0.122133665
+        },
+        {
+          "wall_seconds": 0.1982533690170385,
+          "cpu_seconds": 0.12323021599999961
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_2_3_plain",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0871887489920482,
+          "cpu_seconds": 0.1192937249999998
+        },
+        {
+          "wall_seconds": 0.08784822101006284,
+          "cpu_seconds": 0.12106067499999984
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_2_3_plain",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.08882566902320832,
+          "cpu_seconds": 0.12129229499999994
+        },
+        {
+          "wall_seconds": 0.08951487997546792,
+          "cpu_seconds": 0.12064880500000019
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_2_3_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.08332557999528944,
+          "cpu_seconds": 0.11495546300000026
+        },
+        {
+          "wall_seconds": 0.08420162799302489,
+          "cpu_seconds": 0.11634120500000034
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_2_3_plain",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.1861926459823735,
+          "cpu_seconds": 0.12370372500000004
+        },
+        {
+          "wall_seconds": 0.19847935700090602,
+          "cpu_seconds": 0.12244335499999948
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_2_3_slow",
+      "duration": 72.0,
+      "sample_rate": 11025,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.08786094095557928,
+          "cpu_seconds": 0.12049469300000015
+        },
+        {
+          "wall_seconds": 0.08641907898709178,
+          "cpu_seconds": 0.11829996299999901
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_2_3_slow",
+      "duration": 72.0,
+      "sample_rate": 22050,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.08669231500243768,
+          "cpu_seconds": 0.12001502400000019
+        },
+        {
+          "wall_seconds": 0.08731015800731257,
+          "cpu_seconds": 0.1196302060000003
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_2_3_slow",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "numpy_float32",
+      "timings": [
+        {
+          "wall_seconds": 0.0853628339827992,
+          "cpu_seconds": 0.11729799399999918
+        },
+        {
+          "wall_seconds": 0.0846407319768332,
+          "cpu_seconds": 0.11607656300000024
+        }
+      ]
+    },
+    {
+      "manifest": "aac",
+      "case": "aac_synthetic_2_3_slow",
+      "duration": 72.0,
+      "sample_rate": 44100,
+      "format": "wav_float",
+      "timings": [
+        {
+          "wall_seconds": 0.18027895200066268,
+          "cpu_seconds": 0.11812434500000057
+        },
+        {
+          "wall_seconds": 0.1901036450290121,
+          "cpu_seconds": 0.12292280399999955
+        }
+      ]
+    }
+  ],
+  "policy": "Fresh derivative cache for each repetition; input SHA verification and downloads outside timing."
+}

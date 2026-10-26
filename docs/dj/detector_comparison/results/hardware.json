@@ -1,0 +1,13 @@
+{
+  "machine": "x86_64",
+  "kernel": "7.2.11-1-cachyos",
+  "cpu_model": "AMD Ryzen 7 5800X 8-Core Processor",
+  "logical_processors": 16,
+  "ram": [
+    "MemTotal:       32779948 kB"
+  ],
+  "notes": [
+    "One backend at a time, one computation thread, shared workstation with other user activity.",
+    "CPU time is not frequency-normalized; wall time is descriptive rather than controlled."
+  ]
+}

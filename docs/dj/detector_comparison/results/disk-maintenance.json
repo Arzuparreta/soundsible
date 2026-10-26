@@ -1,0 +1,12 @@
+{
+  "pause_started": 1792971453.998425,
+  "resumed": 1792971458.1143255,
+  "owned_processes": [
+    5462,
+    30842,
+    4162877,
+    88006
+  ],
+  "destination": "/mnt/storage/soundsible-dj-cache",
+  "note": "CPU time excludes the brief maintenance suspension; wall samples crossing it are marked for exclusion."
+}

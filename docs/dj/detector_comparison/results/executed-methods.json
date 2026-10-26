@@ -1,0 +1,36 @@
+{
+  "native_methods": [
+    "allin1-all",
+    "allin1-fold0",
+    "beatnet-1-dbn",
+    "beatnet-1-pf",
+    "beatnet-2-dbn",
+    "beatnet-2-pf",
+    "beatnetplus-generic-dbn",
+    "beatnetplus-generic-pf",
+    "beatnetplus-main-dbn",
+    "beatnetplus-nonpercussive-dbn",
+    "beatthis-final0-dbn",
+    "beatthis-final0-direct",
+    "beatthis-small0-dbn",
+    "beatthis-small0-direct",
+    "essentia-degara",
+    "essentia-multifeature",
+    "joint",
+    "joint-dbn",
+    "librosa-global",
+    "librosa-local",
+    "madmom-modern-default",
+    "madmom-modern-extended",
+    "madmom-original-default",
+    "madmom-original-extended",
+    "soundsible-main",
+    "soundsible-p12",
+    "transformer-fold0"
+  ],
+  "retained_activation_variants": [
+    "beatthis-final0-direct-common",
+    "beatthis-small0-direct-common"
+  ],
+  "interpretation": "The initial experiment file lists the first preparation batch; this executed inventory is authoritative."
+}

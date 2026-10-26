@@ -1,0 +1,731 @@
+{
+  "allin1-all": {
+    "method": "allin1-all",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 1.779435791017022,
+    "passes": [
+      {
+        "beats": 59,
+        "downbeats": 15,
+        "wall_seconds": 88.96559474797687
+      },
+      {
+        "beats": 59,
+        "downbeats": 15,
+        "wall_seconds": 59.09188848501071
+      }
+    ],
+    "exact_parent_peak_rss_kib": 1968388,
+    "largest_child_peak_rss_kib": 688248,
+    "sampled_tree": {
+      "rss_tree_kib": 1969028,
+      "pss_tree_kib": 1963110,
+      "samples": 1673
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "allin1-fold0": {
+    "method": "allin1-fold0",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 1.4590503969811834,
+    "passes": [
+      {
+        "beats": 62,
+        "downbeats": 15,
+        "wall_seconds": 37.488364910008386
+      },
+      {
+        "beats": 62,
+        "downbeats": 15,
+        "wall_seconds": 7.55967452400364
+      }
+    ],
+    "exact_parent_peak_rss_kib": 1875288,
+    "largest_child_peak_rss_kib": 669192,
+    "sampled_tree": {
+      "rss_tree_kib": 1862232,
+      "pss_tree_kib": 1856332,
+      "samples": 1166
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatnet-1-dbn": {
+    "method": "beatnet-1-dbn",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.8477741840179078,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 32,
+        "wall_seconds": 0.13191094901412725
+      },
+      {
+        "beats": 63,
+        "downbeats": 32,
+        "wall_seconds": 0.11816200497560203
+      }
+    ],
+    "exact_parent_peak_rss_kib": 473964,
+    "largest_child_peak_rss_kib": 294100,
+    "sampled_tree": {
+      "rss_tree_kib": 440712,
+      "pss_tree_kib": 434779,
+      "samples": 35
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatnet-1-pf": {
+    "method": "beatnet-1-pf",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.8577551569906063,
+    "passes": [
+      {
+        "beats": 59,
+        "downbeats": 15,
+        "wall_seconds": 1.7757416869862936
+      },
+      {
+        "beats": 59,
+        "downbeats": 15,
+        "wall_seconds": 1.7598496040445752
+      }
+    ],
+    "exact_parent_peak_rss_kib": 430424,
+    "largest_child_peak_rss_kib": 294160,
+    "sampled_tree": {
+      "rss_tree_kib": 430792,
+      "pss_tree_kib": 424861,
+      "samples": 192
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatnet-2-dbn": {
+    "method": "beatnet-2-dbn",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.8501597240101546,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 0.13095356099074706
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 0.11934203002601862
+      }
+    ],
+    "exact_parent_peak_rss_kib": 474024,
+    "largest_child_peak_rss_kib": 294020,
+    "sampled_tree": {
+      "rss_tree_kib": 440856,
+      "pss_tree_kib": 434924,
+      "samples": 36
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatnet-2-pf": {
+    "method": "beatnet-2-pf",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.8508828170015477,
+    "passes": [
+      {
+        "beats": 62,
+        "downbeats": 17,
+        "wall_seconds": 1.6488242970081046
+      },
+      {
+        "beats": 62,
+        "downbeats": 17,
+        "wall_seconds": 1.6862424860009924
+      }
+    ],
+    "exact_parent_peak_rss_kib": 429956,
+    "largest_child_peak_rss_kib": 294320,
+    "sampled_tree": {
+      "rss_tree_kib": 430652,
+      "pss_tree_kib": 424708,
+      "samples": 183
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatnetplus-generic-dbn": {
+    "method": "beatnetplus-generic-dbn",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.8520601849886589,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 0.14402140403399244
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 0.12922331399749964
+      }
+    ],
+    "exact_parent_peak_rss_kib": 475652,
+    "largest_child_peak_rss_kib": 294268,
+    "sampled_tree": {
+      "rss_tree_kib": 442392,
+      "pss_tree_kib": 436546,
+      "samples": 36
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatnetplus-generic-pf": {
+    "method": "beatnetplus-generic-pf",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.8502557100146078,
+    "passes": [
+      {
+        "beats": 61,
+        "downbeats": 17,
+        "wall_seconds": 1.7706477280007675
+      },
+      {
+        "beats": 61,
+        "downbeats": 17,
+        "wall_seconds": 1.761406008969061
+      }
+    ],
+    "exact_parent_peak_rss_kib": 435416,
+    "largest_child_peak_rss_kib": 294204,
+    "sampled_tree": {
+      "rss_tree_kib": 435772,
+      "pss_tree_kib": 429906,
+      "samples": 192
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatnetplus-main-dbn": {
+    "method": "beatnetplus-main-dbn",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.8515585330314934,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 0.14330653299111873
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 0.1284438850125298
+      }
+    ],
+    "exact_parent_peak_rss_kib": 475724,
+    "largest_child_peak_rss_kib": 294264,
+    "sampled_tree": {
+      "rss_tree_kib": 442412,
+      "pss_tree_kib": 436546,
+      "samples": 36
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatnetplus-nonpercussive-dbn": {
+    "method": "beatnetplus-nonpercussive-dbn",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.8513861950486898,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 0.14163111400557682
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 0.12816926796222106
+      }
+    ],
+    "exact_parent_peak_rss_kib": 475948,
+    "largest_child_peak_rss_kib": 294820,
+    "sampled_tree": {
+      "rss_tree_kib": 442548,
+      "pss_tree_kib": 436670,
+      "samples": 36
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatthis-final0-dbn": {
+    "method": "beatthis-final0-dbn",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 1.2469606770318933,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 3.380096615990624
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 3.32163787598256
+      }
+    ],
+    "exact_parent_peak_rss_kib": 715176,
+    "largest_child_peak_rss_kib": 528200,
+    "sampled_tree": {
+      "rss_tree_kib": 682388,
+      "pss_tree_kib": 676562,
+      "samples": 325
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatthis-final0-direct": {
+    "method": "beatthis-final0-direct",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 1.1965444219531491,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 31,
+        "wall_seconds": 3.346666175988503
+      },
+      {
+        "beats": 63,
+        "downbeats": 31,
+        "wall_seconds": 3.326072327035945
+      }
+    ],
+    "exact_parent_peak_rss_kib": 636648,
+    "largest_child_peak_rss_kib": 0,
+    "sampled_tree": {
+      "rss_tree_kib": 637372,
+      "pss_tree_kib": 631542,
+      "samples": 328
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatthis-small0-dbn": {
+    "method": "beatthis-small0-dbn",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 1.1050879469839856,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 1.9678644049563445
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 1.924699174996931
+      }
+    ],
+    "exact_parent_peak_rss_kib": 664816,
+    "largest_child_peak_rss_kib": 395940,
+    "sampled_tree": {
+      "rss_tree_kib": 665824,
+      "pss_tree_kib": 660007,
+      "samples": 204
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "beatthis-small0-direct": {
+    "method": "beatthis-small0-direct",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 1.0579053789842874,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 23,
+        "wall_seconds": 1.9607422840199433
+      },
+      {
+        "beats": 63,
+        "downbeats": 23,
+        "wall_seconds": 1.9434710090281442
+      }
+    ],
+    "exact_parent_peak_rss_kib": 588164,
+    "largest_child_peak_rss_kib": 0,
+    "sampled_tree": {
+      "rss_tree_kib": 588948,
+      "pss_tree_kib": 583142,
+      "samples": 204
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "essentia-degara": {
+    "method": "essentia-degara",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.5150605990202166,
+    "passes": [
+      {
+        "beats": 61,
+        "downbeats": 0,
+        "wall_seconds": 0.05596339801559225
+      },
+      {
+        "beats": 61,
+        "downbeats": 0,
+        "wall_seconds": 0.04503734002355486
+      }
+    ],
+    "exact_parent_peak_rss_kib": 189216,
+    "largest_child_peak_rss_kib": 0,
+    "sampled_tree": {
+      "rss_tree_kib": 189560,
+      "pss_tree_kib": 183814,
+      "samples": 5
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "essentia-multifeature": {
+    "method": "essentia-multifeature",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.5393344559706748,
+    "passes": [
+      {
+        "beats": 61,
+        "downbeats": 0,
+        "wall_seconds": 0.22522551601286978
+      },
+      {
+        "beats": 61,
+        "downbeats": 0,
+        "wall_seconds": 0.21335302904481068
+      }
+    ],
+    "exact_parent_peak_rss_kib": 214060,
+    "largest_child_peak_rss_kib": 0,
+    "sampled_tree": {
+      "rss_tree_kib": 197616,
+      "pss_tree_kib": 191877,
+      "samples": 5
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "joint-dbn": {
+    "method": "joint-dbn",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.0003943449701182544,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 31,
+        "wall_seconds": 0.5265438340138644
+      },
+      {
+        "beats": 63,
+        "downbeats": 31,
+        "wall_seconds": 0.3565721909981221
+      }
+    ],
+    "exact_parent_peak_rss_kib": 308588,
+    "largest_child_peak_rss_kib": 56048,
+    "sampled_tree": {
+      "rss_tree_kib": 108820,
+      "pss_tree_kib": 103159,
+      "samples": 14
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "joint": {
+    "method": "joint",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.00019545800751075149,
+    "passes": [
+      {
+        "beats": 94,
+        "downbeats": 0,
+        "wall_seconds": 0.24843760702060536
+      },
+      {
+        "beats": 94,
+        "downbeats": 0,
+        "wall_seconds": 0.09156369004631415
+      }
+    ],
+    "exact_parent_peak_rss_kib": 110252,
+    "largest_child_peak_rss_kib": 60464,
+    "sampled_tree": {
+      "rss_tree_kib": 110628,
+      "pss_tree_kib": 104964,
+      "samples": 15
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "librosa-global": {
+    "method": "librosa-global",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.0010517170303501189,
+    "passes": [
+      {
+        "beats": 61,
+        "downbeats": 0,
+        "wall_seconds": 1.6652892589918338
+      },
+      {
+        "beats": 61,
+        "downbeats": 0,
+        "wall_seconds": 0.022657056979369372
+      }
+    ],
+    "exact_parent_peak_rss_kib": 333104,
+    "largest_child_peak_rss_kib": 66788,
+    "sampled_tree": {
+      "rss_tree_kib": 311968,
+      "pss_tree_kib": 306226,
+      "samples": 70
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "librosa-local": {
+    "method": "librosa-local",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.0008900190005078912,
+    "passes": [
+      {
+        "beats": 61,
+        "downbeats": 0,
+        "wall_seconds": 1.6633447259664536
+      },
+      {
+        "beats": 61,
+        "downbeats": 0,
+        "wall_seconds": 0.025662809028290212
+      }
+    ],
+    "exact_parent_peak_rss_kib": 332852,
+    "largest_child_peak_rss_kib": 66940,
+    "sampled_tree": {
+      "rss_tree_kib": 322548,
+      "pss_tree_kib": 316793,
+      "samples": 69
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "madmom-modern-default": {
+    "method": "madmom-modern-default",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.15567007096251473,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 2.512683327018749
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 2.4300173760275356
+      }
+    ],
+    "exact_parent_peak_rss_kib": 398596,
+    "largest_child_peak_rss_kib": 0,
+    "sampled_tree": {
+      "rss_tree_kib": 273824,
+      "pss_tree_kib": 268170,
+      "samples": 187
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "madmom-modern-extended": {
+    "method": "madmom-modern-extended",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.1628886089893058,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 2.7017843130161054
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 2.683529942005407
+      }
+    ],
+    "exact_parent_peak_rss_kib": 486384,
+    "largest_child_peak_rss_kib": 0,
+    "sampled_tree": {
+      "rss_tree_kib": 275268,
+      "pss_tree_kib": 269613,
+      "samples": 192
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "madmom-original-default": {
+    "method": "madmom-original-default",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.06913368799723685,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 2.485267288982868
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 2.4612961700186133
+      }
+    ],
+    "exact_parent_peak_rss_kib": 400536,
+    "largest_child_peak_rss_kib": 50776,
+    "sampled_tree": {
+      "rss_tree_kib": 275668,
+      "pss_tree_kib": 270043,
+      "samples": 228
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "madmom-original-extended": {
+    "method": "madmom-original-extended",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.07447511900682002,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 2.7024753209552728
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 2.6741619000094943
+      }
+    ],
+    "exact_parent_peak_rss_kib": 487700,
+    "largest_child_peak_rss_kib": 50244,
+    "sampled_tree": {
+      "rss_tree_kib": 261812,
+      "pss_tree_kib": 256188,
+      "samples": 230
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "soundsible-main": {
+    "method": "soundsible-main",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.00144043198088184,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 15,
+        "wall_seconds": 0.05492858000798151
+      },
+      {
+        "beats": 63,
+        "downbeats": 15,
+        "wall_seconds": 0.04391977202612907
+      }
+    ],
+    "exact_parent_peak_rss_kib": 63984,
+    "largest_child_peak_rss_kib": 0,
+    "sampled_tree": {
+      "rss_tree_kib": 61584,
+      "pss_tree_kib": 55944,
+      "samples": 5
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "soundsible-p12": {
+    "method": "soundsible-p12",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 0.0018144469941034913,
+    "passes": [
+      {
+        "beats": 95,
+        "downbeats": 0,
+        "wall_seconds": 0.08269961195765063
+      },
+      {
+        "beats": 95,
+        "downbeats": 0,
+        "wall_seconds": 0.06998707598540932
+      }
+    ],
+    "exact_parent_peak_rss_kib": 63472,
+    "largest_child_peak_rss_kib": 0,
+    "sampled_tree": {
+      "rss_tree_kib": 60608,
+      "pss_tree_kib": 54931,
+      "samples": 8
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  },
+  "transformer-fold0": {
+    "method": "transformer-fold0",
+    "case": "gtzan_blues_00000",
+    "duration": 30.013333333333332,
+    "load_wall_seconds": 6.45975633704802,
+    "passes": [
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 10.117118894995656
+      },
+      {
+        "beats": 63,
+        "downbeats": 16,
+        "wall_seconds": 1.9445946940104477
+      }
+    ],
+    "exact_parent_peak_rss_kib": 834852,
+    "largest_child_peak_rss_kib": 294112,
+    "sampled_tree": {
+      "rss_tree_kib": 1864608,
+      "pss_tree_kib": 1851695,
+      "samples": 663
+    },
+    "evaluation_imported": false,
+    "caveat": "RSS tree counts shared pages in each process; PSS distributes them. Sampling interval 20 ms."
+  }
+}
