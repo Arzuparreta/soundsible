@@ -257,6 +257,10 @@ export interface DjTransitionPlan {
     in_bar_seconds?: number | null;
     out_metre?: DjMetricCoverage | null;
     in_metre?: DjMetricCoverage | null;
+    /** m outgoing beats last as long as n incoming beats at the planned rate. */
+    cycle_beats?: [number, number] | null;
+    /** The only step the outgoing cue may move by: whole bars and whole cycles. */
+    relocation_seconds?: number | null;
   };
 }
 

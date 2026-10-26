@@ -112,6 +112,10 @@ Resultados y límites en [detector_comparison/RESULTS](detector_comparison/RESUL
   que hoy exige compases para cualquier beatmatch.
 - Versión: **no publicar ninguna versión hasta integrar P12-b**, en lugar de
   revertir #394.
+- Ciclo común: lecturas binarias y ternarias son equivalentes; dos canciones
+  se mezclan con beatmatch en cualquier relación 2ᵃ·3ᵇ de pulsos que los
+  reproductores puedan mantener (incluida 3:2, p. ej. 116 ↔ 174), alineando el
+  ciclo común desde los dos unos. Dentro de la PR de P12-b.
 - Pesos: el `.onnx` de `final0` (84 MB, MIT) se publica como asset de una
   release de GitHub de Soundsible con SHA256 fijado. La imagen Docker y el
   instalador de escritorio lo incluyen; una instalación desde código lo
@@ -282,7 +286,9 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 ### Cálculo de la transición (`plan_transition`)
 
 ```
-ratio = bpm_sale / bpm_entra   (si < 0,7 se multiplica por 2; si > 1,4 se divide por 2)
+ratio = bpm_sale / bpm_entra, llevado a la velocidad del ciclo común más cercano
+        (m pulsos de la que sale = n de la que entra; 1:1, 2:1, 3:2, 4:3, 3:1, 4:1
+        y sus inversos; el contrato antiguo solo pliega una octava)
 tempo     = 1 − |1−ratio| / 0,08
 armonía   = 1 − pasos_Camelot / 7 (±1 en el mismo modo o cambio relativo = un paso; sin tonalidad conocida 0.55)
 confianza = mínimo de las dos canciones
@@ -298,8 +304,19 @@ ejecutable durante todo el solapamiento, no solo BPM compatibles (P12-b):
 `bars` con unos confirmados en ambas canciones y compases ejecutados iguales;
 `beats` con pulso estable compartido (región con `pulse_confidence > 0,6`,
 rejilla regular sin huecos y ambos cues en pulsos medidos). En `beats` el
-compás estimado por el modelo solo se envía si coincide en las dos canciones
-y guía la recolocación; no se promete.
+compás estimado por el modelo solo se envía si coincide en las dos canciones;
+no se promete.
+
+**Ciclo común (decisión del usuario, 2026-10-26).** Leer una canción en
+binario o en ternario es una elección de nivel: un 12/8 es un 4/4 con pulsos
+ternarios y un 6/8 se lee como dos pulsos o como tres. La mezcla no depende
+de esa lectura: busca la duración más corta que sea un número entero de
+pulsos de ambas canciones (`cycle_beats` = [m, n], relaciones 2ᵃ·3ᵇ dentro del
+6 % de velocidad) y la mantiene empezando en los dos unos. Ejemplos: 3 contra 4
+pulsos al mismo pulso (unos juntos al empezar y cada 12 pulsos), 120 ↔ 180 BPM
+(2 pulsos = 3), 90 ↔ 120 (3 = 4), 116 ↔ 176 a velocidad 0,9886, 6/8 a 80 ↔ 4/4
+a 120. El cue solo se recoloca por `relocation_seconds`: compases enteros de la
+que sale que son también ciclos enteros, para no separar los dos unos.
 
 | Condición | Técnica | Compases solicitados |
 | --- | --- | --- |
@@ -312,7 +329,8 @@ y guía la recolocación; no se promete.
 
 El ajuste local no supera el 6 % y debe acumular como máximo 5 ms de desfase
 con los valores redondeados del contrato. Un score alto por tonalidad no puede
-eludir esa comprobación. Medio/doble tempo sigue representando el mismo pulso.
+eludir esa comprobación. Cualquier ciclo común mantiene alineados todos los
+niveles que comparten las dos canciones; medio/doble tempo es el caso 2:1.
 
 - Solapamiento: compases × duración local medida del compás de la canción que
   sale, entre 4 y 48 s; sin compás se usa una reserva temporal y
@@ -326,8 +344,9 @@ eludir esa comprobación. Medio/doble tempo sigue representando el mismo pulso.
   `bars` o `beats` de ambos cues y del tramo completo. Las reservas declaran
   `none`, mantienen velocidad normal y su score de mezcla vale cero en el
   contrato métrico. La tonalidad no puede eludir la guarda.
-- `playback_rate` = relación entre los periodos medidos cerca de cada punto. Solo
-  en bass_swap, long_blend y filter_blend, y solo si el cambio es ≤ 6 %. Si no, 1,0.
+- `playback_rate` = velocidad que iguala el ciclo común con los periodos medidos
+  cerca de cada punto (n · periodo_entra / (m · periodo_sale)). Solo en
+  bass_swap, long_blend y filter_blend, y solo si el cambio es ≤ 6 %. Si no, 1,0.
 
 ### Ejecución en el navegador
 
@@ -1414,10 +1433,14 @@ corrección continua de velocidad.
 
 Límites vigentes tras P12-b:
 
-- El DBN solo modela compases de 3 y 4 pulsos. En las señales sintéticas de
-  3/4 el modelo suele dar 4, y en las de dos pulsos ternarios elige otro nivel
-  de pulso. La confirmación independiente evita prometer `bars` en esos casos,
-  pero el compás estimado es erróneo y frases y secciones cuentan sobre él.
+- La lectura del compás puede no ser la escrita: el DBN agrupa en 3 o 4
+  pulsos y elige el nivel de pulso (en las señales de dos pulsos ternarios lee
+  180 BPM binarios donde se generaron 120 ternarios). El ciclo común hace que
+  la mezcla sea la misma con cualquier lectura. Lo que sí depende de ella es
+  el recuento de frases y secciones (P13). En las señales sintéticas de 3/4
+  el modelo agrupa de 4 en 4 (en valses reales, vistos en su entrenamiento,
+  acierta); la confirmación independiente no lo promete, pero el 1 estimado
+  puede caer en otro pulso del compás.
 - La confirmación independiente no aparece en la música real medida (0 % en
   GTZAN y Ballroom): en la práctica, las mezclas con música real son `beats`.
 - Sin anotaciones de la biblioteca del usuario, la comparación v8/v9/v10 de

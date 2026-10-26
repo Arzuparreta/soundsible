@@ -346,3 +346,44 @@ def test_missing_head_or_middle_cannot_borrow_a_remote_downbeat_or_echo_pulse():
     assert outgoing['out_cue'] == 300
     assert outgoing['technique'] == 'structural_fade'
     assert 'echo_delay_seconds' not in outgoing
+
+
+@pytest.mark.parametrize('out_options,in_options,alignment,cycle', [
+    ({'confirmed': False}, {'confirmed': False, 'size': 3}, 'beats', [1, 1]),  # Four against three pulses.
+    ({'confirmed': False, 'size': 3}, {'confirmed': False}, 'beats', [1, 1]),
+    ({'confirmed': False}, {'confirmed': False, 'period': 1 / 3}, 'beats', [2, 3]),  # 120 -> 180 BPM.
+    ({'confirmed': False, 'period': 60 / 180}, {'confirmed': False}, 'beats', [3, 2]),  # 180 -> 120 BPM.
+    ({'confirmed': False, 'period': 60 / 116}, {'confirmed': False, 'period': 60 / 176}, 'beats', [2, 3]),
+    ({'confirmed': False, 'period': 60 / 90}, {'confirmed': False}, 'beats', [3, 4]),  # 90 -> 120 BPM.
+    ({'size': 3}, {'size': 2, 'period': .75}, 'bars', [3, 2]),  # Equal 1.5 s bars from 3:2 pulses.
+    ({'size': 2, 'subdivision': 3, 'period': .75}, {'size': 4, 'period': .5}, 'beats', [2, 3]),
+])
+def test_binary_and_ternary_readings_mix_on_their_common_cycle(out_options, in_options, alignment, cycle):
+    import math
+    from shared.dj_engine import plan_transition
+    from shared.dj.timing import BEATMATCH_TECHNIQUES, beatmatch_fits, rate_fits
+    outgoing, incoming = metric_analysis(**out_options), metric_analysis(**in_options)
+    plan = plan_transition(outgoing, incoming)
+    sync = plan['sync']
+    assert plan['technique'] in BEATMATCH_TECHNIQUES and plan['score'] > 0
+    assert sync['alignment'] == alignment and sync['cycle_beats'] == cycle
+    assert rate_fits(plan) and beatmatch_fits(plan, outgoing, incoming)
+    m, n = cycle
+    # m outgoing beats last as long as n incoming beats at the executed rate.
+    assert m * sync['out_period'] == pytest.approx(n * sync['in_period'] / plan['playback_rate'], rel=1e-5)
+    # Moving the cue keeps the outgoing one (whole bars) and the cycle (whole cycles).
+    beats = sync['relocation_seconds'] / sync['out_period']
+    size = out_options.get('size', 4)
+    assert beats == pytest.approx(round(beats), abs=1e-4)
+    assert round(beats) == math.lcm(size, m)
+    # Both cues sit on a first beat, so the cycle starts on both ones.
+    assert plan['out_cue'] in outgoing['downbeats'] and plan['in_cue'] in incoming['downbeats']
+
+
+def test_no_common_cycle_within_the_speed_limit_is_not_beatmatched():
+    from shared.dj_engine import plan_transition
+    from shared.dj.timing import BEATMATCH_TECHNIQUES
+    plan = plan_transition(metric_analysis(), metric_analysis(period=60 / 100))  # 120 -> 100 BPM.
+    assert plan['technique'] not in BEATMATCH_TECHNIQUES
+    assert plan['sync']['alignment'] == 'none' and plan['sync']['cycle_beats'] is None
+    assert plan['score'] == 0 and plan['playback_rate'] == 1

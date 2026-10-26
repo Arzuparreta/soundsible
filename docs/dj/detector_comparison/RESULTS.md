@@ -130,10 +130,13 @@ desde los archivos, Beat This! en ONNX Runtime, DBN en NumPy y rejilla de P1.
   certificar solo con la salida del modelo.
 - **DBN.** Es código de madmom. Integrarlo como dependencia no es viable (ver
   tabla); P12-b lo porta a NumPy con igualdad comprobada (arriba).
-- **Compases de 2 y 6 pulsos y subdivisión.** El DBN de Beat This! solo
-  admite 3 y 4. La variante 2/3/4/6 (`-common`) no mejora la música real:
-  queda 0,040 por debajo del DBN 3/4 en las 30 GTZAN (IC [−0,097, +0,010]).
-  Beat This! no estima subdivisión: esos campos del contrato quedan desconocidos.
+- **Nivel de lectura.** El DBN de Beat This! agrupa en 3 o 4 pulsos y elige
+  un nivel de pulso; un 6/8 o un 12/8 queda leído a un nivel u otro. La
+  variante 2/3/4/6 (`-common`) no mejora la música real: 0,040 por debajo del
+  DBN 3/4 en las 30 GTZAN (IC [−0,097, +0,010]). Por decisión del usuario, la
+  mezcla no depende de la lectura: P12-b alinea el ciclo común de ambos pulsos
+  (relaciones 2ᵃ·3ᵇ). Beat This! no estima subdivisión: esos campos del
+  contrato los mide el analizador por su cuenta o quedan desconocidos.
 - **Muestra.** 30 grabaciones GTZAN de 30 s, casi todas en 4; una sola
   ternaria. Ballroom está en el entrenamiento de Beat This!. Los resultados
   no acreditan detección general de cualquier compás.

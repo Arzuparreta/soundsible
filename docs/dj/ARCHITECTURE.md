@@ -71,9 +71,11 @@ lecturas parciales/antiguas; un tipo completo no da por validada esa entrada.
   sin regenerar los vectores legacy de P7/P8/P9. P12-b cambia `three-to-four`
   a `beats` por decisión del usuario y añade tres vectores de `beats`.
 
-`timing.comparable_ratio` conserva el plegado de una octava en los límites
-0,7/1,4, compartido por puntuación, entrada al drop, velocidad final y admisión
-de puentes. `tempo_coordinate` conserva la proyección logarítmica de BPM sobre
+`timing.pulse_relations` da el ciclo común de dos pulsos (m pulsos de la que
+sale = n de la que entra, relaciones 2ᵃ·3ᵇ) y su velocidad; lo comparten
+puntuación, entrada al drop, velocidad final, `metric_sync` y admisión de
+puentes. El contrato antiguo sin `metric_regions` conserva `comparable_ratio`,
+el plegado de una octava en 0,7/1,4. `tempo_coordinate` conserva la proyección logarítmica de BPM sobre
 la octava de la referencia de ruta: es otra operación y tiene otro objetivo.
 `local_period` conserva el ajuste sobre la rejilla alrededor del cue.
 `rate_fits` usa los periodos y la velocidad redondeados y todo el solapamiento;

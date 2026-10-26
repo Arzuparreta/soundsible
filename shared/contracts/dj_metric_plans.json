@@ -44,6 +44,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.5,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -98,6 +103,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.0,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -150,6 +160,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.5,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -203,6 +218,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          2,
+          1
+        ],
+        "relocation_seconds": 2.0,
         "out_period": 0.5,
         "in_period": 1.0,
         "phase_tolerance_ms": 5,
@@ -256,6 +276,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.5,
         "out_period": 0.5,
         "in_period": 0.48,
         "phase_tolerance_ms": 5,
@@ -308,6 +333,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.5,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -367,6 +397,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.0,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -425,6 +460,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.5,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -482,6 +522,11 @@
           "downbeat_confidence": 0.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 2.0,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -534,6 +579,11 @@
           "downbeat_confidence": 0.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 2.0,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -591,6 +641,11 @@
           "downbeat_confidence": 1.0,
           "subdivision_confidence": 1.0
         },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.5,
         "out_period": 0.5,
         "in_period": 0.5,
         "phase_tolerance_ms": 5,
@@ -598,7 +653,303 @@
       }
     },
     "resolved": {
-      "out_cue": 174.75,
+      "out_cue": 174.25,
+      "technique": "bass_swap",
+      "playback_rate": 1.0
+    }
+  },
+  {
+    "name": "three-two-pulses",
+    "outgoing": {
+      "confirmed": false
+    },
+    "incoming": {
+      "confirmed": false,
+      "period": 0.3333333333333333
+    },
+    "duration": 240,
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 206.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 32.0,
+      "overlap_bars": null,
+      "playback_rate": 1.0,
+      "score": 0.978,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "alignment": "beats",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "in_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "cycle_beats": [
+          2,
+          3
+        ],
+        "relocation_seconds": 2.0,
+        "out_period": 0.5,
+        "in_period": 0.333333,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    }
+  },
+  {
+    "name": "three-two-pulses-stretched",
+    "outgoing": {
+      "confirmed": false,
+      "period": 0.5172413793103449
+    },
+    "incoming": {
+      "confirmed": false,
+      "period": 0.3409090909090909
+    },
+    "duration": 240,
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 205.0776,
+      "in_cue": 0.25,
+      "overlap_seconds": 33.103,
+      "overlap_bars": null,
+      "playback_rate": 0.988636,
+      "score": 0.913,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "alignment": "beats",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "in_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "cycle_beats": [
+          2,
+          3
+        ],
+        "relocation_seconds": 2.068966,
+        "out_period": 0.517241,
+        "in_period": 0.340909,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    }
+  },
+  {
+    "name": "four-three-pulses",
+    "outgoing": {
+      "confirmed": false,
+      "period": 0.6666666666666666
+    },
+    "incoming": {
+      "confirmed": false
+    },
+    "duration": 240,
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 194.9167,
+      "in_cue": 0.25,
+      "overlap_seconds": 42.667,
+      "overlap_bars": null,
+      "playback_rate": 1.0,
+      "score": 0.978,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "alignment": "beats",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "in_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "cycle_beats": [
+          3,
+          4
+        ],
+        "relocation_seconds": 8.0,
+        "out_period": 0.666667,
+        "in_period": 0.5,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    }
+  },
+  {
+    "name": "three-two-pulses-equal-bars",
+    "outgoing": {
+      "size": 3
+    },
+    "incoming": {
+      "size": 2,
+      "period": 0.75
+    },
+    "duration": 240,
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 213.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 24.0,
+      "overlap_bars": 16.0,
+      "playback_rate": 1.0,
+      "score": 0.978,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "alignment": "bars",
+        "out_bar_seconds": 1.5,
+        "in_bar_seconds": 1.5,
+        "out_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 3,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 1.0,
+          "downbeat_confidence": 1.0,
+          "subdivision_confidence": 1.0
+        },
+        "in_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 2,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 1.0,
+          "downbeat_confidence": 1.0,
+          "subdivision_confidence": 1.0
+        },
+        "cycle_beats": [
+          3,
+          2
+        ],
+        "relocation_seconds": 1.5,
+        "out_period": 0.5,
+        "in_period": 0.75,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    }
+  },
+  {
+    "name": "relocated-three-two-pulses",
+    "outgoing": {
+      "confirmed": false
+    },
+    "incoming": {
+      "confirmed": false,
+      "period": 0.3333333333333333
+    },
+    "duration": 200,
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 206.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 32.0,
+      "overlap_bars": null,
+      "playback_rate": 1.0,
+      "score": 0.978,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "alignment": "beats",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "in_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "cycle_beats": [
+          2,
+          3
+        ],
+        "relocation_seconds": 2.0,
+        "out_period": 0.5,
+        "in_period": 0.333333,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    },
+    "resolved": {
+      "out_cue": 166.25,
       "technique": "bass_swap",
       "playback_rate": 1.0
     }

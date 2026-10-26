@@ -55,11 +55,15 @@ internal object ProgramDjPlan {
         return (4 * (proposal?.outPeriod ?: 0.0)).takeIf { it.isFinite() && it > 0 } ?: 0.0
     }
 
+    /** Common cycles the server may send: m outgoing beats = n incoming beats (shared/dj/timing.py). */
+    private val CYCLES = setOf(1 to 1, 1 to 2, 2 to 1, 2 to 3, 3 to 2, 3 to 4, 4 to 3, 1 to 3, 3 to 1, 1 to 4, 4 to 1)
+
     /**
      * A relocated measured plan keeps its complete coverage and its phase.
-     * `bars` promises confirmed first beats and moves by whole bars of equal
-     * executed length. `beats` promises the shared pulse: whole bars when the
-     * server sent a common bar estimate, whole beats otherwise. Same rule as
+     * Both cues sit on a first beat and the players hold the common cycle
+     * (`cycle_beats`). The cue moves only by whole `relocation_seconds`:
+     * whole outgoing bars that are also whole cycles. `bars` also checks the
+     * confirmed bars, of equal executed length. Same rule as
      * `metricCuePlacement` in ui_web/src/lib/djCue.ts.
      */
     fun metricCuePlacement(proposed: Double, earliest: Double, latest: Double, proposal: Proposal?, overlap: Double): Pair<Double, Boolean> {
@@ -71,11 +75,15 @@ internal object ProgramDjPlan {
         if (alignment != "bars" && alignment != "beats") return fallback to false
         val out = sync.optJSONObject("out_metre") ?: return fallback to false
         val incoming = sync.optJSONObject("in_metre") ?: return fallback to false
-        val barsSent = !sync.isNull("out_bar_seconds") || !sync.isNull("in_bar_seconds")
+        val cycle = sync.optJSONArray("cycle_beats") ?: return fallback to false
+        if (cycle.length() != 2) return fallback to false
+        val m = cycle.optInt(0, 0)
+        val n = cycle.optInt(1, 0)
+        if ((m to n) !in CYCLES || cycle.optDouble(0) != m.toDouble() || cycle.optDouble(1) != n.toDouble()) return fallback to false
+        val step = sync.optDouble("relocation_seconds", Double.NaN)
+        if (!(step > 0)) return fallback to false
         val outPeriod = sync.optDouble("out_period", Double.NaN)
         val inPeriod = sync.optDouble("in_period", Double.NaN)
-        val step = if (alignment == "bars" || barsSent) bar else outPeriod
-        if (!(step > 0)) return fallback to false
         val left = maxOf(earliest, out.optDouble("start", Double.NaN))
         val right = minOf(latest, out.optDouble("end", Double.NaN) - overlap)
         val inStart = incoming.optDouble("start", Double.NaN)
@@ -83,14 +91,13 @@ internal object ProgramDjPlan {
         if (!listOf(left, right, inStart, inEnd).all(Double::isFinite) || left > right) return fallback to false
         val cue = placeOutCue(proposed, left, right, step)
         val tolerance = minOf(0.005, sync.optDouble("phase_tolerance_ms", 5.0) / 1000)
-        var pulseRatio = inPeriod / outPeriod
-        if (pulseRatio < 0.7) pulseRatio *= 2 else if (pulseRatio > 1.4) pulseRatio /= 2
+        val pulseRatio = inPeriod * n / (outPeriod * m)
         if (!listOf(proposal.rate, pulseRatio, tolerance).all(Double::isFinite) || proposal.rate !in 0.94..1.06 ||
             outPeriod <= 0 || inPeriod <= 0 || tolerance < 0 ||
             abs(proposal.rate / pulseRatio - 1) * overlap > tolerance) return fallback to false
-        if (alignment == "bars" || barsSent) {
+        if (alignment == "bars" || !sync.isNull("out_bar_seconds") || !sync.isNull("in_bar_seconds")) {
             val inBar = sync.optDouble("in_bar_seconds", Double.NaN)
-            if (!inBar.isFinite() || inBar <= 0 || abs(inBar / proposal.rate / bar - 1) * overlap > tolerance) return fallback to false
+            if (!(bar > 0) || !inBar.isFinite() || inBar <= 0 || abs(inBar / proposal.rate / bar - 1) * overlap > tolerance) return fallback to false
         }
         val phaseError = abs(cue - proposed - round((cue - proposed) / step) * step)
         return cue to (phaseError <= tolerance && proposal.inCue >= inStart - tolerance &&

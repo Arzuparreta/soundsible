@@ -138,9 +138,11 @@ class ProgramDjPlanTest {
         confident.copy(outCue = transition.getDouble("out_cue"), inCue = transition.getDouble("in_cue"),
             overlap = transition.getDouble("overlap_seconds"), rate = transition.getDouble("playback_rate"),
             outPeriod = sync.getDouble("out_period"), metricSync = sync)
-    @Test fun pulseOnlyPlansMoveByWholeBeatsAndEstimatedBarsByWholeBars() {
-        // 0.5 s beats move 213.25 to 174.75; a common 2 s bar estimate moves 206.25 to 166.25.
-        for ((name, latest, expected) in listOf(Triple("three-to-four", 175.0, 174.75), Triple("unconfirmed-four", 167.0, 166.25))) {
+    @Test fun pulsePlansMoveByWholeOutgoingBarsThatAreWholeCommonCycles() {
+        // 1.5 s outgoing bars keep the one on the incoming one (213.25 to 174.25);
+        // 120 against 180 BPM moves by 2 s, two cycles of 2 + 3 beats.
+        for ((name, latest, expected) in listOf(Triple("three-to-four", 175.0, 174.25),
+                Triple("unconfirmed-four", 167.0, 166.25), Triple("three-two-pulses", 167.0, 166.25))) {
             val transition = metricVector(name)
             assertEquals(name, "beats", transition.getJSONObject("sync").getString("alignment"))
             val proposal = metricProposal(transition)
@@ -149,13 +151,16 @@ class ProgramDjPlanTest {
             assertTrue(name, placement.second)
         }
     }
-    @Test fun pulsePlansDowngradeWithoutCoverageOrWithContradictoryPeriods() {
-        for (name in listOf("three-to-four", "unconfirmed-four")) {
+    @Test fun pulsePlansDowngradeWithoutCoverageCycleOrStepOrWithContradictoryPeriods() {
+        for (name in listOf("three-to-four", "unconfirmed-four", "three-two-pulses", "four-three-pulses")) {
             val transition = metricVector(name)
             assertTrue(name, ProgramDjPlan.metricCuePlacement(transition.getDouble("out_cue"), 90.0, 215.0,
                 metricProposal(transition), transition.getDouble("overlap_seconds")).second)
+            val inPeriod = transition.getJSONObject("sync").getDouble("in_period")
             for ((field, value) in listOf("out_metre" to org.json.JSONObject.NULL, "in_metre" to org.json.JSONObject.NULL,
-                    "in_period" to 0.55, "out_period" to 0.0, "in_bar_seconds" to 1.7, "alignment" to "none")) {
+                    "in_period" to inPeriod * 1.1, "out_period" to 0.0, "in_bar_seconds" to 1.7, "alignment" to "none",
+                    "cycle_beats" to org.json.JSONObject.NULL, "cycle_beats" to org.json.JSONArray(listOf(5, 7)),
+                    "relocation_seconds" to 0.0)) {
                 val sync = org.json.JSONObject(transition.getJSONObject("sync").toString()).put(field, value)
                 val proposal = metricProposal(transition, sync)
                 val placement = ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, 215.0, proposal, proposal.overlap)

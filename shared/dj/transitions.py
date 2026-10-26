@@ -12,7 +12,7 @@ from .contracts import AnalysisInput, TransitionPlan
 from .timing import (
     MAX_STRETCH as _MAX_STRETCH,
     BEATMATCH_TECHNIQUES, PHASE_TOLERANCE_SECONDS,
-    comparable_ratio, local_period as _local_period, rate_fits as _rate_fits, metric_sync,
+    comparable_ratio, local_period as _local_period, pulse_relations, rate_fits as _rate_fits, metric_sync,
 )
 
 _TEMPO_SCORE_RANGE = 0.08
@@ -20,6 +20,17 @@ _TEMPO_SCORE_RANGE = 0.08
 
 # Seconds kept between a planned blend start and `duration - overlap`.
 _OUT_CUE_MARGIN = 1.5
+
+
+def _closest_rate(outgoing: Mapping[str, Any], incoming: Mapping[str, Any], ratio: float) -> float:
+    """Playback rate of the closest common cycle; one octave for the legacy contract.
+
+    Analyses without `metric_regions` keep the half/double equivalence their
+    plans and vectors were made with.
+    """
+    if 'metric_regions' not in outgoing and 'metric_regions' not in incoming:
+        return comparable_ratio(ratio)
+    return pulse_relations(ratio)[0][2]
 
 
 def _harmonic_score(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
@@ -135,9 +146,8 @@ def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
             out_period = _local_period(outgoing, out_cue, span)
 
             def ratio_at(cue: float) -> float:
-                ratio = _local_period(incoming, cue, span) / out_period
-                ratio = comparable_ratio(ratio)
-                return ratio
+                # The playback rate of the closest common cycle.
+                return _closest_rate(outgoing, incoming, _local_period(incoming, cue, span) / out_period)
 
             cue = intro
             # Refit at the proposed entry rather than measuring a different
@@ -161,7 +171,9 @@ def plan_transition(outgoing: AnalysisInput, incoming: AnalysisInput) -> Transit
     out_bpm = float(outgoing.get("bpm") or 0)
     in_bpm = float(incoming.get("bpm") or 0)
     ratio = out_bpm / in_bpm if out_bpm > 0 and in_bpm > 0 else 1.0
-    ratio = comparable_ratio(ratio)
+    # Closeness to the nearest common cycle (1:1, 2:1, 3:2, 4:3...): every
+    # reading of a pulse is as mixable as another.
+    ratio = _closest_rate(outgoing, incoming, ratio)
     tempo_score = max(0.0, 1 - abs(1 - ratio) / _TEMPO_SCORE_RANGE)
     harmonic = _harmonic_score(outgoing, incoming)
     confidence = min(float(outgoing.get("confidence") or 0), float(incoming.get("confidence") or 0))
@@ -290,10 +302,11 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     # The tempo across the stretch that is actually mixed, not at one point.
     out_period = _local_period(outgoing, float(out_cue or 0), overlap)
     in_period = _local_period(incoming, in_cue, overlap)
-    # playbackRate scales the incoming tempo. A 125 BPM incoming track needs
-    # 120/125 = 0.96 to sit on a 120 BPM outgoing grid.
+    # playbackRate scales the incoming tempo so that its beats fill the common
+    # cycle: a 125 BPM incoming track needs 120/125 = 0.96 on a 120 BPM grid,
+    # a 174 BPM one 0.9655 for three of its beats to last two at 112 BPM.
     local_ratio = in_period / out_period if out_period > 0 and in_period > 0 else 1.0
-    local_ratio = comparable_ratio(local_ratio)
+    local_ratio = _closest_rate(outgoing, incoming, local_ratio)
     # Above six percent, resampling is more audible than a structural cut. The
     # score can still select a safe technique, but never asks the player to
     # torture a recording merely to claim that it beatmatched.

@@ -67,6 +67,10 @@ engine can perform:
 The server chooses the technique automatically for each pair, with the same
 plan for web and Android. A beatmatched blend must fit the local tempo within
 the players' speed limit and keep a steady shared pulse throughout the overlap.
+Two songs share a pulse when whole numbers of their beats last the same: one
+to one, two to one, three to two (116 and 174 BPM) or four to three (90 and
+120 BPM). Reading a song in two or in three is a choice of level — a 12/8 is a
+4/4 with ternary beats — so the mix does not depend on it.
 The plan states which alignment it promises: the beats, or also the bars when
 both songs' first beats are confirmed and their bars last the same. Even when
 only the beats are promised, the mix starts on each song's estimated first
