@@ -151,6 +151,46 @@ def local_metre(analysis: AnalysisInput, cue: float, span: float = 0.0):
 STEADY_PULSE = 0.6
 
 
+def projected_bar(analysis: AnalysisInput, region):
+    """Beats of a region without a bar that lie whole bars from a measured one.
+
+    The beat model may give no one where only harmony plays: an intro whose
+    counterpoint suggests another one, until the beat enters and reveals the
+    bar ("Teardrops (Rules Remix)", decision of the user, P12-b). Counting
+    beats carries the nearest measured one into the region, the following one
+    first: the bar the music goes on to play. The count holds only along one
+    steady pulse on a regular, gapless grid. Returns the region's beats on
+    those ones and the bar's pulse count, or None.
+    """
+    rows = list(analysis.get('metric_regions') or [])
+    if region not in rows or region.get('beats_per_bar') or region.get('pulse_confidence', 0) <= STEADY_PULSE:
+        return None
+    index = rows.index(region)
+    grid = analysis.get('beat_grid') or []
+    for step in (1, -1):
+        position = index
+        while 0 <= position + step < len(rows):
+            neighbour = rows[position + step]
+            boundary = (rows[position]['end'], neighbour['start']) if step > 0 else (neighbour['end'], rows[position]['start'])
+            if abs(boundary[0] - boundary[1]) > 1e-3 or neighbour.get('pulse_confidence', 0) <= STEADY_PULSE:
+                break
+            ones = neighbour.get('downbeats') or []
+            size = neighbour.get('beats_per_bar')
+            if size and ones:
+                anchor = float(ones[0] if step > 0 else ones[-1])
+                beats = [float(t) for t in grid if region['start'] <= t < region['end']]
+                period = float(region['period'])
+                if not beats:
+                    return None
+                first, last = (beats[0], anchor) if step > 0 else (anchor, beats[-1])
+                if not _grid_holds(analysis, first, last - first, period, PHASE_TOLERANCE_SECONDS / 2):
+                    break
+                return {'downbeats': [t for t in beats if round((anchor - t) / period) % size == 0],
+                        'beats_per_bar': size}
+            position += step
+    return None
+
+
 def local_pulse(analysis: AnalysisInput, cue: float, span: float = 0.0):
     """Steady measured pulse across the entire executed interval, or None.
 
@@ -174,12 +214,14 @@ def local_pulse(analysis: AnalysisInput, cue: float, span: float = 0.0):
             return None
         sizes = {row.get('beats_per_bar') for row in run}
         size = sizes.pop() if len(sizes) == 1 else None
+        projected = None if region.get('beats_per_bar') else projected_bar(analysis, region)
         return {
             'start': run[0]['start'], 'end': run[-1]['end'],
             'pulse_unit': region['pulse_unit'], 'beats_per_bar': size,
             # The bar the cue itself sits on: its one, and whole bars from it
-            # within this region, are where a relocated cue may land.
-            'cue_beats_per_bar': region.get('beats_per_bar'),
+            # within this region, are where a relocated cue may land. Where
+            # the region has no bar, the one counted from a measured one.
+            'cue_beats_per_bar': region.get('beats_per_bar') or (projected and projected['beats_per_bar']),
             'subdivision': region['subdivision'],
             **{key: min(row[key] for row in run) for key in (
                 'pulse_confidence', 'metre_confidence', 'downbeat_confidence', 'subdivision_confidence')},
@@ -206,9 +248,10 @@ def metric_sync(outgoing: AnalysisInput, incoming: AnalysisInput, out_cue: float
                 in_cue: float, span: float, rate: float, out_period: float, in_period: float):
     """What the two players can keep aligned for the whole overlap.
 
-    Both cues sit on each song's first beat where one is known, so the
-    common cycle (`cycle_beats`: m outgoing beats = n incoming beats) starts
-    on both ones. `bars`: both first beats confirmed by independent evidence
+    Both cues sit on each song's first beat where one is known, or whole
+    bars from the nearest one measured along the same pulse
+    (`projected_bar`), so the common cycle (`cycle_beats`: m outgoing beats =
+    n incoming beats) starts on both ones. `bars`: both first beats confirmed by independent evidence
     and equal executed bars, whatever their pulse counts (four 0.5 s pulses,
     two 1 s pulses and three 0.667 s pulses all make a 2 s bar). `beats`: a
     steady pulse on both sides held on the common cycle; the beat model's

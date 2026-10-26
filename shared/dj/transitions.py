@@ -12,7 +12,8 @@ from .contracts import AnalysisInput, TransitionPlan
 from .timing import (
     MAX_STRETCH as _MAX_STRETCH,
     BEATMATCH_TECHNIQUES, PHASE_TOLERANCE_SECONDS,
-    comparable_ratio, local_period as _local_period, pulse_relations, rate_fits as _rate_fits, metric_sync,
+    comparable_ratio, local_period as _local_period, projected_bar, pulse_relations, rate_fits as _rate_fits,
+    metric_sync,
 )
 
 _TEMPO_SCORE_RANGE = 0.08
@@ -55,6 +56,14 @@ def _harmonic_score(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
     return 1.0 - steps / 7
 
 
+def _region_ones(analysis: Mapping[str, Any], region: Mapping[str, Any]) -> list[float]:
+    """The region's measured ones, or those counted from a measured one along its pulse."""
+    if region.get('downbeats'):
+        return region['downbeats']
+    projected = projected_bar(analysis, region)
+    return projected['downbeats'] if projected else []
+
+
 def _nearest_grid_point(
     analysis: Mapping[str, Any],
     target: float,
@@ -65,7 +74,7 @@ def _nearest_grid_point(
         region = next((row for row in analysis.get('metric_regions') or [] if row['start'] <= target < row['end']), None)
         if region is None:
             return target
-        grid = region.get('downbeats') if prefer_downbeat else []
+        grid = _region_ones(analysis, region) if prefer_downbeat else []
         if not grid:
             grid = [t for t in analysis.get('beat_grid') or [] if region['start'] <= t < region['end']]
         return min(grid, key=lambda value: abs(value - target)) if grid else target
@@ -81,7 +90,7 @@ def _grid_point_at_or_before(analysis: Mapping[str, Any], limit: float) -> float
         region = next((row for row in analysis.get('metric_regions') or [] if row['start'] <= limit < row['end']), None)
         if region is None:
             return limit
-        grid = region.get('downbeats') or [t for t in analysis.get('beat_grid') or [] if region['start'] <= t < region['end']]
+        grid = _region_ones(analysis, region) or [t for t in analysis.get('beat_grid') or [] if region['start'] <= t < region['end']]
     else:
         grid = analysis.get("downbeats") or analysis.get("beat_grid") or []
     values = [

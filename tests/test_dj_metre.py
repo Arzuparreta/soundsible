@@ -191,20 +191,30 @@ def test_measured_binary_and_ternary_attacks_can_leave_subdivision_ambiguous():
 
 
 def metric_analysis(*, size=4, period=.5, subdivision=2, duration=240, offset=.25, coverage_start=0.,
-                    confirmed=True, pulse_confidence=1.):
-    """Exact measured contract; independent of the detector's success on music."""
+                    confirmed=True, pulse_confidence=1., head=0., tail=None, one=0):
+    """Exact measured contract; independent of the detector's success on music.
+
+    `head`/`tail`: seconds at the start, and from `tail` on, where the same
+    pulse holds but the model measures no one. `one`: the grid beat of the
+    first one, counted in whole bars.
+    """
     from test_dj_sections import measured
     analysis = measured(bpm=60 / period, duration=duration, offset=offset)
-    bars = analysis['beat_grid'][::size]
-    analysis.update(downbeats=bars, phrase_boundaries=bars[::8], bar_seconds=period * size,
+    bars = analysis['beat_grid'][one::size]
+    end = duration if tail is None else tail
+    ones = [t for t in bars if head <= t < end]
+    analysis.update(downbeats=ones, phrase_boundaries=ones[::8], bar_seconds=period * size,
                     outro_cue=bars[-min(len(bars), 17)])
     evidence = 1. if confirmed else 0.
-    analysis['metric_regions'] = [{
-        'start': coverage_start, 'end': duration, 'period': period, 'pulse_unit': 'dotted_quarter' if subdivision == 3 else 'quarter',
+    region = {
+        'start': max(coverage_start, head), 'end': end, 'period': period, 'pulse_unit': 'dotted_quarter' if subdivision == 3 else 'quarter',
         'beats_per_bar': size, 'subdivision': subdivision, 'bar_seconds': period * size,
         'pulse_confidence': pulse_confidence, 'metre_confidence': evidence, 'downbeat_confidence': evidence,
-        'subdivision_confidence': 1., 'downbeats': bars,
-    }]
+        'subdivision_confidence': 1., 'downbeats': ones,
+    }
+    unbarred = {'beats_per_bar': None, 'bar_seconds': None, 'metre_confidence': 0., 'downbeat_confidence': 0., 'downbeats': []}
+    analysis['metric_regions'] = ([{**region, **unbarred, 'start': coverage_start, 'end': head}] if head > coverage_start else []) + [region] + (
+        [{**region, **unbarred, 'start': tail, 'end': duration}] if tail is not None else [])
     if pulse_confidence <= .6:
         analysis['tempo_confidence'] = pulse_confidence
     return analysis
@@ -416,3 +426,43 @@ def test_overlap_within_the_phase_tolerance_of_coverage_is_admitted():
     plan = plan_transition(outgoing, metric_analysis(confirmed=False))
     assert plan['out_cue'] == 206.25 and plan['overlap_seconds'] == 32
     assert plan['sync']['alignment'] == 'beats' and rate_fits(plan)
+
+
+def test_an_unbarred_intro_counts_its_one_back_from_the_bar_the_beat_reveals():
+    # "Teardrops (Rules Remix)", user's session: 12 s of counterpoint without a
+    # measured one, then the beat enters one beat later than whole bars from
+    # the grid's start. The cue on beat 2 put that one on the outgoing 2.
+    from shared.dj_engine import plan_transition
+    incoming = metric_analysis(head=12., one=3)
+    incoming['intro_cue'] = 1.25
+    plan = plan_transition(metric_analysis(), incoming)
+    assert plan['sync']['alignment'] == 'beats'
+    assert plan['in_cue'] == 1.75
+    assert round((incoming['downbeats'][0] - plan['in_cue']) / .5) % 4 == 0
+
+
+@pytest.mark.parametrize('change', ['gap', 'shifted', 'unsteady'])
+def test_a_one_is_never_counted_across_a_broken_pulse(change):
+    from shared.dj.timing import projected_bar
+    intact = metric_analysis(head=12., one=3)
+    projected = projected_bar(intact, intact['metric_regions'][0])
+    assert projected['beats_per_bar'] == 4 and projected['downbeats'][:2] == [1.75, 3.75]
+    incoming = metric_analysis(head=12., one=3)
+    head = incoming['metric_regions'][0]
+    if change == 'gap':
+        incoming['beat_grid'] = [t for t in incoming['beat_grid'] if not 6 < t < 8]
+    elif change == 'shifted':
+        incoming['beat_grid'] = [t + (.1 if t > 8 else 0) for t in incoming['beat_grid']]
+    else:
+        head['pulse_confidence'] = .6
+    assert projected_bar(incoming, head) is None
+
+
+def test_an_unbarred_tail_keeps_whole_bars_counted_from_the_last_measured_one():
+    from shared.dj_engine import plan_transition
+    outgoing = metric_analysis(size=3, tail=200.)
+    plan = plan_transition(outgoing, metric_analysis())
+    assert plan['out_cue'] > 200
+    assert round((plan['out_cue'] - outgoing['downbeats'][-1]) / .5) % 3 == 0
+    # Players relocate by whole counted bars, not single beats.
+    assert plan['sync']['relocation_seconds'] == 1.5

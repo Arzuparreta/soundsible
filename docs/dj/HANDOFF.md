@@ -129,6 +129,16 @@ Resultados y límites en [detector_comparison/RESULTS](detector_comparison/RESUL
   6000 parejas de la biblioteca del usuario: entre un 6 y un 8 % de diferencia
   de tempo, el beatmatch pasa del 2 % al 75 %; entre un 4 y un 6 %, del 26 % al
   78 %.
+- 1 contado desde el primer 1 medido: si el cue cae en un tramo donde el
+  modelo no da ningún 1 (una intro de contrapunto que sugiere otro 1, como
+  «Teardrops (Rules Remix)»), el cue se pone a compases enteros del 1 medido
+  más cercano a lo largo del mismo pulso, primero el siguiente: el compás que
+  revela la entrada de la batería. Solo con rejilla regular, sin huecos y
+  pulso estable hasta ese 1 (`projected_bar`). La recolocación usa ese compás.
+  La garantía sigue siendo `beats`. Medido en la estación: el plan anterior
+  ponía el 1 de la batería en el 2 de la saliente. En la biblioteca del
+  usuario, 17 de 227 canciones con pulso estable tienen este patrón en su cue
+  de entrada.
 - Ciclo común: lecturas binarias y ternarias son equivalentes; dos canciones
   se mezclan con beatmatch en cualquier relación 2ᵃ·3ᵇ de pulsos que los
   reproductores puedan mantener (incluida 3:2, p. ej. 116 ↔ 174), alineando el
@@ -334,7 +344,10 @@ pulsos de ambas canciones (`cycle_beats` = [m, n], relaciones 2ᵃ·3ᵇ dentro 
 pulsos al mismo pulso (unos juntos al empezar y cada 12 pulsos), 120 ↔ 180 BPM
 (2 pulsos = 3), 90 ↔ 120 (3 = 4), 116 ↔ 176 a velocidad 0,9886, 6/8 a 80 ↔ 4/4
 a 120. El cue solo se recoloca por `relocation_seconds`: compases enteros de la
-que sale que son también ciclos enteros, para no separar los dos unos.
+que sale que son también ciclos enteros, para no separar los dos unos. Donde el
+modelo no da ningún 1, los unos se cuentan en compases enteros desde el 1
+medido más cercano del mismo pulso continuo (`projected_bar`): el cue y la
+recolocación usan esos unos.
 
 | Condición | Técnica | Compases solicitados |
 | --- | --- | --- |
