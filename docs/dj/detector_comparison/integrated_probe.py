@@ -159,12 +159,13 @@ def summary(rows, key):
 
 def compare(rows, baseline):
     previous = {r['case']: r for r in baseline['rows']}
-    if set(previous) != {r['case'] for r in rows}:
+    if (set(previous) != {r['case'] for r in rows}
+            or len(previous) != len(baseline['rows']) or len(previous) != len(rows)):
         raise ValueError('Baseline case cohort differs')
     changes = []
     for row in rows:
         old = previous[row['case']]
-        before = {k: old[k] for k in ('bpm', 'tempo_confidence', 'grid')}
+        before = {k: old[k] for k in ('bpm', 'tempo_confidence', 'model', 'grid')}
         after = {k: row[k] for k in before}
         if before != after:
             changes.append(dict(case=row['case'], before=before, after=after))
