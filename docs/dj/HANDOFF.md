@@ -76,7 +76,7 @@ no hay síntoma que lo justifique.
 | P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector integrado en #395; [revalidación final](detector_comparison/FINAL_RESULTS.md) del corpus, parejas y caché/HTTP | Cerrado con P12-b; revalidado el 2026-10-27; límites abajo |
 | P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado (PR #395): mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
 | P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR #395, junto con P12-a) |
-| P13 | Frases y secciones sobre una base métrica explícita | Señales con cambios y papeles conocidos (4/4, 3/4, 6/8), compases equivocados y red real; AAC → SQLite → HTTP; vectores web/Android; [resultados](p13-results.json) | Cerrado (PR P13_PR); límites en [P13](P13.md) |
+| P13 | Frases y secciones sobre una base métrica explícita | Señales con cambios y papeles conocidos (4/4, 3/4, 6/8), compases equivocados y red real; AAC → SQLite → HTTP; vectores web/Android; [resultados](p13-results.json) | Cerrado (PR #399); límites en [P13](P13.md) |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
@@ -91,7 +91,7 @@ detección general del compás, del 1 ni de las frases musicales. P2 corrige la
 alineación temporal de reproducción; no corrige una interpretación musical
 equivocada aunque los dos reproductores coincidan al milisegundo.
 
-**P13 está cerrado (PR P13_PR); no hay un siguiente punto acordado.** Quedan
+**P13 está cerrado (PR #399); no hay un siguiente punto acordado.** Quedan
 registrados, sin orden decidido: repartir el cambio de tempo entre las dos
 canciones durante la mezcla (decisión del usuario del 2026-10-26, punto
 propio), la política legacy de P11-a, P2 en Android sin medir y la aceptación
@@ -1719,7 +1719,7 @@ El alcance y los criterios originales se conservan a continuación.
 
 ## P13. Frases y secciones sobre una base métrica explícita
 
-**Estado: cerrado (PR P13_PR).** Método, constantes y evidencia en [P13](P13.md).
+**Estado: cerrado (PR #399).** Método, constantes y evidencia en [P13](P13.md).
 Sobre los compases de P12-b (unos del modelo o proyectados), sin otro detector:
 
 - **Inicio de frase**: cambio medido del arreglo en una línea de compás (en una
