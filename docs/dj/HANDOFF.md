@@ -73,7 +73,7 @@ no hay síntoma que lo justifique.
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
 | P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
-| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector de P12-b medido de extremo a extremo sobre el corpus de P12-a (`integrated-p12b.json`) | Cerrado con P12-b; límites abajo |
+| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector integrado en #395; [revalidación final](detector_comparison/FINAL_RESULTS.md) del corpus, parejas y caché/HTTP | Cerrado con P12-b; revalidado el 2026-10-27; límites abajo |
 | P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado (PR #395): mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
 | P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR #395, junto con P12-a) |
 | P13 | Frases y secciones sobre una base métrica explícita | Ocho compases contados desde los unos del modelo; fixtures `structure_*` en el corpus de P12-a | **Siguiente trabajo** |
@@ -95,8 +95,10 @@ equivocada aunque los dos reproductores coincidan al milisegundo.
 anterior fue prematuro: `2ca8ccf2` y la PR #394 aportan contratos y guardas,
 pero los doce fragmentos Ballroom no acreditan compás y 1 correctos. El usuario
 acuerda probar estimación conjunta y varias soluciones abiertas mantenibles,
-compararlas y decidir con los resultados. **La comparativa está medida y
-el usuario ha decidido (2026-10-26); el siguiente trabajo es P12-b.**
+compararlas y decidir con los resultados. **La comparativa y la integración
+se fusionaron juntas en #395; el siguiente punto es P13.** La revalidación
+del analizador final y las mediciones adicionales se registran en
+[detector_comparison/FINAL_RESULTS](detector_comparison/FINAL_RESULTS.md).
 Resultados y límites en [detector_comparison/RESULTS](detector_comparison/RESULTS.md).
 
 **Decisiones del usuario (2026-10-26):**
@@ -1357,8 +1359,9 @@ caso y sus variantes en fixtures reproducibles con respuesta conocida.
 **Estado: cerrado, implementación `67d086cf`.** Separadas las responsabilidades
 y sus contratos sin cambiar resultados musicales ni el formato de caché.
 Mapa, unidades, dependencias, políticas y evidencia reproducible en
-[ARCHITECTURE](ARCHITECTURE.md). P12 se implementó después en `2ca8ccf2`;
-el siguiente trabajo vigente es P12-a, la comparativa acordada con el usuario.
+[ARCHITECTURE](ARCHITECTURE.md). Los contratos P12 llegaron después en
+`2ca8ccf2`; la comparativa P12-a y la integración P12-b se fusionaron en #395.
+El siguiente punto vigente es P13.
 
 - `shared/dj_engine.py` queda como fachada pública. `shared/dj/` separa modelos,
   almacenamiento/adquisición, ritmo, medidas por ventana, composición, estructura,
@@ -1409,8 +1412,8 @@ Revisar esa condición en peticiones legacy, colocación y reparación, y decidi
 cómo comparar la seguridad de técnicas de reserva frente a `score`. No basta
 con usar el mismo planificador para considerar iguales los objetivos de ruta.
 La doble influencia del tempo (compatibilidad global del par y continuidad de
-BPM) también queda inventariada, sin nuevos pesos ni recalibración. La secuencia
-acordada continúa con P12-a; P11-a queda visible para esas entradas anteriores.
+BPM) también queda inventariada, sin nuevos pesos ni recalibración. P12-a y
+P12-b ya están cerrados; P11-a queda visible para esas entradas anteriores.
 
 ### Alcance
 
@@ -1479,8 +1482,10 @@ Beat This! `final0`. P12-b lo integra: pulsos y unos del modelo (ONNX Runtime,
 DBN en NumPy), rejilla fijada a los ataques como en P1 y dos garantías de
 mezcla, `beats` y `bars`. Evidencia en
 [detector_comparison/RESULTS](detector_comparison/RESULTS.md) (sección P12-b) y
-en [P12](P12.md). P2 sigue aparcado; no se cambia el reloj ni se introduce
-corrección continua de velocidad.
+en [P12](P12.md). La [revalidación final](detector_comparison/FINAL_RESULTS.md)
+del 2026-10-27 repite las medidas y amplía la evidencia de planificación,
+caché y HTTP sin cambiar el analizador ni sus políticas. La corrección del
+reloj de P2 se entregó también en #395; esta revalidación no la modifica.
 
 Límites vigentes tras P12-b:
 
@@ -1493,7 +1498,8 @@ Límites vigentes tras P12-b:
   acierta); la confirmación independiente no lo promete, pero el 1 estimado
   puede caer en otro pulso del compás.
 - La confirmación independiente no aparece en la música real medida (0 % en
-  GTZAN y Ballroom): en la práctica, las mezclas con música real son `beats`.
+  GTZAN y Ballroom): los beatmatches reales declaran `beats`; los pares sin
+  alineación ejecutable conservan `none`.
 - Sin anotaciones de la biblioteca del usuario, la comparación v8/v9/v10 de
   una muestra solo mide concordancia (sección P12-b de RESULTS).
 - Sin aceptación física de escucha nueva.

@@ -2,7 +2,8 @@
 
 Comparación P12-a, fuera de las dependencias y de la caché de producción.
 No importa este paquete el motor ni se elige automáticamente un método.
-La implementación y su PR quedan después de la valoración del usuario.
+La elección y la integración P12-b se completaron en #395; las salidas de los
+demás candidatos conservan su condición experimental.
 
 El informe interpretativo está en [RESULTS](RESULTS.md); las tablas y los
 registros compactos se generan con `export` una vez completada la corrida.
@@ -149,6 +150,65 @@ en el entorno del motor, sin PyTorch ni madmom.
 .venv/bin/python -I docs/dj/detector_comparison/dbn_probe.py "$DJ_LAB/results" dbn.json
 .venv/bin/python -I docs/dj/detector_comparison/integrated_probe.py "$DJ_LAB" integrated.json
 ```
+
+## Revalidación del analizador final
+
+El informe actualizado está en [FINAL_RESULTS](FINAL_RESULTS.md). No se
+repiten las redes descartadas ni se mezclan sus cronómetros con una corrida
+nueva: se conservan las 29 configuraciones originales y se vuelve a medir
+el método integrado sobre el mismo corpus. No se cambian corpus, tolerancias,
+pesos, umbrales ni políticas a partir de sus resultados.
+
+`integrated_probe` comprueba todos los hashes de audio/anotaciones y la
+igualdad de referencias antes de inferir, admitiendo solo recolocar rutas.
+Guarda revisión, hashes del código ejecutado, versión del analizador, runtime,
+pesos y FFmpeg, eventos crudos, análisis completo, métricas por caso y tiempos
+de CPU por componente. Requiere pesos preparados y verificados: no descarga
+ni escribe una caché de la estación. Una salida `.gz` conserva JSON completo.
+La comparación con el informe anterior señala expresamente que aquel no
+registró la versión ni la revisión; no se le asigna una versión retrospectiva.
+
+```sh
+export SOUNDSIBLE_BEAT_MODEL=/ruta/a/beat_this-final0.onnx
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+DJ_RESULTS=docs/dj/detector_comparison/results
+.venv/bin/python -I docs/dj/detector_comparison/integrated_probe.py "$DJ_LAB" \
+  "$DJ_RESULTS/integrated-final.json.gz" --baseline "$DJ_RESULTS/integrated-p12b.json"
+.venv/bin/python -I docs/dj/detector_comparison/integrated_probe.py "$DJ_LAB" \
+  "$DJ_RESULTS/integrated-final-aac.json.gz" --aac
+.venv/bin/python -I docs/dj/detector_comparison/final_pairs.py \
+  "$DJ_RESULTS/integrated-final.json.gz" "$DJ_RESULTS/final-pairs.json.gz"
+.venv/bin/python -I docs/dj/detector_comparison/final_pipeline.py "$DJ_LAB" \
+  "$DJ_RESULTS/final-pipeline.json"
+"$DJ_LAB/venv/bin/python" -I docs/dj/detector_comparison/final_continuity.py \
+  "$DJ_RESULTS/integrated-final.json.gz" "$DJ_RESULTS/final-continuity.json"
+"$DJ_LAB/venv/bin/python" -I docs/dj/detector_comparison/final_continuity.py \
+  "$DJ_RESULTS/integrated-final-aac.json.gz" "$DJ_RESULTS/final-continuity-aac.json" --aac
+```
+
+Ejecutar en serie, sin otra inferencia durante las medidas de CPU.
+`final_pairs` planifica las 3782 parejas dirigidas sin autorrepetición desde
+los análisis retenidos, verifica admisión/velocidad y contrasta las promesas
+de `bars` en ambos cues contra las referencias. Sus datos no prueban escucha
+ni ejecución física de los reproductores.
+
+`final_pipeline` usa el analizador real para los cinco AAC y tres WAV
+diagnósticos. Las medidas llegan a una SQLite temporal por `analyse_audio`,
+sin inyección de predicciones. Rechaza medidas de la versión anterior,
+comprueba frío/caliente, cero decodificaciones en caliente y el mismo plan
+en fuentes, peticiones, colocación, reparación, legacy y refinado HTTP.
+También crea una grabación de 600 segundos y verifica las ventanas de
+90/120 segundos y la ausencia de cobertura/alineación en el hueco. Los
+proveedores y la adquisición se sustituyen por fixtures locales; HTTP usa
+el cliente de pruebas, no el servidor personal. La caché y la biblioteca de
+la estación no se abren. No se acredita con ello otra arquitectura o sistema
+operativo, ni se repiten las pruebas físicas web/Android.
+
+`final_continuity` completa las métricas opcionales de `mir_eval` desde los
+eventos retenidos, con el entorno experimental ya fijado. No vuelve a inferir
+ni añade SciPy/`mir_eval` al motor. Comprueba cohorte, hash de referencias e
+igualdad del F1 al recalcular; conserva CMLc/CMLt/AMLc/AMLt por caso y sus
+ausencias explícitas, además de las versiones y hashes de este evaluador.
 
 ## Frontera P12 y límites de la comparación
 
