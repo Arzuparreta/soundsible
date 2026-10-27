@@ -35,7 +35,9 @@ def run(lab):
     cases = {c['id']: c for c in aac['cases']}
     cases.update({c['id']: c for c in wav['cases'] if c['id'] in ids})
     target = 'aac_synthetic_4_2_plain'
-    pairs = [(key, target) for key in cases]
+    # Route endpoints intentionally remove a song already playing. Keep
+    # distinct identities here, as in the exhaustive directed-pair inventory.
+    pairs = [(key, target) for key in cases if key != target]
     pairs += [(target, 'aac_synthetic_2_3_slow')]
     with tempfile.TemporaryDirectory(prefix='p12-final-', dir=scratch(lab)) as temporary:
         temp = Path(temporary)
@@ -113,6 +115,7 @@ def run(lab):
                             ]:
                                 response = client.post('/api/discovery/music/' + endpoint, json=payload)
                                 assert response.status_code == 200, response.get_json()
+                                assert response.get_json()['items'], (outgoing, incoming, endpoint, response.get_json())
                                 assert response.get_json()['items'][0]['transition'] == expected, endpoint
                                 assert len(response.data) < 256 * 1024
                                 if endpoint == 'dj-plan':
