@@ -1,0 +1,42 @@
+{
+  "validated_at_utc": "2026-10-27T13:13:16.163159+00:00",
+  "release": {
+    "tagName": "v0.28.0",
+    "publication_status": "awaiting_publication",
+    "publishedAt": null,
+    "url": null
+  },
+  "release_commit": "cfddf489a0802d71004e94fd0364f28c9bd035b2",
+  "verified_head": "2b716723d59575234e2a8b98a7d394f80e046ef4",
+  "remote_main_at_validation": "cfddf489a0802d71004e94fd0364f28c9bd035b2",
+  "protocol": "Every shared/dj Python hash in the four production-analysis/planning phases equals git show RELEASE_COMMIT:path; retained-event and pipeline identities also checked.",
+  "shared_dj_sha256": {
+    "shared/dj/__init__.py": "a3123112cca22a7ef03a631c9046c7ed1fb1fc4ce64ec09ed14ce923e68cad85",
+    "shared/dj/analysis.py": "a8e292986d04745c60bd28d98f606fe71a6ae1f9b95dc9e5935fdf5f723d608c",
+    "shared/dj/beat_model.py": "1188bf1977b61b55f6d4f90699775098007d970e8149a5db4a51fcffa94e72b0",
+    "shared/dj/contracts.py": "d796eeaeaf6cd8defc930790f7eec9eee803016a3aad4864f3f9aa379540d8c3",
+    "shared/dj/dbn.py": "7bac393d917ce014fe2d410e0cec8fa9451d5f7f954bc97eb0e025691c91b377",
+    "shared/dj/features.py": "f266ff5789ce84c48edc11ca47ff2741ac2313b2cb70316c6addb6afb5cd23f8",
+    "shared/dj/metre.py": "d4ae492ec138727dc5d08dd378aef847a39559e81b6d0a5eda2fcc558e0bb014",
+    "shared/dj/rhythm.py": "c906708bcb6964c53f8422efb7236addd663f796d808bf740fdc2b64752ed67a",
+    "shared/dj/routes.py": "423831b41cdfa3ace08404e3264df4853794d25742e2ab6200c36faa7ffbd3df",
+    "shared/dj/store.py": "b5064cc7e26044c8ca7b251f19318cf76a23ddaec978fac2f85088b798b579d5",
+    "shared/dj/structure.py": "f910767fc2d17f559e8638777897e415443850f101a1af9f661db335074b9542",
+    "shared/dj/timing.py": "d4a4c5520a78c2608b18fed48f237fc81191847b5a23bb0f76b8849c99088480",
+    "shared/dj/transitions.py": "492a0c7a8d3bb4576785ed1c26a3989b1ce90e871a2e0bb47c36b7e4892be017",
+    "shared/dj/weights.py": "0e4611a2ffa6374374d9167e5789d83fd38fa0acd6d2bdd6a735ee9313e95f45"
+  },
+  "model_sha256": "c31e46719845b8111259289885996629735ba0d2815bfcef2da4f7dc6224aa31",
+  "artifact_sha256": {
+    "integrated-final.json.gz": "f66ce96b461baa627ca3a343caaed1b7780262b4745c300bf7d7e0d49a5edfbc",
+    "integrated-final-aac.json.gz": "ff7fdf6cc29cca3768c0c8defab3cdba566f9a4de7ff5991c0525ab329ddff4f",
+    "final-pairs.json.gz": "689e5e6b95508defd7a1e92e093ba72719dae5cfe2e67d723bb5080a425b3af1",
+    "final-pipeline.json": "303cbf2006a340053ce0503489588763a5acc6e565c6afc9603124166c254bf7",
+    "http-latency-final.json": "2e29263505123884bb118f5d22c9ee35a51051ee0b3dcfca35d5ca3588b617b4",
+    "final-continuity.json": "8aa36cdecc30a31043220244d40a4b730c879617177e6c917b4b19fcd340d75a",
+    "final-continuity-aac.json": "c74ff92b15ba797043bf5c7d3343f5c760640c926c83ae9cec1fa3eb0e2adf1a",
+    "final-method-case.csv": "625cfac8bd9ec98236f284ff6d6a63c823923856a4e7ecfda80aa8109bf3e9b4",
+    "integrated-p12b.json": "6a2e57bb5aa17c22e866c5a4d2996fdb089101a1e93087fbd3ad0e387315cd4d"
+  },
+  "retained_analysis_equals_production_cache": 8
+}

@@ -1,18 +1,18 @@
 # P12-a: comparar detección conjunta y alternativas abiertas
 
-**Encargo del usuario, 2026-10-25: autorizado y siguiente trabajo.** Probar la
-estimación conjunta de pulso, compás y primer tiempo y varias soluciones de
-código abierto mantenibles; comparar todos los métodos admitidos con las
-mismas entradas. Con los resultados sobre la mesa, **el usuario decidirá** qué
-integrar. Beat This! es un candidato, sin preferencia acordada. Este documento
-es el plan; **las mediciones están completas (2026-10-26)** y sus resultados,
-con la recomendación y la decisión pendiente, están en
-[detector_comparison/RESULTS](detector_comparison/RESULTS.md).
+**Plan original del 2026-10-25, ejecutado en #395.** Las mediciones P12-a
+terminaron el 2026-10-26; el usuario eligió Beat This! `final0` y P12-b lo
+integró en la misma PR. P12 está cerrado con los límites registrados en
+[P12](P12.md); P13 sigue pendiente. Los resultados originales están en
+[detector_comparison/RESULTS](detector_comparison/RESULTS.md), y la
+revalidación del analizador final en
+[detector_comparison/FINAL_RESULTS](detector_comparison/FINAL_RESULTS.md).
 
-P12 queda **parcial**: la PR #394 implementa contratos y guardas, pero los doce
-fragmentos reales de [P12](P12.md) no acreditan compás y 1 correctos. La
-abstención protege la mezcla; por sí sola no resuelve la detección. P13 depende
-de esta decisión. No se reabre P2 ni se cambia el reloj de reproducción.
+El resto conserva el protocolo acordado: comparación sobre las mismas
+entradas y decisión explícita antes de integrar. La condición parcial de
+#394 y las paradas de decisión que describe son históricas, no trabajo
+pendiente ni una nueva elección de detector. La abstención protege la mezcla,
+pero no demuestra por sí sola detección musical correcta.
 
 ## Orden para desarrollar rápido sin rehacer código
 

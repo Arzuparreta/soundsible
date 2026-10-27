@@ -1,0 +1,228 @@
+{
+  "provenance": {
+    "git_head": "2b716723d59575234e2a8b98a7d394f80e046ef4",
+    "packages": {
+      "numpy": "1.26.4",
+      "scipy": "1.12.0",
+      "mir_eval": "0.8.2"
+    },
+    "python": "3.11.15 (main, May  8 2026, 18:33:10) [Clang 22.1.3 ]",
+    "integrated_sha256": "ff7fdf6cc29cca3768c0c8defab3cdba566f9a4de7ff5991c0525ab329ddff4f",
+    "frozen_reference_sha256": "f25439fe3caad92afe0532e7c01e77379117bd83dca25d0a7261b2a3105b4017",
+    "source_sha256": {
+      "docs/dj/detector_comparison/final_continuity.py": "98a9a21ad0244dd71035aeca3019e2a19e1a74cb7f419907dbe34a1d3c4339ac",
+      "docs/dj/detector_comparison/metrics.py": "5c0fda9f93446e4fb9370dcbf2e5f79d51bc2d88548b98c0802b2f49e3dc57fd",
+      "docs/dj/detector_comparison/matching.py": "6853e9edc6f0a42d6e9acc019a91d74b410849be632daba9d58c8e1a0175b4b6"
+    }
+  },
+  "summary": {
+    "GTZAN/codec_diagnostic": {
+      "model_beat": {
+        "cases": 1,
+        "cmlc": 0.9841269841269841,
+        "cmlt": 0.9841269841269841,
+        "amlc": 0.9841269841269841,
+        "amlt": 0.9841269841269841
+      },
+      "model_first": {
+        "cases": 1,
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9375,
+        "amlt": 0.9375
+      },
+      "grid_beat": {
+        "cases": 1,
+        "cmlc": 0.9841269841269841,
+        "cmlt": 0.9841269841269841,
+        "amlc": 0.9841269841269841,
+        "amlt": 0.9841269841269841
+      },
+      "grid_first": {
+        "cases": 1,
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9375,
+        "amlt": 0.9375
+      }
+    },
+    "synthetic/codec_diagnostic": {
+      "model_beat": {
+        "cases": 4,
+        "cmlc": 0.5,
+        "cmlt": 0.5,
+        "amlc": 0.5,
+        "amlt": 0.5
+      },
+      "model_first": {
+        "cases": 4,
+        "cmlc": 0.4965277777777778,
+        "cmlt": 0.4965277777777778,
+        "amlc": 0.7430555555555556,
+        "amlt": 0.7430555555555556
+      },
+      "grid_beat": {
+        "cases": 4,
+        "cmlc": 0.5,
+        "cmlt": 0.5,
+        "amlc": 0.5,
+        "amlt": 0.5
+      },
+      "grid_first": {
+        "cases": 4,
+        "cmlc": 0.5,
+        "cmlt": 0.5,
+        "amlc": 0.7465277777777778,
+        "amlt": 0.7465277777777778
+      }
+    }
+  },
+  "rows": [
+    {
+      "case": "aac_gtzan_blues_00000",
+      "dataset": "GTZAN",
+      "split": "codec_diagnostic",
+      "model_beat": {
+        "cmlc": 0.9841269841269841,
+        "cmlt": 0.9841269841269841,
+        "amlc": 0.9841269841269841,
+        "amlt": 0.9841269841269841
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9375,
+        "amlt": 0.9375
+      },
+      "grid_beat": {
+        "cmlc": 0.9841269841269841,
+        "cmlt": 0.9841269841269841,
+        "amlc": 0.9841269841269841,
+        "amlt": 0.9841269841269841
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9375,
+        "amlt": 0.9375
+      }
+    },
+    {
+      "case": "aac_synthetic_3_2_plain",
+      "dataset": "synthetic",
+      "split": "codec_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      }
+    },
+    {
+      "case": "aac_synthetic_4_2_plain",
+      "dataset": "synthetic",
+      "split": "codec_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "aac_synthetic_2_3_plain",
+      "dataset": "synthetic",
+      "split": "codec_diagnostic",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "model_first": {
+        "cmlc": 0.9861111111111112,
+        "cmlt": 0.9861111111111112,
+        "amlc": 0.9861111111111112,
+        "amlt": 0.9861111111111112
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "aac_synthetic_2_3_slow",
+      "dataset": "synthetic",
+      "split": "codec_diagnostic",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9861111111111112,
+        "amlt": 0.9861111111111112
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9861111111111112,
+        "amlt": 0.9861111111111112
+      }
+    }
+  ],
+  "boundary": "Offline evaluation of retained events; no inference or audio decoding"
+}

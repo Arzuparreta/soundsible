@@ -1,7 +1,10 @@
 # P12-a: evidencia para elegir el detector
 
 **Mediciones completas; el usuario eligió Beat This! `final0` (2026-10-26).**
-La integración es P12-b; esta comparativa no cambia producción. La tabla completa está en
+La comparativa y la integración P12-b se fusionaron juntas en #395. Este
+documento conserva la evaluación que precedió a la elección; la
+[revalidación final](FINAL_RESULTS.md) contrasta el analizador que llegó a la release.
+La tabla completa está en
 `results/TABLES.md` y los registros por caso en `results/method-case.csv`.
 
 ## Recomendación
@@ -115,16 +118,18 @@ desde los archivos, Beat This! en ONNX Runtime, DBN en NumPy y rejilla de P1.
   máximo de 10,6 ms. La inferencia corre fuera del bucle de gevent.
 - Confirmación independiente del 1: 0 % de cobertura en GTZAN y Ballroom, y
   54 % en señales sintéticas con precisión 1,0 (579 unos confirmados, ninguno
-  falso). Con música real todas las mezclas son `beats`; `bars` solo aparece
-  cuando la armonía y los acentos repiten de forma medible el compás del modelo.
+  falso). En los beatmatches de música real la garantía máxima es `beats`;
+  los pares que no se admiten usan `none`. `bars` exige que la armonía y los
+  acentos repitan de forma medible el compás del modelo.
 
 ## Lo que esta comparación no resuelve
 
 - **Confianza del 1.** La activación de la red no distingue aciertos de
   errores: con `final0` DBN el 93 % de los unos emitidos en test tiene
   activación > 0,8 y su precisión es 0,82. Los errores son compases enteros
-  desplazados con la misma activación alta. P12-b debe definir con qué
-  evidencia se certifica `alignment: bars` sin una sigmoide como probabilidad.
+  desplazados con la misma activación alta. P12-b exige la confirmación
+  independiente descrita arriba para certificar `alignment: bars`; una
+  sigmoide no se interpreta como probabilidad.
 - **Controles sin primer tiempo.** Todos los modelos neuronales inventan unos
   en el pulso uniforme (`final0` DBN: 47 sin referencia). La guarda no puede
   certificar solo con la salida del modelo.
@@ -143,11 +148,11 @@ desde los archivos, Beat This! en ONNX Runtime, DBN en NumPy y rejilla de P1.
 - **P13.** Ningún candidato aporta estructura útil (All-In-One, arriba).
   Frases y secciones se construirán sobre la métrica elegida.
 
-## Regresión medida en `main`
+## Regresión histórica de #394 (sustituida por #395)
 
 #394 se fusionó como `3f98b485` con el detector medido aquí como `soundsible-p12`:
-`shared/` no cambia entre `2ca8ccf2` y `3f98b485`. No está en ninguna versión
-publicada (la última es v0.27.0), pero saldría en la siguiente.
+`shared/` no cambia entre `2ca8ccf2` y `3f98b485`. Se midió antes de publicar
+la siguiente release; #395 sustituyó ese detector antes de su publicación.
 
 - En las 30 GTZAN, el tempo correcto baja de 21 a 10 canciones. Los errores
   nuevos son relaciones 3:2 y 4:3 en pop, hip-hop, metal, rock, disco y reggae
@@ -175,8 +180,8 @@ subdivisión se puntúan por separado. Un campo ausente conserva esa condición.
 Las dos referencias propias son el motor anterior a #394 (`8f520a79`,
 `soundsible-main`) y #394 (`2ca8ccf2`, `soundsible-p12`). #394 se fusionó
 después en `main` como `3f98b485`, sin cambios en `shared/` respecto a la
-revisión medida. Esta rama solo añade el banco y sus resultados; la elección
-del usuario precede a P12-b y a su PR de integración.
+revisión medida. La elección del usuario precedió a P12-b; ambos trabajos
+se entregaron en #395. Las salidas originales se conservan como referencia.
 
 ## Protocolo y alcance
 

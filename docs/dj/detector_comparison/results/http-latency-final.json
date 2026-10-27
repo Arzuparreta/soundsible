@@ -1,0 +1,21 @@
+{
+  "reference": "cfddf489a0802d71004e94fd0364f28c9bd035b2",
+  "method": "Separate HTTP client process; two concurrent full analyses of a synthetic WAV; excludes network providers",
+  "results": [
+    {
+      "mode": "reference",
+      "requests": 4658,
+      "max_ms": 23.756843991577625,
+      "p50_ms": 1.2053050159011036,
+      "p95_ms": 1.9921609782613814
+    },
+    {
+      "mode": "current",
+      "requests": 4684,
+      "max_ms": 25.176741008181125,
+      "p50_ms": 1.218529010657221,
+      "p95_ms": 1.9980419892817736
+    }
+  ],
+  "audio_seconds": 120
+}

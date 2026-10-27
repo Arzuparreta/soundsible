@@ -1,0 +1,1891 @@
+{
+  "provenance": {
+    "git_head": "2b716723d59575234e2a8b98a7d394f80e046ef4",
+    "packages": {
+      "numpy": "1.26.4",
+      "scipy": "1.12.0",
+      "mir_eval": "0.8.2"
+    },
+    "python": "3.11.15 (main, May  8 2026, 18:33:10) [Clang 22.1.3 ]",
+    "integrated_sha256": "f66ce96b461baa627ca3a343caaed1b7780262b4745c300bf7d7e0d49a5edfbc",
+    "frozen_reference_sha256": "6cf390acebddad5dbb931d21374e4d78b5f4450c7485b29fa86fdd0495159f45",
+    "source_sha256": {
+      "docs/dj/detector_comparison/final_continuity.py": "98a9a21ad0244dd71035aeca3019e2a19e1a74cb7f419907dbe34a1d3c4339ac",
+      "docs/dj/detector_comparison/metrics.py": "5c0fda9f93446e4fb9370dcbf2e5f79d51bc2d88548b98c0802b2f49e3dc57fd",
+      "docs/dj/detector_comparison/matching.py": "6853e9edc6f0a42d6e9acc019a91d74b410849be632daba9d58c8e1a0175b4b6"
+    }
+  },
+  "summary": {
+    "Ballroom/seen_diagnostic": {
+      "model_beat": {
+        "cases": 12,
+        "cmlc": 0.9942528735632183,
+        "cmlt": 0.9942528735632183,
+        "amlc": 0.9942528735632183,
+        "amlt": 0.9942528735632183
+      },
+      "model_first": {
+        "cases": 12,
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cases": 12,
+        "cmlc": 0.9225506294471811,
+        "cmlt": 0.9893267651888341,
+        "amlc": 0.9225506294471811,
+        "amlt": 0.9893267651888341
+      },
+      "grid_first": {
+        "cases": 12,
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    "GTZAN/development": {
+      "model_beat": {
+        "cases": 10,
+        "cmlc": 0.8928870976526333,
+        "cmlt": 0.9119347167002523,
+        "amlc": 0.8928870976526333,
+        "amlt": 0.9119347167002523
+      },
+      "model_first": {
+        "cases": 10,
+        "cmlc": 0.9670833333333333,
+        "cmlt": 0.9670833333333333,
+        "amlc": 0.9670833333333333,
+        "amlt": 0.9670833333333333
+      },
+      "grid_beat": {
+        "cases": 10,
+        "cmlc": 0.8928350549776398,
+        "cmlt": 0.9182839230494587,
+        "amlc": 0.8928350549776398,
+        "amlt": 0.9182839230494587
+      },
+      "grid_first": {
+        "cases": 10,
+        "cmlc": 0.9670833333333333,
+        "cmlt": 0.9670833333333333,
+        "amlc": 0.9670833333333333,
+        "amlt": 0.9670833333333333
+      }
+    },
+    "GTZAN/test": {
+      "model_beat": {
+        "cases": 20,
+        "cmlc": 0.6428253241800153,
+        "cmlt": 0.6757551487414187,
+        "amlc": 0.9067760664202311,
+        "amlt": 0.9585464706917797
+      },
+      "model_first": {
+        "cases": 20,
+        "cmlc": 0.6927631578947369,
+        "cmlt": 0.6927631578947369,
+        "amlc": 0.8956699346405229,
+        "amlt": 0.9012254901960784
+      },
+      "grid_beat": {
+        "cases": 20,
+        "cmlc": 0.6389855360303959,
+        "cmlt": 0.6676522026970626,
+        "amlc": 0.915255118850322,
+        "amlt": 0.9569652637778582
+      },
+      "grid_first": {
+        "cases": 20,
+        "cmlc": 0.6927631578947369,
+        "cmlt": 0.6927631578947369,
+        "amlc": 0.8898219814241486,
+        "amlt": 0.8898219814241486
+      }
+    },
+    "synthetic/known_signal": {
+      "model_beat": {
+        "cases": 18,
+        "cmlc": 0.7525225166070236,
+        "cmlt": 0.7762210403055474,
+        "amlc": 0.8080780721625792,
+        "amlt": 0.8317765958611029
+      },
+      "model_first": {
+        "cases": 17,
+        "cmlc": 0.6342712759303962,
+        "cmlt": 0.6342712759303962,
+        "amlc": 0.6930948053421608,
+        "amlt": 0.6930948053421608
+      },
+      "grid_beat": {
+        "cases": 18,
+        "cmlc": 0.7777777777777778,
+        "cmlt": 0.7777777777777778,
+        "amlc": 0.8333333333333334,
+        "amlt": 0.8333333333333334
+      },
+      "grid_first": {
+        "cases": 17,
+        "cmlc": 0.636733763272751,
+        "cmlt": 0.636733763272751,
+        "amlc": 0.6955572926845157,
+        "amlt": 0.6955572926845157
+      }
+    }
+  },
+  "rows": [
+    {
+      "case": "gtzan_blues_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 0.9841269841269841,
+        "cmlt": 0.9841269841269841,
+        "amlc": 0.9841269841269841,
+        "amlt": 0.9841269841269841
+      },
+      "model_first": {
+        "cmlc": 0.9375,
+        "cmlt": 0.9375,
+        "amlc": 0.9375,
+        "amlt": 0.9375
+      },
+      "grid_beat": {
+        "cmlc": 0.9841269841269841,
+        "cmlt": 0.9841269841269841,
+        "amlc": 0.9841269841269841,
+        "amlt": 0.9841269841269841
+      },
+      "grid_first": {
+        "cmlc": 0.9375,
+        "cmlt": 0.9375,
+        "amlc": 0.9375,
+        "amlt": 0.9375
+      }
+    },
+    {
+      "case": "gtzan_blues_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_blues_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_classical_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_classical_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.2982456140350877,
+        "cmlt": 0.7368421052631579,
+        "amlc": 0.2982456140350877,
+        "amlt": 0.7368421052631579
+      },
+      "model_first": {
+        "cmlc": 0.10526315789473684,
+        "cmlt": 0.10526315789473684,
+        "amlc": 0.2222222222222222,
+        "amlt": 0.3333333333333333
+      },
+      "grid_beat": {
+        "cmlc": 0.3157894736842105,
+        "cmlt": 0.6491228070175439,
+        "amlc": 0.3157894736842105,
+        "amlt": 0.6491228070175439
+      },
+      "grid_first": {
+        "cmlc": 0.10526315789473684,
+        "cmlt": 0.10526315789473684,
+        "amlc": 0.10526315789473684,
+        "amlt": 0.10526315789473684
+      }
+    },
+    {
+      "case": "gtzan_classical_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      }
+    },
+    {
+      "case": "gtzan_country_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 0.7906976744186046,
+        "cmlt": 0.7906976744186046,
+        "amlc": 0.7906976744186046,
+        "amlt": 0.7906976744186046
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.7906976744186046,
+        "cmlt": 0.7906976744186046,
+        "amlc": 0.7906976744186046,
+        "amlt": 0.7906976744186046
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_country_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_country_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_disco_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_disco_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_disco_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9649122807017544,
+        "amlt": 0.9649122807017544
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9649122807017544,
+        "amlt": 0.9649122807017544
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_hiphop_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_hiphop_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.9782608695652174,
+        "cmlt": 0.9782608695652174,
+        "amlc": 0.9782608695652174,
+        "amlt": 0.9782608695652174
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.9782608695652174,
+        "cmlt": 0.9782608695652174,
+        "amlc": 0.9782608695652174,
+        "amlt": 0.9782608695652174
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_hiphop_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_jazz_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 0.30158730158730157,
+        "cmlt": 0.49206349206349204,
+        "amlc": 0.30158730158730157,
+        "amlt": 0.49206349206349204
+      },
+      "model_first": {
+        "cmlc": 0.7333333333333333,
+        "cmlt": 0.7333333333333333,
+        "amlc": 0.7333333333333333,
+        "amlt": 0.7333333333333333
+      },
+      "grid_beat": {
+        "cmlc": 0.31746031746031744,
+        "cmlt": 0.5555555555555556,
+        "amlc": 0.31746031746031744,
+        "amlt": 0.5555555555555556
+      },
+      "grid_first": {
+        "cmlc": 0.7333333333333333,
+        "cmlt": 0.7333333333333333,
+        "amlc": 0.7333333333333333,
+        "amlt": 0.7333333333333333
+      }
+    },
+    {
+      "case": "gtzan_jazz_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.3333333333333333,
+        "amlt": 0.7101449275362319
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9411764705882353,
+        "amlt": 0.9411764705882353
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.5797101449275363,
+        "amlt": 0.8405797101449275
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9411764705882353,
+        "amlt": 0.9411764705882353
+      }
+    },
+    {
+      "case": "gtzan_jazz_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.58,
+        "cmlt": 0.8,
+        "amlc": 0.58,
+        "amlt": 0.8
+      },
+      "model_first": {
+        "cmlc": 0.75,
+        "cmlt": 0.75,
+        "amlc": 0.75,
+        "amlt": 0.75
+      },
+      "grid_beat": {
+        "cmlc": 0.58,
+        "cmlt": 0.82,
+        "amlc": 0.58,
+        "amlt": 0.82
+      },
+      "grid_first": {
+        "cmlc": 0.75,
+        "cmlt": 0.75,
+        "amlc": 0.75,
+        "amlt": 0.75
+      }
+    },
+    {
+      "case": "gtzan_metal_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_metal_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_metal_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_pop_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_pop_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_pop_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_reggae_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_reggae_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_reggae_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9807692307692307,
+        "amlt": 0.9807692307692307
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.9807692307692307,
+        "amlt": 0.9807692307692307
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_rock_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "model_beat": {
+        "cmlc": 0.8524590163934426,
+        "cmlt": 0.8524590163934426,
+        "amlc": 0.8524590163934426,
+        "amlt": 0.8524590163934426
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.8360655737704918,
+        "cmlt": 0.8524590163934426,
+        "amlc": 0.8360655737704918,
+        "amlt": 0.8524590163934426
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_rock_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "gtzan_rock_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.9056603773584906,
+        "cmlt": 0.9056603773584906,
+        "amlc": 0.9056603773584906,
+        "amlt": 0.9056603773584906
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-06",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-07",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-08",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-01",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.8571428571428571,
+        "cmlt": 0.9761904761904762,
+        "amlc": 0.8571428571428571,
+        "amlt": 0.9761904761904762
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-02",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.5238095238095238,
+        "cmlt": 0.9761904761904762,
+        "amlc": 0.5238095238095238,
+        "amlt": 0.9761904761904762
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-03",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-11",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-12",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Ballroom_Classics4-13",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 0.9310344827586207,
+        "cmlt": 0.9310344827586207,
+        "amlc": 0.9310344827586207,
+        "amlt": 0.9310344827586207
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 0.6896551724137931,
+        "cmlt": 0.9195402298850575,
+        "amlc": 0.6896551724137931,
+        "amlt": 0.9195402298850575
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-Pais_Tropical-08",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-I_Like_It2-01",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "ballroom_Albums-I_Like_It2-02",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_3_2_plain",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      }
+    },
+    {
+      "case": "synthetic_3_2_pickup_weak_one",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      }
+    },
+    {
+      "case": "synthetic_3_2_syncopated",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      }
+    },
+    {
+      "case": "synthetic_3_2_drift",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      }
+    },
+    {
+      "case": "synthetic_4_2_plain",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_4_2_pickup_weak_one",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_4_2_syncopated",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_4_2_drift",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_2_3_plain",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "model_first": {
+        "cmlc": 0.9861111111111112,
+        "cmlt": 0.9861111111111112,
+        "amlc": 0.9861111111111112,
+        "amlt": 0.9861111111111112
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_2_3_pickup_weak_one",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "model_first": {
+        "cmlc": 0.9859154929577465,
+        "cmlt": 0.9859154929577465,
+        "amlc": 0.9859154929577465,
+        "amlt": 0.9859154929577465
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_2_3_syncopated",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_2_3_drift",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "model_first": {
+        "cmlc": 0.9861111111111112,
+        "cmlt": 0.9861111111111112,
+        "amlc": 0.9861111111111112,
+        "amlt": 0.9861111111111112
+      },
+      "grid_beat": {
+        "cmlc": 0.0,
+        "cmlt": 0.0,
+        "amlc": 0.0,
+        "amlt": 0.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "synthetic_change_aligned",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 0.4523809523809524,
+        "cmlt": 0.4523809523809524,
+        "amlc": 0.4523809523809524,
+        "amlt": 0.4523809523809524
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.4523809523809524,
+        "cmlt": 0.4523809523809524,
+        "amlc": 0.4523809523809524,
+        "amlt": 0.4523809523809524
+      }
+    },
+    {
+      "case": "synthetic_change_unaligned",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 0.5524475524475524,
+        "cmlt": 0.9790209790209791,
+        "amlc": 0.5524475524475524,
+        "amlt": 0.9790209790209791
+      },
+      "model_first": {
+        "cmlc": 0.37209302325581395,
+        "cmlt": 0.37209302325581395,
+        "amlc": 0.37209302325581395,
+        "amlt": 0.37209302325581395
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 0.37209302325581395,
+        "cmlt": 0.37209302325581395,
+        "amlc": 0.37209302325581395,
+        "amlt": 0.37209302325581395
+      }
+    },
+    {
+      "case": "synthetic_silence",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": null,
+      "model_first": null,
+      "grid_beat": null,
+      "grid_first": null
+    },
+    {
+      "case": "synthetic_tone",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": null,
+      "model_first": null,
+      "grid_beat": null,
+      "grid_first": null
+    },
+    {
+      "case": "synthetic_uniform_pulse",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 0.9929577464788732,
+        "cmlt": 0.9929577464788732,
+        "amlc": 0.9929577464788732,
+        "amlt": 0.9929577464788732
+      },
+      "model_first": null,
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": null
+    },
+    {
+      "case": "structure_4_bars",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "structure_8_bars",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    },
+    {
+      "case": "structure_16_bars",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "model_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "model_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_beat": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      },
+      "grid_first": {
+        "cmlc": 1.0,
+        "cmlt": 1.0,
+        "amlc": 1.0,
+        "amlt": 1.0
+      }
+    }
+  ],
+  "boundary": "Offline evaluation of retained events; no inference or audio decoding"
+}
