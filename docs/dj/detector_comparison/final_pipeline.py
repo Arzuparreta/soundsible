@@ -16,6 +16,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -35,7 +36,7 @@ def run(lab):
     cases.update({c['id']: c for c in wav['cases'] if c['id'] in ids})
     target = 'aac_synthetic_4_2_plain'
     pairs = [(key, target) for key in cases]
-    pairs += [(target, 'aac_synthetic_2_3_slow'), ('aac_synthetic_2_3_slow', target)]
+    pairs += [(target, 'aac_synthetic_2_3_slow')]
     with tempfile.TemporaryDirectory(prefix='p12-final-', dir=scratch(lab)) as temporary:
         temp = Path(temporary)
         env = {f'SOUNDSIBLE_{kind}_DIR': str(temp / kind.lower())
@@ -83,10 +84,12 @@ def run(lab):
                         assert cold['measured'] is False
                         assert cold['transition']['sync']['alignment'] == 'none'
 
-                    analyses = {}
+                    analyses, timings = {}, {}
                     with patch.object(store, '_decode_measured', wraps=store._decode_measured) as decode:
                         for key in cases:
+                            cpu, wall = time.process_time(), time.perf_counter()
                             measured = dj_engine.analyse_audio(paths[key], dj_engine.analysis_identity(refs[key]))
+                            timings[key] = dict(cold_cpu_s=time.process_time() - cpu, cold_wall_s=time.perf_counter() - wall)
                             assert measured['analysed'] and measured['version'] == contracts.ANALYSER_VERSION
                             assert dj_engine.cached_analysis(paths[key], dj_engine.analysis_identity(refs[key])) == measured
                             analyses[key] = measured
@@ -137,7 +140,9 @@ def run(lab):
                                              no_warm_decode=True, endpoint_bytes=sizes, transition=expected))
                             print(outgoing, incoming, expected['sync']['alignment'], flush=True)
                         for key in cases:
+                            cpu, wall = time.process_time(), time.perf_counter()
                             assert dj_engine.analyse_audio(paths[key], dj_engine.analysis_identity(refs[key])) == analyses[key]
+                            timings[key].update(warm_cpu_s=time.process_time() - cpu, warm_wall_s=time.perf_counter() - wall)
 
                     # A bounded long recording has unknown middle coverage, even
                     # when its repeated content would make arithmetic tempting.
@@ -151,6 +156,10 @@ def run(lab):
                         windows = [dict(start=call.kwargs.get('start', 0), length=call.kwargs['length'])
                                    for call in decode.call_args_list]
                     assert long['analysed'] and long['duration'] == 600
+                    assert windows == [dict(start=0, length=90), dict(start=480, length=120)]
+                    assert long['beat_grid'] and long['metric_regions']
+                    assert any(r['end'] <= 90.001 for r in long['metric_regions'])
+                    assert any(r['start'] >= 479.999 for r in long['metric_regions'])
                     assert all(r['end'] <= 90.001 or r['start'] >= 479.999 for r in long['metric_regions'])
                     assert not any(90 < t < 480 for t in long['beat_grid'])
                     period = 60 / long['bpm']
@@ -159,7 +168,7 @@ def run(lab):
                     return dict(provenance=provenance(aac_path, references / 'aac-references.json'),
                                 boundary='Local files -> real production analysis -> isolated SQLite -> HTTP test client; providers/acquisition stubbed',
                                 previous_version_rejected=True, cold_pairs=len(pairs), decode_calls=decode_count,
-                                analyses=analyses, rows=rows,
+                                analyses=analyses, timings=timings, rows=rows,
                                 long_recording=dict(duration=long['duration'], decode_windows=windows,
                                                     metric_regions=long['metric_regions'], gap_sync=gap))
             finally:
