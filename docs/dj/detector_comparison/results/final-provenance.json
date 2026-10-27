@@ -1,13 +1,15 @@
 {
-  "validated_at_utc": "2026-10-27T13:13:16.163159+00:00",
+  "validated_at_utc": "2026-10-27T13:23:31.742639+00:00",
   "release": {
+    "isDraft": false,
+    "isPrerelease": false,
+    "publishedAt": "2026-10-27T13:22:59Z",
     "tagName": "v0.28.0",
-    "publication_status": "awaiting_publication",
-    "publishedAt": null,
-    "url": null
+    "targetCommitish": "main",
+    "url": "https://github.com/Arzuparreta/soundsible/releases/tag/v0.28.0"
   },
   "release_commit": "cfddf489a0802d71004e94fd0364f28c9bd035b2",
-  "verified_head": "2b716723d59575234e2a8b98a7d394f80e046ef4",
+  "verified_head": "2c0f3ab167916760eb247927ec8d919c1aae5c38",
   "remote_main_at_validation": "cfddf489a0802d71004e94fd0364f28c9bd035b2",
   "protocol": "Every shared/dj Python hash in the four production-analysis/planning phases equals git show RELEASE_COMMIT:path; retained-event and pipeline identities also checked.",
   "shared_dj_sha256": {
