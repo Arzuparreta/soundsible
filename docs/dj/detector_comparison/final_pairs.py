@@ -22,6 +22,17 @@ from shared.dj.timing import BEATMATCH_TECHNIQUES, beatmatch_fits
 from shared.dj.transitions import plan_transition
 
 
+def bar_cue_match(case, cue, tolerance):
+    firsts = case['downbeats']
+    if firsts is None:
+        return None
+    if not firsts:
+        return False  # Explicit absence of an identifiable first beat.
+    if case['beats'] and not case['beats'][0] - tolerance - 1e-9 <= cue <= case['beats'][-1] + tolerance + 1e-9:
+        return None  # Unannotated intro/outro, with the event-matching margin.
+    return any(abs(t - cue) <= tolerance + 1e-9 for t in firsts)
+
+
 def audit(report):
     references = Path(__file__).parent / 'results/manifest-references.json'
     manifest = json.loads(references.read_text())
@@ -58,14 +69,9 @@ def audit(report):
                 bar_cues = {}
                 for key, row in [('out', outgoing), ('in', incoming)]:
                     case = cases[row['case']]
-                    firsts = case['downbeats']
                     cue = plan[key + '_cue']
                     tolerance = manifest['tolerance_seconds']['synthetic' if case['dataset'] == 'synthetic' else 'real']
-                    # Unknown/outside the annotated window is not a false claim.
-                    if firsts is None or (case['beats'] and not case['beats'][0] <= cue <= case['beats'][-1]):
-                        bar_cues[key] = None
-                    else:
-                        bar_cues[key] = any(abs(t - cue) <= tolerance + 1e-9 for t in firsts)
+                    bar_cues[key] = bar_cue_match(case, cue, tolerance)
             plans.append(dict(outgoing=outgoing['case'], incoming=incoming['case'],
                               group='/'.join([outgoing['dataset'], incoming['dataset']]),
                               bar_cue_reference_matches=bar_cues, transition=plan))
@@ -74,6 +80,10 @@ def audit(report):
         subset = [r for r in plans if r['group'] == group]
         groups[group] = dict(pairs=len(subset), alignments=dict(Counter(r['transition']['sync']['alignment'] for r in subset)),
                              techniques=dict(Counter(r['transition']['technique'] for r in subset)),
+                             scored_bar_cues=sum(value is not None for r in subset
+                                                 for value in (r['bar_cue_reference_matches'] or {}).values()),
+                             unscored_bar_cues=sum(value is None for r in subset
+                                                   for value in (r['bar_cue_reference_matches'] or {}).values()),
                              false_bar_cues=sum(value is False for r in subset
                                                 for value in (r['bar_cue_reference_matches'] or {}).values()))
     return dict(provenance=current, summary=groups, rows=plans,

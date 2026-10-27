@@ -40,6 +40,22 @@ def test_integrated_comparison_rejects_missing_cases_instead_of_silently_changin
         compare([dict(case='a')], dict(rows=[dict(case='b')]))
 
 
+def test_bar_cue_scoring_keeps_the_event_tolerance_at_annotation_boundaries():
+    from docs.dj.detector_comparison.final_pairs import bar_cue_match
+
+    case = dict(beats=[.25, .75], downbeats=[.25])
+    assert bar_cue_match(case, .2495, .01) is True
+    assert bar_cue_match(case, .23, .01) is None
+    assert bar_cue_match(case, .5, .01) is False
+
+
+def test_no_identifiable_first_beat_is_not_an_unknown_bar_cue():
+    from docs.dj.detector_comparison.final_pairs import bar_cue_match
+
+    assert bar_cue_match(dict(beats=[.25, .75], downbeats=[]), .2495, .01) is False
+    assert bar_cue_match(dict(beats=[.25, .75], downbeats=None), .2495, .01) is None
+
+
 def test_matching_cannot_count_two_predictions_as_the_same_reference_event():
     scored = events([1., 1.01, 2.], [1., 2.], .07)
     assert scored['matched'] == 2
