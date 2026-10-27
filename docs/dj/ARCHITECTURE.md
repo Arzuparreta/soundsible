@@ -23,7 +23,7 @@ almacenamiento ni Flask; una prueba lo comprueba en otro proceso.
 | `rhythm` | Rejilla precisa a partir de los pulsos del modelo (recta/curva local y ataques de P1), observaciones armónicas/ataques y subdivisión por región | `contracts`, `metre` |
 | `metre` | Compás y unos estimados por el modelo por región; confirmación independiente con agrupaciones de 2/3/4/6 pulsos; abstenciones | Ninguna |
 | `features` | Ataques de notas, tonalidad, textura y medidas de una ventana | `rhythm`, `contracts` |
-| `structure` | Compases recibidos, frases, secciones y cues candidatos sobre las ventanas medidas | `contracts` |
+| `structure` | Frases desde cambios medidos del arreglo en las líneas de compás, longitud de frase, secciones con papel y cues candidatos, sobre los compases recibidos de P12 y las bandas de octava de `features` | `contracts`, `timing` (`projected_bar`) |
 | `analysis` | Diezmado a 11025 Hz y composición de las medidas completas; agrega ventanas sin rellenar huecos | `features`, `structure`, `contracts` |
 | `weights` | Pesos ONNX: ruta empaquetada o caché, SHA-256, descarga única y sesión de un hilo | Ninguna (runtime) |
 | `store` | Identidad, sello del contenido, SQLite, decodificación a 22050 Hz con LUFS en la misma pasada, inferencia serializada y DSP fuera de gevent, trabajos acotados | `analysis`, `beat_model`, `weights`, `contracts` |
@@ -63,8 +63,14 @@ lecturas parciales/antiguas; un tipo completo no da por validada esa entrada.
   si la agrupación independiente coincide en tamaño y fase. Ninguna es una
   probabilidad calibrada de acierto musical. `bar_seconds` puede ser `None`:
   no se rellena lo desconocido con cuatro pulsos. El resumen escalar también
-  distingue cambios o desconocidos. Frases y secciones conservan el supuesto
-  de ocho compases sobre los unos del modelo; P13 sigue pendiente.
+  distingue cambios o desconocidos.
+- `Phrase` y `Section` (P13, [P13](P13.md)): las frases empiezan en un cambio
+  medido del arreglo o a compases enteros de uno; `evidence` distingue
+  `boundary`, `counted` (longitud medida) y `assumed` (ocho compases, reserva).
+  Las secciones agrupan frases con un papel medido; `label = None` es falta de
+  evidencia, y `low_db`/`upper_db` son los niveles en dB frente a la sección
+  más fuerte de la canción. `analysis_summary` omite `phrases` como las demás
+  listas; el contrato de los clientes no cambia.
 - `TransitionPlan` es la decisión ejecutable del servidor. `score` describe
   compatibilidad para ordenar; no certifica que se ejecute beatmatch. El eco
   mantiene su periodo saliente medido. P12 añade vectores métricos compartidos

@@ -1,0 +1,1166 @@
+{
+ "analyser_version": 12,
+ "exact": {
+  "breakdown_build_drop_outro": {
+   "evidence": {
+    "assumed": 7,
+    "boundary": 5
+   },
+   "exact_bar_hits": 5,
+   "known_changes": 5,
+   "labels": [
+    [
+     "body",
+     0
+    ],
+    [
+     "breakdown",
+     16
+    ],
+    [
+     "build",
+     24
+    ],
+    [
+     "drop",
+     32
+    ],
+    [
+     "outro",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": 0.1,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 95
+  },
+  "everything_6db_louder": {
+   "evidence": {
+    "assumed": 10,
+    "boundary": 2
+   },
+   "exact_bar_hits": 2,
+   "known_changes": 2,
+   "labels": [
+    [
+     "intro",
+     0
+    ],
+    [
+     "body",
+     32
+    ],
+    [
+     "outro",
+     48
+    ]
+   ],
+   "measured_changes": 2,
+   "median_offset_ms": 0.0,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 95
+  },
+  "everything_6db_quieter": {
+   "evidence": {
+    "assumed": 10,
+    "boundary": 2
+   },
+   "exact_bar_hits": 2,
+   "known_changes": 2,
+   "labels": [
+    [
+     "body",
+     0
+    ]
+   ],
+   "measured_changes": 2,
+   "median_offset_ms": 0.0,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 95
+  },
+  "extension_8_8_10": {
+   "evidence": {
+    "boundary": 10,
+    "counted": 2
+   },
+   "exact_bar_hits": 10,
+   "known_changes": 10,
+   "measured_changes": 10,
+   "median_offset_ms": -0.2,
+   "phase_bar": 0,
+   "phase_known": 0,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    8
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "lead_1_6db_louder": {
+   "evidence": {
+    "assumed": 12
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 0,
+   "labels": [
+    [
+     null,
+     0
+    ]
+   ],
+   "measured_changes": 0,
+   "median_offset_ms": null,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": null,
+   "recall": null,
+   "role_abstentions": 95,
+   "role_accuracy": null,
+   "role_bars": 95
+  },
+  "lead_fades_in_32_bars": {
+   "evidence": {
+    "assumed": 12
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 0,
+   "labels": [
+    [
+     null,
+     0
+    ]
+   ],
+   "measured_changes": 0,
+   "median_offset_ms": null,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": null,
+   "recall": null,
+   "role_abstentions": 95,
+   "role_accuracy": null,
+   "role_bars": 95
+  },
+  "no_shared_length": {
+   "evidence": {
+    "assumed": 6,
+    "boundary": 8
+   },
+   "exact_bar_hits": 8,
+   "known_changes": 8,
+   "measured_changes": 8,
+   "median_offset_ms": -0.2,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_16_from_4_2x3": {
+   "evidence": {
+    "boundary": 6
+   },
+   "exact_bar_hits": 6,
+   "known_changes": 6,
+   "measured_changes": 6,
+   "median_offset_ms": -0.2,
+   "phase_bar": 4,
+   "phase_known": 4,
+   "phrase_length_known": 16,
+   "phrase_length_measured": [
+    16
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_16_from_4_3x2": {
+   "evidence": {
+    "boundary": 6
+   },
+   "exact_bar_hits": 6,
+   "known_changes": 6,
+   "measured_changes": 6,
+   "median_offset_ms": 0.0,
+   "phase_bar": 4,
+   "phase_known": 4,
+   "phrase_length_known": 16,
+   "phrase_length_measured": [
+    16
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_16_from_4_4x2": {
+   "evidence": {
+    "boundary": 6
+   },
+   "exact_bar_hits": 6,
+   "known_changes": 6,
+   "measured_changes": 6,
+   "median_offset_ms": -0.2,
+   "phase_bar": 4,
+   "phase_known": 4,
+   "phrase_length_known": 16,
+   "phrase_length_measured": [
+    16
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_4_from_4_2x3": {
+   "evidence": {
+    "boundary": 22,
+    "counted": 2
+   },
+   "exact_bar_hits": 22,
+   "known_changes": 22,
+   "measured_changes": 22,
+   "median_offset_ms": -0.2,
+   "phase_bar": 0,
+   "phase_known": 0,
+   "phrase_length_known": 4,
+   "phrase_length_measured": [
+    4
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_4_from_4_3x2": {
+   "evidence": {
+    "boundary": 22,
+    "counted": 2
+   },
+   "exact_bar_hits": 22,
+   "known_changes": 22,
+   "measured_changes": 22,
+   "median_offset_ms": 0.0,
+   "phase_bar": 0,
+   "phase_known": 0,
+   "phrase_length_known": 4,
+   "phrase_length_measured": [
+    4
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_4_from_4_4x2": {
+   "evidence": {
+    "boundary": 22,
+    "counted": 2
+   },
+   "exact_bar_hits": 22,
+   "known_changes": 22,
+   "measured_changes": 22,
+   "median_offset_ms": -0.2,
+   "phase_bar": 0,
+   "phase_known": 0,
+   "phrase_length_known": 4,
+   "phrase_length_measured": [
+    4
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_8_from_5_2x3": {
+   "evidence": {
+    "boundary": 11,
+    "counted": 1
+   },
+   "exact_bar_hits": 11,
+   "known_changes": 11,
+   "measured_changes": 11,
+   "median_offset_ms": -0.2,
+   "phase_bar": 5,
+   "phase_known": 5,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    8
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_8_from_5_3x2": {
+   "evidence": {
+    "boundary": 11,
+    "counted": 1
+   },
+   "exact_bar_hits": 11,
+   "known_changes": 11,
+   "measured_changes": 11,
+   "median_offset_ms": 0.0,
+   "phase_bar": 5,
+   "phase_known": 5,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    8
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_8_from_5_4x2": {
+   "evidence": {
+    "boundary": 11,
+    "counted": 1
+   },
+   "exact_bar_hits": 11,
+   "known_changes": 11,
+   "measured_changes": 11,
+   "median_offset_ms": -0.2,
+   "phase_bar": 5,
+   "phase_known": 5,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    8
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "roles_2x3": {
+   "evidence": {
+    "assumed": 9,
+    "boundary": 5
+   },
+   "exact_bar_hits": 5,
+   "known_changes": 5,
+   "labels": [
+    [
+     "intro",
+     0
+    ],
+    [
+     "body",
+     12
+    ],
+    [
+     "breakdown",
+     32
+    ],
+    [
+     "drop",
+     44
+    ],
+    [
+     "body",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": -0.1,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 95
+  },
+  "roles_3x2": {
+   "evidence": {
+    "assumed": 9,
+    "boundary": 5
+   },
+   "exact_bar_hits": 5,
+   "known_changes": 5,
+   "labels": [
+    [
+     "intro",
+     0
+    ],
+    [
+     "body",
+     12
+    ],
+    [
+     "breakdown",
+     32
+    ],
+    [
+     "drop",
+     44
+    ],
+    [
+     "body",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": 0.0,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 95
+  },
+  "roles_4x2": {
+   "evidence": {
+    "assumed": 9,
+    "boundary": 5
+   },
+   "exact_bar_hits": 5,
+   "known_changes": 5,
+   "labels": [
+    [
+     "intro",
+     0
+    ],
+    [
+     "body",
+     12
+    ],
+    [
+     "breakdown",
+     32
+    ],
+    [
+     "drop",
+     44
+    ],
+    [
+     "body",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": -0.1,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 95
+  },
+  "steady_loop": {
+   "evidence": {
+    "assumed": 12
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 0,
+   "labels": [
+    [
+     null,
+     0
+    ]
+   ],
+   "measured_changes": 0,
+   "median_offset_ms": null,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": null,
+   "recall": null,
+   "role_abstentions": 95,
+   "role_accuracy": null,
+   "role_bars": 95
+  }
+ },
+ "library": {
+  "analysed": 60,
+  "bars_by_label": {
+   "None": 200,
+   "body": 5011,
+   "breakdown": 511,
+   "build": 12,
+   "drop": 528,
+   "intro": 611,
+   "outro": 543
+  },
+  "chance_share_multiple_of": {
+   "16": 0.0625,
+   "4": 0.25,
+   "8": 0.125
+  },
+  "changes_per_100_bars_median": 10.1,
+  "intervals_between_changes": 644,
+  "phrase_evidence": {
+   "assumed": 288,
+   "boundary": 736,
+   "counted": 39
+  },
+  "runs_by_measured_phrase_length": {
+   "4": 2,
+   "8": 1,
+   "None": 105
+  },
+  "scope": "No reference annotations: agreement with dance-music phrasing, not accuracy.",
+  "share_of_intervals_multiple_of": {
+   "16": 0.034,
+   "4": 0.446,
+   "8": 0.196
+  },
+  "skipped": 16,
+  "tracks_with_label": {
+   "None": 15,
+   "body": 58,
+   "breakdown": 18,
+   "build": 2,
+   "drop": 33,
+   "intro": 45,
+   "outro": 42
+  }
+ },
+ "model": {
+  "breakdown_build_drop_outro": {
+   "evidence": {
+    "assumed": 7,
+    "boundary": 5
+   },
+   "exact_bar_hits": 2,
+   "known_changes": 5,
+   "labels": [
+    [
+     "body",
+     0
+    ],
+    [
+     "breakdown",
+     16
+    ],
+    [
+     "build",
+     24
+    ],
+    [
+     "drop",
+     32
+    ],
+    [
+     "outro",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": -0.1,
+   "model_ones": 97,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 0.4,
+   "recall": 0.4,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 96
+  },
+  "everything_6db_louder": {
+   "evidence": {
+    "assumed": 10,
+    "boundary": 2
+   },
+   "exact_bar_hits": 2,
+   "known_changes": 2,
+   "labels": [
+    [
+     "intro",
+     0
+    ],
+    [
+     "body",
+     32
+    ],
+    [
+     "outro",
+     48
+    ]
+   ],
+   "measured_changes": 2,
+   "median_offset_ms": -0.2,
+   "model_ones": 97,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 96
+  },
+  "everything_6db_quieter": {
+   "evidence": {
+    "assumed": 10,
+    "boundary": 2
+   },
+   "exact_bar_hits": 2,
+   "known_changes": 2,
+   "labels": [
+    [
+     "body",
+     0
+    ]
+   ],
+   "measured_changes": 2,
+   "median_offset_ms": -0.1,
+   "model_ones": 97,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 96
+  },
+  "extension_8_8_10": {
+   "evidence": {
+    "boundary": 10,
+    "counted": 2
+   },
+   "exact_bar_hits": 10,
+   "known_changes": 10,
+   "measured_changes": 10,
+   "median_offset_ms": -0.3,
+   "model_ones": 97,
+   "phase_bar": 0,
+   "phase_known": 0,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    8
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "lead_1_6db_louder": {
+   "evidence": {
+    "assumed": 12
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 0,
+   "labels": [
+    [
+     null,
+     0
+    ]
+   ],
+   "measured_changes": 0,
+   "median_offset_ms": null,
+   "model_ones": 97,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": null,
+   "recall": null,
+   "role_abstentions": 96,
+   "role_accuracy": null,
+   "role_bars": 96
+  },
+  "lead_fades_in_32_bars": {
+   "evidence": {
+    "assumed": 12
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 0,
+   "labels": [
+    [
+     null,
+     0
+    ]
+   ],
+   "measured_changes": 0,
+   "median_offset_ms": null,
+   "model_ones": 97,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": null,
+   "recall": null,
+   "role_abstentions": 96,
+   "role_accuracy": null,
+   "role_bars": 96
+  },
+  "no_shared_length": {
+   "evidence": {
+    "assumed": 6,
+    "boundary": 8
+   },
+   "exact_bar_hits": 8,
+   "known_changes": 8,
+   "measured_changes": 8,
+   "median_offset_ms": -0.3,
+   "model_ones": 97,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_16_from_4_2x3": {
+   "evidence": {
+    "assumed": 5,
+    "boundary": 6
+   },
+   "exact_bar_hits": 5,
+   "known_changes": 6,
+   "measured_changes": 6,
+   "median_offset_ms": -0.2,
+   "model_ones": 73,
+   "phase_bar": 5,
+   "phase_known": 4,
+   "phrase_length_known": 16,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 0.833,
+   "recall": 0.833
+  },
+  "phrases_16_from_4_3x2": {
+   "evidence": {
+    "assumed": 3,
+    "boundary": 4
+   },
+   "exact_bar_hits": 3,
+   "known_changes": 6,
+   "measured_changes": 4,
+   "median_offset_ms": -0.4,
+   "model_ones": 56,
+   "phase_bar": 4,
+   "phase_known": 4,
+   "phrase_length_known": 16,
+   "phrase_length_measured": [
+    null,
+    null
+   ],
+   "precision": 0.75,
+   "recall": 0.5
+  },
+  "phrases_16_from_4_4x2": {
+   "evidence": {
+    "boundary": 6
+   },
+   "exact_bar_hits": 6,
+   "known_changes": 6,
+   "measured_changes": 6,
+   "median_offset_ms": -0.3,
+   "model_ones": 97,
+   "phase_bar": 4,
+   "phase_known": 4,
+   "phrase_length_known": 16,
+   "phrase_length_measured": [
+    16
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_4_from_4_2x3": {
+   "evidence": {
+    "assumed": 9
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 22,
+   "measured_changes": 0,
+   "median_offset_ms": null,
+   "model_ones": 73,
+   "phase_bar": 0,
+   "phase_known": 0,
+   "phrase_length_known": 4,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": null,
+   "recall": 0.0
+  },
+  "phrases_4_from_4_3x2": {
+   "evidence": {
+    "assumed": 6
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 22,
+   "measured_changes": 0,
+   "median_offset_ms": null,
+   "model_ones": 52,
+   "phase_bar": 0,
+   "phase_known": 0,
+   "phrase_length_known": 4,
+   "phrase_length_measured": [
+    null,
+    null
+   ],
+   "precision": null,
+   "recall": 0.0
+  },
+  "phrases_4_from_4_4x2": {
+   "evidence": {
+    "boundary": 23,
+    "counted": 1
+   },
+   "exact_bar_hits": 22,
+   "known_changes": 22,
+   "measured_changes": 23,
+   "median_offset_ms": -0.2,
+   "model_ones": 97,
+   "phase_bar": 0,
+   "phase_known": 0,
+   "phrase_length_known": 4,
+   "phrase_length_measured": [
+    4
+   ],
+   "precision": 0.957,
+   "recall": 1.0
+  },
+  "phrases_8_from_5_2x3": {
+   "evidence": {
+    "boundary": 11,
+    "counted": 1
+   },
+   "exact_bar_hits": 11,
+   "known_changes": 11,
+   "measured_changes": 11,
+   "median_offset_ms": -0.3,
+   "model_ones": 97,
+   "phase_bar": 5,
+   "phase_known": 5,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    8
+   ],
+   "precision": 1.0,
+   "recall": 1.0
+  },
+  "phrases_8_from_5_3x2": {
+   "evidence": {
+    "boundary": 9,
+    "counted": 2
+   },
+   "exact_bar_hits": 9,
+   "known_changes": 11,
+   "measured_changes": 9,
+   "median_offset_ms": -0.1,
+   "model_ones": 51,
+   "phase_bar": 5,
+   "phase_known": 5,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    4
+   ],
+   "precision": 1.0,
+   "recall": 0.818
+  },
+  "phrases_8_from_5_4x2": {
+   "evidence": {
+    "boundary": 12
+   },
+   "exact_bar_hits": 11,
+   "known_changes": 11,
+   "measured_changes": 12,
+   "median_offset_ms": -0.2,
+   "model_ones": 97,
+   "phase_bar": 5,
+   "phase_known": 5,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    8
+   ],
+   "precision": 0.917,
+   "recall": 1.0
+  },
+  "roles_2x3": {
+   "evidence": {
+    "boundary": 5
+   },
+   "exact_bar_hits": 3,
+   "known_changes": 5,
+   "labels": [
+    [
+     "intro",
+     1
+    ],
+    [
+     "body",
+     12
+    ],
+    [
+     "breakdown",
+     33
+    ],
+    [
+     "drop",
+     44
+    ],
+    [
+     "body",
+     65
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": -0.6,
+   "model_ones": 36,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 0.6,
+   "recall": 0.6,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 35
+  },
+  "roles_3x2": {
+   "evidence": {
+    "assumed": 4,
+    "boundary": 5
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 5,
+   "labels": [
+    [
+     "intro",
+     0
+    ],
+    [
+     "body",
+     12
+    ],
+    [
+     "breakdown",
+     32
+    ],
+    [
+     "drop",
+     44
+    ],
+    [
+     "body",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": 249.0,
+   "model_ones": 73,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 0.0,
+   "recall": 0.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 72
+  },
+  "roles_4x2": {
+   "evidence": {
+    "assumed": 9,
+    "boundary": 5
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 5,
+   "labels": [
+    [
+     "intro",
+     1
+    ],
+    [
+     "body",
+     12
+    ],
+    [
+     "breakdown",
+     32
+    ],
+    [
+     "drop",
+     44
+    ],
+    [
+     "body",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": -249.1,
+   "model_ones": 97,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 0.0,
+   "recall": 0.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 95
+  },
+  "steady_loop": {
+   "evidence": {
+    "assumed": 12
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 0,
+   "labels": [
+    [
+     null,
+     0
+    ]
+   ],
+   "measured_changes": 0,
+   "median_offset_ms": null,
+   "model_ones": 97,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": null,
+   "recall": null,
+   "role_abstentions": 96,
+   "role_accuracy": null,
+   "role_bars": 96
+  }
+ },
+ "wrong_bars": {
+  "phrases_8_from_5_4x2/one_beat_late": {
+   "evidence": {
+    "boundary": 11,
+    "counted": 1
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 11,
+   "measured_changes": 11,
+   "median_offset_ms": 499.8,
+   "phase_bar": 5,
+   "phase_known": 5,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    8
+   ],
+   "precision": 0.0,
+   "recall": 0.0
+  },
+  "phrases_8_from_5_4x2/three_beat_bars": {
+   "evidence": {
+    "boundary": 11,
+    "counted": 1
+   },
+   "exact_bar_hits": 3,
+   "known_changes": 11,
+   "measured_changes": 11,
+   "median_offset_ms": -0.2,
+   "phase_bar": 5,
+   "phase_known": 5,
+   "phrase_length_known": 8,
+   "phrase_length_measured": [
+    11
+   ],
+   "precision": 0.273,
+   "recall": 0.273
+  },
+  "roles_4x2/one_beat_late": {
+   "evidence": {
+    "assumed": 9,
+    "boundary": 5
+   },
+   "exact_bar_hits": 0,
+   "known_changes": 5,
+   "labels": [
+    [
+     "intro",
+     0
+    ],
+    [
+     "body",
+     12
+    ],
+    [
+     "breakdown",
+     32
+    ],
+    [
+     "drop",
+     44
+    ],
+    [
+     "body",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": 499.9,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 0.0,
+   "recall": 0.0,
+   "role_abstentions": 0,
+   "role_accuracy": 1.0,
+   "role_bars": 95
+  },
+  "roles_4x2/three_beat_bars": {
+   "evidence": {
+    "assumed": 11,
+    "boundary": 5
+   },
+   "exact_bar_hits": 1,
+   "known_changes": 5,
+   "labels": [
+    [
+     "intro",
+     0
+    ],
+    [
+     "body",
+     12
+    ],
+    [
+     "breakdown",
+     32
+    ],
+    [
+     "drop",
+     43
+    ],
+    [
+     "body",
+     64
+    ]
+   ],
+   "measured_changes": 5,
+   "median_offset_ms": -0.1,
+   "phrase_length_known": null,
+   "phrase_length_measured": [
+    null
+   ],
+   "precision": 0.2,
+   "recall": 0.2,
+   "role_abstentions": 0,
+   "role_accuracy": 0.821,
+   "role_bars": 117
+  }
+ }
+}

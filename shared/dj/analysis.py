@@ -120,7 +120,7 @@ def _compose(
         # Tenths of a millisecond: the mixers align these points to the sample.
         "beat_grid": structure["beat_grid"],
         "downbeats": structure["downbeats"],
-        "phrase_boundaries": structure["phrase_boundaries"],
+        "phrases": structure["phrases"],
         "sections": structure["sections"],
         "tempo_confidence": round(tempo_confidence, 3),
         "confidence": round(confidence, 3),

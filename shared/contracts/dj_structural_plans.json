@@ -6,8 +6,7 @@
         {
           "start": 208.25,
           "end": 224.25,
-          "label": "breakdown",
-          "level": 0.5
+          "label": "breakdown"
         }
       ]
     },
@@ -18,8 +17,7 @@
         {
           "start": 62.19,
           "end": 77.55,
-          "label": "drop",
-          "level": 0.5
+          "label": "drop"
         }
       ]
     },
@@ -49,8 +47,7 @@
         {
           "start": 224.25,
           "end": 240,
-          "label": "outro",
-          "level": 0.5
+          "label": "outro"
         }
       ]
     },
@@ -112,8 +109,7 @@
         {
           "start": 32.25,
           "end": 48.25,
-          "label": "drop",
-          "level": 0.5
+          "label": "drop"
         }
       ]
     },
@@ -145,26 +141,22 @@
         {
           "start": 176.25,
           "end": 192.25,
-          "label": "breakdown",
-          "level": 0.5
+          "label": "breakdown"
         },
         {
           "start": 192.25,
           "end": 208.25,
-          "label": "breakdown",
-          "level": 0.5
+          "label": "breakdown"
         },
         {
           "start": 208.25,
           "end": 224.25,
-          "label": "breakdown",
-          "level": 0.5
+          "label": "breakdown"
         },
         {
           "start": 224.25,
           "end": 240,
-          "label": "outro",
-          "level": 0.5
+          "label": "outro"
         }
       ]
     },
@@ -174,26 +166,22 @@
         {
           "start": 0.25,
           "end": 16.25,
-          "label": "intro",
-          "level": 0.5
+          "label": "intro"
         },
         {
           "start": 16.25,
           "end": 32.25,
-          "label": "breakdown",
-          "level": 0.5
+          "label": "breakdown"
         },
         {
           "start": 32.25,
           "end": 48.25,
-          "label": "breakdown",
-          "level": 0.5
+          "label": "breakdown"
         },
         {
           "start": 48.25,
           "end": 64.25,
-          "label": "breakdown",
-          "level": 0.5
+          "label": "breakdown"
         }
       ]
     },
@@ -214,5 +202,238 @@
         "grid_source": "measured"
       }
     }
+  },
+  {
+    "name": "measured-phrase-phase",
+    "outgoing": {
+      "phrases": [
+        {
+          "start": 10.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 26.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 42.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 58.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 74.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 90.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 106.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 122.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 138.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 154.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 170.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 186.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 202.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 218.25,
+          "bars": 8,
+          "evidence": "boundary"
+        },
+        {
+          "start": 234.25,
+          "bars": 2,
+          "evidence": "counted"
+        }
+      ]
+    },
+    "incoming": {
+      "sections": [
+        {
+          "start": 32.25,
+          "end": 64.25,
+          "label": "breakdown"
+        },
+        {
+          "start": 64.25,
+          "end": 128.25,
+          "label": "drop"
+        }
+      ]
+    },
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 192.25,
+      "in_cue": 38.25,
+      "overlap_seconds": 26.0,
+      "overlap_bars": 13.0,
+      "playback_rate": 1.0,
+      "score": 0.978,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "out_period": 0.5,
+        "in_period": 0.5,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    },
+    "duration": 240
+  },
+  {
+    "name": "measured-phrase-before-assumed",
+    "outgoing": {
+      "phrases": [
+        {
+          "start": 0.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 16.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 32.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 48.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 64.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 80.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 96.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 112.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 128.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 144.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 160.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 176.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 192.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 208.25,
+          "bars": 8,
+          "evidence": "assumed"
+        },
+        {
+          "start": 218.25,
+          "bars": 3,
+          "evidence": "boundary"
+        },
+        {
+          "start": 224.25,
+          "bars": 8,
+          "evidence": "assumed"
+        }
+      ]
+    },
+    "incoming": {
+      "sections": [
+        {
+          "start": 32.25,
+          "end": 64.25,
+          "label": "breakdown"
+        },
+        {
+          "start": 64.25,
+          "end": 128.25,
+          "label": "drop"
+        }
+      ]
+    },
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 192.25,
+      "in_cue": 38.25,
+      "overlap_seconds": 26.0,
+      "overlap_bars": 13.0,
+      "playback_rate": 1.0,
+      "score": 0.978,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "out_period": 0.5,
+        "in_period": 0.5,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    },
+    "duration": 240
   }
 ]

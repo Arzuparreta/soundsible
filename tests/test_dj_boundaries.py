@@ -74,7 +74,7 @@ def test_compact_summary_distinguishes_unknown_and_measured_zero_without_mutatin
     assert summary['loudness_lufs'] is None
     assert summary['outro_cue'] is None
     assert contracts.analysis_summary(unknown)['note_rate'] is None
-    assert not {'beat_grid', 'downbeats', 'phrase_boundaries', 'sections'} & summary.keys()
+    assert not {'beat_grid', 'downbeats', 'phrases', 'sections'} & summary.keys()
     assert len(json.dumps([summary] * 16).encode()) < 256 * 1024
     assert zero == original
 

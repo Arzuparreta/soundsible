@@ -150,8 +150,12 @@ def test_analyser_decodes_in_memory_and_finds_a_real_pulse_grid(tmp_path, monkey
     assert 112 <= result["bpm"] <= 124
     assert len(result["beat_grid"]) >= 24
     assert result["downbeats"]
-    assert result["phrase_boundaries"]
+    # An unchanging click has measured bars but no measured arrangement
+    # change: its phrases are the eight-bar assumption and no role is claimed.
+    assert result["phrases"]
+    assert {row["evidence"] for row in result["phrases"]} == {"assumed"}
     assert result["sections"]
+    assert {row["label"] for row in result["sections"]} == {None}
     assert result["tempo_confidence"] > 0
     # Decoding happens in memory: the only things on disk are the source and the
     # analysis cache. `-wal`/`-shm` are that cache's own sidecars.

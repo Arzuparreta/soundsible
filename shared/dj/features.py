@@ -19,6 +19,15 @@ _LOUD_FRAME_RATIO = 0.1
 _SILENT_RMS = 1e-4
 
 
+# Octave bands (IEC 61260 centres) where the arrangement is read for structure
+# (`structure`): 63 Hz to 4 kHz, the top one cut at the 5 kHz the other
+# measures stop at. The two lowest, 44-177 Hz, hold the kick and the bass.
+OCTAVE_CENTRES = (63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0)
+
+
+_OCTAVE_EDGES = tuple(centre / 2 ** .5 for centre in OCTAVE_CENTRES) + (5000.0,)
+
+
 _KEY_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -48,20 +57,20 @@ def _window_features(samples, sample_rate: int, events=None) -> WindowFeatures |
         strides=(usable.strides[0] * hop, usable.strides[0]),
         writeable=False,
     )
-    # Only the mean spectrum and adjacent-frame flux survive this calculation.
-    # Keep a small FFT working set instead of several full-song matrices (over
-    # 400 MiB for an eight-minute track, multiplied by concurrent analyses).
+    # Only per-frame measures survive this calculation. Keep a small FFT
+    # working set instead of several full-song matrices (over 400 MiB for an
+    # eight-minute track, multiplied by concurrent analyses).
     frequencies = np.fft.rfftfreq(frame, 1 / sample_rate)
     band = np.searchsorted(frequencies, _FLATNESS_BAND)
-    rms, _, flux, flatness = _spectral_features(frames, flatness_bins=slice(int(band[0]), int(band[1])))
+    rms, flatness, octaves = _spectral_features(frames, flatness_bins=slice(int(band[0]), int(band[1])),
+                                                band_bins=np.searchsorted(frequencies, _OCTAVE_EDGES))
     loud_level = float(np.percentile(rms, 95))
-    # Level against the song's own loud level: where it starts and how its
-    # sections rise and fall. Not comparable between songs.
+    # Level against the song's own loud level: where it starts and stops
+    # sounding. Not comparable between songs.
     energy = rms / max(loud_level, 1e-7)
     loud = rms >= loud_level * _LOUD_FRAME_RATIO if loud_level >= _SILENT_RMS else np.zeros(rms.size, dtype=bool)
     loud_weights = rms[loud].astype(float) ** 2
     note_count, sounding_seconds = _note_onsets(samples, sample_rate)
-    flux /= max(float(np.percentile(flux, 95)), 1e-7)
     rhythm = _rhythm(samples, sample_rate, events)
 
     key, mode, key_margin = _tonal_features(samples, sample_rate) if loud_level >= _SILENT_RMS else (None, None, 0.0)
@@ -92,41 +101,37 @@ def _window_features(samples, sample_rate: int, events=None) -> WindowFeatures |
         "intro": intro,
         "last_active": last_active,
         "hop_seconds": hop / sample_rate,
+        "frame_seconds": frame / sample_rate,
         "window_seconds": window_seconds,
-        "frame_energy": energy.tolist(),
-        "flux": flux.tolist(),
+        "band_power": octaves,
     }
 
 
-def _spectral_features(frames, *, flatness_bins: slice = slice(1, None)):
+def _spectral_features(frames, *, flatness_bins: slice = slice(1, None), band_bins=None):
     """Same per-frame measures as a whole-matrix FFT, with bounded scratch space.
 
-    Returns per-frame RMS, the mean magnitude spectrum, the positive spectral
-    flux between frames, and per-frame spectral flatness (geometric over
-    arithmetic mean of the power) across `flatness_bins`.
+    Returns per-frame RMS, per-frame spectral flatness (geometric over
+    arithmetic mean of the power) across `flatness_bins`, and per-frame power
+    in the contiguous bands that `band_bins` delimits (float32, frames x bands).
     """
     import numpy as np
 
     count, frame_size = frames.shape
     rms = np.empty(count, dtype=frames.dtype if frames.dtype.kind == "f" else float)
-    flux = np.empty(max(0, count - 1), dtype=float)
     flatness = np.empty(count, dtype=float)
-    spectrum_sum = np.zeros(frame_size // 2 + 1, dtype=float)
+    edges = np.asarray(band_bins if band_bins is not None else [], dtype=int)
+    bands = np.empty((count, max(0, edges.size - 1)), dtype=np.float32)
     window = np.hanning(frame_size)
-    previous = None
     for start in range(0, count, 256):
         block = frames[start:start + 256]
         end = start + len(block)
         rms[start:end] = np.sqrt(np.mean(block * block, axis=1) + 1e-12)
         spectrum = np.abs(np.fft.rfft(block * window, axis=1))
-        spectrum_sum += spectrum.sum(axis=0)
         power = spectrum[:, flatness_bins] ** 2 + 1e-12
         flatness[start:end] = np.exp(np.log(power).mean(axis=1)) / power.mean(axis=1)
-        if previous is not None:
-            flux[start - 1] = np.maximum(0.0, spectrum[0] - previous).sum()
-        flux[start:end - 1] = np.maximum(0.0, np.diff(spectrum, axis=0)).sum(axis=1)
-        previous = spectrum[-1].copy()
-    return rms, spectrum_sum / count, flux, flatness
+        if edges.size > 1:
+            bands[start:end] = np.add.reduceat(spectrum[:, edges[0]:edges[-1]] ** 2, edges[:-1] - edges[0], axis=1)
+    return rms, flatness, bands
 
 
 # Tonality --------------------------------------------------------------------

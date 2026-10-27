@@ -12,24 +12,32 @@ from shared.dj.contracts import fallback_analysis as _fallback
 from shared.dj_engine import plan_transition
 
 
+def phrases(grid, *, bars=8, evidence="counted"):
+    """Phrase starts every `bars` four-beat bars of `grid`."""
+    return [{"start": start, "bars": bars, "evidence": evidence} for start in grid[::4 * bars]]
+
+
 def measured(*, bpm=120, duration=240, offset=0.25):
     period = 60 / bpm
     grid = [round(offset + index * period, 4) for index in range(int((duration - offset) / period) + 1)]
     return {"analysed": True, "bpm": bpm, "duration": duration, "confidence": .9,
             "tempo_confidence": 1., "key": "C", "mode": "major", "bar_seconds": 4 * period,
-            "beat_grid": grid, "downbeats": grid[::4], "phrase_boundaries": grid[::32],
+            "beat_grid": grid, "downbeats": grid[::4], "phrases": phrases(grid),
             "intro_cue": offset, "outro_cue": 192.25, "sections": []}
 
 
 def section(start, end, label):
-    return {"start": start, "end": end, "label": label, "level": .5}
+    return {"start": start, "end": end, "label": label}
 
 
-def section_song(path, *, incoming=False, outro=False, drift=0, long=False):
-    """Four-minute 120 BPM signal, eight-bar regions with known levels.
+def section_song(path, *, incoming=False, outro=False, drift=0, long=False, phase=False):
+    """Four-minute 120 BPM signal whose arrangement changes at known bars.
 
-    The incoming build culminates in a louder rising region at 64 s; the
-    outgoing has a quiet region at 208 s (or an outro at 224 s). Chords accent bars.
+    The incoming has a breakdown 11.5 dB quieter from 32.25 s and its drop at
+    64.25 s; the outgoing a quiet region at 208.25 s (or an outro at
+    224.25 s). `phase`: instead, the outgoing alternates 4 dB every eight
+    bars from bar 5, a phrase phase that counting from its first one misses.
+    Chords accent bars.
     """
     from test_dj_beat_grid import RATE, song
 
@@ -41,8 +49,11 @@ def section_song(path, *, incoming=False, outro=False, drift=0, long=False):
     if long:
         envelope[times < 64.25 if incoming else times >= 176.25] = .12
     elif incoming:
-        region = (times >= 64.25) & (times < 80.25)
-        envelope[region] = np.linspace(.6, 1., region.sum())
+        envelope[(times >= 32.25) & (times < 64.25)] = .12
+    elif phase:
+        envelope[:] = .72
+        envelope[(times >= 10.25) & ((times - 10.25) // 16 % 2 == 0)] = .45
+        envelope[times >= 218.25] = .72
     elif outro:
         envelope[times >= 224.25] = .12
     else:
@@ -85,7 +96,7 @@ def test_unusable_sections_do_not_replace_the_phrase_fallback(start, label):
 def test_incoming_drop_lands_on_the_outgoing_phrase_at_executed_speed(bpm):
     out, inc = measured(), measured(bpm=bpm, offset=.75)
     # A drop around 64 s, after a build longer than the blend.
-    drop = inc["phrase_boundaries"][round(64 / (32 * 60 / bpm))]
+    drop = inc["phrases"][round(64 / (32 * 60 / bpm))]["start"]
     inc["sections"] = [section(.75, drop, "build"), section(drop, drop + 16, "drop")]
     original = copy.deepcopy((out, inc))
     plan = plan_transition(out, inc)
@@ -93,14 +104,14 @@ def test_incoming_drop_lands_on_the_outgoing_phrase_at_executed_speed(bpm):
     assert plan["in_cue"] > inc["intro_cue"]
     assert plan["in_cue"] in inc["downbeats"]
     end = plan["out_cue"] + plan["overlap_seconds"]
-    assert end in out["phrase_boundaries"]
+    assert end in [row["start"] for row in out["phrases"]]
     assert (drop - plan["in_cue"]) / plan["playback_rate"] == pytest.approx(plan["overlap_seconds"], abs=.005)
     assert (out, inc) == original
 
 
 def test_drop_alignment_is_omitted_when_no_measured_phrase_or_rate_fits():
     # The second outgoing grid is 10 % away, beyond the players' 8 % range.
-    for changes in [{"phrase_boundaries": []}, measured(bpm=132)]:
+    for changes in [{"phrases": []}, measured(bpm=132)]:
         out, inc = measured(), measured()
         inc["sections"] = [section(64.25, 80.25, "drop")]
         out.update(changes)
