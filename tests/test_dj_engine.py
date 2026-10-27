@@ -47,7 +47,7 @@ def test_transition_uses_phrase_runway_instead_of_running_past_the_file():
     )
     assert transition["technique"] == "bass_swap"
     assert transition["out_cue"] + transition["overlap_seconds"] <= 180
-    assert 0.94 <= transition["playback_rate"] <= 1.06
+    assert 0.92 <= transition["playback_rate"] <= 1.08
 
 
 def test_local_grid_rate_moves_the_incoming_tempo_in_the_right_direction():
@@ -59,9 +59,10 @@ def test_local_grid_rate_moves_the_incoming_tempo_in_the_right_direction():
 
 
 def test_incompatible_pair_gets_a_structural_fallback():
+    # 144 against 160 BPM at half time: 10 %, beyond the players' 8 % range.
     transition = plan_transition(
         analysis(bpm=72, key="C", confidence=0.6),
-        analysis(bpm=137, key="F#", confidence=0.6),
+        analysis(bpm=160, key="F#", confidence=0.6),
     )
     assert transition["fallback"] is True
     assert transition["technique"] in {"echo_cut", "structural_fade", "safe_fade"}

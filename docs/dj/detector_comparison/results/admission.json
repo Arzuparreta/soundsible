@@ -1,0 +1,120 @@
+{
+  "methods": {
+    "allin1-all": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "allin1-fold0": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatnet-1-dbn": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatnet-1-pf": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatnet-2-dbn": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatnet-2-pf": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatnetplus-generic-dbn": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatnetplus-generic-pf": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatnetplus-main-dbn": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatnetplus-nonpercussive-dbn": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatthis-final0-dbn": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatthis-final0-direct": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatthis-small0-dbn": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "beatthis-small0-direct": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "essentia-degara": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "essentia-multifeature": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "joint": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "joint-dbn": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "librosa-global": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "librosa-local": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "madmom-modern-default": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "madmom-modern-extended": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "madmom-original-default": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "madmom-original-extended": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "soundsible-main": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "soundsible-p12": {
+      "attempted": true,
+      "admission_failure": null
+    },
+    "transformer-fold0": {
+      "attempted": true,
+      "admission_failure": null
+    }
+  },
+  "excluded": [
+    {
+      "repository": "fosfrancesco/md_beat_this",
+      "revision": "aca41a23a26881ba3d1e5b5e4bc3f4869d6a3ed7",
+      "reason": "The inspected tree contains evaluate.py and predictions, without executable inference code or a checkpoint for the frozen input corpus."
+    }
+  ],
+  "qualification": "Admission to measurement is not approval for product distribution; license and platform limits remain separate."
+}

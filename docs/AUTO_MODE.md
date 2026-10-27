@@ -66,12 +66,23 @@ engine can perform:
 
 The server chooses the technique automatically for each pair, with the same
 plan for web and Android. A beatmatched blend must fit the local tempo within
-the players' speed limit and keep the measured bar starts aligned throughout
-the overlap. Different pulse counts can describe the same bar duration; matching
-BPM alone does not establish this. Unknown or incompatible metre uses an echo
-cut or fade. A longer blend also needs compatible keys and enough
-measured quiet opening and tail in both songs, with a straight beat grid
-throughout; it never crosses an unmeasured gap to extend the mix.
+the players' speed limit and keep a steady shared pulse throughout the overlap.
+Whether a pair can be beatmatched is all that decides it: any two keys can be
+mixed. Key and tempo closeness choose which song comes next and which blend
+is used, never an echo cut or fade instead of a blend.
+The incoming song may be stretched up to 8 % (a turntable's pitch range) and
+returns to its own tempo after the blend. Two songs share a pulse when whole
+numbers of their beats last the same: one
+to one, two to one, three to two (116 and 174 BPM) or four to three (90 and
+120 BPM). Reading a song in two or in three is a choice of level — a 12/8 is a
+4/4 with ternary beats — so the mix does not depend on it.
+The plan states which alignment it promises: the beats, or also the bars when
+both songs' first beats are confirmed and their bars last the same. Even when
+only the beats are promised, the mix starts on each song's estimated first
+beat. A recording without a steady pulse uses an echo cut or fade. A longer
+blend also needs compatible keys and enough measured quiet opening and tail in
+both songs, with a straight beat grid throughout; it never crosses an
+unmeasured gap to extend the mix.
 
 When reliable pulses cannot be blended at the permitted speed, DJ can choose
 an echo cut. Its delay is one measured outgoing beat near the exit, corrected
@@ -106,12 +117,20 @@ incoming song enters so its drop lands on a phrase boundary of the outgoing
 song at the end of the blend. Otherwise it keeps the ordinary intro. Both web
 and Android follow the same server plan.
 
-On known synthetic signals with a clear steady pulse, tempo and attack times
-are measured precisely enough to keep blended kicks together. Real music can
-have an ambiguous pulse, metre or first beat; these are separate estimates and
-may remain unknown. This is a conservative periodic-accent detector, with
-limited coverage on real music, rather than a general musical transcription.
-Phrase and section estimates still use an eight-bar grouping and remain hints.
+The pulse and the first beat of each bar come from Beat This!, an open
+neural beat tracker (MIT licence) that runs locally with ONNX Runtime; its
+decisions are then placed on the attacks precisely enough to keep blended kicks
+together. The network can misplace a first beat by a whole beat or two, and
+its confidence does not show when, so a bar alignment is only promised where an
+independent measurement of harmony changes and accents agrees. Phrase and
+section estimates still use an eight-bar grouping and remain hints.
+
+The model adds about 4 seconds of processor time per minute of audio, on one
+core, and up to about 0.5 GB of memory while a song is analysed. A first
+analysis of a large library therefore takes hours in the background; songs
+play with conservative fades until they are measured. Docker images and the
+desktop app include the model. An installation from source downloads it once
+(84 MB) the first time it analyses a song, and verifies its checksum.
 A recording whose tempo drifts,
 such as a live band, gets a grid that follows the performance and a fade at
 normal speed instead of a fixed-rate beatmatch. After an update that changes

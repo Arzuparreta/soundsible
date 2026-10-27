@@ -1,0 +1,237 @@
+{
+  "case": "gtzan_blues_00000",
+  "input_sha256": "1a136f1484ff0c128816c0a461a7abd4e91807d5144315b6f85a99e79a1b964e",
+  "checks": {
+    "demucs_retained_vs_fresh": {
+      "bass": {
+        "equal": true,
+        "shape": [
+          1323588,
+          2
+        ],
+        "maximum_absolute_delta": 0.0
+      },
+      "drums": {
+        "equal": true,
+        "shape": [
+          1323588,
+          2
+        ],
+        "maximum_absolute_delta": 0.0
+      },
+      "other": {
+        "equal": true,
+        "shape": [
+          1323588,
+          2
+        ],
+        "maximum_absolute_delta": 0.0
+      },
+      "vocals": {
+        "equal": true,
+        "shape": [
+          1323588,
+          2
+        ],
+        "maximum_absolute_delta": 0.0
+      }
+    },
+    "fresh_upstream_silence": {
+      "returncode": 1,
+      "assertion_reproduced": true,
+      "log_sha256": "eb4ceb53f7bc47a5f9b17590f32d633abf5d07dc1cdd0aea72012a65eed240d9"
+    },
+    "spleeter_worker_vs_fresh": {
+      "equal": true,
+      "shape": [
+        5,
+        1297,
+        128
+      ],
+      "maximum_absolute_delta": 0.0
+    },
+    "p12_uniform_sample_rate_diagnostic": {
+      "direct_11025": {
+        "bpm": 120.0,
+        "downbeats": [],
+        "metric_regions": [
+          {
+            "start": 0.0,
+            "end": 72.0,
+            "period": 0.500002,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0,
+            "downbeats": []
+          }
+        ],
+        "metre_confidence": 0.0,
+        "downbeat_confidence": 0.0
+      },
+      "common_44100_resampled": {
+        "bpm": 120.0,
+        "downbeats": [
+          0.2489,
+          1.2489,
+          2.2489,
+          3.2489,
+          4.2489,
+          5.2489,
+          6.2489,
+          7.2489,
+          8.2489,
+          9.2489,
+          10.2489,
+          11.2489,
+          12.2489,
+          13.2489,
+          14.2489,
+          15.2489,
+          16.2489,
+          17.2489,
+          18.2489,
+          19.2489,
+          20.2489,
+          21.2489,
+          22.2489,
+          23.2489,
+          24.2489,
+          25.2489,
+          26.2489,
+          27.2489,
+          28.2489,
+          29.2489,
+          30.2489,
+          31.2489,
+          32.2489,
+          33.2489,
+          34.2489,
+          35.2489,
+          36.2489,
+          37.249,
+          38.249,
+          39.249,
+          40.249,
+          41.249,
+          42.249,
+          43.249,
+          44.249,
+          45.249,
+          46.249,
+          47.249,
+          48.249,
+          49.249,
+          50.249,
+          51.249,
+          52.249,
+          53.249,
+          54.249,
+          55.249,
+          56.249,
+          57.249,
+          58.249,
+          59.249
+        ],
+        "metric_regions": [
+          {
+            "start": 0.0,
+            "end": 60.249,
+            "period": 0.500001,
+            "pulse_unit": null,
+            "beats_per_bar": 2,
+            "subdivision": null,
+            "bar_seconds": 1.000002,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 1.0,
+            "downbeat_confidence": 1.0,
+            "subdivision_confidence": 0.0,
+            "downbeats": [
+              0.2489,
+              1.2489,
+              2.2489,
+              3.2489,
+              4.2489,
+              5.2489,
+              6.2489,
+              7.2489,
+              8.2489,
+              9.2489,
+              10.2489,
+              11.2489,
+              12.2489,
+              13.2489,
+              14.2489,
+              15.2489,
+              16.2489,
+              17.2489,
+              18.2489,
+              19.2489,
+              20.2489,
+              21.2489,
+              22.2489,
+              23.2489,
+              24.2489,
+              25.2489,
+              26.2489,
+              27.2489,
+              28.2489,
+              29.2489,
+              30.2489,
+              31.2489,
+              32.2489,
+              33.2489,
+              34.2489,
+              35.2489,
+              36.2489,
+              37.249,
+              38.249,
+              39.249,
+              40.249,
+              41.249,
+              42.249,
+              43.249,
+              44.249,
+              45.249,
+              46.249,
+              47.249,
+              48.249,
+              49.249,
+              50.249,
+              51.249,
+              52.249,
+              53.249,
+              54.249,
+              55.249,
+              56.249,
+              57.249,
+              58.249,
+              59.249
+            ]
+          },
+          {
+            "start": 60.249,
+            "end": 72.0,
+            "period": 0.500001,
+            "pulse_unit": null,
+            "beats_per_bar": null,
+            "subdivision": null,
+            "bar_seconds": null,
+            "pulse_confidence": 1.0,
+            "metre_confidence": 0.0,
+            "downbeat_confidence": 0.0,
+            "subdivision_confidence": 0.0,
+            "downbeats": []
+          }
+        ],
+        "metre_confidence": 0.0,
+        "downbeat_confidence": 0.0
+      }
+    }
+  },
+  "fresh_demucs_wall_seconds": 29.523556365980767
+}

@@ -1,0 +1,10 @@
+{"model": "checkpoints/small0.ckpt", "runtime": "torch 2.5.1+cpu", "audio_seconds": 132.0, "rss_after_load_mib": 254, "peak_rss_mib": 440, "cpu_seconds_per_audio_minute": 2.142}
+{"model": "beat_this-final0.ckpt", "runtime": "torch 2.5.1+cpu", "audio_seconds": 132.0, "rss_after_load_mib": 392, "peak_rss_mib": 501, "cpu_seconds_per_audio_minute": 3.735}
+{"model": "onnx/beat_this-small0.onnx", "runtime": "onnxruntime 1.31.0", "audio_seconds": 132.0, "rss_after_load_mib": 111, "peak_rss_mib": 1468, "cpu_seconds_per_audio_minute": 2.321}
+{"model": "onnx/beat_this-small0.onnx", "runtime": "onnxruntime 1.31.0 without arena", "audio_seconds": 132.0, "rss_after_load_mib": 111, "peak_rss_mib": 1085, "cpu_seconds_per_audio_minute": 2.714}
+{"model": "onnx/beat_this-final0.onnx", "runtime": "onnxruntime 1.31.0", "audio_seconds": 132.0, "rss_after_load_mib": 226, "peak_rss_mib": 1571, "cpu_seconds_per_audio_minute": 3.836}
+{"model": "onnx/beat_this-final0.onnx", "runtime": "onnxruntime 1.31.0 without arena", "audio_seconds": 132.0, "rss_after_load_mib": 231, "peak_rss_mib": 1149, "cpu_seconds_per_audio_minute": 4.376}
+{"model": "onnx-sliced/beat_this-small0.onnx", "runtime": "onnxruntime 1.31.0", "audio_seconds": 132.0, "rss_after_load_mib": 117, "peak_rss_mib": 383, "cpu_seconds_per_audio_minute": 2.176}
+{"model": "onnx-sliced/beat_this-small0.onnx", "runtime": "onnxruntime 1.31.0 without arena", "audio_seconds": 132.0, "rss_after_load_mib": 117, "peak_rss_mib": 541, "cpu_seconds_per_audio_minute": 2.36}
+{"model": "onnx-sliced/beat_this-final0.onnx", "runtime": "onnxruntime 1.31.0", "audio_seconds": 132.0, "rss_after_load_mib": 247, "peak_rss_mib": 507, "cpu_seconds_per_audio_minute": 3.558}
+{"model": "onnx-sliced/beat_this-final0.onnx", "runtime": "onnxruntime 1.31.0 without arena", "audio_seconds": 132.0, "rss_after_load_mib": 247, "peak_rss_mib": 734, "cpu_seconds_per_audio_minute": 3.788}

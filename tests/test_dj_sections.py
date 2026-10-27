@@ -99,7 +99,8 @@ def test_incoming_drop_lands_on_the_outgoing_phrase_at_executed_speed(bpm):
 
 
 def test_drop_alignment_is_omitted_when_no_measured_phrase_or_rate_fits():
-    for changes in [{"phrase_boundaries": []}, {"bpm": 130, "bar_seconds": 240 / 130}]:
+    # The second outgoing grid is 10 % away, beyond the players' 8 % range.
+    for changes in [{"phrase_boundaries": []}, measured(bpm=132)]:
         out, inc = measured(), measured()
         inc["sections"] = [section(64.25, 80.25, "drop")]
         out.update(changes)

@@ -61,9 +61,33 @@ def test_library_sweep_continues_after_broken_files_and_honours_stop(tmp_path):
             raise OSError("deleted while reading")
         if identity == "2":
             stop.set()
-    with patch.object(dj_library, "analyse_audio", side_effect=measure):
+    with (patch.object(dj_library, "analyse_audio", side_effect=measure),
+          patch.object(dj_library, "cached_analysis", return_value=None),
+          patch.object(dj_library, "requests_waiting", return_value=False)):
         dj_library.sweep_library(((str(p), p.name, 240) for p in paths), stop)
     assert seen == ["0", "1", "2"]
+
+
+def test_library_sweep_waits_for_songs_a_dj_session_asked_for(tmp_path):
+    # With the beat model a song costs seconds of CPU; after an analyser update
+    # the session's songs must not queue behind the whole library.
+    paths = [tmp_path / name for name in ("cached", "new")]
+    for path in paths:
+        path.write_bytes(b"audio")
+    stop = threading.Event()
+    seen, pending = [], {"waits": 0}
+
+    def waiting():
+        pending["waits"] += 1
+        return pending["waits"] <= 3  # A session request finishes after three checks.
+
+    with (patch.object(dj_library, "analyse_audio", side_effect=lambda path, identity, **_: seen.append((identity, pending["waits"]))),
+          patch.object(dj_library, "cached_analysis", side_effect=lambda path, identity: {} if identity == "cached" else None),
+          patch.object(dj_library, "requests_waiting", side_effect=waiting),
+          patch.object(stop, "wait", return_value=False)):
+        dj_library.sweep_library(((str(p), p.name, 240) for p in paths), stop)
+    # A measured song is a cache hit and does not wait; the new one waits.
+    assert seen == [("cached", 0), ("new", 4)]
 
 
 def test_library_inventory_spans_accounts_and_skips_podcasts_missing_audio_and_duplicates(tmp_path):
@@ -86,7 +110,8 @@ def test_library_inventory_spans_accounts_and_skips_podcasts_missing_audio_and_d
 
 
 def test_bridge_legs_must_fit_the_players_rate_limit():
-    seed, target, spare = measured(100), measured(114), measured(107)
+    # Each leg is more than 8 % apart, beyond the players' range.
+    seed, target, spare = measured(100), measured(119), measured(109)
     assert plan_transition(seed, spare)["technique"] == "structural_fade"
     assert plan_transition(seed, spare)["playback_rate"] == 1
     route = order_continuous_route(seed, [({"id": "target"}, target)])
@@ -94,11 +119,11 @@ def test_bridge_legs_must_fit_the_players_rate_limit():
 
 
 def test_bridge_can_repair_a_pair_beyond_the_players_rate_limit():
-    seed, target = measured(100), measured(107)
+    seed, target = measured(100), measured(109)
     route = order_continuous_route(seed, [({"id": "target"}, target)])
     assert route[0]["transition"]["technique"] == "structural_fade"
     assert route[0]["transition"]["playback_rate"] == 1
-    result = add_measured_bridges(seed, route, [({"id": "bridge"}, measured(103.5))])
+    result = add_measured_bridges(seed, route, [({"id": "bridge"}, measured(104.5))])
     assert [row["id"] for row in result] == ["bridge", "target"]
     assert all(row["transition"]["playback_rate"] != 1 for row in result)
 

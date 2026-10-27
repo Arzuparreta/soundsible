@@ -34,7 +34,8 @@ internal object ProgramDjPlan {
         val metricFallback = trusted && chained!!.technique in setOf(ProgramMixCurve.Technique.BASS_SWAP,
             ProgramMixCurve.Technique.FILTER_BLEND, ProgramMixCurve.Technique.LONG_BLEND) && !placement.second
         val inCue = if (trusted) chained!!.inCue.coerceIn(0.0, 86400.0) else 0.0
-        val rate = if (trusted && !metricFallback) chained!!.rate.coerceIn(0.94, 1.06).toFloat() else 1f
+        // The players' pitch range, shared/dj/timing.py MAX_STRETCH.
+        val rate = if (trusted && !metricFallback) chained!!.rate.coerceIn(0.92, 1.08).toFloat() else 1f
         val tolerance = chained?.phaseToleranceMs?.takeIf { it.isFinite() && it != 0.0 } ?: 5.0
         val echoDelay = chained?.echoDelaySeconds?.takeIf { trusted && chained.technique == ProgramMixCurve.Technique.ECHO_CUT && it.isFinite() && it > 0 && it <= 2 }
         val technique = if (!trusted) ProgramMixCurve.Technique.SAFE_FADE
@@ -55,32 +56,53 @@ internal object ProgramDjPlan {
         return (4 * (proposal?.outPeriod ?: 0.0)).takeIf { it.isFinite() && it > 0 } ?: 0.0
     }
 
+    /** Common cycles the server may send: m outgoing beats = n incoming beats (shared/dj/timing.py). */
+    private val CYCLES = setOf(1 to 1, 1 to 2, 2 to 1, 2 to 3, 3 to 2, 3 to 4, 4 to 3, 1 to 3, 3 to 1, 1 to 4, 4 to 1)
+
+    /**
+     * A relocated measured plan keeps its complete coverage and its phase.
+     * Both cues sit on a first beat and the players hold the common cycle
+     * (`cycle_beats`). The cue moves only by whole `relocation_seconds`:
+     * whole outgoing bars that are also whole cycles. `bars` also checks the
+     * confirmed bars, of equal executed length. Same rule as
+     * `metricCuePlacement` in ui_web/src/lib/djCue.ts.
+     */
     fun metricCuePlacement(proposed: Double, earliest: Double, latest: Double, proposal: Proposal?, overlap: Double): Pair<Double, Boolean> {
         val sync = proposal?.metricSync
         val bar = barSeconds(proposal)
         val fallback = placeOutCue(proposed, earliest, latest, bar)
         if (sync?.has("alignment") != true) return fallback to (sync?.has("out_bar_seconds") != true)
-        if (sync.optString("alignment") != "bars") return fallback to false
+        val alignment = sync.optString("alignment")
+        if (alignment != "bars" && alignment != "beats") return fallback to false
         val out = sync.optJSONObject("out_metre") ?: return fallback to false
         val incoming = sync.optJSONObject("in_metre") ?: return fallback to false
-        if (bar <= 0) return fallback to false
-        val left = maxOf(earliest, out.optDouble("start", Double.NaN))
-        val right = minOf(latest, out.optDouble("end", Double.NaN) - overlap)
-        val inStart = incoming.optDouble("start", Double.NaN)
-        val inEnd = incoming.optDouble("end", Double.NaN)
-        if (!listOf(left, right, inStart, inEnd).all(Double::isFinite) || left > right) return fallback to false
-        val cue = placeOutCue(proposed, left, right, bar)
-        val tolerance = minOf(0.005, sync.optDouble("phase_tolerance_ms", 5.0) / 1000)
+        val cycle = sync.optJSONArray("cycle_beats") ?: return fallback to false
+        if (cycle.length() != 2) return fallback to false
+        val m = cycle.optInt(0, 0)
+        val n = cycle.optInt(1, 0)
+        if ((m to n) !in CYCLES || cycle.optDouble(0) != m.toDouble() || cycle.optDouble(1) != n.toDouble()) return fallback to false
+        val step = sync.optDouble("relocation_seconds", Double.NaN)
+        if (!(step > 0)) return fallback to false
         val outPeriod = sync.optDouble("out_period", Double.NaN)
         val inPeriod = sync.optDouble("in_period", Double.NaN)
-        var pulseRatio = inPeriod / outPeriod
-        if (pulseRatio < 0.7) pulseRatio *= 2 else if (pulseRatio > 1.4) pulseRatio /= 2
-        val inBar = sync.optDouble("in_bar_seconds", Double.NaN)
-        if (!listOf(proposal.rate, pulseRatio, inBar, tolerance).all(Double::isFinite) || proposal.rate !in 0.94..1.06 ||
-            inBar <= 0 || outPeriod <= 0 || inPeriod <= 0 || tolerance < 0 ||
-            abs(proposal.rate / pulseRatio - 1) * overlap > tolerance ||
-            abs(inBar / proposal.rate / bar - 1) * overlap > tolerance) return fallback to false
-        val phaseError = abs(cue - proposed - round((cue - proposed) / bar) * bar)
+        // The server admits the overlap within its phase tolerance of the
+        // measured coverage; a stricter edge here moved a fitting cue.
+        val tolerance = minOf(0.005, sync.optDouble("phase_tolerance_ms", 5.0) / 1000)
+        val left = maxOf(earliest, out.optDouble("start", Double.NaN) - tolerance)
+        val right = minOf(latest, out.optDouble("end", Double.NaN) - overlap + tolerance)
+        val inStart = incoming.optDouble("start", Double.NaN)
+        val inEnd = incoming.optDouble("end", Double.NaN)
+        if (!listOf(left, right, inStart, inEnd, tolerance).all(Double::isFinite) || left > right) return fallback to false
+        val cue = placeOutCue(proposed, left, right, step)
+        val pulseRatio = inPeriod * n / (outPeriod * m)
+        if (!listOf(proposal.rate, pulseRatio, tolerance).all(Double::isFinite) || proposal.rate !in 0.92..1.08 ||
+            outPeriod <= 0 || inPeriod <= 0 || tolerance < 0 ||
+            abs(proposal.rate / pulseRatio - 1) * overlap > tolerance) return fallback to false
+        if (alignment == "bars" || !sync.isNull("out_bar_seconds") || !sync.isNull("in_bar_seconds")) {
+            val inBar = sync.optDouble("in_bar_seconds", Double.NaN)
+            if (!(bar > 0) || !inBar.isFinite() || inBar <= 0 || abs(inBar / proposal.rate / bar - 1) * overlap > tolerance) return fallback to false
+        }
+        val phaseError = abs(cue - proposed - round((cue - proposed) / step) * step)
         return cue to (phaseError <= tolerance && proposal.inCue >= inStart - tolerance &&
             proposal.inCue + overlap * proposal.rate <= inEnd + tolerance)
     }

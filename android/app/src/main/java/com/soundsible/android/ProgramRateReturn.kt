@@ -10,7 +10,7 @@ internal class ProgramRateReturn(private val main: Handler, private val owns: ()
     private var serial = 0L
     fun start(rate: Float) {
         check(Looper.myLooper() == main.looper)
-        require(rate.isFinite() && rate in 0.94f..1.06f)
+        require(rate.isFinite() && rate in 0.92f..1.08f)
         close()
         if (!owns()) return
         if (kotlin.math.abs(rate - 1f) < 0.001f) { applyRate(1f); return }

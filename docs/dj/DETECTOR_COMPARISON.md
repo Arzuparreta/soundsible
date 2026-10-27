@@ -5,7 +5,9 @@ estimación conjunta de pulso, compás y primer tiempo y varias soluciones de
 código abierto mantenibles; comparar todos los métodos admitidos con las
 mismas entradas. Con los resultados sobre la mesa, **el usuario decidirá** qué
 integrar. Beat This! es un candidato, sin preferencia acordada. Este documento
-registra el trabajo pendiente; no contiene resultados nuevos de detectores.
+es el plan; **las mediciones están completas (2026-10-26)** y sus resultados,
+con la recomendación y la decisión pendiente, están en
+[detector_comparison/RESULTS](detector_comparison/RESULTS.md).
 
 P12 queda **parcial**: la PR #394 implementa contratos y guardas, pero los doce
 fragmentos reales de [P12](P12.md) no acreditan compás y 1 correctos. La
@@ -71,8 +73,8 @@ los artículos existentes.
 
 La antigüedad de un commit no decide por sí sola la admisión. Comprobar
 actividad útil, CI/tests, instalación reproducible, plataformas y dependencia
-de parches propios. Ningún candidato de esta tabla se ha instalado o medido
-para la nueva comparativa todavía.
+de parches propios. Todos los candidatos de esta tabla se instalaron y
+midieron; las exclusiones y sus motivos están en el informe de resultados.
 
 ## Un solo banco y una sola frontera
 

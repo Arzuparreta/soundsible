@@ -80,12 +80,20 @@ def serve_http(revision, seconds):
 
     engine = load_engine(revision)
     samples, rate = synthetic_pcm(seconds)
+    # The whole analysis of a file, as a library job runs it: FFmpeg, the
+    # beat model where the revision has one, and the measures.
+    directory = tempfile.mkdtemp(prefix='soundsible-dj-benchmark-')
+    source = Path(directory) / 'synthetic.wav'
+    with wave.open(str(source), 'wb') as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(rate)
+        output.writeframes((samples * 32767).astype('<i2').tobytes())
     gevent.sleep(0.3)
-    compute = getattr(engine, '_compose_off_loop', engine._compose)
     jobs = []
 
     def start_jobs():
-        jobs.extend(gevent.spawn(compute, samples, samples, rate, duration=seconds, tail_start=0) for _ in range(2))
+        jobs.extend(gevent.spawn(engine._analyse_pcm, source, duration_hint=seconds) for _ in range(2))
 
     def app(env, start_response):
         if env['PATH_INFO'] == '/start':
@@ -125,15 +133,16 @@ def http_runs(args):
                     with urllib.request.urlopen(base + '/start', timeout=30) as response:
                         response.read()
                     times = []
-                    deadline = time.monotonic() + 2
-                    while time.monotonic() < deadline:
+                    deadline = time.monotonic() + 300
+                    completed = 0
+                    # Ping for the whole of both analyses, not a fixed slice of them.
+                    while completed < 2 and time.monotonic() < deadline:
                         start = time.perf_counter()
                         with urllib.request.urlopen(base + '/ping', timeout=30) as response:
-                            response.read()
+                            completed = json.load(response)['completed']
                         times.append((time.perf_counter() - start) * 1000)
                         time.sleep(0.005)
-                    with urllib.request.urlopen(base + '/stats', timeout=30) as response:
-                        assert json.load(response)['completed'] == 2, 'Analysis did not finish successfully'
+                    assert completed == 2, 'Analysis did not finish successfully'
                     row = {'mode': mode, 'requests': len(times), 'max_ms': max(times),
                            'p50_ms': statistics.median(times), 'p95_ms': sorted(times)[int((len(times) - 1) * .95)]}
                     runs.append(row)
@@ -196,7 +205,7 @@ def main():
               'method': 'Fresh child per run; synthetic float32 PCM; feature extraction only, excluding decoder and network',
               'results': []}
     if args.http:
-        report['method'] = 'Separate HTTP client process; two concurrent synthetic PCM analyses; excludes decoder/network providers'
+        report['method'] = 'Separate HTTP client process; two concurrent full analyses of a synthetic WAV; excludes network providers'
         report['audio_seconds'] = args.seconds[-1]
         report['results'] = http_runs(args)
     elif args.pipeline:

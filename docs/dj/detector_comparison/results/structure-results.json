@@ -1,0 +1,405 @@
+{
+  "results": [
+    {
+      "method": "allin1-fold0",
+      "case": "structure_4_bars",
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 0.24,
+          "label": "start"
+        },
+        {
+          "start": 0.24,
+          "end": 24.23,
+          "label": "intro"
+        },
+        {
+          "start": 24.23,
+          "end": 40.23,
+          "label": "intro"
+        },
+        {
+          "start": 40.23,
+          "end": 56.23,
+          "label": "intro"
+        },
+        {
+          "start": 56.23,
+          "end": 72.23,
+          "label": "intro"
+        },
+        {
+          "start": 72.23,
+          "end": 88.23,
+          "label": "intro"
+        },
+        {
+          "start": 88.23,
+          "end": 104.23,
+          "label": "intro"
+        },
+        {
+          "start": 104.23,
+          "end": 131.99,
+          "label": "intro"
+        },
+        {
+          "start": 131.99,
+          "end": 132.0,
+          "label": "start"
+        }
+      ],
+      "content_boundaries_100ms": {
+        "precision": 1.0,
+        "recall": 0.375,
+        "f1": 0.5454545454545454,
+        "matched": 6,
+        "predicted": 6,
+        "reference": 16,
+        "median_ms": 19.999999999997797,
+        "p90_ms": 20.000000000003126,
+        "signed_median_ms": -19.999999999997797
+      },
+      "content_boundaries_500ms": {
+        "precision": 1.0,
+        "recall": 0.375,
+        "f1": 0.5454545454545454,
+        "matched": 6,
+        "predicted": 6,
+        "reference": 16,
+        "median_ms": 19.999999999997797,
+        "p90_ms": 20.000000000003126,
+        "signed_median_ms": -19.999999999997797
+      },
+      "phrase_or_label_accuracy": null
+    },
+    {
+      "method": "allin1-fold0",
+      "case": "structure_8_bars",
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 0.24,
+          "label": "start"
+        },
+        {
+          "start": 0.24,
+          "end": 16.23,
+          "label": "intro"
+        },
+        {
+          "start": 16.23,
+          "end": 40.23,
+          "label": "intro"
+        },
+        {
+          "start": 40.23,
+          "end": 80.23,
+          "label": "intro"
+        },
+        {
+          "start": 80.23,
+          "end": 112.23,
+          "label": "intro"
+        },
+        {
+          "start": 112.23,
+          "end": 131.99,
+          "label": "intro"
+        },
+        {
+          "start": 131.99,
+          "end": 132.0,
+          "label": "start"
+        }
+      ],
+      "content_boundaries_100ms": {
+        "precision": 0.75,
+        "recall": 0.375,
+        "f1": 0.5,
+        "matched": 3,
+        "predicted": 4,
+        "reference": 8,
+        "median_ms": 19.99999999999602,
+        "p90_ms": 19.999999999998863,
+        "signed_median_ms": -19.99999999999602
+      },
+      "content_boundaries_500ms": {
+        "precision": 0.75,
+        "recall": 0.375,
+        "f1": 0.5,
+        "matched": 3,
+        "predicted": 4,
+        "reference": 8,
+        "median_ms": 19.99999999999602,
+        "p90_ms": 19.999999999998863,
+        "signed_median_ms": -19.99999999999602
+      },
+      "phrase_or_label_accuracy": null
+    },
+    {
+      "method": "allin1-fold0",
+      "case": "structure_16_bars",
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 0.24,
+          "label": "start"
+        },
+        {
+          "start": 0.24,
+          "end": 24.23,
+          "label": "intro"
+        },
+        {
+          "start": 24.23,
+          "end": 72.23,
+          "label": "intro"
+        },
+        {
+          "start": 72.23,
+          "end": 96.23,
+          "label": "intro"
+        },
+        {
+          "start": 96.23,
+          "end": 110.23,
+          "label": "intro"
+        },
+        {
+          "start": 110.23,
+          "end": 131.99,
+          "label": "intro"
+        },
+        {
+          "start": 131.99,
+          "end": 132.0,
+          "label": "start"
+        }
+      ],
+      "content_boundaries_100ms": {
+        "precision": 0.25,
+        "recall": 0.25,
+        "f1": 0.25,
+        "matched": 1,
+        "predicted": 4,
+        "reference": 4,
+        "median_ms": 19.99999999999602,
+        "p90_ms": 19.99999999999602,
+        "signed_median_ms": -19.99999999999602
+      },
+      "content_boundaries_500ms": {
+        "precision": 0.25,
+        "recall": 0.25,
+        "f1": 0.25,
+        "matched": 1,
+        "predicted": 4,
+        "reference": 4,
+        "median_ms": 19.99999999999602,
+        "p90_ms": 19.99999999999602,
+        "signed_median_ms": -19.99999999999602
+      },
+      "phrase_or_label_accuracy": null
+    },
+    {
+      "method": "allin1-all",
+      "case": "structure_4_bars",
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 0.24,
+          "label": "start"
+        },
+        {
+          "start": 0.24,
+          "end": 24.24,
+          "label": "intro"
+        },
+        {
+          "start": 24.24,
+          "end": 40.24,
+          "label": "intro"
+        },
+        {
+          "start": 40.24,
+          "end": 56.24,
+          "label": "intro"
+        },
+        {
+          "start": 56.24,
+          "end": 72.24,
+          "label": "intro"
+        },
+        {
+          "start": 72.24,
+          "end": 88.24,
+          "label": "intro"
+        },
+        {
+          "start": 88.24,
+          "end": 104.24,
+          "label": "intro"
+        },
+        {
+          "start": 104.24,
+          "end": 131.99,
+          "label": "intro"
+        },
+        {
+          "start": 131.99,
+          "end": 132.0,
+          "label": "intro"
+        }
+      ],
+      "content_boundaries_100ms": {
+        "precision": 1.0,
+        "recall": 0.375,
+        "f1": 0.5454545454545454,
+        "matched": 6,
+        "predicted": 6,
+        "reference": 16,
+        "median_ms": 10.00000000000334,
+        "p90_ms": 10.000000000005116,
+        "signed_median_ms": -10.00000000000334
+      },
+      "content_boundaries_500ms": {
+        "precision": 1.0,
+        "recall": 0.375,
+        "f1": 0.5454545454545454,
+        "matched": 6,
+        "predicted": 6,
+        "reference": 16,
+        "median_ms": 10.00000000000334,
+        "p90_ms": 10.000000000005116,
+        "signed_median_ms": -10.00000000000334
+      },
+      "phrase_or_label_accuracy": null
+    },
+    {
+      "method": "allin1-all",
+      "case": "structure_8_bars",
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 0.24,
+          "label": "start"
+        },
+        {
+          "start": 0.24,
+          "end": 16.23,
+          "label": "intro"
+        },
+        {
+          "start": 16.23,
+          "end": 48.24,
+          "label": "intro"
+        },
+        {
+          "start": 48.24,
+          "end": 80.24,
+          "label": "intro"
+        },
+        {
+          "start": 80.24,
+          "end": 112.23,
+          "label": "intro"
+        },
+        {
+          "start": 112.23,
+          "end": 131.99,
+          "label": "inst"
+        },
+        {
+          "start": 131.99,
+          "end": 132.0,
+          "label": "intro"
+        }
+      ],
+      "content_boundaries_100ms": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666,
+        "matched": 4,
+        "predicted": 4,
+        "reference": 8,
+        "median_ms": 15.000000000000568,
+        "p90_ms": 19.999999999998508,
+        "signed_median_ms": -15.000000000000568
+      },
+      "content_boundaries_500ms": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666,
+        "matched": 4,
+        "predicted": 4,
+        "reference": 8,
+        "median_ms": 15.000000000000568,
+        "p90_ms": 19.999999999998508,
+        "signed_median_ms": -15.000000000000568
+      },
+      "phrase_or_label_accuracy": null
+    },
+    {
+      "method": "allin1-all",
+      "case": "structure_16_bars",
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 0.24,
+          "label": "start"
+        },
+        {
+          "start": 0.24,
+          "end": 32.24,
+          "label": "intro"
+        },
+        {
+          "start": 32.24,
+          "end": 72.24,
+          "label": "intro"
+        },
+        {
+          "start": 72.24,
+          "end": 96.24,
+          "label": "intro"
+        },
+        {
+          "start": 96.24,
+          "end": 131.99,
+          "label": "intro"
+        },
+        {
+          "start": 131.99,
+          "end": 132.0,
+          "label": "intro"
+        }
+      ],
+      "content_boundaries_100ms": {
+        "precision": 0.6666666666666666,
+        "recall": 0.5,
+        "f1": 0.5714285714285714,
+        "matched": 2,
+        "predicted": 3,
+        "reference": 4,
+        "median_ms": 10.000000000001563,
+        "p90_ms": 10.000000000004405,
+        "signed_median_ms": -10.000000000001563
+      },
+      "content_boundaries_500ms": {
+        "precision": 0.6666666666666666,
+        "recall": 0.5,
+        "f1": 0.5714285714285714,
+        "matched": 2,
+        "predicted": 3,
+        "reference": 4,
+        "median_ms": 10.000000000001563,
+        "p90_ms": 10.000000000004405,
+        "signed_median_ms": -10.000000000001563
+      },
+      "phrase_or_label_accuracy": null
+    }
+  ],
+  "scope": "Known content changes in three 4/4 signals; not reference musical section labels or real-song phrase accuracy.",
+  "p13_status": "Fixtures prepared and model output retained; P13 remains pending."
+}

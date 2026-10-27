@@ -12,7 +12,8 @@ from .contracts import AnalysisInput, TransitionPlan
 from .timing import (
     MAX_STRETCH as _MAX_STRETCH,
     BEATMATCH_TECHNIQUES, PHASE_TOLERANCE_SECONDS,
-    comparable_ratio, local_period as _local_period, rate_fits as _rate_fits, local_metre, metric_sync,
+    comparable_ratio, local_period as _local_period, projected_bar, pulse_relations, rate_fits as _rate_fits,
+    metric_sync,
 )
 
 _TEMPO_SCORE_RANGE = 0.08
@@ -20,6 +21,17 @@ _TEMPO_SCORE_RANGE = 0.08
 
 # Seconds kept between a planned blend start and `duration - overlap`.
 _OUT_CUE_MARGIN = 1.5
+
+
+def _closest_rate(outgoing: Mapping[str, Any], incoming: Mapping[str, Any], ratio: float) -> float:
+    """Playback rate of the closest common cycle; one octave for the legacy contract.
+
+    Analyses without `metric_regions` keep the half/double equivalence their
+    plans and vectors were made with.
+    """
+    if 'metric_regions' not in outgoing and 'metric_regions' not in incoming:
+        return comparable_ratio(ratio)
+    return pulse_relations(ratio)[0][2]
 
 
 def _harmonic_score(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
@@ -44,6 +56,14 @@ def _harmonic_score(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
     return 1.0 - steps / 7
 
 
+def _region_ones(analysis: Mapping[str, Any], region: Mapping[str, Any]) -> list[float]:
+    """The region's measured ones, or those counted from a measured one along its pulse."""
+    if region.get('downbeats'):
+        return region['downbeats']
+    projected = projected_bar(analysis, region)
+    return projected['downbeats'] if projected else []
+
+
 def _nearest_grid_point(
     analysis: Mapping[str, Any],
     target: float,
@@ -54,7 +74,7 @@ def _nearest_grid_point(
         region = next((row for row in analysis.get('metric_regions') or [] if row['start'] <= target < row['end']), None)
         if region is None:
             return target
-        grid = region.get('downbeats') if prefer_downbeat else []
+        grid = _region_ones(analysis, region) if prefer_downbeat else []
         if not grid:
             grid = [t for t in analysis.get('beat_grid') or [] if region['start'] <= t < region['end']]
         return min(grid, key=lambda value: abs(value - target)) if grid else target
@@ -70,7 +90,7 @@ def _grid_point_at_or_before(analysis: Mapping[str, Any], limit: float) -> float
         region = next((row for row in analysis.get('metric_regions') or [] if row['start'] <= limit < row['end']), None)
         if region is None:
             return limit
-        grid = region.get('downbeats') or [t for t in analysis.get('beat_grid') or [] if region['start'] <= t < region['end']]
+        grid = _region_ones(analysis, region) or [t for t in analysis.get('beat_grid') or [] if region['start'] <= t < region['end']]
     else:
         grid = analysis.get("downbeats") or analysis.get("beat_grid") or []
     values = [
@@ -135,9 +155,8 @@ def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
             out_period = _local_period(outgoing, out_cue, span)
 
             def ratio_at(cue: float) -> float:
-                ratio = _local_period(incoming, cue, span) / out_period
-                ratio = comparable_ratio(ratio)
-                return ratio
+                # The playback rate of the closest common cycle.
+                return _closest_rate(outgoing, incoming, _local_period(incoming, cue, span) / out_period)
 
             cue = intro
             # Refit at the proposed entry rather than measuring a different
@@ -154,14 +173,20 @@ def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
 def plan_transition(outgoing: AnalysisInput, incoming: AnalysisInput) -> TransitionPlan:
     """Choose effects from the pair's measured pulse and available sections.
 
-    Scores retain their route-ordering meaning. Technique choice also checks
-    the actual local rate: a good harmonic score cannot make an impossible
-    beatmatch safe. No client style or random effect selection is involved.
+    Execution alone decides whether the pair is beatmatched: both pulses
+    measured and the actual local rate within the players' range and phase
+    budget. The score (tempo, key, confidence) orders routes and chooses
+    between blends; a distant key or tempo inside the range never forces a
+    fallback, and a good score cannot make an impossible beatmatch safe
+    (decision of the user, P12-b). No client style or random effect selection
+    is involved.
     """
     out_bpm = float(outgoing.get("bpm") or 0)
     in_bpm = float(incoming.get("bpm") or 0)
     ratio = out_bpm / in_bpm if out_bpm > 0 and in_bpm > 0 else 1.0
-    ratio = comparable_ratio(ratio)
+    # Closeness to the nearest common cycle (1:1, 2:1, 3:2, 4:3...): every
+    # reading of a pulse is as mixable as another.
+    ratio = _closest_rate(outgoing, incoming, ratio)
     tempo_score = max(0.0, 1 - abs(1 - ratio) / _TEMPO_SCORE_RANGE)
     harmonic = _harmonic_score(outgoing, incoming)
     confidence = min(float(outgoing.get("confidence") or 0), float(incoming.get("confidence") or 0))
@@ -170,7 +195,7 @@ def plan_transition(outgoing: AnalysisInput, incoming: AnalysisInput) -> Transit
     steady = all(float(analysis.get("bpm") or 0) > 0
                  and float(analysis.get("tempo_confidence") or 0) > 0.6
                  for analysis in (outgoing, incoming))
-    if steady and score >= 0.55:
+    if steady:
         technique = "bass_swap" if score >= 0.72 else "filter_blend"
         plan = _transition_plan(outgoing, incoming, technique, 16, score, confidence)
         if _rate_fits(plan):
@@ -237,8 +262,12 @@ def _grid_runway(analysis: Mapping[str, Any], cue: float, span: float) -> bool:
 
 def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
                      technique: str, bars: int, blend_score: float, confidence: float) -> TransitionPlan:
-    # A missing grouping only chooses a bounded fade in seconds, never a bar.
-    region = local_metre(outgoing, float(outgoing.get('outro_cue') or 0))
+    # The beat model's bar at the exit sizes the overlap; promising that the
+    # bars align is `metric_sync`'s decision. A missing grouping only chooses
+    # a bounded fade in seconds, never a bar.
+    exit_at = float(outgoing.get('outro_cue') or 0)
+    region = next((row for row in outgoing.get('metric_regions') or []
+                   if row['start'] <= exit_at < row['end'] and row.get('bar_seconds')), None)
     bar_seconds = float(region['bar_seconds']) if region else float(outgoing.get("bar_seconds") or 2.0)
     overlap = max(4.0, min(48.0, bars * bar_seconds))
     duration = float(outgoing.get("duration") or 0)
@@ -286,11 +315,12 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     # The tempo across the stretch that is actually mixed, not at one point.
     out_period = _local_period(outgoing, float(out_cue or 0), overlap)
     in_period = _local_period(incoming, in_cue, overlap)
-    # playbackRate scales the incoming tempo. A 125 BPM incoming track needs
-    # 120/125 = 0.96 to sit on a 120 BPM outgoing grid.
+    # playbackRate scales the incoming tempo so that its beats fill the common
+    # cycle: a 125 BPM incoming track needs 120/125 = 0.96 on a 120 BPM grid,
+    # a 174 BPM one 0.9655 for three of its beats to last two at 112 BPM.
     local_ratio = in_period / out_period if out_period > 0 and in_period > 0 else 1.0
-    local_ratio = comparable_ratio(local_ratio)
-    # Above six percent, resampling is more audible than a structural cut. The
+    local_ratio = _closest_rate(outgoing, incoming, local_ratio)
+    # Beyond the players' 8 % pitch range, a fallback replaces the beatmatch. The
     # score can still select a safe technique, but never asks the player to
     # torture a recording merely to claim that it beatmatched.
     playback_rate = local_ratio if abs(1 - local_ratio) <= _MAX_STRETCH else 1.0
@@ -316,8 +346,9 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     if technique not in BEATMATCH_TECHNIQUES and sync_metric:
         sync_metric['alignment'] = 'none'
     # For the measured metric contract, score ranks sustained, executable
-    # alignment. Absent/incompatible metre cannot retain a high blend score.
-    if sync_metric and sync_metric['alignment'] != 'bars':
+    # alignment of bars or of the pulse. Without either it cannot retain a
+    # high blend score.
+    if sync_metric and sync_metric['alignment'] == 'none':
         blend_score = 0.
     measured_bar = sync_metric.get('out_bar_seconds') if sync_metric else 4 * out_period
     return {

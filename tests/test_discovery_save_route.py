@@ -1389,6 +1389,54 @@ def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_
     assert body["items"][0]["request_id"] == "q-wanted"
 
 
+def test_dj_place_never_bridges_through_the_requested_or_playing_song_under_another_identity(tmp_path):
+    # User's session, 2026-10-26: «Teardrops (Rules Remix)» came back as its own
+    # bridge. The library copy reached the pool through the heard songs as
+    # `music:youtube:<id>` while the request was `music:track:<id>`, and a song
+    # into itself is a perfect mix. The browser showed two rows that were
+    # deleted and moved together.
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    measured = {
+        "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
+        "wanted": {"duration": 220, "bpm": 130, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
+    }
+
+    def analysis(_metadata, item, *, schedule=False):
+        key = str(item.get("track_id") or item.get("youtube_id") or item.get("id") or "")
+        return measured.get(key, _auto_mode._dj_fallback_analysis(float(item.get("duration") or 0)))
+
+    def copy(track_id: str, video: str, title: str, artist: str) -> dict:
+        return {"id": video, "track_id": track_id, "youtube_id": video, "title": title, "artist": artist,
+                "duration": 220, "source": "preview", "source_pool": "related",
+                "recommendation_identity": f"music:youtube:{video}", "score": 0.9,
+                "external_ids": {"youtube_id": video}}
+
+    related = [copy("wanted", "wantedvid01", "Wanted", "Listener"), copy("seed", "seedvideo01", "Seed", "Artist")]
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)),
+        patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-place",
+            json={
+                "seed": {"id": "seed", "track_id": "seed", "title": "Seed", "artist": "Artist", "duration": 220},
+                "route": [],
+                "track": {"id": "wanted", "track_id": "wanted", "title": "Wanted", "artist": "Listener", "duration": 220},
+                "requested_queue_id": "q-wanted",
+                "heard": [{"id": "wanted", "track_id": "wanted", "title": "Wanted", "artist": "Listener"}],
+            },
+        )
+
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert [(item["route_kind"], item["track_id"]) for item in items] == [("user", "wanted")]
+
+
 def _repair_route(*kinds: str) -> list[dict]:
     return [
         {
@@ -1439,7 +1487,7 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
     _make_runtime(tmp_path)
     measured = {
         "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
-        # Two adjacent Camelot steps, each inside the mixer's 6% rate limit.
+        # Two adjacent Camelot steps, each inside the players' 8 % rate limit.
         # At 100 -> 113 -> 128 neither leg could beatmatch; that old fixture
         # only passed because C -> D was incorrectly scored as unrelated.
         "t0": {"duration": 220, "bpm": 112, "key": "D", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
@@ -2283,7 +2331,7 @@ def test_v6_analysis_summary_keeps_sixteen_fast_long_starts_within_native_respon
     assert analysis["beat_grid"] == beats
 
 
-@pytest.mark.parametrize("bpm", [90, 137])
+@pytest.mark.parametrize("bpm", [100, 137])  # No common cycle with 120 within 8 %.
 def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
     """Known pulse -> AAC -> SQLite -> the common plan for web and Android."""
     import subprocess
@@ -2327,36 +2375,42 @@ def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
     print({"bpm": bpm, "echo_delay_seconds": plan["echo_delay_seconds"]})
 
 
-@pytest.mark.parametrize('out_size,in_size,subdivision,aligned', [(3, 3, 2, True), (3, 4, 2, False), (2, 2, 3, True)])
-def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, monkeypatch, out_size, in_size, subdivision, aligned):
-    """Known PCM -> AAC -> versioned SQLite -> every planner, no client detector."""
+@pytest.mark.parametrize('out_size,in_size,subdivision', [(3, 3, 2), (3, 4, 2), (4, 4, 2)])
+def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, monkeypatch, out_size, in_size, subdivision):
+    """Known PCM -> AAC -> beat model -> versioned SQLite -> every planner, no client detector.
+
+    The real network reads these signals; its accuracy is measured elsewhere.
+    What must hold regardless: one decode per file, none when warm, the same
+    plan from every entry point, a compact summary, a shared steady pulse
+    mixed as such, and bars promised only with confirmed equal bars.
+    """
     import subprocess
     import wave
-    import numpy as np
     from shared.dj import store
     from shared.dj.contracts import ANALYSER_VERSION
     from shared.dj.timing import BEATMATCH_TECHNIQUES
     from shared import dj_engine
     from shared.ffmpeg_runtime import ffmpeg_executable
-    from test_dj_metre import metric_signal, RATE
+    from test_dj_metre import metric_signal
 
+    rate = 22050
     _make_runtime(tmp_path)
     monkeypatch.setattr(store, '_cache_path', lambda: tmp_path / 'metre.sqlite3')
     api = _mock_api()
     api['get_core'].return_value = (_FakeLibrary(None), None, None)
     refs, paths = {}, {}
     for key, size in [('outgoing', out_size), ('incoming', in_size)]:
-        samples, _, _ = metric_signal(beats_per_bar=size, subdivision=subdivision, seconds=120)
+        samples, _, _ = metric_signal(beats_per_bar=size, subdivision=subdivision, seconds=120, rate=rate)
         wav, aac = tmp_path / f'{key}.wav', tmp_path / f'{key}.m4a'
         with wave.open(str(wav), 'wb') as output:
             output.setnchannels(1)
             output.setsampwidth(2)
-            output.setframerate(RATE)
+            output.setframerate(rate)
             output.writeframes((samples * 16000).astype('<i2').tobytes())
         subprocess.run([ffmpeg_executable(), '-v', 'error', '-i', str(wav), '-c:a', 'aac', str(aac)], check=True)
         refs[key] = {'id': key, 'track_id': key, 'title': key, 'artist': 'Metric fixture', 'duration': 120}
         paths[key] = aac
-        # A valid content stamp cannot promote the previous analyser's 4/4 prior.
+        # A valid content stamp cannot promote the previous analyser's measures.
         with store._connect() as conn:
             conn.execute('INSERT INTO audio_analysis VALUES (?, ?, ?, ?, ?)',
                          (dj_engine.analysis_identity(refs[key]), store._source_stamp(aac), ANALYSER_VERSION - 1,
@@ -2372,21 +2426,26 @@ def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, 
         assert cold['measured'] is False
         assert cold['transition']['sync']['alignment'] == 'none'
         assert cold['transition']['sync']['out_bar_seconds'] is None
+        analyses = {}
         with patch.object(store, '_decode_measured', wraps=store._decode_measured) as decode:
             for key in refs:
-                analysis = dj_engine.analyse_audio(paths[key], dj_engine.analysis_identity(refs[key]))
-                assert analysis['version'] == ANALYSER_VERSION
-                assert analysis['beats_per_bar'] == (out_size if key == 'outgoing' else in_size)
+                analyses[key] = dj_engine.analyse_audio(paths[key], dj_engine.analysis_identity(refs[key]))
+                assert analyses[key]['version'] == ANALYSER_VERSION
+                assert analyses[key]['bpm'] == pytest.approx(120, abs=.05)
+                assert analyses[key]['tempo_confidence'] > .6
             assert decode.call_count == 2
         with patch.object(store, '_decode_measured', side_effect=AssertionError('warm HTTP must not decode')):
             refined = client.post('/api/discovery/music/dj-transition', json=pair).get_json()
             assert refined['measured'] is True
             expected = refined['transition']
-            assert (expected['sync']['alignment'] == 'bars') == aligned
-            assert (expected['technique'] in BEATMATCH_TECHNIQUES) == aligned
-            if not aligned:
-                assert expected['echo_delay_seconds'] == pytest.approx(.5, abs=.001)
-                assert expected['score'] == 0
+            assert expected['technique'] in BEATMATCH_TECHNIQUES
+            assert expected['sync']['alignment'] in ('beats', 'bars')
+            if expected['sync']['alignment'] == 'bars':
+                for analysis in analyses.values():
+                    assert analysis['metre_confidence'] > 0 and analysis['downbeat_confidence'] > 0
+                assert out_size == in_size
+                assert expected['sync']['in_bar_seconds'] / expected['playback_rate'] == pytest.approx(
+                    expected['sync']['out_bar_seconds'], abs=.000005)
             common = {'seed': refs['outgoing']}
             for endpoint, payload in [
                 ('dj-plan', {**common, 'sources': [{'id': 's', 'tracks': [refs['incoming']]}], 'limit': 1}),
@@ -2401,8 +2460,8 @@ def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, 
                     summary = body['items'][0]['analysis']
                     assert 'metric_regions' not in summary
                     assert 'beat_grid' not in summary
-                    assert summary['beats_per_bar'] == in_size
-                    assert summary['metre_confidence'] > 0
+                    assert summary['beats_per_bar'] == analyses['incoming']['beats_per_bar']
+                    assert summary['metre_confidence'] == analyses['incoming']['metre_confidence']
             with patch.object(_auto_mode, '_build_music_plan', return_value=({'items': [refs['incoming']]}, 200)):
                 legacy = client.post('/api/discovery/music/dj-plan', json={**common, 'limit': 1})
             assert legacy.get_json()['items'][0]['transition'] == expected

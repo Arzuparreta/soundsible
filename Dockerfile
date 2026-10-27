@@ -22,6 +22,16 @@ COPY requirements.docker.lock ./
 RUN pip wheel --require-hashes --wheel-dir /wheels -r requirements.docker.lock
 
 
+# The Auto DJ beat model: a Soundsible release asset with a fixed SHA-256,
+# fetched and verified by the same script desktop builds and CI use.
+FROM --platform=$BUILDPLATFORM python:3.13-slim-trixie AS dj-model
+
+WORKDIR /build
+COPY scripts/fetch_dj_model.py scripts/
+COPY shared/dj/weights.py shared/dj/
+RUN python scripts/fetch_dj_model.py --output /build/models/beat_this-final0.onnx
+
+
 FROM python:3.13-slim-trixie AS runtime
 
 # Left empty on purpose. An arg-less build then reports the version that
@@ -72,6 +82,7 @@ COPY --chown=soundsible:soundsible player ./player
 COPY --chown=soundsible:soundsible setup_tool ./setup_tool
 COPY --chown=soundsible:soundsible branding ./branding
 COPY --chown=soundsible:soundsible --from=ui-build /build/ui_web/dist ./ui_web/dist
+COPY --chown=soundsible:soundsible --from=dj-model /build/models ./models
 
 RUN mkdir -p /config /data /cache /logs /music \
     && chown -R soundsible:soundsible /config /data /cache /logs /music

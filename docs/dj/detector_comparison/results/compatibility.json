@@ -1,0 +1,2435 @@
+{
+  "results": [
+    {
+      "method": "beatthis-final0-dbn",
+      "case": "gtzan_blues_00000",
+      "input_sha256": "728e445a61ebb2ab9cefe779a9af5c44cff39f20308a0a29bce3e3ea597aa592",
+      "beats": {
+        "reference_events": 63,
+        "current_events": 63,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 16,
+        "current_events": 16,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 11.50000000000162,
+          "p90_ms": 24.699999999998564,
+          "signed_median_ms": 11.50000000000162
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 0.9375,
+          "f1": 0.967741935483871,
+          "matched": 15,
+          "predicted": 15,
+          "reference": 16,
+          "median_ms": 9.000000000000341,
+          "p90_ms": 21.599999999999397,
+          "signed_median_ms": 9.000000000000341
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 11.50000000000162,
+          "absolute_median_ms": 11.50000000000162,
+          "absolute_p90_ms": 24.699999999998564
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.000000000000341,
+          "absolute_median_ms": 9.000000000000341,
+          "absolute_p90_ms": 21.599999999999397
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.9375,
+          "cmlt": 0.9375,
+          "amlc": 0.9375,
+          "amlt": 0.9375
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.5235602094241676,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 11.50000000000162,
+          "p90_ms": 24.699999999998564,
+          "signed_median_ms": 11.50000000000162
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 0.9375,
+          "f1": 0.967741935483871,
+          "matched": 15,
+          "predicted": 15,
+          "reference": 16,
+          "median_ms": 9.000000000000341,
+          "p90_ms": 21.599999999999397,
+          "signed_median_ms": 9.000000000000341
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 11.50000000000162,
+          "absolute_median_ms": 11.50000000000162,
+          "absolute_p90_ms": 24.699999999998564
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.000000000000341,
+          "absolute_median_ms": 9.000000000000341,
+          "absolute_p90_ms": 21.599999999999397
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.9375,
+          "cmlt": 0.9375,
+          "amlc": 0.9375,
+          "amlt": 0.9375
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.5235602094241676,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-final0-dbn",
+      "case": "gtzan_classical_00000",
+      "input_sha256": "8add3a7d1add1e157ce5de91be72372773b1ad2779742532c4f0ad1c7316f2a4",
+      "beats": {
+        "reference_events": 47,
+        "current_events": 47,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 12,
+        "current_events": 12,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 0.9574468085106383,
+          "recall": 0.9574468085106383,
+          "f1": 0.9574468085106383,
+          "matched": 45,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 18.99999999999835,
+          "p90_ms": 32.999999999999986,
+          "signed_median_ms": -3.9999999999995595
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 12,
+          "predicted": 12,
+          "reference": 12,
+          "median_ms": 22.00000000000024,
+          "p90_ms": 37.50000000000022,
+          "signed_median_ms": -16.500000000000625
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -4.999999999999005,
+          "absolute_median_ms": 19.000000000000128,
+          "absolute_p90_ms": 39.59999999999936
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -16.500000000000625,
+          "absolute_median_ms": 22.00000000000024,
+          "absolute_p90_ms": 37.50000000000022
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 93.75000000000001,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000000444,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 1.313171508157629,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 0.9574468085106383,
+          "recall": 0.9574468085106383,
+          "f1": 0.9574468085106383,
+          "matched": 45,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 18.99999999999835,
+          "p90_ms": 32.999999999999986,
+          "signed_median_ms": -3.9999999999995595
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 12,
+          "predicted": 12,
+          "reference": 12,
+          "median_ms": 22.00000000000024,
+          "p90_ms": 37.50000000000022,
+          "signed_median_ms": -16.500000000000625
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -4.999999999999005,
+          "absolute_median_ms": 19.000000000000128,
+          "absolute_p90_ms": 39.59999999999936
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -16.500000000000625,
+          "absolute_median_ms": 22.00000000000024,
+          "absolute_p90_ms": 37.50000000000022
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 93.75000000000001,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000000444,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 1.313171508157629,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-final0-dbn",
+      "case": "synthetic_4_2_plain",
+      "input_sha256": "3ed09ee3984ab66d76f6093c128c81c5c81b955bbb26417f5acfa0c056cfc8bb",
+      "beats": {
+        "reference_events": 144,
+        "current_events": 144,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 36,
+        "current_events": 36,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": 9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": 9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": 9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": 9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-final0-direct",
+      "case": "gtzan_blues_00000",
+      "input_sha256": "728e445a61ebb2ab9cefe779a9af5c44cff39f20308a0a29bce3e3ea597aa592",
+      "beats": {
+        "reference_events": 63,
+        "current_events": 63,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 31,
+        "current_events": 31,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 11.50000000000162,
+          "p90_ms": 25.89999999999968,
+          "signed_median_ms": 11.50000000000162
+        },
+        "downbeat": {
+          "precision": 0.5,
+          "recall": 0.9375,
+          "f1": 0.6521739130434783,
+          "matched": 15,
+          "predicted": 30,
+          "reference": 16,
+          "median_ms": 9.000000000000341,
+          "p90_ms": 21.599999999999397,
+          "signed_median_ms": 9.000000000000341
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 11.50000000000162,
+          "absolute_median_ms": 11.50000000000162,
+          "absolute_p90_ms": 25.89999999999968
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 6.999999999998896,
+          "absolute_median_ms": 418.50000000000165,
+          "absolute_p90_ms": 958.0000000000002
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.03333333333333333,
+          "cmlt": 0.03333333333333333,
+          "amlc": 0.8709677419354839,
+          "amlt": 0.9032258064516129
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 0.06666666666666667,
+        "grouping_accuracy": 0.06666666666666667,
+        "bar_duration_abs_error_percent": 49.869451697127964,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.5,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 11.50000000000162,
+          "p90_ms": 25.89999999999968,
+          "signed_median_ms": 11.50000000000162
+        },
+        "downbeat": {
+          "precision": 0.5,
+          "recall": 0.9375,
+          "f1": 0.6521739130434783,
+          "matched": 15,
+          "predicted": 30,
+          "reference": 16,
+          "median_ms": 9.000000000000341,
+          "p90_ms": 21.599999999999397,
+          "signed_median_ms": 9.000000000000341
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 11.50000000000162,
+          "absolute_median_ms": 11.50000000000162,
+          "absolute_p90_ms": 25.89999999999968
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 6.999999999998896,
+          "absolute_median_ms": 418.50000000000165,
+          "absolute_p90_ms": 958.0000000000002
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.03333333333333333,
+          "cmlt": 0.03333333333333333,
+          "amlc": 0.8709677419354839,
+          "amlt": 0.9032258064516129
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 0.06666666666666667,
+        "grouping_accuracy": 0.06666666666666667,
+        "bar_duration_abs_error_percent": 49.869451697127964,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.5,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-final0-direct",
+      "case": "gtzan_classical_00000",
+      "input_sha256": "8add3a7d1add1e157ce5de91be72372773b1ad2779742532c4f0ad1c7316f2a4",
+      "beats": {
+        "reference_events": 47,
+        "current_events": 47,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 24,
+        "current_events": 24,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 13.00000000000001,
+          "p90_ms": 29.799999999999823,
+          "signed_median_ms": -3.9999999999995595
+        },
+        "downbeat": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "matched": 12,
+          "predicted": 24,
+          "reference": 12,
+          "median_ms": 16.500000000000625,
+          "p90_ms": 31.500000000000018,
+          "signed_median_ms": -9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -3.9999999999995595,
+          "absolute_median_ms": 13.00000000000001,
+          "absolute_p90_ms": 29.799999999999823
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1.5000000000000568,
+          "absolute_median_ms": 623.0,
+          "absolute_p90_ms": 1285.4999999999989
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9583333333333334,
+          "amlt": 0.9583333333333334
+        },
+        "bpm": 93.74999999999994,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000008216,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 0.0,
+        "grouping_accuracy": 0.0,
+        "bar_duration_abs_error_percent": 49.66574911521826,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.5,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 13.00000000000001,
+          "p90_ms": 29.799999999999823,
+          "signed_median_ms": -3.9999999999995595
+        },
+        "downbeat": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "matched": 12,
+          "predicted": 24,
+          "reference": 12,
+          "median_ms": 16.500000000000625,
+          "p90_ms": 31.500000000000018,
+          "signed_median_ms": -9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -3.9999999999995595,
+          "absolute_median_ms": 13.00000000000001,
+          "absolute_p90_ms": 29.799999999999823
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1.5000000000000568,
+          "absolute_median_ms": 623.0,
+          "absolute_p90_ms": 1285.4999999999989
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9583333333333334,
+          "amlt": 0.9583333333333334
+        },
+        "bpm": 93.74999999999994,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000008216,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 0.0,
+        "grouping_accuracy": 0.0,
+        "bar_duration_abs_error_percent": 49.66574911521826,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.5,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-final0-direct",
+      "case": "synthetic_4_2_plain",
+      "input_sha256": "3ed09ee3984ab66d76f6093c128c81c5c81b955bbb26417f5acfa0c056cfc8bb",
+      "beats": {
+        "reference_events": 144,
+        "current_events": 144,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 36,
+        "current_events": 36,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": 9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": 9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": 9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": 9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-small0-dbn",
+      "case": "gtzan_blues_00000",
+      "input_sha256": "728e445a61ebb2ab9cefe779a9af5c44cff39f20308a0a29bce3e3ea597aa592",
+      "beats": {
+        "reference_events": 63,
+        "current_events": 63,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 16,
+        "current_events": 16,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 21.49999999999963,
+          "p90_ms": 35.00000000000014,
+          "signed_median_ms": 21.49999999999963
+        },
+        "downbeat": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "matched": 0,
+          "predicted": 16,
+          "reference": 16,
+          "median_ms": null,
+          "p90_ms": null,
+          "signed_median_ms": null
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 21.49999999999963,
+          "absolute_median_ms": 21.49999999999963,
+          "absolute_p90_ms": 35.00000000000014
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -940.0000000000005,
+          "absolute_median_ms": 945.5,
+          "absolute_p90_ms": 953.0000000000016
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9375,
+          "amlt": 0.9375
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.26109660574415994,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 1.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 21.49999999999963,
+          "p90_ms": 35.00000000000014,
+          "signed_median_ms": 21.49999999999963
+        },
+        "downbeat": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "matched": 0,
+          "predicted": 16,
+          "reference": 16,
+          "median_ms": null,
+          "p90_ms": null,
+          "signed_median_ms": null
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 21.49999999999963,
+          "absolute_median_ms": 21.49999999999963,
+          "absolute_p90_ms": 35.00000000000014
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -940.0000000000005,
+          "absolute_median_ms": 945.5,
+          "absolute_p90_ms": 953.0000000000016
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9375,
+          "amlt": 0.9375
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.26109660574415994,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 1.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-small0-dbn",
+      "case": "gtzan_classical_00000",
+      "input_sha256": "8add3a7d1add1e157ce5de91be72372773b1ad2779742532c4f0ad1c7316f2a4",
+      "beats": {
+        "reference_events": 47,
+        "current_events": 47,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 12,
+        "current_events": 12,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 14.999999999998792,
+          "p90_ms": 32.999999999999694,
+          "signed_median_ms": 1.000000000000334
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 12,
+          "predicted": 12,
+          "reference": 12,
+          "median_ms": 12.500000000000178,
+          "p90_ms": 31.500000000000018,
+          "signed_median_ms": -3.4999999999989484
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 1.000000000000334,
+          "absolute_median_ms": 14.999999999998792,
+          "absolute_p90_ms": 32.999999999999694
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -3.4999999999989484,
+          "absolute_median_ms": 12.500000000000178,
+          "absolute_p90_ms": 31.500000000000018
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 93.75000000000004,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31249999999997113,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.6389776357828225,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 14.999999999998792,
+          "p90_ms": 32.999999999999694,
+          "signed_median_ms": 1.000000000000334
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 12,
+          "predicted": 12,
+          "reference": 12,
+          "median_ms": 12.500000000000178,
+          "p90_ms": 31.500000000000018,
+          "signed_median_ms": -3.4999999999989484
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 1.000000000000334,
+          "absolute_median_ms": 14.999999999998792,
+          "absolute_p90_ms": 32.999999999999694
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -3.4999999999989484,
+          "absolute_median_ms": 12.500000000000178,
+          "absolute_p90_ms": 31.500000000000018
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 93.75000000000004,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31249999999997113,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.6389776357828225,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-small0-dbn",
+      "case": "synthetic_4_2_plain",
+      "input_sha256": "3ed09ee3984ab66d76f6093c128c81c5c81b955bbb26417f5acfa0c056cfc8bb",
+      "beats": {
+        "reference_events": 144,
+        "current_events": 144,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 36,
+        "current_events": 36,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": 9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": 9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": 9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": 9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-small0-direct",
+      "case": "gtzan_blues_00000",
+      "input_sha256": "728e445a61ebb2ab9cefe779a9af5c44cff39f20308a0a29bce3e3ea597aa592",
+      "beats": {
+        "reference_events": 63,
+        "current_events": 63,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 23,
+        "current_events": 23,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 20.500000000000185,
+          "p90_ms": 31.900000000000084,
+          "signed_median_ms": 20.500000000000185
+        },
+        "downbeat": {
+          "precision": 0.30434782608695654,
+          "recall": 0.4375,
+          "f1": 0.358974358974359,
+          "matched": 7,
+          "predicted": 23,
+          "reference": 16,
+          "median_ms": 26.999999999999915,
+          "p90_ms": 34.00000000000034,
+          "signed_median_ms": 26.999999999999915
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 20.500000000000185,
+          "absolute_median_ms": 20.500000000000185,
+          "absolute_p90_ms": 31.900000000000084
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -920.0000000000017,
+          "absolute_median_ms": 929.9999999999998,
+          "absolute_p90_ms": 952.6000000000001
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.2608695652173913,
+          "amlt": 0.45161290322580644
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 0.5333333333333333,
+        "grouping_accuracy": 0.5333333333333333,
+        "bar_duration_abs_error_percent": 0.7345225603357486,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.6956521739130435,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 20.500000000000185,
+          "p90_ms": 31.900000000000084,
+          "signed_median_ms": 20.500000000000185
+        },
+        "downbeat": {
+          "precision": 0.30434782608695654,
+          "recall": 0.4375,
+          "f1": 0.358974358974359,
+          "matched": 7,
+          "predicted": 23,
+          "reference": 16,
+          "median_ms": 26.999999999999915,
+          "p90_ms": 34.00000000000034,
+          "signed_median_ms": 26.999999999999915
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 20.500000000000185,
+          "absolute_median_ms": 20.500000000000185,
+          "absolute_p90_ms": 31.900000000000084
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -920.0000000000017,
+          "absolute_median_ms": 929.9999999999998,
+          "absolute_p90_ms": 952.6000000000001
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.2608695652173913,
+          "amlt": 0.45161290322580644
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 0.5333333333333333,
+        "grouping_accuracy": 0.5333333333333333,
+        "bar_duration_abs_error_percent": 0.7345225603357486,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.6956521739130435,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-small0-direct",
+      "case": "gtzan_classical_00000",
+      "input_sha256": "8add3a7d1add1e157ce5de91be72372773b1ad2779742532c4f0ad1c7316f2a4",
+      "beats": {
+        "reference_events": 47,
+        "current_events": 47,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 23,
+        "current_events": 23,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 13.00000000000001,
+          "p90_ms": 32.39999999999981,
+          "signed_median_ms": 1.000000000000334
+        },
+        "downbeat": {
+          "precision": 0.5217391304347826,
+          "recall": 1.0,
+          "f1": 0.6857142857142857,
+          "matched": 12,
+          "predicted": 23,
+          "reference": 12,
+          "median_ms": 12.500000000000178,
+          "p90_ms": 31.500000000000018,
+          "signed_median_ms": -3.4999999999989484
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 1.000000000000334,
+          "absolute_median_ms": 13.00000000000001,
+          "absolute_p90_ms": 32.39999999999981
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -1.9999999999988916,
+          "absolute_median_ms": 52.999999999999936,
+          "absolute_p90_ms": 1282.800000000001
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.043478260869565216,
+          "cmlt": 0.043478260869565216,
+          "amlc": 0.6086956521739131,
+          "amlt": 0.9130434782608695
+        },
+        "bpm": 93.74999999999991,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000010436,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 0.09090909090909091,
+        "grouping_accuracy": 0.09090909090909091,
+        "bar_duration_abs_error_percent": 49.41634241245134,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.4782608695652174,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 13.00000000000001,
+          "p90_ms": 32.39999999999981,
+          "signed_median_ms": 1.000000000000334
+        },
+        "downbeat": {
+          "precision": 0.5217391304347826,
+          "recall": 1.0,
+          "f1": 0.6857142857142857,
+          "matched": 12,
+          "predicted": 23,
+          "reference": 12,
+          "median_ms": 12.500000000000178,
+          "p90_ms": 31.500000000000018,
+          "signed_median_ms": -3.4999999999989484
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 1.000000000000334,
+          "absolute_median_ms": 13.00000000000001,
+          "absolute_p90_ms": 32.39999999999981
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -1.9999999999988916,
+          "absolute_median_ms": 52.999999999999936,
+          "absolute_p90_ms": 1282.800000000001
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.043478260869565216,
+          "cmlt": 0.043478260869565216,
+          "amlc": 0.6086956521739131,
+          "amlt": 0.9130434782608695
+        },
+        "bpm": 93.74999999999991,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000010436,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 0.09090909090909091,
+        "grouping_accuracy": 0.09090909090909091,
+        "bar_duration_abs_error_percent": 49.41634241245134,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.4782608695652174,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "beatthis-small0-direct",
+      "case": "synthetic_4_2_plain",
+      "input_sha256": "3ed09ee3984ab66d76f6093c128c81c5c81b955bbb26417f5acfa0c056cfc8bb",
+      "beats": {
+        "reference_events": 144,
+        "current_events": 144,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 36,
+        "current_events": 36,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": 9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": 9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": 9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": 9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "madmom-modern-default",
+      "case": "gtzan_blues_00000",
+      "input_sha256": "728e445a61ebb2ab9cefe779a9af5c44cff39f20308a0a29bce3e3ea597aa592",
+      "beats": {
+        "reference_events": 63,
+        "current_events": 63,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 16,
+        "current_events": 16,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 6.000000000000227,
+          "p90_ms": 19.89999999999945,
+          "signed_median_ms": 5.000000000000782
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 0.9375,
+          "f1": 0.967741935483871,
+          "matched": 15,
+          "predicted": 15,
+          "reference": 16,
+          "median_ms": 3.0000000000001137,
+          "p90_ms": 16.799999999999923,
+          "signed_median_ms": 1.000000000000334
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 5.000000000000782,
+          "absolute_median_ms": 6.000000000000227,
+          "absolute_p90_ms": 19.89999999999945
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1.000000000000334,
+          "absolute_median_ms": 3.0000000000001137,
+          "absolute_p90_ms": 16.799999999999923
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.9375,
+          "cmlt": 0.9375,
+          "amlc": 0.9375,
+          "amlt": 0.9375
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.5702436495593988,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 6.000000000000227,
+          "p90_ms": 19.89999999999945,
+          "signed_median_ms": 5.000000000000782
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 0.9375,
+          "f1": 0.967741935483871,
+          "matched": 15,
+          "predicted": 15,
+          "reference": 16,
+          "median_ms": 3.0000000000001137,
+          "p90_ms": 16.799999999999923,
+          "signed_median_ms": 1.000000000000334
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 5.000000000000782,
+          "absolute_median_ms": 6.000000000000227,
+          "absolute_p90_ms": 19.89999999999945
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1.000000000000334,
+          "absolute_median_ms": 3.0000000000001137,
+          "absolute_p90_ms": 16.799999999999923
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.9375,
+          "cmlt": 0.9375,
+          "amlc": 0.9375,
+          "amlt": 0.9375
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.5702436495593988,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "madmom-modern-default",
+      "case": "gtzan_classical_00000",
+      "input_sha256": "8add3a7d1add1e157ce5de91be72372773b1ad2779742532c4f0ad1c7316f2a4",
+      "beats": {
+        "reference_events": 47,
+        "current_events": 47,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 12,
+        "current_events": 12,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 16.00000000000179,
+          "p90_ms": 31.799999999999603,
+          "signed_median_ms": -11.999999999996902
+        },
+        "downbeat": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "matched": 0,
+          "predicted": 12,
+          "reference": 12,
+          "median_ms": null,
+          "p90_ms": null,
+          "signed_median_ms": null
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -11.999999999996902,
+          "absolute_median_ms": 16.00000000000179,
+          "absolute_p90_ms": 31.799999999999603
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1257.5,
+          "absolute_median_ms": 1257.5,
+          "absolute_p90_ms": 1294.0
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9166666666666666,
+          "amlt": 0.9166666666666666
+        },
+        "bpm": 93.74999999999994,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000008216,
+        "grouping_coverage": 0.9090909090909091,
+        "correct_grouping_coverage": 0.9090909090909091,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.7273462044063206,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 1.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 16.00000000000179,
+          "p90_ms": 31.799999999999603,
+          "signed_median_ms": -11.999999999996902
+        },
+        "downbeat": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "matched": 0,
+          "predicted": 12,
+          "reference": 12,
+          "median_ms": null,
+          "p90_ms": null,
+          "signed_median_ms": null
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -11.999999999996902,
+          "absolute_median_ms": 16.00000000000179,
+          "absolute_p90_ms": 31.799999999999603
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1257.5,
+          "absolute_median_ms": 1257.5,
+          "absolute_p90_ms": 1294.0
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9166666666666666,
+          "amlt": 0.9166666666666666
+        },
+        "bpm": 93.74999999999994,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000008216,
+        "grouping_coverage": 0.9090909090909091,
+        "correct_grouping_coverage": 0.9090909090909091,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.7273462044063206,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 1.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "madmom-modern-default",
+      "case": "synthetic_4_2_plain",
+      "input_sha256": "3ed09ee3984ab66d76f6093c128c81c5c81b955bbb26417f5acfa0c056cfc8bb",
+      "beats": {
+        "reference_events": 144,
+        "current_events": 144,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 36,
+        "current_events": 36,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": -9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": -9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": -9.999999999999787
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 36,
+          "predicted": 36,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.00000000000334,
+          "signed_median_ms": -9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": -9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.00000000000334
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "madmom-modern-extended",
+      "case": "gtzan_blues_00000",
+      "input_sha256": "728e445a61ebb2ab9cefe779a9af5c44cff39f20308a0a29bce3e3ea597aa592",
+      "beats": {
+        "reference_events": 63,
+        "current_events": 63,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 16,
+        "current_events": 16,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 6.000000000000227,
+          "p90_ms": 19.89999999999945,
+          "signed_median_ms": 5.000000000000782
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 0.9375,
+          "f1": 0.967741935483871,
+          "matched": 15,
+          "predicted": 15,
+          "reference": 16,
+          "median_ms": 3.0000000000001137,
+          "p90_ms": 16.799999999999923,
+          "signed_median_ms": 1.000000000000334
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 5.000000000000782,
+          "absolute_median_ms": 6.000000000000227,
+          "absolute_p90_ms": 19.89999999999945
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1.000000000000334,
+          "absolute_median_ms": 3.0000000000001137,
+          "absolute_p90_ms": 16.799999999999923
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.9375,
+          "cmlt": 0.9375,
+          "amlc": 0.9375,
+          "amlt": 0.9375
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.5702436495593988,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 0.9841269841269841,
+          "f1": 0.992,
+          "matched": 62,
+          "predicted": 62,
+          "reference": 63,
+          "median_ms": 6.000000000000227,
+          "p90_ms": 19.89999999999945,
+          "signed_median_ms": 5.000000000000782
+        },
+        "downbeat": {
+          "precision": 1.0,
+          "recall": 0.9375,
+          "f1": 0.967741935483871,
+          "matched": 15,
+          "predicted": 15,
+          "reference": 16,
+          "median_ms": 3.0000000000001137,
+          "p90_ms": 16.799999999999923,
+          "signed_median_ms": 1.000000000000334
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": 5.000000000000782,
+          "absolute_median_ms": 6.000000000000227,
+          "absolute_p90_ms": 19.89999999999945
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1.000000000000334,
+          "absolute_median_ms": 3.0000000000001137,
+          "absolute_p90_ms": 16.799999999999923
+        },
+        "beat_continuity": {
+          "cmlc": 0.9841269841269841,
+          "cmlt": 0.9841269841269841,
+          "amlc": 0.9841269841269841,
+          "amlt": 0.9841269841269841
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.9375,
+          "cmlt": 0.9375,
+          "amlc": 0.9375,
+          "amlt": 0.9375
+        },
+        "bpm": 124.99999999999989,
+        "reference_bpm": 125.1303441084468,
+        "tempo_error_percent": -0.10416666666716035,
+        "grouping_coverage": 1.0,
+        "correct_grouping_coverage": 1.0,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.5702436495593988,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "madmom-modern-extended",
+      "case": "gtzan_classical_00000",
+      "input_sha256": "8add3a7d1add1e157ce5de91be72372773b1ad2779742532c4f0ad1c7316f2a4",
+      "beats": {
+        "reference_events": 47,
+        "current_events": 47,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 12,
+        "current_events": 12,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 16.00000000000179,
+          "p90_ms": 31.799999999999603,
+          "signed_median_ms": -11.999999999996902
+        },
+        "downbeat": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "matched": 0,
+          "predicted": 12,
+          "reference": 12,
+          "median_ms": null,
+          "p90_ms": null,
+          "signed_median_ms": null
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -11.999999999996902,
+          "absolute_median_ms": 16.00000000000179,
+          "absolute_p90_ms": 31.799999999999603
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1257.5,
+          "absolute_median_ms": 1257.5,
+          "absolute_p90_ms": 1294.0
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9166666666666666,
+          "amlt": 0.9166666666666666
+        },
+        "bpm": 93.74999999999994,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000008216,
+        "grouping_coverage": 0.9090909090909091,
+        "correct_grouping_coverage": 0.9090909090909091,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.7273462044063206,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 1.0,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 47,
+          "predicted": 47,
+          "reference": 47,
+          "median_ms": 16.00000000000179,
+          "p90_ms": 31.799999999999603,
+          "signed_median_ms": -11.999999999996902
+        },
+        "downbeat": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "matched": 0,
+          "predicted": 12,
+          "reference": 12,
+          "median_ms": null,
+          "p90_ms": null,
+          "signed_median_ms": null
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -11.999999999996902,
+          "absolute_median_ms": 16.00000000000179,
+          "absolute_p90_ms": 31.799999999999603
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 1257.5,
+          "absolute_median_ms": 1257.5,
+          "absolute_p90_ms": 1294.0
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9166666666666666,
+          "amlt": 0.9166666666666666
+        },
+        "bpm": 93.74999999999994,
+        "reference_bpm": 94.04388714733544,
+        "tempo_error_percent": -0.31250000000008216,
+        "grouping_coverage": 0.9090909090909091,
+        "correct_grouping_coverage": 0.9090909090909091,
+        "grouping_accuracy": 1.0,
+        "bar_duration_abs_error_percent": 0.7273462044063206,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": null,
+        "correct_subdivision_coverage": null,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 1.0,
+        "unsupported_downbeat_events": null
+      }
+    },
+    {
+      "method": "madmom-modern-extended",
+      "case": "synthetic_4_2_plain",
+      "input_sha256": "3ed09ee3984ab66d76f6093c128c81c5c81b955bbb26417f5acfa0c056cfc8bb",
+      "beats": {
+        "reference_events": 144,
+        "current_events": 144,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "downbeats": {
+        "reference_events": 24,
+        "current_events": 24,
+        "identical": true,
+        "maximum_absolute_delta_seconds": 0.0
+      },
+      "reference_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": -9.999999999999787
+        },
+        "downbeat": {
+          "precision": 0.5,
+          "recall": 0.3333333333333333,
+          "f1": 0.4,
+          "matched": 12,
+          "predicted": 24,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000001563,
+          "signed_median_ms": -9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 489.9999999999984,
+          "absolute_median_ms": 500.0,
+          "absolute_p90_ms": 990.000000000002
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.0,
+          "amlt": 0.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 0.9714285714285714,
+        "correct_grouping_coverage": 0.0,
+        "grouping_accuracy": 0.0,
+        "bar_duration_abs_error_percent": 50.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.5,
+        "unsupported_downbeat_events": null
+      },
+      "current_metrics": {
+        "beat": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "matched": 143,
+          "predicted": 143,
+          "reference": 143,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000004405,
+          "signed_median_ms": -9.999999999999787
+        },
+        "downbeat": {
+          "precision": 0.5,
+          "recall": 0.3333333333333333,
+          "f1": 0.4,
+          "matched": 12,
+          "predicted": 24,
+          "reference": 36,
+          "median_ms": 9.999999999999787,
+          "p90_ms": 10.000000000001563,
+          "signed_median_ms": -9.999999999999787
+        },
+        "all_predicted_beat_nearest_error": {
+          "signed_median_ms": -9.999999999999787,
+          "absolute_median_ms": 9.999999999999787,
+          "absolute_p90_ms": 10.000000000004405
+        },
+        "all_predicted_downbeat_nearest_error": {
+          "signed_median_ms": 489.9999999999984,
+          "absolute_median_ms": 500.0,
+          "absolute_p90_ms": 990.000000000002
+        },
+        "beat_continuity": {
+          "cmlc": 1.0,
+          "cmlt": 1.0,
+          "amlc": 1.0,
+          "amlt": 1.0
+        },
+        "downbeat_continuity": {
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.0,
+          "amlt": 0.0
+        },
+        "bpm": 120.0,
+        "reference_bpm": 120.0,
+        "tempo_error_percent": 0.0,
+        "grouping_coverage": 0.9714285714285714,
+        "correct_grouping_coverage": 0.0,
+        "grouping_accuracy": 0.0,
+        "bar_duration_abs_error_percent": 50.0,
+        "subdivision_accuracy": null,
+        "subdivision_coverage": 0.0,
+        "correct_subdivision_coverage": 0.0,
+        "downbeat_abstention": false,
+        "downbeat_false_fraction": 0.5,
+        "unsupported_downbeat_events": null
+      }
+    }
+  ],
+  "scope": "Three frozen inputs per configuration on Python 3.14; event comparison with the measured interpreter, not full-corpus or platform parity."
+}

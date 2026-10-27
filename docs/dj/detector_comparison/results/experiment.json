@@ -1,0 +1,1901 @@
+{
+  "created_utc": "2026-10-25T21:40:25.968322+00:00",
+  "manifest_sha256": "31f6c0e6230aa547d99f40ee7b9958531c8dc5a5c12a258e3ff8f4942f89c03d",
+  "cpu_threads": 1,
+  "repeats": 2,
+  "timeout_per_case_seconds": 180,
+  "methods": [
+    "soundsible-main",
+    "soundsible-p12",
+    "beatthis-small0-direct",
+    "beatthis-final0-direct",
+    "beatthis-small0-dbn",
+    "beatthis-final0-dbn",
+    "madmom-original-default",
+    "madmom-original-extended",
+    "madmom-modern-default",
+    "madmom-modern-extended",
+    "beatnet-1-dbn",
+    "beatnet-2-dbn",
+    "beatnet-1-pf",
+    "beatnet-2-pf",
+    "essentia-multifeature",
+    "essentia-degara",
+    "librosa-global",
+    "librosa-local",
+    "joint"
+  ],
+  "additional_pending": [
+    "allin1-fold0",
+    "allin1-all",
+    "transformer-fold0",
+    "beatnetplus-main"
+  ],
+  "model_weights": [
+    {
+      "path": "sources/zhaojw1998_Beat-Transformer/checkpoint/fold_6_trf_param.pt",
+      "sha256": "ac203ddd8d265bce30114a912f4c5569ce436bef27b68d9f973be1c809c4379a",
+      "bytes": 37235863
+    },
+    {
+      "path": "sources/zhaojw1998_Beat-Transformer/checkpoint/fold_0_trf_param.pt",
+      "sha256": "1940a5034bb2bb7860c1a3219d359906913be88c915f6135a5ce8382c239d738",
+      "bytes": 37235863
+    },
+    {
+      "path": "sources/zhaojw1998_Beat-Transformer/checkpoint/fold_2_trf_param.pt",
+      "sha256": "0246091b6f6840b452541b0b4172e507018db8893defe38be34534b4e56a98fd",
+      "bytes": 37235863
+    },
+    {
+      "path": "sources/zhaojw1998_Beat-Transformer/checkpoint/fold_5_trf_param.pt",
+      "sha256": "4eacf553e67da7bae9923b003be84a69752694441add497399dbebd91c454226",
+      "bytes": 37235863
+    },
+    {
+      "path": "sources/zhaojw1998_Beat-Transformer/checkpoint/fold_1_trf_param.pt",
+      "sha256": "823227d4844a00d4c40898d9fce7fb3b9490aacf7e204a14c0ec17f0ffc43f17",
+      "bytes": 37235863
+    },
+    {
+      "path": "sources/zhaojw1998_Beat-Transformer/checkpoint/fold_3_trf_param.pt",
+      "sha256": "01631722cf2c2a84a2e3ab3980c6bcc0e099803686279ac88065e7efe6ec30c4",
+      "bytes": 37235863
+    },
+    {
+      "path": "sources/zhaojw1998_Beat-Transformer/checkpoint/fold_4_trf_param.pt",
+      "sha256": "b76033014dd07d12307743b92337b7dffadf1f20a6ccd5a1edb03276e99a4512",
+      "bytes": 37235863
+    },
+    {
+      "path": "sources/zhaojw1998_Beat-Transformer/checkpoint/fold_7_trf_param.pt",
+      "sha256": "ae15d89f0023365ba06c25235dc43490b99db954325f31fa2f8a256104d02c24",
+      "bytes": 37235863
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/build/lib/BeatNet/models/model-2.pt",
+      "sha256": "caeb8ac03dbee656fef0fd8c06c599de3e697d97ede48cd773f0b5642af04369",
+      "bytes": 1614574
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/build/lib/BeatNet/models/model_1_weights.pt",
+      "sha256": "619091bc317ca3e83b45591d46f6de3d5a41588bcb39fe9fe7be30cffa6aca84",
+      "bytes": 1612179
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/build/lib/BeatNet/models/model_3_weights.pt",
+      "sha256": "0c52a074ea38e8cb4a760ecfa3747c9cf91a1e3cd19f238eed80b0de763989ca",
+      "bytes": 1612179
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/build/lib/BeatNet/models/model-1.pt",
+      "sha256": "80e320ba1efaeae36a7f8b684cada1b3a7d8c645add26d3ed1bb870f92ba11ed",
+      "bytes": 1614574
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/build/lib/BeatNet/models/model-3.pt",
+      "sha256": "be8455d28c604bd5050d1344250ab1f5bd45e2afd264431f2e37893555794959",
+      "bytes": 1614574
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/build/lib/BeatNet/models/model_2_weights.pt",
+      "sha256": "5878a18c079fa0b0139879b14ed2b5b7595faef8c3d16210aed141fd00fa2d58",
+      "bytes": 1612179
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/src/BeatNet/models/model-2.pt",
+      "sha256": "caeb8ac03dbee656fef0fd8c06c599de3e697d97ede48cd773f0b5642af04369",
+      "bytes": 1614574
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/src/BeatNet/models/model_1_weights.pt",
+      "sha256": "619091bc317ca3e83b45591d46f6de3d5a41588bcb39fe9fe7be30cffa6aca84",
+      "bytes": 1612179
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/src/BeatNet/models/model_3_weights.pt",
+      "sha256": "0c52a074ea38e8cb4a760ecfa3747c9cf91a1e3cd19f238eed80b0de763989ca",
+      "bytes": 1612179
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/src/BeatNet/models/model-1.pt",
+      "sha256": "80e320ba1efaeae36a7f8b684cada1b3a7d8c645add26d3ed1bb870f92ba11ed",
+      "bytes": 1614574
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/src/BeatNet/models/model-3.pt",
+      "sha256": "be8455d28c604bd5050d1344250ab1f5bd45e2afd264431f2e37893555794959",
+      "bytes": 1614574
+    },
+    {
+      "path": "sources/mjhydri_BeatNet/src/BeatNet/models/model_2_weights.pt",
+      "sha256": "5878a18c079fa0b0139879b14ed2b5b7595faef8c3d16210aed141fd00fa2d58",
+      "bytes": 1612179
+    },
+    {
+      "path": "sources/mjhydri_BeatNet-Plus/src/BeatNetPlus/models/generic_main_weights.pt",
+      "sha256": "5bbae630b4112f3c1193654e3dbc946b850caa06a2a82e10e8de9e48bb673519",
+      "bytes": 3072890
+    },
+    {
+      "path": "sources/mjhydri_BeatNet-Plus/src/BeatNetPlus/models/af_non_percussive_weights.pt",
+      "sha256": "15fe9c1ec8f2fca75dd3cecac72a3fbf57c9004e8726a786876ad5e269f4895f",
+      "bytes": 3073019
+    },
+    {
+      "path": "sources/mjhydri_BeatNet-Plus/src/BeatNetPlus/models/generic_weights.pt",
+      "sha256": "ed52f90e27ff9b5ef3c63f59c6d4b37366f60a21a48ea1d46d7c3e18d6f1977e",
+      "bytes": 3072825
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/notes/2018/notes_cnn_1.pkl",
+      "sha256": "c062775ca6ef68f5152e6cb96cac237c1e22019f42ba6f7b7c41877bbdceb2e1",
+      "bytes": 1964008
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/notes/2018/notes_cnn_2.pkl",
+      "sha256": "1bbb3e5f3d6ca0d27c3b53fc70d43634d93f918060e5309f0fa3edd75d5f1339",
+      "bytes": 1963323
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/notes/2019/notes_cnn.pkl",
+      "sha256": "48ac7581cf5bb7d205d47fdb5b819a163e23250c22de3de5287a78dce9581f5d",
+      "bytes": 1976634
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/notes/2013/notes_brnn.pkl",
+      "sha256": "963cc5b21877d03a0a77636080fa62d6b66d7521ae0c90a6ad9f2f1923ac36ff",
+      "bytes": 838832
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/chords/2016/chords_cnncrf.pkl",
+      "sha256": "4b8a63b4bb5bea076cf1babc76d5cb0a3618e6125d9a3a998f441d61308676af",
+      "bytes": 15981
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/chords/2016/chords_dccrf.pkl",
+      "sha256": "64e72027c989d6db8ecaa2f097592d3124b94f0362bde225d0c686a8a68d8d03",
+      "bytes": 4381
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/chords/2016/chords_cnnfeat.pkl",
+      "sha256": "59ac731a514880d7ec22ed9ee33935fc1683d2a03d8a7b4b81d26a3da944ce7d",
+      "bytes": 3880804
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_7.pkl",
+      "sha256": "bbc47b60c3c7e3f2026e234847aa91b41d3faf8cc61f81b8f523c4567a7b6c46",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_3.pkl",
+      "sha256": "fc54ea5248fca54385312e17974cac07ca4a1a97432dc1dd1c02c364b4cd717a",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_2.pkl",
+      "sha256": "af222e0cb79f49b680a87952e13dd755b71f5b81128b3318d4e99bdd458dba26",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_4.pkl",
+      "sha256": "7a355cf7167607f3543e73b8b2ba06ffa481d1cd7443376d4e3378ef6d28f1ae",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_8.pkl",
+      "sha256": "78459e9ef8af334ffa88eb8a36ababf04e51d7abdad2daaabd56dd99ccad2f3e",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_5.pkl",
+      "sha256": "849d563129e1b77df72c9b5e0d13a02f5a3eeffe3189b91a3edb73f864dc19c9",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_6.pkl",
+      "sha256": "cae69664e3058ad3fed74dcd53414284096913cae8c9b2726375a555701202c8",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_1.pkl",
+      "sha256": "baab78a188d220d6972fdb91040f375ae711d96489bdb471ff7268124cc47725",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_4.pkl",
+      "sha256": "4a4469fc00dc4c90b028866a9d268fd19429c6a3f298c70838571e90db248f18",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_2.pkl",
+      "sha256": "89ab1defb1b34712bdd0c9f84a756178e809612720733ed7b3a5cc47420689d7",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_3.pkl",
+      "sha256": "4a3f63f1fe361a354cb5f646349522b87482f29baadacf2d20441d5c52c5282a",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_8.pkl",
+      "sha256": "fc25b6890baaeecd2304e18078ee1ce6a0014a69fdba95590a4ebee6cd847f64",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_5.pkl",
+      "sha256": "017fd2e6808f43b9cddb61ac115c8d899f6fcdd3801338c6f76b1b30c3c3dbfd",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_7.pkl",
+      "sha256": "35ba5622e6c8f6c24b7efee1dbb31a78468b3106a7e4a8e3bfa2761f326b51dc",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_1.pkl",
+      "sha256": "bd6545fe694264491ee95e03508d318d164b7f2abac1f48edd0121389506bf5f",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_6.pkl",
+      "sha256": "055e8c8715ce4e71e9855e348ff1816fb7630a4d10117d8e4c11684770d64240",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/chroma/2016/chroma_dnn.pkl",
+      "sha256": "d91aff59113ec6b85de9c9b1aafb065ed0c756072284cebc61564237e901ca94",
+      "bytes": 2153203
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/patterns/2013/ballroom_pattern_4_4.pkl",
+      "sha256": "d16b5455f610bf5e68da48aef04a3882305e292a825a51c6f5d5a162c1f2ee28",
+      "bytes": 17821
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/patterns/2013/ballroom_pattern_3_4.pkl",
+      "sha256": "e4955a6b878be8226e5db860a2d1d3cd62db15c58f54dabff14f7e4564b3d9cb",
+      "bytes": 13277
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/key/2018/key_cnn.pkl",
+      "sha256": "c58ba553be1048877662a663a2670c0051b3c2c66d109b6042ba722ed0bfc7a6",
+      "bytes": 2670279
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_4.pkl",
+      "sha256": "c3ea8025bbfc3f7660aea1c92b901c7f35b71c64d5c57a8485fd9011409f6a39",
+      "bytes": 480301
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_4.pkl",
+      "sha256": "a4f9a09b1588ca74b0157251364650d3fe81e383019b5986941415e08b37fcde",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_1.pkl",
+      "sha256": "f8797e7d8ce9d064714f3b9b4ccdc03413e5c91b25d6a275024efea72d8aef01",
+      "bytes": 216779
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_5.pkl",
+      "sha256": "82f71f78943399af650fccee59a9118ba64784e22fac4446ae820c5ec96d6933",
+      "bytes": 216835
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_0.pkl",
+      "sha256": "50e7bcb8b6d5be58c35463caca79b624552469b23f94f353a97e319b38a3ee33",
+      "bytes": 481061
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_8.pkl",
+      "sha256": "a0d20e1922872a3e5b74df451d8b5701de6ca88d9f5739f313fb2991d7a84c77",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_5.pkl",
+      "sha256": "452708ef3c3a38523c259eaacc94dca84fb444e7a2553ee4a93fce20ef9397bb",
+      "bytes": 480707
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_3.pkl",
+      "sha256": "adf6a3e3bf345a9172e8252a511dae28622afe26ee653354c0d4c9e37de8f89a",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_2.pkl",
+      "sha256": "d959a9478dd08ba3543c45df1ff89a80e8319d4c353f4e591ea93d52d317ff09",
+      "bytes": 482099
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_2.pkl",
+      "sha256": "a29d2acbffe75485e6476c63df461f90640bb9de6fd534b61a6bd8f938db46ee",
+      "bytes": 216540
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_3.pkl",
+      "sha256": "81089b0d9cfed8b21ffdb6584cac5f055ed97372612d6a0d4eb503494842763f",
+      "bytes": 480690
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_7.pkl",
+      "sha256": "371a319a66d32bee6ab8d4a15f6ae9e4ee22ff97b4276736bab93d9a994c06c1",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_0.pkl",
+      "sha256": "8d677435269025d71f1beb85c11e9c130eacb1fdbeca45d054969299fd18eea9",
+      "bytes": 216414
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_1.pkl",
+      "sha256": "b02c4b8aa963069449422fd5cc55bd4077105fe268b0d83036b7d68b5520f38d",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_6.pkl",
+      "sha256": "89b6854c5d6b2381687731aedc9bce6c84894021d1c2eeb60d161cefe997d68c",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_4.pkl",
+      "sha256": "28ec3216a4368071eae0c2311bab138fca0b0dbca6791441b7ba290f34c29217",
+      "bytes": 216494
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_1.pkl",
+      "sha256": "78f82313bec5f129bd9eed03a13718d6e81b5b6587c4bbdd7e5b4c4616e18436",
+      "bytes": 481288
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_5.pkl",
+      "sha256": "e40aea9b8221babaf14a9211a48dccc3ebcecdf8bcd6d62d60f0949445de9bb6",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_3.pkl",
+      "sha256": "649ccc0a015020b74c5b437789926082bbbea7f9fe1950125b5e5d094b3d6d8f",
+      "bytes": 216693
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_2.pkl",
+      "sha256": "6fa9d138ed84bed14ab5ef6f81f3a7e1a125ff8c571a255f6ce91ccf93390eee",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_2.pkl",
+      "sha256": "f91032d9dcf53c9e58bb2c0bd2e2426ecc1b902ecf12f2d600708ad8b4889421",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_3.pkl",
+      "sha256": "4b1861ac93fab07f5c75857fc0dd6475a4ad91be69c4ebb410bf016e606f29b3",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_4.pkl",
+      "sha256": "1ffec751eccff3d6ffa646ae200a163efde2539aea14873f082f6b939407282c",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_5.pkl",
+      "sha256": "a47e99b66fead879e19f2f8db72e832cdfa1357f12d6fc066b02632c7053a229",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_1.pkl",
+      "sha256": "25c4a9bb3497153208e1cf6512474676d53f6ab6e7b7b61b00b9cdc8c775c5c0",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_8.pkl",
+      "sha256": "1245d22ed4622ca26cf4372631a5850bf52321bb3e069f5c8ac8efdc6e9a0dd9",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_6.pkl",
+      "sha256": "8faf9788338ef7d12148ef82b5547166d1de0aa8187c97ee454a0916866a4f8e",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_7.pkl",
+      "sha256": "a48253adc5c264c882e44f75ae896f67b2a64ad2e131f5422e066d6094210654",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_5.pkl",
+      "sha256": "cbe6967220a327e8691a45ab40adf6a98089c77b4969a6e9c961d308e3e29eb5",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_8.pkl",
+      "sha256": "0b24555e609460b5a134645fb439e7088fb518007a165e6b9d469b7cf7d65de4",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_cnn.pkl",
+      "sha256": "ac7aad3f99c45ecea846406c867dec83fbdab114399b00bcb12eaaeffd5a990e",
+      "bytes": 1163976
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_3.pkl",
+      "sha256": "bfb88d92ca0f7dcb11749edba9ff1c954536e0d84ba0660f6e201af9cc43050d",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_4.pkl",
+      "sha256": "77af66643507873a0a1a6835c8dfccdb35ea0baace5e44ce0653211827a9db97",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_6.pkl",
+      "sha256": "3395a9be0e4c2b1fb37b58616a3ed499c6fd994bdd29e644144e8a06664180d5",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_2.pkl",
+      "sha256": "2169734fc38a2366c49b98e2950f0743bcf7c659097db7798fbb0bc570bdfb22",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_7.pkl",
+      "sha256": "d36d4f14b91aad277e6d5f8dad542297ada35f075a95cbb62f8fde34766c8e26",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_8.pkl",
+      "sha256": "fafc8535a5654b2225739eff6803897f36f5945a411cbeaf36a2228ed00deaea",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_3.pkl",
+      "sha256": "0b2d2f805f5f9eca7a08174bfb3fdef7ed4cd04a75845dea925061262c634819",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_6.pkl",
+      "sha256": "686cde0a80a83b3efb0986f8a4c8c170353727ebd03920fac525959e4d7f3f2f",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_1.pkl",
+      "sha256": "cd3552b4476f6cafb73c3937e07d954056b4ebd972114b67641ae5726c3233fd",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_1.pkl",
+      "sha256": "5374f4a5fd12c9419de6195d77f20de7553b8b858d1408942b35bf04dc674901",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_7.pkl",
+      "sha256": "14788a5834c73b09bebed233cb870cfd0af41915e6ee2639fbca1e43bdeae410",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_4.pkl",
+      "sha256": "5394e8a6ef0d6b316a7dea0150ebf8d32b0a91267ba2cbb3108b9b8aabf11d17",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_5.pkl",
+      "sha256": "2c5b97872b568dab9e9aa67899c379026df5793f129595c070d4e58f0caa512d",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_2.pkl",
+      "sha256": "041d72ce5fb5d466aeb65b1555f3cbb83db6ed659f30299c15cb5024f22cee21",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/notes/2018/notes_cnn_1.pkl",
+      "sha256": "c062775ca6ef68f5152e6cb96cac237c1e22019f42ba6f7b7c41877bbdceb2e1",
+      "bytes": 1964008
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/notes/2018/notes_cnn_2.pkl",
+      "sha256": "1bbb3e5f3d6ca0d27c3b53fc70d43634d93f918060e5309f0fa3edd75d5f1339",
+      "bytes": 1963323
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/notes/2019/notes_cnn.pkl",
+      "sha256": "48ac7581cf5bb7d205d47fdb5b819a163e23250c22de3de5287a78dce9581f5d",
+      "bytes": 1976634
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/notes/2013/notes_brnn.pkl",
+      "sha256": "963cc5b21877d03a0a77636080fa62d6b66d7521ae0c90a6ad9f2f1923ac36ff",
+      "bytes": 838832
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/chords/2016/chords_cnncrf.pkl",
+      "sha256": "4b8a63b4bb5bea076cf1babc76d5cb0a3618e6125d9a3a998f441d61308676af",
+      "bytes": 15981
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/chords/2016/chords_dccrf.pkl",
+      "sha256": "64e72027c989d6db8ecaa2f097592d3124b94f0362bde225d0c686a8a68d8d03",
+      "bytes": 4381
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/chords/2016/chords_cnnfeat.pkl",
+      "sha256": "59ac731a514880d7ec22ed9ee33935fc1683d2a03d8a7b4b81d26a3da944ce7d",
+      "bytes": 3880804
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2016/beats_lstm_7.pkl",
+      "sha256": "bbc47b60c3c7e3f2026e234847aa91b41d3faf8cc61f81b8f523c4567a7b6c46",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2016/beats_lstm_3.pkl",
+      "sha256": "fc54ea5248fca54385312e17974cac07ca4a1a97432dc1dd1c02c364b4cd717a",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2016/beats_lstm_2.pkl",
+      "sha256": "af222e0cb79f49b680a87952e13dd755b71f5b81128b3318d4e99bdd458dba26",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2016/beats_lstm_4.pkl",
+      "sha256": "7a355cf7167607f3543e73b8b2ba06ffa481d1cd7443376d4e3378ef6d28f1ae",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2016/beats_lstm_8.pkl",
+      "sha256": "78459e9ef8af334ffa88eb8a36ababf04e51d7abdad2daaabd56dd99ccad2f3e",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2016/beats_lstm_5.pkl",
+      "sha256": "849d563129e1b77df72c9b5e0d13a02f5a3eeffe3189b91a3edb73f864dc19c9",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2016/beats_lstm_6.pkl",
+      "sha256": "cae69664e3058ad3fed74dcd53414284096913cae8c9b2726375a555701202c8",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2016/beats_lstm_1.pkl",
+      "sha256": "baab78a188d220d6972fdb91040f375ae711d96489bdb471ff7268124cc47725",
+      "bytes": 122772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2019/beats_tcn_8.pkl",
+      "sha256": "f5cd319aa0a4888b99f91af23608f6ee880c2b470885da0efbf58a6354833fb0",
+      "bytes": 187935
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2019/beats_tcn_5.pkl",
+      "sha256": "29fe3fcb244ad8b5f672b9986520fe9b942d35a98db2e2dd6daca3a23e802d24",
+      "bytes": 187772
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2019/beats_tcn_1.pkl",
+      "sha256": "f406175bf34b017ec2a6930f17d777631eebed312cec0eada9803f4867e99251",
+      "bytes": 187268
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2019/beats_tcn_7.pkl",
+      "sha256": "20aa2c1306a11657cf90f79ceab6f44cda35bfb8600c6ad003fccd487aae4686",
+      "bytes": 187128
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2019/beats_tcn_3.pkl",
+      "sha256": "86ce8328ba519a4d75e53a155bc359292b692a01ea0b2ad57dc972ef9e5f8f83",
+      "bytes": 188065
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2019/beats_tcn_6.pkl",
+      "sha256": "5c81d29ad45b1f812a18835d404a9bfe5ee26f5888227055fc9ee34a43ca5bb0",
+      "bytes": 187475
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2019/beats_tcn_4.pkl",
+      "sha256": "053fb7430e32bbfeef87905e68c345d6d2a0906190022bbdcbbd0ad6c78f5dc2",
+      "bytes": 187382
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2019/beats_tcn_2.pkl",
+      "sha256": "c128fd63ce7796c40e312ec9b0d5e6b8aa541cd416b2dab79b86d3af85c88f39",
+      "bytes": 187158
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2015/beats_blstm_4.pkl",
+      "sha256": "4a4469fc00dc4c90b028866a9d268fd19429c6a3f298c70838571e90db248f18",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2015/beats_blstm_2.pkl",
+      "sha256": "89ab1defb1b34712bdd0c9f84a756178e809612720733ed7b3a5cc47420689d7",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2015/beats_blstm_3.pkl",
+      "sha256": "4a3f63f1fe361a354cb5f646349522b87482f29baadacf2d20441d5c52c5282a",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2015/beats_blstm_8.pkl",
+      "sha256": "fc25b6890baaeecd2304e18078ee1ce6a0014a69fdba95590a4ebee6cd847f64",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2015/beats_blstm_5.pkl",
+      "sha256": "017fd2e6808f43b9cddb61ac115c8d899f6fcdd3801338c6f76b1b30c3c3dbfd",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2015/beats_blstm_7.pkl",
+      "sha256": "35ba5622e6c8f6c24b7efee1dbb31a78468b3106a7e4a8e3bfa2761f326b51dc",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2015/beats_blstm_1.pkl",
+      "sha256": "bd6545fe694264491ee95e03508d318d164b7f2abac1f48edd0121389506bf5f",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2015/beats_blstm_6.pkl",
+      "sha256": "055e8c8715ce4e71e9855e348ff1816fb7630a4d10117d8e4c11684770d64240",
+      "bytes": 370771
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2013/beats_blstm_4.pkl",
+      "sha256": "0bddb9e3ee2fb5938913467253e5256339f11b3105b01c6c4a33d2dcbee29b12",
+      "bytes": 268363
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2013/beats_blstm_2.pkl",
+      "sha256": "dac300890efdd63de80f59c380deee425b83312768d62d7197e3a6cb561d9530",
+      "bytes": 268363
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2013/beats_blstm_3.pkl",
+      "sha256": "ebe04d78f2fb8b2892ebf17d8c0bf35cf700d3fb1c723ed5374fdaeb7daf254d",
+      "bytes": 268363
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2013/beats_blstm_8.pkl",
+      "sha256": "10c1059b0011409fd5f65c6d7b8a4018f307255e4b2f8da26901cc489eb813cd",
+      "bytes": 268363
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2013/beats_blstm_5.pkl",
+      "sha256": "07b5a957b3be70f4bf73ce15a52f8a0ddc5c1e774480bbf7522613690d0287c3",
+      "bytes": 268363
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2013/beats_blstm_7.pkl",
+      "sha256": "622ad136555259004980e17b5863b37df1e0e62c1c02055e9d699683acdb3c9f",
+      "bytes": 268363
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2013/beats_blstm_1.pkl",
+      "sha256": "397e6853cc46472d39cdd24a9b29e06ef1309e71e3d5f27d9261e10ca898f227",
+      "bytes": 268363
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/beats/2013/beats_blstm_6.pkl",
+      "sha256": "428bccfef54612e2f8b3038db280c5b53d3529fbafd04a5edd49862a7d7b6203",
+      "bytes": 268363
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/chroma/2016/chroma_dnn.pkl",
+      "sha256": "d91aff59113ec6b85de9c9b1aafb065ed0c756072284cebc61564237e901ca94",
+      "bytes": 2153203
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/patterns/2013/ballroom_pattern_4_4.pkl",
+      "sha256": "d16b5455f610bf5e68da48aef04a3882305e292a825a51c6f5d5a162c1f2ee28",
+      "bytes": 17821
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/patterns/2013/ballroom_pattern_3_4.pkl",
+      "sha256": "e4955a6b878be8226e5db860a2d1d3cd62db15c58f54dabff14f7e4564b3d9cb",
+      "bytes": 13277
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/key/2018/key_cnn.pkl",
+      "sha256": "c58ba553be1048877662a663a2670c0051b3c2c66d109b6042ba722ed0bfc7a6",
+      "bytes": 2670279
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/key/2017/key_cnn_1.pkl",
+      "sha256": "cc0d78e9ba7a3bf5b1cc3ee257f3dabfad4e7a87fdba7ff1a055ef6549b89007",
+      "bytes": 723550
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/key/2017/key_cnn_3.pkl",
+      "sha256": "b430b6e77ca330a3a8478806b9126bf5f25ededc60d8a6da36b84f388b6e6869",
+      "bytes": 723550
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/key/2017/key_cnn_4.pkl",
+      "sha256": "ee0c9b2c7960783c067115d5fd7097c2dfa4680b1c2fc6a2434b5af2a08c600b",
+      "bytes": 723550
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/key/2017/key_cnn_2.pkl",
+      "sha256": "390dc811e21eb7da06858b03b4d15a3022d05595aefd57cc66be154520ad976d",
+      "bytes": 723550
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_4.pkl",
+      "sha256": "c3ea8025bbfc3f7660aea1c92b901c7f35b71c64d5c57a8485fd9011409f6a39",
+      "bytes": 480301
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_4.pkl",
+      "sha256": "a4f9a09b1588ca74b0157251364650d3fe81e383019b5986941415e08b37fcde",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_harmonic_1.pkl",
+      "sha256": "f8797e7d8ce9d064714f3b9b4ccdc03413e5c91b25d6a275024efea72d8aef01",
+      "bytes": 216779
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_harmonic_5.pkl",
+      "sha256": "82f71f78943399af650fccee59a9118ba64784e22fac4446ae820c5ec96d6933",
+      "bytes": 216835
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_0.pkl",
+      "sha256": "50e7bcb8b6d5be58c35463caca79b624552469b23f94f353a97e319b38a3ee33",
+      "bytes": 481061
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_8.pkl",
+      "sha256": "a0d20e1922872a3e5b74df451d8b5701de6ca88d9f5739f313fb2991d7a84c77",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_5.pkl",
+      "sha256": "452708ef3c3a38523c259eaacc94dca84fb444e7a2553ee4a93fce20ef9397bb",
+      "bytes": 480707
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_3.pkl",
+      "sha256": "adf6a3e3bf345a9172e8252a511dae28622afe26ee653354c0d4c9e37de8f89a",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_2.pkl",
+      "sha256": "d959a9478dd08ba3543c45df1ff89a80e8319d4c353f4e591ea93d52d317ff09",
+      "bytes": 482099
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_harmonic_2.pkl",
+      "sha256": "a29d2acbffe75485e6476c63df461f90640bb9de6fd534b61a6bd8f938db46ee",
+      "bytes": 216540
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_3.pkl",
+      "sha256": "81089b0d9cfed8b21ffdb6584cac5f055ed97372612d6a0d4eb503494842763f",
+      "bytes": 480690
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_7.pkl",
+      "sha256": "371a319a66d32bee6ab8d4a15f6ae9e4ee22ff97b4276736bab93d9a994c06c1",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_harmonic_0.pkl",
+      "sha256": "8d677435269025d71f1beb85c11e9c130eacb1fdbeca45d054969299fd18eea9",
+      "bytes": 216414
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_1.pkl",
+      "sha256": "b02c4b8aa963069449422fd5cc55bd4077105fe268b0d83036b7d68b5520f38d",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_6.pkl",
+      "sha256": "89b6854c5d6b2381687731aedc9bce6c84894021d1c2eeb60d161cefe997d68c",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_harmonic_4.pkl",
+      "sha256": "28ec3216a4368071eae0c2311bab138fca0b0dbca6791441b7ba290f34c29217",
+      "bytes": 216494
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_1.pkl",
+      "sha256": "78f82313bec5f129bd9eed03a13718d6e81b5b6587c4bbdd7e5b4c4616e18436",
+      "bytes": 481288
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_5.pkl",
+      "sha256": "e40aea9b8221babaf14a9211a48dccc3ebcecdf8bcd6d62d60f0949445de9bb6",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_bgru_harmonic_3.pkl",
+      "sha256": "649ccc0a015020b74c5b437789926082bbbea7f9fe1950125b5e5d094b3d6d8f",
+      "bytes": 216693
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_2.pkl",
+      "sha256": "6fa9d138ed84bed14ab5ef6f81f3a7e1a125ff8c571a255f6ce91ccf93390eee",
+      "bytes": 409619
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2014/onsets_brnn_pp_2.pkl",
+      "sha256": "f91032d9dcf53c9e58bb2c0bd2e2426ecc1b902ecf12f2d600708ad8b4889421",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2014/onsets_brnn_pp_3.pkl",
+      "sha256": "4b1861ac93fab07f5c75857fc0dd6475a4ad91be69c4ebb410bf016e606f29b3",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2014/onsets_brnn_pp_4.pkl",
+      "sha256": "1ffec751eccff3d6ffa646ae200a163efde2539aea14873f082f6b939407282c",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2014/onsets_brnn_pp_5.pkl",
+      "sha256": "a47e99b66fead879e19f2f8db72e832cdfa1357f12d6fc066b02632c7053a229",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2014/onsets_brnn_pp_1.pkl",
+      "sha256": "25c4a9bb3497153208e1cf6512474676d53f6ab6e7b7b61b00b9cdc8c775c5c0",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2014/onsets_brnn_pp_8.pkl",
+      "sha256": "1245d22ed4622ca26cf4372631a5850bf52321bb3e069f5c8ac8efdc6e9a0dd9",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2014/onsets_brnn_pp_6.pkl",
+      "sha256": "8faf9788338ef7d12148ef82b5547166d1de0aa8187c97ee454a0916866a4f8e",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2014/onsets_brnn_pp_7.pkl",
+      "sha256": "a48253adc5c264c882e44f75ae896f67b2a64ad2e131f5422e066d6094210654",
+      "bytes": 1723
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_brnn_5.pkl",
+      "sha256": "cbe6967220a327e8691a45ab40adf6a98089c77b4969a6e9c961d308e3e29eb5",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_brnn_8.pkl",
+      "sha256": "0b24555e609460b5a134645fb439e7088fb518007a165e6b9d469b7cf7d65de4",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_cnn.pkl",
+      "sha256": "ac7aad3f99c45ecea846406c867dec83fbdab114399b00bcb12eaaeffd5a990e",
+      "bytes": 1163976
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_rnn_3.pkl",
+      "sha256": "bfb88d92ca0f7dcb11749edba9ff1c954536e0d84ba0660f6e201af9cc43050d",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_rnn_4.pkl",
+      "sha256": "77af66643507873a0a1a6835c8dfccdb35ea0baace5e44ce0653211827a9db97",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_rnn_6.pkl",
+      "sha256": "3395a9be0e4c2b1fb37b58616a3ed499c6fd994bdd29e644144e8a06664180d5",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_rnn_2.pkl",
+      "sha256": "2169734fc38a2366c49b98e2950f0743bcf7c659097db7798fbb0bc570bdfb22",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_rnn_7.pkl",
+      "sha256": "d36d4f14b91aad277e6d5f8dad542297ada35f075a95cbb62f8fde34766c8e26",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_rnn_8.pkl",
+      "sha256": "fafc8535a5654b2225739eff6803897f36f5945a411cbeaf36a2228ed00deaea",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_brnn_3.pkl",
+      "sha256": "0b2d2f805f5f9eca7a08174bfb3fdef7ed4cd04a75845dea925061262c634819",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_brnn_6.pkl",
+      "sha256": "686cde0a80a83b3efb0986f8a4c8c170353727ebd03920fac525959e4d7f3f2f",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_brnn_1.pkl",
+      "sha256": "cd3552b4476f6cafb73c3937e07d954056b4ebd972114b67641ae5726c3233fd",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_rnn_1.pkl",
+      "sha256": "5374f4a5fd12c9419de6195d77f20de7553b8b858d1408942b35bf04dc674901",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_brnn_7.pkl",
+      "sha256": "14788a5834c73b09bebed233cb870cfd0af41915e6ee2639fbca1e43bdeae410",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_brnn_4.pkl",
+      "sha256": "5394e8a6ef0d6b316a7dea0150ebf8d32b0a91267ba2cbb3108b9b8aabf11d17",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_rnn_5.pkl",
+      "sha256": "2c5b97872b568dab9e9aa67899c379026df5793f129595c070d4e58f0caa512d",
+      "bytes": 37373
+    },
+    {
+      "path": "sources/CPJKU_madmom/madmom/models/onsets/2013/onsets_brnn_2.pkl",
+      "sha256": "041d72ce5fb5d466aeb65b1555f3cbb83db6ed659f30299c15cb5024f22cee21",
+      "bytes": 90405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/notes/2018/notes_cnn_1.pkl",
+      "sha256": "897e4779905c129bcb8579c19bbec09fc5a8a2ab6aaa1f2d5efaec21d2cb0c0c",
+      "bytes": 1307200
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/notes/2018/notes_cnn_2.pkl",
+      "sha256": "a1ff7ef38a0d92290fc5e9a9f9ecce0018200e002349d2a0c33b53d9cc586402",
+      "bytes": 1307200
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/notes/2019/notes_cnn.pkl",
+      "sha256": "1bfab35f3ab93f8f61b4cf648a67bb9e24616ea14affb4fe55fac498472eee62",
+      "bytes": 1307124
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/notes/2013/notes_brnn.pkl",
+      "sha256": "12a1115d0a824f26d92887379d5a73f0e15a57bd28df82caf3ea659246c4a8dd",
+      "bytes": 840867
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/chords/2016/chords_cnncrf.pkl",
+      "sha256": "49577e21fe681fe21b771214a10243200925c2cffe651c5d2fe97620d1b5289f",
+      "bytes": 15905
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/chords/2016/chords_dccrf.pkl",
+      "sha256": "d34451c128c69af5ad84cc1c89c8783b702533d1522bba7bd2893e8877ddf224",
+      "bytes": 4305
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/chords/2016/chords_cnnfeat.pkl",
+      "sha256": "f02dd34d5a99cb59cc4b6e5f188c9dc439990be5464fbba17f235d1decefd5fb",
+      "bytes": 3880003
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_7.pkl",
+      "sha256": "31b1ff20a42e6faffd0e4e76944ae0aeba5e33ffb4c82c323466d0ae2ba61ec4",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_3.pkl",
+      "sha256": "566adcbd5175bd0f7f84442876cbd9dde5348691f3181d7ded931f4773c35d51",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_2.pkl",
+      "sha256": "b01a468d08e4e6633611ea5ac37c48eae89a33bcf49b0628ee8417d2adff74cf",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_4.pkl",
+      "sha256": "612f2e44e1562ca76b90c002523c8d50472afc347ea0d1009700d5d02db18fa5",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_8.pkl",
+      "sha256": "ad969e307f2db6322fc18819d64f6c866e9e8cea33986fab12dba7ae3ff1cc95",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_5.pkl",
+      "sha256": "b43ee1cc1e91cff65dbc60e719cbb3c8956d40910ac3f98a5ddb080098ea7596",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_6.pkl",
+      "sha256": "1bfa09512752647e17ea772a52e4b7c78b7e276b4f999e2f908b50c80acd10b4",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2016/beats_lstm_1.pkl",
+      "sha256": "d9a4394b8a1febc32458da8c41548d3133fe216d8b8ce5ae841b9412dbbe5008",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2019/beats_tcn_8.pkl",
+      "sha256": "f5cd319aa0a4888b99f91af23608f6ee880c2b470885da0efbf58a6354833fb0",
+      "bytes": 187935
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2019/beats_tcn_5.pkl",
+      "sha256": "29fe3fcb244ad8b5f672b9986520fe9b942d35a98db2e2dd6daca3a23e802d24",
+      "bytes": 187772
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2019/beats_tcn_1.pkl",
+      "sha256": "f406175bf34b017ec2a6930f17d777631eebed312cec0eada9803f4867e99251",
+      "bytes": 187268
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2019/beats_tcn_7.pkl",
+      "sha256": "20aa2c1306a11657cf90f79ceab6f44cda35bfb8600c6ad003fccd487aae4686",
+      "bytes": 187128
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2019/beats_tcn_3.pkl",
+      "sha256": "86ce8328ba519a4d75e53a155bc359292b692a01ea0b2ad57dc972ef9e5f8f83",
+      "bytes": 188065
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2019/beats_tcn_6.pkl",
+      "sha256": "5c81d29ad45b1f812a18835d404a9bfe5ee26f5888227055fc9ee34a43ca5bb0",
+      "bytes": 187475
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2019/beats_tcn_4.pkl",
+      "sha256": "053fb7430e32bbfeef87905e68c345d6d2a0906190022bbdcbbd0ad6c78f5dc2",
+      "bytes": 187382
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2019/beats_tcn_2.pkl",
+      "sha256": "c128fd63ce7796c40e312ec9b0d5e6b8aa541cd416b2dab79b86d3af85c88f39",
+      "bytes": 187158
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_4.pkl",
+      "sha256": "a601aa6f3c5c0d5cc9fb8896e7696595a46aa768fec8b4e60fe20edf344666f5",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_2.pkl",
+      "sha256": "49ec724cfe5840d1a9c929a9bfa45f2472405fab2c5799d5e9f6c07d74321d09",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_3.pkl",
+      "sha256": "ed8ae7d59d2e4a1b8f2559eb7cddf755bd998dc2cd9f22202af646d68db22146",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_8.pkl",
+      "sha256": "c3e76e775288cbee73ccbf350e49a82577d645d0d52009fa22c56c6b4744bbdc",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_5.pkl",
+      "sha256": "8ddb6ca4119f3df7aa14f9fbcb9e5864f5d05492da60999b1ddc81ad1b9ce6f5",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_7.pkl",
+      "sha256": "1d1422321610d11c53814e216701048fddd1cff24d0d4e9b06a53052d0f6183a",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_1.pkl",
+      "sha256": "679db95450ce012b9f580ac23730906c63fed78a69ecfd3cd1766aae98abda61",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2015/beats_blstm_6.pkl",
+      "sha256": "1f893e1197fee2d1d5d3641038b8112cb79eafcae5bd2bb0e4249dbfce891515",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2013/beats_blstm_4.pkl",
+      "sha256": "e76fc84cdd79c4faee2c3bee4aa535bef256689728c9954ba0e0735818600464",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2013/beats_blstm_2.pkl",
+      "sha256": "da12c7acdcc591e681e7b74afdc6b69b33deef734d10ea33ecdd7a32df18dfdb",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2013/beats_blstm_3.pkl",
+      "sha256": "d26c16b7149f8fa9b03af5c78aff6a69db33e9e3833871a89bca7987e92e92c5",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2013/beats_blstm_8.pkl",
+      "sha256": "06a6df8f85e9400a2bde5e9d69c1641fe34c9f4a64f68d131a33d082104bc60e",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2013/beats_blstm_5.pkl",
+      "sha256": "30c739c5e93f6f2d8fa372967324b163e34d37fe63285cbbff38b0aee2c4cf85",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2013/beats_blstm_7.pkl",
+      "sha256": "2b3570f375dfa31587ef9cf81c0d972826fab26a2832c23c279fb687d509c5c3",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2013/beats_blstm_1.pkl",
+      "sha256": "b53363e6ae5a736200e82f3c80bce391b0c565c4f1d03069cbac18f5785542b2",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/beats/2013/beats_blstm_6.pkl",
+      "sha256": "406dcb9f81da3f4834f9ec0db5973f223d6ee3c61468adea783f43a597fad139",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/chroma/2016/chroma_dnn.pkl",
+      "sha256": "0a5397210c951423537f3e128378bc541d5ef9c204dc06ecda459da7e1ab6d27",
+      "bytes": 2153082
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/patterns/2013/ballroom_pattern_4_4.pkl",
+      "sha256": "046d07d060e2a6a816ddb0109d9edb9d6b4ad11c469af63d23ee653814ae2a48",
+      "bytes": 17015
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/patterns/2013/ballroom_pattern_3_4.pkl",
+      "sha256": "5412c981ba1392376ae50011d078acb3839b833f709b48ab289b59e792ec90df",
+      "bytes": 12839
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/key/2018/key_cnn.pkl",
+      "sha256": "6fdc4fe4acf6f604c588c25d892e512d32eb89af69642d0370b6713812187013",
+      "bytes": 2668955
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/key/2017/key_cnn_1.pkl",
+      "sha256": "c942ac245549efc30f55c58efe1a206fbe499fc9c42c985a5191a344aba0c185",
+      "bytes": 723239
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/key/2017/key_cnn_3.pkl",
+      "sha256": "29caa880e6dcd03f03c84fd818941e40654759828d503bbfc2ed6ffc19ce25c8",
+      "bytes": 723239
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/key/2017/key_cnn_4.pkl",
+      "sha256": "eddc7a9e465a94128f169f72160cb90ecfcd05f61a5c16917856abdbcb462bd2",
+      "bytes": 723239
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/key/2017/key_cnn_2.pkl",
+      "sha256": "ddf6d772db6f96c9ab5e644c100393eb542ec924e8b76ef30b99ae12f5ab2995",
+      "bytes": 723239
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_4.pkl",
+      "sha256": "8f731b7e9d6a302682da14d05587b86d94f51fc9f05a07c81f9c5a5f5e439346",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_4.pkl",
+      "sha256": "4ea521e45261ade7e85a4d29794022a894501cb98e23679fff82b7f3430caffd",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_1.pkl",
+      "sha256": "86c25d15d2ada33507f0eb9f321e5558c216c2af5dbe7aa74e95d2c32345e3e6",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_5.pkl",
+      "sha256": "5582181f88080f9c79bed223f09fc0db4d5d8e32b666005ffc9e9a65e20cc256",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_0.pkl",
+      "sha256": "60fc150385e649afb810f10339ee672cae77ac1abbecac40740920591ac87d04",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_8.pkl",
+      "sha256": "b5f4c4aba477cb847ef18a5cd660a76efc49f28fefdb134ac5e4e484ae5da9f9",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_5.pkl",
+      "sha256": "b38cd3435acb1b931b3ebe88cbb6a8c3c9e06200c994e1a9bc055bbaa1b7e633",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_3.pkl",
+      "sha256": "2ae8e8006f5697c39a8b52a9ed14e1638afa6107d8383e42bbfa324853aa0943",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_2.pkl",
+      "sha256": "5ff1494be31652bd15cbb6ab5aa472a561737eefb49a41578abeedda6b6855e7",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_2.pkl",
+      "sha256": "f36a38b96d38376ce7efd9ffc8861a6ec4e1ab15896a782aafbf2018c1e44c88",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_3.pkl",
+      "sha256": "7eb71ee1c56def726326f084e116af9a639669c8b6b1607f9fbe2a77bcc07afc",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_7.pkl",
+      "sha256": "78de89fd597231e45b5dc4ec502eb3d29ec7fe1cb1e154e7ac32b19f79751bdc",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_0.pkl",
+      "sha256": "d0315762dee943193bf4661fb03010eb0ac66b7e99e3294211fff03ca2589d2e",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_1.pkl",
+      "sha256": "22830500ae3bc1874dd6a1442f4fb05c80eb4f9ddcf5284155cdf5429cc631ba",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_6.pkl",
+      "sha256": "0507d9f1c4ecd87c5013b3f408ac1187d609ba66c1cdc5642f120e26a4b54642",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_4.pkl",
+      "sha256": "3bbe93d5b91e34af86b88ff1f9a76b1b1f4abf7fee3cef1732daf2ca709e15bd",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_1.pkl",
+      "sha256": "81e86c504fc38ff07a3c62e1d6ce038807ff0c8a092e54781ebfa8aa59418ecd",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_5.pkl",
+      "sha256": "3d90646ea6cc068b6d30777c1ad2a2d9a8ec7ebe4521151c0c8342cbe5e9741c",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_bgru_harmonic_3.pkl",
+      "sha256": "7b8e2eba8df6077577b2a9727c7f3b525f4be5e35ed4871da8f484306d5b47ec",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/downbeats/2016/downbeats_blstm_2.pkl",
+      "sha256": "db1089357848c07fc6cfd4fbe67d67d7631891f3f6467b3ae7cdddde2c6d1d7a",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_2.pkl",
+      "sha256": "e7d28e6da98cf57f7d80e9e69ffbb5fe1b5331b017bba2603515c9e9d9825397",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_3.pkl",
+      "sha256": "83b6166df6f1c2d999b54a8679cc4998fb39a193263cc8f540d53fb7dec000a2",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_4.pkl",
+      "sha256": "1a4ad7eab7802bed1770a3ddb3adeafe2214ed6bc2435f8ac185c3c1461977be",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_5.pkl",
+      "sha256": "ca5e46699fa2b455ece5d96985ed536edf738d640a428c532bf3997616e43b5a",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_1.pkl",
+      "sha256": "1e5db3a40856a6d5d54ed9c8d9cfe1c91b51a590003e72571f3260a2c12c1435",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_8.pkl",
+      "sha256": "809a633a904bf36f90a86faec73a9126786cac7a6a0e15874fe967b6f1b8cc0b",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_6.pkl",
+      "sha256": "5e05859cefd26132582f744aa3f4cae47a85d5f27317a2443c4dbf1cd66126f1",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2014/onsets_brnn_pp_7.pkl",
+      "sha256": "f41f1e622dc6becd49c6eb9174d8eb08677dda0844494da421e413ac4c08d603",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_5.pkl",
+      "sha256": "c92dc3b9b7ebb8548c92095e7d31b45edad3d1c5356a93853a2271e07e19297b",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_8.pkl",
+      "sha256": "0bf5529498f2e3d67bb05702c1ebba648da7da0cd55c0d14c37bbbbf0b5ecd40",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_cnn.pkl",
+      "sha256": "9c118583d184b6900a0644383125dce9c1d4ea22d1895f75e4b204412f1a9505",
+      "bytes": 1163705
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_3.pkl",
+      "sha256": "a4acf4c7debdce1abc2989549e79482c06b60dcecee08c6ce140fdc0e307f328",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_4.pkl",
+      "sha256": "b19b0193409d9931cacaed5fbe5c1d3489e8b4cf4464cf1383c7f86bc53ff359",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_6.pkl",
+      "sha256": "0999557e51b194d191cd060a9e1aba1a8fbbfb66d86e3f35c0c8d97562a9a5f3",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_2.pkl",
+      "sha256": "384e40634f722caeda67306d8c12c0e09c9b09afb60a0d2898510cade382ca7d",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_7.pkl",
+      "sha256": "f3f33b6e05060b37faf2d4c0311575735c5a64dc9d146f8ad945d5879c405dc5",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_8.pkl",
+      "sha256": "086441032b379afb44050fe658d24c9ee744d67ce15e544ee2cbd83ecce9b750",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_3.pkl",
+      "sha256": "5999810e35b8b03b526a280f1bdd320e6d1442dee761b558119556e8a302b759",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_6.pkl",
+      "sha256": "c31744730b137c0cd677f66bdbb6de2e399cecb543e3bb6a6258f9717b0a09a1",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_1.pkl",
+      "sha256": "76c282faf5f2d490751b9d99615c803fe866e38bbb965e07780ad7b9157dec59",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_1.pkl",
+      "sha256": "0823f4578ee0a435dd0d08448dfe842f19df0e968aa4890fa1f85a45ac32c9cb",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_7.pkl",
+      "sha256": "4b83da7c3a7696423ca712af85563300d47777f8cd55d679feaba239cec441ae",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_4.pkl",
+      "sha256": "2b21fc61ded1939ede5c98c0013e5d91593f3fc016aeafb5c20f7e86c3581f28",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_rnn_5.pkl",
+      "sha256": "cf94a1ef09adc6b094df03840a856c0a12df72fe598e17b0e087056a7dc8167e",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/build/lib.linux-x86_64-cpython-311/madmom/models/onsets/2013/onsets_brnn_2.pkl",
+      "sha256": "49a45d4993f2cae8aee7330238ee11c88c771e59e728fac35438129082888dc5",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/notes/2018/notes_cnn_1.pkl",
+      "sha256": "897e4779905c129bcb8579c19bbec09fc5a8a2ab6aaa1f2d5efaec21d2cb0c0c",
+      "bytes": 1307200
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/notes/2018/notes_cnn_2.pkl",
+      "sha256": "a1ff7ef38a0d92290fc5e9a9f9ecce0018200e002349d2a0c33b53d9cc586402",
+      "bytes": 1307200
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/notes/2019/notes_cnn.pkl",
+      "sha256": "1bfab35f3ab93f8f61b4cf648a67bb9e24616ea14affb4fe55fac498472eee62",
+      "bytes": 1307124
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/notes/2013/notes_brnn.pkl",
+      "sha256": "12a1115d0a824f26d92887379d5a73f0e15a57bd28df82caf3ea659246c4a8dd",
+      "bytes": 840867
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/chords/2016/chords_cnncrf.pkl",
+      "sha256": "49577e21fe681fe21b771214a10243200925c2cffe651c5d2fe97620d1b5289f",
+      "bytes": 15905
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/chords/2016/chords_dccrf.pkl",
+      "sha256": "d34451c128c69af5ad84cc1c89c8783b702533d1522bba7bd2893e8877ddf224",
+      "bytes": 4305
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/chords/2016/chords_cnnfeat.pkl",
+      "sha256": "f02dd34d5a99cb59cc4b6e5f188c9dc439990be5464fbba17f235d1decefd5fb",
+      "bytes": 3880003
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2016/beats_lstm_7.pkl",
+      "sha256": "31b1ff20a42e6faffd0e4e76944ae0aeba5e33ffb4c82c323466d0ae2ba61ec4",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2016/beats_lstm_3.pkl",
+      "sha256": "566adcbd5175bd0f7f84442876cbd9dde5348691f3181d7ded931f4773c35d51",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2016/beats_lstm_2.pkl",
+      "sha256": "b01a468d08e4e6633611ea5ac37c48eae89a33bcf49b0628ee8417d2adff74cf",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2016/beats_lstm_4.pkl",
+      "sha256": "612f2e44e1562ca76b90c002523c8d50472afc347ea0d1009700d5d02db18fa5",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2016/beats_lstm_8.pkl",
+      "sha256": "ad969e307f2db6322fc18819d64f6c866e9e8cea33986fab12dba7ae3ff1cc95",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2016/beats_lstm_5.pkl",
+      "sha256": "b43ee1cc1e91cff65dbc60e719cbb3c8956d40910ac3f98a5ddb080098ea7596",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2016/beats_lstm_6.pkl",
+      "sha256": "1bfa09512752647e17ea772a52e4b7c78b7e276b4f999e2f908b50c80acd10b4",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2016/beats_lstm_1.pkl",
+      "sha256": "d9a4394b8a1febc32458da8c41548d3133fe216d8b8ce5ae841b9412dbbe5008",
+      "bytes": 121326
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2019/beats_tcn_8.pkl",
+      "sha256": "f5cd319aa0a4888b99f91af23608f6ee880c2b470885da0efbf58a6354833fb0",
+      "bytes": 187935
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2019/beats_tcn_5.pkl",
+      "sha256": "29fe3fcb244ad8b5f672b9986520fe9b942d35a98db2e2dd6daca3a23e802d24",
+      "bytes": 187772
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2019/beats_tcn_1.pkl",
+      "sha256": "f406175bf34b017ec2a6930f17d777631eebed312cec0eada9803f4867e99251",
+      "bytes": 187268
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2019/beats_tcn_7.pkl",
+      "sha256": "20aa2c1306a11657cf90f79ceab6f44cda35bfb8600c6ad003fccd487aae4686",
+      "bytes": 187128
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2019/beats_tcn_3.pkl",
+      "sha256": "86ce8328ba519a4d75e53a155bc359292b692a01ea0b2ad57dc972ef9e5f8f83",
+      "bytes": 188065
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2019/beats_tcn_6.pkl",
+      "sha256": "5c81d29ad45b1f812a18835d404a9bfe5ee26f5888227055fc9ee34a43ca5bb0",
+      "bytes": 187475
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2019/beats_tcn_4.pkl",
+      "sha256": "053fb7430e32bbfeef87905e68c345d6d2a0906190022bbdcbbd0ad6c78f5dc2",
+      "bytes": 187382
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2019/beats_tcn_2.pkl",
+      "sha256": "c128fd63ce7796c40e312ec9b0d5e6b8aa541cd416b2dab79b86d3af85c88f39",
+      "bytes": 187158
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2015/beats_blstm_4.pkl",
+      "sha256": "a601aa6f3c5c0d5cc9fb8896e7696595a46aa768fec8b4e60fe20edf344666f5",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2015/beats_blstm_2.pkl",
+      "sha256": "49ec724cfe5840d1a9c929a9bfa45f2472405fab2c5799d5e9f6c07d74321d09",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2015/beats_blstm_3.pkl",
+      "sha256": "ed8ae7d59d2e4a1b8f2559eb7cddf755bd998dc2cd9f22202af646d68db22146",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2015/beats_blstm_8.pkl",
+      "sha256": "c3e76e775288cbee73ccbf350e49a82577d645d0d52009fa22c56c6b4744bbdc",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2015/beats_blstm_5.pkl",
+      "sha256": "8ddb6ca4119f3df7aa14f9fbcb9e5864f5d05492da60999b1ddc81ad1b9ce6f5",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2015/beats_blstm_7.pkl",
+      "sha256": "1d1422321610d11c53814e216701048fddd1cff24d0d4e9b06a53052d0f6183a",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2015/beats_blstm_1.pkl",
+      "sha256": "679db95450ce012b9f580ac23730906c63fed78a69ecfd3cd1766aae98abda61",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2015/beats_blstm_6.pkl",
+      "sha256": "1f893e1197fee2d1d5d3641038b8112cb79eafcae5bd2bb0e4249dbfce891515",
+      "bytes": 371567
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2013/beats_blstm_4.pkl",
+      "sha256": "e76fc84cdd79c4faee2c3bee4aa535bef256689728c9954ba0e0735818600464",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2013/beats_blstm_2.pkl",
+      "sha256": "da12c7acdcc591e681e7b74afdc6b69b33deef734d10ea33ecdd7a32df18dfdb",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2013/beats_blstm_3.pkl",
+      "sha256": "d26c16b7149f8fa9b03af5c78aff6a69db33e9e3833871a89bca7987e92e92c5",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2013/beats_blstm_8.pkl",
+      "sha256": "06a6df8f85e9400a2bde5e9d69c1641fe34c9f4a64f68d131a33d082104bc60e",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2013/beats_blstm_5.pkl",
+      "sha256": "30c739c5e93f6f2d8fa372967324b163e34d37fe63285cbbff38b0aee2c4cf85",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2013/beats_blstm_7.pkl",
+      "sha256": "2b3570f375dfa31587ef9cf81c0d972826fab26a2832c23c279fb687d509c5c3",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2013/beats_blstm_1.pkl",
+      "sha256": "b53363e6ae5a736200e82f3c80bce391b0c565c4f1d03069cbac18f5785542b2",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/beats/2013/beats_blstm_6.pkl",
+      "sha256": "406dcb9f81da3f4834f9ec0db5973f223d6ee3c61468adea783f43a597fad139",
+      "bytes": 269159
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/chroma/2016/chroma_dnn.pkl",
+      "sha256": "0a5397210c951423537f3e128378bc541d5ef9c204dc06ecda459da7e1ab6d27",
+      "bytes": 2153082
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/patterns/2013/ballroom_pattern_4_4.pkl",
+      "sha256": "046d07d060e2a6a816ddb0109d9edb9d6b4ad11c469af63d23ee653814ae2a48",
+      "bytes": 17015
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/patterns/2013/ballroom_pattern_3_4.pkl",
+      "sha256": "5412c981ba1392376ae50011d078acb3839b833f709b48ab289b59e792ec90df",
+      "bytes": 12839
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/key/2018/key_cnn.pkl",
+      "sha256": "6fdc4fe4acf6f604c588c25d892e512d32eb89af69642d0370b6713812187013",
+      "bytes": 2668955
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/key/2017/key_cnn_1.pkl",
+      "sha256": "c942ac245549efc30f55c58efe1a206fbe499fc9c42c985a5191a344aba0c185",
+      "bytes": 723239
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/key/2017/key_cnn_3.pkl",
+      "sha256": "29caa880e6dcd03f03c84fd818941e40654759828d503bbfc2ed6ffc19ce25c8",
+      "bytes": 723239
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/key/2017/key_cnn_4.pkl",
+      "sha256": "eddc7a9e465a94128f169f72160cb90ecfcd05f61a5c16917856abdbcb462bd2",
+      "bytes": 723239
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/key/2017/key_cnn_2.pkl",
+      "sha256": "ddf6d772db6f96c9ab5e644c100393eb542ec924e8b76ef30b99ae12f5ab2995",
+      "bytes": 723239
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_4.pkl",
+      "sha256": "8f731b7e9d6a302682da14d05587b86d94f51fc9f05a07c81f9c5a5f5e439346",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_4.pkl",
+      "sha256": "4ea521e45261ade7e85a4d29794022a894501cb98e23679fff82b7f3430caffd",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_harmonic_1.pkl",
+      "sha256": "86c25d15d2ada33507f0eb9f321e5558c216c2af5dbe7aa74e95d2c32345e3e6",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_harmonic_5.pkl",
+      "sha256": "5582181f88080f9c79bed223f09fc0db4d5d8e32b666005ffc9e9a65e20cc256",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_0.pkl",
+      "sha256": "60fc150385e649afb810f10339ee672cae77ac1abbecac40740920591ac87d04",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_8.pkl",
+      "sha256": "b5f4c4aba477cb847ef18a5cd660a76efc49f28fefdb134ac5e4e484ae5da9f9",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_5.pkl",
+      "sha256": "b38cd3435acb1b931b3ebe88cbb6a8c3c9e06200c994e1a9bc055bbaa1b7e633",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_3.pkl",
+      "sha256": "2ae8e8006f5697c39a8b52a9ed14e1638afa6107d8383e42bbfa324853aa0943",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_2.pkl",
+      "sha256": "5ff1494be31652bd15cbb6ab5aa472a561737eefb49a41578abeedda6b6855e7",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_harmonic_2.pkl",
+      "sha256": "f36a38b96d38376ce7efd9ffc8861a6ec4e1ab15896a782aafbf2018c1e44c88",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_3.pkl",
+      "sha256": "7eb71ee1c56def726326f084e116af9a639669c8b6b1607f9fbe2a77bcc07afc",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_7.pkl",
+      "sha256": "78de89fd597231e45b5dc4ec502eb3d29ec7fe1cb1e154e7ac32b19f79751bdc",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_harmonic_0.pkl",
+      "sha256": "d0315762dee943193bf4661fb03010eb0ac66b7e99e3294211fff03ca2589d2e",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_1.pkl",
+      "sha256": "22830500ae3bc1874dd6a1442f4fb05c80eb4f9ddcf5284155cdf5429cc631ba",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_6.pkl",
+      "sha256": "0507d9f1c4ecd87c5013b3f408ac1187d609ba66c1cdc5642f120e26a4b54642",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_harmonic_4.pkl",
+      "sha256": "3bbe93d5b91e34af86b88ff1f9a76b1b1f4abf7fee3cef1732daf2ca709e15bd",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_rhythmic_1.pkl",
+      "sha256": "81e86c504fc38ff07a3c62e1d6ce038807ff0c8a092e54781ebfa8aa59418ecd",
+      "bytes": 173358
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_5.pkl",
+      "sha256": "3d90646ea6cc068b6d30777c1ad2a2d9a8ec7ebe4521151c0c8342cbe5e9741c",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_bgru_harmonic_3.pkl",
+      "sha256": "7b8e2eba8df6077577b2a9727c7f3b525f4be5e35ed4871da8f484306d5b47ec",
+      "bytes": 79749
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_2.pkl",
+      "sha256": "db1089357848c07fc6cfd4fbe67d67d7631891f3f6467b3ae7cdddde2c6d1d7a",
+      "bytes": 410405
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2014/onsets_brnn_pp_2.pkl",
+      "sha256": "e7d28e6da98cf57f7d80e9e69ffbb5fe1b5331b017bba2603515c9e9d9825397",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2014/onsets_brnn_pp_3.pkl",
+      "sha256": "83b6166df6f1c2d999b54a8679cc4998fb39a193263cc8f540d53fb7dec000a2",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2014/onsets_brnn_pp_4.pkl",
+      "sha256": "1a4ad7eab7802bed1770a3ddb3adeafe2214ed6bc2435f8ac185c3c1461977be",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2014/onsets_brnn_pp_5.pkl",
+      "sha256": "ca5e46699fa2b455ece5d96985ed536edf738d640a428c532bf3997616e43b5a",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2014/onsets_brnn_pp_1.pkl",
+      "sha256": "1e5db3a40856a6d5d54ed9c8d9cfe1c91b51a590003e72571f3260a2c12c1435",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2014/onsets_brnn_pp_8.pkl",
+      "sha256": "809a633a904bf36f90a86faec73a9126786cac7a6a0e15874fe967b6f1b8cc0b",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2014/onsets_brnn_pp_6.pkl",
+      "sha256": "5e05859cefd26132582f744aa3f4cae47a85d5f27317a2443c4dbf1cd66126f1",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2014/onsets_brnn_pp_7.pkl",
+      "sha256": "f41f1e622dc6becd49c6eb9174d8eb08677dda0844494da421e413ac4c08d603",
+      "bytes": 1725
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_brnn_5.pkl",
+      "sha256": "c92dc3b9b7ebb8548c92095e7d31b45edad3d1c5356a93853a2271e07e19297b",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_brnn_8.pkl",
+      "sha256": "0bf5529498f2e3d67bb05702c1ebba648da7da0cd55c0d14c37bbbbf0b5ecd40",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_cnn.pkl",
+      "sha256": "9c118583d184b6900a0644383125dce9c1d4ea22d1895f75e4b204412f1a9505",
+      "bytes": 1163705
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_rnn_3.pkl",
+      "sha256": "a4acf4c7debdce1abc2989549e79482c06b60dcecee08c6ce140fdc0e307f328",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_rnn_4.pkl",
+      "sha256": "b19b0193409d9931cacaed5fbe5c1d3489e8b4cf4464cf1383c7f86bc53ff359",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_rnn_6.pkl",
+      "sha256": "0999557e51b194d191cd060a9e1aba1a8fbbfb66d86e3f35c0c8d97562a9a5f3",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_rnn_2.pkl",
+      "sha256": "384e40634f722caeda67306d8c12c0e09c9b09afb60a0d2898510cade382ca7d",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_rnn_7.pkl",
+      "sha256": "f3f33b6e05060b37faf2d4c0311575735c5a64dc9d146f8ad945d5879c405dc5",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_rnn_8.pkl",
+      "sha256": "086441032b379afb44050fe658d24c9ee744d67ce15e544ee2cbd83ecce9b750",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_brnn_3.pkl",
+      "sha256": "5999810e35b8b03b526a280f1bdd320e6d1442dee761b558119556e8a302b759",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_brnn_6.pkl",
+      "sha256": "c31744730b137c0cd677f66bdbb6de2e399cecb543e3bb6a6258f9717b0a09a1",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_brnn_1.pkl",
+      "sha256": "76c282faf5f2d490751b9d99615c803fe866e38bbb965e07780ad7b9157dec59",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_rnn_1.pkl",
+      "sha256": "0823f4578ee0a435dd0d08448dfe842f19df0e968aa4890fa1f85a45ac32c9cb",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_brnn_7.pkl",
+      "sha256": "4b83da7c3a7696423ca712af85563300d47777f8cd55d679feaba239cec441ae",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_brnn_4.pkl",
+      "sha256": "2b21fc61ded1939ede5c98c0013e5d91593f3fc016aeafb5c20f7e86c3581f28",
+      "bytes": 90898
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_rnn_5.pkl",
+      "sha256": "cf94a1ef09adc6b094df03840a856c0a12df72fe598e17b0e087056a7dc8167e",
+      "bytes": 37624
+    },
+    {
+      "path": "sources/imcmurray_madmom-modern/madmom/models/onsets/2013/onsets_brnn_2.pkl",
+      "sha256": "49a45d4993f2cae8aee7330238ee11c88c771e59e728fac35438129082888dc5",
+      "bytes": 90898
+    },
+    {
+      "path": "checkpoints/small0.ckpt",
+      "sha256": "6074be2c4d490c5f6101fcc374a1ec72ae93456e23bb6019783b849f5dc7d47b",
+      "bytes": 8451101
+    },
+    {
+      "path": "/home/arsu/.cache/torch/hub/checkpoints/beat_this-final0.ckpt",
+      "sha256": "8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331",
+      "bytes": 81058141
+    }
+  ]
+}

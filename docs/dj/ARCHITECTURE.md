@@ -2,29 +2,31 @@
 
 P11 extrajo `ad59b838` sin cambiar medidas, órdenes ni planes. El punto de
 entrada público sigue siendo `shared/dj_engine.py`: reexporta las funciones,
-sin copias del estado de caché o de los trabajos. P12 añade medidas métricas
-locales y validación de ejecución; [P12](P12.md) documenta su contrato y sus
-límites reales. **P12 sigue parcial**: primero se ejecuta la
-[comparativa P12-a](DETECTOR_COMPARISON.md), el usuario decide y P12-b integra
-una sola vía. Preparar fixtures de P13 en la comparativa; su implementación
-consume la métrica elegida. Los adaptadores experimentales permanecen fuera
-de estos propietarios de producción para evitar reescrituras por candidato.
+sin copias del estado de caché o de los trabajos. P12 añadió medidas métricas
+locales y validación de ejecución ([P12](P12.md)). P12-b sustituye su detector
+de pulso y compás por el elegido en la [comparativa P12-a](DETECTOR_COMPARISON.md):
+Beat This! `final0` en ONNX Runtime con el DBN portado a NumPy. Los
+adaptadores experimentales siguen fuera de estos propietarios de producción.
 
 ## Propietarios y dependencias
 
 Todos los módulos musicales están en `shared/dj/`. Solo `store` accede a disco,
-SQLite, FFmpeg, runtime y trabajos. Los módulos puros se pueden importar sin
-cargar el almacenamiento ni Flask; una prueba lo comprueba en otro proceso.
+SQLite, FFmpeg, runtime y trabajos, y solo `weights` a los pesos del modelo y
+su descarga. Los módulos puros se pueden importar sin cargar el
+almacenamiento ni Flask; una prueba lo comprueba en otro proceso.
 
 | Módulo | Responsabilidad y salida | Dependencias DJ |
 | --- | --- | --- |
 | `contracts` | `Analysis`, `AnalysisSummary`, `WindowFeatures`, `RhythmWindow`, `Structure`, `TransitionPlan`, unidades, versión de análisis y ausencia de evidencia | Ninguna |
-| `rhythm` | Hipótesis de pulso, rejilla, observaciones armónicas/ataques y subdivisión por región | `contracts`, `metre` |
-| `metre` | Agrupaciones de 2/3/4/6 pulsos, confianza del compás y del 1, regiones y abstenciones | Ninguna |
+| `beat_model` | Espectrograma log-mel, predicción por bloques de Beat This! con una sesión dada y tiempo de cada pulso entre tramas | `dbn` |
+| `dbn` | Decodificación conjunta de pulsos y unos (3/4 pulsos, 55–215 BPM), igual a madmom | Ninguna |
+| `rhythm` | Rejilla precisa a partir de los pulsos del modelo (recta/curva local y ataques de P1), observaciones armónicas/ataques y subdivisión por región | `contracts`, `metre` |
+| `metre` | Compás y unos estimados por el modelo por región; confirmación independiente con agrupaciones de 2/3/4/6 pulsos; abstenciones | Ninguna |
 | `features` | Ataques de notas, tonalidad, textura y medidas de una ventana | `rhythm`, `contracts` |
 | `structure` | Compases recibidos, frases, secciones y cues candidatos sobre las ventanas medidas | `contracts` |
-| `analysis` | Composición de las medidas completas; agrega ventanas sin rellenar huecos | `features`, `structure`, `contracts` |
-| `store` | Identidad, sello del contenido, SQLite, decodificación, LUFS en la misma pasada, trabajos acotados y despacho del DSP fuera de gevent | `analysis`, `contracts` |
+| `analysis` | Diezmado a 11025 Hz y composición de las medidas completas; agrega ventanas sin rellenar huecos | `features`, `structure`, `contracts` |
+| `weights` | Pesos ONNX: ruta empaquetada o caché, SHA-256, descarga única y sesión de un hilo | Ninguna (runtime) |
+| `store` | Identidad, sello del contenido, SQLite, decodificación a 22050 Hz con LUFS en la misma pasada, inferencia serializada y DSP fuera de gevent, trabajos acotados | `analysis`, `beat_model`, `weights`, `contracts` |
 | `timing` | Periodo y métrica locales, equivalencia de medio/doble pulso, deriva y admisión de beatmatch | `contracts` |
 | `transitions` | Único `plan_transition`: compatibilidad, técnica, cues, velocidad y eco | `timing`, `features` (nombres de notas), `contracts` |
 | `routes` | Continuidad, ruta legacy, llegada a peticiones, elección de hueco y reparación entre anclas | `transitions`, `timing`, `contracts` |
@@ -55,30 +57,37 @@ lecturas parciales/antiguas; un tipo completo no da por validada esa entrada.
   lectura, por ejemplo en silencio. BPM cero expresa pulso desconocido.
   `outro_cue = None` requiere colocar el fundido con la duración cargada.
   Lista vacía expresa falta de evidencia de rejilla/estructura.
-- `confidence` sigue combinando tempo y tonalidad. `metric_regions` separa
-  confianza del pulso, agrupación, subdivisión y fase del 1; ninguna es una
+- `confidence` sigue combinando tempo y tonalidad. En `metric_regions`,
+  `beats_per_bar`, `bar_seconds` y `downbeats` son la estimación del modelo
+  (P12-b); `metre_confidence` y `downbeat_confidence` solo dejan de ser cero
+  si la agrupación independiente coincide en tamaño y fase. Ninguna es una
   probabilidad calibrada de acierto musical. `bar_seconds` puede ser `None`:
-  ya no rellena lo desconocido con cuatro pulsos. El resumen escalar también
+  no se rellena lo desconocido con cuatro pulsos. El resumen escalar también
   distingue cambios o desconocidos. Frases y secciones conservan el supuesto
-  de ocho compases, ahora dentro de cada región conocida; P13 sigue pendiente.
+  de ocho compases sobre los unos del modelo; P13 sigue pendiente.
 - `TransitionPlan` es la decisión ejecutable del servidor. `score` describe
   compatibilidad para ordenar; no certifica que se ejecute beatmatch. El eco
   mantiene su periodo saliente medido. P12 añade vectores métricos compartidos
-  sin regenerar los vectores legacy de P7/P8/P9.
+  sin regenerar los vectores legacy de P7/P8/P9. P12-b cambia `three-to-four`
+  a `beats` por decisión del usuario y añade tres vectores de `beats`.
 
-`timing.comparable_ratio` conserva el plegado de una octava en los límites
-0,7/1,4, compartido por puntuación, entrada al drop, velocidad final y admisión
-de puentes. `tempo_coordinate` conserva la proyección logarítmica de BPM sobre
+`timing.pulse_relations` da el ciclo común de dos pulsos (m pulsos de la que
+sale = n de la que entra, relaciones 2ᵃ·3ᵇ) y su velocidad; lo comparten
+puntuación, entrada al drop, velocidad final, `metric_sync` y admisión de
+puentes. El contrato antiguo sin `metric_regions` conserva `comparable_ratio`,
+el plegado de una octava en 0,7/1,4. `tempo_coordinate` conserva la proyección logarítmica de BPM sobre
 la octava de la referencia de ruta: es otra operación y tiene otro objetivo.
 `local_period` conserva el ajuste sobre la rejilla alrededor del cue.
 `rate_fits` usa los periodos y la velocidad redondeados y todo el solapamiento;
 el límite del planificador sigue siendo 5 ms. La admisión de puentes verifica
 además BPM y técnica, y rechaza planes antiguos incompletos o valores inválidos.
-P12 añade `metric_sync`: compara duración de los compases a la velocidad
-real, fase de ambos cues y rejillas estables en todo el tramo medido. Solo
-entonces declara `alignment: bars`; las reservas declaran `none`. El score
-musical anterior se conserva para mezclas ejecutables y pasa a cero en las
-reservas del contrato métrico. `beatmatch_fits` es la misma admisión para
+`metric_sync` declara lo que los dos reproductores pueden mantener durante
+todo el tramo: `bars` con unos confirmados en ambas canciones, compases
+ejecutados iguales, fase de ambos cues y rejillas estables; `beats` (P12-b)
+con pulso estable compartido, ambos cues en pulsos medidos y rejillas
+regulares sin huecos, y el compás estimado común solo como guía de
+recolocación; `none` en el resto. El score musical anterior se conserva para
+mezclas ejecutables y pasa a cero con `none`. `beatmatch_fits` es la misma admisión para
 puentes de fuentes y de peticiones con medidas nuevas. Las entradas sin
 `metric_regions` conservan explícitamente el contrato legacy; P11-a sigue
 visible para esa política anterior.
@@ -112,10 +121,13 @@ continuidad v6 y semántica/relevancia legacy es deliberada y ya figuraba en P3.
 
 Contradicción confirmada que esta extracción conserva: `route_to_request`
 declara mejorar la seguridad pero compara solamente `score`. En la fixture
-medida 100 → 107 → 114 BPM devuelve un puente con dos `echo_cut`, puntuaciones
-0,602/0,625 y velocidad 1; ambos desajustes superan el límite de 6 %. Para el
-mismo conjunto, `add_measured_bridges` conserva el destino directo, porque
-ningún tramo hace beatmatch. Una puntuación armónica alta tampoco asegura una
+medida 100 → 109 → 119 BPM, con tonalidades Do → La → Fa# mayor, devuelve un
+puente con dos `echo_cut`, puntuaciones 0,381/0,381 frente a 0,244 del paso
+directo, y velocidad 1; ambos desajustes superan el límite de 8 % y el puente
+gana solo por tonalidad. Hasta P12-b, con el límite de 6 %, la fixture era
+100 → 107 → 114 BPM (0,602/0,625). Para el mismo conjunto,
+`add_measured_bridges` conserva el destino directo, porque ningún tramo hace
+beatmatch. Una puntuación armónica alta tampoco asegura una
 velocidad local ejecutable aunque los BPM globales coincidan.
 
 P12 exige ambos tramos ejecutables para las medidas nuevas y comparte su
@@ -124,8 +136,8 @@ resultado descrito. Para esas entradas legacy, el subpunto deberá decidir si
 todos los puentes de petición tienen que superar la misma prueba de ejecución que los de fuentes, y cómo comparar las
 técnicas de reserva sin presentar `score` como seguridad. Afecta a peticiones
 legacy, colocación y reparación. Tiene caso permanente en
-`test_dj_boundaries.py`; no se cambia de política dentro de P11. El siguiente
-trabajo de la secuencia acordada es P12-a; esta discrepancia legacy sigue visible.
+`test_dj_boundaries.py`; no se cambia de política dentro de P11. Esta
+discrepancia legacy sigue visible tras P12-b.
 
 ## Evidencia de extracción
 

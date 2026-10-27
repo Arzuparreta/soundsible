@@ -40,7 +40,6 @@ from shared.dj.routes import (
     choose_placement,
     choose_request_segment,
     repair_route,
-    route_identity as _dj_repair_identity,
 )
 from shared.dj.contracts import analysis_summary as _dj_analysis_summary
 from shared.dj_pool import ANALYSIS_COHORT_SIZE, add_measured_bridges
@@ -1555,6 +1554,27 @@ def discovery_music_dj_plan():
     })
 
 
+def _dj_occupied_keys(data: dict, items) -> set[str]:
+    """Every key of the songs a bridge must not repeat: the seed, `items`, avoided ones.
+
+    One recording has several identities: `music:track:<id>` from the
+    library, `music:youtube:<id>` from the catalogue, its canonical artist and
+    title. Comparing one of them let a requested song come back as its own
+    bridge — the library copy of «Teardrops (Rules Remix)» before the
+    catalogue one, a perfect mix into itself — and the browser showed it twice.
+    """
+    occupied = {str(value) for value in (data.get("exclude") or []) if value}
+    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
+    if seed:
+        occupied |= _candidate_keys(seed)
+        parsed = _music_set_item(seed, source_id="route", label="Route")
+        if parsed:
+            occupied |= _candidate_keys(parsed)
+    for item in items:
+        occupied |= _candidate_keys(item)
+    return occupied
+
+
 def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tuple[dict, dict]]:
     """Build one-hop bridges from explicit sources and heard music only."""
     source_roots = []
@@ -1591,10 +1611,10 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
         related = list(_planner_context_related(metadata, roots[-8:], personalise=False).items)
         candidates = []
         for item in related:
-            identity = str(item.get("recommendation_identity") or item.get("id") or "")
-            if not identity or identity in occupied or not _song_sized(item):
+            keys = _candidate_keys(item)
+            if not keys or keys & occupied or not _song_sized(item):
                 continue
-            occupied.add(identity)
+            occupied.update(keys)
             candidates.append((item, _dj_item_analysis(metadata, item)))
             if len(candidates) >= 12:
                 break
@@ -1670,7 +1690,6 @@ def _dj_place_one(data: dict) -> tuple[dict, int]:
             route_offset = raw_index
 
     route: list[tuple[dict, dict]] = []
-    occupied = {str(target.get("recommendation_identity") or target.get("id") or "")}
     horizon = raw_route[route_offset:route_offset + (1 if route_offset else 16)]
     for raw in horizon:
         if not isinstance(raw, dict):
@@ -1679,8 +1698,8 @@ def _dj_place_one(data: dict) -> tuple[dict, int]:
         if not item:
             continue
         item["queue_id"] = str(raw.get("queue_id") or "")
-        occupied.add(str(item.get("recommendation_identity") or item.get("id") or ""))
         route.append((item, _dj_item_analysis(metadata, item)))
+    occupied = _dj_occupied_keys(data, [target, *(item for item, _ in route)])
 
     fixed_index = next(
         (index for index, (item, _) in enumerate(route) if item.get("queue_id") == before_queue_id),
@@ -1801,9 +1820,7 @@ def discovery_music_dj_repair():
 
     anchors = [(item, analysis) for pinned, item, analysis in parsed if pinned]
     spares = [(item, analysis) for pinned, item, analysis in parsed if not pinned]
-    occupied = {str(value) for value in (data.get("exclude") or []) if value}
-    occupied.update(_dj_repair_identity(item) for item, _ in (*anchors, *spares))
-    occupied.discard("")
+    occupied = _dj_occupied_keys(data, [item for item, _ in (*anchors, *spares)])
     extra_pool = _dj_place_bridge_pool(metadata, data, occupied)
     seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
     target = min(_DJ_REPAIR_ROUTE_CAP, max(len(refs), int(raw_limit or len(refs))))

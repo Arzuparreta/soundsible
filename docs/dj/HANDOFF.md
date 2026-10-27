@@ -62,7 +62,7 @@ no hay síntoma que lo justifique.
 | Punto | Tema | Evidencia | Estado |
 | --- | --- | --- | --- |
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
-| P2 | Alineación de fase en el navegador | Lectura de código | Sin síntoma tras #377; se retoma solo si vuelve a oírse desfase |
+| P2 | Alineación de fase en el navegador | Traza de la estación: un `seek` en el cue dejó 115 ms de desfase 30 s, oído por el usuario | Cerrado en la web (PR #395): fase mantenida con `playbackRate` durante la mezcla; Android sin medir |
 | P3 | El orden de la ruta ignora la calidad de la transición | Tests de magnitudes, audio sintético → HTTP y replay de análisis locales | Cerrado (implementación `0e62b0fb`) |
 | P4 | La "energía" no mide intensidad | Medido | Cerrado (#385): notas/s, LUFS y planitud; `energy` eliminado |
 | P5 | Pool analizado, previews y canciones puente | AAC → caché → HTTP, pools fríos/calientes y adquisición real de 16 previews | Cerrado (implementación `31f696bc`) |
@@ -73,10 +73,10 @@ no hay síntoma que lo justifique.
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
 | P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
-| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en `2ca8ccf2`, PR #394; doce fragmentos reales sin compás y 1 acreditados | Parcial; cierre anterior rectificado. Detección musical pendiente |
-| P12-a | Estimación conjunta y comparativa de detectores abiertos | [Plan de comparación](DETECTOR_COMPARISON.md); sin resultados nuevos todavía | Autorizado; siguiente trabajo, casi de extremo a extremo |
-| P12-b | Integración del método elegido y cierre de P12 | Depende de los resultados de P12-a | Pendiente de decisión del usuario; reutilizar contratos y guardas |
-| P13 | Frases y secciones sobre una base métrica explícita | Agrupación actual en ocho compases; comparar también modelos que produzcan estructura | Preparar fixtures en P12-a; implementar sobre la métrica elegida, después o junto a P12-b |
+| P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector de P12-b medido de extremo a extremo sobre el corpus de P12-a (`integrated-p12b.json`) | Cerrado con P12-b; límites abajo |
+| P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado (PR #395): mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
+| P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR #395, junto con P12-a) |
+| P13 | Frases y secciones sobre una base métrica explícita | Ocho compases contados desde los unos del modelo; fixtures `structure_*` en el corpus de P12-a | **Siguiente trabajo** |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
@@ -91,12 +91,69 @@ detección general del compás, del 1 ni de las frases musicales. P2 corrige la
 alineación temporal de reproducción; no corrige una interpretación musical
 equivocada aunque los dos reproductores coincidan al milisegundo.
 
-**P12 queda parcial; el siguiente trabajo es P12-a, antes de P13.** El cierre
+**P12 se cierra con P12-b; el siguiente trabajo es P13.** Historia: el cierre
 anterior fue prematuro: `2ca8ccf2` y la PR #394 aportan contratos y guardas,
 pero los doce fragmentos Ballroom no acreditan compás y 1 correctos. El usuario
 acuerda probar estimación conjunta y varias soluciones abiertas mantenibles,
-compararlas y decidir con los resultados. No hay detector elegido ni
-comparativa nueva ejecutada todavía.
+compararlas y decidir con los resultados. **La comparativa está medida y
+el usuario ha decidido (2026-10-26); el siguiente trabajo es P12-b.**
+Resultados y límites en [detector_comparison/RESULTS](detector_comparison/RESULTS.md).
+
+**Decisiones del usuario (2026-10-26):**
+
+- Detector: **Beat This! `final0`** con su DBN de 3/4 pulsos. Se ejecuta con
+  ONNX Runtime y frontend NumPy, sin PyTorch ni madmom en el motor: PyTorch no
+  publica Windows arm64 y madmom solo existe como código fuente de 2018 con
+  pesos CC BY-NC-SA. El DBN se porta a NumPy y se verifica contra las salidas
+  retenidas de la comparativa.
+- Guardas: **beatmatch por pulso cuando el pulso es fiable**; alineación de
+  compases solo con evidencia adicional del 1. La activación de la red no es
+  esa evidencia: no separa aciertos de errores. Cambia la política de P12,
+  que hoy exige compases para cualquier beatmatch.
+- Versión: **no publicar ninguna versión hasta integrar P12-b**, en lugar de
+  revertir #394.
+- Velocidad: el límite de estiramiento de la canción que entra pasa del 6 % al
+  8 %, el rango de pitch de un plato o CDJ (120 ↔ 128 BPM, 6,7 %, se oía
+  mezclable y caía en `echo_cut`). Pendiente como punto propio: repartir el
+  cambio de tempo entre las dos canciones durante la mezcla (cada una ≤ 8 %,
+  hasta ~16 %, p. ej. 120 ↔ 140) y volver gradualmente; requiere variar la
+  velocidad de ambas manteniendo la fase en web y Android.
+- Puerta del beatmatch: **solo la ejecución decide si hay fallback**. Si los
+  dos pulsos son estables y la velocidad local cabe en el 8 % con ≤ 5 ms de
+  desfase, hay beatmatch. Se quita la puerta `score ≥ 0,55`: con ella la
+  tonalidad provocaba fallbacks (120 La menor ↔ 128 Sol menor sacaba 0,495 y
+  sonaba en `echo_cut`) y la parte de tempo dejaba un límite oculto cerca del
+  7 %. Todos los intervalos entre tonalidades se consideran mezclables; la
+  clasificación Camelot se conserva para ordenar la ruta y elegir entre
+  bass_swap (≥ 0,72), filter_blend y long_blend (armonía ≥ 6/7). Medido en
+  6000 parejas de la biblioteca del usuario: entre un 6 y un 8 % de diferencia
+  de tempo, el beatmatch pasa del 2 % al 75 %; entre un 4 y un 6 %, del 26 % al
+  78 %.
+- 1 contado desde el primer 1 medido: si el cue cae en un tramo donde el
+  modelo no da ningún 1 (una intro de contrapunto que sugiere otro 1, como
+  «Teardrops (Rules Remix)»), el cue se pone a compases enteros del 1 medido
+  más cercano a lo largo del mismo pulso, primero el siguiente: el compás que
+  revela la entrada de la batería. Solo con rejilla regular, sin huecos y
+  pulso estable hasta ese 1 (`projected_bar`). La recolocación usa ese compás.
+  La garantía sigue siendo `beats`. Medido en la estación: el plan anterior
+  ponía el 1 de la batería en el 2 de la saliente. En la biblioteca del
+  usuario, 17 de 227 canciones con pulso estable tienen este patrón en su cue
+  de entrada.
+- Ciclo común: lecturas binarias y ternarias son equivalentes; dos canciones
+  se mezclan con beatmatch en cualquier relación 2ᵃ·3ᵇ de pulsos que los
+  reproductores puedan mantener (incluida 3:2, p. ej. 116 ↔ 174), alineando el
+  ciclo común desde los dos unos. Dentro de la PR de P12-b.
+- Pesos: el `.onnx` de `final0` (84 MB, MIT) se publica como asset de una
+  release de GitHub de Soundsible con SHA256 fijado. La imagen Docker y el
+  instalador de escritorio lo incluyen; una instalación desde código lo
+  descarga la primera vez.
+
+**Regresión medida en `main` (#394, sin publicar todavía).** Con las 30
+grabaciones GTZAN no vistas, el tempo correcto baja de 21 a 10 y el 1 real no
+se identifica en ninguna (F1 0). En la caché local del usuario, 162 de 278
+canciones cambian de BPM respecto a v8 (66 ×1,5) y el 1 cubre de media el
+2,2 % de cada canción v9: casi todas las transiciones con música real son de
+reserva. El usuario decide retener la próxima versión hasta P12-b.
 
 **Orden de desarrollo acordado (2026-10-25): banco/adaptadores y comparativa
 P12-a → resultados y decisión del usuario → integración P12-b → P13.** Para
@@ -195,6 +252,7 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 | --- | --- |
 | Entrada pública (reexports, sin estado propio) | `shared/dj_engine.py` |
 | Contratos, almacenamiento, análisis, estructura, reglas temporales, transiciones y rutas | `shared/dj/`; mapa de dependencias en [ARCHITECTURE](ARCHITECTURE.md) |
+| Modelo de pulso y unos (Beat This! en ONNX Runtime, DBN en NumPy) y sus pesos | `shared/dj/beat_model.py`, `shared/dj/dbn.py`, `shared/dj/weights.py`; avisos en `shared/dj/third_party/` |
 | Admisión de puentes del conjunto medido | `shared/dj_pool.py` |
 | Endpoints `dj-plan`, `dj-place`, `dj-repair`, `dj-transition` | `shared/api/routes/auto_mode.py` |
 | Cuándo y cómo se lanza cada transición (navegador) | `ui_web/src/stores/dj.ts` |
@@ -208,11 +266,15 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 1. **Análisis** (`analyse_audio`). La biblioteca local de todas las cuentas se
    recorre en segundo plano al arrancar y cada cinco minutos (sin podcasts ni
    audio disponible solo en la nube). Las previews se analizan al completar su
-   adquisición. Cada recarga prepara un conjunto acotado de candidatas (P5). FFmpeg decodifica a mono,
-   11025 Hz; NumPy calcula las medidas; solo se guardan las medidas en SQLite. En
-   segundo plano, 2 hilos (`request_analysis`). Canciones de más de 8 minutos: solo
-   los primeros 90 s y los últimos 120 s. Mientras no hay análisis se usa
-   `contracts.fallback_analysis()` con `confidence` 0,18.
+   adquisición. Cada recarga prepara un conjunto acotado de candidatas (P5). FFmpeg decodifica una
+   vez a mono, 22050 Hz, con el medidor LUFS en la misma pasada. Beat This!
+   `final0` (ONNX Runtime, un hilo, una inferencia a la vez) y el DBN dan pulsos
+   y unos; el resto de medidas usan la misma ventana diezmada a 11025 Hz en
+   NumPy. Solo se guardan las medidas en SQLite. En segundo plano, 2 trabajos
+   (`request_analysis`). Canciones de más de 8 minutos: solo los primeros 90 s y
+   los últimos 120 s. Sin pesos verificados no se analiza ni se guarda nada
+   (P12-b). Mientras no hay análisis se usa `contracts.fallback_analysis()` con
+   `confidence` 0,18.
 2. **Candidatas** (`_build_music_set_route`, `auto_mode.py:1219`): canciones de cada
    fuente, más las "related" de YouTube Music (25 por semilla) de las últimas 4
    canciones de cada fuente, más las related de las últimas 4 canciones
@@ -234,10 +296,10 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 
 | Campo | Cómo se calcula | ¿Se usa al planificar? |
 | --- | --- | --- |
-| `bpm` | Recta (o curva local) ajustada a todos los golpes de la ventana; ver P1 | Sí |
-| `beat_grid` | Rejilla ajustada y alineada al inicio del ataque, 4 decimales; ver P1 | Sí |
-| `downbeats` | Unos identificados dentro de regiones con agrupación medida; puede abstenerse (P12) | Sí |
-| `metric_regions` | Periodo, unidad convencional, pulsos/compás, subdivisión, cobertura y confianzas separadas; desconocidos explícitos (P12) | Sí, validez del par y del solapamiento; el plan transmite solo dos coberturas compactas |
+| `bpm` | Recta (o curva local) por los pulsos del modelo, ponderada por el ataque de cada uno; ver P1 y P12-b | Sí |
+| `beat_grid` | Pulsos del modelo donde los hay (sin prolongarlos), fase y periodo fijados con los ataques, 4 decimales | Sí |
+| `downbeats` | Unos estimados por el modelo, en puntos de la rejilla (P12-b) | Sí |
+| `metric_regions` | Pulsos/compás y unos: estimación del modelo. `metre/downbeat_confidence`: confirmación independiente (cambios armónicos y acentos sobre la misma rejilla), cero si no coincide. Subdivisión medida; desconocidos explícitos | Sí, validez del par y del solapamiento; el plan transmite solo dos coberturas compactas |
 | `key`, `mode` | Correlación de Pearson con los perfiles Krumhansl; croma con resolución para graves (P6) | Sí |
 | `note_rate` | Ataques por segundo de música que suena (P4) | Sí, continuidad de ruta (P3) |
 | `loudness_lufs` | Sonoridad integrada EBU R128 de FFmpeg, en la misma decodificación (P4) | Sí, continuidad de ruta (P3) |
@@ -251,32 +313,56 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 ### Cálculo de la transición (`plan_transition`)
 
 ```
-ratio = bpm_sale / bpm_entra   (si < 0,7 se multiplica por 2; si > 1,4 se divide por 2)
+ratio = bpm_sale / bpm_entra, llevado a la velocidad del ciclo común más cercano
+        (m pulsos de la que sale = n de la que entra; 1:1, 2:1, 3:2, 4:3, 3:1, 4:1
+        y sus inversos; el contrato antiguo solo pliega una octava)
 tempo     = 1 − |1−ratio| / 0,08
 armonía   = 1 − pasos_Camelot / 7 (±1 en el mismo modo o cambio relativo = un paso; sin tonalidad conocida 0.55)
 confianza = mínimo de las dos canciones
 score_base = 0.46·tempo + 0.32·armonía + 0.22·confianza
-score      = score_base si la mezcla métrica es ejecutable; 0 si requiere reserva
+score      = score_base si hay alineación ejecutable (`bars` o `beats`); 0 si no
              (las entradas antiguas sin contrato métrico conservan score_base)
 ```
 
-La puntuación conserva la escala de `adaptive` anterior para ordenar rutas.
-La técnica comprueba además el periodo local, la velocidad y la métrica
-realmente ejecutadas. Las tres técnicas de beatmatch requieren compases
-alineados durante todo el solapamiento, no solo BPM compatibles (P12):
+La puntuación conserva la escala de `adaptive` anterior para ordenar rutas y
+elegir entre bass_swap y filter_blend; no decide un fallback (P12-b). La
+técnica comprueba el periodo local, la velocidad y la métrica realmente
+ejecutadas. Las tres técnicas de beatmatch requieren alineación
+ejecutable durante todo el solapamiento, no solo BPM compatibles (P12-b):
+`bars` con unos confirmados en ambas canciones y compases ejecutados iguales;
+`beats` con pulso estable compartido (región con `pulse_confidence > 0,6`,
+rejilla regular sin huecos y ambos cues en pulsos medidos). En `beats` el
+compás estimado por el modelo solo se envía si coincide en las dos canciones;
+no se promete.
+
+**Ciclo común (decisión del usuario, 2026-10-26).** Leer una canción en
+binario o en ternario es una elección de nivel: un 12/8 es un 4/4 con pulsos
+ternarios y un 6/8 se lee como dos pulsos o como tres. La mezcla no depende
+de esa lectura: busca la duración más corta que sea un número entero de
+pulsos de ambas canciones (`cycle_beats` = [m, n], relaciones 2ᵃ·3ᵇ dentro del
+8 % de velocidad) y la mantiene empezando en los dos unos. Ejemplos: 3 contra 4
+pulsos al mismo pulso (unos juntos al empezar y cada 12 pulsos), 120 ↔ 180 BPM
+(2 pulsos = 3), 90 ↔ 120 (3 = 4), 116 ↔ 176 a velocidad 0,9886, 6/8 a 80 ↔ 4/4
+a 120. El cue solo se recoloca por `relocation_seconds`: compases enteros de la
+que sale que son también ciclos enteros, para no separar los dos unos. Donde el
+modelo no da ningún 1, los unos se cuentan en compases enteros desde el 1
+medido más cercano del mismo pulso continuo (`projected_bar`): el cue y la
+recolocación usan esos unos.
 
 | Condición | Técnica | Compases solicitados |
 | --- | --- | --- |
 | Pulso fiable, score ≥ 0,72 y ajuste local ejecutable | bass_swap | 16 |
 | Lo anterior, tonalidades iguales/vecinas/relativas y apertura/cola tranquilas medidas suficientemente largas, sin huecos ni deriva | long_blend | 32 |
-| Pulso fiable, score ≥ 0,55 y ajuste local ejecutable | filter_blend | 16 |
+| Pulso fiable y ajuste local ejecutable, score < 0,72 | filter_blend | 16 |
 | No hay mezcla ejecutable, confianza ≥ 0,42, pulso fiable en ambas canciones y golpe saliente medido válido | echo_cut | 8 |
 | Confianza ≥ 0,42 sin los requisitos anteriores | structural_fade | 8 |
 | Resto | safe_fade | 8 |
 
-El ajuste local no supera el 6 % y debe acumular como máximo 5 ms de desfase
+El ajuste local no supera el 8 % (rango de pitch de un plato o CDJ; decisión
+del usuario, 2026-10-26, antes 6 %) y debe acumular como máximo 5 ms de desfase
 con los valores redondeados del contrato. Un score alto por tonalidad no puede
-eludir esa comprobación. Medio/doble tempo sigue representando el mismo pulso.
+eludir esa comprobación. Cualquier ciclo común mantiene alineados todos los
+niveles que comparten las dos canciones; medio/doble tempo es el caso 2:1.
 
 - Solapamiento: compases × duración local medida del compás de la canción que
   sale, entre 4 y 48 s; sin compás se usa una reserva temporal y
@@ -286,12 +372,13 @@ eludir esa comprobación. Medio/doble tempo sigue representando el mismo pulso.
   `in_cue` = `intro_cue` ajustado dentro de su región; no salta a otra ventana
   cuando el comienzo carece de medida. Son los puntos de reserva:
   P8 usa las secciones cuando caben en la ventana y puede acortar el solapamiento.
-- Beatmatch solo con BPM conocido, `tempo_confidence > 0,6` y validación
-  métrica local de ambos cues y del tramo completo. Las reservas no prometen
-  alineación de compás y mantienen velocidad normal; su score de mezcla vale
-  cero en el contrato métrico nuevo. La tonalidad no puede eludir la guarda.
-- `playback_rate` = relación entre los periodos medidos cerca de cada punto. Solo
-  en bass_swap, long_blend y filter_blend, y solo si el cambio es ≤ 6 %. Si no, 1,0.
+- Beatmatch solo con BPM conocido, `tempo_confidence > 0,6` y alineación
+  `bars` o `beats` de ambos cues y del tramo completo. Las reservas declaran
+  `none`, mantienen velocidad normal y su score de mezcla vale cero en el
+  contrato métrico. La tonalidad no puede eludir la guarda.
+- `playback_rate` = velocidad que iguala el ciclo común con los periodos medidos
+  cerca de cada punto (n · periodo_entra / (m · periodo_sale)). Solo en
+  bass_swap, long_blend y filter_blend, y solo si el cambio es ≤ 8 %. Si no, 1,0.
 
 ### Ejecución en el navegador
 
@@ -308,16 +395,18 @@ eludir esa comprobación. Medio/doble tempo sigue representando el mismo pulso.
   fundido empieza unos 24 s antes del final.
 - Transición fiable: solapamiento limitado al 25 % de la duración. La salida no
   empieza antes de 90 s o del 60 % de la canción, lo que llegue antes. Si
-  `out_cue` cae fuera de esa ventana se mueve compases enteros (`placeOutCue` en
-  `ui_web/src/lib/djCue.ts` y `ProgramDjPlan.placeOutCue` en Android), no una
-  cantidad cualquiera.
+  `out_cue` cae fuera de esa ventana se mueve compases enteros (`bars`, o
+  `beats` con compás común enviado) o pulsos enteros (`beats` sin compás),
+  dentro de la cobertura medida (`metricCuePlacement` en
+  `ui_web/src/lib/djCue.ts` y `ProgramDjPlan.metricCuePlacement` en Android),
+  no una cantidad cualquiera. Si no cabe, el beatmatch pasa a `structural_fade`.
 - "Mezclar entre canciones" apagado: técnica `direct`, la siguiente empieza
   cuando termina el archivo.
 
 `mixer.ts` y `graph.ts`:
 
 - La canción entrante arranca en silencio hasta 4 s antes del punto de mezcla, a
-  `playback_rate` (0,94–1,06, `preservesPitch` activado). Mientras está en
+  `playback_rate` (0,92–1,08, `preservesPitch` activado). Mientras está en
   silencio se corrige **una vez** su posición para que `in_cue` coincida con
   `out_cue`, con tolerancia de 5 ms.
 - Volumen: curva de igual potencia (seno/coseno) durante el solapamiento,
@@ -444,9 +533,24 @@ reales actuales. Las cifras de evaluación de #377 son históricas.
 
 ## P2. Alineación de fase en el navegador
 
-**Estado: sin síntoma.** Tras #377 el usuario no oye desfase en las mezclas. Lo
-que sigue es diagnóstico por lectura de código, sin medir; se retoma solo si
-vuelve a oírse un desfase entre los golpes de las dos canciones.
+**Estado: cerrado en la web (PR #395).** Síntoma medido y oído el 2026-10-26
+(«It's Not Right But It's Okay» → «Teardrops (Rules Remix)», web con
+plataforma `other` y la página oculta a ratos): en el cue, la entrante estaba 11 ms
+fuera de fase y `mixer.ts` la movió con un `seek` mientras sonaba. El `seek`
+tardó 370 ms (`media.seeking` → `media.seeked` en la traza) y la dejó 115 ms
+(−0,24 pulsos) detrás durante los 30 s de la mezcla; el usuario oyó los bombos
+desdoblados. Antes del arreglo nada corregía la fase después del cue.
+
+**Arreglo.** Durante una mezcla con beatmatch, cada tick compara la posición de
+la entrante con la que le corresponde según la saliente y, si se aparta más que
+la tolerancia del plan (5 ms), ajusta su `playbackRate` como un DJ con el pitch:
+error/1 s, como mucho ±2 %, en pasos de 0,25 %; vuelve a la velocidad exacta del
+plan al quedar dentro de la mitad de la tolerancia. En el cue solo se hace
+`seek` si el error supera 100 ms, una vez y con la entrante en silencio; la
+mezcla se abre cuando el `seek` termina y el pitch cierra lo que quede. Tests
+en `ui_web/src/lib/audio.test.ts`.
+
+Lo que sigue es el diagnóstico anterior al arreglo, por lectura de código.
 
 **Qué pasa.** `mixer.ts` (`tick`, fase `prerolling`) mueve `currentTime` del
 `<audio>` entrante una sola vez, mientras está en silencio, con un temporizador
@@ -971,7 +1075,8 @@ siguiente P aplica la mezcla automática a cada par, sin recuperar menús de est
   Se conservan las escalas, umbrales y límites de ejecución de la política
   anterior; no se calibran nuevas notas con canciones ni se añade azar.
 - **Técnica ejecutable.** Se construye el plan a sus puntos reales y se verifica
-  el ajuste local dentro del 6 % y del presupuesto de fase de 5 ms. Si no cabe,
+  el ajuste local dentro del límite de velocidad (6 % entonces; 8 % desde
+  P12-b) y del presupuesto de fase de 5 ms. Si no cabe,
   no se etiqueta como beatmatch a velocidad 1: se vuelve a planificar un eco
   de ocho compases con golpe saliente medido, o un fundido estructural/seguro
   si no hay pulso o confianza suficientes. No cambia la sincronización de P9.
@@ -1291,9 +1396,12 @@ revisar esa compatibilidad y la comparación de técnicas de reserva sigue
 pendiente, sin bloquear el cierre de P11 ni el modelo métrico de P12.
 
 Antes de P12, `route_to_request` declara mejorar la seguridad pero no exige ejecución de
-beatmatch. Con medidas de 100 → 107 → 114 BPM elige un puente con dos `echo_cut`
-a velocidad 1, puntuaciones 0,602/0,625. Los dos ajustes exceden el límite del
-6 %. Con el mismo conjunto, `add_measured_bridges` no añade puente porque
+beatmatch. Con medidas de 100 → 109 → 119 BPM y tonalidades Do → La → Fa#
+mayor elige un puente con dos `echo_cut` a velocidad 1, puntuaciones
+0,381/0,381 frente a 0,244 del paso directo. Los dos ajustes exceden el límite
+del 8 %; el puente gana solo por tonalidad. Hasta P12-b, con el límite del 6 %,
+la fixture era 100 → 107 → 114 BPM (0,602/0,625). Con el mismo conjunto,
+`add_measured_bridges` no añade puente porque
 requiere dos tramos con beatmatch y deriva admisible. La fixture permanente es
 `test_preserved_request_bridge_policy_differs_from_measured_cohort_admission`.
 
@@ -1364,29 +1472,54 @@ distribución concreta de archivos se deciden al implementarlo:
 
 ## P12. Compás, subdivisión, identificación del 1 y sus confianzas
 
-**Estado: parcial; cierre anterior rectificado el 2026-10-25.** La
-implementación `2ca8ccf2` (PR #394) aporta infraestructura métrica y guardas;
-la detección del compás y del 1 en música real sigue pendiente. Método,
-medidas y límites de ese baseline en [P12](P12.md) y
-[p12-results.json](p12-results.json). P2 sigue aparcado; no se cambia el reloj
-ni se introduce corrección continua de velocidad.
+**Estado: cerrado con P12-b (2026-10-26).** #394 (`2ca8ccf2`) aportó contratos
+y guardas, pero su detector no acreditó compás ni 1 en música real y empeoró el
+tempo en `main`. P12-a comparó alternativas abiertas y el usuario eligió
+Beat This! `final0`. P12-b lo integra: pulsos y unos del modelo (ONNX Runtime,
+DBN en NumPy), rejilla fijada a los ataques como en P1 y dos garantías de
+mezcla, `beats` y `bars`. Evidencia en
+[detector_comparison/RESULTS](detector_comparison/RESULTS.md) (sección P12-b) y
+en [P12](P12.md). P2 sigue aparcado; no se cambia el reloj ni se introduce
+corrección continua de velocidad.
+
+Límites vigentes tras P12-b:
+
+- La lectura del compás puede no ser la escrita: el DBN agrupa en 3 o 4
+  pulsos y elige el nivel de pulso (en las señales de dos pulsos ternarios lee
+  180 BPM binarios donde se generaron 120 ternarios). El ciclo común hace que
+  la mezcla sea la misma con cualquier lectura. Lo que sí depende de ella es
+  el recuento de frases y secciones (P13). En las señales sintéticas de 3/4
+  el modelo agrupa de 4 en 4 (en valses reales, vistos en su entrenamiento,
+  acierta); la confirmación independiente no lo promete, pero el 1 estimado
+  puede caer en otro pulso del compás.
+- La confirmación independiente no aparece en la música real medida (0 % en
+  GTZAN y Ballroom): en la práctica, las mezclas con música real son `beats`.
+- Sin anotaciones de la biblioteca del usuario, la comparación v8/v9/v10 de
+  una muestra solo mide concordancia (sección P12-b de RESULTS).
+- Sin aceptación física de escucha nueva.
+
+Lo siguiente describe el contrato de #394, que P12-b conserva:
 
 - `metric_regions` distingue periodo/unidad, pulsos por compás, subdivisión,
   cobertura y confianzas de pulso, agrupación, subdivisión y 1. Desconocidos y
   cambios no se rellenan con 4/4. Las confianzas describen evidencia del modelo,
   no probabilidades calibradas de verdad musical.
-- Se contrastan hipótesis binarias/ternarias de pulso y agrupaciones locales.
+- #394 contrastaba hipótesis binarias/ternarias de pulso; P12-b las retira
+  (eran la causa de los errores 3:2 y 4:3). Las agrupaciones locales de 2/3/4/6
+  pulsos quedan como confirmación independiente de los compases del modelo.
   Las fixtures incluyen anacrusas, 1 débil, contratiempos, dos subdivisiones
-  presentes, cambios dentro/fuera de un bloque, deriva, tono y pulso uniforme.
-  Se mantiene la precisión de P1; un pulso uniforme puede tener compás nulo.
+  presentes, cambios dentro/fuera de un bloque, deriva, tono, pulso uniforme y
+  unos del modelo equivocados de fase o de agrupación.
 - El plan certifica `alignment: bars` solo con ambos cues y todo el tramo
-  medidos y ejecutables. Igual BPM en 3/4 → 4/4 ya no promete coincidencia de
-  unos; 4 pulsos de 0,5 s y 2 de 1 s sí pueden compartir compases de 2 s.
-  Score cero y reserva explícita cuando falla la validación métrica.
+  medidos, confirmados y ejecutables; 4 pulsos de 0,5 s y 2 de 1 s sí pueden
+  compartir compases de 2 s. Desde P12-b, igual pulso en 3/4 → 4/4 da `beats`:
+  pulso alineado, sin prometer los unos. Score cero y reserva explícita solo
+  sin alineación ejecutable (`none`).
 - Rutas, peticiones, colocación, reparación, refinado y puentes comparten esa
   regla. Web y Android leen el compás local, conservan cobertura al recolocar
-  y degradan si no cabe. Ocho vectores comunes verifican ambos ejecutores;
-  el contrato antiguo conserva su reserva, sin presentarla como medida.
+  y degradan si no cabe. Once vectores comunes verifican ambos ejecutores
+  (tres de `beats` desde P12-b); el contrato antiguo conserva su reserva, sin
+  presentarla como medida.
 - Caché invalidada y resumen compacto con valores nulos explícitos. AAC →
   SQLite → HTTP cubre filas anteriores, estado frío/caliente, una decodificación
   por archivo y todos los endpoints sin redetectar música en clientes.
@@ -1399,7 +1532,7 @@ ni se introduce corrección continua de velocidad.
   el supuesto de ocho compases para frases/secciones. **P13 queda pendiente**:
   ni esas frases ni sus etiquetas prueban la forma musical.
 
-Validación local: suite principal de 2.330 casos (77,44 %), seguida de 201
+Validación local de #394: suite principal de 2.330 casos (77,44 %), seguida de 201
 casos dirigidos sobre los ajustes finales y tres casos AAC/HTTP de peticiones
 (sueltas y de artista); 1.772 tests de UI y 23 pruebas JVM. Chromium completo
 con un trabajador: 353 aprobados, 71 skips previstos; WebKit completo en imagen
@@ -1444,6 +1577,66 @@ El [plan operativo](DETECTOR_COMPARISON.md) fija el orden para avanzar rápido:
    estructural de los modelos que la tengan; no reescribir todavía estructura
    sobre una métrica que podría descartarse. Se permiten entregas amplias que
    cierren P12-b y P13 juntas si evitan pisar código y demuestran cada criterio.
+
+### P12-b: plan de integración (2026-10-26)
+
+**Ejecutado.** Diferencias respecto al plan: la rejilla toma el tiempo de cada
+pulso del pico de activación entre tramas, pondera la recta por el ataque
+medido y corrige fase y periodo con los ataques a ±20 ms (una trama del
+modelo), no a ±35 ms: en `gtzan_rock_00001` la ventana de P1 saltaba a otro
+instrumento. La sesión ONNX desactiva la telemetría 1DS de ONNX Runtime.
+
+Prueba en la estación del usuario (2026-10-26, techno/house). Las
+transiciones suenan mucho mejor, pero en una mezcla `beats` el 2 de la
+entrante caía en el 1 de la saliente (medido por el usuario a mano y en las
+trazas: +0,47 s, un pulso a 125 BPM, constante toda la mezcla). Dos causas,
+corregidas con tests de regresión:
+
+- El navegador no aplicaba al borde de la cobertura los 5 ms que admite el
+  servidor; un solapamiento 0,9 ms más largo que lo medido hizo mover el cue.
+- El paso de recolocación tomaba el compás del tramo entero; un bloque sin
+  compás regular dentro del solapamiento lo reducía a un pulso. Ahora es el
+  compás de la región del cue.
+
+En la misma prueba: el DBN se salta pulsos en pasajes a medio tiempo, y la
+pendiente inicial suponía pulsos consecutivos. Canciones estables quedaban
+como «deriva» (confianza 0,34-0,49) y sin beatmatch. Se numeran los pulsos
+a través de los saltos antes de ajustar (confianza 1,0 en esas canciones) y
+`ANALYSER_VERSION` pasa a 11.
+
+Una sola vía, con las decisiones de arriba. Una entrega coherente (servidor,
+persistencia, endpoints, web, Android y empaquetado), apoyada en los contratos
+y guardas de #394. Evidencia de partida en
+[detector_comparison/RESULTS](detector_comparison/RESULTS.md).
+
+1. **Runtime y pesos.** Sesión ONNX Runtime única y perezosa, un hilo,
+   exportación con atención partida (`onnx_probe.py --sliced-attention`),
+   frontend NumPy y troceado de Beat This!. `onnxruntime` entra en
+   `requirements.txt`, el lock de Docker y el sidecar PyInstaller. El asset
+   lleva SHA256; sin pesos válidos el análisis se abstiene, sin otro detector.
+2. **DBN en NumPy.** Port del `DBNDownBeatTrackingProcessor` que usa Beat
+   This! (3 y 4 pulsos, 55–215 BPM, 50 fps, λ 100, observación 16, umbral
+   0,05, corrección a picos). Igualdad contra las salidas `beatthis-final0-dbn`
+   retenidas, con fixtures de activaciones en los tests.
+3. **Una decodificación.** FFmpeg a 22050 Hz con el medidor LUFS en la misma
+   pasada; las medidas de 11025 Hz se derivan en NumPy. Comprobar P1/P4/P6
+   con sus señales sintéticas; `ANALYSER_VERSION` sube.
+4. **Rejilla.** El modelo decide tempo, octava, fase y el 1 candidato. El
+   ajuste fino de P1 no puede mover un pulso a otro ataque: en la comparativa,
+   el refinamiento local bajó el F1 sintético de 0,80 a 0,68 aunque dejó el
+   percentil 90 en 1,4 ms. Resultado: 0,845 de F1 sintético y 1,5 ms de
+   percentil 90 con la rejilla de P12-b.
+5. **Guardas.** Nuevo nivel `alignment: beats`: beatmatch con pulso fiable en
+   ambos cues y todo el solapamiento, velocidad ≤ 8 % y 5 ms de fase. `bars`
+   solo si el 1 del modelo coincide con evidencia independiente (agrupación
+   y fase de `metre` sobre la misma rejilla); si no, `beats`. Web
+   (`metricCuePlacement`) y Android (`ProgramDjPlan`) hoy degradan todo lo que
+   no sea `bars`: deben recolocar por pulsos enteros. Vectores comunes nuevos.
+6. **Limpieza.** Retirar del pulso las hipótesis 3:2/4:3 de #394 y el código
+   que deje de tener lectores.
+7. **Evidencia.** Repetir la comparativa con el analizador integrado (debe
+   igualar `beatthis-final0-dbn`), AAC → SQLite → HTTP frío/caliente, suites
+   completas web/Android y comparación de la caché local v8/v9/v10.
 
 El alcance y los criterios originales se conservan a continuación.
 
@@ -1511,10 +1704,12 @@ El alcance y los criterios originales se conservan a continuación.
 
 ## P13. Frases y secciones sobre una base métrica explícita
 
-**Estado: pendiente; depende de la métrica elegida en P12-a e integrada en
-P12-b.** Preparar fixtures durante la comparativa; implementar después de la
-decisión, pudiendo agrupar la entrega con P12-b para evitar reescrituras,
-con evidencia propia de frases y secciones. P8 cerró el uso de las secciones al
+**Estado: pendiente; siguiente trabajo tras P12-b.** La métrica es la de
+P12-b: unos estimados por Beat This! y confirmados solo con evidencia
+independiente. P12-b no cambió la agrupación de frases y secciones; ahora
+cuenta ocho compases desde los unos del modelo. Las fixtures de estructura de
+P12-a (`structure_4/8/16_bars`) están en el corpus fijado; All-In-One no
+aportó una salida estructural útil sobre ellas (P12-a, RESULTS). P8 cerró el uso de las secciones al
 planificar, no una detección general de forma musical. La agrupación actual
 en ocho compases no demuestra dónde empieza una frase ni dónde cambia una
 sección; ambas pueden parecer coherentes porque comparten la misma suposición.

@@ -9,8 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from shared.dj import contracts, routes, store, timing, transitions
-from shared.dj import analysis, contracts, features, rhythm, routes, structure, timing, transitions
+from shared.dj import analysis, contracts, features, rhythm, routes, store, structure, timing, transitions
 from shared import dj_engine
 from shared.dj_pool import _beatmatched, add_measured_bridges
 from test_dj_sections import measured
@@ -102,13 +101,15 @@ def test_bridge_boundary_uses_the_same_rounded_rate_and_full_overlap_budget():
 
 def test_preserved_request_bridge_policy_differs_from_measured_cohort_admission():
     # P11-a in the handoff: do not silently change this musical policy during
-    # extraction. Both legs exceed 6%; a score is not a beatmatch certificate.
-    seed, spare, target = (measured(bpm=bpm) for bpm in (100, 107, 114))
+    # extraction. Both legs exceed the players' 8 % range; the request bridge
+    # wins on key alone, and a score is not a beatmatch certificate.
+    seed, spare, target = ({**measured(bpm=bpm), 'key': key} for bpm, key in ((100, 'C'), (109, 'A'), (119, 'F#')))
     pool = [({'id': 'spare'}, spare)]
     destination = ({'id': 'target'}, target)
     requested = routes.route_to_request(seed, pool, destination, max_starts=3)
     assert [row['id'] for row in requested] == ['spare', 'target']
     assert [row['transition']['technique'] for row in requested] == ['echo_cut', 'echo_cut']
-    assert [row['transition']['score'] for row in requested] == [.602, .625]
+    assert [row['transition']['score'] for row in requested] == [.381, .381]
+    assert transitions.plan_transition(seed, target)['score'] == .244
     ordinary = routes.order_continuous_route(seed, [destination])
     assert [row['id'] for row in add_measured_bridges(seed, ordinary, pool)] == ['target']

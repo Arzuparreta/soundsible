@@ -4,7 +4,8 @@ import logging
 import threading
 from pathlib import Path
 
-from shared.dj_engine import analyse_audio, analysis_identity
+from shared.dj_engine import analyse_audio, analysis_identity, cached_analysis
+from shared.dj.store import requests_waiting
 from shared.path_resolver import resolve_local_track_path
 
 logger = logging.getLogger(__name__)
@@ -34,13 +35,21 @@ def library_inventory():
 
 
 def sweep_library(inventory, stop):
-    """One bounded-memory pass. A missing/broken file never aborts the rest."""
+    """One bounded-memory pass. A missing/broken file never aborts the rest.
+
+    Songs a DJ session is waiting for go first: before measuring an unmeasured
+    library song the sweep waits until no session request is pending.
+    """
     for path, identity, duration in inventory:
         if stop.is_set():
             break
         try:
             # Empty/disappearing files are picked up on the next pass.
             if Path(path).stat().st_size:
+                if cached_analysis(path, identity) is None:
+                    while requests_waiting():
+                        if stop.wait(0.5):
+                            return
                 analyse_audio(path, identity, duration_hint=duration)
         except Exception:
             logger.debug("DJ library analysis failed: %s", identity, exc_info=True)

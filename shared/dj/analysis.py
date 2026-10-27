@@ -6,6 +6,37 @@ from .contracts import ANALYSER_VERSION, Analysis, fallback_analysis as _fallbac
 from .features import _window_features
 from .structure import structure_from_windows
 
+# Decimation 22050 → 11025 Hz: Kaiser-windowed sinc (β 9, 64 taps a side,
+# about 90 dB of stopband), cutoff at 97 % of the new Nyquist like FFmpeg's
+# default resampler. The bands the 11025 Hz measures read end at 5 kHz.
+_DECIMATION_TAPS = 64
+_DECIMATION_CUTOFF = 0.97
+_DECIMATION_BETA = 9.0
+
+
+def decimate(samples):
+    """The 22050 Hz window band-limited and halved: 11025 Hz float32, zero phase.
+
+    The beat model reads 22050 Hz; the other measures keep the 11025 Hz
+    resolution they were validated at. One FFmpeg decode feeds both.
+    """
+    import numpy as np
+
+    signal = np.asarray(samples, dtype=np.float32)
+    span = _DECIMATION_TAPS
+    k = np.arange(-span, span + 1)
+    cutoff = 0.25 * _DECIMATION_CUTOFF  # Cycles per input sample; the new Nyquist is 0.25.
+    taps = 2 * cutoff * np.sinc(2 * cutoff * k) * np.kaiser(k.size, _DECIMATION_BETA)
+    taps = (taps / taps.sum()).astype(np.float32)
+    # y[n] = Σ_m taps[m] · padded[2n + 2T − m] with padded = x surrounded by T
+    # zeros. Even taps read only even samples and odd taps only odd ones, so
+    # two half-rate convolutions replace one at the input rate.
+    padded = np.pad(signal, span)
+    count = (signal.size + 1) // 2
+    even = np.convolve(padded[0::2], taps[0::2])[span:span + count]
+    odd = np.convolve(padded[1::2], taps[1::2])[span - 1:span - 1 + count]
+    return (even + odd).astype(np.float32)
+
 
 def _compose(
     tail,
@@ -15,6 +46,7 @@ def _compose(
     duration: float,
     tail_start: float,
     loudness_lufs: float | None = None,
+    events=None,
 ) -> Analysis:
     """Build the stored analysis from the measured windows.
 
@@ -23,11 +55,13 @@ def _compose(
     next track mixes *into*.
 
     `loudness_lufs` is measured by the decoder, on the original channels.
+    `events` is (tail, head) beat-model events in window seconds, or None.
     """
-    features = _window_features(tail, sample_rate)
+    tail_events, head_events = events if events is not None else (None, None)
+    features = _window_features(tail, sample_rate, tail_events)
     if features is None:
         return _fallback(duration)
-    head_features = features if head is tail else _window_features(head, sample_rate)
+    head_features = features if head is tail else _window_features(head, sample_rate, head_events)
     structure = structure_from_windows(features, head_features, duration=duration, tail_start=tail_start)
     beats = structure["beat_grid"]
     beat_offset = beats[0] if beats else 0.0

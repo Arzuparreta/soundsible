@@ -75,7 +75,7 @@ class ProgramDjPlanTest {
     @Test fun trustedTempoAndPhaseRemainInsideRuntimeBounds() {
         val plan = ProgramDjPlan.resolve("current", 200000000,
             confident.copy(rate = 2.0, inCue = -2.0, phaseToleranceMs = 30.0), true)!!
-        assertEquals(1.06, plan.rate.toDouble(), 0.0001)
+        assertEquals(1.08, plan.rate.toDouble(), 0.0001)
         assertEquals(0L, plan.inCueUs)
         assertEquals(12000L, plan.phaseToleranceUs)
     }
@@ -128,6 +128,60 @@ class ProgramDjPlanTest {
             val plan = ProgramDjPlan.resolve("current", 240000000, proposal, true)!!
             assertEquals(field, ProgramMixCurve.Technique.STRUCTURAL_FADE, plan.technique)
             assertEquals(1.0, plan.rate.toDouble(), 0.0)
+        }
+    }
+    private fun metricVector(name: String): org.json.JSONObject {
+        val rows = ProgramDjPlanTest::class.java.classLoader!!.getResourceAsStream("dj_metric_plans.json")!!.bufferedReader().use { JSONArray(it.readText()) }
+        return (0 until rows.length()).map { rows.getJSONObject(it) }.first { it.getString("name") == name }.getJSONObject("transition")
+    }
+    private fun metricProposal(transition: org.json.JSONObject, sync: org.json.JSONObject = transition.getJSONObject("sync")) =
+        confident.copy(outCue = transition.getDouble("out_cue"), inCue = transition.getDouble("in_cue"),
+            overlap = transition.getDouble("overlap_seconds"), rate = transition.getDouble("playback_rate"),
+            outPeriod = sync.getDouble("out_period"), metricSync = sync)
+    @Test fun pulsePlansMoveByWholeOutgoingBarsThatAreWholeCommonCycles() {
+        // 1.5 s outgoing bars keep the one on the incoming one (213.25 to 174.25);
+        // 120 against 180 BPM moves by 2 s, two cycles of 2 + 3 beats.
+        for ((name, latest, expected) in listOf(Triple("three-to-four", 175.0, 174.25),
+                Triple("unconfirmed-four", 167.0, 166.25), Triple("three-two-pulses", 167.0, 166.25))) {
+            val transition = metricVector(name)
+            assertEquals(name, "beats", transition.getJSONObject("sync").getString("alignment"))
+            val proposal = metricProposal(transition)
+            val placement = ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, latest, proposal, proposal.overlap)
+            assertEquals(name, expected, placement.first, 1e-9)
+            assertTrue(name, placement.second)
+        }
+    }
+    @Test fun pulsePlansDowngradeWithoutCoverageCycleOrStepOrWithContradictoryPeriods() {
+        for (name in listOf("three-to-four", "unconfirmed-four", "three-two-pulses", "four-three-pulses")) {
+            val transition = metricVector(name)
+            assertTrue(name, ProgramDjPlan.metricCuePlacement(transition.getDouble("out_cue"), 90.0, 215.0,
+                metricProposal(transition), transition.getDouble("overlap_seconds")).second)
+            val inPeriod = transition.getJSONObject("sync").getDouble("in_period")
+            for ((field, value) in listOf("out_metre" to org.json.JSONObject.NULL, "in_metre" to org.json.JSONObject.NULL,
+                    "in_period" to inPeriod * 1.1, "out_period" to 0.0, "in_bar_seconds" to 1.7, "alignment" to "none",
+                    "cycle_beats" to org.json.JSONObject.NULL, "cycle_beats" to org.json.JSONArray(listOf(5, 7)),
+                    "relocation_seconds" to 0.0)) {
+                val sync = org.json.JSONObject(transition.getJSONObject("sync").toString()).put(field, value)
+                val proposal = metricProposal(transition, sync)
+                val placement = ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, 215.0, proposal, proposal.overlap)
+                assertFalse("$name $field", placement.second)
+            }
+        }
+    }
+    @Test fun aCueWhoseOverlapEndsWithinThePhaseToleranceOfCoverageStays() {
+        // User's session, 2026-10-26: 0.9 ms past the coverage moved the cue one beat.
+        for (name in listOf("unconfirmed-four", "three-quarter")) {
+            val transition = metricVector(name)
+            val end = transition.getDouble("out_cue") + transition.getDouble("overlap_seconds") - 0.0009
+            val sync = org.json.JSONObject(transition.getJSONObject("sync").toString())
+            sync.put("out_metre", org.json.JSONObject(sync.getJSONObject("out_metre").toString()).put("end", end))
+            val proposal = metricProposal(transition, sync)
+            val placement = ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, 215.0, proposal, proposal.overlap)
+            assertEquals(name, proposal.outCue, placement.first, 0.0)
+            assertTrue(name, placement.second)
+            sync.put("out_metre", org.json.JSONObject(sync.getJSONObject("out_metre").toString()).put("end", end - 0.01))
+            val beyond = metricProposal(transition, sync)
+            assertNotEquals(name, beyond.outCue, ProgramDjPlan.metricCuePlacement(beyond.outCue, 90.0, 215.0, beyond, beyond.overlap).first, 0.0)
         }
     }
     @Test fun echoDelayBelongsOnlyToATrustedMatchingOccurrenceWithMixingEnabled() {

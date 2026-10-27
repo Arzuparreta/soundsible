@@ -173,6 +173,15 @@ jobs:
           # Checksum-verified on every use; the key changes with the pin.
           path: android/build/webrtc-original.aar
           key: android-webrtc-${{ hashFiles('scripts/android_webrtc.py') }}
+      # The fixture engine measures real audio with the Auto DJ beat model. It
+      # cannot download it itself: its TLS fixture replaces the CA bundle.
+      - name: Restore DJ beat model
+        uses: actions/cache@v6.1.0
+        with:
+          path: models
+          key: dj-model-${{ hashFiles('shared/dj/weights.py') }}
+      - name: Fetch DJ beat model
+        run: scripts/ci_retry.sh -- python scripts/fetch_dj_model.py
       - name: Prepare web bundle
         run: python scripts/android.py prepare
       - name: Install emulator and system image

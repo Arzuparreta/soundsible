@@ -1,0 +1,488 @@
+{
+  "allin1-all": {
+    "method": "allin1-all",
+    "external_weight_bytes": 95346479,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold0-0vra4ys2.pth",
+        "bytes": 1400571,
+        "sha256": "0db596dfb0995f41d62f6267d76a9d54c046f1649bd35e1dbeca0c5f9a7b8acd"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold1-3ozjhtsj.pth",
+        "bytes": 1400571,
+        "sha256": "607b4864eaabccd4f6951410d5ea6676666ad1cfa6ce2e18bc99f3824b77c3b7"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold2-gmgo0nsy.pth",
+        "bytes": 1400571,
+        "sha256": "67c28ec7ca612d365e5fcb152f6530eb53e34c4303940afb30fd17a295c958a4"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold3-i92b7m8p.pth",
+        "bytes": 1400571,
+        "sha256": "446d05672b2669cdb7d9b8bbbc228a4f3592484335a7995cca89a744e3950ddc"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold4-1bql5qo0.pth",
+        "bytes": 1400571,
+        "sha256": "96327222ab9b33c005388b788ba602f529aa03cc4dde1c859c011f1004490493"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold5-x4z5zeef.pth",
+        "bytes": 1400571,
+        "sha256": "c87f162a1090290bcbb863688746784919cf912c56744fb3d81a1a7dba3b114e"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold6-x7t226rq.pth",
+        "bytes": 1400571,
+        "sha256": "13e7e639bf30fcd3fa049ad863088773a4e57b06d7c68581385b3ef625c60688"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold7-qwwskhg6.pth",
+        "bytes": 1400571,
+        "sha256": "b888b7fba95efa3d5a37ca013fe7efe2741621ea9ca335e6b2723e4fd0fade57"
+      },
+      {
+        "path": "/home/arsu/.cache/torch/hub/checkpoints/955717e8-8726e21a.th",
+        "bytes": 84141911,
+        "sha256": "8726e21a993978c7ba086d3872e7608d7d5bfca646ca4aca459ffda844faa8b4"
+      }
+    ]
+  },
+  "allin1-fold0": {
+    "method": "allin1-fold0",
+    "external_weight_bytes": 85542482,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/harmonix-fold0-0vra4ys2.pth",
+        "bytes": 1400571,
+        "sha256": "0db596dfb0995f41d62f6267d76a9d54c046f1649bd35e1dbeca0c5f9a7b8acd"
+      },
+      {
+        "path": "/home/arsu/.cache/torch/hub/checkpoints/955717e8-8726e21a.th",
+        "bytes": 84141911,
+        "sha256": "8726e21a993978c7ba086d3872e7608d7d5bfca646ca4aca459ffda844faa8b4"
+      }
+    ]
+  },
+  "beatnet-1-dbn": {
+    "method": "beatnet-1-dbn",
+    "external_weight_bytes": 1612179,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/mjhydri_BeatNet/src/BeatNet/models/model_1_weights.pt",
+        "bytes": 1612179,
+        "sha256": "619091bc317ca3e83b45591d46f6de3d5a41588bcb39fe9fe7be30cffa6aca84"
+      }
+    ]
+  },
+  "beatnet-1-pf": {
+    "method": "beatnet-1-pf",
+    "external_weight_bytes": 1612179,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/mjhydri_BeatNet/src/BeatNet/models/model_1_weights.pt",
+        "bytes": 1612179,
+        "sha256": "619091bc317ca3e83b45591d46f6de3d5a41588bcb39fe9fe7be30cffa6aca84"
+      }
+    ]
+  },
+  "beatnet-2-dbn": {
+    "method": "beatnet-2-dbn",
+    "external_weight_bytes": 1612179,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/mjhydri_BeatNet/src/BeatNet/models/model_2_weights.pt",
+        "bytes": 1612179,
+        "sha256": "5878a18c079fa0b0139879b14ed2b5b7595faef8c3d16210aed141fd00fa2d58"
+      }
+    ]
+  },
+  "beatnet-2-pf": {
+    "method": "beatnet-2-pf",
+    "external_weight_bytes": 1612179,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/mjhydri_BeatNet/src/BeatNet/models/model_2_weights.pt",
+        "bytes": 1612179,
+        "sha256": "5878a18c079fa0b0139879b14ed2b5b7595faef8c3d16210aed141fd00fa2d58"
+      }
+    ]
+  },
+  "beatnetplus-generic-dbn": {
+    "method": "beatnetplus-generic-dbn",
+    "external_weight_bytes": 3072825,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/mjhydri_BeatNet-Plus/src/BeatNetPlus/models/generic_weights.pt",
+        "bytes": 3072825,
+        "sha256": "ed52f90e27ff9b5ef3c63f59c6d4b37366f60a21a48ea1d46d7c3e18d6f1977e"
+      }
+    ]
+  },
+  "beatnetplus-generic-pf": {
+    "method": "beatnetplus-generic-pf",
+    "external_weight_bytes": 3072825,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/mjhydri_BeatNet-Plus/src/BeatNetPlus/models/generic_weights.pt",
+        "bytes": 3072825,
+        "sha256": "ed52f90e27ff9b5ef3c63f59c6d4b37366f60a21a48ea1d46d7c3e18d6f1977e"
+      }
+    ]
+  },
+  "beatnetplus-main-dbn": {
+    "method": "beatnetplus-main-dbn",
+    "external_weight_bytes": 3072890,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/mjhydri_BeatNet-Plus/src/BeatNetPlus/models/generic_main_weights.pt",
+        "bytes": 3072890,
+        "sha256": "5bbae630b4112f3c1193654e3dbc946b850caa06a2a82e10e8de9e48bb673519"
+      }
+    ]
+  },
+  "beatnetplus-nonpercussive-dbn": {
+    "method": "beatnetplus-nonpercussive-dbn",
+    "external_weight_bytes": 3073019,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/mjhydri_BeatNet-Plus/src/BeatNetPlus/models/af_non_percussive_weights.pt",
+        "bytes": 3073019,
+        "sha256": "15fe9c1ec8f2fca75dd3cecac72a3fbf57c9004e8726a786876ad5e269f4895f"
+      }
+    ]
+  },
+  "beatthis-final0-dbn": {
+    "method": "beatthis-final0-dbn",
+    "external_weight_bytes": 81058141,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/torch/hub/checkpoints/beat_this-final0.ckpt",
+        "bytes": 81058141,
+        "sha256": "8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331"
+      }
+    ]
+  },
+  "beatthis-final0-direct": {
+    "method": "beatthis-final0-direct",
+    "external_weight_bytes": 81058141,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/torch/hub/checkpoints/beat_this-final0.ckpt",
+        "bytes": 81058141,
+        "sha256": "8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331"
+      }
+    ]
+  },
+  "beatthis-final0-direct-common": {
+    "method": "beatthis-final0-direct-common",
+    "external_weight_bytes": 81058141,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/torch/hub/checkpoints/beat_this-final0.ckpt",
+        "bytes": 81058141,
+        "sha256": "8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331"
+      }
+    ]
+  },
+  "beatthis-small0-dbn": {
+    "method": "beatthis-small0-dbn",
+    "external_weight_bytes": 8451101,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/small0.ckpt",
+        "bytes": 8451101,
+        "sha256": "6074be2c4d490c5f6101fcc374a1ec72ae93456e23bb6019783b849f5dc7d47b"
+      }
+    ]
+  },
+  "beatthis-small0-direct": {
+    "method": "beatthis-small0-direct",
+    "external_weight_bytes": 8451101,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/small0.ckpt",
+        "bytes": 8451101,
+        "sha256": "6074be2c4d490c5f6101fcc374a1ec72ae93456e23bb6019783b849f5dc7d47b"
+      }
+    ]
+  },
+  "beatthis-small0-direct-common": {
+    "method": "beatthis-small0-direct-common",
+    "external_weight_bytes": 8451101,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/checkpoints/small0.ckpt",
+        "bytes": 8451101,
+        "sha256": "6074be2c4d490c5f6101fcc374a1ec72ae93456e23bb6019783b849f5dc7d47b"
+      }
+    ]
+  },
+  "essentia-degara": {
+    "method": "essentia-degara",
+    "external_weight_bytes": 0,
+    "files": []
+  },
+  "essentia-multifeature": {
+    "method": "essentia-multifeature",
+    "external_weight_bytes": 0,
+    "files": []
+  },
+  "joint": {
+    "method": "joint",
+    "external_weight_bytes": 0,
+    "files": []
+  },
+  "joint-dbn": {
+    "method": "joint-dbn",
+    "external_weight_bytes": 0,
+    "files": []
+  },
+  "librosa-global": {
+    "method": "librosa-global",
+    "external_weight_bytes": 0,
+    "files": []
+  },
+  "librosa-local": {
+    "method": "librosa-local",
+    "external_weight_bytes": 0,
+    "files": []
+  },
+  "madmom-modern-default": {
+    "method": "madmom-modern-default",
+    "external_weight_bytes": 3283240,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_1.pkl",
+        "bytes": 410405,
+        "sha256": "22830500ae3bc1874dd6a1442f4fb05c80eb4f9ddcf5284155cdf5429cc631ba"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_2.pkl",
+        "bytes": 410405,
+        "sha256": "db1089357848c07fc6cfd4fbe67d67d7631891f3f6467b3ae7cdddde2c6d1d7a"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_3.pkl",
+        "bytes": 410405,
+        "sha256": "2ae8e8006f5697c39a8b52a9ed14e1638afa6107d8383e42bbfa324853aa0943"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_4.pkl",
+        "bytes": 410405,
+        "sha256": "4ea521e45261ade7e85a4d29794022a894501cb98e23679fff82b7f3430caffd"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_5.pkl",
+        "bytes": 410405,
+        "sha256": "3d90646ea6cc068b6d30777c1ad2a2d9a8ec7ebe4521151c0c8342cbe5e9741c"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_6.pkl",
+        "bytes": 410405,
+        "sha256": "0507d9f1c4ecd87c5013b3f408ac1187d609ba66c1cdc5642f120e26a4b54642"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_7.pkl",
+        "bytes": 410405,
+        "sha256": "78de89fd597231e45b5dc4ec502eb3d29ec7fe1cb1e154e7ac32b19f79751bdc"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_8.pkl",
+        "bytes": 410405,
+        "sha256": "b5f4c4aba477cb847ef18a5cd660a76efc49f28fefdb134ac5e4e484ae5da9f9"
+      }
+    ]
+  },
+  "madmom-modern-extended": {
+    "method": "madmom-modern-extended",
+    "external_weight_bytes": 3283240,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_1.pkl",
+        "bytes": 410405,
+        "sha256": "22830500ae3bc1874dd6a1442f4fb05c80eb4f9ddcf5284155cdf5429cc631ba"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_2.pkl",
+        "bytes": 410405,
+        "sha256": "db1089357848c07fc6cfd4fbe67d67d7631891f3f6467b3ae7cdddde2c6d1d7a"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_3.pkl",
+        "bytes": 410405,
+        "sha256": "2ae8e8006f5697c39a8b52a9ed14e1638afa6107d8383e42bbfa324853aa0943"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_4.pkl",
+        "bytes": 410405,
+        "sha256": "4ea521e45261ade7e85a4d29794022a894501cb98e23679fff82b7f3430caffd"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_5.pkl",
+        "bytes": 410405,
+        "sha256": "3d90646ea6cc068b6d30777c1ad2a2d9a8ec7ebe4521151c0c8342cbe5e9741c"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_6.pkl",
+        "bytes": 410405,
+        "sha256": "0507d9f1c4ecd87c5013b3f408ac1187d609ba66c1cdc5642f120e26a4b54642"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_7.pkl",
+        "bytes": 410405,
+        "sha256": "78de89fd597231e45b5dc4ec502eb3d29ec7fe1cb1e154e7ac32b19f79751bdc"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/imcmurray_madmom-modern/madmom/models/downbeats/2016/downbeats_blstm_8.pkl",
+        "bytes": 410405,
+        "sha256": "b5f4c4aba477cb847ef18a5cd660a76efc49f28fefdb134ac5e4e484ae5da9f9"
+      }
+    ]
+  },
+  "madmom-original-default": {
+    "method": "madmom-original-default",
+    "external_weight_bytes": 3276952,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_1.pkl",
+        "bytes": 409619,
+        "sha256": "b02c4b8aa963069449422fd5cc55bd4077105fe268b0d83036b7d68b5520f38d"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_2.pkl",
+        "bytes": 409619,
+        "sha256": "6fa9d138ed84bed14ab5ef6f81f3a7e1a125ff8c571a255f6ce91ccf93390eee"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_3.pkl",
+        "bytes": 409619,
+        "sha256": "adf6a3e3bf345a9172e8252a511dae28622afe26ee653354c0d4c9e37de8f89a"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_4.pkl",
+        "bytes": 409619,
+        "sha256": "a4f9a09b1588ca74b0157251364650d3fe81e383019b5986941415e08b37fcde"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_5.pkl",
+        "bytes": 409619,
+        "sha256": "e40aea9b8221babaf14a9211a48dccc3ebcecdf8bcd6d62d60f0949445de9bb6"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_6.pkl",
+        "bytes": 409619,
+        "sha256": "89b6854c5d6b2381687731aedc9bce6c84894021d1c2eeb60d161cefe997d68c"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_7.pkl",
+        "bytes": 409619,
+        "sha256": "371a319a66d32bee6ab8d4a15f6ae9e4ee22ff97b4276736bab93d9a994c06c1"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_8.pkl",
+        "bytes": 409619,
+        "sha256": "a0d20e1922872a3e5b74df451d8b5701de6ca88d9f5739f313fb2991d7a84c77"
+      }
+    ]
+  },
+  "madmom-original-extended": {
+    "method": "madmom-original-extended",
+    "external_weight_bytes": 3276952,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_1.pkl",
+        "bytes": 409619,
+        "sha256": "b02c4b8aa963069449422fd5cc55bd4077105fe268b0d83036b7d68b5520f38d"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_2.pkl",
+        "bytes": 409619,
+        "sha256": "6fa9d138ed84bed14ab5ef6f81f3a7e1a125ff8c571a255f6ce91ccf93390eee"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_3.pkl",
+        "bytes": 409619,
+        "sha256": "adf6a3e3bf345a9172e8252a511dae28622afe26ee653354c0d4c9e37de8f89a"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_4.pkl",
+        "bytes": 409619,
+        "sha256": "a4f9a09b1588ca74b0157251364650d3fe81e383019b5986941415e08b37fcde"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_5.pkl",
+        "bytes": 409619,
+        "sha256": "e40aea9b8221babaf14a9211a48dccc3ebcecdf8bcd6d62d60f0949445de9bb6"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_6.pkl",
+        "bytes": 409619,
+        "sha256": "89b6854c5d6b2381687731aedc9bce6c84894021d1c2eeb60d161cefe997d68c"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_7.pkl",
+        "bytes": 409619,
+        "sha256": "371a319a66d32bee6ab8d4a15f6ae9e4ee22ff97b4276736bab93d9a994c06c1"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/CPJKU_madmom/madmom/models/downbeats/2016/downbeats_blstm_8.pkl",
+        "bytes": 409619,
+        "sha256": "a0d20e1922872a3e5b74df451d8b5701de6ca88d9f5739f313fb2991d7a84c77"
+      }
+    ]
+  },
+  "soundsible-main": {
+    "method": "soundsible-main",
+    "external_weight_bytes": 0,
+    "files": []
+  },
+  "soundsible-p12": {
+    "method": "soundsible-p12",
+    "external_weight_bytes": 0,
+    "files": []
+  },
+  "transformer-fold0": {
+    "method": "transformer-fold0",
+    "external_weight_bytes": 235767637,
+    "files": [
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/sources/zhaojw1998_Beat-Transformer/checkpoint/fold_0_trf_param.pt",
+        "bytes": 37235863,
+        "sha256": "1940a5034bb2bb7860c1a3219d359906913be88c915f6135a5ce8382c239d738"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/pretrained_models/5stems/._checkpoint",
+        "bytes": 176,
+        "sha256": "26dee657082855729a296273b999d09b49023012af36b07f6d31e93a4f8d6805"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/pretrained_models/5stems/.probe",
+        "bytes": 2,
+        "sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/pretrained_models/5stems/checkpoint",
+        "bytes": 67,
+        "sha256": "011c96b970c1f56137037924fe1a0f0851369b0ee6692e120aea798615326f48"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/pretrained_models/5stems/model.data-00000-of-00001",
+        "bytes": 196535188,
+        "sha256": "aace47a9eacc62e6fda823cee92ba45375b48e65b7c69713b91a7fa9d87ae920"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/pretrained_models/5stems/model.index",
+        "bytes": 12941,
+        "sha256": "b20377789eb084cb5ac78d141a1d480dfdbf8c796ecc554a9b8e4376cd3cee20"
+      },
+      {
+        "path": "/home/arsu/.cache/soundsible-dj-comparison/pretrained_models/5stems/model.meta",
+        "bytes": 1983400,
+        "sha256": "00fc7ce46920ba5622e9f3d281e5670c711ff1a72003199e1928a19774a1efec"
+      }
+    ]
+  }
+}

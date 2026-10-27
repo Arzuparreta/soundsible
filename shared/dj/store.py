@@ -17,7 +17,8 @@ from pathlib import Path
 from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
 
-from .analysis import _compose
+from . import beat_model, weights
+from .analysis import _compose, decimate
 from .contracts import ANALYSER_VERSION, Analysis, fallback_analysis as _fallback
 
 # A normal song is decoded in full so the grid and the musical sections come
@@ -130,6 +131,10 @@ def analyse_audio(path: str | Path, identity: str, *, duration_hint: float = 0.0
         return cached
 
     analysis = _analyse_pcm(source, duration_hint=duration_hint)
+    if analysis is None:
+        # No beat model yet (weights downloading or unavailable). Measuring
+        # without it would cache a song as pulseless for this version.
+        return _fallback(duration_hint)
     with _connect() as conn:
         conn.execute(
             """
@@ -158,6 +163,17 @@ def _analysis_pool() -> ThreadPoolExecutor:
         if _pool is None:
             _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dj-analysis")
     return _pool
+
+
+def requests_waiting() -> bool:
+    """Whether songs a DJ session asked for are queued or being measured.
+
+    The library sweep yields to them: with the beat model a song takes
+    seconds of CPU, and after an analyser update the session would otherwise
+    play unmeasured songs while the sweep works through the library.
+    """
+    with _pending_lock:
+        return bool(_pending)
 
 
 def request_analysis(path: str | Path, identity: str, *, duration_hint: float = 0.0) -> None:
@@ -259,8 +275,12 @@ def _decode_measured(path: Path, sample_rate: int, *, start: float = 0.0, length
     return np.frombuffer(proc.stdout, dtype="<f4"), lufs
 
 
-def _analyse_pcm(path: Path, *, duration_hint: float) -> Analysis:
-    sample_rate = 11025
+def _analyse_pcm(path: Path, *, duration_hint: float) -> Analysis | None:
+    """Decode once at the beat model's rate and measure; None without the model."""
+    session = weights.session(_off_loop)
+    if session is None:
+        return None
+    sample_rate = beat_model.SAMPLE_RATE
     duration = float(duration_hint or 0)
     if duration <= 0:
         duration = _probe_duration(path)
@@ -272,16 +292,31 @@ def _analyse_pcm(path: Path, *, duration_hint: float) -> Analysis:
         if tail is None or tail.size < sample_rate * 4:
             return _fallback(duration)
         lufs = _combined_lufs([(head_lufs, HEAD_WINDOW_SECONDS), (tail_lufs, TAIL_WINDOW_SECONDS)])
+        events = (_model_events(session, tail),
+                  _model_events(session, head) if head is not None and head.size >= sample_rate * 4 else None)
         return _compose_off_loop(
-            tail, head, sample_rate, duration=duration, tail_start=tail_start, loudness_lufs=lufs,
+            tail, head, sample_rate, duration=duration, tail_start=tail_start, loudness_lufs=lufs, events=events,
         )
 
     samples, lufs = _decode_measured(path, sample_rate)
     if samples is None or samples.size < sample_rate * 4:
         return _fallback(duration or (0.0 if samples is None else samples.size / sample_rate))
+    window = _model_events(session, samples)
     return _compose_off_loop(
-        samples, samples, sample_rate, duration=samples.size / sample_rate, tail_start=0.0, loudness_lufs=lufs,
+        samples, samples, sample_rate, duration=samples.size / sample_rate, tail_start=0.0,
+        loudness_lufs=lufs, events=(window, window),
     )
+
+
+# One inference at a time across the analysis jobs: the network's working
+# memory (~250 MiB on top of its weights) is not multiplied by the job count.
+_model_lock = threading.Lock()
+
+
+def _model_events(session, samples):
+    """Beat-model events of one 22050 Hz window, computed off the cooperative loop."""
+    with _model_lock:
+        return _off_loop(beat_model.events, session, samples)
 
 
 def _combined_lufs(windows: list[tuple[float | None, float]]) -> float | None:
@@ -298,21 +333,34 @@ def _combined_lufs(windows: list[tuple[float | None, float]]) -> float | None:
     return -0.691 + 10 * math.log10(power / seconds)
 
 
+def _measure(tail, head, sample_rate: int, **kwargs):
+    """Decimate the decoded windows to the measures' 11025 Hz and compose."""
+    if sample_rate == beat_model.SAMPLE_RATE:
+        tail11 = decimate(tail)
+        head11 = tail11 if head is tail else (decimate(head) if head is not None else None)
+        tail, head, sample_rate = tail11, head11, sample_rate // 2
+    return _compose(tail, head, sample_rate, **kwargs)
+
+
 def _compose_off_loop(tail, head, sample_rate: int, *, duration: float, tail_start: float,
-                      loudness_lufs: float | None = None):
+                      loudness_lufs: float | None = None, events=None):
+    kwargs = {"duration": duration, "tail_start": tail_start, "loudness_lufs": loudness_lufs, "events": events}
+    return _off_loop(_measure, tail, head, sample_rate, **kwargs)
+
+
+def _off_loop(function, *args, **kwargs):
     # The daemon monkey-patches threading: its concurrent.futures workers are
-    # greenlets, so NumPy on those workers otherwise stalls every HTTP request.
-    # Offload only pure PCM computation. SQLite and cooperative subprocess I/O
-    # stay on their owning thread; the two analysis jobs still bound concurrency.
-    args = (tail, head, sample_rate)
-    kwargs = {"duration": duration, "tail_start": tail_start, "loudness_lufs": loudness_lufs}
+    # greenlets, so NumPy and ONNX Runtime on those workers otherwise stall
+    # every HTTP request. Offload only pure computation. SQLite and
+    # cooperative subprocess I/O stay on their owning thread; the two analysis
+    # jobs still bound concurrency.
     # Plain CLI/desktop analyses do not need to initialize gevent at all.
     monkey = sys.modules.get("gevent.monkey")
     if monkey is not None and monkey.is_module_patched("threading"):
         from gevent import get_hub
 
-        return get_hub().threadpool.apply(_compose, args, kwargs)
-    return _compose(*args, **kwargs)
+        return get_hub().threadpool.apply(function, args, kwargs)
+    return function(*args, **kwargs)
 
 
 def analysis_identity(item: Mapping[str, object]) -> str:

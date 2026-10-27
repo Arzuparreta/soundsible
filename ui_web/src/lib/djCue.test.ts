@@ -59,3 +59,61 @@ describe('metric coverage at execution', () => {
     }
   });
 });
+
+describe('pulse alignment at execution', () => {
+  it('moves only by whole outgoing bars that are also whole common cycles', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { metricCuePlacement } = await import('./djCue');
+    const cases = JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_metric_plans.json', import.meta.url), 'utf8'));
+    const transition = (name: string) => cases.find((row: { name: string }) => row.name === name).transition;
+    // Three against four pulses: whole 1.5 s outgoing bars keep its one on the incoming one.
+    const threeFour = transition('three-to-four');
+    expect(threeFour.sync.alignment).toBe('beats');
+    expect(metricCuePlacement(threeFour.out_cue, 90, 175, threeFour, threeFour.overlap_seconds)).toEqual({ cue: 174.25, aligned: true });
+    const four = transition('unconfirmed-four');
+    expect(metricCuePlacement(four.out_cue, 90, 167, four, four.overlap_seconds)).toEqual({ cue: 166.25, aligned: true });
+    // 120 against 180 BPM: two outgoing beats are three incoming ones; a 2 s
+    // outgoing bar is two such cycles.
+    const threeTwo = transition('three-two-pulses');
+    expect(threeTwo.sync.cycle_beats).toEqual([2, 3]);
+    expect(metricCuePlacement(threeTwo.out_cue, 90, 167, threeTwo, threeTwo.overlap_seconds)).toEqual({ cue: 166.25, aligned: true });
+  });
+
+  it('rejects a pulse plan without coverage, cycle or step, or with a contradictory period', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { metricCuePlacement } = await import('./djCue');
+    const cases = JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_metric_plans.json', import.meta.url), 'utf8'));
+    for (const name of ['three-to-four', 'unconfirmed-four', 'three-two-pulses', 'four-three-pulses']) {
+      const original = cases.find((row: { name: string }) => row.name === name).transition;
+      expect(metricCuePlacement(original.out_cue, 90, 215, original, original.overlap_seconds).aligned, name).toBe(true);
+      for (const change of [{ out_metre: null }, { in_metre: null }, { in_period: original.sync.in_period * 1.1 },
+        { out_period: 0 }, { out_metre: { ...original.sync.out_metre, end: 12 } }, { in_bar_seconds: 1.7 },
+        { alignment: 'none' }, { cycle_beats: null }, { cycle_beats: [5, 7] }, { cycle_beats: [1, 1] },
+        { relocation_seconds: 0 }]) {
+        const plan = { ...original, sync: { ...original.sync, ...change } };
+        if (name === 'three-to-four' || name === 'unconfirmed-four') {
+          if (JSON.stringify(change) === '{"cycle_beats":[1,1]}') continue;  // Already their cycle.
+        }
+        expect(metricCuePlacement(original.out_cue, 90, 215, plan, plan.overlap_seconds).aligned, `${name} ${JSON.stringify(change)}`).toBe(false);
+      }
+    }
+  });
+});
+
+describe('coverage edge', () => {
+  it('keeps a cue whose overlap ends within the phase tolerance of the measured coverage', async () => {
+    // User's session, 2026-10-26: 0.9 ms past the coverage moved the cue one
+    // beat and the incoming one landed on the outgoing beat 4.
+    const { readFileSync } = await import('node:fs');
+    const { metricCuePlacement } = await import('./djCue');
+    const cases = JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_metric_plans.json', import.meta.url), 'utf8'));
+    for (const name of ['unconfirmed-four', 'three-quarter']) {
+      const original = cases.find((row: { name: string }) => row.name === name).transition;
+      const end = original.out_cue + original.overlap_seconds - 0.0009;
+      const plan = { ...original, sync: { ...original.sync, out_metre: { ...original.sync.out_metre, end } } };
+      expect(metricCuePlacement(original.out_cue, 90, 215, plan, plan.overlap_seconds), name).toEqual({ cue: original.out_cue, aligned: true });
+      const beyond = { ...original, sync: { ...original.sync, out_metre: { ...original.sync.out_metre, end: end - 0.01 } } };
+      expect(metricCuePlacement(original.out_cue, 90, 215, beyond, beyond.overlap_seconds).cue, name).not.toBe(original.out_cue);
+    }
+  });
+});

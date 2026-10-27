@@ -22,6 +22,10 @@ for tool in ("ffmpeg", "ffprobe"):
 hiddenimports = []
 curl_cffi_datas, curl_cffi_binaries, curl_cffi_hiddenimports = collect_all("curl_cffi")
 pyinstaller_binaries.extend(curl_cffi_binaries)
+# The Auto DJ beat model runs on ONNX Runtime's native library.
+onnxruntime_datas, onnxruntime_binaries, onnxruntime_hiddenimports = collect_all("onnxruntime")
+pyinstaller_binaries.extend(onnxruntime_binaries)
+hiddenimports.extend(onnxruntime_hiddenimports)
 for package in ("shared", "player", "setup_tool"):
     hiddenimports.extend(collect_submodules(package))
 hiddenimports.extend(curl_cffi_hiddenimports)
@@ -48,10 +52,19 @@ hiddenimports.extend(
     ]
 )
 
+# `shared.dj.weights.bundled_path()` reads `models/` beside the bundle root;
+# build-sidecar.sh fetches and verifies the file first.
+DJ_MODEL = REPO_ROOT / "models" / "beat_this-final0.onnx"
+if not DJ_MODEL.is_file():
+    raise SystemExit(f"Missing DJ beat model {DJ_MODEL}: run scripts/fetch_dj_model.py")
+
 datas = [
     (str(REPO_ROOT / "ui_web" / "dist"), "ui_web/dist"),
     (str(REPO_ROOT / "branding"), "branding"),
+    (str(DJ_MODEL), "models"),
+    (str(REPO_ROOT / "shared" / "dj" / "third_party"), "shared/dj/third_party"),
     *curl_cffi_datas,
+    *onnxruntime_datas,
 ]
 for pkg in ("flask", "engineio", "socketio", "yt_dlp"):
     datas.extend(collect_data_files(pkg, include_py_files=True))

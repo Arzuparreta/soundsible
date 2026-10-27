@@ -1,0 +1,3492 @@
+{
+  "methods": {
+    "allin1-all": {
+      "development": {
+        "events": 125,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 25,
+            "mean_score": 0.09413147819461301,
+            "observed_precision": 0.64
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 39,
+            "mean_score": 0.29671020614795196,
+            "observed_precision": 0.7435897435897436
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 61,
+            "mean_score": 0.5019202256788973,
+            "observed_precision": 0.9344262295081968
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.34172931951668567
+      },
+      "known_signal": {
+        "events": 843,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 231,
+            "mean_score": 0.07634083455573622,
+            "observed_precision": 0.5670995670995671
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 176,
+            "mean_score": 0.2793477882038463,
+            "observed_precision": 0.9034090909090909
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 436,
+            "mean_score": 0.5017198894275438,
+            "observed_precision": 0.9747706422018348
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.35617987289269387
+      },
+      "seen_diagnostic": {
+        "events": 179,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 78,
+            "mean_score": 0.09336163969083618,
+            "observed_precision": 0.9871794871794872
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 80,
+            "mean_score": 0.28959671407938004,
+            "observed_precision": 0.975
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 21,
+            "mean_score": 0.4747022674197242,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.6083569711104273
+      },
+      "test": {
+        "events": 244,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 67,
+            "mean_score": 0.08500846620968808,
+            "observed_precision": 0.582089552238806
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 57,
+            "mean_score": 0.2824498281667107,
+            "observed_precision": 0.8070175438596491
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 120,
+            "mean_score": 0.4970123961567879,
+            "observed_precision": 0.975
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.3606138655789887
+      }
+    },
+    "allin1-fold0": {
+      "development": {
+        "events": 123,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 24,
+            "mean_score": 0.09014113134859751,
+            "observed_precision": 0.625
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 33,
+            "mean_score": 0.32216635527032794,
+            "observed_precision": 0.696969696969697
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 62,
+            "mean_score": 0.5284407989632699,
+            "observed_precision": 0.9838709677419355
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 4,
+            "mean_score": 0.6238163858652115,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.31377848057201313
+      },
+      "known_signal": {
+        "events": 866,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 335,
+            "mean_score": 0.07983504258469355,
+            "observed_precision": 0.6119402985074627
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 79,
+            "mean_score": 0.2767697342588932,
+            "observed_precision": 0.7848101265822784
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 419,
+            "mean_score": 0.5642855221445634,
+            "observed_precision": 0.954653937947494
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 33,
+            "mean_score": 0.6042050556703047,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.3373249786280448
+      },
+      "seen_diagnostic": {
+        "events": 181,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 58,
+            "mean_score": 0.07289984654775693,
+            "observed_precision": 0.9655172413793104
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 73,
+            "mean_score": 0.3180995103839326,
+            "observed_precision": 0.9726027397260274
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 44,
+            "mean_score": 0.46523072164167056,
+            "observed_precision": 0.9545454545454546
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 6,
+            "mean_score": 0.6219281156857809,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.5244217871107967
+      },
+      "test": {
+        "events": 257,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 92,
+            "mean_score": 0.06891963416115765,
+            "observed_precision": 0.5652173913043478
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 38,
+            "mean_score": 0.29128329965629074,
+            "observed_precision": 0.631578947368421
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 118,
+            "mean_score": 0.5212893945685888,
+            "observed_precision": 0.9491525423728814
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 9,
+            "mean_score": 0.6222793724801805,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.3347043900129307
+      }
+    },
+    "beatnet-1-dbn": {
+      "development": {
+        "events": 183,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 19,
+            "mean_score": 0.10616585954190477,
+            "observed_precision": 0.21052631578947367
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 12,
+            "mean_score": 0.31472531457742053,
+            "observed_precision": 0.16666666666666666
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 12,
+            "mean_score": 0.48649265617132187,
+            "observed_precision": 0.16666666666666666
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 29,
+            "mean_score": 0.700539231300354,
+            "observed_precision": 0.3793103448275862
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 111,
+            "mean_score": 0.934333314766755,
+            "observed_precision": 0.5945945945945946
+          }
+        ],
+        "brier_on_emitted_events": 0.3110172901430929
+      },
+      "known_signal": {
+        "events": 1546,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 109,
+            "mean_score": 0.09398041651883257,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 12,
+            "mean_score": 0.2713136598467827,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 14,
+            "mean_score": 0.5330972160611834,
+            "observed_precision": 0.14285714285714285
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 361,
+            "mean_score": 0.7536473644076952,
+            "observed_precision": 0.1994459833795014
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 1050,
+            "mean_score": 0.8564757563954308,
+            "observed_precision": 0.20857142857142857
+          }
+        ],
+        "brier_on_emitted_events": 0.5118736967947434
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 9,
+            "mean_score": 0.0749538061289867,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 10,
+            "mean_score": 0.3256442815065384,
+            "observed_precision": 0.6
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 2,
+            "mean_score": 0.4896675795316696,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 5,
+            "mean_score": 0.6865357637405396,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 201,
+            "mean_score": 0.9789862057462854,
+            "observed_precision": 0.9850746268656716
+          }
+        ],
+        "brier_on_emitted_events": 0.06648230005546144
+      },
+      "test": {
+        "events": 371,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 28,
+            "mean_score": 0.0848414038516369,
+            "observed_precision": 0.25
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 29,
+            "mean_score": 0.3126546946065179,
+            "observed_precision": 0.20689655172413793
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 38,
+            "mean_score": 0.5025719608131208,
+            "observed_precision": 0.18421052631578946
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 60,
+            "mean_score": 0.7096203207969666,
+            "observed_precision": 0.25
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 216,
+            "mean_score": 0.953839273640403,
+            "observed_precision": 0.6666666666666666
+          }
+        ],
+        "brier_on_emitted_events": 0.28186112526049756
+      }
+    },
+    "beatnet-1-pf": {
+      "development": {
+        "events": 124,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 17,
+            "mean_score": 0.501597383443047,
+            "observed_precision": 0.058823529411764705
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 23,
+            "mean_score": 0.712000644725302,
+            "observed_precision": 0.17391304347826086
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 84,
+            "mean_score": 0.9373310414098558,
+            "observed_precision": 0.5238095238095238
+          }
+        ],
+        "brier_on_emitted_events": 0.3938965648682519
+      },
+      "known_signal": {
+        "events": 244,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 22,
+            "mean_score": 0.5053789669817145,
+            "observed_precision": 0.3181818181818182
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 98,
+            "mean_score": 0.7143898904323578,
+            "observed_precision": 0.17346938775510204
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 124,
+            "mean_score": 0.8714267380775944,
+            "observed_precision": 0.056451612903225805
+          }
+        ],
+        "brier_on_emitted_events": 0.5628213189521882
+      },
+      "seen_diagnostic": {
+        "events": 208,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 5,
+            "mean_score": 0.485334312915802,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 10,
+            "mean_score": 0.7191724181175232,
+            "observed_precision": 0.2
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 193,
+            "mean_score": 0.97891094524008,
+            "observed_precision": 0.8704663212435233
+          }
+        ],
+        "brier_on_emitted_events": 0.13398297485606225
+      },
+      "test": {
+        "events": 271,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 16,
+            "mean_score": 0.5171995367854834,
+            "observed_precision": 0.0625
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 49,
+            "mean_score": 0.719804550920214,
+            "observed_precision": 0.24489795918367346
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 206,
+            "mean_score": 0.9548078679922715,
+            "observed_precision": 0.6504854368932039
+          }
+        ],
+        "brier_on_emitted_events": 0.31192357233823426
+      }
+    },
+    "beatnet-2-dbn": {
+      "development": {
+        "events": 145,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 4,
+            "mean_score": 0.10563709051348269,
+            "observed_precision": 0.75
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.26279735565185547,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 5,
+            "mean_score": 0.5218359172344208,
+            "observed_precision": 0.4
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 9,
+            "mean_score": 0.6908323764801025,
+            "observed_precision": 0.5555555555555556
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 126,
+            "mean_score": 0.974784997720567,
+            "observed_precision": 0.9603174603174603
+          }
+        ],
+        "brier_on_emitted_events": 0.07108170457112817
+      },
+      "known_signal": {
+        "events": 1372,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 13,
+            "mean_score": 0.14551623394856086,
+            "observed_precision": 0.23076923076923078
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 117,
+            "mean_score": 0.24956881490528074,
+            "observed_precision": 0.008547008547008548
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 170,
+            "mean_score": 0.5292218145202188,
+            "observed_precision": 0.011764705882352941
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 619,
+            "mean_score": 0.731390102999661,
+            "observed_precision": 0.2972536348949919
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 453,
+            "mean_score": 0.903133821803213,
+            "observed_precision": 0.1545253863134658
+          }
+        ],
+        "brier_on_emitted_events": 0.4559101564946721
+      },
+      "seen_diagnostic": {
+        "events": 207,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 51,
+            "mean_score": 0.06232887362677823,
+            "observed_precision": 0.45098039215686275
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 22,
+            "mean_score": 0.30536623231389304,
+            "observed_precision": 0.22727272727272727
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 17,
+            "mean_score": 0.5041739712743198,
+            "observed_precision": 0.23529411764705882
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 29,
+            "mean_score": 0.715976240306065,
+            "observed_precision": 0.5172413793103449
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 88,
+            "mean_score": 0.945288555865938,
+            "observed_precision": 0.8295454545454546
+          }
+        ],
+        "brier_on_emitted_events": 0.24191182215279847
+      },
+      "test": {
+        "events": 316,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 5,
+            "mean_score": 0.08588575925678014,
+            "observed_precision": 0.8
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 4,
+            "mean_score": 0.31043339893221855,
+            "observed_precision": 0.5
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 4,
+            "mean_score": 0.5037816315889359,
+            "observed_precision": 0.75
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 10,
+            "mean_score": 0.717069274187088,
+            "observed_precision": 0.8
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 293,
+            "mean_score": 0.9836533561908344,
+            "observed_precision": 0.9863481228668942
+          }
+        ],
+        "brier_on_emitted_events": 0.033988371380206744
+      }
+    },
+    "beatnet-2-pf": {
+      "development": {
+        "events": 139,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 6,
+            "mean_score": 0.5537140270074209,
+            "observed_precision": 0.16666666666666666
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 7,
+            "mean_score": 0.713447460106441,
+            "observed_precision": 0.14285714285714285
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 126,
+            "mean_score": 0.9727546501727331,
+            "observed_precision": 0.8333333333333334
+          }
+        ],
+        "brier_on_emitted_events": 0.16557411902056718
+      },
+      "known_signal": {
+        "events": 316,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 152,
+            "mean_score": 0.5036804464302564,
+            "observed_precision": 0.24342105263157895
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 82,
+            "mean_score": 0.708532123303995,
+            "observed_precision": 0.32926829268292684
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 82,
+            "mean_score": 0.8940607709128682,
+            "observed_precision": 0.13414634146341464
+          }
+        ],
+        "brier_on_emitted_events": 0.39863975107800687
+      },
+      "seen_diagnostic": {
+        "events": 156,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 12,
+            "mean_score": 0.5206137051184972,
+            "observed_precision": 0.25
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 23,
+            "mean_score": 0.7315231561660767,
+            "observed_precision": 0.30434782608695654
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 121,
+            "mean_score": 0.9446263032511246,
+            "observed_precision": 0.5537190082644629
+          }
+        ],
+        "brier_on_emitted_events": 0.3786175661613457
+      },
+      "test": {
+        "events": 324,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 5,
+            "mean_score": 0.4620735585689545,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 14,
+            "mean_score": 0.7473178080150059,
+            "observed_precision": 0.2857142857142857
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 305,
+            "mean_score": 0.9791432652317109,
+            "observed_precision": 0.8819672131147541
+          }
+        ],
+        "brier_on_emitted_events": 0.11856363216009452
+      }
+    },
+    "beatnetplus-generic-dbn": {
+      "development": {
+        "events": 141,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.39603421092033386,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 5,
+            "mean_score": 0.46227853894233706,
+            "observed_precision": 0.2
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 18,
+            "mean_score": 0.7142611145973206,
+            "observed_precision": 0.3888888888888889
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 117,
+            "mean_score": 0.96938639267897,
+            "observed_precision": 0.6153846153846154
+          }
+        ],
+        "brier_on_emitted_events": 0.3567948726209973
+      },
+      "known_signal": {
+        "events": 851,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 63,
+            "mean_score": 0.12450223892099327,
+            "observed_precision": 0.015873015873015872
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 21,
+            "mean_score": 0.33937685191631317,
+            "observed_precision": 0.09523809523809523
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 31,
+            "mean_score": 0.47808330193642645,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 127,
+            "mean_score": 0.7069524695554118,
+            "observed_precision": 0.05511811023622047
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 609,
+            "mean_score": 0.9622280767007023,
+            "observed_precision": 0.4548440065681445
+          }
+        ],
+        "brier_on_emitted_events": 0.43261469433050825
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 1,
+            "mean_score": 0.00025239321985282004,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 3,
+            "mean_score": 0.3269822696844737,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 3,
+            "mean_score": 0.4652483860651652,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 1,
+            "mean_score": 0.6550928354263306,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 219,
+            "mean_score": 0.9882771141452876,
+            "observed_precision": 0.9863013698630136
+          }
+        ],
+        "brier_on_emitted_events": 0.02543121538852852
+      },
+      "test": {
+        "events": 299,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 15,
+            "mean_score": 0.11099994393686453,
+            "observed_precision": 0.4
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 17,
+            "mean_score": 0.30774934765170603,
+            "observed_precision": 0.11764705882352941
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 19,
+            "mean_score": 0.49309872482952316,
+            "observed_precision": 0.42105263157894735
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 26,
+            "mean_score": 0.7336444556713104,
+            "observed_precision": 0.2692307692307692
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 222,
+            "mean_score": 0.961892765653026,
+            "observed_precision": 0.7342342342342343
+          }
+        ],
+        "brier_on_emitted_events": 0.250839484630577
+      }
+    },
+    "beatnetplus-generic-pf": {
+      "development": {
+        "events": 152,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 10,
+            "mean_score": 0.5268039256334305,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 14,
+            "mean_score": 0.7289916574954987,
+            "observed_precision": 0.21428571428571427
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 128,
+            "mean_score": 0.9658621535636485,
+            "observed_precision": 0.4921875
+          }
+        ],
+        "brier_on_emitted_events": 0.4556570198285599
+      },
+      "known_signal": {
+        "events": 878,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 132,
+            "mean_score": 0.5016409747979858,
+            "observed_precision": 0.21212121212121213
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 196,
+            "mean_score": 0.6863980469655018,
+            "observed_precision": 0.2653061224489796
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 550,
+            "mean_score": 0.9573000645637513,
+            "observed_precision": 0.4672727272727273
+          }
+        ],
+        "brier_on_emitted_events": 0.42391795917402253
+      },
+      "seen_diagnostic": {
+        "events": 224,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 6,
+            "mean_score": 0.7415896654129028,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 218,
+            "mean_score": 0.9860721941387981,
+            "observed_precision": 0.9541284403669725
+          }
+        ],
+        "brier_on_emitted_events": 0.05461767189397247
+      },
+      "test": {
+        "events": 353,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 24,
+            "mean_score": 0.5172321386635303,
+            "observed_precision": 0.125
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 48,
+            "mean_score": 0.7274760815004507,
+            "observed_precision": 0.16666666666666666
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 281,
+            "mean_score": 0.9473845245999374,
+            "observed_precision": 0.594306049822064
+          }
+        ],
+        "brier_on_emitted_events": 0.3518221055410533
+      }
+    },
+    "beatnetplus-main-dbn": {
+      "development": {
+        "events": 181,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 12,
+            "mean_score": 0.14318949077278376,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 14,
+            "mean_score": 0.3332159093448094,
+            "observed_precision": 0.07142857142857142
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 17,
+            "mean_score": 0.5025718001758351,
+            "observed_precision": 0.058823529411764705
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 34,
+            "mean_score": 0.7173974198453567,
+            "observed_precision": 0.2647058823529412
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 104,
+            "mean_score": 0.9263205820551286,
+            "observed_precision": 0.3173076923076923
+          }
+        ],
+        "brier_on_emitted_events": 0.44810780911994713
+      },
+      "known_signal": {
+        "events": 937,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 142,
+            "mean_score": 0.2599712059321538,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 15,
+            "mean_score": 0.522981055577596,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 183,
+            "mean_score": 0.7397382575306085,
+            "observed_precision": 0.366120218579235
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 597,
+            "mean_score": 0.9104355898135071,
+            "observed_precision": 0.7370184254606366
+          }
+        ],
+        "brier_on_emitted_events": 0.23274011072437198
+      },
+      "seen_diagnostic": {
+        "events": 253,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 3,
+            "mean_score": 0.1766105592250824,
+            "observed_precision": 0.3333333333333333
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 8,
+            "mean_score": 0.2911118119955063,
+            "observed_precision": 0.125
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 11,
+            "mean_score": 0.4922538453882391,
+            "observed_precision": 0.45454545454545453
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 25,
+            "mean_score": 0.7152965617179871,
+            "observed_precision": 0.68
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 206,
+            "mean_score": 0.9616789716540031,
+            "observed_precision": 0.9466019417475728
+          }
+        ],
+        "brier_on_emitted_events": 0.0805695494214311
+      },
+      "test": {
+        "events": 363,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 9,
+            "mean_score": 0.1475362330675125,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 33,
+            "mean_score": 0.2968132003690257,
+            "observed_precision": 0.030303030303030304
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 39,
+            "mean_score": 0.5054770501760336,
+            "observed_precision": 0.3076923076923077
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 97,
+            "mean_score": 0.7209708561602327,
+            "observed_precision": 0.25773195876288657
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 185,
+            "mean_score": 0.9176156089112565,
+            "observed_precision": 0.4918918918918919
+          }
+        ],
+        "brier_on_emitted_events": 0.36242997323103493
+      }
+    },
+    "beatnetplus-nonpercussive-dbn": {
+      "development": {
+        "events": 152,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 6,
+            "mean_score": 0.13189898896962404,
+            "observed_precision": 0.16666666666666666
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 7,
+            "mean_score": 0.31758636236190796,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 14,
+            "mean_score": 0.47480498041425434,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 25,
+            "mean_score": 0.6920373916625977,
+            "observed_precision": 0.08
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 100,
+            "mean_score": 0.9592935365438461,
+            "observed_precision": 0.35
+          }
+        ],
+        "brier_on_emitted_events": 0.4883569899096906
+      },
+      "known_signal": {
+        "events": 985,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 141,
+            "mean_score": 0.3440020069585624,
+            "observed_precision": 0.0070921985815602835
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 3,
+            "mean_score": 0.4724772572517395,
+            "observed_precision": 0.6666666666666666
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 38,
+            "mean_score": 0.73995661892389,
+            "observed_precision": 0.631578947368421
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 803,
+            "mean_score": 0.9467374942964812,
+            "observed_precision": 0.7322540473225405
+          }
+        ],
+        "brier_on_emitted_events": 0.229370935367406
+      },
+      "seen_diagnostic": {
+        "events": 226,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 6,
+            "mean_score": 0.024490831478033215,
+            "observed_precision": 0.3333333333333333
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 6,
+            "mean_score": 0.26426398505767185,
+            "observed_precision": 0.6666666666666666
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 4,
+            "mean_score": 0.5301967263221741,
+            "observed_precision": 0.75
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 11,
+            "mean_score": 0.7293801957910712,
+            "observed_precision": 0.9090909090909091
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 199,
+            "mean_score": 0.9809565085861551,
+            "observed_precision": 0.949748743718593
+          }
+        ],
+        "brier_on_emitted_events": 0.07079987942325308
+      },
+      "test": {
+        "events": 341,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 21,
+            "mean_score": 0.10658309608697891,
+            "observed_precision": 0.3333333333333333
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 19,
+            "mean_score": 0.29286830676229375,
+            "observed_precision": 0.3684210526315789
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 25,
+            "mean_score": 0.5000939917564392,
+            "observed_precision": 0.48
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 77,
+            "mean_score": 0.7095932410908984,
+            "observed_precision": 0.4155844155844156
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 199,
+            "mean_score": 0.9442701384649804,
+            "observed_precision": 0.6080402010050251
+          }
+        ],
+        "brier_on_emitted_events": 0.32472271935340746
+      }
+    },
+    "beatthis-final0-dbn": {
+      "development": {
+        "events": 133,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 9,
+            "mean_score": 0.04486319597934306,
+            "observed_precision": 0.2222222222222222
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 2,
+            "mean_score": 0.3268514711273532,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 3,
+            "mean_score": 0.5415259451999045,
+            "observed_precision": 0.6666666666666666
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 4,
+            "mean_score": 0.7129280984513222,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 115,
+            "mean_score": 0.9794054299788795,
+            "observed_precision": 0.9478260869565217
+          }
+        ],
+        "brier_on_emitted_events": 0.07437442737548985
+      },
+      "known_signal": {
+        "events": 853,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 8,
+            "mean_score": 0.09455146355675914,
+            "observed_precision": 0.125
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.3657123450203777,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 3,
+            "mean_score": 0.4728444702366703,
+            "observed_precision": 0.6666666666666666
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 55,
+            "mean_score": 0.7214534312755779,
+            "observed_precision": 0.6909090909090909
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 786,
+            "mean_score": 0.9636712049896785,
+            "observed_precision": 0.7519083969465649
+          }
+        ],
+        "brier_on_emitted_events": 0.21995233437584566
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 227,
+            "mean_score": 0.9997623824816158,
+            "observed_precision": 0.986784140969163
+          }
+        ],
+        "brier_on_emitted_events": 0.013218316690463888
+      },
+      "test": {
+        "events": 285,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 3,
+            "mean_score": 0.10051064940409642,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.26386214696008364,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 3,
+            "mean_score": 0.49678530376794966,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 13,
+            "mean_score": 0.7174844415312142,
+            "observed_precision": 0.23076923076923078
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 265,
+            "mean_score": 0.9925140941814454,
+            "observed_precision": 0.8226415094339623
+          }
+        ],
+        "brier_on_emitted_events": 0.18137963158399414
+      }
+    },
+    "beatthis-final0-direct": {
+      "development": {
+        "events": 211,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 6,
+            "mean_score": 0.5535121418674646,
+            "observed_precision": 0.3333333333333333
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 22,
+            "mean_score": 0.6925402836349825,
+            "observed_precision": 0.18181818181818182
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 183,
+            "mean_score": 0.9687935234474345,
+            "observed_precision": 0.6174863387978142
+          }
+        ],
+        "brier_on_emitted_events": 0.3535299423289251
+      },
+      "known_signal": {
+        "events": 1196,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 7,
+            "mean_score": 0.09344983411116248,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.27742967820967046,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 42,
+            "mean_score": 0.5403961956565106,
+            "observed_precision": 0.3333333333333333
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 117,
+            "mean_score": 0.7165865059331978,
+            "observed_precision": 0.4700854700854701
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 1029,
+            "mean_score": 0.9508327901365657,
+            "observed_precision": 0.6355685131195336
+          }
+        ],
+        "brier_on_emitted_events": 0.31027984054413
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 227,
+            "mean_score": 0.9997623824816158,
+            "observed_precision": 0.986784140969163
+          }
+        ],
+        "brier_on_emitted_events": 0.013218316690463888
+      },
+      "test": {
+        "events": 353,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.2820681546248762,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 16,
+            "mean_score": 0.5391692360276803,
+            "observed_precision": 0.125
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 33,
+            "mean_score": 0.70392712577226,
+            "observed_precision": 0.15151515151515152
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 303,
+            "mean_score": 0.9826418162271906,
+            "observed_precision": 0.7260726072607261
+          }
+        ],
+        "brier_on_emitted_events": 0.26870064503508195
+      }
+    },
+    "beatthis-final0-direct-common": {
+      "development": {
+        "events": 156,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 5,
+            "mean_score": 0.03825391251780266,
+            "observed_precision": 0.2
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 4,
+            "mean_score": 0.29711755928982736,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 4,
+            "mean_score": 0.5250184919952005,
+            "observed_precision": 0.5
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 9,
+            "mean_score": 0.7167735002410766,
+            "observed_precision": 0.4444444444444444
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 134,
+            "mean_score": 0.9732411819175288,
+            "observed_precision": 0.8059701492537313
+          }
+        ],
+        "brier_on_emitted_events": 0.184358818313657
+      },
+      "known_signal": {
+        "events": 913,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 7,
+            "mean_score": 0.08636661017705961,
+            "observed_precision": 0.14285714285714285
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 15,
+            "mean_score": 0.32144854757633,
+            "observed_precision": 0.9333333333333333
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 18,
+            "mean_score": 0.502928216814434,
+            "observed_precision": 0.9444444444444444
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 60,
+            "mean_score": 0.7172478460370237,
+            "observed_precision": 0.7166666666666667
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 813,
+            "mean_score": 0.961448842490391,
+            "observed_precision": 0.7306273062730627
+          }
+        ],
+        "brier_on_emitted_events": 0.2382463540076393
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 227,
+            "mean_score": 0.9997623824816158,
+            "observed_precision": 0.986784140969163
+          }
+        ],
+        "brier_on_emitted_events": 0.013218316690463888
+      },
+      "test": {
+        "events": 280,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.275953387055204,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 4,
+            "mean_score": 0.538085021802829,
+            "observed_precision": 0.25
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 9,
+            "mean_score": 0.7041556352357115,
+            "observed_precision": 0.4444444444444444
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 266,
+            "mean_score": 0.9921168261194913,
+            "observed_precision": 0.8120300751879699
+          }
+        ],
+        "brier_on_emitted_events": 0.1863348083832858
+      }
+    },
+    "beatthis-small0-dbn": {
+      "development": {
+        "events": 142,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 5,
+            "mean_score": 0.00281857620968621,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.3147072433200276,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 1,
+            "mean_score": 0.41400929392589203,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 5,
+            "mean_score": 0.7024504233237219,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 130,
+            "mean_score": 0.9843252435385343,
+            "observed_precision": 0.676923076923077
+          }
+        ],
+        "brier_on_emitted_events": 0.3068723597150158
+      },
+      "known_signal": {
+        "events": 809,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 42,
+            "mean_score": 0.1509019997520197,
+            "observed_precision": 0.2857142857142857
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 15,
+            "mean_score": 0.32838671542702386,
+            "observed_precision": 0.8
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 32,
+            "mean_score": 0.5023015640837261,
+            "observed_precision": 0.90625
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 68,
+            "mean_score": 0.7270747046759967,
+            "observed_precision": 0.39705882352941174
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 652,
+            "mean_score": 0.9697084119325559,
+            "observed_precision": 0.897239263803681
+          }
+        ],
+        "brier_on_emitted_events": 0.13134659361636308
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 227,
+            "mean_score": 0.99977157167213,
+            "observed_precision": 0.9823788546255506
+          }
+        ],
+        "brier_on_emitted_events": 0.017615637020700563
+      },
+      "test": {
+        "events": 312,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 2,
+            "mean_score": 0.05747370335013406,
+            "observed_precision": 0.5
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 6,
+            "mean_score": 0.2833152274400856,
+            "observed_precision": 0.16666666666666666
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 11,
+            "mean_score": 0.512013347794428,
+            "observed_precision": 0.18181818181818182
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 5,
+            "mean_score": 0.712555335125361,
+            "observed_precision": 0.2
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 288,
+            "mean_score": 0.9835172554247111,
+            "observed_precision": 0.7881944444444444
+          }
+        ],
+        "brier_on_emitted_events": 0.19995702387067368
+      }
+    },
+    "beatthis-small0-direct": {
+      "development": {
+        "events": 220,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 11,
+            "mean_score": 0.5304295469321076,
+            "observed_precision": 0.18181818181818182
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 27,
+            "mean_score": 0.6935366962929083,
+            "observed_precision": 0.14814814814814814
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 182,
+            "mean_score": 0.9640306884632067,
+            "observed_precision": 0.5439560439560439
+          }
+        ],
+        "brier_on_emitted_events": 0.4122223653345867
+      },
+      "known_signal": {
+        "events": 1033,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 12,
+            "mean_score": 0.015881816241202093,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 8,
+            "mean_score": 0.3581366845427318,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 68,
+            "mean_score": 0.532923582221239,
+            "observed_precision": 0.39705882352941174
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 206,
+            "mean_score": 0.7219414159053515,
+            "observed_precision": 0.19902912621359223
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 739,
+            "mean_score": 0.9584250664974122,
+            "observed_precision": 0.8227334235453315
+          }
+        ],
+        "brier_on_emitted_events": 0.2073991154956014
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 227,
+            "mean_score": 0.99977157167213,
+            "observed_precision": 0.9823788546255506
+          }
+        ],
+        "brier_on_emitted_events": 0.017615637020700563
+      },
+      "test": {
+        "events": 416,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 1,
+            "mean_score": 0.0010497245726567104,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 24,
+            "mean_score": 0.5396030419500032,
+            "observed_precision": 0.16666666666666666
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 36,
+            "mean_score": 0.7099079247950217,
+            "observed_precision": 0.16666666666666666
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 355,
+            "mean_score": 0.9736244938240904,
+            "observed_precision": 0.6535211267605634
+          }
+        ],
+        "brier_on_emitted_events": 0.3180028060988932
+      }
+    },
+    "beatthis-small0-direct-common": {
+      "development": {
+        "events": 149,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 5,
+            "mean_score": 0.03986308071676044,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 1,
+            "mean_score": 0.3147072433200276,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 3,
+            "mean_score": 0.5107705143740442,
+            "observed_precision": 0.3333333333333333
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 7,
+            "mean_score": 0.7069896274698845,
+            "observed_precision": 0.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 133,
+            "mean_score": 0.981691001814189,
+            "observed_precision": 0.6616541353383458
+          }
+        ],
+        "brier_on_emitted_events": 0.3182605385614363
+      },
+      "known_signal": {
+        "events": 845,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 54,
+            "mean_score": 0.1518689235904231,
+            "observed_precision": 0.2222222222222222
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 15,
+            "mean_score": 0.32838671542702386,
+            "observed_precision": 0.8
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 32,
+            "mean_score": 0.5023015640837261,
+            "observed_precision": 0.90625
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 82,
+            "mean_score": 0.7268116343231106,
+            "observed_precision": 0.32926829268292684
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 662,
+            "mean_score": 0.9686702938680366,
+            "observed_precision": 0.8897280966767371
+          }
+        ],
+        "brier_on_emitted_events": 0.1401718066261305
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 227,
+            "mean_score": 0.99977157167213,
+            "observed_precision": 0.9823788546255506
+          }
+        ],
+        "brier_on_emitted_events": 0.017615637020700563
+      },
+      "test": {
+        "events": 323,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 2,
+            "mean_score": 0.05747370335013406,
+            "observed_precision": 0.5
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 4,
+            "mean_score": 0.27634885419794014,
+            "observed_precision": 0.5
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 13,
+            "mean_score": 0.5110224062679147,
+            "observed_precision": 0.15384615384615385
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 11,
+            "mean_score": 0.6850310870062583,
+            "observed_precision": 0.18181818181818182
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 293,
+            "mean_score": 0.9817803410080622,
+            "observed_precision": 0.7781569965870307
+          }
+        ],
+        "brier_on_emitted_events": 0.21327381776405732
+      }
+    },
+    "madmom-modern-default": {
+      "development": {
+        "events": 141,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 46,
+            "mean_score": 0.08683096169008185,
+            "observed_precision": 0.4782608695652174
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 47,
+            "mean_score": 0.29465790853855456,
+            "observed_precision": 0.44680851063829785
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 25,
+            "mean_score": 0.4920637905597687,
+            "observed_precision": 0.8
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 12,
+            "mean_score": 0.6785322080055872,
+            "observed_precision": 0.9166666666666666
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 11,
+            "mean_score": 0.8799395127729936,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.2785608115112183
+      },
+      "known_signal": {
+        "events": 886,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 178,
+            "mean_score": 0.11308537304710095,
+            "observed_precision": 0.0449438202247191
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 581,
+            "mean_score": 0.2696841060345842,
+            "observed_precision": 0.7624784853700516
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 116,
+            "mean_score": 0.442850476965822,
+            "observed_precision": 0.8017241379310345
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 11,
+            "mean_score": 0.7742964896288785,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.32238374387079394
+      },
+      "seen_diagnostic": {
+        "events": 213,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 38,
+            "mean_score": 0.11090480505586847,
+            "observed_precision": 0.9210526315789473
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 101,
+            "mean_score": 0.30387304442943913,
+            "observed_precision": 0.9702970297029703
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 47,
+            "mean_score": 0.46749314982840356,
+            "observed_precision": 0.9787234042553191
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 13,
+            "mean_score": 0.686325898537269,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 14,
+            "mean_score": 0.869807767016547,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.4254608003927925
+      },
+      "test": {
+        "events": 343,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 109,
+            "mean_score": 0.11341012208380762,
+            "observed_precision": 0.41284403669724773
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 82,
+            "mean_score": 0.2891315343539889,
+            "observed_precision": 0.5121951219512195
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 67,
+            "mean_score": 0.5151798053463893,
+            "observed_precision": 0.8059701492537313
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 50,
+            "mean_score": 0.6945711588859558,
+            "observed_precision": 0.92
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 35,
+            "mean_score": 0.8824083549635751,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.24317099616355425
+      }
+    },
+    "madmom-modern-extended": {
+      "development": {
+        "events": 131,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 42,
+            "mean_score": 0.0898319297758419,
+            "observed_precision": 0.4523809523809524
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 41,
+            "mean_score": 0.3004867121940706,
+            "observed_precision": 0.5853658536585366
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 25,
+            "mean_score": 0.4932479798793793,
+            "observed_precision": 0.84
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 12,
+            "mean_score": 0.6785322080055872,
+            "observed_precision": 0.9166666666666666
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 11,
+            "mean_score": 0.8799395127729936,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.28290958278404843
+      },
+      "known_signal": {
+        "events": 658,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 163,
+            "mean_score": 0.1325800810794866,
+            "observed_precision": 0.012269938650306749
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 356,
+            "mean_score": 0.28213447930940083,
+            "observed_precision": 0.6348314606741573
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 127,
+            "mean_score": 0.4413316165368388,
+            "observed_precision": 0.8188976377952756
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 12,
+            "mean_score": 0.7672003706296285,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.24893055378632892
+      },
+      "seen_diagnostic": {
+        "events": 213,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 38,
+            "mean_score": 0.11090480505586847,
+            "observed_precision": 0.9210526315789473
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 101,
+            "mean_score": 0.30387304442943913,
+            "observed_precision": 0.9702970297029703
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 47,
+            "mean_score": 0.46749314982840356,
+            "observed_precision": 0.9787234042553191
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 13,
+            "mean_score": 0.686325898537269,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 14,
+            "mean_score": 0.869807767016547,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.4254608003927925
+      },
+      "test": {
+        "events": 293,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 71,
+            "mean_score": 0.10452192917820328,
+            "observed_precision": 0.4507042253521127
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 71,
+            "mean_score": 0.29499528147804904,
+            "observed_precision": 0.6056338028169014
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 67,
+            "mean_score": 0.51430225683682,
+            "observed_precision": 0.8208955223880597
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 49,
+            "mean_score": 0.696098660936161,
+            "observed_precision": 0.9387755102040817
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 35,
+            "mean_score": 0.8824083549635751,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.24530816605431338
+      }
+    },
+    "madmom-original-default": {
+      "development": {
+        "events": 141,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 46,
+            "mean_score": 0.08683096169008185,
+            "observed_precision": 0.4782608695652174
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 47,
+            "mean_score": 0.29465790853855456,
+            "observed_precision": 0.44680851063829785
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 25,
+            "mean_score": 0.4920637905597687,
+            "observed_precision": 0.8
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 12,
+            "mean_score": 0.6785322080055872,
+            "observed_precision": 0.9166666666666666
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 11,
+            "mean_score": 0.8799395127729936,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.2785608115112183
+      },
+      "known_signal": {
+        "events": 886,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 178,
+            "mean_score": 0.11308537304710095,
+            "observed_precision": 0.0449438202247191
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 581,
+            "mean_score": 0.2696841060345842,
+            "observed_precision": 0.7624784853700516
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 116,
+            "mean_score": 0.442850476965822,
+            "observed_precision": 0.8017241379310345
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 11,
+            "mean_score": 0.7742964896288785,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.32238374387079394
+      },
+      "seen_diagnostic": {
+        "events": 213,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 38,
+            "mean_score": 0.11090480505586847,
+            "observed_precision": 0.9210526315789473
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 101,
+            "mean_score": 0.30387304442943913,
+            "observed_precision": 0.9702970297029703
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 47,
+            "mean_score": 0.46749314982840356,
+            "observed_precision": 0.9787234042553191
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 13,
+            "mean_score": 0.686325898537269,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 14,
+            "mean_score": 0.869807767016547,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.4254608003927925
+      },
+      "test": {
+        "events": 343,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 109,
+            "mean_score": 0.11341012208380762,
+            "observed_precision": 0.41284403669724773
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 82,
+            "mean_score": 0.2891315343539889,
+            "observed_precision": 0.5121951219512195
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 67,
+            "mean_score": 0.5151798053463893,
+            "observed_precision": 0.8059701492537313
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 50,
+            "mean_score": 0.6945711588859558,
+            "observed_precision": 0.92
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 35,
+            "mean_score": 0.8824083549635751,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.24317099616355425
+      }
+    },
+    "madmom-original-extended": {
+      "development": {
+        "events": 131,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 42,
+            "mean_score": 0.0898319297758419,
+            "observed_precision": 0.4523809523809524
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 41,
+            "mean_score": 0.3004867121940706,
+            "observed_precision": 0.5853658536585366
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 25,
+            "mean_score": 0.4932479798793793,
+            "observed_precision": 0.84
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 12,
+            "mean_score": 0.6785322080055872,
+            "observed_precision": 0.9166666666666666
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 11,
+            "mean_score": 0.8799395127729936,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.28290958278404843
+      },
+      "known_signal": {
+        "events": 658,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 163,
+            "mean_score": 0.1325800810794866,
+            "observed_precision": 0.012269938650306749
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 356,
+            "mean_score": 0.28213447930940083,
+            "observed_precision": 0.6348314606741573
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 127,
+            "mean_score": 0.4413316165368388,
+            "observed_precision": 0.8188976377952756
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 12,
+            "mean_score": 0.7672003706296285,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          }
+        ],
+        "brier_on_emitted_events": 0.24893055378632892
+      },
+      "seen_diagnostic": {
+        "events": 213,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 38,
+            "mean_score": 0.11090480505586847,
+            "observed_precision": 0.9210526315789473
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 101,
+            "mean_score": 0.30387304442943913,
+            "observed_precision": 0.9702970297029703
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 47,
+            "mean_score": 0.46749314982840356,
+            "observed_precision": 0.9787234042553191
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 13,
+            "mean_score": 0.686325898537269,
+            "observed_precision": 1.0
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 14,
+            "mean_score": 0.869807767016547,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.4254608003927925
+      },
+      "test": {
+        "events": 293,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 71,
+            "mean_score": 0.10452192917820328,
+            "observed_precision": 0.4507042253521127
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 71,
+            "mean_score": 0.29499528147804904,
+            "observed_precision": 0.6056338028169014
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 67,
+            "mean_score": 0.51430225683682,
+            "observed_precision": 0.8208955223880597
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 49,
+            "mean_score": 0.696098660936161,
+            "observed_precision": 0.9387755102040817
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 35,
+            "mean_score": 0.8824083549635751,
+            "observed_precision": 1.0
+          }
+        ],
+        "brier_on_emitted_events": 0.24530816605431338
+      }
+    },
+    "transformer-fold0": {
+      "development": {
+        "events": 141,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 13,
+            "mean_score": 0.10177789599849628,
+            "observed_precision": 0.3076923076923077
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 15,
+            "mean_score": 0.28713008761405945,
+            "observed_precision": 0.2
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 13,
+            "mean_score": 0.540549988930042,
+            "observed_precision": 0.5384615384615384
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 59,
+            "mean_score": 0.7379089836346902,
+            "observed_precision": 0.711864406779661
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 41,
+            "mean_score": 0.8577215947755953,
+            "observed_precision": 0.9024390243902439
+          }
+        ],
+        "brier_on_emitted_events": 0.16985828957628488
+      },
+      "known_signal": {
+        "events": 728,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 143,
+            "mean_score": 0.07215131679712632,
+            "observed_precision": 0.20279720279720279
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 76,
+            "mean_score": 0.2860208914468163,
+            "observed_precision": 0.2894736842105263
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 61,
+            "mean_score": 0.5143307403462832,
+            "observed_precision": 0.22950819672131148
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 180,
+            "mean_score": 0.7162980619404051,
+            "observed_precision": 0.37777777777777777
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 268,
+            "mean_score": 0.8946327829538886,
+            "observed_precision": 0.43656716417910446
+          }
+        ],
+        "brier_on_emitted_events": 0.32941667824290594
+      },
+      "seen_diagnostic": {
+        "events": 227,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 0,
+            "mean_score": null,
+            "observed_precision": null
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 17,
+            "mean_score": 0.5256290540975683,
+            "observed_precision": 0.7647058823529411
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 93,
+            "mean_score": 0.7246038375362274,
+            "observed_precision": 0.978494623655914
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 117,
+            "mean_score": 0.8668343720273075,
+            "observed_precision": 0.9914529914529915
+          }
+        ],
+        "brier_on_emitted_events": 0.06618418632230834
+      },
+      "test": {
+        "events": 299,
+        "bins": [
+          {
+            "low": 0.0,
+            "high": 0.2,
+            "events": 36,
+            "mean_score": 0.08895182874726339,
+            "observed_precision": 0.19444444444444445
+          },
+          {
+            "low": 0.2,
+            "high": 0.4,
+            "events": 45,
+            "mean_score": 0.28567419283919865,
+            "observed_precision": 0.4444444444444444
+          },
+          {
+            "low": 0.4,
+            "high": 0.6000000000000001,
+            "events": 35,
+            "mean_score": 0.4980519277708871,
+            "observed_precision": 0.4
+          },
+          {
+            "low": 0.6000000000000001,
+            "high": 0.8,
+            "events": 83,
+            "mean_score": 0.730245013552976,
+            "observed_precision": 0.9156626506024096
+          },
+          {
+            "low": 0.8,
+            "high": 1.0,
+            "events": 100,
+            "mean_score": 0.8803446596860885,
+            "observed_precision": 0.99
+          }
+        ],
+        "brier_on_emitted_events": 0.13024215553798527
+      }
+    }
+  },
+  "interpretation": "Native downbeat activation maximum within matching tolerance of each emitted event; not all-frame calibration.",
+  "fitting": "No threshold/calibrator fitted; descriptive development/test reliability separately."
+}

@@ -1,0 +1,480 @@
+{
+  "policies": {
+    "beatthis": {
+      "GTZAN": "dataset excluded by final0/small0 training declaration",
+      "Ballroom": "dataset included in training declaration"
+    },
+    "beatnet-1": {
+      "GTZAN": "held-out dataset, model source comment and ISMIR 2021 experiment",
+      "Ballroom": "training/validation dataset; exact checkpoint membership not listed"
+    },
+    "beatnet-2": {
+      "GTZAN": "training/validation dataset; exact checkpoint membership not listed",
+      "Ballroom": "held-out dataset, model source comment and ISMIR 2021 experiment"
+    },
+    "beatnetplus": {
+      "GTZAN": "test only according to upstream README",
+      "Ballroom": "training dataset according to upstream README"
+    },
+    "madmom": {
+      "GTZAN": "held-out in ISMIR 2016; migrated arrays equal, same trained model family",
+      "Ballroom": "training/development dataset; exact ensemble membership not fully audited"
+    },
+    "allin1": {
+      "GTZAN": "model family declares Harmonix training only",
+      "Ballroom": "model family declares Harmonix training only"
+    },
+    "libs/own": {
+      "GTZAN": "no pretrained parameters",
+      "Ballroom": "no pretrained parameters; diagnostic previously seen by Soundsible"
+    },
+    "transformer": {
+      "GTZAN": "TEST_ONLY in published training script",
+      "Ballroom": "per-file split inferred from published seed/order; see exceptions"
+    }
+  },
+  "sources": {
+    "beatthis": "https://github.com/CPJKU/beat_this/tree/b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c",
+    "beatnet": "https://archives.ismir.net/ismir2021/paper/000033.pdf",
+    "madmom": "https://archives.ismir.net/ismir2016/paper/000186.pdf",
+    "allin1": "https://github.com/mir-aidj/all-in-one/tree/18e78903c0365147a2c5d4e5e57ebf88cb7d800e",
+    "transformer": "https://github.com/zhaojw1998/Beat-Transformer/blob/063667fc9e4e11507f9d76dc1154d9db953a85eb/code/train.py"
+  },
+  "recording_duplicate_audit": "Training audio is not available for cross-dataset fingerprinting; exclusion is declared at dataset level, not proof against recordings duplicated across datasets.",
+  "cases": [
+    {
+      "id": "gtzan_blues_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_blues_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_blues_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_classical_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_classical_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_classical_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_country_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_country_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_country_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_disco_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_disco_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_disco_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_hiphop_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_hiphop_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_hiphop_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_jazz_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_jazz_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_jazz_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_metal_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_metal_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_metal_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_pop_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_pop_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_pop_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_reggae_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_reggae_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_reggae_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_rock_00000",
+      "dataset": "GTZAN",
+      "split": "development",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_rock_00001",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "gtzan_rock_00002",
+      "dataset": "GTZAN",
+      "split": "test",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-06",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-07",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-08",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-01",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-02",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-03",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-11",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-12",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Ballroom_Classics4-13",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-Pais_Tropical-08",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-I_Like_It2-01",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "ballroom_Albums-I_Like_It2-02",
+      "dataset": "Ballroom",
+      "split": "seen_diagnostic",
+      "synthetic_not_in_historical_training": false
+    },
+    {
+      "id": "synthetic_3_2_plain",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_3_2_pickup_weak_one",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_3_2_syncopated",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_3_2_drift",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_4_2_plain",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_4_2_pickup_weak_one",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_4_2_syncopated",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_4_2_drift",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_2_3_plain",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_2_3_pickup_weak_one",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_2_3_syncopated",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_2_3_drift",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_change_aligned",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_change_unaligned",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_silence",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_tone",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "synthetic_uniform_pulse",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "structure_4_bars",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "structure_8_bars",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    },
+    {
+      "id": "structure_16_bars",
+      "dataset": "synthetic",
+      "split": "known_signal",
+      "synthetic_not_in_historical_training": true
+    }
+  ],
+  "transformer_ballroom": {
+    "ballroom_Albums-Ballroom_Classics4-06": {
+      "fold": 7,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Ballroom_Classics4-07": {
+      "fold": 4,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Ballroom_Classics4-08": {
+      "fold": 6,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Ballroom_Classics4-01": {
+      "fold": 0,
+      "fold0_status": "test",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Ballroom_Classics4-02": {
+      "fold": 0,
+      "fold0_status": "test",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Ballroom_Classics4-03": {
+      "fold": 3,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Ballroom_Classics4-11": {
+      "fold": 4,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Ballroom_Classics4-12": {
+      "fold": 7,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Ballroom_Classics4-13": {
+      "fold": 7,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-Pais_Tropical-08": {
+      "fold": 7,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-I_Like_It2-01": {
+      "fold": 0,
+      "fold0_status": "test",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    },
+    "ballroom_Albums-I_Like_It2-02": {
+      "fold": 5,
+      "fold0_status": "training",
+      "inferred_from": "published audio order, RandomState(0), published fold split"
+    }
+  }
+}
