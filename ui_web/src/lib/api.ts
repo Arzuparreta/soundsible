@@ -1,5 +1,6 @@
 import type { SavedEntity } from './savedEntities';
 import { ApiError, request } from './http';
+import type { WorkReference } from './http';
 import type { DownloadEvidence } from './track';
 export { request, setUnauthorizedHandler, ApiError } from './http';
 import type {
@@ -601,7 +602,7 @@ export const api = {
   /** Warm previews the user is likely to play next: the engine resolves their
    * stream URLs in the background and, with `download`, also caches the audio
    * on disk. Best-effort — errors are the caller's to swallow. */
-  prefetchPreviews: (videoIds: string[], download = false) =>
+  prefetchPreviews: (videoIds: string[], download = false, work?: WorkReference) =>
     request<{
       status?: string;
       queued?: string[];
@@ -610,12 +611,17 @@ export const api = {
       method: 'POST',
       body: { video_ids: videoIds, download },
       timeoutMs: 5000,
+      work,
     }),
-  previewStatuses: (videoIds: string[]) =>
+  previewInterest: (videoIds: string[], revision: number, work: WorkReference) =>
+    request<void>('/api/preview/interest', { method: 'POST',
+      body: { video_ids: videoIds, revision }, work, keepalive: true }),
+  previewStatuses: (videoIds: string[], work?: WorkReference) =>
     request<{ preparation?: Record<string, PreviewPreparation> }>('/api/preview/status', {
       method: 'POST',
       body: { video_ids: videoIds },
       timeoutMs: 5000,
+      work,
     }),
   cancelPreview: (videoId: string) =>
     request<{ cancelled?: boolean }>(`/api/preview/cancel/${encodeURIComponent(videoId)}`, {
@@ -1150,6 +1156,8 @@ export const api = {
       timeoutMs: 8000,
       signal,
     }),
+  updateDjWork: (body: { active: boolean; revision: number; tracks?: DjItemRef[] }, work?: WorkReference) =>
+    request<void>('/api/discovery/music/dj-work', { method: 'POST', body, work, keepalive: true }),
   saveDiscoveryTrack: (body: {
     artist: string;
     title: string;

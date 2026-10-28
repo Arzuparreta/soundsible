@@ -151,6 +151,9 @@ def test_feed_returns_cache_hits_immediately(monkeypatch):
     mock_db.get_cached_resolution.return_value = None
     monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
 
+    from shared import related_work
+    monkeypatch.setattr(related_work, "instance_db", lambda: mock_db)
+
     client = _make_app().test_client()
     res = client.get("/api/discover/feed?seeds=t1&limit=10")
     body = res.get_json()
@@ -184,6 +187,8 @@ def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
     mock_db.get_related_mix.return_value = None  # cache miss
     mock_db.get_cached_resolution.return_value = None
     monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
+    from shared import related_work
+    monkeypatch.setattr(related_work, "instance_db", lambda: mock_db)
 
     # Use a real (inline) executor so the expansion runs synchronously enough
     # to verify the side effects. We patch the executor to run inline.

@@ -103,7 +103,6 @@ export interface RuntimePorts {
 /** Owns runtime behaviour; cross-domain work enters through explicit ports. */
 export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
   let socket: AppSocket | null = null;
-  let _warmTimer: ReturnType<typeof setTimeout> | null = null;
   function displayMode(): string {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'unknown';
     return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as Navigator & {
@@ -491,14 +490,6 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       // Shares the coalescing window with download completions, which arrive for
       // the same writes moments earlier.
       ports.actions.syncLibrarySoon();
-      // Note: Debounced discover cache warming — when the library changes (new
-      // saves, favourites, deletes) the top seeds may shift, so re-warm the
-      // persistent related-mix cache in the background. The server picks its own
-      // top seeds; this is fire-and-forget.
-      if (_warmTimer) lifetime.clearTimeout(_warmTimer);
-      _warmTimer = lifetime.setTimeout(() => {
-        void api.warmDiscoverSeeds([]).catch(lifetime.guard(() => {}));
-      }, 4000);
     }));
     // The collection changes without the library changing — a song saved or
     // hearted on another device, or a catalog row that just finished resolving to

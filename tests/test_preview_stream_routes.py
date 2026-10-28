@@ -734,6 +734,27 @@ def test_preview_prefetch_queues_valid_ids(tmp_path, monkeypatch):
     assert calls == {"ids": [VID], "download": True, "refresh": True}
 
 
+def test_delayed_prefetch_cannot_reopen_released_preview_interest(tmp_path, monkeypatch):
+    import json
+
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    queued = []
+    monkeypatch.setattr(preview_cache, "request_prefetch", lambda ids, **kwargs: queued.append(list(ids)) or [])
+    client = _make_app().test_client()
+    def headers(revision, interests):
+        return {"X-Soundsible-Work": json.dumps({"client": "tab", "epoch": 1,
+                "revision": revision, "interests": interests})}
+    assert client.post("/api/preview/interest", headers=headers(2, []),
+                       json={"revision": 2, "video_ids": []}).status_code == 200
+    assert client.post("/api/preview/prefetch", headers=headers(1, [VID]),
+                       json={"video_ids": [VID], "download": True}).status_code == 200
+    assert queued == [[]]
+    assert client.post("/api/preview/prefetch", headers=headers(3, [VID]),
+                       json={"video_ids": [VID], "download": True}).status_code == 200
+    assert queued == [[], [VID]]
+
+
 def test_preview_prefetch_rejects_non_list_body(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)

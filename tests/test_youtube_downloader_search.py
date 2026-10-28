@@ -373,6 +373,23 @@ def test_get_related_videos_tries_rd_mix_flat_first(monkeypatch, tmp_path):
     ]
     # And flat extraction was requested.
     assert instances[0].opts.get("extract_flat") == "in_playlist"
+    assert instances[0].opts.get("playlistend") == 5
+    assert instances[0].opts.get("lazy_playlist") is True
+
+
+def test_related_playlist_does_not_enumerate_past_requested_limit(monkeypatch, tmp_path):
+    def entries():
+        for _ in range(5):
+            yield {"id": "relA1BcdEfG", "title": "Related"}
+        raise AssertionError("enumerated an unused related song")
+
+    class YDL(_RecordingYoutubeDL):
+        def __init__(self, opts):
+            super().__init__([{"entries": entries()}])
+
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", YDL)
+    downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
+    assert len(downloader.get_related_videos("seedxxxxxxX", max_results=5)) == 5
 
 
 def test_get_related_videos_falls_back_to_ytmusic_search_when_rd_mix_empty(monkeypatch, tmp_path):

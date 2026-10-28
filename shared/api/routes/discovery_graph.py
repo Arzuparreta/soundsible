@@ -107,10 +107,10 @@ def _expand_seed(
         with user_context(user_id):
             api = _get_api()
             dl = api["get_downloader"](open_browser=False)
-            results = dl.downloader.get_related_videos(
+            from shared.related_work import submit
+            results = submit(video_id, lambda: dl.downloader.get_related_videos(
                 video_id, max_results=_DISCOVER_RECS_PER_SEED, enrich=False
-            )
-            instance_db().set_related_mix(video_id, results)
+            )).result()
             if request_id and seed_track_id:
                 mod = api["_mod"]
                 sio = getattr(mod, "socketio", None)

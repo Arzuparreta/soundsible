@@ -301,6 +301,16 @@ test('changing the authenticated account replaces the runtime and its library', 
 });
 
 
+test('plain HTTP crypto capabilities allow the player to load and play music', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(globalThis.crypto, 'randomUUID', { value: undefined, configurable: true }));
+  await mockMusicEngine(page);
+  await page.goto('/player/#/library?view=songs');
+  await expect(page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ })).toBeVisible();
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  await expect(page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true, includeHidden: true })).toBeVisible();
+});
+
 test('a failed lazy player view retries without restarting playback', async ({ page }) => {
   await mockMusicEngine(page);
   const view = /\/NowPlaying(?:-[^/]+)?\.(?:js|tsx)(?:\?|$)/;

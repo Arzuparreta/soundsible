@@ -50,7 +50,6 @@ import { writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { libraryContext, playlistContext } from '../lib/playbackContext';
-import { prefetchPreviews } from '../lib/prefetch';
 import { isPodcastTrack } from '../lib/track';
 import { pickPlaylistCoverTrack } from '../lib/playlists';
 import { openTrackMenu } from './trackActions';
@@ -457,18 +456,6 @@ export function NowPlayingBrowser(props: {
       onCarryTrack: referenceMode() || routeMode() ? undefined : props.onCarryTrack,
     };
   };
-
-  createEffect(() => {
-    const ids = [
-      ...items()
-        .filter((item) => item.type === 'track' || item.type === 'library_track')
-        .map(catalogPreviewId)
-        .filter((id): id is string => !!id),
-      ...ytResults().map((result) => result.id),
-      ...(direct() ? [direct()!.id] : []),
-    ].slice(0, 8);
-    if (ids.length) prefetchPreviews(ids);
-  });
 
   onCleanup(() => {
     clearTimeout(debounce);

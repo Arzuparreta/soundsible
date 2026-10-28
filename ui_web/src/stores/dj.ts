@@ -5,6 +5,7 @@ import { type MediaSessionSyncReason } from "../lib/mediaSession";
 import { playbackYoutubeId } from "../lib/media";
 import { createPreparationOwner } from "../lib/prefetch";
 import { metricCuePlacement } from "../lib/djCue";
+import { setDjWork } from '../lib/http';
 import { toast } from "../lib/toast";
 import { confirmDialog } from "../lib/confirm";
 import { isPodcastTrack } from "../lib/track";
@@ -74,6 +75,34 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     repeat: RepeatMode;
   } | null = null;
   let autoSessionEpoch = 0;
+  const workClient = `dj-${randomId()}`;
+  let workRevision = 0;
+  let workSignature = '';
+  let workUpdatedAt = 0;
+  function activateDjWork(): void {
+    setDjWork({ client: workClient, epoch: autoSessionEpoch });
+  }
+  function syncDjWork(): void {
+    if (!state.autoMode.active) return;
+    activateDjWork();
+    // Match the planner's eight-song runway rather than acquiring every
+    // distant manual request the listener may have queued.
+    const tracks = state.playback.queue.slice(Math.max(0, state.playback.index), Math.max(0, state.playback.index) + 9).map(djItemRef);
+    const signature = JSON.stringify([autoSessionEpoch, tracks]);
+    if (signature === workSignature && Date.now() - workUpdatedAt < 15_000) return;
+    if (signature !== workSignature) ++workRevision;
+    workSignature = signature;
+    workUpdatedAt = Date.now();
+    void api.updateDjWork?.({ active: true, revision: workRevision, tracks }).catch(() => { workSignature = ''; });
+  }
+  function releaseDjWork(): void {
+    void api.updateDjWork?.({ active: false, revision: ++workRevision },
+      { client: workClient, epoch: autoSessionEpoch }).catch(() => {});
+    workSignature = '';
+    setDjWork(undefined);
+    refinementAborter?.abort();
+    refinement = { pair: '', inFlight: false, nextAt: 0, measured: false };
+  }
   let pendingImmediateAutoTrack: Track | null = null;
   let autoOpeningAborter: AbortController | null = null;
   let autoOpeningRetry: ReturnType<typeof setTimeout> | null = null;
@@ -300,8 +329,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       level: ports.levelFor(next)
     });
   }
-  const REFINE_LEAD_SECONDS = 20;
   let refinement = { pair: '', inFlight: false, nextAt: 0, measured: false };
+  let refinementAborter: AbortController | null = null;
   const REFINE_RETRY_MS = 2_000;
   function djItemRef(track: Track): DjItemRef {
     return {
@@ -322,30 +351,61 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   function maybeRefineTransition(current: Track, next: PlaybackQueueEntry, fromKey: string): void {
     const toKey = queueIdentity(next);
     const pair = `${fromKey}>${toKey}`;
-    if (committedTransition || audioService.mixPhase() !== 'idle') return;
-    if (refinement.pair !== pair) refinement = { pair, inFlight: false, nextAt: 0, measured: false };
+    const phase = audioService.mixPhase();
+    if (phase !== 'idle' && phase !== 'armed') return;
+    if (committedTransition && committedTransition.queueId !== next.queueId) return;
+    if (refinement.pair !== pair) {
+      refinementAborter?.abort();
+      refinement = { pair, inFlight: false, nextAt: 0, measured: false };
+    }
     const attempt = refinement;
     if (attempt.inFlight || attempt.measured || performance.now() < attempt.nextAt) return;
     const item = state.autoMode.plan[next.queueId];
     if (!item || item.fromKey !== fromKey) return;
     if ((item.transition?.confidence ?? 0) >= TRUSTED_CONFIDENCE) return;
     attempt.inFlight = true;
+    const aborter = new AbortController();
+    refinementAborter = aborter;
     attempt.nextAt = performance.now() + REFINE_RETRY_MS;
     const revision = state.autoMode.directionRevision;
     void api.refineDjTransition({
       from: djItemRef(current),
       to: djItemRef(next)
-    }).then(lifetime.guard(result => {
-      if (!result.measured || !state.autoMode.active || refinement !== attempt || committedTransition) return;
+    }, aborter.signal).then(lifetime.guard(result => {
+      if (!result.measured || !state.autoMode.active || refinement !== attempt) return;
       if (state.autoMode.directionRevision !== revision || state.autoMode.plan[next.queueId] !== item) return;
+      if (committedTransition) {
+        if (committedTransition.queueId !== next.queueId || audioService.mixPhase() !== 'armed'
+            || (result.transition.out_cue ?? 0) < state.playback.currentTime + 5) return;
+        // Loading bytes is reversible while the incoming deck remains silent.
+        ++commitSeq;
+        committedTransition = null;
+        audioService.cancelMix('superseded');
+        setState('autoMode', 'transition', IDLE_TRANSITION);
+      }
       attempt.measured = true;
       setState('autoMode', 'plan', next.queueId, 'transition', result.transition);
+      setState('autoMode', 'staleSeams', seams => seams.filter(id => id !== next.queueId));
+      evaluateDjRunway();
     })).catch(lifetime.guard(() => {
       /* the conservative plan stands until the next bounded attempt */
-    })).finally(() => { attempt.inFlight = false; });
+    })).finally(() => {
+      attempt.inFlight = false;
+      if (refinementAborter === aborter) refinementAborter = null;
+    });
   }
   function evaluateDjRunway(): void {
-    if (!state.autoMode.active || committedTransition || audioService.mixPhase() !== 'idle') return;
+    syncDjWork();
+    if (!state.autoMode.active) return;
+    if (committedTransition) {
+      const current = state.playback.currentTrack;
+      const next = state.playback.queue[state.playback.index + 1];
+      if (current && next && state.playback.djMixing && audioService.mixPhase() === 'armed') {
+        maybeRefineTransition(current, next, queueIdentity(current));
+      }
+      return;
+    }
+    if (audioService.mixPhase() !== 'idle') return;
     if (performance.now() < autoHandoffCooldownUntil) return;
     const pb = state.playback;
     const current = pb.currentTrack;
@@ -358,11 +418,15 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       return;
     }
     const fromKey = queueIdentity(current);
+    const entry = state.autoMode.plan[next.queueId];
+    if (entry && entry.fromKey !== fromKey) {
+      setState('autoMode', 'plan', next.queueId, { ...entry, fromKey, transition: undefined });
+      refinement = { pair: '', inFlight: false, nextAt: 0, measured: false };
+    }
     const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[next.queueId]);
     if (!plan) return;
     // A measured blend is only worth asking for when there will be a blend.
-    if (state.playback.djMixing && pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS
-        && pb.currentTime >= plan.out_cue - COMMIT_LEAD_SECONDS - REFINE_LEAD_SECONDS) {
+    if (state.playback.djMixing && pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS) {
       maybeRefineTransition(current, next, fromKey);
     }
     if (pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS) return;
@@ -559,6 +623,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     autoOpeningRetry = null;
     if (!state.autoMode.active || state.playback.currentTrack || state.autoMode.sources.length === 0) return;
     const sessionEpoch = autoSessionEpoch;
+    activateDjWork();
     autoOpeningAborter?.abort();
     const aborter = new AbortController();
     autoOpeningAborter = aborter;
@@ -1065,6 +1130,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     return 'autoMode.reason.node';
   }
   function ensureGeneratedQueue(): GeneratedQueueController {
+    if (state.autoMode.active) activateDjWork();
     if (generatedQueue) return generatedQueue;
     generatedQueue = new GeneratedQueueController({
       snapshot: () => ({
@@ -1076,6 +1142,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       planningContext: () => JSON.stringify([state.autoMode.directionRevision, state.autoMode.sources.map(source => [source.id, source.activation, source.tracks.map(queueIdentity)]), (state.autoMode.exploration ?? []).map(queueIdentity), state.autoMode.avoidedIdentities]),
       isCommitted: entry => committedTransition?.queueId === entry.queueId,
       requestPlan: (intent, profile, seed, limit, exclude, signal, generatedSession) => {
+        if (intent === 'auto_mode') syncDjWork();
         const seedBody = {
           id: seed.id,
           track_id: seed.source === 'preview' ? undefined : seed.id,
@@ -1206,6 +1273,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
             const live = new Set(state.playback.queue.map(entry => entry.queueId));
             return seams.filter(id => live.has(id) && plan[id] === undefined);
           });
+          syncDjWork();
         }
         ports.prefetchUpcoming();
         // New runway. If the music ran out waiting for exactly this, start it
@@ -1362,6 +1430,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       if (current) void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);else void openAutoFromCollection();
     },
     exitAutoMode(): void {
+      releaseDjWork();
       cancelRunwayReplan();
       pendingImmediateAutoTrack = null;
       autoOpeningAborter?.abort();
@@ -2226,6 +2295,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   };
   return {
     dispose() {
+      releaseDjWork();
       ++autoSessionEpoch;
       autoOpeningAborter?.abort();
       generatedQueue?.stop();

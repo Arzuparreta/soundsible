@@ -47,6 +47,8 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     # tests' runtimes. Recovery itself is exercised with an explicit worker.
     from shared import dj_library
     monkeypatch.setattr(dj_library, "start", lambda: None)
+    from shared import work
+    monkeypatch.setattr(work, "start_reaper", lambda: None)
     from shared.artwork_recovery import recovery
     monkeypatch.setattr(recovery, "start", lambda: None)
     # The checkout's own pre-move settings file is the developer's, not a test's.
@@ -61,6 +63,7 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     try:
         yield runtime
     finally:
+        work.reset_runtime()
         # A test that boots the API starts the download pump and the loudness
         # worker, and ending them is `stop_api`'s job, which such tests stub
         # out. Left running they carried on through every later test, writing

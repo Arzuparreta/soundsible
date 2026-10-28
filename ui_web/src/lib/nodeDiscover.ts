@@ -25,7 +25,6 @@ import { createEffect, createRoot, createSignal, untrack } from 'solid-js';
 import { api } from './api';
 import { favouriteLibraryIds, state } from '../stores';
 import { isPodcastTrack } from './track';
-import { prefetchPreviews } from './prefetch';
 import { setDiscoverSeedHandler } from './socket';
 import type { SearchResult } from '../types/music';
 import { user, userKey } from './session';
@@ -278,8 +277,6 @@ function finalize(rs: RebuildState): void {
   if (currentRebuild === rs) currentRebuild = null;
   setDiscoverSeedHandler(null);
   if (rs === currentRebuild || currentRebuild === null) setRebuilding(false);
-  // Warm the first rows so the eventual tap starts near-instantly.
-  prefetchPreviews(nodeFeed().slice(0, 4).map((r) => r.id));
 }
 
 function startRebuild(): Promise<void> {

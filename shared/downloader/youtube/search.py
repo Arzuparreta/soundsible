@@ -11,12 +11,14 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
+from itertools import islice
 
 import yt_dlp
 
 from shared.music_identity import youtube_music_metadata
 from shared.resolution_confidence import best_candidate
 from shared.text_utils import identity_key
+from shared.work import check, WorkCancelled, context_call
 
 from ..config import prefer_ytmusic
 from .ids import is_valid_video_id, thumbnail_url, video_id_from_url, watch_url
@@ -71,11 +73,14 @@ def peek_video_metadata(url: str, cookies: Cookies) -> Dict[str, Any]:
         attempts.append({**base, "cookiesfrombrowser": (cookies.browser, None, None, None)})
     last_err: Optional[Exception] = None
     for opts in attempts:
+        check()
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
             if isinstance(info, dict) and info:
                 return info
+        except WorkCancelled:
+            raise
         except Exception as e:
             last_err = e
             logger.debug("peek_video_metadata attempt failed for %s: %s", url, e)
@@ -188,7 +193,7 @@ def _enrich_missing_creators(items: List[Dict[str, Any]]) -> None:
         return
     with ThreadPoolExecutor(max_workers=min(8, len(missing))) as executor:
         futures = {
-            executor.submit(oembed_creator, str(item.get("id") or "")): item
+            executor.submit(context_call(oembed_creator, str(item.get("id") or ""))): item
             for item in missing
         }
         for future in as_completed(futures):
@@ -219,6 +224,7 @@ def search_youtube(
 
     Errors propagate: the caller decides whether to try the other surface.
     """
+    check()
     if not query or not query.strip():
         return []
     query = query.strip()
@@ -288,12 +294,15 @@ def search_match_candidates(
         def recover(row):
             try:
                 return peek_brief(str(row['id']), cookies)
+            except WorkCancelled:
+                raise
             except Exception as exc:
                 logger.debug('Fallback candidate metadata failed for %s: %s', row['id'], exc)
                 return None
         if plausible:
             with ThreadPoolExecutor(max_workers=3) as executor:
-                rows = [row for row in executor.map(recover, plausible) if row]
+                futures = [executor.submit(context_call(recover, row)) for row in plausible]
+                rows = [row for future in futures if (row := future.result())]
     # Matching scores the upload itself — its official/lyrics/version
     # markers — so it gets the title as uploaded, not the song title.
     return [{**row, "title": row.get("source_title") or row.get("title")} for row in rows]
@@ -336,6 +345,7 @@ def get_related_videos(
         return []
 
     def _try_extract(ydl_opts: dict, url: str) -> List[Dict[str, Any]]:
+        check()
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             result = ydl.extract_info(url, download=False)
         if not result or "entries" not in result:
@@ -344,20 +354,25 @@ def get_related_videos(
                 list(result.keys()) if result else "None",
             )
             return []
-        rows = (_related_row(entry) for entry in _entries(result)[:max_results])
+        check()
+        rows = (_related_row(entry) for entry in islice(result.get("entries") or [], max_results))
         return [row for row in rows if row is not None]
 
-    base_opts = _extract_options(socket_timeout=12, **cookies.ydl_options())
+    base_opts = _extract_options(socket_timeout=12, playlistend=max_results,
+                                 lazy_playlist=True, **cookies.ydl_options())
     mix_url = f"{watch_url(seed_video_id)}&list=RD{seed_video_id}&start_radio=1"
 
     try:
         results = _try_extract({**base_opts, "extract_flat": "in_playlist", "noplaylist": False}, mix_url)
         if results:
             return results
+    except WorkCancelled:
+        raise
     except Exception as e:
         logger.debug("[Discover] get_related_videos RD flat failed: %s", e)
 
     try:
+        check()
         info = peek_video_metadata(watch_url(seed_video_id), cookies)
         if info:
             title = str(info.get("track") or info.get("title") or "").strip()
@@ -378,6 +393,8 @@ def get_related_videos(
                 results = [r for r in results if str(r.get("id", "")) != seed_video_id]
                 if results:
                     return results
+    except WorkCancelled:
+        raise
     except Exception as e:
         logger.debug("[Discover] get_related_videos search fallback failed: %s", e)
 
@@ -385,6 +402,8 @@ def get_related_videos(
         results = _try_extract({**base_opts, "noplaylist": False}, mix_url)
         if results:
             return results
+    except WorkCancelled:
+        raise
     except Exception as e:
         logger.debug("[Discover] get_related_videos RD full failed: %s", e)
 
