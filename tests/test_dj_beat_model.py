@@ -114,7 +114,7 @@ def test_analysis_without_the_model_is_not_cached(tmp_path, monkeypatch):
     from shared.dj import store
 
     monkeypatch.setattr(store, '_cache_path', lambda: tmp_path / 'analysis.sqlite3')
-    monkeypatch.setattr(weights, 'session', lambda run=None: None)
+    monkeypatch.setattr(weights, 'session', lambda: None)
     samples, _ = _click_track(seconds=10)
     path = tmp_path / 'kicks.wav'
     with wave.open(str(path), 'wb') as output:

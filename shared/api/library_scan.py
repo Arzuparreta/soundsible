@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -133,6 +134,11 @@ class LibraryScanService:
                 scanner = LibraryScanner()
 
                 def progress(result: ScanResult) -> None:
+                    # Called once per file. Hashing and tag reads are plain
+                    # file I/O, which never yields to the engine's cooperative
+                    # loop: without this a first scan of a large library holds
+                    # every request, and the loop watchdog, for its duration.
+                    time.sleep(0)
                     self._update(
                         user_id,
                         scan_id,

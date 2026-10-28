@@ -79,9 +79,9 @@ def main() -> int:
         logger.info("Created first-run local configuration in %s", os.environ.get("SOUNDSIBLE_CONFIG_DIR", "/config"))
 
     # Socket and thread monkey-patching must precede imports of the API server.
-    from gevent import monkey
+    from shared.cooperative import patch_process
 
-    monkey.patch_all()
+    patch_process()
 
     from shared.api import start_api
     from shared.runtime import RuntimeConfig

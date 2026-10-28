@@ -65,11 +65,7 @@ def _verified_file(path: Path) -> bool:
     return True
 
 
-def _inline(function, *args):
-    return function(*args)
-
-
-def _download(target: Path, run) -> bool:
+def _download(target: Path) -> bool:
     import requests
 
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -80,7 +76,7 @@ def _download(target: Path, run) -> bool:
             with partial.open("wb") as stream:
                 for block in response.iter_content(1 << 20):
                     stream.write(block)
-        if not run(_verified_file, partial):
+        if not _verified_file(partial):
             logger.warning("DJ beat model download did not match its SHA-256; discarded")
             partial.unlink(missing_ok=True)
             return False
@@ -94,21 +90,17 @@ def _download(target: Path, run) -> bool:
         return False
 
 
-def model_path(*, download: bool = True, run=_inline) -> Path | None:
-    """A verified weights file, downloading it into the cache if allowed.
-
-    `run(function, *args)` executes the CPU-bound hashing; the download itself
-    stays in the caller, whose sockets may be cooperative.
-    """
+def model_path(*, download: bool = True) -> Path | None:
+    """A verified weights file, downloading it into the cache if allowed."""
     explicit = os.environ.get(ENVIRONMENT, "").strip()
     candidates = [Path(explicit)] if explicit else [bundled_path(), cached_path()]
     for path in candidates:
-        if run(_verified_file, path):
+        if _verified_file(path):
             return path
     if explicit or not download:
         return None
     target = cached_path()
-    return target if _download(target, run) else None
+    return target if _download(target) else None
 
 
 def _runtime():
@@ -135,12 +127,12 @@ def _open(path: Path):
     return ort.InferenceSession(str(path), options, providers=["CPUExecutionProvider"])
 
 
-def session(run=_inline):
+def session():
     """One ONNX Runtime session with one thread, or None while unavailable.
 
     Called from an analysis job, never from a request: the first call may
-    download 84 MB. `run` executes hashing and model loading off a cooperative
-    loop. Callers serialise inference themselves (see `store`).
+    download 84 MB. Inside the engine that job runs in the analysis process
+    (`worker`), which measures one song at a time.
     """
     global _session, _failed_at
     with _lock:
@@ -149,14 +141,14 @@ def session(run=_inline):
         if _failed_at and time.monotonic() - _failed_at < _RETRY_SECONDS:
             return None
         try:
-            run(_runtime)
+            _runtime()
         except ImportError:
             logger.warning("onnxruntime is not installed; DJ pulse analysis is unavailable")
             _failed_at = time.monotonic()
             return None
-        path = model_path(run=run)
+        path = model_path()
         if path is None:
             _failed_at = time.monotonic()
             return None
-        _session = run(_open, path)
+        _session = _open(path)
         return _session

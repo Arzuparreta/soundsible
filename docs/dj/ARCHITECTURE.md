@@ -26,7 +26,8 @@ almacenamiento ni Flask; una prueba lo comprueba en otro proceso.
 | `structure` | Frases desde cambios medidos del arreglo en las líneas de compás, longitud de frase, secciones con papel y cues candidatos, sobre los compases recibidos de P12 y las bandas de octava de `features` | `contracts`, `timing` (`projected_bar`) |
 | `analysis` | Diezmado a 11025 Hz y composición de las medidas completas; agrega ventanas sin rellenar huecos | `features`, `structure`, `contracts` |
 | `weights` | Pesos ONNX: ruta empaquetada o caché, SHA-256, descarga única y sesión de un hilo | Ninguna (runtime) |
-| `store` | Identidad, sello del contenido, SQLite, decodificación a 22050 Hz con LUFS en la misma pasada, inferencia serializada y DSP fuera de gevent, trabajos acotados | `analysis`, `beat_model`, `weights`, `contracts` |
+| `store` | Identidad, sello del contenido, SQLite, decodificación a 22050 Hz con LUFS en la misma pasada, cola acotada; en el motor, cada medición se encarga a `worker` | `analysis`, `beat_model`, `weights`, `contracts`, `worker` |
+| `worker` | Proceso de análisis: mide una canción cada vez fuera del motor; el motor lo arranca, lo cierra tras 5 min sin trabajo y lo sustituye si se cuelga o muere | `store` (en el proceso hijo), `contracts` |
 | `timing` | Periodo y métrica locales, equivalencia de medio/doble pulso, deriva y admisión de beatmatch | `contracts` |
 | `transitions` | Único `plan_transition`: compatibilidad, técnica, cues, velocidad y eco | `timing`, `features` (nombres de notas), `contracts` |
 | `routes` | Continuidad, ruta legacy, llegada a peticiones, elección de hueco y reparación entre anclas | `transitions`, `timing`, `contracts` |
@@ -170,9 +171,39 @@ del estado. Los probes de tempo y tonalidad y los benchmarks de análisis/cola
 usan esos propietarios; la instrumentación de la cola observa el trabajo real
 de `store`, y las revisiones separadas se cargan en otro namespace.
 
-Se mantienen dos trabajadores de adquisición, hasta 64 identidades pendientes,
-deduplicación por identidad, conexiones SQLite por hilo, FFT por bloques y
-despacho del DSP al threadpool nativo cuando hay gevent. Las pruebas comprueban
-esos límites y la no obstrucción del bucle cooperativo. No se fusionan las FFT
-de ritmo, tonalidad y ataques de notas ni se afirma una mejora de rendimiento:
-P11 cambia la organización y las fronteras.
+Se mantienen hasta 64 identidades pendientes, deduplicación por identidad,
+conexiones SQLite por hilo y FFT por bloques. No se fusionan las FFT de ritmo,
+tonalidad y ataques de notas ni se afirma una mejora de rendimiento: P11 cambia
+la organización y las fronteras.
+
+## Ejecución: el análisis nunca corre dentro del motor
+
+Desde el 2026-10-28 el motor no decodifica, no ejecuta ONNX Runtime ni hace
+DSP con NumPy. `store.start_analysis_process()` (llamado al arrancar la API)
+hace que cada medición vaya a `shared/dj/worker.py`, un proceso hijo sin
+gevent que mide una canción cada vez con OpenBLAS en un hilo. El motor conserva
+SQLite, identidades, cola y prioridades; espera la respuesta sin bloquear su
+bucle. La cola de adquisición tiene un trabajo, porque el proceso mide de uno
+en uno; el barrido de la biblioteca sigue cediendo a las peticiones de sesión.
+
+Motivo: el motor sirve todo desde un único bucle de gevent y gevent arranca
+cada subproceso con `fork()`. Con el DSP en hilos nativos del mismo proceso,
+un `fork()` de FFmpeg coincidente con un producto de matrices de OpenBLAS
+multihilo se bloqueaba en el manejador `atfork` de OpenBLAS: el bucle no
+volvía y la estación quedaba inaccesible con un núcleo al 100 % hasta un
+reinicio manual (tres veces entre el 26 y el 28-10). Reglas del proceso del
+motor en `shared/cooperative.py`; pruebas en `tests/test_cooperative_process.py`
+y `tests/test_dj_worker.py`.
+
+- Un análisis que no responde en 630 s se mata y la siguiente petición arranca
+  otro proceso; el hijo vuelca su pila y sale a los 600 s por su cuenta.
+- Una fuente que el proceso no pudo medir (error, caída o tiempo agotado) no
+  se reintenta hasta que cambia su sello o se reinicia el motor.
+- El resultado es idéntico al análisis en el mismo proceso, que siguen usando
+  pruebas, probes y benchmarks (`store._analyse_pcm`).
+- El ejecutable de escritorio (PyInstaller) es también su propio proceso de
+  análisis: `soundsible-engine --dj-analysis-worker`.
+- El hijo lee la siguiente petición solo entre mediciones, en su hilo
+  principal. Un hilo bloqueado leyendo stdin durante una medición colgaba la
+  versión de Windows al cargar las DLL de NumPy (una lectura síncrona
+  pendiente en un pipe bloquea otras llamadas sobre ese handle).

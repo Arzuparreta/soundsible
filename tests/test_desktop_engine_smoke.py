@@ -295,3 +295,20 @@ def test_desktop_engine_smoke_sidecar(tmp_path):
             pytest.skip("Sidecar binary not built; run desktop-shell/scripts/build-sidecar.sh")
         engine_bin = matches[0]
     _run_smoke(tmp_path, engine_bin=engine_bin)
+    _exercise_frozen_analysis_worker(engine_bin, tmp_path)
+
+
+def _exercise_frozen_analysis_worker(engine_bin: Path, tmp_path: Path) -> None:
+    """The packaged engine measures a song as its own DJ analysis process."""
+    from shared.dj.worker import FROZEN_FLAG, AnalysisProcess
+    from test_dj_beat_grid import song
+
+    path = tmp_path / "worker-song.wav"
+    song(path, 123.0, seconds=20.0)
+    process = AnalysisProcess([str(engine_bin), FROZEN_FLAG])
+    try:
+        analysis = process.measure(path, 20.0)
+    finally:
+        process.close()
+    assert analysis is not None, "the bundled beat model did not load"
+    assert analysis["analysed"] is True

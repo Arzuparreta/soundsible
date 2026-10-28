@@ -44,6 +44,9 @@ def started_api(monkeypatch, isolated_runtime):
             lambda *_args, **_kwargs: record["served"].append(True),
         )
         monkeypatch.setattr(api, "stop_api", lambda *_args, **_kwargs: None)
+        # With stop_api stubbed, start_api's analysis process would outlive
+        # the test and measure every later test's songs in a child.
+        monkeypatch.setattr("shared.dj.store._process", None)
         api.start_api(
             runtime_config=isolated_runtime,
             on_ready=lambda _runtime: record["ready"].append(True),

@@ -252,9 +252,10 @@ def _ensure_bootstrap_before_gevent():
 
 _ensure_bootstrap_before_gevent()
 
-# Note: Gevent must patch before imports that use socket/threading.
-from gevent import monkey
-monkey.patch_all()
+# Gevent must patch before imports that use socket/threading; see
+# shared/cooperative.py for the rules a cooperative process follows.
+from shared.cooperative import patch_process
+patch_process()
 
 import socket
 import threading

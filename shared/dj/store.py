@@ -1,13 +1,18 @@
-"""Versioned analysis identity, SQLite, bounded decoding and background acquisition."""
+"""Versioned analysis identity, SQLite, bounded decoding and background acquisition.
+
+Inside the engine every measurement runs in the analysis process
+(`worker`); this module keeps the cache, the identities and the queue. Tools
+and tests that never start that process measure in their own.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import sqlite3
 import subprocess
-import sys
 import threading
 import time
 from collections.abc import Mapping
@@ -18,8 +23,11 @@ from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
 
 from . import beat_model, weights
+from .worker import AnalysisFailed, AnalysisProcess
 from .analysis import _compose, decimate
 from .contracts import ANALYSER_VERSION, Analysis, fallback_analysis as _fallback
+
+logger = logging.getLogger(__name__)
 
 # A normal song is decoded in full so the grid and the musical sections come
 # from the recording, not from arithmetic projected from its first transient.
@@ -130,7 +138,7 @@ def analyse_audio(path: str | Path, identity: str, *, duration_hint: float = 0.0
     if cached is not None:
         return cached
 
-    analysis = _analyse_pcm(source, duration_hint=duration_hint)
+    analysis = _measure_source(source, identity, duration_hint)
     if analysis is None:
         # No beat model yet (weights downloading or unavailable). Measuring
         # without it would cache a song as pulseless for this version.
@@ -150,6 +158,48 @@ def analyse_audio(path: str | Path, identity: str, *, duration_hint: float = 0.0
     return analysis
 
 
+_process: AnalysisProcess | None = None
+# identity -> source stamp of a file the analysis process could not measure.
+# Not retried until the file changes or the engine restarts: a song that
+# crashes or stalls the process would otherwise cost a full timeout on every
+# library pass.
+_unmeasurable: dict[str, str] = {}
+
+
+def start_analysis_process() -> None:
+    """Measure in a separate process from now on. The engine calls this at startup."""
+    global _process
+    if _process is None:
+        _process = AnalysisProcess()
+
+
+def stop_analysis_process() -> None:
+    global _process
+    process, _process = _process, None
+    if process is not None:
+        process.close()
+
+
+def _measure_source(source: Path, identity: str, duration_hint: float) -> Analysis | None:
+    process = _process
+    if process is None:
+        return _analyse_pcm(source, duration_hint=duration_hint)
+    try:
+        stamp = _source_stamp(source)
+    except OSError:
+        return None
+    if _unmeasurable.get(identity) == stamp:
+        return None
+    try:
+        analysis = process.measure(source, duration_hint)
+    except AnalysisFailed as exc:
+        _unmeasurable[identity] = stamp
+        logger.warning("DJ analysis of %s failed: %s", source.name, exc)
+        return None
+    _unmeasurable.pop(identity, None)
+    return analysis
+
+
 _pending_lock = threading.Lock()
 
 
@@ -161,7 +211,8 @@ def _analysis_pool() -> ThreadPoolExecutor:
     global _pool
     with _pending_lock:
         if _pool is None:
-            _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dj-analysis")
+            # One job: the analysis process measures one song at a time.
+            _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dj-analysis")
     return _pool
 
 
@@ -277,7 +328,7 @@ def _decode_measured(path: Path, sample_rate: int, *, start: float = 0.0, length
 
 def _analyse_pcm(path: Path, *, duration_hint: float) -> Analysis | None:
     """Decode once at the beat model's rate and measure; None without the model."""
-    session = weights.session(_off_loop)
+    session = weights.session()
     if session is None:
         return None
     sample_rate = beat_model.SAMPLE_RATE
@@ -292,31 +343,20 @@ def _analyse_pcm(path: Path, *, duration_hint: float) -> Analysis | None:
         if tail is None or tail.size < sample_rate * 4:
             return _fallback(duration)
         lufs = _combined_lufs([(head_lufs, HEAD_WINDOW_SECONDS), (tail_lufs, TAIL_WINDOW_SECONDS)])
-        events = (_model_events(session, tail),
-                  _model_events(session, head) if head is not None and head.size >= sample_rate * 4 else None)
-        return _compose_off_loop(
+        events = (beat_model.events(session, tail),
+                  beat_model.events(session, head) if head is not None and head.size >= sample_rate * 4 else None)
+        return _measure(
             tail, head, sample_rate, duration=duration, tail_start=tail_start, loudness_lufs=lufs, events=events,
         )
 
     samples, lufs = _decode_measured(path, sample_rate)
     if samples is None or samples.size < sample_rate * 4:
         return _fallback(duration or (0.0 if samples is None else samples.size / sample_rate))
-    window = _model_events(session, samples)
-    return _compose_off_loop(
+    window = beat_model.events(session, samples)
+    return _measure(
         samples, samples, sample_rate, duration=samples.size / sample_rate, tail_start=0.0,
         loudness_lufs=lufs, events=(window, window),
     )
-
-
-# One inference at a time across the analysis jobs: the network's working
-# memory (~250 MiB on top of its weights) is not multiplied by the job count.
-_model_lock = threading.Lock()
-
-
-def _model_events(session, samples):
-    """Beat-model events of one 22050 Hz window, computed off the cooperative loop."""
-    with _model_lock:
-        return _off_loop(beat_model.events, session, samples)
 
 
 def _combined_lufs(windows: list[tuple[float | None, float]]) -> float | None:
@@ -340,27 +380,6 @@ def _measure(tail, head, sample_rate: int, **kwargs):
         head11 = tail11 if head is tail else (decimate(head) if head is not None else None)
         tail, head, sample_rate = tail11, head11, sample_rate // 2
     return _compose(tail, head, sample_rate, **kwargs)
-
-
-def _compose_off_loop(tail, head, sample_rate: int, *, duration: float, tail_start: float,
-                      loudness_lufs: float | None = None, events=None):
-    kwargs = {"duration": duration, "tail_start": tail_start, "loudness_lufs": loudness_lufs, "events": events}
-    return _off_loop(_measure, tail, head, sample_rate, **kwargs)
-
-
-def _off_loop(function, *args, **kwargs):
-    # The daemon monkey-patches threading: its concurrent.futures workers are
-    # greenlets, so NumPy and ONNX Runtime on those workers otherwise stall
-    # every HTTP request. Offload only pure computation. SQLite and
-    # cooperative subprocess I/O stay on their owning thread; the two analysis
-    # jobs still bound concurrency.
-    # Plain CLI/desktop analyses do not need to initialize gevent at all.
-    monkey = sys.modules.get("gevent.monkey")
-    if monkey is not None and monkey.is_module_patched("threading"):
-        from gevent import get_hub
-
-        return get_hub().threadpool.apply(function, args, kwargs)
-    return function(*args, **kwargs)
 
 
 def analysis_identity(item: Mapping[str, object]) -> str:

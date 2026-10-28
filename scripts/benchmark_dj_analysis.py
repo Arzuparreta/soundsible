@@ -30,7 +30,7 @@ def load_engine(revision):
     from shared.dj import analysis, features, store
     return types.SimpleNamespace(_window_features=features._window_features,
                                  _analyse_pcm=store._analyse_pcm,
-                                 _compose=analysis._compose, _compose_off_loop=store._compose_off_loop)
+                                 _compose=analysis._compose)
 
 
 def synthetic_pcm(seconds):
