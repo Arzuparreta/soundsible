@@ -32,7 +32,9 @@ class ProgramDjRecoveryTest {
     @Test fun tlsHistoryPrune() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), history = true)
     @Test fun httpMeasuredRefinement() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), measured = true)
     @Test fun tlsMeasuredRefinement() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), measured = true)
-    private fun run(origin: String?, starved: Int? = null, history: Boolean = false, measured: Boolean = false) {
+    @Test fun httpSilentArmedRefinement() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), lateRefinement = true)
+    @Test fun tlsSilentArmedRefinement() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), lateRefinement = true)
+    private fun run(origin: String?, starved: Int? = null, history: Boolean = false, measured: Boolean = false, lateRefinement: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val connection = EngineConnection.shared(instrumentation.targetContext)
@@ -78,7 +80,7 @@ class ProgramDjRecoveryTest {
                     repeat(1000) { put(JSONObject().put("source", "local").put("id", "member-pcm-soft").put("title", "History $it").put("duration", 20)) }
                 }) else items
                 successorKey.set(routeItems[if (history) 996 else if (starved == 1 || starved == 2) 0 else 1].mediaMetadata.extras!!.getString(ProgramQueue.KEY))
-                session = ProgramDjSession(instrumentation.targetContext, generation, owns, DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)), tap, { false }, routeItems.map { ProgramDjSession.Row(it) }, mixing = { starved != null })
+                session = ProgramDjSession(instrumentation.targetContext, generation, owns, DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)), tap, { false }, routeItems.map { ProgramDjSession.Row(it) }, mixing = { starved != null || lateRefinement })
                 output = ProgramDjSession::class.java.getDeclaredField("output").apply { isAccessible = true }.get(session) as ProgramMixOutput
                 @Suppress("UNCHECKED_CAST")
                 decks = ProgramDjSession::class.java.getDeclaredField("decks").apply { isAccessible = true }.get(session) as Array<ExoPlayer>
@@ -165,6 +167,37 @@ class ProgramDjRecoveryTest {
                 return
             }
             await { session!!.player.isPlaying && output.readyInput(1) }
+            if (lateRefinement) {
+                await { output.transition()?.let { output.positionUs() * 48000 / 1000000 < it.start } == true }
+                instrumentation.runOnMainSync {
+                    val owner = session!!
+                    owner.player.pause()
+                    val snapshot = owner.refinementSnapshot()
+                    val key = owner.player.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!!
+                    val epoch = output.epoch()
+                    val position = output.positionUs()
+                    val proposal = ProgramDjPlan.Proposal(key, ProgramMixCurve.Technique.SAFE_FADE, 15.0, 0.0, 4.0, 1.0, 0.5)
+                    assertTrue("Silent armed reservation rejected measured replacement", owner.applyRefinement(snapshot, proposal))
+                    assertNull("Old reservation survived replacement", output.transition())
+                    assertEquals("Refinement reset the output epoch", epoch, output.epoch())
+                    assertEquals("Refinement changed paused programme position", position, output.positionUs())
+                    assertEquals(proposal, owner.refinementSnapshot().rows[1].proposal)
+                    assertFalse("Refinement resumed paused audio", owner.player.playWhenReady)
+                    assertFalse("Stale refinement accepted", owner.applyRefinement(snapshot, proposal))
+                    owner.player.play()
+                }
+                await { output.transition()?.let { output.positionUs() * 48000 / 1000000 >= it.start + 4800 } == true }
+                instrumentation.runOnMainSync {
+                    val owner = session!!
+                    val snapshot = owner.refinementSnapshot()
+                    val key = owner.player.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!!
+                    val window = output.transition()
+                    assertFalse("Sounding mix accepted late refinement", owner.applyRefinement(snapshot,
+                        ProgramDjPlan.Proposal(key, ProgramMixCurve.Technique.SAFE_FADE, 18.0, 0.0, 2.0, 1.0, 0.5)))
+                    assertEquals("Rejected refinement changed sounding mix", window, output.transition())
+                }
+                return
+            }
             instrumentation.runOnMainSync {
                 val snapshot = session!!.routeSnapshot()
                 val key = session!!.player.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!!

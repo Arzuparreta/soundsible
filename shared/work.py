@@ -9,7 +9,7 @@ by several owners stop only when the last interested owner releases them.
 from __future__ import annotations
 
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar, copy_context
 import logging
 import re
@@ -36,6 +36,10 @@ class WorkCancelled(CancelledError):
     pass
 
 
+class WorkInterrupted(BaseException):
+    """Internal unwind: provider retry handlers must not swallow cancellation."""
+
+
 class Owner:
     def __init__(self, key: tuple, epoch: int):
         self.key, self.epoch = key, epoch
@@ -44,6 +48,7 @@ class Owner:
         self.closed = False
         self.retired = False
         self.jobs: set[Job] = set()
+        self.callbacks: set = set()
         self.children: dict[str, Owner] = {}
         self.cancelled_requests: dict[str, float] = {}
         self.parent: Owner | None = None
@@ -70,10 +75,13 @@ class Owner:
             self.retired = self.retired or retire
             jobs = list(self.jobs)
             children = list(self.children.values())
+            callbacks = list(self.callbacks)
         for job in jobs:
             job.release(self)
         for child in children:
             child.close()
+        for callback in callbacks:
+            callback()
 
 
 def owner(client: str, epoch: int, *, active: bool = True) -> Owner:
@@ -128,7 +136,7 @@ def context_call(fn, *args, **kwargs):
 
                 def deliver():
                     if running[0]:
-                        target.throw(WorkCancelled())
+                        target.throw(WorkInterrupted())
 
                 gevent.spawn(deliver)
 
@@ -142,7 +150,9 @@ def context_call(fn, *args, **kwargs):
                     pass
 
             try:
-                with cancelling(interrupt):
+                demand = current()
+                lifetime = interruptible(demand) if demand is not None and current_job() is None else nullcontext()
+                with cancelling(interrupt), lifetime:
                     check()
                     return fn(*args, **kwargs)
             finally:
@@ -162,6 +172,39 @@ def using(value: Owner | None):
         yield value
     finally:
         _current.reset(token)
+
+
+@contextmanager
+def interruptible(demand: Owner):
+    """Interrupt inline HTTP planning as well as its queued provider jobs."""
+    from shared.cooperative import _cooperative
+
+    if not _cooperative():
+        yield
+        return
+    import gevent
+
+    target = gevent.getcurrent()
+    running = True
+
+    def interrupt():
+        def deliver():
+            if running:
+                target.throw(WorkInterrupted())
+
+        gevent.spawn(deliver)
+
+    with _lock:
+        demand.callbacks.add(interrupt)
+    try:
+        check()
+        yield
+    except WorkInterrupted:
+        raise WorkCancelled() from None
+    finally:
+        running = False
+        with _lock:
+            demand.callbacks.discard(interrupt)
 
 
 def check() -> None:
@@ -244,7 +287,7 @@ class Job:
             def interrupt():
                 def deliver():
                     if self.running:
-                        running.throw(WorkCancelled())
+                        running.throw(WorkInterrupted())
 
                 gevent.spawn(deliver)
 
@@ -256,7 +299,11 @@ class Job:
             with user_context(self.user):
                 # Shared jobs must not inherit just the first owner's lifetime.
                 with using(None):
-                    return self.fn(*self.args, **self.kwargs)
+                    result = self.fn(*self.args, **self.kwargs)
+                    check()
+                    return result
+        except WorkInterrupted:
+            raise WorkCancelled() from None
         finally:
             self.running = False
             _job.reset(token)

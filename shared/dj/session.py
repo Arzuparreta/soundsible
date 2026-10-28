@@ -55,7 +55,9 @@ def scoped(fn):
                     # Transfer its interests before retiring the old request;
                     # a changed route cancels the old work immediately.
                     for old_id, old in list(demand.children.items()):
-                        if getattr(old, "path", None) == request.path:
+                        if getattr(old, "path", None) == request.path and (
+                            old.closed or getattr(old, "waiting_retry", False)
+                        ):
                             if getattr(old, "fingerprint", None) == child.fingerprint:
                                 with work._lock:
                                     for job in list(old.jobs):
@@ -66,7 +68,7 @@ def scoped(fn):
                     demand.children[request_id] = child
                 parent, request_scope = demand, child
                 demand = child
-            with work.using(demand):
+            with work.using(demand), work.interruptible(demand):
                 warming = False
                 try:
                     result = fn(*args, **kwargs)
@@ -78,6 +80,7 @@ def scoped(fn):
                     return result
                 finally:
                     if request_scope is not None:
+                        request_scope.waiting_retry = warming
                         if warming:
                             # These seeds answer the explicitly advertised retry.
                             # Unused source resolutions have no future consumer.

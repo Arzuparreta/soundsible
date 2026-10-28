@@ -160,7 +160,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val duration = outgoing.duration.takeIf { it > 0 } ?: return
         val resolved = plan ?: ProgramDjPlan.resolve(key(current), duration * 1000, route[current + 1].proposal, mixing()) ?: return
         val remainingUs = resolved.outCueUs - outgoing.currentPosition * 1000
-        if (plan == null && mixing() && remainingUs > 45000000L) refine(this)
+        if (mixing() && remainingUs > 5000000L) refine(this)
         if (remainingUs > 45000000) return
         val standby = 1 - slot
         if (indices[standby] != current + 1) {
@@ -240,6 +240,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             recovering || snapshot.floor != current) return false
         if (proposal.fromKey != key(current) || current + 1 >= route.size) return false
         if (plan != null || armed) {
+            if (!mixing()) return false
             val slot = output.dominantInput()
             val duration = decks[slot].duration.takeIf { it > 0 } ?: return false
             val resolved = ProgramDjPlan.resolve(key(current), duration * 1000, proposal, mixing()) ?: return false

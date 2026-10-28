@@ -41,7 +41,7 @@ import threading
 from pathlib import Path
 
 from .contracts import Analysis
-from shared.work import WorkCancelled, check as check_work, current_job
+from shared.work import WorkCancelled, WorkInterrupted, check as check_work, current_job
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class AnalysisProcess:
                 self._idle_timer = None
             try:
                 return self._exchange(request)
-            except (WorkCancelled, KeyboardInterrupt, SystemExit):
+            except (WorkCancelled, WorkInterrupted, KeyboardInterrupt, SystemExit):
                 # An owner can disappear during a measurement. Retire that
                 # exchange before the next job reuses its protocol stream.
                 self._stop(kill=True)

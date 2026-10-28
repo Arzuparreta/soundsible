@@ -291,7 +291,10 @@ def test_gevent_cancellation_interrupts_network_and_preserves_the_next_job():
         started = Event()
         def network():
             started.set()
-            gevent.sleep(60)
+            try:
+                gevent.sleep(60)
+            except Exception:
+                raise AssertionError("provider swallowed cancellation as a retryable failure")
             raise AssertionError("obsolete network call completed")
         future = executor.submit("old", network, demand=demand)
         assert started.wait(2)
@@ -323,6 +326,57 @@ def test_gevent_cancellation_interrupts_network_and_preserves_the_next_job():
         for number in range(20):
             assert executor.submit(str(number), lambda: (gevent.sleep(.001), "ok")[1], demand=fresh).result(2) == "ok"
         executor.pool.shutdown()
+    """,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_gevent_cancellation_interrupts_inline_http_planning_before_fallback_requests():
+    from tests.test_dj_worker import run_python
+
+    result = run_python(
+        """
+        from shared.cooperative import patch_process
+        patch_process()
+        import json
+        import gevent
+        from gevent.event import Event
+        from flask import Flask
+        from concurrent.futures import ThreadPoolExecutor
+        from shared import work
+        from shared.dj.session import scoped
+        app = Flask(__name__)
+        started = Event()
+        @app.post("/plan")
+        @scoped
+        def plan():
+            # Inline requests can fan out metadata without the broker too.
+            with ThreadPoolExecutor(2) as provider:
+                provider.submit(work.context_call(metadata)).result()
+        def metadata():
+            started.set()
+            try:
+                gevent.sleep(60)
+            except Exception:
+                raise AssertionError("inline provider continued after cancellation")
+            raise AssertionError("obsolete planning reached the next provider")
+        headers = {"X-Soundsible-Work": json.dumps({"client": "tab", "epoch": 1}),
+                   "X-Soundsible-Work-Request": "request-a"}
+        request = gevent.spawn(lambda: app.test_client().post("/plan", headers=headers))
+        assert started.wait(2)
+        # Arrival order cannot establish intent order: an older request can
+        # arrive after this one. Its cancellation must only affect its own ID.
+        other_headers = {**headers, "X-Soundsible-Work-Request": "older-delayed"}
+        other = gevent.spawn(lambda: app.test_client().post("/plan", headers=other_headers))
+        gevent.sleep(.01)
+        root = work.owner("tab", 1)
+        root.children["older-delayed"].close()
+        assert other.get(timeout=2).status_code == 409
+        assert not request.ready(), "old arrival/cancellation retired the newer request"
+        work.owner("tab", 2)
+        assert request.get(timeout=2).status_code == 409
+        assert not work.owner("tab", 2).callbacks
     """,
         timeout=10,
     )

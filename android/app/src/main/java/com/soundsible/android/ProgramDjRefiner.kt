@@ -9,7 +9,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
-/** Best-effort cached analysis before a decoder's cue/rate becomes committed. */
+/** Best-effort cached analysis while the incoming programme remains silent. */
 @UnstableApi
 internal class ProgramDjRefiner(private val connection: EngineConnection, private val main: Handler,
     private val session: () -> ProgramDjSession?, private val planner: ProgramDjPlanner) : AutoCloseable {
