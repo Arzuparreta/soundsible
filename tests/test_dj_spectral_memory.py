@@ -1,6 +1,4 @@
 """Block boundaries must not change the musical measurements."""
-import subprocess
-import sys
 
 import numpy as np
 import pytest
@@ -37,33 +35,6 @@ def test_fft_working_set_does_not_grow_with_track_length(monkeypatch):
     _spectral_features(np.zeros((1025, 2048), dtype=np.float32))
     assert sum(batches) == 1025
     assert max(batches) <= 256
-
-
-def test_daemon_analysis_does_not_block_cooperative_http_loop():
-    # Patch in a fresh process, just as run.py does; never contaminate pytest's
-    # own threads. A native sleep stands in for non-cooperative numerical work.
-    code = '''
-from gevent import monkey
-monkey.patch_all()
-import gevent
-import threading
-from shared.dj import store as dj_store
-native_sleep = monkey.get_original("time", "sleep")
-native_id = monkey.get_original("_thread", "get_ident")
-main_id = native_id()
-seen = []
-def compute(*args, **kwargs):
-    assert native_id() != main_id
-    native_sleep(0.15)
-    return {"analysed": True}
-dj_store._compose = compute
-job = gevent.spawn(dj_store._compose_off_loop, None, None, 11025, duration=10, tail_start=0)
-gevent.sleep(0.03)
-assert not job.ready(), "numerical work blocked the request loop"
-assert job.get(timeout=5) == {"analysed": True}
-'''
-    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=15)
-    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize("kind", ["silence", "tone", "pulse", "sweep"])

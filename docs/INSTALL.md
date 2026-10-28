@@ -278,7 +278,7 @@ Environment=SOUNDSIBLE_ADMIN_TOKEN=your-long-random-token
 
 Save, then `sudo systemctl restart soundsible`.
 
-Two things to know once systemd owns the engine:
+Three things to know once systemd owns the engine:
 
 - **Manage it with `systemctl`, not the menu.** The menu only stops an engine
   it started itself: quitting it leaves the service running, and option `4`
@@ -287,6 +287,11 @@ Two things to know once systemd owns the engine:
   web player with `npm` after an update. If Node.js came from `nvm`, `fnm` or
   another per-user installer, add its directory to the drop-in, for example
   `Environment=PATH=/home/you/.nvm/versions/node/<version>/bin:/usr/local/bin:/usr/bin:/bin`.
+- **An engine that stops answering restarts itself.** If its request loop
+  does not run for 60 seconds, the engine writes the stack of every thread to
+  the journal, under a line `Timeout (0:01:00)!`, and exits with status 1;
+  `Restart=on-failure` starts a fresh one five seconds later. That journal
+  entry is what to attach to a bug report.
 
 systemd is Linux only. On other systems, [Docker](DOCKER.md) with its
 `restart: unless-stopped` policy is the way to keep Soundsible running across

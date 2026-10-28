@@ -1827,6 +1827,8 @@ def stop_api() -> None:
         _api_shutdown_done = True
 
     logger.info("API: Shutting down...")
+    from shared.cooperative import stop_loop_watchdog
+    stop_loop_watchdog()
     queue_manager_dl.accepting = False
     from shared.artwork_recovery import recovery
     recovery.stop()
@@ -1854,7 +1856,9 @@ def stop_api() -> None:
         logger.exception("API: Error stopping loudness idle worker")
 
     from shared import dj_library
+    from shared.dj.store import stop_analysis_process
     dj_library.stop()
+    stop_analysis_process()
 
     try:
         orchestrator.drain_downloads(timeout=5.0)
@@ -2073,6 +2077,9 @@ def start_api(
             logger.debug("API: Loudness idle worker start skipped", exc_info=True)
 
         from shared import dj_library
+        from shared.dj.store import start_analysis_process
+        # Measurements never run in this process: see shared/dj/worker.py.
+        start_analysis_process()
         dj_library.start()
 
         # Note: Pre-warm the discover node feed's persistent related-mix cache
@@ -2131,6 +2138,10 @@ def start_api(
     sys.stdout.flush()
     sys.stderr.flush()
     _register_api_shutdown_handlers()
+    # From here a loop that stops running ends the process, so the service
+    # manager restarts a station that would otherwise stay unreachable.
+    from shared.cooperative import start_loop_watchdog
+    start_loop_watchdog()
     try:
         socketio.run(app, host=runtime.host, port=runtime.port, debug=debug)
     finally:

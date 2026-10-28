@@ -143,7 +143,7 @@ def compose(samples, events):
 
 def synthetic(with_model: bool) -> dict:
     report = {'exact': {}, 'wrong_bars': {}, 'model': {}}
-    session = weights.session(store._off_loop) if with_model else None
+    session = weights.session() if with_model else None
     for name, layers, size, subdivision, changes, length, role in cases():
         samples, beats, ones = arrangement(layers, bars=BARS, beats_per_bar=size, subdivision=subdivision)
         analysis, lengths, _ = compose(samples, model_events(beats, ones))
@@ -163,7 +163,7 @@ def synthetic(with_model: bool) -> dict:
 
 def library(directory: Path, limit: int) -> dict:
     """Aggregates over real recordings up to eight minutes; nothing identifies a track."""
-    session = weights.session(store._off_loop)
+    session = weights.session()
     paths = sorted(path for path in directory.iterdir()
                    if path.suffix.lower() in {'.flac', '.m4a', '.mp3', '.opus', '.ogg'})
     counts = Counter()

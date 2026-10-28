@@ -902,7 +902,9 @@ salvo en el estado de la caché.
   rechazo del CDN, límite LRU y prioridad de reproducción existentes. No espera
   a red ni a FFmpeg dentro de `dj-plan`. Caché desactivada: no descarga; los
   destinos siguen entrando con fundidos conservadores. La cola de análisis
-  admite hasta 64 identidades pendientes, con dos trabajadores.
+  admite hasta 64 identidades pendientes, con dos trabajadores (desde el
+  2026-10-28, uno: el análisis corre en su propio proceso; ver
+  [ARCHITECTURE](ARCHITECTURE.md#ejecución-el-análisis-nunca-corre-dentro-del-motor)).
 - **Publicación inmediata.** `CacheWriter.commit` encarga el análisis tras guardar
   bytes completos y validados, tanto si los pidió la web como Android o el pool.
   La firma de una preview usa tamaño y revisión del contenido. Su `mtime` es el

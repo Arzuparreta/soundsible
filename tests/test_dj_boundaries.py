@@ -33,35 +33,44 @@ def test_public_facade_has_one_cache_worker_and_planner_owner():
     assert dj_engine.ANALYSER_VERSION == contracts.ANALYSER_VERSION
 
 
-def test_acquisition_keeps_two_workers_64_pending_and_identity_deduplication(tmp_path, monkeypatch):
+def test_acquisition_keeps_one_job_64_pending_and_identity_deduplication(tmp_path, monkeypatch):
+    # One job: inside the engine the analysis process measures one song at a time.
     source = tmp_path / 'audio'
     source.write_bytes(b'only a job fixture')
     release = threading.Event()
-    started = threading.Barrier(3)
+    started = threading.Event()
     seen = []
 
     def analyse(path, identity, **kwargs):
         seen.append(identity)
-        if len(seen) <= 2:
-            started.wait(timeout=5)
+        started.set()
         assert release.wait(timeout=5)
 
     monkeypatch.setattr(store, '_pending', set())
     monkeypatch.setattr(store, 'analyse_audio', analyse)
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         monkeypatch.setattr(store, '_pool', executor)
         try:
             for index in range(65):
                 store.request_analysis(source, str(index))
                 store.request_analysis(source, str(index))
-            started.wait(timeout=5)
-            assert len(seen) == 2
+            assert started.wait(timeout=5)
+            assert len(seen) == 1
             assert len(store._pending) == 64
             assert '64' not in store._pending
         finally:
             release.set()
     assert len(seen) == len(set(seen)) == 64
     assert not store._pending
+
+
+def test_the_engine_pool_runs_one_job(monkeypatch):
+    monkeypatch.setattr(store, '_pool', None)
+    pool = store._analysis_pool()
+    try:
+        assert pool._max_workers == 1
+    finally:
+        pool.shutdown(wait=False)
 
 
 def test_compact_summary_distinguishes_unknown_and_measured_zero_without_mutating_analysis():
