@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import socket
+import threading
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -147,24 +148,40 @@ class RuntimeConfig:
 
 
 _active_runtime: Optional[RuntimeConfig] = None
+_runtime_lock = threading.Lock()
 
 
 def get_runtime_config() -> RuntimeConfig:
+    """The configured runtime, or one derived from the environment.
+
+    The default is computed outside the lock (it reads files) and stored only
+    if nothing was configured meanwhile. Assigning it unconditionally let a
+    thread that started deriving it before `configure_runtime` overwrite the
+    configured runtime afterwards: every path in the process moved between two
+    lines of the same caller.
+    """
     global _active_runtime
-    if _active_runtime is None:
-        _active_runtime = RuntimeConfig.default()
-    return _active_runtime
+    runtime = _active_runtime
+    if runtime is not None:
+        return runtime
+    default = RuntimeConfig.default()
+    with _runtime_lock:
+        if _active_runtime is None:
+            _active_runtime = default
+        return _active_runtime
 
 
 def configure_runtime(runtime_config: RuntimeConfig) -> RuntimeConfig:
     global _active_runtime
-    _active_runtime = runtime_config
-    return _active_runtime
+    with _runtime_lock:
+        _active_runtime = runtime_config
+    return runtime_config
 
 
 def reset_runtime() -> None:
     global _active_runtime
-    _active_runtime = None
+    with _runtime_lock:
+        _active_runtime = None
 
 
 def runtime_with_overrides(

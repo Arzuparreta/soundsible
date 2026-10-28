@@ -175,3 +175,36 @@ def test_runtime_uses_persisted_music_dir_when_env_unset(monkeypatch, tmp_path):
 
     runtime = RuntimeConfig.default()
     assert runtime.music_dir == persisted
+
+
+def test_a_late_default_never_replaces_a_configured_runtime(tmp_path, monkeypatch):
+    # A background thread started deriving the default while nothing was
+    # configured; the test (or the engine) configured its runtime before that
+    # thread finished. CI saw the paths move between two lines of one test.
+    import threading
+
+    from shared import runtime as runtime_module
+
+    configured = runtime_module.runtime_with_overrides(
+        base=runtime_module.RuntimeConfig.default(), cache_dir=str(tmp_path / "configured"))
+    original_default = runtime_module.RuntimeConfig.default
+    deriving = threading.Event()
+    release = threading.Event()
+
+    def slow_default(*args, **kwargs):
+        deriving.set()
+        assert release.wait(timeout=5)
+        return original_default(*args, **kwargs)
+
+    runtime_module.reset_runtime()
+    monkeypatch.setattr(runtime_module.RuntimeConfig, "default", staticmethod(slow_default))
+    seen = []
+    thread = threading.Thread(target=lambda: seen.append(runtime_module.get_runtime_config()))
+    thread.start()
+    assert deriving.wait(timeout=5)
+    runtime_module.configure_runtime(configured)
+    release.set()
+    thread.join(timeout=5)
+
+    assert runtime_module.get_runtime_config() is configured
+    assert seen == [configured]
