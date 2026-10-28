@@ -802,17 +802,47 @@ def preview_prefetch():
         _invalidate_stream(vid)
         return _get_preview_stream_cached(api, vid, skip_fast_path=True)
 
-    queued = preview_cache.request_prefetch(
-        video_ids,
-        download=download,
-        resolver=resolver,
-        refresh_resolver=refresh_resolver if download else None,
-    )
+    from shared.dj.session import scoped
+    def enqueue():
+        from shared import work
+        allowed = getattr(work.current(), "preview_keys", None)
+        selected = video_ids if allowed is None else [vid for vid in video_ids if vid in allowed]
+        return preview_cache.request_prefetch(
+            selected, download=download, resolver=resolver,
+            refresh_resolver=refresh_resolver if download else None,
+        )
+    queued = scoped(enqueue)()
+    if not isinstance(queued, list):
+        return queued
     preparation = {
         video_id: preview_cache.preparation_status(video_id).as_dict()
         for video_id in video_ids
     }
     return jsonify({"status": "queued", "queued": queued, "preparation": preparation})
+
+
+@playback_bp.route("/api/preview/interest", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("preview_interest", limit=120, window_sec=60)
+def preview_interest():
+    from shared.dj.session import scoped
+    from shared import work
+    @scoped
+    def update():
+        data = request.get_json(silent=True) or {}
+        ids = data.get("video_ids")
+        revision = data.get("revision")
+        if not isinstance(ids, list) or len(ids) > 64 or type(revision) is not int:
+            return jsonify({"error": "invalid interest"}), 400
+        demand = work.current()
+        if revision >= getattr(demand, "interest_revision", -1):
+            demand.interest_revision = revision
+            keys = {str(vid) for vid in ids if validate_youtube_video_id(str(vid))}
+            demand.preview_keys = keys
+            demand.retain("preview-download", keys)
+            demand.retain("preview-resolve", keys)
+        return jsonify({})
+    return update()
 
 
 @playback_bp.route("/api/preview/status", methods=["POST"])
@@ -825,6 +855,13 @@ def preview_status():
     if not isinstance(raw_ids, list):
         return jsonify({"error": "video_ids must be a list"}), 400
     video_ids = [str(v) for v in raw_ids if validate_youtube_video_id(str(v))][:8]
+    if request.headers.get("X-Soundsible-Work"):
+        from shared.dj.session import scoped
+        return scoped(lambda: _preview_status_body(video_ids))()
+    return _preview_status_body(video_ids)
+
+
+def _preview_status_body(video_ids):
     return jsonify({
         "preparation": {
             video_id: preview_cache.preparation_status(video_id).as_dict()

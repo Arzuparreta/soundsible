@@ -41,6 +41,7 @@ import threading
 from pathlib import Path
 
 from .contracts import Analysis
+from shared.work import WorkCancelled, check as check_work, current_job
 
 logger = logging.getLogger(__name__)
 
@@ -100,19 +101,35 @@ class AnalysisProcess:
         self._replies: queue.Queue | None = None
         self._idle_timer: threading.Timer | None = None
         self._generation = 0
+        self._exchange_owner = None
 
     def measure(self, path: Path, duration_hint: float) -> Analysis | None:
         """The analysis of `path`, or None without a beat model. Raises `AnalysisFailed`."""
         request = (json.dumps({"path": str(path), "duration_hint": float(duration_hint or 0)}) + "\n").encode()
         with self._lock:
+            self._exchange_owner = current_job()
             self._generation += 1
             if self._idle_timer is not None:
                 self._idle_timer.cancel()
                 self._idle_timer = None
             try:
                 return self._exchange(request)
+            except (WorkCancelled, KeyboardInterrupt, SystemExit):
+                # An owner can disappear during a measurement. Retire that
+                # exchange before the next job reuses its protocol stream.
+                self._stop(kill=True)
+                raise
             finally:
+                self._exchange_owner = None
                 self._arm_idle_close()
+
+    def cancel(self, expected=...) -> None:
+        """Interrupt a measurement without waiting for its exchange lock."""
+        if expected is not ... and self._exchange_owner is not expected:
+            return
+        process = self._process
+        if process is not None and process.poll() is None:
+            process.kill()
 
     def close(self) -> None:
         with self._lock:
@@ -124,6 +141,7 @@ class AnalysisProcess:
 
     def _exchange(self, request: bytes) -> Analysis | None:
         process, replies = self._running()
+        check_work()
         try:
             process.stdin.write(request)
             process.stdin.flush()

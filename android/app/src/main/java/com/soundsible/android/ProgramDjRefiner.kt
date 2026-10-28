@@ -21,7 +21,7 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
     private var requestId: String? = null
     fun refine(owner: ProgramDjSession) {
         if (closed || session() !== owner) return
-        val snapshot = owner.routeSnapshot()
+        val snapshot = owner.refinementSnapshot()
         val from = snapshot.rows.getOrNull(snapshot.floor)?.item ?: return
         val next = snapshot.rows.getOrNull(snapshot.floor + 1) ?: return
         val fromKey = from.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: return
@@ -35,12 +35,13 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
         val settingsRevision = planner.settingsRevision
         val body = JSONObject().put("from", planner.reference(from)).put("to", planner.reference(next.item))
         val id = "dj-refine:" + java.util.UUID.randomUUID(); requestId = id
+        val workHeaders = planner.workHeaders()
         worker.execute {
             if (closed || token != serial) return@execute
             var response: JSONObject? = null
             try {
                 connection.execute("/api/discovery/music/dj-transition", "POST",
-                    body.toString().toRequestBody("application/json".toMediaType()), emptyMap(), generation, id, 8000).use {
+                    body.toString().toRequestBody("application/json".toMediaType()), workHeaders, generation, id, 8000).use {
                     if (it.isSuccessful) {
                         val raw = it.peekBody(262145).string()
                         require(raw.toByteArray().size <= 262144)

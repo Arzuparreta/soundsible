@@ -23,6 +23,7 @@ const apiMock = vi.hoisted(() => ({
 const storeMock = vi.hoisted(() => ({
   playTrack: vi.fn(),
   library: [] as Array<Record<string, unknown>>,
+  djActive: false,
 }));
 const routerMock = vi.hoisted(() => ({
   params: {} as Record<string, string>,
@@ -57,6 +58,7 @@ vi.mock('../stores', async () => {
         return storeMock.library;
       },
       playback: { currentTrack: null, queue: [] },
+      autoMode: { get active() { return storeMock.djActive; } },
       downloads: { queue: [] },
     },
     ...identityMock({ currentTrack: () => null, library: () => storeMock.library as unknown as Track[] }),
@@ -71,6 +73,7 @@ describe('Search route', () => {
     vi.useFakeTimers();
     apiMock.getDiscoveryMusicFeed.mockResolvedValue({ items: [], browse_sections: [] });
     storeMock.library = [];
+    storeMock.djActive = false;
     routerMock.params = {};
     window.location.hash = '#/search';
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
@@ -499,6 +502,18 @@ describe('Search route', () => {
     expect(await screen.findByText('Detected video')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Direct Video/ })).toBeInTheDocument();
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+  });
+
+  it('keeps DJ search results available without speculatively resolving their stream URLs', async () => {
+    storeMock.djActive = true;
+    render(() => <Search />);
+    fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), {
+      target: { value: 'https://youtu.be/dQw4w9WgXcQ' },
+    });
+    await vi.advanceTimersByTimeAsync(230);
+    expect(screen.getByRole('button', { name: /Direct Video/ })).toBeInTheDocument();
+    expect(apiMock.prefetchPreviews).not.toHaveBeenCalled();
+    expect(apiMock.resolveCatalogItem).not.toHaveBeenCalled();
   });
 
   it('opens a shared identity as the only result and plays the recipient preview', async () => {

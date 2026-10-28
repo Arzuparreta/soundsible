@@ -2082,7 +2082,6 @@ def test_impend_seed_cannot_be_its_own_route(tmp_path, warming, exclude):
         patch.object(_auto_mode, "_get_api", return_value=api),
         patch.object(_auto_mode, "_planner_context_related",
                      return_value=_auto_mode._GraphWalk([], warming, warming)),
-        patch.object(_auto_mode, "_planner_warm_related"),
     ):
         body, status = _auto_mode._build_music_set_route({
             "seed": seed, "sources": [{"tracks": [seed]}], "exclude": exclude,
@@ -2098,7 +2097,6 @@ def test_impend_seed_cannot_be_its_own_route(tmp_path, warming, exclude):
 def test_cold_graph_joins_inflight_fetch_then_uses_persisted_result(tmp_path):
     """Real executor/cache path; a delayed provider outlives multiple HTTP waits."""
     import threading
-    from concurrent.futures import ThreadPoolExecutor
 
     _make_runtime(tmp_path)
     seed = {"id": "FgGtOCKWLwI", "youtube_id": "FgGtOCKWLwI"}
@@ -2114,8 +2112,6 @@ def test_cold_graph_joins_inflight_fetch_then_uses_persisted_result(tmp_path):
         return rows
 
     with (
-        ThreadPoolExecutor(max_workers=1) as executor,
-        patch.object(_auto_mode, "_GRAPH_FETCH_EXECUTOR", executor),
         patch.object(_auto_mode, "_planner_uncached_related", side_effect=fetch) as provider,
         patch.object(_auto_mode, "_AUTO_GRAPH_WAIT_SEC", 0.01),
     ):
@@ -2218,8 +2214,15 @@ def test_dj_cohort_is_bounded_identical_for_cold_and_warm_pools_and_reports_cove
         cold = client.post("/api/discovery/music/dj-plan", json=data).get_json()
         ready = True
         warm = client.post("/api/discovery/music/dj-plan", json=data).get_json()
+        headers = {"X-Soundsible-Work": '{"client":"modern","epoch":1}'}
+        modern = client.post("/api/discovery/music/dj-plan", json=data, headers=headers).get_json()
+        assert len(prepared) == 2  # A prospective route has no acquisition owner.
+        accepted = [data["seed"], *modern["items"][:2]]
+        assert client.post("/api/discovery/music/dj-work", headers=headers,
+                           json={"revision": 1, "tracks": accepted}).status_code == 200
+        assert prepared[2] == [item["id"] for item in accepted]
     assert prepared[0] == prepared[1]
-    assert len(prepared[0]) == 17  # seed + bounded 16, regardless of cache
+    assert len(prepared[0]) == 5  # seed + actual four starts, regardless of cache
     assert [row["id"] for row in cold["items"]] == [row["id"] for row in warm["items"]]
     assert cold["analysis_coverage"] == {"candidates": 40, "analysed": 0, "cohort": 16, "cohort_analysed": 0, "bridges": 0}
     assert warm["analysis_coverage"]["analysed"] == 40
@@ -2248,14 +2251,16 @@ def test_dj_plan_v6_inserts_a_bridge_only_when_every_frozen_candidate_is_measure
         client = _make_app().test_client()
         cold = client.post("/api/discovery/music/dj-plan", json=data).get_json()
         target = cold["items"][0]["id"]
-        spares = [key for key in cohort if key not in {"seed", target}]
+        spares = [key for key in ("a", "b", "c") if key != target]
         tempos.update({target: 112, spares[0]: 106, spares[1]: 106})
         known.update({"seed", target, spares[0]})
         partial = client.post("/api/discovery/music/dj-plan", json=data).get_json()
         assert [row["id"] for row in partial["items"]] == [target]
         known.add(spares[1])
         warm = client.post("/api/discovery/music/dj-plan", json=data).get_json()
-    assert [row["id"] for row in warm["items"]] == [spares[0], target]
+    assert len(warm["items"]) == 2
+    assert warm["items"][0]["id"] in spares
+    assert warm["items"][1]["id"] == target
     assert warm["items"][0]["route_kind"] == "bridge"
     assert warm["analysis_coverage"]["bridges"] == 1
 
@@ -2281,7 +2286,7 @@ def test_committed_preview_is_analysed_before_refinement_and_serving_ranges_keep
         queued.append(identity)
         dj_engine.analyse_audio(path, identity, **kwargs)
     with (patch.object(_auto_mode, "_get_api", return_value=api),
-          patch.object(dj_engine, "request_analysis", side_effect=measure)):
+          patch("shared.dj.store.request_analysis", side_effect=measure)):
         client = _make_app().test_client()
         assert client.post("/api/discovery/music/dj-transition", json={"from": ref, "to": ref}).get_json()["measured"] is False
         writer = preview_cache.open_writer(video, "audio/mp4", source.stat().st_size)

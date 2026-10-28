@@ -136,7 +136,10 @@ internal class ProgramDjSession(private val context: Context, private val genera
         level(slot); if (indices[1 - slot] >= 0) level(1 - slot)
         val window = output.transition()
         if (armed && window != null) {
-            if (output.positionUs() * 48000 / 1000000 < window.start + window.length) return
+            if (output.positionUs() * 48000 / 1000000 < window.start + window.length) {
+                if (output.positionUs() * 48000 / 1000000 < window.start && mixing()) refine(this)
+                return
+            }
             val old = window.outgoing
             indices[old] = -1; streams = streams.copyOf().also { it[old] = null }
             decks[old].pause(); decks[old].stop(); decks[old].clearMediaItems()
@@ -157,7 +160,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val duration = outgoing.duration.takeIf { it > 0 } ?: return
         val resolved = plan ?: ProgramDjPlan.resolve(key(current), duration * 1000, route[current + 1].proposal, mixing()) ?: return
         val remainingUs = resolved.outCueUs - outgoing.currentPosition * 1000
-        if (plan == null && mixing() && remainingUs in 45000001L..65000000L) refine(this)
+        if (plan == null && mixing() && remainingUs > 45000000L) refine(this)
         if (remainingUs > 45000000) return
         val standby = 1 - slot
         if (indices[standby] != current + 1) {
@@ -233,8 +236,21 @@ internal class ProgramDjSession(private val context: Context, private val genera
         routeRevision++; player.routeChanged(); changed()
     }
     fun applyRefinement(snapshot: RouteSnapshot, proposal: ProgramDjPlan.Proposal): Boolean {
-        if (!snapshotCurrent(snapshot) || plan != null || armed || recovering || snapshot.floor != current) return false
+        if (!owns() || snapshot.epoch != output.epoch() || snapshot.revision != routeRevision ||
+            recovering || snapshot.floor != current) return false
         if (proposal.fromKey != key(current) || current + 1 >= route.size) return false
+        if (plan != null || armed) {
+            val slot = output.dominantInput()
+            val duration = decks[slot].duration.takeIf { it > 0 } ?: return false
+            val resolved = ProgramDjPlan.resolve(key(current), duration * 1000, proposal, mixing()) ?: return false
+            if (resolved.outCueUs - decks[slot].currentPosition * 1000 < 5000000) return false
+            if (armed && !output.cancelArmed()) return false
+            val standby = 1 - slot
+            rateReturns[standby].close()
+            decks[standby].pause(); decks[standby].stop(); decks[standby].clearMediaItems()
+            indices[standby] = -1; streams = streams.copyOf().also { it[standby] = null }
+            armed = false; plan = null; pendingSince = 0
+        }
         route = route.toMutableList().also { it[current + 1] = it[current + 1].copy(proposal = proposal) }
         routeRevision++; changed()
         return true
@@ -273,6 +289,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         check(Looper.myLooper() == main.looper && owns())
         return RouteSnapshot(output.epoch(), routeRevision, protectedIndex(), route.toList())
     }
+    fun refinementSnapshot(): RouteSnapshot = RouteSnapshot(output.epoch(), routeRevision, current, route.toList())
     fun snapshotCurrent(snapshot: RouteSnapshot): Boolean = owns() && snapshot.epoch == output.epoch() &&
         snapshot.revision == routeRevision && snapshot.floor == protectedIndex()
     /** Scoped edits may replace only the captured future, never a committed input. */

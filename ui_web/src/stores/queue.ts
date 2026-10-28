@@ -2,7 +2,7 @@ import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { api, type PreviewPreparation } from "../lib/api";
 import { audioService } from "../lib/audio";
 import { playbackYoutubeId } from "../lib/media";
-import { prefetchPreviews, createPreparationOwner, upcomingPreviewIds } from "../lib/prefetch";
+import { createPreparationOwner, upcomingPreviewIds } from "../lib/prefetch";
 import { toast } from "../lib/toast";
 import { isPodcastTrack } from "../lib/track";
 import { GeneratedQueueController } from "../lib/generatedQueue";
@@ -74,8 +74,6 @@ export function createQueue(ports: QueuePorts, lifetime: RuntimeLifetime) {
     matchUpcomingContext();
     const ids = previewLookahead();
     upcomingPreparation.update(ids.slice(0, 3));
-    const warmOnly = ids.slice(3);
-    if (warmOnly.length > 0) prefetchPreviews(warmOnly);
   }
   let stagedEntry: {
     queueId: string;

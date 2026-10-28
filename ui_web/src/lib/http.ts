@@ -21,7 +21,12 @@ interface RequestOptions {
   ifNoneMatch?: string;
   onETag?: (etag: string | null) => void;
   cache?: RequestCache;
+  work?: WorkReference;
 }
+
+export interface WorkReference { client: string; epoch: number; revision?: number; interests?: string[] }
+let djWork: WorkReference | undefined;
+export function setDjWork(value: WorkReference | undefined): void { djWork = value; }
 
 /** Notified whenever the engine answers 401 — the app shows the login screen. */
 let onUnauthorized: (() => void) | null = null;
@@ -52,6 +57,16 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     else external.addEventListener('abort', abortFromCaller, { once: true });
   }
   const headers: Record<string, string> = {};
+  const work = opts.work ?? (path.startsWith('/api/discovery/music/dj-') ? djWork : undefined);
+  if (work) headers['X-Soundsible-Work'] = JSON.stringify(work);
+  if (work && /\/dj-(plan|place|repair)$/.test(path)) {
+    const requestId = globalThis.crypto.randomUUID();
+    headers['X-Soundsible-Work-Request'] = requestId;
+    controller.signal.addEventListener('abort', () => {
+      void request('/api/discovery/music/dj-work', { method: 'POST', work,
+        body: { cancel_request: requestId }, keepalive: true }).catch(() => {});
+    }, { once: true });
+  }
   if (opts.ifNoneMatch) headers['If-None-Match'] = opts.ifNoneMatch;
   // FormData sets its own multipart Content-Type (with boundary); JSON we set explicitly.
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData;

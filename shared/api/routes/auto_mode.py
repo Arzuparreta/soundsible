@@ -14,11 +14,10 @@ import random
 import threading
 import time
 import uuid
-from collections.abc import Iterable
 from concurrent.futures import Future, wait
 from typing import NamedTuple
 
-from flask import jsonify, request
+from flask import has_request_context, jsonify, request
 
 from shared import request_scope
 from shared.database import instance_db
@@ -66,12 +65,22 @@ from .discovery_common import (
     _AUTO_ROUTER_LIMIT,
     _AUTO_SHORTLIST_LIMIT,
     _CANONICAL_RESOLVE_BUDGET_SEC,
-    _GRAPH_FETCH_EXECUTOR,
     _PLAN_RESOLVE_EXECUTOR,
     _get_api,
 )
 from .discovery_feed import _build_discovery_feed_body, _deezer_artist_top_rows
 from .discovery_graph import _resolve_seed_yt_id
+from shared.dj.session import scoped as _dj_scoped
+from shared import work
+_RESOLUTION_WORK = work.Executor("planner-resolution", 4)
+
+
+def _submit_resolution(fn, *args):
+    if work.current() is None:
+        return _PLAN_RESOLVE_EXECUTOR.submit(fn, *args)
+    name = getattr(fn, "__qualname__", type(fn).__name__)
+    key = hashlib.sha256(f"{name}:{args!r}".encode()).hexdigest()
+    return _RESOLUTION_WORK.submit(key, fn, *args)
 
 logger = logging.getLogger(__name__)
 
@@ -349,7 +358,7 @@ def _canonicalize_generated_items(items: list[dict], user_id: str | None) -> lis
             continue
         if submitted >= 3:
             break
-        future = _PLAN_RESOLVE_EXECUTOR.submit(_resolve_generated_playback, dict(item), user_id)
+        future = _submit_resolution(_resolve_generated_playback, dict(item), user_id)
         futures[future] = index
         submitted += 1
     if not futures:
@@ -394,7 +403,6 @@ def _planner_uncached_related(video_id: str) -> list[dict]:
         max_results=25,
         enrich=False,
     )
-    instance_db().set_related_mix(video_id, rows)
     return rows
 
 
@@ -412,10 +420,8 @@ def _planner_related_future(video_id: str) -> Future:
     retry either finds the cache warm or waits on the fetch already running.
     """
     with _GRAPH_INFLIGHT_LOCK:
-        existing = _GRAPH_INFLIGHT.get(video_id)
-        if existing is not None and not existing.done():
-            return existing
-        future = _GRAPH_FETCH_EXECUTOR.submit(_planner_uncached_related, video_id)
+        from shared.related_work import submit
+        future = submit(video_id, lambda: _planner_uncached_related(video_id))
         _GRAPH_INFLIGHT[video_id] = future
 
     def _release(_done: Future, key: str = video_id) -> None:
@@ -425,25 +431,6 @@ def _planner_related_future(video_id: str) -> Future:
 
     future.add_done_callback(_release)
     return future
-
-
-def _planner_warm_related(video_ids: Iterable[str]) -> None:
-    """Start reading a seed's neighbourhood before anybody waits on it.
-
-    Called for the tracks a session is steered by and for the head of each route
-    it hands out, so the refill that follows is a cache hit rather than the next
-    cold wait. Nothing joins these futures: warming is best effort.
-    """
-    for video_id in list(dict.fromkeys(video_ids))[:_AUTO_GRAPH_ANCHORS + 2]:
-        if not video_id or not validate_youtube_video_id(video_id):
-            continue
-        if instance_db().get_related_mix(video_id) is not None:
-            continue
-        try:
-            _planner_related_future(video_id)
-        except RuntimeError as exc:  # executor shutting down
-            logger.debug("Auto graph warm rejected for %s: %s", video_id, exc)
-            return
 
 
 def _planner_context_related(
@@ -479,10 +466,8 @@ def _planner_context_related(
     }
     if futures:
         done, pending = wait(futures, timeout=_AUTO_GRAPH_WAIT_SEC)
-        # A running fetch cannot be cancelled, and we do not want it to be: it
-        # finishes, caches its rows, and answers the next call in microseconds.
-        # What matters here is telling the caller the difference between "this
-        # seed has no neighbours" and "we are still reading them".
+        # A warming response lets an identical retry keep these seed interests.
+        # Changed/cancelled requests retire them through the work scope.
         warming = warming or bool(pending)
         for future in done:
             try:
@@ -550,13 +535,14 @@ def _planner_related_artist_pool(
 
     names = [str(row.get("name") or "").strip() for row in related_rows if str(row.get("name") or "").strip()]
     futures = {
-        _PLAN_RESOLVE_EXECUTOR.submit(_deezer_artist_top_tracks, str(row["deezer_id"]), 1): index
+        _submit_resolution(_deezer_artist_top_tracks, str(row["deezer_id"]), 1): index
         for index, row in enumerate(related_rows)
         if row.get("deezer_id")
     }
     done, pending = wait(futures, timeout=5)
-    for future in pending:
-        future.cancel()
+    if work.current() is None:
+        for future in pending:
+            future.cancel()
     seeds: list[tuple[int, dict]] = []
     for future in done:
         try:
@@ -577,12 +563,13 @@ def _planner_related_artist_pool(
     seeds.sort(key=lambda pair: pair[0])
 
     resolution_futures = {
-        _PLAN_RESOLVE_EXECUTOR.submit(_planner_resolve_artist_candidate, item, user_id): index
+        _submit_resolution(_planner_resolve_artist_candidate, item, user_id): index
         for index, item in seeds
     }
     done, pending = wait(resolution_futures, timeout=8)
-    for future in pending:
-        future.cancel()
+    if work.current() is None:
+        for future in pending:
+            future.cancel()
     resolved: list[tuple[int, dict]] = []
     for future in done:
         try:
@@ -767,12 +754,13 @@ def _planner_artist_candidates(seed_artist: str, user_id: str | None, limit: int
         if len(seeds) >= max(4, limit):
             break
     futures = {
-        _PLAN_RESOLVE_EXECUTOR.submit(_planner_resolve_artist_candidate, item, user_id): index
+        _submit_resolution(_planner_resolve_artist_candidate, item, user_id): index
         for index, item in enumerate(seeds)
     }
     done, pending = wait(futures, timeout=8)
-    for future in pending:
-        future.cancel()
+    if work.current() is None:
+        for future in pending:
+            future.cancel()
     resolved: list[tuple[int, dict]] = []
     for future in done:
         try:
@@ -1054,7 +1042,8 @@ def _dj_item_analysis(metadata, item: dict, *, schedule: bool = False) -> dict:
     cached = cached_analysis(path, identity)
     if cached is not None:
         return cached
-    if schedule:
+    if schedule and (not has_request_context() or not request.headers.get("X-Soundsible-Work")
+                     or request.path.endswith(("dj-work", "dj-transition"))):
         request_analysis(path, identity, duration_hint=duration_hint)
     return _dj_fallback_analysis(duration_hint)
 
@@ -1065,6 +1054,14 @@ def _dj_prepare_cohort(metadata, items: list[dict]) -> None:
     from .playback import _get_preview_stream_cached, _invalidate_stream
 
     video_ids = []
+    demand = work.current()
+    if demand is not None:
+        work.check()
+        tracks = getattr(demand, "tracks", {})
+        tracks.update({analysis_identity(item): {key: item[key] for key in
+                       ("id", "track_id", "youtube_id", "source", "duration") if key in item}
+                       for item in items})
+        demand.tracks = tracks
     for item in items:
         _dj_item_analysis(metadata, item, schedule=True)
         if not item.get("track_id"):
@@ -1339,7 +1336,10 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     spares = [(item, snapshots[id(item)]) for item in cohort[limit:]]
     previous = opening_analysis or _dj_item_analysis(metadata, seed, schedule=True)
     route = add_measured_bridges(previous, order_continuous_route(previous, analysed), spares)
-    _dj_prepare_cohort(metadata, [seed, *cohort])
+    # Cold alternatives are not revisited after this response. Only actual
+    # route members have a consumer for newly acquired bytes/measurements.
+    if not has_request_context() or not request.headers.get("X-Soundsible-Work"):
+        _dj_prepare_cohort(metadata, [seed, *route])
     coverage = {
         "candidates": len(available),
         "analysed": sum(bool(analysis.get("analysed")) for analysis in snapshots.values()),
@@ -1347,14 +1347,6 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         "cohort_analysed": sum(bool(snapshots[id(item)].get("analysed")) for item in cohort),
         "bridges": sum(item.get("route_kind") == "bridge" for item in route),
     }
-    # Read ahead of the listener. The seeds that will anchor the next refill are
-    # the head of this route, and the sources it is steered by; warming them now
-    # is the difference between the next call being a cache hit and it being
-    # another cold wait the listener has to sit through.
-    _planner_warm_related(
-        _planner_video_id(metadata, item)
-        for item in [*route[:2], *(row for source in ordered_sources for row in source.get("tracks", []) if isinstance(row, dict))]
-    )
     # `empty_reason` is the only failure signal the route panel acts on, and
     # "exhausted" is terminal there: it stops the automatic retry and asks the
     # listener to press a button. Reserve it for a neighbourhood we actually
@@ -1413,6 +1405,7 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
 
 @discovery_bp.route("/api/discovery/music/dj-plan", methods=["POST"])
 @rate_limit("discovery_music_dj_plan", limit=60, window_sec=60)
+@_dj_scoped
 def discovery_music_dj_plan():
     """Build a short transition-aware route exclusively for Auto Mode."""
     data = request.get_json(silent=True) or {}
@@ -1625,6 +1618,7 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
 
 @discovery_bp.route("/api/discovery/music/dj-place", methods=["POST"])
 @rate_limit("discovery_music_dj_place", limit=90, window_sec=60)
+@_dj_scoped
 def discovery_music_dj_place():
     """Place songs in the current route without rebuilding existing occurrences."""
     data = request.get_json(silent=True) or {}
@@ -1778,6 +1772,7 @@ def _dj_repair_anchor(raw: dict) -> dict:
 
 @discovery_bp.route("/api/discovery/music/dj-repair", methods=["POST"])
 @rate_limit("discovery_music_dj_repair", limit=30, window_sec=60)
+@_dj_scoped
 def discovery_music_dj_repair():
     """Rebuild the mix around whatever the listener has done to the route.
 
@@ -1845,6 +1840,7 @@ def discovery_music_dj_repair():
 
 @discovery_bp.route("/api/discovery/music/dj-transition", methods=["POST"])
 @rate_limit("discovery_music_dj_transition", limit=240, window_sec=60)
+@_dj_scoped
 def discovery_music_dj_transition():
     """Re-plan a single transition against whatever is now measured.
 
@@ -1861,6 +1857,12 @@ def discovery_music_dj_transition():
     if not outgoing or not incoming:
         return jsonify({"error": "from and to are required"}), 400
 
+    demand = work.current()
+    if demand is not None and not request.headers.get("X-Soundsible-Work"):
+        interested = getattr(demand, "tracks", {})
+        interested.update({analysis_identity(item): dict(item) for item in (outgoing, incoming)})
+        demand.tracks = interested
+
     api = _get_api()
     lib, _, _ = api["get_core"]()
     metadata = getattr(lib, "metadata", None)
@@ -1870,7 +1872,7 @@ def discovery_music_dj_transition():
         analysis = cached_analysis(path, analysis_identity(item)) if path else None
         if analysis is not None:
             return analysis, True
-        if path:
+        if path and not request.headers.get("X-Soundsible-Work"):
             request_analysis(path, analysis_identity(item), duration_hint=float(item.get("duration") or 0))
         return _dj_fallback_analysis(float(item.get("duration") or 0)), False
 
@@ -1881,3 +1883,31 @@ def discovery_music_dj_transition():
         "analysis": {"from": out_analysis, "to": in_analysis},
         "measured": out_ready and in_ready,
     })
+
+
+@discovery_bp.route("/api/discovery/music/dj-work", methods=["POST"])
+@rate_limit("discovery_music_dj_work", limit=120, window_sec=60)
+@_dj_scoped
+def discovery_music_dj_work():
+    data = request.get_json(silent=True) or {}
+    demand = work.current()
+    cancelled = data.get("cancel_request")
+    if isinstance(cancelled, str):
+        if not work._KEY.fullmatch(cancelled):
+            return jsonify({"error": "invalid request id"}), 400
+        demand.finish_request(cancelled)
+        child = demand.children.pop(cancelled, None)
+        if child is not None:
+            child.close()
+        return jsonify({"cancelled": True})
+    if not data.get("active", True):
+        demand.close()
+        return jsonify({"active": False})
+    tracks = data.get("tracks", [])
+    if not isinstance(tracks, list) or len(tracks) > 64 or any(not isinstance(item, dict) for item in tracks):
+        return jsonify({"error": "invalid runway"}), 400
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    from shared.dj.session import sync
+    sync(getattr(lib, "metadata", None), tracks, data.get("revision", 0))
+    return jsonify({"active": True})

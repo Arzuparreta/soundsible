@@ -20,6 +20,64 @@ const metricVectors: typeof structuralVectors =
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
 const t2: Track = { id: 't2', title: 'Two', artist: 'Artist', duration: 200 };
 
+describe('DJ session work and first mix', () => {
+  it('repairs the predecessor and measures a ready successor promoted ahead of a cold song', async () => {
+    const measured = { technique: 'bass_swap', out_cue: 170, in_cue: 2,
+      overlap_seconds: 8, playback_rate: 1.01, confidence: .9 };
+    const refineDjTransition = vi.fn().mockResolvedValue({ measured: true, transition: measured });
+    const armTransition = vi.fn();
+    const s = await loadStore({ planDjQueue: vi.fn().mockResolvedValue(autoPlan(['route-00001', 'route-00002'])),
+      refineDjTransition, __previewPreparationState: (id: string) => id === 'route-00002' ? 'ready' : 'streamable' }, { armTransition });
+    s.initStore(); s.actions.playFrom([t1], 0); s.fireDeckEvent('playing'); s.actions.enterAutoMode();
+    await vi.waitFor(() => expect(s.state.playback.queue.length).toBe(3));
+    (s.deck as unknown as { currentTime: number }).currentTime = 10;
+    s.fireDeckEvent('timeupdate'); s.fireDeckEvent('timeupdate'); await flush();
+    expect(s.state.playback.queue[1].id).toBe('route-00002');
+    expect(refineDjTransition).toHaveBeenCalledWith(expect.objectContaining({
+      from: expect.objectContaining({ id: 't1' }), to: expect.objectContaining({ id: 'route-00002' }),
+    }), expect.any(AbortSignal));
+    (s.deck as unknown as { currentTime: number }).currentTime = 130;
+    s.fireDeckEvent('timeupdate');
+    expect(armTransition.mock.calls[0][1]).toMatchObject(measured);
+  });
+
+  it.each(['armed', 'prerolling'] as const)('accepts late measured plans only while the prepared deck is silent: %s', async phaseAfterCommit => {
+    let phase = 'idle';
+    const pending = deferred<{ measured: boolean; transition: DjTransitionPlan }>();
+    const armTransition = vi.fn((_url: string, _plan: unknown) => { phase = phaseAfterCommit; });
+    const cancelMix = vi.fn(() => { phase = 'idle'; });
+    const s = await loadStore({ planDjQueue: vi.fn().mockResolvedValue(autoPlan(['route-00001'])),
+      refineDjTransition: vi.fn().mockReturnValue(pending.promise), __previewPreparationState: () => 'ready' },
+    { armTransition, cancelMix, mixPhase: () => phase });
+    s.initStore(); s.actions.playFrom([t1], 0); s.fireDeckEvent('playing'); s.actions.enterAutoMode();
+    await vi.waitFor(() => expect(s.state.playback.queue.length).toBe(2));
+    (s.deck as unknown as { currentTime: number }).currentTime = 110;
+    s.fireDeckEvent('timeupdate');
+    (s.deck as unknown as { currentTime: number }).currentTime = 130;
+    s.fireDeckEvent('timeupdate');
+    expect(armTransition).toHaveBeenCalledOnce();
+    const measured = { technique: 'bass_swap' as const, out_cue: 170, in_cue: 2,
+      overlap_seconds: 8, overlap_bars: 4, playback_rate: 1.01, confidence: .9, score: .9, fallback: false };
+    pending.resolve({ measured: true, transition: measured }); await flush();
+    expect(armTransition).toHaveBeenCalledTimes(phaseAfterCommit === 'armed' ? 2 : 1);
+    if (phaseAfterCommit === 'armed') expect(armTransition.mock.calls[1][1]).toMatchObject({
+      technique: 'bass_swap', confidence: .9, out_cue: 170, in_cue: 2, playback_rate: 1.01,
+    });
+  });
+
+  it('publishes only the actual runway and releases its demand on exit', async () => {
+    const updateDjWork = vi.fn().mockResolvedValue(undefined);
+    const s = await loadStore({ updateDjWork, planDjQueue: vi.fn().mockResolvedValue(autoPlan(['route-00001'])),
+      __previewPreparationState: () => 'ready' });
+    s.initStore(); s.actions.playFrom([t1], 0); s.fireDeckEvent('playing'); s.actions.enterAutoMode();
+    await vi.waitFor(() => expect(s.state.playback.queue.length).toBe(2));
+    s.fireDeckEvent('timeupdate');
+    expect(updateDjWork.mock.calls.at(-1)?.[0].tracks.map((item: Track) => item.id)).toEqual(['t1', 'route-00001']);
+    s.actions.exitAutoMode();
+    expect(updateDjWork.mock.calls.at(-1)?.[0]).toMatchObject({ active: false });
+  });
+});
+
 describe('portable remote playback', () => {
   it.each([
     { id: 'dQw4w9WgXcQ', title: 'Song', artist: 'A', source: 'preview' as const },
@@ -4055,7 +4113,7 @@ describe('DJ sources: one piece of music, chosen at once', () => {
     // still the DJ's call.
     expect(refineDjTransition).toHaveBeenCalledWith(expect.objectContaining({
       from: expect.objectContaining({ id: 't1' }), to: expect.objectContaining({ id: 'oliver' }),
-    }));
+    }), expect.any(AbortSignal));
     expect(audioService.load).not.toHaveBeenCalled();
     expect(planDjQueue.mock.calls.at(-1)![0].seed).toMatchObject({ id: 'oliver' });
     await vi.waitFor(() => expect(state.playback.queue.map((row) => row.id)).toEqual(['t1', 'oliver', 'new-1']));
@@ -4371,7 +4429,7 @@ describe('preview preparation ownership', () => {
     expect(preparationOwners[1].ids).toEqual([]);
     fireDeckEvent('playing');
     expect(preparationOwners[1].ids).toEqual(previews.slice(1, 4).map(t => t.id));
-    expect(prefetchPreviews).toHaveBeenCalledWith(previews.slice(4, 6).map(t => t.id));
+    expect(prefetchPreviews).not.toHaveBeenCalled();
 
     actions.playFrom(previews.slice(5), 0);
     expect(preparationOwners[0].ids).toEqual([previews[5].id]);

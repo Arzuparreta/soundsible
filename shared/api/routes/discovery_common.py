@@ -40,10 +40,7 @@ _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix=
 
 # ── Auto Mode / Planner constants ──
 _PLAN_RESOLVE_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="soundsible-plan-resolve")
-# The related-graph walk gets its own threads. Sharing the resolve pool meant a
-# cold DJ session queued behind Deezer artist lookups and spent its whole budget
-# waiting to start, which reads downstream as an empty neighbourhood.
-_GRAPH_FETCH_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="soundsible-graph")
+# Related extraction has a shared demand-owned lane in shared/related_work.py.
 _CANONICAL_RESOLVE_BUDGET_SEC = 2.5
 _AUTO_CONTEXT_MAX = 5
 _AUTO_GRAPH_ANCHORS = 4

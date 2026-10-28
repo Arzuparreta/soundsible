@@ -20,6 +20,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
     @Volatile private var serial = 0L
     private var requestId: String? = null
     private var closed = false
+    private var requestWork = emptyMap<String, String>()
     var revision = 0L; private set
     var outcome = "idle"; private set
     var requestTitle = ""; private set
@@ -98,6 +99,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
         val identity = connection.sessionIdentity(generation)
         val token = serial
         val id = endpoint + ":" + java.util.UUID.randomUUID()
+        val workHeaders = planner.workHeaders(id); requestWork = workHeaders
         outcome = "pending"; requestTitle = title
         fun failed(code: Int) {
             if (keepRequest) { outcome = "placement_fallback"; revision++; status("degraded", code) }
@@ -109,7 +111,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
             try {
                 require(body.toString().toByteArray().size <= 262144)
                 connection.execute("/api/discovery/music/$endpoint", "POST",
-                    body.toString().toRequestBody("application/json".toMediaType()), emptyMap(), generation, id, 20000).use { response ->
+                    body.toString().toRequestBody("application/json".toMediaType()), workHeaders, generation, id, 20000).use { response ->
                     code = response.code
                     if (response.isSuccessful) {
                         val raw = response.peekBody(262145).string(); require(raw.toByteArray().size <= 262144)
@@ -210,7 +212,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
     }
     fun clear() {
         val pending = requestId != null
-        serial++; requestId?.let(connection::cancel); requestId = null; worker.queue.clear()
+        serial++; requestId?.let { connection.cancel(it); planner.cancelWork(it, requestWork) }; requestId = null; worker.queue.clear()
         outcome = if (pending) "cancelled" else "idle"; requestTitle = ""
         if (pending && !closed) status("cancelled", 0)
     }

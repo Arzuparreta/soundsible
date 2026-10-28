@@ -22,6 +22,12 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
     var sources = JSONArray(); private set
     private var restoredWorkspace = JSONObject()
     private var sessionId = ""
+    private val work = ProgramDjWork(connection)
+    private var requestWork = emptyMap<String, String>()
+    fun workHeaders(requestId: String? = null) = work.headers(requestId)
+    fun cancelWork(requestId: String, headers: Map<String, String>) = work.cancel(requestId, headers)
+    fun releaseWork() = work.release()
+    fun syncWork(owner: ProgramDjSession) = work.sync(JSONArray(owner.items().drop(owner.currentIndex()).take(9).map(::reference)))
     private var segment = 0
     private var revision = 0
     fun busy() = requestId != null || retry != null
@@ -34,7 +40,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         val nextSources = workspace.optJSONArray("sources") ?: JSONArray()
         require(nextSources.length() <= 6 && nextSources.toString().length <= 65536)
         for (i in 0 until nextSources.length()) require(nextSources.getJSONObject(i).getJSONArray("tracks").length() <= 15)
-        clear(); sources = JSONArray(nextSources.toString())
+        clear(); work.begin(); sources = JSONArray(nextSources.toString())
         // A workspace from an older client may still carry a DJ style and a
         // direction; neither exists any more.
         restoredWorkspace = JSONObject(workspace.toString()).apply { remove("djProfile"); remove("direction") }; settingsRevision++
@@ -61,6 +67,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         require(!fromCurrent || seed != null && seed.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
         require(seed != null || sources.length() > 0)
         clear()
+        if (kind != Kind.APPEND) work.begin()
         if (kind == Kind.START) restoredWorkspace = JSONObject()
         if (this.sources.toString() != sources.toString()) settingsRevision++
         this.sources = JSONArray(sources.toString())
@@ -99,13 +106,14 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
             retry = null
             if (!valid()) { if (token == serial) status("cancelled", 0); return@Runnable }
             val id = "dj-plan:" + java.util.UUID.randomUUID(); requestId = id
+            val workHeaders = work.headers(id); requestWork = workHeaders
             status("planning", 0)
             worker.execute {
                 if (closed || token != serial || generation != connection.generation) return@execute
                 var answer: JSONObject? = null; var code = 0
                 try {
                     connection.execute("/api/discovery/music/dj-plan", "POST",
-                        body.toString().toRequestBody("application/json".toMediaType()), emptyMap(), generation, id, minOf(20000L, maxOf(1L, 60000 - (android.os.SystemClock.elapsedRealtime() - started)))).use { response ->
+                        body.toString().toRequestBody("application/json".toMediaType()), workHeaders, generation, id, minOf(20000L, maxOf(1L, 60000 - (android.os.SystemClock.elapsedRealtime() - started)))).use { response ->
                         code = response.code
                         if (response.isSuccessful) {
                             val raw = response.peekBody(262145).string(); require(raw.toByteArray().size <= 262144)
@@ -194,9 +202,9 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         } else null
     }
     fun clear() {
-        serial++; requestId?.let(connection::cancel); requestId = null
+        serial++; requestId?.let { connection.cancel(it); work.cancel(it, requestWork) }; requestId = null
         retry?.let(main::removeCallbacks); retry = null
         worker.queue.clear()
     }
-    override fun close() { closed = true; clear(); worker.shutdownNow() }
+    override fun close() { closed = true; clear(); work.close(); worker.shutdownNow() }
 }

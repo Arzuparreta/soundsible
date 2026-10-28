@@ -32,13 +32,24 @@ almacenamiento ni Flask; una prueba lo comprueba en otro proceso.
 | `transitions` | Único `plan_transition`: compatibilidad, técnica, cues, velocidad y eco | `timing`, `features` (nombres de notas), `contracts` |
 | `routes` | Continuidad, ruta legacy, llegada a peticiones, elección de hueco y reparación entre anclas | `transitions`, `timing`, `contracts` |
 | `shared/dj_pool.py` | Admisión de puentes dentro del conjunto fijado antes de consultar caché | `transitions`, `timing` |
-| `shared/dj_library.py`, `shared/preview_cache.py` | Adquisición desde biblioteca y previews completas | Fachada → `store` |
+| `session` | Demanda HTTP de la sesión: épocas, peticiones cancelables y ruta realmente aceptada | `shared/work`, `store`; adaptación hacia `auto_mode` |
+| `shared/work.py` | Trabajos acotados y compartidos por recurso, intereses, cancelación y caducidad | Runtime y contexto de cuenta |
+| `shared/related_work.py` | Una extracción y escritura de caché de relacionados por semilla para DJ y Discover | `shared/work`, base de datos |
+| `shared/preview_cache.py` | Bytes completos compartidos, adquisición con demanda; al completar, avisa solo a los DJ que todavía los necesitan | `session` → `store`, `shared/work` |
 | `shared/api/routes/auto_mode.py` | Fuentes, referencias, sesión, adquisición, llamadas a políticas puras y adaptación HTTP | Fachada, `routes`, `contracts`, `dj_pool` |
 
 No hay imports de almacenamiento desde los módulos puros ni dependencias de
 vuelta desde el planificador hacia HTTP. Los endpoints ya no contienen la
 búsqueda de hueco, puntuación de peticiones ni reconstrucción musical de la
 reparación. Las fuentes y el recomendador siguen eligiendo el conjunto.
+
+Desde P14 no se arranca `shared/dj_library.py`: no hay análisis automático de
+la biblioteca ni de reproducciones NORMAL. Los clientes publican canción actual
+y próximas ocho de la ruta aceptada. El conjunto de alternativas para ordenar
+sigue fijado antes de leer caché; los descartes fríos no se adquieren. Los
+puentes ya medidos se pueden reutilizar dentro de ese conjunto. La caché no
+posee trabajos: solo los consumidores vigentes los mantienen. Contrato, reservas
+y límites de desconexión en [P14](P14.md).
 
 ## Contratos, unidades y cobertura
 

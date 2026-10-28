@@ -50,6 +50,11 @@ def test_acquisition_keeps_one_job_64_pending_and_identity_deduplication(tmp_pat
     monkeypatch.setattr(store, 'analyse_audio', analyse)
     with ThreadPoolExecutor(max_workers=1) as executor:
         monkeypatch.setattr(store, '_pool', executor)
+        from shared import work
+        jobs = work.Executor('dj-analysis', 1)
+        jobs.pool.shutdown()
+        jobs.pool = executor
+        monkeypatch.setattr(store, '_jobs', jobs)
         try:
             for index in range(65):
                 store.request_analysis(source, str(index))
@@ -66,6 +71,7 @@ def test_acquisition_keeps_one_job_64_pending_and_identity_deduplication(tmp_pat
 
 def test_the_engine_pool_runs_one_job(monkeypatch):
     monkeypatch.setattr(store, '_pool', None)
+    monkeypatch.setattr(store, '_jobs', None)
     pool = store._analysis_pool()
     try:
         assert pool._max_workers == 1

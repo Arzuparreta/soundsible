@@ -145,6 +145,8 @@ CORS(
         "Content-Type",
         "X-Soundsible-Admin-Token",
         "X-Soundsible-Agent-Token",
+        "X-Soundsible-Work",
+        "X-Soundsible-Work-Request",
         "Range",
     ],
 )
@@ -1855,9 +1857,9 @@ def stop_api() -> None:
     except Exception:
         logger.exception("API: Error stopping loudness idle worker")
 
-    from shared import dj_library
+    from shared import work
     from shared.dj.store import stop_analysis_process
-    dj_library.stop()
+    work.stop()
     stop_analysis_process()
 
     try:
@@ -2076,27 +2078,11 @@ def start_api(
         except Exception:
             logger.debug("API: Loudness idle worker start skipped", exc_info=True)
 
-        from shared import dj_library
         from shared.dj.store import start_analysis_process
         # Measurements never run in this process: see shared/dj/worker.py.
         start_analysis_process()
-        dj_library.start()
-
-        # Note: Pre-warm the discover node feed's persistent related-mix cache
-        # for the top likely seeds (favourites + most-recent additions). This
-        # runs in the background so the user's first Discover open is instant.
-        # The related_mix_cache survives restarts (SQLite, 7-day TTL), so on a
-        # warm restart this is a no-op (all cache hits).
-        try:
-            from shared.api.routes.discovery import warm_discover_top_seeds
-            threading.Thread(
-                target=warm_discover_top_seeds,
-                name="discover-warm-startup",
-                daemon=True,
-            ).start()
-            logger.info("API: Discover cache warming scheduled (top seeds).")
-        except Exception:
-            logger.debug("API: Discover warming start skipped", exc_info=True)
+        from shared.work import start_reaper
+        start_reaper()
 
     except Exception as e:
         logger.exception("FATAL: Core initialization failed: %s", e)

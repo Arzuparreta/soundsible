@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { PreviewPreparation } from './api';
+import type { WorkReference } from './http';
 import { isPodcastTrack } from './track';
 import type { Track } from '../types/music';
 
@@ -11,7 +12,7 @@ const POLL_MS = 1000;
 const READY_POLL_MS = 30_000;
 const RETRY_MS = 2000;
 type Listener = (id: string, status: PreviewPreparation) => void;
-type Client = Pick<typeof api, 'prefetchPreviews' | 'previewStatuses'>;
+type Client = Pick<typeof api, 'prefetchPreviews' | 'previewStatuses'> & Partial<Pick<typeof api, 'previewInterest'>>;
 
 export interface PreparationOwner {
   update(ids: string[]): void;
@@ -39,6 +40,14 @@ export class PreviewPrefetch {
   private busy = false;
   private nextStatusAt = 0;
   private disposed = false;
+  private work: WorkReference = { client: `preview-${globalThis.crypto.randomUUID()}`, epoch: 0 };
+  private revision = 0;
+
+  private publishInterest(): void {
+    const ids = [...this.entries].filter(([, e]) => e.owners.size).map(([id]) => id);
+    this.work = { ...this.work, revision: ++this.revision, interests: ids };
+    void this.client.previewInterest?.(ids, this.revision, this.work).catch(() => {});
+  }
 
   constructor(
     private client: Client,
@@ -98,6 +107,7 @@ export class PreviewPrefetch {
     const update = (values: string[]): void => {
       if (disposed || this.disposed) return;
       const next = new Set(values.filter(id => YT_ID_RE.test(id)));
+      if (next.size === ids.size && [...next].every(id => ids.has(id))) return;
       for (const id of ids) {
         if (next.has(id)) continue;
         const e = this.entries.get(id);
@@ -124,6 +134,7 @@ export class PreviewPrefetch {
         e.owners.add(notify);
       }
       this.schedule();
+      this.publishInterest();
     };
     return {
       update,
@@ -209,8 +220,11 @@ export class PreviewPrefetch {
       if (download) for (const { e } of batch) e.retryAt = Date.now() + RETRY_MS;
       if (!download) this.nextStatusAt = Date.now() + POLL_MS;
       const result = download
-        ? await this.client.prefetchPreviews(ids, true)
-        : await this.client.previewStatuses(ids);
+        ? await (this.client.previewInterest
+          ? this.client.prefetchPreviews(ids, true, this.work)
+          : this.client.prefetchPreviews(ids, true))
+        : await (this.client.previewInterest
+          ? this.client.previewStatuses(ids, this.work) : this.client.previewStatuses(ids));
       for (const { id, e, generation } of batch) {
         if (this.disposed || generation !== e.generation || !e.owners.size) continue;
         const status = result.preparation?.[id];
@@ -251,6 +265,7 @@ export class PreviewPrefetch {
     if (this.timer !== undefined) clearTimeout(this.timer);
     this.timer = undefined;
     this.entries.clear();
+    this.publishInterest();
   }
 }
 

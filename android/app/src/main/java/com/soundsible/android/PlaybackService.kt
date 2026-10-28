@@ -107,6 +107,7 @@ class PlaybackService : MediaLibraryService() {
     }
     private fun publishDj(phase: String, code: Int) {
         djPhase = phase; djError = code
+        if (::djPlanner.isInitialized) dj?.let(djPlanner::syncWork)
         if (::deviceSession.isInitialized) deviceSession.changed()
         session?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply {
             putLong("djGeneration", connection.generation); putBoolean("djActive", dj != null)
@@ -121,6 +122,7 @@ class PlaybackService : MediaLibraryService() {
     }
     private fun maybeRefill() {
         val owner = dj ?: return
+        djPlanner.syncWork(owner)
         if (djPlanner.busy() || djRouteEditor?.busy() == true || !player.playWhenReady || owner.items().size - owner.currentIndex() - 1 > 3) return
         val anchor = owner.items().lastOrNull() ?: return
         val key = anchor.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: return
@@ -131,6 +133,7 @@ class PlaybackService : MediaLibraryService() {
     }
     private fun restoreNormal() {
         djRefiner?.clear()
+        djPlanner.releaseWork()
         val previous = dj
         val listener = liveListener
         if (previous == null && listener == null) return

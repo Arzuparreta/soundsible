@@ -183,6 +183,8 @@ def test_the_child_exits_when_the_engine_goes_away():
 
 
 class _Failing:
+    def cancel(self, *args):
+        pass
     def __init__(self):
         self.calls = 0
 
@@ -216,7 +218,7 @@ def test_the_engine_measures_through_the_process_once_started(tmp_path, monkeypa
     started = []
     monkeypatch.setattr(store, "AnalysisProcess", lambda: started.append(1) or type(
         "Stub", (), {"measure": lambda self, p, d: {"analysed": True, "version": store.ANALYSER_VERSION},
-                     "close": lambda self: started.append("closed")})())
+                     "close": lambda self: started.append("closed"), "cancel": lambda self, *args: None})())
     source = tmp_path / "song.audio"
     source.write_bytes(b"audio")
     store.start_analysis_process()

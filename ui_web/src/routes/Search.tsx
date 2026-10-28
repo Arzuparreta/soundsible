@@ -428,6 +428,7 @@ export default function Search() {
   // (Deezer) songs are resolved to a video id first (server-cached forever).
   const prefetchedCatalog = new Set<string>();
   createEffect(() => {
+    if (state.autoMode.active) return;
     const directResult = youtubeDirect();
     const playableIds = [
       ...(directResult ? [directResult.id] : []),

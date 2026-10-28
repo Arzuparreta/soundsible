@@ -21,6 +21,7 @@ from pathlib import Path
 
 from shared.ffmpeg_runtime import ffmpeg_executable
 from shared.runtime import get_cache_dir
+from shared import work
 
 from . import beat_model, weights
 from .worker import AnalysisFailed, AnalysisProcess
@@ -137,11 +138,13 @@ def analyse_audio(path: str | Path, identity: str, *, duration_hint: float = 0.0
     cached = cached_analysis(source, identity)
     if cached is not None:
         return cached
-
+    stamp = _source_stamp(source)
     analysis = _measure_source(source, identity, duration_hint)
     if analysis is None:
         # No beat model yet (weights downloading or unavailable). Measuring
         # without it would cache a song as pulseless for this version.
+        return _fallback(duration_hint)
+    if _source_stamp(source) != stamp:
         return _fallback(duration_hint)
     with _connect() as conn:
         conn.execute(
@@ -153,7 +156,7 @@ def analyse_audio(path: str | Path, identity: str, *, duration_hint: float = 0.0
                 payload = excluded.payload,
                 updated_at = excluded.updated_at
             """,
-            (identity, _source_stamp(source), ANALYSER_VERSION, json.dumps(analysis, separators=(",", ":")), int(time.time())),
+            (identity, stamp, ANALYSER_VERSION, json.dumps(analysis, separators=(",", ":")), int(time.time())),
         )
     return analysis
 
@@ -191,8 +194,12 @@ def _measure_source(source: Path, identity: str, duration_hint: float) -> Analys
     if _unmeasurable.get(identity) == stamp:
         return None
     try:
-        analysis = process.measure(source, duration_hint)
+        job = work.current_job()
+        with work.cancelling(lambda: process.cancel(job)):
+            analysis = process.measure(source, duration_hint)
+        work.check()
     except AnalysisFailed as exc:
+        work.check()  # cancellation is not evidence of a broken recording
         _unmeasurable[identity] = stamp
         logger.warning("DJ analysis of %s failed: %s", source.name, exc)
         return None
@@ -205,23 +212,24 @@ _pending_lock = threading.Lock()
 
 _pool: ThreadPoolExecutor | None = None
 _pending: set[str] = set()
+_jobs: work.Executor | None = None
 
 
 def _analysis_pool() -> ThreadPoolExecutor:
-    global _pool
+    global _pool, _jobs
     with _pending_lock:
         if _pool is None:
             # One job: the analysis process measures one song at a time.
-            _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dj-analysis")
+            _jobs = work.Executor("dj-analysis", 1)
+            _pool = _jobs.pool
     return _pool
 
 
 def requests_waiting() -> bool:
     """Whether songs a DJ session asked for are queued or being measured.
 
-    The library sweep yields to them: with the beat model a song takes
-    seconds of CPU, and after an analyser update the session would otherwise
-    play unmeasured songs while the sweep works through the library.
+    The production engine only asks on behalf of live DJ sessions; a manual
+    maintenance caller can use this to yield to their pending measurements.
     """
     with _pending_lock:
         return bool(_pending)
@@ -239,13 +247,15 @@ def request_analysis(path: str | Path, identity: str, *, duration_hint: float = 
     if not source.is_file() or not identity:
         return
     with _pending_lock:
-        if identity in _pending or len(_pending) >= 64:
+        if identity not in _pending and len(_pending) >= 64:
             return
         _pending.add(identity)
 
     def run() -> None:
         try:
             analyse_audio(source, identity, duration_hint=duration_hint)
+        except work.WorkCancelled:
+            raise
         except Exception:
             pass
         finally:
@@ -253,7 +263,12 @@ def request_analysis(path: str | Path, identity: str, *, duration_hint: float = 
                 _pending.discard(identity)
 
     try:
-        _analysis_pool().submit(run)
+        _analysis_pool()
+        future = _jobs.submit(identity, run)
+        def finished(_):
+            with _pending_lock:
+                _pending.discard(identity)
+        future.add_done_callback(finished)
     except RuntimeError:
         with _pending_lock:
             _pending.discard(identity)

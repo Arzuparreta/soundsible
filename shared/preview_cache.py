@@ -597,9 +597,9 @@ class CacheWriter:
             # Every acquisition path (playback, web/native prefetch, DJ cohort)
             # publishes analysis as soon as complete validated bytes exist.
             try:
-                from shared.dj_engine import analysis_identity, request_analysis
+                from shared.dj.session import preview_ready
 
-                request_analysis(target, analysis_identity({"youtube_id": self.video_id}))
+                preview_ready(self.video_id, target)
             except Exception:
                 logger.debug("[PreviewCache] Could not queue DJ analysis", exc_info=True)
             return True
@@ -772,6 +772,8 @@ def preparation_status(video_id: str) -> PreparationStatus:
         return PreparationStatus("ready")
     with _pending_lock:
         pending = (video_id, True) in _pending
+    lane = _owned_lanes.get("preview-download")
+    pending = pending or (lane is not None and lane.pending(video_id))
     if not pending:
         with _fills_lock:
             pending = video_id in _fills
@@ -855,7 +857,9 @@ def _emit_fill_event(event: str, state: _FillState, **extra: object) -> None:
     try:
         from shared.telemetry import emit
 
-        emit(event, {
+        emit("play-timing", {
+            "event": event,
+            "ts": int(time.time()),
             "track_id": state.video_id,
             **state.facts(),
             **extra,
@@ -1049,11 +1053,19 @@ def ensure_cached(
             state.keep_warm = True
 
     if not owner:
-        if not state.done.wait(wait_timeout):
-            raise TimeoutError(f"preview cache fill timed out for {video_id}")
-        if state.error is not None:
-            raise state.error
-        return get_cached(video_id)
+        from shared import work
+        # A direct reader protects its transfer. A background job must never
+        # attach an immortal reader interest to itself while awaiting a fill.
+        interest = _playback_interest(video_id) if work.current_job() is None else None
+        try:
+            if not state.done.wait(wait_timeout):
+                raise TimeoutError(f"preview cache fill timed out for {video_id}")
+            if state.error is not None:
+                raise state.error
+            return get_cached(video_id)
+        finally:
+            if interest is not None:
+                interest.close()
 
     try:
         return _download_once(video_id, stream, state)
@@ -1078,6 +1090,7 @@ class ProgressiveHandle:
     def __init__(self, state: _FillState):
         self.state = state
         self._closed = False
+        self._interest = _playback_interest(state.video_id)
 
     @property
     def content_type(self) -> str:
@@ -1168,6 +1181,7 @@ class ProgressiveHandle:
         if self._closed:
             return
         self._closed = True
+        self._interest.close()
         with self.state.condition:
             self.state.readers = max(0, self.state.readers - 1)
             abandoned = self.state.readers == 0 and not self.state.keep_warm
@@ -1274,6 +1288,11 @@ def _run_prefetch_job(
     *,
     download: bool,
 ) -> None:
+    from shared import work
+    work.check()
+    # Complete bytes make a signed upstream URL unnecessary in either lane.
+    if get_cached(video_id):
+        return
     if not download:
         resolver(video_id)
         return
@@ -1371,12 +1390,16 @@ def request_prefetch(
     skipped. Never blocks: when the queue is full the rest are dropped —
     prefetch is best-effort by design.
     """
+    from shared import work
+    demand = work.current()
+    if demand is not None:
+        return _request_owned_prefetch(video_ids, download, resolver, refresh_resolver, demand)
     _ensure_worker()
     queued: list[str] = []
     jobs = _download_queue if download else _resolve_queue
     requester = current_user_id()
     for video_id in video_ids:
-        if download and get_cached(video_id):
+        if get_cached(video_id):
             continue
         pending_key = (video_id, download)
         with _pending_lock:
@@ -1395,3 +1418,55 @@ def request_prefetch(
                 _record_preparation_failure(video_id, "queue_full", 2)
             break
     return queued
+
+
+_owned_lanes = {}
+
+
+def _playback_interest(video_id):
+    from shared import work
+    interest = work.Owner((str(get_cache_dir()), current_user_id(), "reader-" + uuid.uuid4().hex), 0)
+    interest.expires = math.inf  # the open reader, rather than a heartbeat, owns it
+    lane = _owned_lanes.get("preview-download")
+    if lane is not None:
+        lane.interest(video_id, interest)
+    return interest
+
+
+def _request_owned_prefetch(video_ids, download, resolver, refresh_resolver, demand):
+    from shared import work
+    kind = "preview-download" if download else "preview-resolve"
+    with _pending_lock:
+        if kind not in _owned_lanes:
+            _owned_lanes[kind] = work.Executor(kind, 1 if download else 2, _QUEUE_MAX)
+        lane = _owned_lanes[kind]
+    queued = []
+    for video_id in video_ids:
+        work.check()
+        if get_cached(video_id):
+            continue
+        def run(vid=video_id):
+            try:
+                with work.cancelling(lambda: _cancel_unobserved_fill(vid)):
+                    _run_prefetch_job(vid, resolver, refresh_resolver, download=download)
+            except work.WorkCancelled:
+                _clear_preparation_failure(vid)
+                raise
+            except Exception:
+                if download:
+                    _record_preparation_failure(vid, "download_failed")
+                logger.debug("Owned preview preparation failed", exc_info=True)
+        try:
+            lane.submit(video_id, run, demand=demand)
+            queued.append(video_id)
+        except RuntimeError:
+            break
+    return queued
+
+
+def _cancel_unobserved_fill(video_id):
+    with _fills_lock:
+        state = _fills.get(video_id)
+    if state is not None and state.readers == 0 and not state.done.is_set():
+        state.keep_warm = False
+        state.cancel.set()
