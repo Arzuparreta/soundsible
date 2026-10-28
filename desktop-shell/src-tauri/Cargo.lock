@@ -4161,7 +4161,7 @@ dependencies = [
 
 [[package]]
 name = "soundsible-desktop"
-version = "0.29.0"
+version = "0.29.1"
 dependencies = [
  "base64 0.23.1",
  "dirs 7.0.0",
