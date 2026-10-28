@@ -1,4 +1,5 @@
 import { apiOrigin, ownerToken } from './config';
+import { randomId } from './randomId';
 
 export class ApiError extends Error {
   constructor(
@@ -60,7 +61,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const work = opts.work ?? (path.startsWith('/api/discovery/music/dj-') ? djWork : undefined);
   if (work) headers['X-Soundsible-Work'] = JSON.stringify(work);
   if (work && /\/dj-(plan|place|repair)$/.test(path)) {
-    const requestId = globalThis.crypto.randomUUID();
+    const requestId = randomId();
     headers['X-Soundsible-Work-Request'] = requestId;
     controller.signal.addEventListener('abort', () => {
       void request('/api/discovery/music/dj-work', { method: 'POST', work,

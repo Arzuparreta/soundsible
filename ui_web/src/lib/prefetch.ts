@@ -1,6 +1,7 @@
 import { api } from './api';
 import type { PreviewPreparation } from './api';
 import type { WorkReference } from './http';
+import { randomId } from './randomId';
 import { isPodcastTrack } from './track';
 import type { Track } from '../types/music';
 
@@ -40,7 +41,7 @@ export class PreviewPrefetch {
   private busy = false;
   private nextStatusAt = 0;
   private disposed = false;
-  private work: WorkReference = { client: `preview-${globalThis.crypto.randomUUID()}`, epoch: 0 };
+  private work: WorkReference = { client: `preview-${randomId()}`, epoch: 0 };
   private revision = 0;
 
   private publishInterest(): void {
