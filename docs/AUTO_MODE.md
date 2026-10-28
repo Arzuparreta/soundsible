@@ -111,19 +111,26 @@ The engine limits tempo stretching and falls back safely instead of forcing two
 incompatible recordings together. Loudness levelling sits inside the same
 program path, so a transition does not need a sudden volume jump to feel alive.
 
-Measured sections help place the mix: it can start at an outro or finish before
-a breakdown. When the pulse is reliable and the measured phrases fit, the
-incoming song enters so its drop lands on a phrase boundary of the outgoing
-song at the end of the blend. Otherwise it keeps the ordinary intro. Both web
-and Android follow the same server plan.
+Measured sections help place the mix: it can start during an outro or finish
+before a breakdown. A phrase starts on a bar where the arrangement measurably
+changes, a sound entering or leaving; between changes, phrases are counted in
+whole bars at the length the changes repeat, or in eight-bar steps that are
+marked as an assumption. A breakdown is where the kick and bass fall to less
+than half as loud, and a drop is where they come back after one; a passage that
+is only louder is neither. When the pulse is reliable and a measured phrase
+fits, the incoming song enters so its drop lands on a phrase start of the
+outgoing song at the end of the blend; an assumed phrase is used only when no
+measured one fits. Otherwise it keeps the ordinary intro. Both web and Android
+follow the same server plan.
 
 The pulse and the first beat of each bar come from Beat This!, an open
 neural beat tracker (MIT licence) that runs locally with ONNX Runtime; its
 decisions are then placed on the attacks precisely enough to keep blended kicks
 together. The network can misplace a first beat by a whole beat or two, and
 its confidence does not show when, so a bar alignment is only promised where an
-independent measurement of harmony changes and accents agrees. Phrase and
-section estimates still use an eight-bar grouping and remain hints.
+independent measurement of harmony changes and accents agrees. Phrases and
+sections are counted on those bars, so a misplaced first beat moves them too;
+where the levels do not show a role clearly, the DJ claims none.
 
 The model adds about 4 seconds of processor time per minute of audio, on one
 core, and up to about 0.5 GB of memory while a song is analysed. A first

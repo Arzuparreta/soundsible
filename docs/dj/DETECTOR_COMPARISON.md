@@ -3,7 +3,7 @@
 **Plan original del 2026-10-25, ejecutado en #395.** Las mediciones P12-a
 terminaron el 2026-10-26; el usuario eligió Beat This! `final0` y P12-b lo
 integró en la misma PR. P12 está cerrado con los límites registrados en
-[P12](P12.md); P13 sigue pendiente. Los resultados originales están en
+[P12](P12.md); P13 se cerró después ([P13](P13.md)). Los resultados originales están en
 [detector_comparison/RESULTS](detector_comparison/RESULTS.md), y la
 revalidación del analizador final en
 [detector_comparison/FINAL_RESULTS](detector_comparison/FINAL_RESULTS.md).

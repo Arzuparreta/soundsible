@@ -5,7 +5,7 @@ Medido el 2026-10-27, con el analizador 11 que llegó a la release.
 por caso del modelo y de la rejilla del informe integrado anterior.** No aparece
 una regresión nueva en ese corpus ni se cambia producción. Se completa la
 trazabilidad y se amplía la evidencia de parejas, AAC, SQLite, HTTP y ventanas largas.
-P13 sigue pendiente; la decisión de Beat This! `final0` de #395 se conserva.
+P13 estaba pendiente en esta revalidación y se cerró después ([P13](../P13.md)); la decisión de Beat This! `final0` de #395 se conserva.
 
 ## Referencias y trazabilidad
 

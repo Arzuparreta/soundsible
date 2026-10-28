@@ -76,7 +76,7 @@ no hay síntoma que lo justifique.
 | P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector integrado en #395; [revalidación final](detector_comparison/FINAL_RESULTS.md) del corpus, parejas y caché/HTTP | Cerrado con P12-b; revalidado el 2026-10-27; límites abajo |
 | P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado (PR #395): mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
 | P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR #395, junto con P12-a) |
-| P13 | Frases y secciones sobre una base métrica explícita | Ocho compases contados desde los unos del modelo; fixtures `structure_*` en el corpus de P12-a | **Siguiente trabajo** |
+| P13 | Frases y secciones sobre una base métrica explícita | Señales con cambios y papeles conocidos (4/4, 3/4, 6/8), compases equivocados y red real; AAC → SQLite → HTTP; vectores web/Android; [resultados](p13-results.json) | Cerrado (PR #399); límites en [P13](P13.md) |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
@@ -91,12 +91,18 @@ detección general del compás, del 1 ni de las frases musicales. P2 corrige la
 alineación temporal de reproducción; no corrige una interpretación musical
 equivocada aunque los dos reproductores coincidan al milisegundo.
 
-**P12 se cierra con P12-b; el siguiente trabajo es P13.** Historia: el cierre
+**P13 está cerrado (PR #399); no hay un siguiente punto acordado.** Quedan
+registrados, sin orden decidido: repartir el cambio de tempo entre las dos
+canciones durante la mezcla (decisión del usuario del 2026-10-26, punto
+propio), la política legacy de P11-a, P2 en Android sin medir y la aceptación
+física de escucha de P12-b y P13.
+
+**P12 se cerró con P12-b; después vino P13.** Historia: el cierre
 anterior fue prematuro: `2ca8ccf2` y la PR #394 aportan contratos y guardas,
 pero los doce fragmentos Ballroom no acreditan compás y 1 correctos. El usuario
 acuerda probar estimación conjunta y varias soluciones abiertas mantenibles,
 compararlas y decidir con los resultados. **La comparativa y la integración
-se fusionaron juntas en #395; el siguiente punto es P13.** La revalidación
+se fusionaron juntas en #395.** La revalidación
 del analizador final y las mediciones adicionales se registran en
 [detector_comparison/FINAL_RESULTS](detector_comparison/FINAL_RESULTS.md).
 Resultados y límites en [detector_comparison/RESULTS](detector_comparison/RESULTS.md).
@@ -307,8 +313,9 @@ técnica se decide por par. El servidor ignora el campo de clientes antiguos.
 | `loudness_lufs` | Sonoridad integrada EBU R128 de FFmpeg, en la misma decodificación (P4) | Sí, continuidad de ruta (P3) |
 | `spectral_flatness` | Planitud espectral 100–5000 Hz de los fotogramas fuertes, ponderada por potencia (P4) | Sí, continuidad de ruta (P3) |
 | `intro_cue` | Primer instante con energía sobre el percentil 35 | Sí (punto de entrada) |
-| `outro_cue` | Primer límite de frase unos 64 golpes antes del último sonido | Sí (punto de salida) |
-| `sections` | Etiquetas intro/build/drop/breakdown/body/outro por bloques de 8 compases; `level` es el nivel medio frente al de la propia canción | Sí, salida en outro/antes de breakdown y llegada al drop (P8) |
+| `outro_cue` | Primer inicio de frase unos 64 golpes antes del último sonido | Sí (punto de salida) |
+| `phrases` | Inicios de frase en los compases de P12: cambio medido del arreglo (`boundary`), compases enteros de la longitud medida desde uno (`counted`) o de ocho, supuestos (`assumed`); P13 | Sí, final de la mezcla en la llegada al drop (medidas antes que supuestas) |
+| `sections` | Frases consecutivas con un papel medido: intro, build, drop, breakdown, body, outro o `None` sin evidencia; `low_db`/`upper_db` en dB frente a la sección más fuerte (P13) | Sí, salida durante el outro/antes de breakdown, llegada al drop y pista de la mezcla larga (P8) |
 | `tempo_confidence` | Parte de golpes que encajan en la rejilla; ≤ 0,6 si el tempo deriva | Sí, dentro de `confidence` y como requisito independiente de beatmatch (P8) |
 | `confidence` | `0,38 + 0,36·tempo_conf + min(0,2, margen_tonalidad/8)` | Sí |
 
@@ -1133,12 +1140,14 @@ solo usa los límites de frase; `intro_cue` es el primer instante con sonido.
 **Estado: cerrado en `90b6c7e9`.** Solo cambia la planificación, no las medidas
 guardadas ni su formato; no hizo falta invalidar la caché en P8. P12 consume
 las agrupaciones conocidas por región e invalida sus medidas anteriores;
-conserva el supuesto de ocho compases para frases y etiquetas. P13 revisará
-su detección, y una región sin compás/1 no fabrica estructura de otra ventana.
+conservaba el supuesto de ocho compases para frases y etiquetas. P13 lo
+sustituye por cambios medidos del arreglo y papeles con unidades; una región
+sin compás/1 no fabrica estructura de otra ventana.
 
 - **Salida por secciones.** `plan_transition` lee los comienzos de outro y
   breakdown. Puede comenzar la mezcla en el outro o terminarla al llegar a un
-  breakdown. Elige la oportunidad válida más cercana al punto de salida
+  breakdown. Desde P13 un outro medido puede ser largo: la salida puede caer
+  en su comienzo o en cualquiera de sus inicios de frase. Elige la oportunidad válida más cercana al punto de salida
   anterior; los bloques contiguos con la misma etiqueta forman una sola
   sección. No añade notas humanas ni pesos de gusto. Un outro corto reduce
   el solapamiento para dejar los 1,5 s de margen del servidor.
@@ -1183,8 +1192,8 @@ serialización de 1 ms: AAC puede conservar muestras adicionales respecto a los
 comprueba el plan y las suites web y JVM de Android lo ejecutan sin mover
 puntos ni acortar el solapamiento. No hay escucha física en esta entrega.
 
-**Límites.** Se conservan las etiquetas heurísticas de ocho compases y los
-límites de detección de P1; estas señales no prueban la clasificación de todos
+**Límites.** Se conservaban las etiquetas heurísticas de ocho compases
+(sustituidas en P13) y los límites de detección de P1; estas señales no prueban la clasificación de todos
 los géneros. No se inventan secciones en el hueco central de los archivos largos
 analizados por ventanas. Sin sección utilizable se mantienen los puntos de
 reserva; sin una rejilla fiable se funde sin beatmatch. No se añade corrección
@@ -1360,8 +1369,8 @@ caso y sus variantes en fixtures reproducibles con respuesta conocida.
 y sus contratos sin cambiar resultados musicales ni el formato de caché.
 Mapa, unidades, dependencias, políticas y evidencia reproducible en
 [ARCHITECTURE](ARCHITECTURE.md). Los contratos P12 llegaron después en
-`2ca8ccf2`; la comparativa P12-a y la integración P12-b se fusionaron en #395.
-El siguiente punto vigente es P13.
+`2ca8ccf2`; la comparativa P12-a y la integración P12-b se fusionaron en #395;
+P13 se cerró después.
 
 - `shared/dj_engine.py` queda como fachada pública. `shared/dj/` separa modelos,
   almacenamiento/adquisición, ritmo, medidas por ventana, composición, estructura,
@@ -1535,8 +1544,8 @@ Lo siguiente describe el contrato de #394, que P12-b conserva:
   canciones ni convertir resultados sintéticos en precisión real. No hay
   aceptación física de escucha nueva.
 - P8 consume ahora solo los compases conocidos de cada región, conservando
-  el supuesto de ocho compases para frases/secciones. **P13 queda pendiente**:
-  ni esas frases ni sus etiquetas prueban la forma musical.
+  el supuesto de ocho compases para frases/secciones (#394). P13 lo
+  sustituye por cambios medidos del arreglo y papeles con unidades.
 
 Validación local de #394: suite principal de 2.330 casos (77,44 %), seguida de 201
 casos dirigidos sobre los ajustes finales y tres casos AAC/HTTP de peticiones
@@ -1710,15 +1719,41 @@ El alcance y los criterios originales se conservan a continuación.
 
 ## P13. Frases y secciones sobre una base métrica explícita
 
-**Estado: pendiente; siguiente trabajo tras P12-b.** La métrica es la de
-P12-b: unos estimados por Beat This! y confirmados solo con evidencia
-independiente. P12-b no cambió la agrupación de frases y secciones; ahora
-cuenta ocho compases desde los unos del modelo. Las fixtures de estructura de
+**Estado: cerrado (PR #399).** Método, constantes y evidencia en [P13](P13.md).
+Sobre los compases de P12-b (unos del modelo o proyectados), sin otro detector:
+
+- **Inicio de frase**: cambio medido del arreglo en una línea de compás (en una
+  banda de octava, ≥ 3,01 dB y más de tres errores estándar entre los cuatro
+  compases de cada lado; cada compás es la mediana de sus pulsos). Entre
+  cambios, compases enteros desde cada uno: con la longitud que comparten sus
+  intervalos (prueba binomial al nivel 3σ con Bonferroni) o con ocho
+  compases marcados como `assumed`. El conteo se reinicia en cada cambio
+  (extensiones, fases que no empiezan en el primer 1).
+- **Papeles** con unidades: sin pulso grave (44–177 Hz ≥ 10 dB por debajo de la
+  sección más fuerte, menos de la mitad de sonoridad) → breakdown/build;
+  vuelta del pulso grave → drop; apertura/cierre por la entrada/salida del
+  pulso grave o por cambios que solo añaden/quitan sonido → intro/outro;
+  `None` sin evidencia. Un salto de nivel no es un drop.
+- **Planificador**: final de la mezcla en frases medidas antes que supuestas;
+  salida en cualquier inicio de frase de un outro medido, no solo en su
+  comienzo. Contrato de clientes sin cambios; `ANALYSER_VERSION` 12.
+- **Evidencia**: `tests/test_dj_structure.py` (4/4, 3/4 y 6/8; frases de 4, 8
+  y 16 compases, fase desplazada, extensión, sin longitud común; papeles;
+  material ambiguo; compases equivocados; huecos y ventanas), AAC → SQLite →
+  HTTP con la red real (cuatro casos, uno nuevo de fase de frase) y dos
+  vectores nuevos ejecutados por web y Android. Medición separada con
+  `docs/dj/structure_probe.py` → [p13-results.json](p13-results.json).
+- **Límites**: sin anotaciones de estructura de música real (la biblioteca solo
+  da concordancia); sin escucha física nueva; los errores del 1 y de la
+  agrupación se heredan tal cual; cambios solo armónicos no se detectan.
+
+Diagnóstico de partida: P12-b no cambió la agrupación de frases y secciones;
+contaba ocho compases desde los unos del modelo. Las fixtures de estructura de
 P12-a (`structure_4/8/16_bars`) están en el corpus fijado; All-In-One no
 aportó una salida estructural útil sobre ellas (P12-a, RESULTS). P8 cerró el uso de las secciones al
-planificar, no una detección general de forma musical. La agrupación actual
-en ocho compases no demuestra dónde empieza una frase ni dónde cambia una
-sección; ambas pueden parecer coherentes porque comparten la misma suposición.
+planificar, no una detección general de forma musical. La agrupación
+en ocho compases no demostraba dónde empieza una frase ni dónde cambia una
+sección; ambas podían parecer coherentes porque compartían la misma suposición.
 
 ### Alcance
 

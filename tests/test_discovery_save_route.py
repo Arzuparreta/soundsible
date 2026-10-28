@@ -1665,9 +1665,10 @@ def test_dj_transition_validates_its_pair(tmp_path):
     ).status_code == 400
 
 
-@pytest.mark.parametrize("outro,long", [(False, False), (True, False), (False, True)])
-def test_measured_audio_sections_reach_route_and_refinement_without_client_replanning(tmp_path, outro, long):
+@pytest.mark.parametrize("case", ["breakdown", "outro", "long", "phase"])
+def test_measured_audio_sections_reach_route_and_refinement_without_client_replanning(tmp_path, case):
     """Synthetic AAC -> real analysis/cache -> the common web/Android HTTP plan."""
+    outro, long, phase = case == "outro", case == "long", case == "phase"
     import subprocess
     from shared import dj_engine
     from shared.ffmpeg_runtime import ffmpeg_executable
@@ -1679,7 +1680,7 @@ def test_measured_audio_sections_reach_route_and_refinement_without_client_repla
     refs, paths, analyses = {}, {}, {}
     for key in ("outgoing", "incoming"):
         wav, aac = tmp_path / f"{key}.wav", tmp_path / f"{key}.m4a"
-        section_song(wav, incoming=key == "incoming", outro=outro, long=long)
+        section_song(wav, incoming=key == "incoming", outro=outro, long=long, phase=phase)
         subprocess.run([ffmpeg_executable(), "-v", "error", "-i", str(wav), "-c:a", "aac", str(aac)], check=True)
         refs[key] = {"id": key, "track_id": key, "title": key, "artist": "Synthetic", "duration": 240}
         paths[key] = aac
@@ -1724,6 +1725,18 @@ def test_measured_audio_sections_reach_route_and_refinement_without_client_repla
     if long:
         assert plan["overlap_seconds"] == 48
         assert abs(plan["playback_rate"] - 1) * plan["overlap_seconds"] <= .005
+    elif phase:
+        # The incoming drop lands on a measured outgoing phrase: bar 5 plus
+        # whole eight-bar phrases, where counting eight bars from the first
+        # one (before P13) would have put it elsewhere.
+        end = plan["out_cue"] + plan["overlap_seconds"]
+        phrases = analyses["outgoing"]["phrases"]
+        assert any(abs(row["start"] - end) <= .005 and row["evidence"] != "assumed" for row in phrases)
+        assert round((end - .25) / 2) % 8 == 5
+        assert {row["label"] for row in analyses["outgoing"]["sections"]} == {"body"}
+        drop = next(s["start"] for s in analyses["incoming"]["sections"] if s["label"] == "drop")
+        assert drop == pytest.approx(64.25, abs=.005)
+        assert (drop - plan["in_cue"]) / plan["playback_rate"] == pytest.approx(plan["overlap_seconds"], abs=.005)
     elif outro:
         start = next(s["start"] for s in analyses["outgoing"]["sections"] if s["label"] == "outro")
         assert plan["out_cue"] == pytest.approx(start, abs=.005)
@@ -2321,7 +2334,8 @@ def test_v6_analysis_summary_keeps_sixteen_fast_long_starts_within_native_respon
     from shared.dj.contracts import fallback_analysis as _fallback
     beats = [round(i * 60 / 220, 4) for i in range(1760)]
     analysis = {**_fallback(480), "analysed": True, "bpm": 220, "key": "C", "mode": "major",
-                "beat_grid": beats, "downbeats": beats[::4], "phrase_boundaries": beats[::32]}
+                "beat_grid": beats, "downbeats": beats[::4],
+                "phrases": [{"start": t, "bars": 8, "evidence": "counted"} for t in beats[::32]]}
     full = {"seed_analysis": analysis, "items": [{"analysis": analysis}] * 16}
     assert len(json.dumps(full).encode()) > 262144
     summary = _auto_mode._dj_analysis_summary(analysis)

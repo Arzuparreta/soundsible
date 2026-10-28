@@ -101,29 +101,41 @@ def _grid_point_at_or_before(analysis: Mapping[str, Any], limit: float) -> float
     return max(values) if values else limit
 
 
-def _section_starts(analysis: Mapping[str, Any], labels: set[str]) -> list[float]:
-    """Starts of contiguous measured roles, not every eight-bar block in one."""
+def _section_spans(analysis: Mapping[str, Any], labels: set[str]) -> list[tuple[float, float]]:
+    """(start, end) of contiguous measured roles, not of every section in one."""
     if not analysis.get("analysed"):
         return []
-    result = []
+    result: list[tuple[float, float]] = []
     previous = None
     for section in analysis.get("sections") or []:
         label = section["label"]
-        if label in labels and (previous is None or previous["label"] != label
-                                or abs(previous["end"] - section["start"]) > 0.001):
-            result.append(float(section["start"]))
+        if label in labels:
+            if (previous is not None and previous["label"] == label
+                    and abs(previous["end"] - section["start"]) <= 0.001):
+                result[-1] = (result[-1][0], float(section["end"]))
+            else:
+                result.append((float(section["start"]), float(section["end"])))
         previous = section
     return result
 
 
+def _section_starts(analysis: Mapping[str, Any], labels: set[str]) -> list[float]:
+    return [start for start, _ in _section_spans(analysis, labels)]
+
+
 def _structural_exit(analysis: Mapping[str, Any], proposed: float, overlap: float,
                      earliest: float, duration: float) -> tuple[float, float]:
-    # Leave at an outro's start, or finish the blend before a breakdown.
-    # Use the nearest such opportunity to the existing end-of-song cue; there
-    # are no role weights or human ratings. Never move a measured section just
-    # to squeeze it inside the players' permitted window.
-    targets = [(start, min(overlap, duration - start - _OUT_CUE_MARGIN))
-               for start in _section_starts(analysis, {"outro"})]
+    # Leave during an outro, on its start or on one of its phrases, or finish
+    # the blend before a breakdown. Use the nearest such opportunity to the
+    # existing end-of-song cue; there are no role weights or human ratings. A
+    # measured outro can be long (P13): its start alone could leave half a
+    # song early. Never move a measured section just to squeeze it inside the
+    # players' permitted window.
+    targets = []
+    for start, end in _section_spans(analysis, {"outro"}):
+        starts = [start] + [float(row["start"]) for row in analysis.get("phrases") or []
+                            if start < float(row["start"]) < end]
+        targets += [(at, min(overlap, duration - at - _OUT_CUE_MARGIN)) for at in starts]
     targets += [(start - overlap, overlap) for start in _section_starts(analysis, {"breakdown"})]
     candidates = []
     for target, span in targets:
@@ -143,8 +155,12 @@ def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     """
     if not outgoing.get("downbeats") or not incoming.get("downbeats"):
         return None
-    phrases = sorted({float(value) for value in outgoing.get("phrase_boundaries") or []
-                      if 4 <= float(value) - out_cue <= overlap + 0.001}, reverse=True)
+    # Measured phrase starts (a change, or whole measured phrases from one)
+    # first, the longest blend first; the eight-bar assumption only where
+    # none fits (P13).
+    phrases = [row['start'] for row in sorted(
+        (row for row in outgoing.get("phrases") or [] if 4 <= float(row['start']) - out_cue <= overlap + 0.001),
+        key=lambda row: (row['evidence'] == 'assumed', -float(row['start'])))]
     for drop in _section_starts(incoming, {"drop"}):
         if abs(_nearest_grid_point(incoming, drop) - drop) > PHASE_TOLERANCE_SECONDS:
             continue

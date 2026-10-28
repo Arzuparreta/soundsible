@@ -297,6 +297,7 @@ cuántas mezclas musicales puede habilitar de forma segura el elegido.
 Las tres señales de estructura tienen cambios de contenido conocidos cada
 cuatro, ocho y dieciséis compases. Se contrastan los límites de All-In-One,
 sin usar sus etiquetas como verdad musical. No hay una evaluación anotada de
-frases reales, drops ni secciones: P13 sigue pendiente, con fixtures preparadas.
+frases reales, drops ni secciones. P13 se implementó después sobre la métrica
+elegida, con sus propias señales y límites ([P13](../P13.md)).
 La ejecución de contratos web/Android y la escucha física son evidencias
 separadas de las métricas del detector.

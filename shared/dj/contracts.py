@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Literal, NotRequired, TypeAlias, TypedDict
 
-ANALYSER_VERSION = 11
+ANALYSER_VERSION = 12
 
 # JSON numbers retain their wire representation. Aliases name units rather
 # than wrapping samples or changing the versioned SQLite payload.
@@ -18,10 +18,27 @@ Candidate: TypeAlias = tuple[dict[str, Any], AnalysisInput]
 
 
 class Section(TypedDict):
+    """Consecutive phrases with one measured role, inside one run of measured bars."""
     start: Seconds
     end: Seconds
-    label: Literal['intro', 'build', 'drop', 'breakdown', 'body', 'outro']
-    level: float  # Relative to this window's loud frames, not inter-song LUFS.
+    bars: int
+    # None: no evidence for a role (a pulse level neither clearly present nor
+    # clearly absent, or a single bar). Never a guessed label.
+    label: Literal['intro', 'build', 'drop', 'breakdown', 'body', 'outro'] | None
+    # Mean levels against this track's loudest section, in dB: the kick/bass
+    # octaves (44-177 Hz) and the octaves above them (177-5000 Hz).
+    low_db: float | None
+    upper_db: float | None
+    starts_on_change: bool  # A measured arrangement change; False: where measured bars begin.
+
+
+class Phrase(TypedDict):
+    start: Seconds  # A bar's first beat.
+    bars: int  # Measured bars until the next phrase or the end of its run.
+    # 'boundary': a measured arrangement change. 'counted': whole phrase
+    # lengths from one, at the length those changes repeat. 'assumed': whole
+    # eight-bar phrases from one, no measured length; a reserve, not evidence.
+    evidence: Literal['boundary', 'counted', 'assumed']
 
 
 class MetricRegion(TypedDict):
@@ -66,7 +83,7 @@ class AnalysisSummary(TypedDict):
 class Structure(TypedDict):
     beat_grid: list[Seconds]
     downbeats: list[Seconds]
-    phrase_boundaries: list[Seconds]
+    phrases: list[Phrase]
     sections: list[Section]
     intro_cue: Seconds
     outro_cue: Seconds | None
@@ -78,7 +95,7 @@ class Analysis(AnalysisSummary):
     # mean no evidence. Gaps between head/tail must never be interpolated.
     beat_grid: list[Seconds]
     downbeats: list[Seconds]
-    phrase_boundaries: list[Seconds]
+    phrases: list[Phrase]
     sections: list[Section]
 
 
@@ -107,9 +124,9 @@ class WindowFeatures(TypedDict):
     intro: Seconds
     last_active: Seconds
     hop_seconds: Seconds
+    frame_seconds: Seconds
     window_seconds: Seconds  # Coverage is [offset, offset + window_seconds].
-    frame_energy: list[float]
-    flux: list[float]
+    band_power: Any  # float32 frames x octave bands (`features.OCTAVE_CENTRES`); not persisted.
 
 
 class Sync(TypedDict):
@@ -145,7 +162,7 @@ def analysis_summary(analysis: AnalysisInput) -> AnalysisSummary:
     would exceed Android's 256 KiB response budget.
     """
     return {key: value for key, value in analysis.items()
-            if key not in {'beat_grid', 'downbeats', 'phrase_boundaries', 'sections', 'metric_regions'}}
+            if key not in {'beat_grid', 'downbeats', 'phrases', 'sections', 'metric_regions'}}
 
 
 def fallback_analysis(duration: Seconds = 0.0) -> Analysis:
@@ -176,7 +193,7 @@ def fallback_analysis(duration: Seconds = 0.0) -> Analysis:
         "metric_regions": [],
         "beat_grid": [],
         "downbeats": [],
-        "phrase_boundaries": [],
+        "phrases": [],
         "sections": [],
         "tempo_confidence": 0.0,
         "confidence": 0.18,

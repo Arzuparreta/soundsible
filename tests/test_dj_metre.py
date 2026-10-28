@@ -203,7 +203,7 @@ def metric_analysis(*, size=4, period=.5, subdivision=2, duration=240, offset=.2
     bars = analysis['beat_grid'][one::size]
     end = duration if tail is None else tail
     ones = [t for t in bars if head <= t < end]
-    analysis.update(downbeats=ones, phrase_boundaries=ones[::8], bar_seconds=period * size,
+    analysis.update(downbeats=ones, phrases=[{'start': t, 'bars': 8, 'evidence': 'counted'} for t in ones[::8]], bar_seconds=period * size,
                     outro_cue=bars[-min(len(bars), 17)])
     evidence = 1. if confirmed else 0.
     region = {
