@@ -27,7 +27,7 @@ almacenamiento ni Flask; una prueba lo comprueba en otro proceso.
 | `analysis` | Diezmado a 11025 Hz y composición de las medidas completas; agrega ventanas sin rellenar huecos | `features`, `structure`, `contracts` |
 | `weights` | Pesos ONNX: ruta empaquetada o caché, SHA-256, descarga única y sesión de un hilo | Ninguna (runtime) |
 | `store` | Identidad, sello del contenido, SQLite, decodificación a 22050 Hz con LUFS en la misma pasada, cola acotada; en el motor, cada medición se encarga a `worker` | `analysis`, `beat_model`, `weights`, `contracts`, `worker` |
-| `worker` | Proceso de análisis: mide una canción cada vez fuera del motor; el motor lo arranca, lo sustituye si se cuelga o muere y él sale tras 5 min sin trabajo | `store` (en el proceso hijo), `contracts` |
+| `worker` | Proceso de análisis: mide una canción cada vez fuera del motor; el motor lo arranca, lo cierra tras 5 min sin trabajo y lo sustituye si se cuelga o muere | `store` (en el proceso hijo), `contracts` |
 | `timing` | Periodo y métrica locales, equivalencia de medio/doble pulso, deriva y admisión de beatmatch | `contracts` |
 | `transitions` | Único `plan_transition`: compatibilidad, técnica, cues, velocidad y eco | `timing`, `features` (nombres de notas), `contracts` |
 | `routes` | Continuidad, ruta legacy, llegada a peticiones, elección de hueco y reparación entre anclas | `transitions`, `timing`, `contracts` |
@@ -203,3 +203,7 @@ y `tests/test_dj_worker.py`.
   pruebas, probes y benchmarks (`store._analyse_pcm`).
 - El ejecutable de escritorio (PyInstaller) es también su propio proceso de
   análisis: `soundsible-engine --dj-analysis-worker`.
+- El hijo lee la siguiente petición solo entre mediciones, en su hilo
+  principal. Un hilo bloqueado leyendo stdin durante una medición colgaba la
+  versión de Windows al cargar las DLL de NumPy (una lectura síncrona
+  pendiente en un pipe bloquea otras llamadas sobre ese handle).

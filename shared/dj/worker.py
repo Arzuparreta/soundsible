@@ -10,15 +10,22 @@ asked for analyses.
 
 The engine keeps the cache, the identities and the queue (`store`); this
 process only turns a file into an `Analysis`. One child measures one song at
-a time and owns everything native. It is started on the first request, exits
-by itself after `IDLE_EXIT_SECONDS` without work so its model and buffers do
-not stay resident, and is killed and replaced when a measurement takes longer
+a time and owns everything native. The engine starts it on the first request,
+closes it after `IDLE_CLOSE_SECONDS` without work so its model and buffers do
+not stay resident, and kills and replaces it when a measurement takes longer
 than `JOB_TIMEOUT_SECONDS` or the child dies.
 
 Protocol: one JSON object per line. The engine writes
 `{"path": ..., "duration_hint": ...}` to the child's stdin; the child answers
 on stdout with `{"analysis": Analysis | null}` (null: no beat model yet) or
-`{"error": "..."}`. Anything else the child prints goes to stderr.
+`{"error": "..."}`. Anything else the child prints goes to stderr. The child
+exits when its stdin closes.
+
+The child reads its next request only between measurements, on its main
+thread. A thread left blocked on stdin during a measurement deadlocked the
+Windows build: with a synchronous read pending on a pipe, other calls on that
+handle wait for the read, and loading NumPy's DLLs makes such a call
+(measured on the desktop CI, 2026-10-28).
 """
 
 from __future__ import annotations
@@ -42,8 +49,8 @@ FROZEN_FLAG = "--dj-analysis-worker"
 #: Longest measurement. A song takes seconds; the first one may also download
 #: the 84 MB model. A child still busy after this is stuck, not slow.
 JOB_TIMEOUT_SECONDS = 600.0
-#: The child exits after this long without a request; the next one starts it.
-IDLE_EXIT_SECONDS = 300.0
+#: The engine closes the child after this long without a request.
+IDLE_CLOSE_SECONDS = 300.0
 # The engine's own limit, after the child's: the child dumps its stacks first.
 _REPLY_TIMEOUT_SECONDS = JOB_TIMEOUT_SECONDS + 30.0
 _STOP_TIMEOUT_SECONDS = 5.0
@@ -80,53 +87,81 @@ class AnalysisProcess:
     """The engine's handle on the analysis child; one measurement at a time.
 
     Every wait here is cooperative under gevent (the patched subprocess pipes,
-    queue and lock) and an ordinary blocking wait in a threaded process.
+    queue, lock and timer) and an ordinary blocking wait in a threaded process.
     """
 
-    def __init__(self, command: list[str] | None = None, *, reply_timeout: float = _REPLY_TIMEOUT_SECONDS):
+    def __init__(self, command: list[str] | None = None, *, reply_timeout: float = _REPLY_TIMEOUT_SECONDS,
+                 idle_close: float = IDLE_CLOSE_SECONDS):
         self._command = command
         self._reply_timeout = reply_timeout
+        self._idle_close = idle_close
         self._lock = threading.Lock()
         self._process: subprocess.Popen | None = None
         self._replies: queue.Queue | None = None
+        self._idle_timer: threading.Timer | None = None
+        self._generation = 0
 
     def measure(self, path: Path, duration_hint: float) -> Analysis | None:
         """The analysis of `path`, or None without a beat model. Raises `AnalysisFailed`."""
         request = (json.dumps({"path": str(path), "duration_hint": float(duration_hint or 0)}) + "\n").encode()
         with self._lock:
-            # A second attempt only when the child had just exited on its own
-            # after idling, between our last request and this one.
-            for attempt in range(2):
-                process, replies = self._running()
-                try:
-                    process.stdin.write(request)
-                    process.stdin.flush()
-                except OSError:
-                    self._stop()
-                    continue
-                try:
-                    line = replies.get(timeout=self._reply_timeout)
-                except queue.Empty:
-                    self._stop(kill=True)
-                    raise AnalysisFailed(f"no answer within {self._reply_timeout:.0f} s") from None
-                if line is None:
-                    code = self._stop()
-                    if code == 0 and attempt == 0:
-                        continue
-                    raise AnalysisFailed(f"analysis process exited with status {code}")
-                try:
-                    reply = json.loads(line)
-                except ValueError:
-                    self._stop(kill=True)
-                    raise AnalysisFailed("analysis process broke its protocol") from None
-                if "error" in reply:
-                    raise AnalysisFailed(str(reply["error"]))
-                return reply.get("analysis")
-            raise AnalysisFailed("analysis process could not be started")
+            self._generation += 1
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
+            try:
+                return self._exchange(request)
+            finally:
+                self._arm_idle_close()
 
     def close(self) -> None:
         with self._lock:
+            self._generation += 1
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
             self._stop()
+
+    def _exchange(self, request: bytes) -> Analysis | None:
+        process, replies = self._running()
+        try:
+            process.stdin.write(request)
+            process.stdin.flush()
+        except OSError:
+            code = self._stop(kill=True)
+            raise AnalysisFailed(f"analysis process exited with status {code}") from None
+        try:
+            line = replies.get(timeout=self._reply_timeout)
+        except queue.Empty:
+            self._stop(kill=True)
+            raise AnalysisFailed(f"no answer within {self._reply_timeout:.0f} s") from None
+        if line is None:
+            code = self._stop()
+            raise AnalysisFailed(f"analysis process exited with status {code}")
+        try:
+            reply = json.loads(line)
+        except ValueError:
+            self._stop(kill=True)
+            raise AnalysisFailed("analysis process broke its protocol") from None
+        if "error" in reply:
+            raise AnalysisFailed(str(reply["error"]))
+        return reply.get("analysis")
+
+    def _arm_idle_close(self) -> None:
+        if self._process is None:
+            return
+        generation = self._generation
+        timer = threading.Timer(self._idle_close, self._close_if_idle, args=(generation,))
+        timer.daemon = True
+        self._idle_timer = timer
+        timer.start()
+
+    def _close_if_idle(self, generation: int) -> None:
+        with self._lock:
+            # A measurement since this timer was armed owns the child now.
+            if generation == self._generation:
+                self._idle_timer = None
+                self._stop()
 
     def _running(self) -> tuple[subprocess.Popen, queue.Queue]:
         if self._process is not None and self._process.poll() is None:
@@ -175,16 +210,8 @@ def _pump(stream, replies: queue.Queue) -> None:
         replies.put(None)
 
 
-def _read_requests(stream, requests: queue.Queue) -> None:
-    try:
-        for line in iter(stream.readline, b""):
-            requests.put(line)
-    finally:
-        requests.put(None)
-
-
 def main() -> int:
-    """The child: measure each requested file until stdin closes or work stops coming."""
+    """The child: measure each requested file until stdin closes."""
     # Before NumPy loads: one core for background analysis, as ONNX Runtime
     # already has, and no BLAS thread pool at all.
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -198,14 +225,10 @@ def main() -> int:
 
     from . import store
 
-    requests: queue.Queue = queue.Queue()
-    threading.Thread(target=_read_requests, args=(sys.stdin.buffer, requests), daemon=True).start()
+    requests = sys.stdin.buffer
     while True:
-        try:
-            line = requests.get(timeout=IDLE_EXIT_SECONDS)
-        except queue.Empty:
-            return 0
-        if line is None:
+        line = requests.readline()
+        if not line:
             return 0
         # A measurement that never ends dumps where it is stuck and exits;
         # the engine starts a new child for the next request.

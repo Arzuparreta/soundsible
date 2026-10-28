@@ -108,16 +108,33 @@ def test_a_crash_fails_only_its_own_measurement():
         process.close()
 
 
-def test_a_child_that_exited_after_idling_is_replaced_without_losing_the_request():
-    # Answers once, then exits cleanly, like the idle exit racing the next request.
+def test_an_idle_child_is_closed_and_the_next_request_starts_another():
+    import time
+
     command = fake_worker('''
-        print(json.dumps({"analysis": {"pid": os.getpid()}}), flush=True)
-        os._exit(0)
+        return {"analysis": {"pid": os.getpid()}}
     ''')
-    process = AnalysisProcess(command)
+    process = AnalysisProcess(command, idle_close=0.3)
     try:
         first = process.measure(Path("/a"), 0)["pid"]
+        child = process._process
+        time.sleep(1.0)
+        assert process._process is None
+        assert child.returncode == 0  # Closed through its stdin, not killed.
         assert process.measure(Path("/b"), 0)["pid"] != first
+    finally:
+        process.close()
+
+
+def test_a_measurement_keeps_the_child_from_being_closed_as_idle():
+    command = fake_worker('''
+        time.sleep(0.5)
+        return {"analysis": {"pid": os.getpid()}}
+    ''')
+    process = AnalysisProcess(command, idle_close=0.3)
+    try:
+        pids = {process.measure(Path(f"/{index}"), 0)["pid"] for index in range(3)}
+        assert len(pids) == 1
     finally:
         process.close()
 
