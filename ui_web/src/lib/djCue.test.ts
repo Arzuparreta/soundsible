@@ -27,20 +27,19 @@ describe('placeOutCue', () => {
 });
 
 describe('planBarSeconds', () => {
-  it('reads four measured beats of the outgoing song', () => {
-    expect(planBarSeconds({ out_period: 0.46875 })).toBeCloseTo(1.875, 12);
+  it('never derives a bar from the pulse', () => {
     expect(planBarSeconds(undefined)).toBe(0);
-    expect(planBarSeconds({ out_period: -1 })).toBe(0);
+    expect(planBarSeconds({})).toBe(0);
   });
 });
 
 // Metre-aware fixtures are also executed through the store and Android resolver.
 describe('explicit metric bars', () => {
   it('uses three pulses or a compound bar instead of four pulses', () => {
-    expect(planBarSeconds({ out_period: .5, out_bar_seconds: 1.5 })).toBe(1.5);
-    expect(planBarSeconds({ out_period: .5, out_bar_seconds: 1 })).toBe(1);
-    expect(planBarSeconds({ out_period: .5, out_bar_seconds: null })).toBe(0);
-    expect(planBarSeconds({ out_period: .5, out_bar_seconds: Number.NaN })).toBe(0);
+    expect(planBarSeconds({ out_bar_seconds: 1.5 })).toBe(1.5);
+    expect(planBarSeconds({ out_bar_seconds: 1 })).toBe(1);
+    expect(planBarSeconds({ out_bar_seconds: null })).toBe(0);
+    expect(planBarSeconds({ out_bar_seconds: Number.NaN })).toBe(0);
     expect(placeOutCue(185.4, 90, 183, 1.5)).toBeCloseTo(182.4, 9);
   });
 });

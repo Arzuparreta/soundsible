@@ -15,6 +15,7 @@ for _m in ("watchdog", "watchdog.events", "watchdog.observers"):
 # Load download_queue and discovery route directly from their .py files.
 _ROOT = Path(__file__).resolve().parents[1]
 
+
 def _load_module(name: str, rel_path: str):
     spec = importlib.util.spec_from_file_location(name, _ROOT / rel_path)
     mod = importlib.util.module_from_spec(spec)
@@ -61,6 +62,12 @@ from shared.providers import deezer
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.telemetry import init_telemetry, reset_telemetry
+from test_dj_sections import measured as _measured_grid
+
+
+def _pulsed(features):
+    """Measured features over a steady 4/4 grid, as the analyser stores them."""
+    return {**_measured_grid(bpm=features["bpm"], duration=features.get("duration", 240)), **features}
 
 
 @pytest.fixture(autouse=True)
@@ -1486,12 +1493,12 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
     # the one thing no existing endpoint can do.
     _make_runtime(tmp_path)
     measured = {
-        "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
+        "seed": _pulsed({"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True}),
         # Two adjacent Camelot steps, each inside the players' 8 % rate limit.
         # At 100 -> 113 -> 128 neither leg could beatmatch; that old fixture
         # only passed because C -> D was incorrectly scored as unrelated.
-        "t0": {"duration": 220, "bpm": 112, "key": "D", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
-        "bridge01": {"duration": 220, "bpm": 106, "key": "G", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
+        "t0": _pulsed({"duration": 220, "bpm": 112, "key": "D", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True}),
+        "bridge01": _pulsed({"duration": 220, "bpm": 106, "key": "G", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True}),
     }
 
     def analysis(_metadata, item, *, schedule=False):
@@ -1611,7 +1618,7 @@ def test_dj_repair_validates_its_body(tmp_path):
 
 def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
     _make_runtime(tmp_path)
-    measured = {
+    measured = _pulsed({
         "duration": 220,
         "bpm": 120,
         "key": "C",
@@ -1621,7 +1628,7 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
         "outro_cue": 190,
         "intro_cue": 6,
         "bar_seconds": 2,
-    }
+    })
     mock_api = _mock_api()
     mock_api["get_core"].return_value = (
         _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
@@ -1763,10 +1770,10 @@ def test_dj_transition_prefers_relative_keys_over_parallel_and_mixed_mode_fifths
     common = {"duration": 240, "confidence": .9, "tempo_confidence": 1., "outro_cue": 200,
               "intro_cue": 0, "bar_seconds": 2, "analysed": True}
     measured = {
-        "current": {**common, "bpm": 120, "key": "C", "mode": "major"},
-        "relative": {**common, "bpm": 124, "key": "A", "mode": "minor"},
-        "parallel": {**common, "bpm": 124, "key": "C", "mode": "minor"},
-        "mixed-fifth": {**common, "bpm": 124, "key": "G", "mode": "minor"},
+        "current": _pulsed({**common, "bpm": 120, "key": "C", "mode": "major"}),
+        "relative": _pulsed({**common, "bpm": 124, "key": "A", "mode": "minor"}),
+        "parallel": _pulsed({**common, "bpm": 124, "key": "C", "mode": "minor"}),
+        "mixed-fifth": _pulsed({**common, "bpm": 124, "key": "G", "mode": "minor"}),
     }
     client = _make_app().test_client()
     plans = {}
@@ -2242,7 +2249,7 @@ def test_dj_plan_v6_inserts_a_bridge_only_when_every_frozen_candidate_is_measure
         key = item["id"]
         if key not in known:
             return _auto_mode._dj_fallback_analysis(240)
-        return {"analysed": True, "duration": 240, "bpm": tempos[key], "key": "C", "mode": "major", "confidence": .9, "tempo_confidence": 1.}
+        return _pulsed({"analysed": True, "duration": 240, "bpm": tempos[key], "key": "C", "mode": "major", "confidence": .9, "tempo_confidence": 1.})
     cohort = []
     with (patch.object(_auto_mode, "_get_api", return_value=api),
           patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),

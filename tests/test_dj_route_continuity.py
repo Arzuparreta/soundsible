@@ -7,11 +7,12 @@ import pytest
 from shared.dj.contracts import fallback_analysis as _fallback
 from shared.dj_engine import order_continuous_route, plan_transition
 
+import test_dj_sections as sections
+
 
 def measured(**features):
-    return {"analysed": True, "duration": 240, "bpm": 120, "key": "C", "mode": "major",
-            "confidence": .9, "note_rate": 2., "loudness_lufs": -14., "spectral_flatness": .05,
-            **features}
+    return {**sections.measured(bpm=features.get("bpm", 120)), "note_rate": 2., "loudness_lufs": -14.,
+            "spectral_flatness": .05, **features}
 
 
 def candidate(identity, **features):

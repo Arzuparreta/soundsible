@@ -282,12 +282,9 @@ def test_metric_pair_cannot_be_promoted_by_key_or_composite_confidence():
     assert plan['sync']['out_bar_seconds'] is None and plan['sync']['in_bar_seconds'] is None
 
 
-def test_metric_fallback_and_old_plans_remain_explicitly_distinguishable():
+def test_metric_fallback_claims_no_alignment():
     from shared.dj.contracts import fallback_analysis
     from shared.dj_engine import plan_transition
-    from test_dj_sections import measured
-    old = plan_transition(measured(), measured())
-    assert 'alignment' not in old['sync']  # Legacy four-pulse prior, no measured claim.
     cold = plan_transition(fallback_analysis(), metric_analysis())
     assert cold['sync']['alignment'] == 'none'
     assert cold['sync']['out_bar_seconds'] is None

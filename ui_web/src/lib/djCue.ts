@@ -21,14 +21,10 @@ export function placeOutCue(proposed: number, earliest: number, latest: number, 
   return moved >= earliest && moved <= latest ? moved : clamped;
 }
 
-/** Explicit local bar, including unknown. Only old plans use the four-pulse prior. */
-export function planBarSeconds(sync: { out_period?: number; out_bar_seconds?: number | null } | undefined): number {
-  if (sync && Object.hasOwn(sync, 'out_bar_seconds')) {
-    const bar = Number(sync.out_bar_seconds);
-    return Number.isFinite(bar) && bar >= MIN_BAR_SECONDS && bar <= MAX_BAR_SECONDS ? bar : 0;
-  }
-  const period = Number(sync?.out_period);
-  return Number.isFinite(period) && period > 0 ? 4 * period : 0;
+/** The plan's local outgoing bar; 0 when unknown. */
+export function planBarSeconds(sync: { out_bar_seconds?: number | null } | undefined): number {
+  const bar = Number(sync?.out_bar_seconds ?? Number.NaN);
+  return Number.isFinite(bar) && bar >= MIN_BAR_SECONDS && bar <= MAX_BAR_SECONDS ? bar : 0;
 }
 
 // Local bars may have different pulse counts; bounds reject pathological plans.
@@ -54,8 +50,7 @@ export function metricCuePlacement(proposed: number, earliest: number, latest: n
   const sync = plan?.sync;
   const bar = planBarSeconds(sync);
   const fallback = placeOutCue(proposed, earliest, latest, bar);
-  if (sync?.alignment === undefined) return { cue: fallback, aligned: !sync || !Object.hasOwn(sync, 'out_bar_seconds') }; // Legacy.
-  if (sync.alignment !== 'bars' && sync.alignment !== 'beats') return { cue: fallback, aligned: false };
+  if (!sync || (sync.alignment !== 'bars' && sync.alignment !== 'beats')) return { cue: fallback, aligned: false };
   const out = sync.out_metre;
   const incoming = sync.in_metre;
   const cycle = sync.cycle_beats;

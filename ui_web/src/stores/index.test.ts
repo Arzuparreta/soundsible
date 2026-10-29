@@ -19,11 +19,20 @@ const metricVectors: typeof structuralVectors =
 
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
 const t2: Track = { id: 't2', title: 'Two', artist: 'Artist', duration: 200 };
+/** A 1:1 pulse held at 1.01 over measured coverage, as the server sends it. */
+const PULSE_SYNC: NonNullable<DjTransitionPlan['sync']> = {
+  out_period: .5, in_period: .505, phase_tolerance_ms: 5, grid_source: 'measured', alignment: 'beats',
+  out_bar_seconds: null, in_bar_seconds: null, cycle_beats: [1, 1], relocation_seconds: .5,
+  out_metre: { start: 0, end: 240, pulse_unit: 'quarter', beats_per_bar: 4, subdivision: 2, pulse_confidence: 1,
+    metre_confidence: 0, downbeat_confidence: 0, subdivision_confidence: 1 },
+  in_metre: { start: 0, end: 240, pulse_unit: 'quarter', beats_per_bar: 4, subdivision: 2, pulse_confidence: 1,
+    metre_confidence: 0, downbeat_confidence: 0, subdivision_confidence: 1 },
+};
 
 describe('DJ session work and first mix', () => {
   it('repairs the predecessor and measures a ready successor promoted ahead of a cold song', async () => {
     const measured = { technique: 'bass_swap', out_cue: 170, in_cue: 2,
-      overlap_seconds: 8, playback_rate: 1.01, confidence: .9 };
+      overlap_seconds: 8, playback_rate: 1.01, confidence: .9, sync: PULSE_SYNC };
     const refineDjTransition = vi.fn().mockResolvedValue({ measured: true, transition: measured });
     const armTransition = vi.fn();
     const s = await loadStore({ planDjQueue: vi.fn().mockResolvedValue(autoPlan(['route-00001', 'route-00002'])),
@@ -38,7 +47,8 @@ describe('DJ session work and first mix', () => {
     }), expect.any(AbortSignal));
     (s.deck as unknown as { currentTime: number }).currentTime = 130;
     s.fireDeckEvent('timeupdate');
-    expect(armTransition.mock.calls[0][1]).toMatchObject(measured);
+    // The player receives only the phase tolerance of the server's sync.
+    expect(armTransition.mock.calls[0][1]).toMatchObject({ ...measured, sync: { phase_tolerance_ms: 5 } });
   });
 
   it.each(['armed', 'prerolling'] as const)('accepts late measured plans only while the prepared deck is silent: %s', async phaseAfterCommit => {
@@ -57,7 +67,7 @@ describe('DJ session work and first mix', () => {
     s.fireDeckEvent('timeupdate');
     expect(armTransition).toHaveBeenCalledOnce();
     const measured = { technique: 'bass_swap' as const, out_cue: 170, in_cue: 2,
-      overlap_seconds: 8, overlap_bars: 4, playback_rate: 1.01, confidence: .9, score: .9, fallback: false };
+      overlap_seconds: 8, overlap_bars: 4, playback_rate: 1.01, confidence: .9, score: .9, fallback: false, sync: PULSE_SYNC };
     pending.resolve({ measured: true, transition: measured }); await flush();
     expect(armTransition).toHaveBeenCalledTimes(phaseAfterCommit === 'armed' ? 2 : 1);
     if (phaseAfterCommit === 'armed') expect(armTransition.mock.calls[1][1]).toMatchObject({
@@ -1169,7 +1179,7 @@ describe('Playback load coalescing', () => {
     const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
     const pending = deferred<{ measured: boolean }>();
     const measured = { technique: 'bass_swap', out_cue: 170, in_cue: 2, overlap_seconds: 8,
-      overlap_bars: 4, playback_rate: 1.01, confidence: .9 };
+      overlap_bars: 4, playback_rate: 1.01, confidence: .9, sync: PULSE_SYNC };
     const refineDjTransition = vi.fn().mockReturnValueOnce(pending.promise)
       .mockRejectedValueOnce(new Error('temporary network failure'))
       .mockResolvedValue({ measured: true, transition: measured });

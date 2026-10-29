@@ -12,10 +12,16 @@ from shared.dj.contracts import fallback_analysis as _fallback
 from shared.dj_engine import analysis_identity, order_continuous_route, plan_transition
 from shared.dj_pool import add_measured_bridges
 
+from shared.dj.timing import BEATMATCH_TECHNIQUES
+
+import test_dj_sections as sections
+
 
 def measured(bpm=120):
-    return {"analysed": True, "duration": 240, "bpm": bpm, "key": "C", "mode": "major",
-            "confidence": .9, "tempo_confidence": 1., "note_rate": 2., "loudness_lufs": -14., "spectral_flatness": .05}
+    if not bpm:  # Analysed, but no pulse was found.
+        return {**sections.measured(), "bpm": 0, "tempo_confidence": 0., "beat_grid": [], "downbeats": [],
+                "metric_regions": [], "note_rate": 2., "loudness_lufs": -14., "spectral_flatness": .05}
+    return {**sections.measured(bpm=bpm), "note_rate": 2., "loudness_lufs": -14., "spectral_flatness": .05}
 
 
 def test_bridge_improves_both_seams_and_preserves_every_original_start():
@@ -43,7 +49,8 @@ def test_partial_coverage_never_selects_the_only_downloaded_bridge(cold):
 
 
 def test_compatible_seam_and_useless_spares_add_no_delay():
-    for tempo, spare in [(106, 103), (112, 150)]:
+    # 122 BPM reaches neither 100 nor 112 on any common cycle within 8 %.
+    for tempo, spare in [(106, 103), (112, 122)]:
         seed = measured(100)
         route = order_continuous_route(seed, [({"id": "target"}, measured(tempo))])
         assert add_measured_bridges(seed, route, [({"id": "spare"}, measured(spare))]) == route
@@ -112,7 +119,7 @@ def test_library_inventory_spans_accounts_and_skips_podcasts_missing_audio_and_d
 def test_bridge_legs_must_fit_the_players_rate_limit():
     # Each leg is more than 8 % apart, beyond the players' range.
     seed, target, spare = measured(100), measured(119), measured(109)
-    assert plan_transition(seed, spare)["technique"] == "structural_fade"
+    assert plan_transition(seed, spare)["technique"] not in BEATMATCH_TECHNIQUES
     assert plan_transition(seed, spare)["playback_rate"] == 1
     route = order_continuous_route(seed, [({"id": "target"}, target)])
     assert add_measured_bridges(seed, route, [({"id": "spare"}, spare)]) == route
@@ -121,7 +128,7 @@ def test_bridge_legs_must_fit_the_players_rate_limit():
 def test_bridge_can_repair_a_pair_beyond_the_players_rate_limit():
     seed, target = measured(100), measured(109)
     route = order_continuous_route(seed, [({"id": "target"}, target)])
-    assert route[0]["transition"]["technique"] == "structural_fade"
+    assert route[0]["transition"]["technique"] not in BEATMATCH_TECHNIQUES
     assert route[0]["transition"]["playback_rate"] == 1
     result = add_measured_bridges(seed, route, [({"id": "bridge"}, measured(104.5))])
     assert [row["id"] for row in result] == ["bridge", "target"]
