@@ -1,3 +1,4 @@
+import { SILENT_WAV } from './unlockSample';
 import type { RuntimeLifetime } from '../runtimeLifetime';
 import { diagnosticLoad, diagnosticPause, diagnosticPlay, diagnosticSource, observeDiagnosticMedia, recordPlaybackDiagnostic } from "../playbackDiagnostics";
 import { ProgramOutput } from "./programOutput";
@@ -166,7 +167,6 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       });
     }
   }
-  const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
   const unlockedDecks = new WeakSet<HTMLAudioElement>();
   function holdsUnlockSample(deck: HTMLAudioElement): boolean {
     return (deck.currentSrc || deck.getAttribute('src') || '') === SILENT_WAV;

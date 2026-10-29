@@ -78,6 +78,7 @@ no hay síntoma que lo justifique.
 | P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR #395, junto con P12-a) |
 | P13 | Frases y secciones sobre una base métrica explícita | Señales con cambios y papeles conocidos (4/4, 3/4, 6/8), compases equivocados y red real; AAC → SQLite → HTTP; vectores web/Android; [resultados](p13-results.json) | Cerrado (PR #399); límites en [P13](P13.md) |
 | P14 | Primera mezcla y trabajos ligados a la sesión vigente | Cola cancelable, proceso real interrumpido, intereses compartidos, caché y protocolo HTTP; refinado temprano web/Android; [contrato y evidencia](P14.md) | Cerrado en esta PR; aceptación física de escucha pendiente |
+| P15 | Continuidad ante fallos del reloj y saltos sin muestras | Dos capturas completas del 2026-10-29; tests de reproducción y WAV real; [evidencia](P15.md) | Cerrado en PR #405: correcciones y suites locales completas; escucha física posterior pendiente |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
