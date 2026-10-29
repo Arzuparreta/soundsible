@@ -25,7 +25,8 @@ test('the gesture unlock sample decodes and actually plays on the browser render
       return { duration: decoded.duration, silent: decoded.getChannelData(0).every(value => value === 0) };
     } finally { await context.close(); }
   });
-  expect(result.duration).toBeCloseTo(0.02, 6);
+  // The decoder resamples to the context rate; allow one 8 kHz source frame.
+  expect(Math.abs(result.duration - 0.02)).toBeLessThanOrEqual(1 / 8000);
   expect(result.silent).toBe(true);
   const button = page.getByRole('button', { name: 'Probar desbloqueo' });
   await button.click();
