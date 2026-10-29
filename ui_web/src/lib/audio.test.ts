@@ -776,6 +776,82 @@ describe('two-deck mixer', () => {
     expect(clock.seeks).toEqual([]);
   });
 
+  it('stops rate corrections when the incoming clock regresses without a seek', async () => {
+    const { audioService, outgoing, incoming, handlers } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    const clock = watchSeeks(incoming, 2.885);
+    await play(outgoing, 111);
+    expect(incoming.playbackRate).toBeGreaterThan(1);
+    clock.position = 2.74; // Drive trace: a 144 ms regression after a rate change.
+    await play(outgoing, 111.25);
+    expect(incoming.playbackRate).toBe(1);
+    clock.position = 3.2;
+    await play(outgoing, 112);
+    expect(incoming.playbackRate).toBe(1);
+    clock.position = 6.2;
+    await play(outgoing, 115);
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
+    expect(incoming.load).toHaveBeenCalledTimes(1);
+    expect(clock.seeks).toEqual([]);
+    expect(audioService.mixPhase()).toBe('idle');
+  });
+
+  it('ends the rate-return ramp if the loaded song loses most of its clock advance', async () => {
+    const { outgoing, incoming } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    await play(incoming, 6.2);
+    expect(incoming.playbackRate).not.toBe(1);
+    for (let i = 0; i < 6; i++) {
+      incoming.currentTime += 0.04;
+      await vi.advanceTimersByTimeAsync(200);
+    }
+    expect(incoming.playbackRate).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(incoming.playbackRate).toBe(1);
+    expect(incoming.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the gradual rate return when the media clock advances normally', async () => {
+    const { outgoing, incoming } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    await play(incoming, 6.2);
+    const initial = incoming.playbackRate;
+    expect(initial).not.toBe(1);
+    for (let i = 0; i < 40; i++) {
+      incoming.currentTime += 0.2 * incoming.playbackRate;
+      await vi.advanceTimersByTimeAsync(200);
+      if (i === 4) {
+        expect(incoming.playbackRate).not.toBe(1);
+        expect(Math.abs(incoming.playbackRate - 1)).toBeLessThan(Math.abs(initial - 1));
+      }
+    }
+    expect(incoming.playbackRate).toBe(1);
+  });
+
+  it('keeps the outgoing audio while a manual skip is waiting for its first samples', async () => {
+    const { audioEl, audioService, outgoing, incoming } = await armed();
+    const handlers = callbacks();
+    incoming.readyState = 0;
+    audioService.armTransition('/slow-next', plan, handlers, { level: 1, manual: true });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(audioService.mixPhase()).toBe('prerolling');
+    expect(audioEl()).toBe(outgoing);
+    expect(outgoing.volume).toBe(1);
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    incoming.readyState = 4;
+    await vi.advanceTimersByTimeAsync(300);
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    await play(incoming, 2.1);
+    expect(handlers.onDominant).toHaveBeenCalledOnce();
+    expect(audioService.mixPhase()).toBe('crossfading');
+  });
+
   it('opens the blend on time for a small error at the cue and nudges it away', async () => {
     const { audioService, outgoing, incoming } = await armed();
     await play(outgoing, 108.5);
@@ -1169,8 +1245,9 @@ describe('two-deck mixer', () => {
     const { audioEl, audioService, incoming, handlers } = await armed();
 
     expect(audioService.startMixNow()).toBe('blend');
-    // A requested skip hands over at once — the listener already knows the
-    // track changed — and keeps whatever the incoming deck had buffered.
+    // Even a buffered skip waits for actual advancement before handing over.
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    await play(incoming, 0.1);
     expect(handlers.onDominant).toHaveBeenCalledOnce();
     expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
     expect(incoming.load).toHaveBeenCalledTimes(1);

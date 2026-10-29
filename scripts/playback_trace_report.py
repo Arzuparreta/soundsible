@@ -95,7 +95,7 @@ def report(path: Path, since: str | None = None) -> str:
                         advancing.append(media['id'])
             mismatch = row.get('declaredState') != 'playing' and bool(advancing)
             previous = row
-            if not is_window and not mismatch and row['event'] not in {'reject.play', 'media.error', 'context.statechange'}:
+            if not is_window and not mismatch and row['event'] not in {'reject.play', 'media.error', 'context.statechange', 'mix.rate_fallback'}:
                 continue
             timestamp = datetime.fromtimestamp(start + row['elapsedMs'] / 1000, timezone.utc).isoformat(timespec='milliseconds')
             media = ','.join(f"{m.get('id')}:{'paused' if m.get('paused') else 'playing'}:{'muted' if m.get('muted') else 'unmuted'}@{m.get('position')}" for m in row['media'])

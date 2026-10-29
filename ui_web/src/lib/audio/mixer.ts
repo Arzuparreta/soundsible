@@ -90,6 +90,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     });
   }
   let mix: ActiveMix | null = null;
+  const rateFallbacks = new WeakSet<ActiveMix>();
   let mixGeneration = 0;
   let mixTimer: ReturnType<typeof setTimeout> | null = null;
   let rateTimer: ReturnType<typeof setInterval> | null = null;
@@ -160,11 +161,31 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       return;
     }
     const startedAt = Date.now();
+    let position = deck.currentTime;
+    let sampleAt = startedAt;
+    let samplePosition = position;
     rateTimer = lifetime.setInterval(() => {
       if (ports.decks()[ports.activeIndex] !== deck) {
         stopRateReturn();
         return;
       }
+      // A media clock must not run backwards without a seek. Another rate
+      // change can restart a renderer interruption instead of smoothing it.
+      const elapsed = (Date.now() - sampleAt) / 1000;
+      const regressed = deck.currentTime < position - 0.05;
+      const starved = elapsed >= 1 && elapsed <= 2 && deck.currentTime - samplePosition < elapsed * 0.5;
+      if (!deck.seeking && !deck.paused && (regressed || starved)) {
+        deck.playbackRate = 1;
+        recordPlaybackDiagnostic('mix.rate_fallback', { reason: regressed ? 'clock_regressed' : 'clock_starved' });
+        stopRateReturn();
+        return;
+      }
+      position = deck.currentTime;
+      if (elapsed >= 1 || deck.paused || deck.seeking) {
+        sampleAt = Date.now();
+        samplePosition = position;
+      }
+      if (deck.paused || deck.seeking) return;
       const progress = Math.min(1, (Date.now() - startedAt) / RATE_RETURN_MS);
       deck.playbackRate = from + (1 - from) * progress;
       if (progress >= 1) stopRateReturn();
@@ -241,6 +262,14 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   }
   function observeIncoming(current: ActiveMix, to: HTMLAudioElement): void {
     const position = Number.isFinite(to.currentTime) ? to.currentTime : 0;
+    if (current.phase === 'crossfading' && !to.paused && !to.seeking
+        && position < current.inPosition - 0.05 && !rateFallbacks.has(current)) {
+      // Preserve the song and fade, but stop promising beat alignment once the
+      // renderer cannot keep a monotonic clock. Do not seek or reload it.
+      rateFallbacks.add(current);
+      to.playbackRate = 1;
+      recordPlaybackDiagnostic('mix.rate_fallback', { reason: 'clock_regressed' });
+    }
     if (!to.paused && !to.seeking && position > current.inPosition + 0.01) {
       current.inAdvanced = true;
       current.inProgressAt = Date.now();
@@ -249,7 +278,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   }
   /** Keeps a beatmatched incoming deck on the outgoing beat through the blend. */
   function holdPhase(current: ActiveMix, from: HTMLAudioElement, to: HTMLAudioElement): void {
-    if (current.manual || !HELD_TECHNIQUES.has(current.technique) || to.seeking || to.paused || from.paused) return;
+    if (rateFallbacks.has(current) || current.manual || !HELD_TECHNIQUES.has(current.technique) || to.seeking || to.paused || from.paused) return;
     const target = current.inCue + (from.currentTime - current.outCue) * current.rate;
     const error = to.currentTime - target;
     if (!Number.isFinite(error)) return;
@@ -408,6 +437,9 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
           return;
         }
       }
+      // play() clears paused before audio is available. A manual skip must
+      // not fade the old deck or acquire ownership until the new clock advances.
+      if (!incomingSounding(current, to)) return;
       current.mixStart = to.currentTime;
       current.phase = 'crossfading';
       current.inProgressAt = Date.now();

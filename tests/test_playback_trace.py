@@ -155,3 +155,13 @@ def test_clock_report_does_not_bridge_interruptions(interrupt):
     rows = clock_rows()
     interrupt(rows[1])
     assert clock_comparison(rows) == []
+
+
+def test_operator_report_includes_rate_fallback_outside_handoff_window(tmp_path):
+    from scripts.playback_trace_report import report
+    batch = sample()
+    batch['events'][0].update(event='mix.rate_fallback', facts={'reason': 'clock_regressed'})
+    save_batch(validate_batch(batch, TEST_USER_ID), tmp_path)
+    result = report(tmp_path / 'playback-traces.sqlite3')
+    assert 'mix.rate_fallback' in result
+    assert 'clock_regressed' in result
