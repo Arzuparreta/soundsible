@@ -169,9 +169,14 @@ class ProgramDjRecoveryTest {
             await { session!!.player.isPlaying && output.readyInput(1) }
             if (lateRefinement) {
                 await { output.transition()?.let { output.positionUs() * 48000 / 1000000 < it.start } == true }
+                instrumentation.runOnMainSync { session!!.player.pause() }
+                // AudioTrack keeps reporting frames already handed to the HAL for a
+                // moment after pause; capture the paused position once it stops.
+                var lastPosition = -1L
+                await { output.positionUs().let { val stopped = it == lastPosition; lastPosition = it; stopped } }
                 instrumentation.runOnMainSync {
                     val owner = session!!
-                    owner.player.pause()
+                    assertTrue("Paused before the armed mix", output.transition()?.let { output.positionUs() * 48000 / 1000000 < it.start } == true)
                     val snapshot = owner.refinementSnapshot()
                     val key = owner.player.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!!
                     val epoch = output.epoch()
