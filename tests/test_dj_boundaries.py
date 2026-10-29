@@ -114,17 +114,14 @@ def test_bridge_boundary_uses_the_same_rounded_rate_and_full_overlap_budget():
     assert not _beatmatched(plan, analysis, analysis)
 
 
-def test_preserved_request_bridge_policy_differs_from_measured_cohort_admission():
-    # P11-a in the handoff: do not silently change this musical policy during
-    # extraction. Both legs exceed the players' 8 % range; the request bridge
-    # wins on key alone, and a score is not a beatmatch certificate.
+def test_request_and_cohort_bridges_refuse_the_same_unexecutable_legs():
+    # P11-a: both legs exceed the players' 8 % range. The bridge has the
+    # better key path, but a score is not a beatmatch certificate.
     seed, spare, target = ({**measured(bpm=bpm), 'key': key} for bpm, key in ((100, 'C'), (109, 'A'), (119, 'F#')))
     pool = [({'id': 'spare'}, spare)]
     destination = ({'id': 'target'}, target)
+    assert not _beatmatched(transitions.plan_transition(seed, spare), seed, spare)
     requested = routes.route_to_request(seed, pool, destination, max_starts=3)
-    assert [row['id'] for row in requested] == ['spare', 'target']
-    assert [row['transition']['technique'] for row in requested] == ['echo_cut', 'echo_cut']
-    assert [row['transition']['score'] for row in requested] == [.381, .381]
-    assert transitions.plan_transition(seed, target)['score'] == .244
+    assert [row['id'] for row in requested] == ['target']
     ordinary = routes.order_continuous_route(seed, [destination])
     assert [row['id'] for row in add_measured_bridges(seed, ordinary, pool)] == ['target']

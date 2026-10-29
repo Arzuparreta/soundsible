@@ -17,12 +17,21 @@ def phrases(grid, *, bars=8, evidence="counted"):
     return [{"start": start, "bars": bars, "evidence": evidence} for start in grid[::4 * bars]]
 
 
+def metric_region(grid, *, period, duration, start=0.):
+    """One confirmed 4/4 region over the whole measured grid."""
+    return {"start": start, "end": duration, "period": period, "pulse_unit": "quarter",
+            "beats_per_bar": 4, "subdivision": 2, "bar_seconds": 4 * period,
+            "pulse_confidence": 1., "metre_confidence": 1., "downbeat_confidence": 1.,
+            "subdivision_confidence": 1., "downbeats": grid[::4]}
+
+
 def measured(*, bpm=120, duration=240, offset=0.25):
     period = 60 / bpm
     grid = [round(offset + index * period, 4) for index in range(int((duration - offset) / period) + 1)]
     return {"analysed": True, "bpm": bpm, "duration": duration, "confidence": .9,
             "tempo_confidence": 1., "key": "C", "mode": "major", "bar_seconds": 4 * period,
             "beat_grid": grid, "downbeats": grid[::4], "phrases": phrases(grid),
+            "metric_regions": [metric_region(grid, period=period, duration=duration)],
             "intro_cue": offset, "outro_cue": 192.25, "sections": []}
 
 

@@ -8,20 +8,27 @@
       "out_cue": 192.25,
       "in_cue": 0.25,
       "overlap_seconds": 34.909,
-      "overlap_bars": 8.0,
+      "overlap_bars": null,
       "playback_rate": 1.0,
       "echo_delay_seconds": 1.090909,
-      "score": 0.518,
+      "score": 0.0,
       "confidence": 0.9,
       "fallback": true,
       "sync": {
+        "alignment": "none",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": null,
+        "in_metre": null,
+        "cycle_beats": null,
+        "relocation_seconds": null,
         "out_period": 1.090909,
-        "in_period": 0.346821,
+        "in_period": 0.48,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
       }
     },
-    "incoming_bpm": 173
+    "incoming_bpm": 125
   },
   {
     "name": "outgoing-90-bpm",
@@ -32,20 +39,27 @@
       "out_cue": 192.25,
       "in_cue": 0.25,
       "overlap_seconds": 21.333,
-      "overlap_bars": 8.0,
+      "overlap_bars": null,
       "playback_rate": 1.0,
       "echo_delay_seconds": 0.666667,
-      "score": 0.518,
+      "score": 0.0,
       "confidence": 0.9,
       "fallback": true,
       "sync": {
+        "alignment": "none",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": null,
+        "in_metre": null,
+        "cycle_beats": null,
+        "relocation_seconds": null,
         "out_period": 0.666667,
-        "in_period": 0.437956,
+        "in_period": 0.4,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
       }
     },
-    "incoming_bpm": 137
+    "incoming_bpm": 150
   },
   {
     "name": "outgoing-120-bpm",
@@ -56,20 +70,27 @@
       "out_cue": 192.25,
       "in_cue": 0.25,
       "overlap_seconds": 16.0,
-      "overlap_bars": 8.0,
+      "overlap_bars": null,
       "playback_rate": 1.0,
       "echo_delay_seconds": 0.5,
-      "score": 0.518,
+      "score": 0.0,
       "confidence": 0.9,
       "fallback": true,
       "sync": {
+        "alignment": "none",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": null,
+        "in_metre": null,
+        "cycle_beats": null,
+        "relocation_seconds": null,
         "out_period": 0.5,
-        "in_period": 0.346821,
+        "in_period": 0.428571,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
       }
     },
-    "incoming_bpm": 173
+    "incoming_bpm": 140
   },
   {
     "name": "outgoing-137-bpm",
@@ -80,20 +101,27 @@
       "out_cue": 192.9507,
       "in_cue": 0.25,
       "overlap_seconds": 14.015,
-      "overlap_bars": 8.0,
+      "overlap_bars": null,
       "playback_rate": 1.0,
       "echo_delay_seconds": 0.437956,
-      "score": 0.518,
+      "score": 0.0,
       "confidence": 0.9,
       "fallback": true,
       "sync": {
+        "alignment": "none",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": null,
+        "in_metre": null,
+        "cycle_beats": null,
+        "relocation_seconds": null,
         "out_period": 0.437956,
-        "in_period": 0.346821,
+        "in_period": 0.5,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
       }
     },
-    "incoming_bpm": 173
+    "incoming_bpm": 120
   },
   {
     "name": "outgoing-220-bpm",
@@ -104,19 +132,26 @@
       "out_cue": 192.25,
       "in_cue": 0.25,
       "overlap_seconds": 8.727,
-      "overlap_bars": 8.0,
+      "overlap_bars": null,
       "playback_rate": 1.0,
       "echo_delay_seconds": 0.272727,
-      "score": 0.518,
+      "score": 0.0,
       "confidence": 0.9,
       "fallback": true,
       "sync": {
+        "alignment": "none",
+        "out_bar_seconds": null,
+        "in_bar_seconds": null,
+        "out_metre": null,
+        "in_metre": null,
+        "cycle_beats": null,
+        "relocation_seconds": null,
         "out_period": 0.272727,
-        "in_period": 0.346821,
+        "in_period": 0.48,
         "phase_tolerance_ms": 5,
         "grid_source": "measured"
       }
     },
-    "incoming_bpm": 173
+    "incoming_bpm": 125
   }
 ]

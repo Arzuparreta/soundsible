@@ -85,20 +85,22 @@ lecturas parciales/antiguas; un tipo completo no da por validada esa entrada.
   listas; el contrato de los clientes no cambia.
 - `TransitionPlan` es la decisión ejecutable del servidor. `score` describe
   compatibilidad para ordenar; no certifica que se ejecute beatmatch. El eco
-  mantiene su periodo saliente medido. P12 añade vectores métricos compartidos
-  sin regenerar los vectores legacy de P7/P8/P9. P12-b cambia `three-to-four`
-  a `beats` por decisión del usuario y añade tres vectores de `beats`.
+  mantiene su periodo saliente medido. P12 añade vectores métricos compartidos;
+  P12-b cambia `three-to-four` a `beats` por decisión del usuario y añade tres
+  vectores de `beats`. Al cerrar P11-a se regeneran los vectores estructurales
+  y de eco de P7/P8/P9 con análisis que llevan `metric_regions`, como los de
+  producción: mismos cues y técnicas, ahora con `alignment`.
 
 `timing.pulse_relations` da el ciclo común de dos pulsos (m pulsos de la que
 sale = n de la que entra, relaciones 2ᵃ·3ᵇ) y su velocidad; lo comparten
 puntuación, entrada al drop, velocidad final, `metric_sync` y admisión de
-puentes. El contrato antiguo sin `metric_regions` conserva `comparable_ratio`,
-el plegado de una octava en 0,7/1,4. `tempo_coordinate` conserva la proyección logarítmica de BPM sobre
+puentes. `tempo_coordinate` conserva la proyección logarítmica de BPM sobre
 la octava de la referencia de ruta: es otra operación y tiene otro objetivo.
 `local_period` conserva el ajuste sobre la rejilla alrededor del cue.
 `rate_fits` usa los periodos y la velocidad redondeados y todo el solapamiento;
 el límite del planificador sigue siendo 5 ms. La admisión de puentes verifica
-además BPM y técnica, y rechaza planes antiguos incompletos o valores inválidos.
+además BPM y técnica, y rechaza planes sin `alignment` ejecutable, incompletos
+o con valores inválidos.
 `metric_sync` declara lo que los dos reproductores pueden mantener durante
 todo el tramo: `bars` con unos confirmados en ambas canciones, compases
 ejecutados iguales, fase de ambos cues y rejillas estables; `beats` (P12-b)
@@ -106,9 +108,9 @@ con pulso estable compartido, ambos cues en pulsos medidos y rejillas
 regulares sin huecos, y el compás estimado común solo como guía de
 recolocación; `none` en el resto. El score musical anterior se conserva para
 mezclas ejecutables y pasa a cero con `none`. `beatmatch_fits` es la misma admisión para
-puentes de fuentes y de peticiones con medidas nuevas. Las entradas sin
-`metric_regions` conservan explícitamente el contrato legacy; P11-a sigue
-visible para esa política anterior.
+puentes de fuentes, de peticiones, de colocación y de reparación. Un análisis
+sin `metric_regions` se trata como uno sin regiones medidas: no hay contrato
+anterior que conservar (P11-a).
 
 Las guardas propias de cada reproductor siguen comprobando identidad, duración,
 solapamiento, velocidad y pertenencia del plan; compartir una regla del servidor
@@ -120,7 +122,7 @@ no sustituye esa frontera de ejecución.
 | --- | --- | --- |
 | `dj-plan` con fuentes, v6 | Conjunto/barajado independiente de caché; `order_continuous_route`: déficit de `score` y diferencias de notas/s, LUFS, planitud y BPM, normalizados por dispersión; posiciones frías fijas | `add_measured_bridges`: semilla y conjunto entero medidos, ambos tramos con técnica de beatmatch y deriva ejecutada admisible; conserva todos los destinos |
 | `dj-plan` legacy, relleno v4 | `order_route`: 0,42 transición + 0,38 semántica + 0,20 relevancia; secuencia de fuentes; calidad neutra 0,62 ante análisis ausente | No amplía el conjunto como v6; analiza la ruta aceptada |
-| Peticiones legacy de canción/artista | `choose_request_segment` → `route_to_request`; media de `score`, relevancia del destino y costes de demora ya existentes | Beam de hasta 48 estados, 12 candidatas, hasta cuatro puentes; destino preferido a continuación. P12 exige `beatmatch_fits` en cada tramo métrico, incluido el final; sin contrato métrico conserva P11-a |
+| Peticiones legacy de canción/artista | `choose_request_segment` → `route_to_request`; media de `score`, relevancia del destino y costes de demora ya existentes | Beam de hasta 48 estados, 12 candidatas, hasta cuatro puentes; destino preferido a continuación. Exige `beatmatch_fits` en cada tramo, incluido el final (P12; P11-a cerrado) |
 | `dj-place` automático | `choose_placement`: media de transiciones de entrada y salida, menos 0,009 por hueco; empate favorece el hueco anterior | Hasta dos puentes; con posición fijada no se adquieren ni se admiten puentes |
 | `dj-repair` | `repair_route`: anclas y profundidad conservadas; relleno con `order_route`; bonificación de estabilidad 0,06 a las filas existentes | Llegada al ancla con `route_to_request`, hasta dos puentes; techo de 16; no crece por relleno. Las exclusiones no anulan anclas explícitas |
 | `dj-transition` | Solo `plan_transition` contra las medidas actuales de los dos archivos; sin elegir canciones ni reordenar | Lectura de caché y eventual programación asíncrona; sin decodificación dentro de la petición |
@@ -135,33 +137,33 @@ y aplica la validez métrica como requisito binario, no como otro peso de gusto.
 La diferencia entre
 continuidad v6 y semántica/relevancia legacy es deliberada y ya figuraba en P3.
 
-### P11-a: resuelto para medidas métricas; pendiente en entradas legacy
+### P11-a: cerrado
 
-Contradicción confirmada que esta extracción conserva: `route_to_request`
-declara mejorar la seguridad pero compara solamente `score`. En la fixture
-medida 100 → 109 → 119 BPM, con tonalidades Do → La → Fa# mayor, devuelve un
-puente con dos `echo_cut`, puntuaciones 0,381/0,381 frente a 0,244 del paso
-directo, y velocidad 1; ambos desajustes superan el límite de 8 % y el puente
-gana solo por tonalidad. Hasta P12-b, con el límite de 6 %, la fixture era
-100 → 107 → 114 BPM (0,602/0,625). Para el mismo conjunto,
-`add_measured_bridges` conserva el destino directo, porque ningún tramo hace
-beatmatch. Una puntuación armónica alta tampoco asegura una
-velocidad local ejecutable aunque los BPM globales coincidan.
+Contradicción que la extracción de P11 conservó: `route_to_request` declaraba
+mejorar la seguridad pero comparaba solamente `score`. En la fixture
+100 → 109 → 119 BPM, con tonalidades Do → La → Fa# mayor, devolvía un puente
+con dos `echo_cut` a velocidad 1 que ganaba solo por tonalidad, mientras
+`add_measured_bridges` conservaba el destino directo.
 
-P12 exige ambos tramos ejecutables para las medidas nuevas y comparte su
-validador con `dj_pool`. La fixture histórica sin `metric_regions` conserva el
-resultado descrito. Para esas entradas legacy, el subpunto deberá decidir si
-todos los puentes de petición tienen que superar la misma prueba de ejecución que los de fuentes, y cómo comparar las
-técnicas de reserva sin presentar `score` como seguridad. Afecta a peticiones
-legacy, colocación y reparación. Tiene caso permanente en
-`test_dj_boundaries.py`; no se cambia de política dentro de P11. Esta
-discrepancia legacy sigue visible tras P12-b.
+P12 exigió los dos tramos ejecutables cuando un análisis traía
+`metric_regions` y dejó la regla antigua para los que no la traían. En
+producción esa rama no se alcanzaba: la caché solo devuelve filas de la
+versión actual del analizador, toda medida actual lleva `metric_regions` y el
+análisis de reserva la lleva vacía. Solo la usaban fixtures de prueba escritas
+a mano y los vectores estructurales y de eco. Al cerrar P11-a se elimina esa
+rama (también `comparable_ratio` y la lectura de cuatro pulsos por compás en
+la web), las fixtures pasan a llevar regiones métricas y la misma fixture
+queda como `test_request_and_cohort_bridges_refuse_the_same_unexecutable_legs`.
+Android conserva la lectura de planes sin `alignment` porque puede hablar con
+una estación anterior a P12.
 
 ## Evidencia de extracción
 
-`python -I docs/dj/extraction_probe.py --reference ad59b838` ejecuta el monolito
-anterior y los módulos actuales con las mismas dependencias y señales, sin
-datos personales. Exige igualdad completa, no una nueva expectativa generada:
+`python -I docs/dj/extraction_probe.py --reference ad59b838`, en `67d086cf`
+(se retiró al cerrar P11-a: desde P12 la versión del analizador ya no coincide
+con la de `ad59b838`), ejecutaba el monolito anterior y los módulos de P11
+con las mismas dependencias y señales, sin datos personales. Exigía igualdad
+completa, no una nueva expectativa generada:
 
 - 7 análisis PCM: pulsos a 90/137 BPM, silencio, tono, ruido, regiones de nivel
   conocido y grabación de 600 s medida por cabeza/cola. Ningún golpe se añade

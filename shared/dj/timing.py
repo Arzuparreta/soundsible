@@ -42,15 +42,6 @@ def pulse_relation(ratio: PlaybackRatio, max_stretch: float = MAX_STRETCH):
     return best if abs(best[2] - 1) <= max_stretch else None
 
 
-def comparable_ratio(ratio: PlaybackRatio) -> PlaybackRatio:
-    """The half/double-pulse equivalence of plans made before common cycles."""
-    if ratio < 0.7:
-        return ratio * 2
-    if ratio > 1.4:
-        return ratio / 2
-    return ratio
-
-
 def tempo_coordinate(bpm: float, reference: float) -> float:
     """BPM projected onto the route reference octave, for continuity distance."""
     return bpm * 2 ** round(math.log2(reference / bpm))
@@ -62,7 +53,7 @@ def rate_drift(playback_rate: PlaybackRatio, ratio: PlaybackRatio, overlap: Seco
 
 
 def rate_fits(plan: PlanInput, *, tolerance: Seconds | None = PHASE_TOLERANCE_SECONDS) -> bool:
-    """Validate even old/incomplete plans at the bridge admission boundary.
+    """Validate even incomplete plans at the bridge admission boundary.
 
     The planner supplies complete positive periods. Reject missing/invalid
     evidence here rather than inferring pulse from a technique or a score.
@@ -75,33 +66,27 @@ def rate_fits(plan: PlanInput, *, tolerance: Seconds | None = PHASE_TOLERANCE_SE
         rate, overlap = float(plan['playback_rate']), float(plan['overlap_seconds'])
         if not all(math.isfinite(value) and value > 0 for value in (out_period, in_period, rate, overlap)):
             return False
-        if 'out_bar_seconds' in sync and 'alignment' not in sync:
-            return False  # Incomplete metric contract, not a legacy pulse plan.
-        if 'alignment' in sync:
-            if sync['alignment'] not in ('bars', 'beats'):
+        if sync.get('alignment') not in ('bars', 'beats'):
+            return False
+        bars = (sync['out_bar_seconds'], sync['in_bar_seconds'])
+        if sync['alignment'] == 'bars' or bars != (None, None):
+            out_bar, in_bar = float(bars[0]), float(bars[1])
+            if not all(math.isfinite(value) and value > 0 for value in (out_bar, in_bar)):
                 return False
-            bars = (sync['out_bar_seconds'], sync['in_bar_seconds'])
-            if sync['alignment'] == 'bars' or bars != (None, None):
-                out_bar, in_bar = float(bars[0]), float(bars[1])
-                if not all(math.isfinite(value) and value > 0 for value in (out_bar, in_bar)):
-                    return False
-                if rate_drift(rate, in_bar / out_bar, overlap) > budget:
-                    return False
-            for prefix, cue, span in (('out', float(plan['out_cue']), overlap), ('in', float(plan['in_cue']), overlap * rate)):
-                metre = sync[f'{prefix}_metre']
-                if not (metre['start'] <= cue + budget and cue + span <= metre['end'] + budget):
-                    return False
-        cycle = sync.get('cycle_beats')
-        if cycle is not None:
-            beats = (int(cycle[0]), int(cycle[1]))
-            if beats not in CYCLES or list(beats) != list(cycle):
+            if rate_drift(rate, in_bar / out_bar, overlap) > budget:
                 return False
-            expected = in_period * beats[1] / (out_period * beats[0])
-            step = sync.get('relocation_seconds')
-            if step is not None and not (math.isfinite(float(step)) and float(step) > 0):
+        for prefix, cue, span in (('out', float(plan['out_cue']), overlap), ('in', float(plan['in_cue']), overlap * rate)):
+            metre = sync[f'{prefix}_metre']
+            if not (metre['start'] <= cue + budget and cue + span <= metre['end'] + budget):
                 return False
-        else:
-            expected = comparable_ratio(in_period / out_period)
+        cycle = sync['cycle_beats']
+        beats = (int(cycle[0]), int(cycle[1]))
+        if beats not in CYCLES or list(beats) != list(cycle):
+            return False
+        expected = in_period * beats[1] / (out_period * beats[0])
+        step = sync.get('relocation_seconds')
+        if step is not None and not (math.isfinite(float(step)) and float(step) > 0):
+            return False
         return math.isfinite(budget) and budget >= 0 and rate_drift(rate, expected, overlap) <= budget
     except (KeyError, TypeError, ValueError, ZeroDivisionError, OverflowError):
         return False
@@ -263,8 +248,6 @@ def metric_sync(outgoing: AnalysisInput, incoming: AnalysisInput, out_cue: float
     outgoing one stays on the incoming one and on the cycle. Without a bar
     estimate, whole cycles.
     """
-    if 'metric_regions' not in outgoing and 'metric_regions' not in incoming:
-        return {}  # Legacy contract: its four-pulse prior is not new evidence.
     result = {'alignment': 'none', 'out_bar_seconds': None, 'in_bar_seconds': None,
               'out_metre': None, 'in_metre': None, 'cycle_beats': None, 'relocation_seconds': None}
     relation = pulse_relation(in_period / out_period) if out_period > 0 and in_period > 0 else None

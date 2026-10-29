@@ -9,9 +9,10 @@ from shared.dj_engine import plan_transition
 from test_dj_sections import measured
 
 
-@pytest.mark.parametrize("bpm", [55, 90, 120, 137, 220])
-def test_echo_repeats_one_outgoing_beat_even_when_incoming_tempo_differs(bpm):
-    plan = plan_transition(measured(bpm=bpm), measured(bpm=137 if bpm == 90 else 173))
+# Incoming tempi no common cycle reaches within the players' 8 % range.
+@pytest.mark.parametrize("bpm,incoming", [(55, 125), (90, 150), (120, 140), (137, 120), (220, 125)])
+def test_echo_repeats_one_outgoing_beat_even_when_incoming_tempo_differs(bpm, incoming):
+    plan = plan_transition(measured(bpm=bpm), measured(bpm=incoming))
     assert plan["technique"] == "echo_cut"
     assert plan["echo_delay_seconds"] == pytest.approx(60 / bpm, abs=1e-6)
     assert plan["playback_rate"] == 1
@@ -20,7 +21,7 @@ def test_echo_repeats_one_outgoing_beat_even_when_incoming_tempo_differs(bpm):
 def test_echo_uses_the_grid_near_the_exit_instead_of_global_bpm_or_bar_seconds():
     out = measured(bpm=121)
     out.update(bpm=120, bar_seconds=2)
-    plan = plan_transition(out, measured(bpm=173))
+    plan = plan_transition(out, measured(bpm=140))
     assert plan["echo_delay_seconds"] == pytest.approx(60 / 121, abs=1e-6)
 
 
@@ -31,7 +32,7 @@ def test_echo_uses_the_grid_near_the_exit_instead_of_global_bpm_or_bar_seconds()
 def test_no_echo_from_an_unknown_or_unpredictable_outgoing_pulse(unknown):
     out = measured()
     out.update(unknown)
-    plan = plan_transition(out, measured(bpm=173))
+    plan = plan_transition(out, measured(bpm=140))
     assert plan["technique"] == "structural_fade"
     assert "echo_delay_seconds" not in plan
 

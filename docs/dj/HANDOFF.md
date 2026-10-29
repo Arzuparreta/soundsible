@@ -72,7 +72,7 @@ no hay síntoma que lo justifique.
 | P9 | Eco no sincronizado con el tempo | AAC → SQLite → HTTP; impulsos en Web Audio real y PCM nativo | Cerrado (`a8a22618`); activación automática cerrada en P7 (`d678f625`) |
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
-| P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); discrepancia P11-a registrada |
+| P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); P11-a cerrado (rama `dj/p11a-remove-legacy`) |
 | P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector integrado en #395; [revalidación final](detector_comparison/FINAL_RESULTS.md) del corpus, parejas y caché/HTTP | Cerrado con P12-b; revalidado el 2026-10-27; límites abajo |
 | P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado (PR #395): mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
 | P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR #395, junto con P12-a) |
@@ -101,8 +101,9 @@ el barrido automático y la adquisición especulativa de 16 previews de P5;
 la caché sigue siendo compartida y reutilizable. Quedan
 registrados, sin orden decidido: repartir el cambio de tempo entre las dos
 canciones durante la mezcla (decisión del usuario del 2026-10-26, punto
-propio), la política legacy de P11-a, P2 en Android sin medir y la aceptación
-física de escucha de P12-b y P13.
+propio), P2 en Android sin medir y la aceptación física de escucha de P12-b y
+P13. P11-a está cerrado: la rama legacy no se alcanzaba en producción y se ha
+eliminado.
 
 **P12 se cerró con P12-b; después vino P13.** Historia: el cierre
 anterior fue prematuro: `2ca8ccf2` y la PR #394 aportan contratos y guardas,
@@ -176,8 +177,8 @@ ahorrar reescrituras, preparar fixtures de P13 durante la comparativa y poder
 entregar su implementación junto a P12-b si comparten una métrica ya elegida,
 con aceptaciones independientes. No cambiar producción por candidato. El plan
 operativo único está en [DETECTOR_COMPARISON](DETECTOR_COMPARISON.md).
-P11-a queda resuelto para medidas nuevas y pendiente para entradas sin
-contrato métrico; no es otro detector que haya que reescribir en la comparativa.
+P11-a no es otro detector que haya que reescribir en la comparativa; ya está
+cerrado.
 
 Por qué este orden: P3 ordena con las medidas de P4 y con la puntuación de
 tonalidad de P6 (`plan_transition`: `0,46·tempo + 0,32·armonía + 0,22·confianza`),
@@ -1392,7 +1393,9 @@ P13 se cerró después.
   `TransitionPlan` distinguen medidas completas, resumen y ejecución. Conservan
   segundos, BPM, ratio de reproducción, datos ausentes y ceros medidos. No se
   rellena el hueco central entre ventanas ni se invalida la caché.
-- `python -I docs/dj/extraction_probe.py --reference ad59b838`: igualdad completa
+- `python -I docs/dj/extraction_probe.py --reference ad59b838` (disponible en
+  `67d086cf`; retirado al cerrar P11-a porque desde P12 la versión del
+  analizador ya no coincide con la de `ad59b838`): igualdad completa
   de 7 análisis PCM, 784 planes, 168 rutas, WAV/AAC y cuatro lecturas de caché
   sin decodificar, en ambos sentidos. Los vectores comunes no cambian.
   `key_probe.py` mantiene 96/96 cadencias, antes y después; también puede cargar
@@ -1407,31 +1410,49 @@ P13 se cerró después.
   de la PR cubren el conjunto final y los ejecutores web/Android. Sin aceptación
   física de escucha; no se afirma una mejora de coste ni detección métrica nueva.
 
-### P11-a. Discrepancia conservada: puentes de petición basados solo en score
+### P11-a. Puentes de petición basados solo en score
 
-**Resuelto para medidas métricas en P12; pendiente para entradas legacy.**
-P12 comparte `beatmatch_fits` con los puentes de fuentes y exige ejecución
-válida en cada tramo de petición/colocación/reparación, incluido el final. La
-fixture histórica sin `metric_regions` conserva la diferencia siguiente;
-revisar esa compatibilidad y la comparación de técnicas de reserva sigue
-pendiente, sin bloquear el cierre de P11 ni el modelo métrico de P12.
+**Estado: cerrado (rama `dj/p11a-remove-legacy`).** La discrepancia no se
+alcanzaba en producción; se elimina el código que la mantenía.
 
-Antes de P12, `route_to_request` declara mejorar la seguridad pero no exige ejecución de
-beatmatch. Con medidas de 100 → 109 → 119 BPM y tonalidades Do → La → Fa#
-mayor elige un puente con dos `echo_cut` a velocidad 1, puntuaciones
-0,381/0,381 frente a 0,244 del paso directo. Los dos ajustes exceden el límite
-del 8 %; el puente gana solo por tonalidad. Hasta P12-b, con el límite del 6 %,
-la fixture era 100 → 107 → 114 BPM (0,602/0,625). Con el mismo conjunto,
-`add_measured_bridges` no añade puente porque
-requiere dos tramos con beatmatch y deriva admisible. La fixture permanente es
-`test_preserved_request_bridge_policy_differs_from_measured_cohort_admission`.
+Antes de P12, `route_to_request` declaraba mejorar la seguridad pero no exigía
+ejecución de beatmatch. Con medidas de 100 → 109 → 119 BPM y tonalidades
+Do → La → Fa# mayor elegía un puente con dos `echo_cut` a velocidad 1 que
+ganaba solo por tonalidad, mientras `add_measured_bridges` no añadía puente.
+P12 exigió `beatmatch_fits` en cada tramo de petición, colocación y reparación,
+pero solo si uno de los dos análisis tenía la clave `metric_regions`.
 
-Revisar esa condición en peticiones legacy, colocación y reparación, y decidir
-cómo comparar la seguridad de técnicas de reserva frente a `score`. No basta
-con usar el mismo planificador para considerar iguales los objetivos de ruta.
+Por qué la rama sin `metric_regions` no se alcanzaba en producción:
+`_dj_item_analysis` y `/dj-transition` toman los análisis de `cached_analysis`,
+que solo lee filas de la `ANALYSER_VERSION` actual, o del análisis de reserva.
+Todo análisis actual lleva `metric_regions` (`analysis.py`) y el de reserva la
+lleva vacía (`fallback_analysis`). Los clientes no devuelven análisis al
+servidor. La rama solo la usaban fixtures escritas a mano y los vectores
+`dj_structural_plans.json` y `dj_echo_plans.json`.
+
+Cambios al cerrarlo:
+
+- Servidor: `beatmatch_fits` sin condición en `route_to_request`; fuera la
+  rama legacy de `_closest_rate`, `_nearest_grid_point`,
+  `_grid_point_at_or_before`, el eco y `metric_sync`; `rate_fits` exige
+  `alignment` y `cycle_beats`; se elimina `comparable_ratio`.
+- Web: `planBarSeconds` ya no deduce un compás de cuatro pulsos y
+  `metricCuePlacement` no acepta un plan sin `alignment`. La web la sirve el
+  propio motor, así que siempre recibe planes de su misma versión.
+- Android conserva la lectura de planes sin `alignment`
+  (`ProgramDjPlan.barSeconds`/`metricCuePlacement`): la app no comprueba la
+  versión de la estación y puede hablar con una anterior a P12.
+- Fixtures con `metric_regions` (`test_dj_sections.measured`). Los vectores
+  estructurales conservan cues y técnicas y ganan `alignment`. Los de eco usan
+  tempos de entrada sin ciclo común en el ±8 % (con ciclos comunes, 120 → 173
+  BPM es un 2:3 a 1,04), y como no alinean nada puntúan 0, como en producción.
+- `test_preserved_request_bridge_policy_differs_from_measured_cohort_admission`
+  pasa a `test_request_and_cohort_bridges_refuse_the_same_unexecutable_legs`.
+- Se retira `docs/dj/extraction_probe.py`, que ya no funcionaba desde P12.
+
 La doble influencia del tempo (compatibilidad global del par y continuidad de
-BPM) también queda inventariada, sin nuevos pesos ni recalibración. P12-a y
-P12-b ya están cerrados; P11-a queda visible para esas entradas anteriores.
+BPM) sigue inventariada en [ARCHITECTURE](ARCHITECTURE.md), sin nuevos pesos
+ni recalibración; no dependía de esta rama.
 
 ### Alcance
 

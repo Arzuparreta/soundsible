@@ -117,7 +117,8 @@ def test_decoded_cadence_replaces_old_cached_keys(tmp_path, monkeypatch, mode, e
 
 
 def test_route_quality_prefers_a_relative_key_even_when_parallel_is_listed_first():
-    common = {"bpm": 120, "confidence": .9, "duration": 240, "analysed": True}
+    from test_dj_sections import measured
+    common = measured()
     current = {**common, "key": "C", "mode": "major"}
     candidates = [({"id": name, "score": .5}, {**common, "key": key, "mode": "minor"})
                   for name, key in (("parallel", "C"), ("relative", "A"))]

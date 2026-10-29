@@ -14,20 +14,12 @@ from shared.dj_engine import (
     request_analysis,
     route_to_request,
 )
+from test_dj_sections import measured
 
 
 def analysis(*, bpm=120, key="C", mode="major", confidence=0.9, duration=240):
-    return {
-        "bpm": bpm,
-        "key": key,
-        "mode": mode,
-        "confidence": confidence,
-        "tempo_confidence": 1.0,
-        "duration": duration,
-        "outro_cue": duration - 8,
-        "intro_cue": 8,
-        "bar_seconds": 2,
-    }
+    return {**measured(bpm=bpm, duration=duration), "key": key, "mode": mode,
+            "confidence": confidence, "outro_cue": duration - 8, "intro_cue": 8}
 
 
 def item(identity, score=0.5):

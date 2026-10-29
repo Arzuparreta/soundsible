@@ -174,7 +174,7 @@ def route_to_request(
                 if index in used:
                     continue
                 plan = plan_transition(previous, row[1])
-                if ('metric_regions' in previous or 'metric_regions' in row[1]) and not beatmatch_fits(plan, previous, row[1]):
+                if not beatmatch_fits(plan, previous, row[1]):
                     continue
                 quality = float(plan["score"])
                 expanded.append((accumulated + quality, (*prefix, row), row[1], used | {index}))
@@ -182,7 +182,7 @@ def route_to_request(
         beam = expanded[:48]
         for accumulated, prefix, previous, _ in beam:
             plan = plan_transition(previous, requested_analysis)
-            if ('metric_regions' in previous or 'metric_regions' in requested_analysis) and not beatmatch_fits(plan, previous, requested_analysis):
+            if not beatmatch_fits(plan, previous, requested_analysis):
                 continue
             final_quality = float(plan["score"])
             sequence_quality = (accumulated + final_quality) / (count + 1)

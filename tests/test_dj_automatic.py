@@ -91,7 +91,9 @@ def test_local_grid_overrules_a_matching_global_bpm_for_technique_choice():
     plan = plan_transition(out, inc)
     assert plan['technique'] == 'echo_cut'
     assert plan['playback_rate'] == 1
-    assert plan['overlap_bars'] == 8
+    # Eight outgoing bars of exit, but no executed bar is promised.
+    assert plan['overlap_seconds'] == 16
+    assert plan['overlap_bars'] is None
 
 
 def test_half_time_pair_still_blends_automatically():
