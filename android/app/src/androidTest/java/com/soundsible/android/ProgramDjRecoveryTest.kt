@@ -203,14 +203,19 @@ class ProgramDjRecoveryTest {
                 }
                 return
             }
+            // A silent armed mix still accepts refinement at least 5 s before its cue
+            // (see httpSilentArmedRefinement); with mixing, refinement is late only
+            // once the blend sounds.
+            if (starved != null) await { output.transition()?.let { output.positionUs() * 48000 / 1000000 >= it.start + 4800 } == true }
             instrumentation.runOnMainSync {
                 val snapshot = session!!.routeSnapshot()
                 val key = session!!.player.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!!
+                val window = output.transition()
                 assertFalse("Prepared cue changed by late refinement", session!!.applyRefinement(snapshot,
                     ProgramDjPlan.Proposal(key, ProgramMixCurve.Technique.SAFE_FADE, 10.0, 0.0, 4.0, 1.0, 0.5)))
+                assertEquals("Rejected refinement changed sounding mix", window, output.transition())
             }
             if (starved != null) {
-                await { output.transition()?.let { output.positionUs() * 48000 / 1000000 >= it.start + 4800 } == true }
                 val epoch = output.epoch()
                 val position = output.positionUs()
                 successorPcm.set(false)
