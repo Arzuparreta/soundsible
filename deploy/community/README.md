@@ -41,8 +41,8 @@ docker compose --env-file deploy/community/.env \
   -f deploy/community/docker-compose.yml up -d --build
 ```
 
-Before starting and after each TURN certificate renewal, place container-readable
-copies inside a root-protected directory:
+Before starting, place container-readable copies of the TURN certificate inside
+a root-protected directory:
 
 ```bash
 install -d -m 700 deploy/community/certs
@@ -51,6 +51,19 @@ install -m 644 /etc/letsencrypt/live/turn.example.org/privkey.pem deploy/communi
 docker compose --env-file deploy/community/.env \
   -f deploy/community/docker-compose.yml restart coturn-tls
 ```
+
+Both certificates renew through the webroot, which neither reloads Nginx nor
+refreshes Coturn's copy. Install the deploy hook so certbot does both after
+every renewal, adapting `COMMUNITY_DIR` and `TURN_HOST` at its top first:
+
+```bash
+install -m 755 deploy/community/certbot-deploy-hook.sh \
+  /etc/letsencrypt/renewal-hooks/deploy/soundsible-community.sh
+certbot renew --dry-run
+```
+
+Without it the public origin keeps serving an expired certificate after a
+successful renewal, and TURN over TLS fails when the copy expires.
 
 Expose TCP 80/443/3478, UDP 443/3478, UDP and TCP 8189, and UDP 49152–50687.
 TLS/TCP 443 is the primary TURN path because it survives networks that block
