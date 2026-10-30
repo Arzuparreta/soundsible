@@ -39,7 +39,6 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   const ARMED_FINE_LEAD = 2;
   const MAX_PREROLL = 4;
   const MIN_OVERLAP = 1.2;
-  const MIX_STALL_MS = 4_000;
   const RATE_RETURN_MS = 8_000;
   // A beatmatched blend holds its phase the way a DJ rides the pitch: an
   // incoming deck off by more than the plan's tolerance is nudged by at most
@@ -52,13 +51,16 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   const PHASE_NUDGE_SECONDS = 1;
   const PHASE_SEEK_SECONDS = 0.1;
   const HELD_TECHNIQUES = new Set<LiveTransitionPlan['technique']>(['bass_swap', 'filter_blend', 'long_blend']);
+  function blendProgress(current: ActiveMix): number {
+    if (current.suspended || current.mixStart === null) return 0;
+    const elapsed = ports.audioContext && current.mixContextStart !== null
+      ? ports.audioContext.currentTime - current.mixContextStart
+      : (ports.decks()[current.toIndex].currentTime - current.mixStart) / current.rate;
+    return Math.min(1, Math.max(0, elapsed / Math.max(0.001, current.overlap)));
+  }
   function programMixSnapshot(): ProgramMixSnapshot {
     const list = ports.decks();
-    let progress = 0;
-    if (mix?.mixStart != null) {
-      const incoming = list[mix.toIndex];
-      progress = Math.min(1, Math.max(0, (incoming.currentTime - mix.mixStart) / Math.max(0.001, mix.overlap * mix.rate)));
-    }
+    const progress = mix ? blendProgress(mix) : 0;
     return {
       contextTime: ports.audioContext?.currentTime ?? 0,
       activeIndex: ports.activeIndex,
@@ -108,6 +110,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   let rateTimer: ReturnType<typeof setInterval> | null = null;
   function scheduleCrossfade(current: ActiveMix): void {
     if (!ports.deckGains || !ports.audioContext) return;
+    current.mixContextStart = ports.audioContext.currentTime;
     ports.setBlendLimiter(true);
     const points = 96;
     const incoming = Array.from({
@@ -506,18 +509,11 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       scheduleCrossfade(current);
     }
 
-    // The outgoing curve runs on the audio clock whatever the incoming deck is
-    // doing. One whose clock has stopped is a fade into silence: hand over to it
-    // if it already owns the programme (its own stall recovery takes it from
-    // there), otherwise give the blend up and stay on the song that is sounding.
-    if (Date.now() - current.inProgressAt > MIX_STALL_MS) {
-      if (current.dominant) finishMix();else failMix(new Error('incoming deck stalled during the blend'));
-      return;
-    }
     holdPhase(current, from, to);
-    const span = Math.max(0.05, current.overlap * current.rate);
-    const elapsed = to.currentTime - (current.mixStart ?? to.currentTime);
-    const progress = Math.min(1, Math.max(0, elapsed / span));
+    // A renderer rate correction changes media time, not the duration of the
+    // AudioParam envelope. Ownership and retirement follow that envelope's
+    // output clock; PCM/continuity guards above still veto a silent handoff.
+    const progress = blendProgress(current);
     // Equal-power curves keep the perceived loudness steadier than linear gain,
     // especially on long blends.
     if (!ports.deckGains || !ports.audioContext) {
@@ -527,6 +523,10 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     if (!current.dominant && (current.manual || progress >= 0.5)) {
       const output = ports.deckOutputSignal(current.toIndex);
       if (output !== null && (current.outputSignalAt === null || performance.now() - current.outputSignalAt >= 250)) {
+        // A manual fade requests dominance at its first tick, when its gain
+        // curve still starts at zero. Let the renderer produce that first block
+        // instead of mistaking normal render latency for a silent fader.
+        if (current.manual && progress < 0.5) return;
         // In particular, an incoming gain curve that failed to reach the graph
         // must not earn ownership. Explicit gain assignment restores the old
         // output and cancels both curves in releaseToStaged.
@@ -642,6 +642,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         rate,
         preroll,
         mixStart: null,
+        mixContextStart: null,
         signalAt: null,
         outputSignalAt: null,
         suspended: false,

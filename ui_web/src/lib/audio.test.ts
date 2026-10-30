@@ -100,6 +100,16 @@ class DeadAudioContext extends FakeAudioContext {
   }
 }
 
+class MeteredAudioContext extends FakeAudioContext {
+  meters: Array<FakeAnalyserNode & { getFloatTimeDomainData: (target: Float32Array) => void }> = [];
+  override createAnalyser = () => {
+    const node = Object.assign(new FakeAnalyserNode(), {
+      getFloatTimeDomainData(target: Float32Array) { target.fill(node.level === 128 ? 0 : 0.25); },
+    });
+    this.meters.push(node); return node;
+  };
+}
+
 /** What each deck was doing at the instant it was routed. WebKit refuses the
  * audio session to a context that is handed an element which is already
  * sounding, and the refusal is permanent: the routing cannot be undone. */
@@ -237,6 +247,14 @@ async function armed() {
 async function play(deck: FakeAudio, position: number) {
   deck.currentTime = position;
   await vi.advanceTimersByTimeAsync(300);
+}
+
+async function advancePair(outgoing: FakeAudio, incoming: FakeAudio, milliseconds: number) {
+  for (let elapsed = 0; elapsed < milliseconds; elapsed += 100) {
+    outgoing.currentTime += 0.1 * outgoing.playbackRate;
+    incoming.currentTime += 0.1 * incoming.playbackRate;
+    await vi.advanceTimersByTimeAsync(100);
+  }
 }
 
 /** Put the page in the background, the way a phone going into a pocket does. */
@@ -650,17 +668,32 @@ describe('two-deck mixer', () => {
     const module = await import('./audio'); module.audioService.unlockAudio();
     const { audioService, outgoing, incoming, handlers } = await armed();
     await play(outgoing, 108.5); incoming.currentTime = 2; await play(outgoing, 110);
-    await play(incoming, 4.1);
+    await advancePair(outgoing, incoming, 2200);
     expect(handlers.onDominant).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(650);
     const [a, b] = [contexts[0].gains[2].gain, contexts[0].gains[4].gain];
     expect(a.cancelScheduledValues).toHaveBeenCalled();
     expect(a.value).toBe(1); expect(b.value).toBe(0);
     expect(handlers.onComplete).not.toHaveBeenCalled();
-    await play(incoming, 4.8); await play(incoming, 9);
+    await advancePair(outgoing, incoming, 4500);
     expect(handlers.onDominant).toHaveBeenCalledOnce();
     expect(handlers.onComplete).toHaveBeenCalledOnce();
     expect(audioService.mixPhase()).toBe('idle');
+  });
+
+  it('retires the outgoing deck on the gain-curve clock even when the media clock jumps ahead', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio'); module.audioService.unlockAudio();
+    const { audioService, outgoing, incoming, handlers } = await armed();
+    await play(outgoing, 108.5); incoming.currentTime = 2; await play(outgoing, 110);
+    incoming.currentTime = 6.2; // A rate discontinuity must not finish a 4 s envelope in 300 ms.
+    await vi.advanceTimersByTimeAsync(100);
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    expect(handlers.onComplete).not.toHaveBeenCalled();
+    expect(audioService.programMixSnapshot().progress).toBeLessThan(0.5);
+    await advancePair(outgoing, incoming, 4100);
+    expect(handlers.onDominant).toHaveBeenCalledOnce();
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
   });
 
   it('keeps a handoff prepared when only the outgoing deck has started', async () => {
@@ -862,30 +895,40 @@ describe('two-deck mixer', () => {
   });
 
   it.each(['source', 'output'])('does not fade into an advancing but silent %s', async kind => {
-    class MeteredContext extends FakeAudioContext {
-      meters: Array<FakeAnalyserNode & { getFloatTimeDomainData: (target: Float32Array) => void }> = [];
-      override createAnalyser = () => {
-        const node = Object.assign(new FakeAnalyserNode(), {
-          getFloatTimeDomainData(target: Float32Array) { target.fill(node.level === 128 ? 0 : 0.25); },
-        });
-        this.meters.push(node); return node;
-      };
-    }
-    vi.stubGlobal('AudioContext', MeteredContext);
+    vi.stubGlobal('AudioContext', MeteredAudioContext);
     const module = await import('./audio'); module.audioService.unlockAudio();
     const { audioService, outgoing, incoming, handlers } = await armed();
-    const context = contexts[0] as MeteredContext;
+    const context = contexts[0] as MeteredAudioContext;
     context.meters[kind === 'source' ? 2 : 3].level = 128;
     await play(outgoing, 108.5); incoming.currentTime = 2; await play(outgoing, 110);
     if (kind === 'source') {
       expect(audioService.mixPhase()).toBe('prerolling');
     } else {
-      await play(incoming, 4.1);
+      await advancePair(outgoing, incoming, 2200);
       expect(audioService.mixPhase()).toBe('idle');
       expect(handlers.onStaged).toHaveBeenCalledOnce();
     }
     expect(handlers.onDominant).not.toHaveBeenCalled();
     expect(context.gains[2].gain.value).toBe(1); // A remains in the programme.
+  });
+
+  it('waits for the first rendered output block of a manual fade without abandoning it', async () => {
+    vi.stubGlobal('AudioContext', MeteredAudioContext);
+    const module = await import('./audio'); module.audioService.unlockAudio();
+    const { audioService, outgoing, incoming } = await armed();
+    const context = contexts[0] as MeteredAudioContext;
+    const handlers = callbacks();
+    context.meters[3].level = 128;
+    audioService.armTransition('/manual', { ...plan, in_cue: 0 }, handlers, { manual: true, level: 1 });
+    await play(incoming, 0.1);
+    expect(audioService.mixPhase()).toBe('crossfading');
+    expect(handlers.onStaged).not.toHaveBeenCalled();
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    context.meters[3].level = 200;
+    await advancePair(outgoing, incoming, 2000);
+    expect(handlers.onDominant).toHaveBeenCalledOnce();
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
+    expect(handlers.onStaged).not.toHaveBeenCalled();
   });
 
   it('keeps the gradual rate return when the media clock advances normally', async () => {

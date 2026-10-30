@@ -126,6 +126,8 @@ export interface ActiveMix {
   preroll: number;
   /** Incoming media position at which the crossfade started. */
   mixStart: number | null;
+  /** The same output clock that owns AudioParam curves also owns retirement. */
+  mixContextStart: number | null;
   /** Last observed PCM activity; null means this runtime cannot measure it. */
   signalAt: number | null;
   outputSignalAt: number | null;
