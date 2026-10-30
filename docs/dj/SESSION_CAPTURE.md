@@ -34,6 +34,14 @@ capped at 64 entries. Source changes, requests, reordering, repair, manual
 advance, seek and mixing toggles mark interventions. Visibility alone does not
 exclude background listening.
 
+The recorder implementation loads only when DJ observation is first needed,
+outside the initial library payload. Up to 128 setup observations are buffered
+while it loads. IDs and session time are allocated immediately. If playback
+outruns the module load, the opening is explicitly marked incomplete; an import
+failure emits `dj.capture_unavailable`. Neither case holds up playback or
+produces an eligible opening in the report. The existing payload budget remains
+unchanged.
+
 ## Stages and units
 
 | Event | Observation |

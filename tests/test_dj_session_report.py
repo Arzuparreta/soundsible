@@ -67,6 +67,7 @@ def test_schema_persists_linkage_and_report_pairs_the_actual_session(tmp_path):
     (lambda b: b['events'][2]['facts'].update(mixing=False), 'manual_or_unmixed'),
     (lambda b: b['events'][5].update(event='dj.direction_changed'), 'interaction_or_interruption'),
     (lambda b: b['events'][1].update(event='dj.interaction'), 'interaction_or_interruption'),
+    (lambda b: b['events'][1].update(event='dj.capture_unavailable'), 'capture_unavailable'),
     (lambda b: b['events'][1].update(event='transport.pause'), 'interaction_or_interruption'),
     (lambda b: b['events'][1].update(event='connection.state', facts=dict(djSession='session', state='offline')), 'connection_interrupted'),
     (lambda b: b['events'][3]['facts'].pop('technique'), 'execution_missing'),

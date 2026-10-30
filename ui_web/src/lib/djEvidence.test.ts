@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DjEvidence, pairObservations } from './djEvidence';
+import { createDjEvidence, pairObservations } from './djEvidenceRecorder';
 import type { DjTransitionPlan, ListeningPlanResponse } from './api';
 import type { DiagnosticFacts } from './playbackDiagnostics';
 
@@ -9,7 +9,7 @@ const response = { plan_id: 'plan', session_id: 'planner', segment_index: 0 } as
 function recorder() {
   const rows: Array<{ event: string; facts: DiagnosticFacts }> = [];
   let serial = 0, time = 0;
-  const evidence = new DjEvidence((event, facts) => rows.push({ event, facts }), () => `opaque-${++serial}`, () => time);
+  const evidence = createDjEvidence((event, facts) => rows.push({ event, facts }), () => `opaque-${++serial}`, () => time);
   return { evidence, rows, tick: () => { time += 1000; } };
 }
 
@@ -54,7 +54,7 @@ describe('linked DJ evidence', () => {
   });
 
   it('cannot throw recorder failures into playback', () => {
-    const evidence = new DjEvidence(() => { throw new Error('storage'); }, () => 'id');
+    const evidence = createDjEvidence(() => { throw new Error('storage'); }, () => 'id');
     expect(() => { evidence.start(0); evidence.arm('a', 'b', plan, true, false); evidence.end('exit'); }).not.toThrow();
   });
 });

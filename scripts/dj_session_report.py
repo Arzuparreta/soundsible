@@ -63,7 +63,7 @@ def report(path: Path):
             start = next((row for row in session_rows if row['event'] == 'dj.session_started'), None)
             if not start or start['facts'].get('startKnown') is not True:
                 reasons.add('opening_not_observed')
-            lower = start['sequence'] if start else session_rows[0]['sequence']
+            lower = session_rows[0]['sequence']
             upper = session_rows[-1]['sequence']
             window = [row for row in ordered if lower <= row['sequence'] <= upper]
             if losses[cid] or any(b['sequence'] != a['sequence'] + 1 for a, b in zip(window, window[1:])):
@@ -71,6 +71,8 @@ def report(path: Path):
             first_selection = next((row['sequence'] for row in session_rows if row['event'] == 'dj.selected'), float('inf'))
             for row in session_rows:
                 event, facts = row['event'], row['facts']
+                if event == 'dj.capture_unavailable':
+                    reasons.add('capture_unavailable')
                 if event == 'dj.direction_changed' and row['sequence'] > first_selection:
                     reasons.add('interaction_or_interruption')
                 if event in {'dj.interaction', 'media_session.action', 'transport.pause', 'transport.resume', 'media.seeking'}:

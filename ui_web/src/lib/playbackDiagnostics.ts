@@ -79,7 +79,7 @@ export function recordPlaybackDiagnostic(event: string, facts: Facts = {}): void
   if (!active) return;
   try {
     if (event === 'handoff.retirement' || String(facts.reason ?? '').startsWith('handoff')) denseUntil = performance.now() + 10_000;
-    const contextual = /^(dj\.|mix\.|handoff\.|transport\.|connection\.|lifecycle\.|media_session\.action|store\.ui_program_transport)/.test(event);
+    const contextual = /^(dj\.|mix\.|handoff\.|transport\.|connection\.|media_session\.action)/.test(event);
     const row = entry(event, contextual ? { ...context?.(), ...facts } : facts);
     if (buffer.length === CAPACITY) {
       buffer[cursor] = row;
