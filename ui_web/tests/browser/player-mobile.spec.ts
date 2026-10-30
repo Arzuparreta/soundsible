@@ -2,7 +2,7 @@ import { snapCarousel, snapPlayerCarousel, holdCarousel, releaseCarousel, holdFo
 import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
 import AxeBuilder from '@axe-core/playwright';
-import { silentStream } from './music-browser-fixture';
+import { fixtureStream } from './music-browser-fixture';
 
 const TRACKS = [
   {
@@ -48,7 +48,7 @@ async function mockEngine(page: Page) {
   });
   // Keep playback on its fixture song instead of decoding the API fallback's
   // JSON as audio, failing it and moving the transport beneath gesture tests.
-  await silentStream(page);
+  await fixtureStream(page);
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem('lang', 'es');

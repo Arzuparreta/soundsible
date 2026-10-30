@@ -539,7 +539,7 @@ async function loadStore(
   const disconnect = vi.fn();
   const createSocket = vi.fn(() => ({
     on: (event: string, handler: (data?: unknown) => void) => socketHandlers.set(event, handler),
-    emit: vi.fn(), disconnect,
+    emit: vi.fn(), disconnect, connect: vi.fn(), connected: false,
   }));
   vi.doMock('../lib/socket', () => ({
     createSocket,

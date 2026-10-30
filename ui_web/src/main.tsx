@@ -10,7 +10,7 @@ import { installPageVisibility } from './lib/pageVisibility';
 import { initLocale } from './lib/i18n';
 import { registerServiceWorker } from './lib/pwa';
 import { OverlayOutlet } from './lib/overlay';
-import { installSessionGuard, ready, refreshSession, requiresLogin, user, sessionUnavailable } from './lib/session';
+import { installSessionGuard, ready, refreshSession, recoverSession, requiresLogin, user, sessionUnavailable } from './lib/session';
 import { recoveryPlayer } from './boot/playerRecovery';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
@@ -55,7 +55,8 @@ if (import.meta.hot) import.meta.hot.dispose(stopPageVisibility);
 void initLocale();
 installSessionGuard();
 registerServiceWorker();
-void refreshSession();
+const stopSessionRecovery = recoverSession();
+if (import.meta.hot) import.meta.hot.dispose(stopSessionRecovery);
 
 const root = document.getElementById('app');
 if (!root) throw new Error('#app mount point missing');

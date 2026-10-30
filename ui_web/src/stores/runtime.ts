@@ -6,6 +6,8 @@ import { api, type RemotePlaybackState } from "../lib/api";
 import { audioService, onProgramEvent, setProgramOutputReporter, setProgramTransportReporter, type ProgramMediaEventName, type ProgramPlaybackSnapshot } from "../lib/audio";
 import { ProgramMediaSession, type MediaSessionSyncReason } from "../lib/mediaSession";
 import { recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from "../lib/playbackDiagnostics";
+import { takeConnectionFailures } from '../lib/connectionEvidence';
+import { recoverConnection } from '../lib/connectionRecovery';
 import { bustCovers } from "../lib/media";
 import { isPodcastTrack } from "../lib/track";
 import { createShortcutHandler } from "../lib/shortcuts";
@@ -449,6 +451,17 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     });
     socket = createSocket();
     const ownedSocket = socket;
+    for (const failure of takeConnectionFailures()) recordPlaybackDiagnostic('connection.boot_failure', { ...failure });
+    socket.on('connect_error', lifetime.guard(() => recordPlaybackDiagnostic('connection.state', {
+      state: 'offline', reason: 'socket_connect_error'
+    })));
+    const reconnect = () => {
+      if (document.visibilityState !== 'hidden' && !ownedSocket.connected) ownedSocket.connect();
+    };
+    lifetime.listen(window, 'online', reconnect);
+    lifetime.listen(window, 'pageshow', reconnect);
+    lifetime.listen(document, 'visibilitychange', reconnect);
+    lifetime.listen(document, 'resume', reconnect);
     lifetime.own(() => {
       ownedSocket.disconnect();
       socket = null;
@@ -460,9 +473,11 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       ports.programMediaSession.uninstallActions();
     });
     socket.on('connect', lifetime.guard(() => {
+      recordPlaybackDiagnostic('connection.state', { state: 'online' });
       void syncSavedEntities();
       ports.revalidatePreparation();
       setState('online', true);
+      if (state.libraryError) void ports.actions.syncLibrary();
       socket!.emit('playback_register', state.device);
       void api.registerDevice(state.device).catch(lifetime.guard(() => {}));
       void ports.actions.loadDownloads(); // re-seed the queue after a (re)connect
@@ -470,7 +485,10 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       // this is the moment that ends the silence.
       ports.resumeFromStarved();
     }));
-    socket.on('disconnect', lifetime.guard(() => setState('online', false)));
+    socket.on('disconnect', lifetime.guard(() => {
+      recordPlaybackDiagnostic('connection.state', { state: 'offline', reason: 'socket_disconnected' });
+      setState('online', false);
+    }));
     // A sweep measured more of the library. Nothing re-levels mid-song; the new
     // numbers ride the refreshed library and apply from the next track on.
     socket.on('loudness_updated', lifetime.guard(() => {
@@ -571,7 +589,14 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     };
     lifetime.listen(window, 'beforeunload', pushStateOnUnload);
     lifetime.listen(window, 'pagehide', pushStateOnUnload);
-    void ports.actions.syncLibrary().then(lifetime.guard(() => ports.searchForResume(resumeAttempts)));
+    const currentLibrary = lifetime.capture();
+    lifetime.own(recoverConnection(async () => {
+      await ports.actions.syncLibrary();
+      if (!currentLibrary()) return true;
+      if (state.libraryError) return false;
+      ports.searchForResume(resumeAttempts);
+      return true;
+    }));
     void ports.actions.loadDownloads();
     // Warm the discovery feed so Search and Podcasts render cached rails instantly.
     void import('../lib/discover').then(lifetime.guard(m => {

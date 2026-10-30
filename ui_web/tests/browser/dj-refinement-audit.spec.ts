@@ -1,7 +1,7 @@
 /** Real app/store/audio, controlled API and silent WAV: pending analysis must
  * be retried before the seam is committed, and stop once it is measured. */
 import { expect, test } from '@playwright/test';
-import { mockMusicEngine, openMusicPlayer, silentWav, TRACKS } from './music-browser-fixture';
+import { mockMusicEngine, openMusicPlayer, fixtureWav, TRACKS } from './music-browser-fixture';
 
 for (const initiallyReady of [false, true]) {
   test(`refinement retries until measured (initially ready: ${initiallyReady})`, async ({ page }) => {
@@ -9,11 +9,11 @@ for (const initiallyReady of [false, true]) {
     await page.route('**/api/static/stream/**', async (route) => {
       const match = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '');
       const start = match ? Number(match[1]) : 0;
-      const end = match?.[2] ? Math.min(Number(match[2]), silentWav.length - 1) : silentWav.length - 1;
+      const end = match?.[2] ? Math.min(Number(match[2]), fixtureWav.length - 1) : fixtureWav.length - 1;
       await route.fulfill({ status: match ? 206 : 200, contentType: 'audio/wav',
         headers: { 'Accept-Ranges': 'bytes', 'Content-Length': String(end - start + 1),
-          ...(match ? { 'Content-Range': `bytes ${start}-${end}/${silentWav.length}` } : {}) },
-        body: silentWav.subarray(start, end + 1) });
+          ...(match ? { 'Content-Range': `bytes ${start}-${end}/${fixtureWav.length}` } : {}) },
+        body: fixtureWav.subarray(start, end + 1) });
     });
     let ready = initiallyReady;
     let refinements = 0;

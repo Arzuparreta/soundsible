@@ -1,7 +1,10 @@
 import type { RuntimeLifetime } from '../runtimeLifetime';
 import { diagnosticLoad, diagnosticPause, diagnosticSource, recordPlaybackDiagnostic } from "../playbackDiagnostics";
 import type { DeckEffects, ProgramMixSnapshot, LiveTransitionPlan, MixPhase, MixCancelReason, ProgramTransportOrigin, ProgramTransportEvent, MixCallbacks, ActiveMix } from "./contracts";
+import { MediaClockHealth } from './mediaClock';
 export interface MixerPorts {
+  deckSignal: (index: number) => number | null;
+  deckOutputSignal: (index: number) => number | null;
   decks: () => HTMLAudioElement[];
   mixGains: number[];
   audioContext: AudioContext | null;
@@ -36,7 +39,6 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   const ARMED_FINE_LEAD = 2;
   const MAX_PREROLL = 4;
   const MIN_OVERLAP = 1.2;
-  const MIX_STALL_MS = 4_000;
   const RATE_RETURN_MS = 8_000;
   // A beatmatched blend holds its phase the way a DJ rides the pitch: an
   // incoming deck off by more than the plan's tolerance is nudged by at most
@@ -49,14 +51,16 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   const PHASE_NUDGE_SECONDS = 1;
   const PHASE_SEEK_SECONDS = 0.1;
   const HELD_TECHNIQUES = new Set<LiveTransitionPlan['technique']>(['bass_swap', 'filter_blend', 'long_blend']);
+  function blendProgress(current: ActiveMix): number {
+    if (current.suspended || current.mixStart === null) return 0;
+    const elapsed = ports.audioContext && current.mixContextStart !== null
+      ? ports.audioContext.currentTime - current.mixContextStart
+      : (ports.decks()[current.toIndex].currentTime - current.mixStart) / current.rate;
+    return Math.min(1, Math.max(0, elapsed / Math.max(0.001, current.overlap)));
+  }
   function programMixSnapshot(): ProgramMixSnapshot {
     const list = ports.decks();
-    let progress = 0;
-    if (mix?.mixStart != null) {
-      const incoming = list[mix.toIndex];
-      progress = Math.min(1, Math.max(0, (incoming.currentTime - mix.mixStart) / Math.max(0.001, mix.overlap * mix.rate)));
-    }
-    const liveGains = mix?.phase === 'crossfading' ? [mix.fromIndex === 0 ? Math.cos(progress * Math.PI * 0.5) : Math.sin(progress * Math.PI * 0.5), mix.fromIndex === 1 ? Math.cos(progress * Math.PI * 0.5) : Math.sin(progress * Math.PI * 0.5)] : ports.mixGains;
+    const progress = mix ? blendProgress(mix) : 0;
     return {
       contextTime: ports.audioContext?.currentTime ?? 0,
       activeIndex: ports.activeIndex,
@@ -68,7 +72,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         index,
         position: Number.isFinite(deck.currentTime) ? deck.currentTime : 0,
         duration: Number.isFinite(deck.duration) ? deck.duration : 0,
-        gain: liveGains[index]
+        gain: ports.deckGains?.[index].gain.value ?? ports.mixGains[index]
       }))
     };
   }
@@ -91,11 +95,22 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   }
   let mix: ActiveMix | null = null;
   const rateFallbacks = new WeakSet<ActiveMix>();
+  const incomingClock = new MediaClockHealth();
+  // Capability belongs to this audio runtime. Once this renderer fails at
+  // variable speed, do not expose the listener to the same failure every song.
+  let rateControlAvailable = true;
+  const rateChangedAt = new WeakMap<HTMLAudioElement, number>();
+  function rateFallback(deck: HTMLAudioElement, reason: string, phase: string): void {
+    rateControlAvailable = false;
+    if (deck.playbackRate !== 1) deck.playbackRate = 1;
+    recordPlaybackDiagnostic('mix.rate_fallback', { reason, phase });
+  }
   let mixGeneration = 0;
   let mixTimer: ReturnType<typeof setTimeout> | null = null;
   let rateTimer: ReturnType<typeof setInterval> | null = null;
   function scheduleCrossfade(current: ActiveMix): void {
     if (!ports.deckGains || !ports.audioContext) return;
+    current.mixContextStart = ports.audioContext.currentTime;
     ports.setBlendLimiter(true);
     const points = 96;
     const incoming = Array.from({
@@ -161,9 +176,9 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       return;
     }
     const startedAt = Date.now();
-    let position = deck.currentTime;
-    let sampleAt = startedAt;
-    let samplePosition = position;
+    if (!rateControlAvailable) { deck.playbackRate = 1; return; }
+    const clock = new MediaClockHealth();
+    clock.observe(deck);
     rateTimer = lifetime.setInterval(() => {
       if (ports.decks()[ports.activeIndex] !== deck) {
         stopRateReturn();
@@ -171,23 +186,18 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       }
       // A media clock must not run backwards without a seek. Another rate
       // change can restart a renderer interruption instead of smoothing it.
-      const elapsed = (Date.now() - sampleAt) / 1000;
-      const regressed = deck.currentTime < position - 0.05;
-      const starved = elapsed >= 1 && elapsed <= 2 && deck.currentTime - samplePosition < elapsed * 0.5;
-      if (!deck.seeking && !deck.paused && (regressed || starved)) {
-        deck.playbackRate = 1;
-        recordPlaybackDiagnostic('mix.rate_fallback', { reason: regressed ? 'clock_regressed' : 'clock_starved' });
+      const failure = clock.observe(deck);
+      if (failure) {
+        rateFallback(deck, failure, 'return');
         stopRateReturn();
         return;
       }
-      position = deck.currentTime;
-      if (elapsed >= 1 || deck.paused || deck.seeking) {
-        sampleAt = Date.now();
-        samplePosition = position;
-      }
       if (deck.paused || deck.seeking) return;
       const progress = Math.min(1, (Date.now() - startedAt) / RATE_RETURN_MS);
-      deck.playbackRate = from + (1 - from) * progress;
+      // Quarter-percent steps, as in phase riding. Reassigning playbackRate
+      // every 200 ms for an almost imperceptible change restarts some renderers.
+      const wanted = progress >= 1 ? 1 : Math.round((from + (1 - from) * progress) * 400) / 400;
+      if (Math.abs(deck.playbackRate - wanted) > 1e-6) deck.playbackRate = wanted;
       if (progress >= 1) stopRateReturn();
     }, 200);
   }
@@ -262,14 +272,17 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   }
   function observeIncoming(current: ActiveMix, to: HTMLAudioElement): void {
     const position = Number.isFinite(to.currentTime) ? to.currentTime : 0;
-    if (current.phase === 'crossfading' && !to.paused && !to.seeking
-        && position < current.inPosition - 0.05 && !rateFallbacks.has(current)) {
+    const failure = current.phase === 'crossfading' ? incomingClock.observe(to) : null;
+    if (failure && !rateFallbacks.has(current)) {
       // Preserve the song and fade, but stop promising beat alignment once the
       // renderer cannot keep a monotonic clock. Do not seek or reload it.
       rateFallbacks.add(current);
-      to.playbackRate = 1;
-      recordPlaybackDiagnostic('mix.rate_fallback', { reason: 'clock_regressed' });
+      rateFallback(to, failure, 'blend');
     }
+    const signal = ports.deckSignal(current.toIndex);
+    if (signal !== null && signal > 0) current.signalAt = performance.now();
+    const output = ports.deckOutputSignal(current.toIndex);
+    if (output !== null && output > 0) current.outputSignalAt = performance.now();
     if (!to.paused && !to.seeking && position > current.inPosition + 0.01) {
       current.inAdvanced = true;
       current.inProgressAt = Date.now();
@@ -289,10 +302,17 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       ? Math.round(Math.max(-PHASE_NUDGE_MAX, Math.min(PHASE_NUDGE_MAX, error / PHASE_NUDGE_SECONDS)) * 400) / 400
       : 0;
     const wanted = current.rate * from.playbackRate * (1 - nudge);
-    if (Math.abs(to.playbackRate - wanted) > 1e-6) to.playbackRate = wanted;
+    const now = performance.now();
+    if (Math.abs(to.playbackRate - wanted) > 1e-6 && now - (rateChangedAt.get(to) ?? -Infinity) >= 200) {
+      to.playbackRate = wanted;
+      rateChangedAt.set(to, now);
+    }
   }
   function incomingSounding(current: ActiveMix, to: HTMLAudioElement): boolean {
-    return current.phase !== 'armed' && current.inAdvanced && !to.paused && !to.seeking && to.readyState >= 3;
+    const signal = ports.deckSignal(current.toIndex);
+    return current.phase !== 'armed' && current.inAdvanced && !to.paused && !to.seeking && to.readyState >= 3
+      && Date.now() - current.inProgressAt < 500
+      && (signal === null || current.signalAt !== null && performance.now() - current.signalAt < 250);
   }
   function releaseToStaged(current: ActiveMix): void {
     mixGeneration += 1;
@@ -381,6 +401,45 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       return;
     }
     observeIncoming(current, to);
+    // A clock can advance while its routed PCM stays silent. Do not finish a
+    // fade into that deck based on its playhead alone. Restore A and keep B as
+    // the staged successor, instead of dropping a perfectly valid song.
+    if (current.phase === 'crossfading' && !current.dominant && !incomingSounding(current, to)) {
+      if (to.playbackRate !== 1) rateFallback(to, 'signal_lost', 'blend');
+      recordPlaybackDiagnostic('mix.signal_fallback', { reason: 'incoming_signal_lost' });
+      releaseToStaged(current);
+      return;
+    }
+    if (current.phase === 'crossfading' && current.dominant) {
+      const output = ports.deckOutputSignal(current.toIndex);
+      const outputMissing = !current.suspended && output !== null
+        && (current.outputSignalAt === null || performance.now() - current.outputSignalAt >= 250);
+      if (!incomingSounding(current, to) || outputMissing) {
+        if (!current.suspended) {
+          // Ownership already moved to B. Keep A as a bed while B recovers;
+          // an AudioParam curve must not continue fading A into silence.
+          current.suspended = true;
+          rateFallbacks.add(current);
+          if (to.playbackRate !== 1) rateFallback(to, 'signal_lost', 'blend');
+          to.playbackRate = 1;
+          current.rate = 1;
+          ports.setDeckGain(current.fromIndex, 1);
+          ports.setDeckGain(current.toIndex, 0);
+          ports.resetDeckEffects(current.fromIndex);
+          ports.resetDeckEffects(current.toIndex);
+          recordPlaybackDiagnostic('mix.suspended', { reason: 'incoming_not_sounding' });
+        }
+        return;
+      }
+      if (current.suspended) {
+        current.suspended = false;
+        current.mixStart = to.currentTime;
+        current.overlap = Math.min(4, current.overlap);
+        current.technique = 'structural_fade';
+        scheduleCrossfade(current);
+        recordPlaybackDiagnostic('mix.resumed', { technique: current.technique });
+      }
+    }
     if (current.phase === 'armed') {
       if (from.paused) return;
       const due = from.currentTime >= current.outCue - current.preroll;
@@ -443,21 +502,18 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       current.mixStart = to.currentTime;
       current.phase = 'crossfading';
       current.inProgressAt = Date.now();
+      incomingClock.reset();
+      incomingClock.observe(to);
+      recordPlaybackDiagnostic('mix.started', { phase: 'crossfading', technique: current.technique,
+        rate: current.rate, overlap: current.overlap });
       scheduleCrossfade(current);
     }
 
-    // The outgoing curve runs on the audio clock whatever the incoming deck is
-    // doing. One whose clock has stopped is a fade into silence: hand over to it
-    // if it already owns the programme (its own stall recovery takes it from
-    // there), otherwise give the blend up and stay on the song that is sounding.
-    if (Date.now() - current.inProgressAt > MIX_STALL_MS) {
-      if (current.dominant) finishMix();else failMix(new Error('incoming deck stalled during the blend'));
-      return;
-    }
     holdPhase(current, from, to);
-    const span = Math.max(0.05, current.overlap * current.rate);
-    const elapsed = to.currentTime - (current.mixStart ?? to.currentTime);
-    const progress = Math.min(1, Math.max(0, elapsed / span));
+    // A renderer rate correction changes media time, not the duration of the
+    // AudioParam envelope. Ownership and retirement follow that envelope's
+    // output clock; PCM/continuity guards above still veto a silent handoff.
+    const progress = blendProgress(current);
     // Equal-power curves keep the perceived loudness steadier than linear gain,
     // especially on long blends.
     if (!ports.deckGains || !ports.audioContext) {
@@ -465,6 +521,19 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       ports.setDeckGain(current.fromIndex, Math.cos(progress * Math.PI * 0.5));
     }
     if (!current.dominant && (current.manual || progress >= 0.5)) {
+      const output = ports.deckOutputSignal(current.toIndex);
+      if (output !== null && (current.outputSignalAt === null || performance.now() - current.outputSignalAt >= 250)) {
+        // A manual fade requests dominance at its first tick, when its gain
+        // curve still starts at zero. Let the renderer produce that first block
+        // instead of mistaking normal render latency for a silent fader.
+        if (current.manual && progress < 0.5) return;
+        // In particular, an incoming gain curve that failed to reach the graph
+        // must not earn ownership. Explicit gain assignment restores the old
+        // output and cancels both curves in releaseToStaged.
+        recordPlaybackDiagnostic('mix.signal_fallback', { reason: 'incoming_output_silent' });
+        releaseToStaged(current);
+        return;
+      }
       current.dominant = true;
       ports.activeIndex = current.toIndex;
       current.callbacks.onDominant();
@@ -522,7 +591,10 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       const to = ports.decks()[toIndex];
       ports.pendingDetach.delete(to);
       const manual = options.manual === true;
-      const rate = Math.min(1.08, Math.max(0.92, Number(plan.playback_rate) || 1));  // shared/dj/timing.py MAX_STRETCH.
+      const rate = rateControlAvailable && !manual ? Math.min(1.08, Math.max(0.92, Number(plan.playback_rate) || 1)) : 1;
+      const technique = !rateControlAvailable && HELD_TECHNIQUES.has(plan.technique) ? 'structural_fade' : plan.technique;
+      if (technique !== plan.technique) recordPlaybackDiagnostic('mix.execution_fallback', {
+        reason: 'rate_control_unavailable', technique, requestedTechnique: plan.technique });
       const overlap = manual ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4)) : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6);
       const inCue = Math.max(0, Number(plan.in_cue) || 0);
       const preroll = manual ? 0 : Math.min(MAX_PREROLL, inCue / rate);
@@ -570,7 +642,11 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         rate,
         preroll,
         mixStart: null,
-        technique: plan.technique,
+        mixContextStart: null,
+        signalAt: null,
+        outputSignalAt: null,
+        suspended: false,
+        technique,
         echoDelay: Number.isFinite(plan.echo_delay_seconds) && plan.echo_delay_seconds! > 0 && plan.echo_delay_seconds! <= 2
           ? plan.echo_delay_seconds : undefined,
         phaseTolerance: Math.max(0.001, Math.min(0.012, Number(plan.sync?.phase_tolerance_ms || 5) / 1000)),

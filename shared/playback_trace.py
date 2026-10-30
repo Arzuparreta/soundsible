@@ -14,8 +14,8 @@ MAX_BATCHES = 32768
 MAX_BYTES = 64 * 1024 * 1024  # payload cap; SQLite reuses free pages
 RETENTION_SEC = 7 * 86400
 KEY = re.compile(r"^[a-zA-Z0-9_.:-]{1,128}$")
-FACTS = set("node operation error index from to state origin action reason expectedState mode phase syncReason persisted lost".split())
-PROGRAM = set("activeIndex mixPhase dominant contextState contextTime outputMode gain0Target gain1Target localVolume localMuted".split())
+FACTS = set("node operation error index from to state origin action reason expectedState mode phase syncReason persisted lost technique requestedTechnique rate overlap atMs".split())
+PROGRAM = set("activeIndex mixPhase dominant contextState contextTime outputMode gain0Target gain1Target gain0Actual gain1Actual signal0Rms signal1Rms output0Rms output1Rms technique localVolume localMuted".split())
 MEDIA = set("id deckIndex paused ended muted position duration rate volume readyState networkState hasSource sourceKind errorCode".split())
 CAPTURE = set("id startedAt clientRevision userId deviceId platform displayMode".split())
 

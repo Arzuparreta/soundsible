@@ -164,6 +164,27 @@ test('a first offline session exposes station recovery without loading playback'
   await expect(page.locator('#login-username')).toBeVisible();
 });
 
+test('recovers the initial station connection without reloading the PWA', async ({ page }) => {
+  await engine(page);
+  let attempts = 0;
+  await page.route('**/api/auth/state', route => ++attempts <= 2 ? route.abort() : route.fulfill({
+    json: { requires_login: true, user: null },
+  }));
+  await page.goto('/player/');
+  await expect(page.getByRole('alert')).toContainText('Tu biblioteca sigue ahí');
+  await expect(page.locator('#login-username')).toBeVisible({ timeout: 10_000 });
+  expect(attempts).toBe(3);
+});
+
+test('recovers an initial library failure even while the socket is unavailable', async ({ page }) => {
+  await mockMusicEngine(page);
+  let attempts = 0;
+  await page.route('**/api/library?*', route => ++attempts <= 2 ? route.abort() : route.fallback());
+  await page.goto('/player/#/library?view=songs');
+  await expect(page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ })).toBeVisible({ timeout: 12_000 });
+  expect(attempts).toBeGreaterThanOrEqual(3);
+});
+
 for (const theme of ['light', 'dark']) {
   test(`respects ${theme} theme and reduced motion on a narrow screen`, async ({ page }) => {
     const auth = gate();

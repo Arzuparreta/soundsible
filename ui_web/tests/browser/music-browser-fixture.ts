@@ -41,7 +41,7 @@ export async function mockMusicEngine(page: Page | BrowserContext) {
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
-  await silentStream(page);
+  await fixtureStream(page);
   await page.addInitScript(() => {
     if (!sessionStorage.getItem('music-fixture-initialized')) {
       localStorage.clear();
@@ -53,7 +53,7 @@ export async function mockMusicEngine(page: Page | BrowserContext) {
 }
 
 /**
- * Serve every track as a long, real, silent WAV.
+ * Serve every track as a long, real PCM WAV with a quiet tone.
  *
  * Without this the engine gets audio it cannot play, treats each track as
  * finished and walks the queue: three seconds after pressing play on track 320
@@ -68,7 +68,7 @@ export async function mockMusicEngine(page: Page | BrowserContext) {
  * additional-themes, music-explorer and player-panel-swipe all flake in the
  * same place.
  *
- * Three minutes of silence outlasts any test, so playback simply stays put.
+ * Three minutes of PCM outlasts any test, so playback simply stays put.
  * Register it before a spec's own stream route, which then takes precedence.
  *
  * It is also the only audio the Linux WebKit builds survive. Handed the MP3
@@ -79,18 +79,21 @@ export async function mockMusicEngine(page: Page | BrowserContext) {
  * and 206s, which rules the transport out and leaves the GStreamer decode
  * path. Only reach for the MP3 where the format is the thing under test.
  */
-export const silentWav = (() => {
+export const fixtureWav = (() => {
   const samples = 8000 * 180;
   const wav = Buffer.alloc(44 + samples * 2);
   wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
   wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
   wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
   wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
+  // A non-zero signal exercises the real mixer admission. Digital silence
+  // must not stand in for a song that a DJ transition should acquire.
+  for (let i = 0; i < samples; i++) wav.writeInt16LE(Math.round(160 * Math.sin(2 * Math.PI * 220 * i / 8000)), 44 + i * 2);
   return wav;
 })();
 
-export async function silentStream(page: Page | BrowserContext): Promise<void> {
-  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: silentWav }));
+export async function fixtureStream(page: Page | BrowserContext): Promise<void> {
+  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: fixtureWav }));
 }
 
 /**

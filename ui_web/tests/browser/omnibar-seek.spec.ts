@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { mockMusicEngine, silentWav } from './music-browser-fixture';
+import { mockMusicEngine, fixtureWav } from './music-browser-fixture';
 
 const mediaPosition = (page: Page) => page.evaluate(async () => {
   const { audioService } = await import('/player/src/lib/audio.ts');
@@ -13,10 +13,10 @@ test.beforeEach(async ({ page }) => {
     const range = route.request().headers().range;
     const match = range?.match(/bytes=(\d+)-(\d*)/);
     const start = match ? Number(match[1]) : 0;
-    const end = match?.[2] ? Math.min(Number(match[2]), silentWav.length - 1) : silentWav.length - 1;
+    const end = match?.[2] ? Math.min(Number(match[2]), fixtureWav.length - 1) : fixtureWav.length - 1;
     return route.fulfill({ status: match ? 206 : 200, contentType: 'audio/wav',
-      headers: { 'Accept-Ranges': 'bytes', ...(match ? { 'Content-Range': `bytes ${start}-${end}/${silentWav.length}` } : {}) },
-      body: silentWav.subarray(start, end + 1) });
+      headers: { 'Accept-Ranges': 'bytes', ...(match ? { 'Content-Range': `bytes ${start}-${end}/${fixtureWav.length}` } : {}) },
+      body: fixtureWav.subarray(start, end + 1) });
   });
   await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();

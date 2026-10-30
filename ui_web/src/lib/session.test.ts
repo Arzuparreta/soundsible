@@ -80,6 +80,15 @@ describe('session', () => {
     expect(user()?.id).toBe('u-ana');
   });
 
+  it('shares one session request across automatic and manual retries', async () => {
+    let resolve!: (value: unknown) => void;
+    requestMock.mockImplementation(() => new Promise(done => { resolve = done; }));
+    const first = refreshSession(), second = refreshSession();
+    expect(requestMock).toHaveBeenCalledOnce();
+    resolve({ requires_login: true, user: MEMBER });
+    expect(await first).toEqual(await second);
+  });
+
   it('drops to the login screen when a request comes back 401', async () => {
     requestMock.mockResolvedValue({ requires_login: true, user: MEMBER });
     await refreshSession();

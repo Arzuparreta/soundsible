@@ -3,6 +3,7 @@ import { MAX_LINEAR as MAX_LEVEL, MIN_LINEAR as MIN_LEVEL } from "../loudness";
 import { recordPlaybackDiagnostic } from "../playbackDiagnostics";
 import { ProgramOutput, type ProgramOutputEvent } from "./programOutput";
 import { storedVolume } from "../audioPreferences";
+import { createSignalMeter } from './signal';
 import type { DeckEffects, GraphState, BroadcastCapture } from "./contracts";
 export interface GraphPorts {
   elements: HTMLAudioElement[] | null;
@@ -45,6 +46,10 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
   let limiter: DynamicsCompressorNode | null = null;
   let programOutput: AudioNode | null = null;
   let graphState: GraphState = 'untested';
+  let signalMeters: Array<ReturnType<typeof createSignalMeter>> = [];
+  let outputMeters: Array<ReturnType<typeof createSignalMeter>> = [];
+  function deckSignal(index: number): number | null { return signalMeters[index]?.read() ?? null; }
+  function deckOutputSignal(index: number): number | null { return outputMeters[index]?.read() ?? null; }
   function setProgramOutputReporter(fn: ((event: ProgramOutputEvent) => void) | null): void {
     programOutputReporter = fn;
   }
@@ -164,6 +169,13 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
         level.gain.value = appliedLevel(index);
         levels.push(level);
         const source = context.createMediaElementSource(deck);
+        const meter = createSignalMeter(context);
+        signalMeters[index] = meter;
+        const outputMeter = createSignalMeter(context);
+        outputMeters[index] = outputMeter;
+        if (outputMeter) gain.connect(outputMeter.node).connect(master);
+        else gain.connect(master);
+        const input = meter ? source.connect(meter.node) : source;
         if (typeof context.createBiquadFilter === 'function') {
           const low = context.createBiquadFilter();
           low.type = 'lowshelf';
@@ -173,7 +185,7 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
           filter.type = 'lowpass';
           filter.frequency.value = 22000;
           filter.Q.value = 0.7;
-          source.connect(low).connect(filter).connect(level).connect(gain).connect(master);
+          input.connect(low).connect(filter).connect(level).connect(gain);
           // No echo send here: see `ensureEcho`.
           effects.push({
             low,
@@ -182,7 +194,7 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
             level
           });
         } else {
-          source.connect(level).connect(gain).connect(master);
+          input.connect(level).connect(gain);
           effects.push({
             source,
             level
@@ -290,6 +302,8 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
     programCarrier = null;
     audioContext = null;
     deckGains = null;
+    signalMeters = [];
+    outputMeters = [];
     // The nodes go; `levelGains` stays, so the levels survive into whatever
     // replaces the graph.
     levelNodes = null;
@@ -433,6 +447,8 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
     },
     actions,
     setDeckGain,
+    deckSignal,
+    deckOutputSignal,
     get mixGains() {
       return mixGains;
     },

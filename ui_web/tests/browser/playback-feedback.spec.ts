@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test';
-import { mockMusicEngine, silentWav } from './music-browser-fixture';
+import { mockMusicEngine, fixtureWav } from './music-browser-fixture';
 
 // The fixture's silent WAV is the audio here on purpose. These tests are about
 // the transport and the queue, not about a format, and the MP3 fixture kills
@@ -50,7 +50,7 @@ test('touch selection uses the orange treatment before audio loads and scrolling
   const held = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/static/stream/**', async route => {
     await held;
-    await route.fulfill({ contentType: 'audio/wav', body: silentWav });
+    await route.fulfill({ contentType: 'audio/wav', body: fixtureWav });
   });
   try {
     await page.goto('/player/#/library?view=songs');
