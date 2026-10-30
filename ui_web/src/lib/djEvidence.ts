@@ -6,10 +6,10 @@ export function createDjEvidence(emit: (event: string, facts: DiagnosticFacts) =
   id: () => string, now = () => performance.now(),
   load: () => Promise<Factory> = () => import('./djEvidenceRecorder').then(module => module.createDjEvidence)): Recorder {
   let recorder: Recorder | undefined, loading = false;
-  let session: { id: string; time: number; direction: number; known: boolean } | undefined;
+  let session: { id: string; time: number; known: boolean } | undefined;
   const pending: Array<(recorder: Recorder) => void> = [];
   function context(): DiagnosticFacts {
-    return recorder?.context() ?? (session ? { djSession: session.id, sessionMs: now() - session.time, direction: session.direction } : {});
+    return recorder?.context() ?? (session ? { djSession: session.id } : {});
   }
   function send(operation: (recorder: Recorder) => void): void {
     if (recorder) { operation(recorder); return; }
@@ -26,22 +26,24 @@ export function createDjEvidence(emit: (event: string, facts: DiagnosticFacts) =
     });
   }
   function start(direction: number, known = true): void {
-    const owner = { id: id(), time: now(), direction, known };
+    const owner = { id: id(), time: now(), known };
     session = owner;
     send(recorder => recorder.start(direction, owner.known, owner.id, owner.time));
   }
-  function end(reason: string): void { send(recorder => recorder.end(reason)); session = undefined; }
+  function end(reason: string): void {
+    if (session || recorder) send(recorder => recorder.end(reason));
+    session = undefined;
+  }
   function sync(active: boolean, direction: number): void {
     if (!active) { if (session || recorder) end('inactive'); return; }
     if (!session && !recorder) start(direction, false);
-    if (session) session.direction = direction;
     send(recorder => recorder.sync(active, direction));
   }
   function arm(...args: Parameters<Recorder['arm']>): DiagnosticFacts {
     if (recorder) return recorder.arm(...args);
     if (session) session.known = false; // Execution before observer load is incomplete.
     send(recorder => recorder.arm(...args));
-    return { ...context(), transitionId: id(), ordinal: 0 };
+    return context();
   }
   const forwarded = Object.fromEntries(['select', 'route', 'refine', 'interaction', 'outcome'].map(name =>
     [name, (...args: unknown[]) => send(recorder => (recorder[name as keyof Recorder] as (...args: unknown[]) => void)(...args))]));

@@ -17,6 +17,7 @@ describe('DJ-only recorder loading', () => {
   it('loads only when needed, preserves session ownership and replays setup in order', async () => {
     const { evidence, rows, loads, ready } = setup();
     evidence.sync(false, 0);
+    evidence.end('disposed');
     expect(loads()).toBe(0);
     evidence.start(1);
     const session = evidence.context().djSession;
@@ -32,7 +33,8 @@ describe('DJ-only recorder loading', () => {
     const { evidence, rows, ready } = setup();
     evidence.start(1);
     const owned = evidence.arm('from', 'to', plan, false, true);
-    expect(owned.ordinal).toBe(0);
+    expect(owned.ordinal).toBeUndefined();
+    expect(owned.transitionId).toBeUndefined();
     await ready();
     expect(rows[0].facts.startKnown).toBe(false);
     const next = evidence.arm('to', 'next', plan, false, true);
