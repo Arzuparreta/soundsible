@@ -45,7 +45,7 @@ de estado y en su sección; el resto sigue siendo diagnóstico.
     añadir canciones puente al pool, **siempre que se elimine o se mitigue al
     máximo la preferencia circular** por las canciones ya descargadas
     (condición del usuario).
-- Comunicar en español, claro y literal.
+- Responder en el idioma que use el usuario, con claridad y precisión.
 
 ## Síntoma que el usuario oye
 
