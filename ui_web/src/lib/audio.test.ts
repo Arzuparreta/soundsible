@@ -287,6 +287,29 @@ afterEach(() => {
 });
 
 describe('two-deck mixer', () => {
+  it('keeps execution and cancellation attached to their armed pair across a diagnostic session change', async () => {
+    const module = await import('./audio');
+    const diagnostics = await import('./playbackDiagnostics');
+    diagnostics.startPlaybackDiagnostics({ userId: 'user', deviceId: 'device', platform: 'test', displayMode: 'browser' });
+    const cleanup = diagnostics.setDiagnosticContext(() => ({ djSession: 'new-session' }));
+    try {
+      await module.audioService.load('/current', 1);
+      const outgoing = module.audioEl() as unknown as FakeAudio;
+      outgoing.currentTime = 100;
+      module.audioService.armTransition('/next', plan, callbacks(), {
+        level: 1, diagnostic: { djSession: 'owned-session', transitionId: 'owned-pair' },
+      });
+      const incoming = created.find(deck => deck !== outgoing)!;
+      await play(outgoing, 108); await play(incoming, 0.5);
+      await play(outgoing, 110); await play(incoming, 2);
+      await advancePair(outgoing, incoming, 500);
+      module.audioService.cancelMix('superseded');
+      const rows = JSON.parse(diagnostics.playbackDiagnosticExport()).events;
+      const started = rows.find((r: { event: string }) => r.event === 'mix.started');
+      expect(started.facts).toMatchObject({ djSession: 'owned-session', transitionId: 'owned-pair', technique: 'filter_blend' });
+      expect(rows.find((r: { event: string }) => r.event === 'mix.cancelled').facts).toMatchObject({ djSession: 'owned-session', transitionId: 'owned-pair' });
+    } finally { cleanup(); diagnostics.stopPlaybackDiagnostics(); }
+  });
   it.each([false, true])('gates a seek until completion and new-position readiness without restarting playback (graph=%s)', async (graph) => {
     if (graph) vi.stubGlobal('AudioContext', FakeAudioContext);
     vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });

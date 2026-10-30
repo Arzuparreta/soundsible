@@ -1,3 +1,4 @@
+import type { DiagnosticFacts } from '../playbackDiagnostics';
 import { type ProgramOutputMode } from "./programOutput";
 export interface DeckEffects {
   low?: BiquadFilterNode;
@@ -107,6 +108,7 @@ export interface MixCallbacks {
   onStaged?(): void;
 }
 export interface ActiveMix {
+  diagnostic?: DiagnosticFacts;
   phase: Exclude<MixPhase, 'idle'>;
   fromIndex: number;
   toIndex: number;
@@ -179,6 +181,7 @@ export interface AudioService {
   startMixNow: (overlapSeconds?: number) => 'finished' | 'blend' | 'staged' | 'failed' | false;
   armTransition: (url: string, plan: LiveTransitionPlan, callbacks: MixCallbacks, options: {
     manual?: boolean;
+    diagnostic?: DiagnosticFacts;
     level: number;
   }) => void;
 }

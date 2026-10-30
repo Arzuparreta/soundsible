@@ -109,6 +109,15 @@ the response stops automatic collection and clears the page's pending account
 outbox. See [PLAYBACK_DIAGNOSIS.md](PLAYBACK_DIAGNOSIS.md) for limits and the
 operator's report command. The listener need not activate or export anything.
 
+**Change note, 2026-10-30:** the browser recorder additionally retains linked
+DJ observations (`dj.*`) and opaque edge/arm-attempt IDs on mixer events. Fields
+cover observed analysis readiness, existing numerical audio features, selected
+and executed techniques/cues/rates, candidate counts, and manual actions or
+interruptions. No song identity, title, media URL or audio is added. Existing
+account partitioning, retention, offline delivery and opt-out apply unchanged.
+Native Android is outside this browser recorder's coverage. The local report
+is `scripts/dj_session_report.py`; see [the field contract](dj/SESSION_CAPTURE.md).
+
 Buffering before the first sound and buffering after it are recorded as separate
 fields. They used to be one counter emitted at the moment of first sound, where
 the second kind cannot have happened yet — so it reported the opening wait that

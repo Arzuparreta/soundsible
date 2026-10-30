@@ -164,6 +164,9 @@ guards, placement and refinement still apply.
 
 ## Interpretation and next measurement
 
+The user subsequently authorised [automatic linked capture](SESSION_CAPTURE.md).
+It measures future sessions; it does not change the retrospective results here.
+
 The strongest supported statement is that the session's musical neighbourhood
 changes and usually broadens. The general early-to-late improvement remains
 unresolved. These results neither substantiate a universal warming trend nor

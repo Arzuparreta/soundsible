@@ -88,6 +88,15 @@ Version 2 makes cancellation and recovery explicit. `server_stream_ready` and
 `ui_click_to_playing` rows join on `attempt_id`; the local report uses the
 server's cache/egress classification and never infers it in the browser.
 
+The account-local `playback-traces.sqlite3` browser recorder also carries
+additive DJ observations: `dj.session_started/ended`, `dj.route`, `dj.selected`,
+`dj.refined`, `dj.committed`, `dj.outcome`, `dj.interaction` and
+`dj.direction_changed`. Opaque `djSession`, `edgeId` and `transitionId` fields
+join planning, accepted analysis and actual execution without upload times.
+Mixer events retain their armed attempt's identity. Unknown readings stay null.
+This evidence never feeds recommendation learning; see
+[the field contract](dj/SESSION_CAPTURE.md).
+
 ### 3.4 `listening-events.jsonl` and `library.db` recommendation profile (Layer 2 — active)
 
 Version 2 writers are per account and local only. Positive inputs are actual
