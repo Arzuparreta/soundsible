@@ -100,7 +100,15 @@ def _secure_station_origin() -> str | None:
     if configured:
         return configured
     try:
-        address = ipaddress.ip_address(request.host.split(":", 1)[0])
+        host = (urlparse(f"//{request.host}").hostname or "").rstrip(".").lower()
+    except ValueError:
+        return None
+    if host.endswith(".ts.net"):
+        # Already the MagicDNS name, opened on the engine's port: Tailscale
+        # Serve publishes HTTPS for it on 443.
+        return f"https://{host}"
+    try:
+        address = ipaddress.ip_address(host)
         if address not in TAILSCALE_NETWORK:
             return None
         hostname = socket.gethostbyaddr(str(address))[0].rstrip(".").lower()

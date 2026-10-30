@@ -114,6 +114,41 @@ def test_station_bridge_offers_tailscale_https_origin(monkeypatch):
     assert payload["secure_url"] == "https://desktop-ruben.example.ts.net"
 
 
+def test_station_bridge_offers_https_for_its_tailscale_name(monkeypatch):
+    monkeypatch.delenv("SOUNDSIBLE_HTTPS_URL", raising=False)
+    monkeypatch.setattr(routes, "current_user_id_from_request", lambda: TEST_USER_ID)
+    monkeypatch.setattr(routes.requests, "get", lambda *args, **kwargs: _HealthResponse())
+
+    def no_lookup(address):
+        raise AssertionError("the name is already known")
+
+    monkeypatch.setattr(routes.socket, "gethostbyaddr", no_lookup)
+    app = Flask(__name__)
+    app.register_blueprint(routes.community_bp)
+
+    payload = app.test_client().get(
+        "/api/community/config",
+        headers={"Host": "Desktop-Ruben.example.ts.net:5005"},
+    ).get_json()
+
+    assert payload["secure_url"] == "https://desktop-ruben.example.ts.net"
+
+
+def test_station_bridge_offers_no_https_for_other_names(monkeypatch):
+    monkeypatch.delenv("SOUNDSIBLE_HTTPS_URL", raising=False)
+    monkeypatch.setattr(routes, "current_user_id_from_request", lambda: TEST_USER_ID)
+    monkeypatch.setattr(routes.requests, "get", lambda *args, **kwargs: _HealthResponse())
+    app = Flask(__name__)
+    app.register_blueprint(routes.community_bp)
+
+    payload = app.test_client().get(
+        "/api/community/config",
+        headers={"Host": "station.local:5005"},
+    ).get_json()
+
+    assert "secure_url" not in payload
+
+
 def test_station_bridge_can_be_explicitly_disabled(monkeypatch):
     monkeypatch.setenv("SOUNDSIBLE_COMMUNITY_DISABLED", "true")
     monkeypatch.setenv("SOUNDSIBLE_COMMUNITY_URL", "https://ignored.example")
