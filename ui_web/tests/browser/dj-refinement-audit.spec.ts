@@ -22,9 +22,12 @@ for (const initiallyReady of [false, true]) {
       await route.fulfill({ json: {
         v: 6, plan_id: 'queue-audit', intent: 'auto_mode', profile: 'balanced',
         seed_identity: request.seed?.id, direction_revision: request.direction_revision,
+        seed_analysis: { analysed: false },
+        analysis_coverage: { candidates: 8, analysed: 0, cohort: 8, cohort_analysed: 0, bridges: 0 },
         items: TRACKS.slice(0, 8).map((row) => ({
           ...row, track_id: row.id, source: 'library', source_pool: 'local', recommendation_identity: `music:track:${row.id}`,
           transition: { technique: 'fade', confidence: 0.18, out_cue: 165, overlap_seconds: 8 },
+          analysis: { analysed: false },
         })),
         pool_counts: { local: 8, related: 0, discovery: 0 }, generated_at: 1,
       } });
@@ -33,6 +36,7 @@ for (const initiallyReady of [false, true]) {
       refinements += 1;
       await route.fulfill({ json: {
         measured: ready,
+        analysis: { from: { analysed: ready }, to: { analysed: ready } },
         transition: { technique: ready ? 'long_blend' : 'fade', confidence: ready ? 0.95 : 0.18,
           out_cue: 165, overlap_seconds: 8 },
       } });
@@ -89,6 +93,18 @@ for (const initiallyReady of [false, true]) {
     expect(refinements).toBe(initiallyReady ? 1 : 2);
     expect(observation.currentId).toBe(TRACKS[319].id);
     expect(observation.transition.confidence).toBe(0.95);
+    const evidence = await page.evaluate(async () => {
+      const path = '/player/src/lib/playbackDiagnostics.ts';
+      const { playbackDiagnosticExport } = await import(/* @vite-ignore */ path);
+      return JSON.parse(playbackDiagnosticExport()).events as Array<{ event: string; facts: Record<string, unknown> }>;
+    });
+    const selected = evidence.find(row => row.event === 'dj.selected')!;
+    const refined = evidence.find(row => row.event === 'dj.refined' && row.facts.accepted === true)!;
+    expect(evidence.find(row => row.event === 'dj.session_started')?.facts.startKnown).toBe(true);
+    expect(selected.facts.fromAnalysed).toBe(false);
+    expect(refined.facts).toMatchObject({ djSession: selected.facts.djSession, edgeId: selected.facts.edgeId,
+      fromAnalysed: true, toAnalysed: true });
+    expect(JSON.stringify(evidence.filter(row => row.event.startsWith('dj.')))).not.toContain('library-track-');
     await test.info().attach('refinement-observation.json', {
       body: JSON.stringify({ initiallyReady, refinements, serverReadyAfterFirstResponse: ready, ...observation }),
       contentType: 'application/json',

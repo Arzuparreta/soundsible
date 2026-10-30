@@ -6,7 +6,14 @@ export interface DiagnosticSetup {
   platform: string;
   displayMode: string;
 }
-type Facts = Record<string, string | number | boolean | null>;
+export type DiagnosticFacts = Record<string, string | number | boolean | null>;
+type Facts = DiagnosticFacts;
+let context: (() => Facts) | null = null;
+/** Low-frequency session context; explicit event ownership always wins. */
+export function setDiagnosticContext(reader: (() => Facts) | null): () => void {
+  context = reader;
+  return () => { if (context === reader) context = null; };
+}
 const CAPACITY = 4096;
 let setup: (DiagnosticSetup & { id: string; startedAt: string; clientRevision: string }) | null = null;
 let active = false;
@@ -72,7 +79,8 @@ export function recordPlaybackDiagnostic(event: string, facts: Facts = {}): void
   if (!active) return;
   try {
     if (event === 'handoff.retirement' || String(facts.reason ?? '').startsWith('handoff')) denseUntil = performance.now() + 10_000;
-    const row = entry(event, facts);
+    const contextual = /^(dj\.|mix\.|handoff\.|transport\.|connection\.|media_session\.action)/.test(event);
+    const row = entry(event, contextual ? { ...context?.(), ...facts } : facts);
     if (buffer.length === CAPACITY) {
       buffer[cursor] = row;
       cursor = (cursor + 1) % CAPACITY;

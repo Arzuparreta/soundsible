@@ -1,5 +1,6 @@
 import type { RuntimeLifetime } from '../runtimeLifetime';
 import { diagnosticLoad, diagnosticPause, diagnosticSource, recordPlaybackDiagnostic } from "../playbackDiagnostics";
+import type { DiagnosticFacts } from "../playbackDiagnostics";
 import type { DeckEffects, ProgramMixSnapshot, LiveTransitionPlan, MixPhase, MixCancelReason, ProgramTransportOrigin, ProgramTransportEvent, MixCallbacks, ActiveMix } from "./contracts";
 import { MediaClockHealth } from './mediaClock';
 export interface MixerPorts {
@@ -100,10 +101,10 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   // variable speed, do not expose the listener to the same failure every song.
   let rateControlAvailable = true;
   const rateChangedAt = new WeakMap<HTMLAudioElement, number>();
-  function rateFallback(deck: HTMLAudioElement, reason: string, phase: string): void {
+  function rateFallback(deck: HTMLAudioElement, reason: string, phase: string, diagnostic = mix?.diagnostic): void {
     rateControlAvailable = false;
     if (deck.playbackRate !== 1) deck.playbackRate = 1;
-    recordPlaybackDiagnostic('mix.rate_fallback', { reason, phase });
+    recordPlaybackDiagnostic('mix.rate_fallback', { ...diagnostic, reason, phase });
   }
   let mixGeneration = 0;
   let mixTimer: ReturnType<typeof setTimeout> | null = null;
@@ -167,7 +168,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     if (rateTimer) lifetime.clearInterval(rateTimer);
     rateTimer = null;
   }
-  function scheduleRateReturn(index: number): void {
+  function scheduleRateReturn(index: number, diagnostic?: DiagnosticFacts): void {
     stopRateReturn();
     const deck = ports.decks()[index];
     const from = deck.playbackRate;
@@ -188,7 +189,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       // change can restart a renderer interruption instead of smoothing it.
       const failure = clock.observe(deck);
       if (failure) {
-        rateFallback(deck, failure, 'return');
+        rateFallback(deck, failure, 'return', diagnostic);
         stopRateReturn();
         return;
       }
@@ -208,6 +209,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     mix = null;
     ports.setBlendLimiter(false);
     if (!current) return;
+    recordPlaybackDiagnostic('mix.cancelled', { ...current.diagnostic, reason });
     const keep = current.dominant ? current.toIndex : current.fromIndex;
     const drop = 1 - keep;
     ports.activeIndex = keep;
@@ -216,7 +218,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     ports.resetDeckEffects(keep);
     ports.resetDeckEffects(drop);
     ports.releaseDeck(drop);
-    if (current.dominant) scheduleRateReturn(keep);
+    if (current.dominant) scheduleRateReturn(keep, current.diagnostic);
     current.callbacks.onCancel(reason);
   }
   function finishMix(): void {
@@ -234,17 +236,18 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       ports.activeIndex = current.toIndex;
       current.callbacks.onDominant();
     }
-    recordPlaybackDiagnostic('handoff.retirement', {
+    recordPlaybackDiagnostic('handoff.retirement', { ...current.diagnostic,
       from: current.fromIndex,
       to: current.toIndex
     });
     ports.releaseDeck(current.fromIndex);
-    scheduleRateReturn(current.toIndex);
+    scheduleRateReturn(current.toIndex, current.diagnostic);
     current.callbacks.onComplete(incoming.currentTime);
   }
   function failMix(error: unknown): void {
     const current = mix;
     if (!current) return;
+    recordPlaybackDiagnostic('mix.failed', { ...current.diagnostic });
     mixGeneration += 1;
     stopTicker();
     mix = null;
@@ -406,7 +409,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     // the staged successor, instead of dropping a perfectly valid song.
     if (current.phase === 'crossfading' && !current.dominant && !incomingSounding(current, to)) {
       if (to.playbackRate !== 1) rateFallback(to, 'signal_lost', 'blend');
-      recordPlaybackDiagnostic('mix.signal_fallback', { reason: 'incoming_signal_lost' });
+      recordPlaybackDiagnostic('mix.signal_fallback', { ...current.diagnostic, reason: 'incoming_signal_lost' });
       releaseToStaged(current);
       return;
     }
@@ -427,7 +430,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
           ports.setDeckGain(current.toIndex, 0);
           ports.resetDeckEffects(current.fromIndex);
           ports.resetDeckEffects(current.toIndex);
-          recordPlaybackDiagnostic('mix.suspended', { reason: 'incoming_not_sounding' });
+          recordPlaybackDiagnostic('mix.suspended', { ...current.diagnostic, reason: 'incoming_not_sounding' });
         }
         return;
       }
@@ -437,7 +440,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         current.overlap = Math.min(4, current.overlap);
         current.technique = 'structural_fade';
         scheduleCrossfade(current);
-        recordPlaybackDiagnostic('mix.resumed', { technique: current.technique });
+        recordPlaybackDiagnostic('mix.resumed', { ...current.diagnostic, technique: current.technique });
       }
     }
     if (current.phase === 'armed') {
@@ -504,7 +507,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       current.inProgressAt = Date.now();
       incomingClock.reset();
       incomingClock.observe(to);
-      recordPlaybackDiagnostic('mix.started', { phase: 'crossfading', technique: current.technique,
+      recordPlaybackDiagnostic('mix.started', { ...current.diagnostic, phase: 'crossfading', technique: current.technique,
         rate: current.rate, overlap: current.overlap });
       scheduleCrossfade(current);
     }
@@ -530,7 +533,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         // In particular, an incoming gain curve that failed to reach the graph
         // must not earn ownership. Explicit gain assignment restores the old
         // output and cancels both curves in releaseToStaged.
-        recordPlaybackDiagnostic('mix.signal_fallback', { reason: 'incoming_output_silent' });
+        recordPlaybackDiagnostic('mix.signal_fallback', { ...current.diagnostic, reason: 'incoming_output_silent' });
         releaseToStaged(current);
         return;
       }
@@ -574,6 +577,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     },
     armTransition(url: string, plan: LiveTransitionPlan, callbacks: MixCallbacks, options: {
       manual?: boolean;
+      diagnostic?: DiagnosticFacts;
       level: number;
     }): void {
       cancelMix('superseded');
@@ -593,7 +597,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       const manual = options.manual === true;
       const rate = rateControlAvailable && !manual ? Math.min(1.08, Math.max(0.92, Number(plan.playback_rate) || 1)) : 1;
       const technique = !rateControlAvailable && HELD_TECHNIQUES.has(plan.technique) ? 'structural_fade' : plan.technique;
-      if (technique !== plan.technique) recordPlaybackDiagnostic('mix.execution_fallback', {
+      if (technique !== plan.technique) recordPlaybackDiagnostic('mix.execution_fallback', { ...options.diagnostic,
         reason: 'rate_control_unavailable', technique, requestedTechnique: plan.technique });
       const overlap = manual ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4)) : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6);
       const inCue = Math.max(0, Number(plan.in_cue) || 0);
@@ -629,6 +633,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         once: true
       });
       mix = {
+        diagnostic: options.diagnostic,
         phase: 'armed',
         fromIndex,
         toIndex,

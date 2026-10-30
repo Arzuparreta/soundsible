@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { diagnosticPlay, diagnosticPause, diagnosticStatus, observeDiagnosticMedia, playbackDiagnosticExport,
-  recordPlaybackDiagnostic, setDiagnosticSnapshot, startPlaybackDiagnostics, stopPlaybackDiagnostics } from './playbackDiagnostics';
+  recordPlaybackDiagnostic, setDiagnosticContext, setDiagnosticSnapshot, startPlaybackDiagnostics, stopPlaybackDiagnostics } from './playbackDiagnostics';
 
 const setup = { userId: 'user', deviceId: 'device', platform: 'test', displayMode: 'browser' };
 const cleanups: Array<() => void> = [];
@@ -8,6 +8,7 @@ afterEach(() => {
   stopPlaybackDiagnostics();
   for (const cleanup of cleanups.splice(0)) cleanup();
   setDiagnosticSnapshot(() => ({}));
+  setDiagnosticContext(null);
   vi.restoreAllMocks();
 });
 
@@ -20,6 +21,19 @@ function media() {
 const exported = () => JSON.parse(playbackDiagnosticExport());
 
 describe('local playback flight recorder', () => {
+  it('retains explicit transition ownership across session changes without context on dense samples', () => {
+    startPlaybackDiagnostics(setup);
+    const oldCleanup = setDiagnosticContext(() => ({ djSession: 'old' }));
+    setDiagnosticContext(() => ({ djSession: 'new' }));
+    oldCleanup();
+    recordPlaybackDiagnostic('mix.started', { djSession: 'old', transitionId: 'owned' });
+    recordPlaybackDiagnostic('transport.pause');
+    recordPlaybackDiagnostic('media.timeupdate');
+    const rows = exported().events;
+    expect(rows.at(-3).facts).toMatchObject({ djSession: 'old', transitionId: 'owned' });
+    expect(rows.at(-2).facts.djSession).toBe('new');
+    expect(rows.at(-1).facts.djSession).toBeUndefined();
+  });
   it('does not change play promises or observe them while disabled', () => {
     const element = media();
     const promise = Promise.resolve();

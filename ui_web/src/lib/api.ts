@@ -358,7 +358,8 @@ export interface DjPlanResponse extends ListeningPlanResponse {
   source_profile: ListeningPlanProfile;
   /** Features of the track the route continues from — the only reading the
    * player has for a song it did not plan itself. */
-  seed_analysis?: { bpm?: number; key?: string | null; note_rate?: number | null; analysed?: boolean };
+  seed_analysis?: Partial<NonNullable<ListeningPlanItem['analysis']>>;
+  analysis_coverage?: { candidates: number; analysed: number; cohort: number; cohort_analysed: number; bridges: number };
   /** Present only when a source-only DJ session asked the server to choose its
    * opening. It is not repeated in `items`; those are the route after it. */
   opening?: ListeningPlanItem;
@@ -1149,7 +1150,7 @@ export const api = {
     },
     signal?: AbortSignal,
   ) =>
-    request<{ transition: DjTransitionPlan; measured: boolean }>('/api/discovery/music/dj-transition', {
+    request<{ transition: DjTransitionPlan; measured: boolean; analysis?: { from: NonNullable<ListeningPlanItem['analysis']>; to: NonNullable<ListeningPlanItem['analysis']> } }>('/api/discovery/music/dj-transition', {
       method: 'POST',
       body,
       timeoutMs: 8000,

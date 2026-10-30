@@ -928,6 +928,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       });
     },
     next(trigger: PlaybackTrigger = 'next', preservePaused = false): void {
+      if (trigger === 'next') recordPlaybackDiagnostic('dj.interaction', { action: 'next' });
       // Every path out of here either loads a deck or does nothing; loading
       // cancels the mixer, which reports back and clears the DJ state itself.
       if (audioService.mixPhase() !== 'idle') audioService.cancelMix('load');
@@ -949,6 +950,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       }
     },
     prev(preservePaused = false): void {
+      recordPlaybackDiagnostic('dj.interaction', { action: 'previous' });
       if (state.playback.currentTime > 3) {
         ports.actions.seek(0);
         return;
@@ -960,6 +962,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       ports.actions.seek(audioService.snapshot().position + delta);
     },
     seek(t: number): void {
+      recordPlaybackDiagnostic('dj.interaction', { action: 'seek' });
       if (!Number.isFinite(t) || ports.podcastSourcePending && state.playback.currentTrack && isPodcastTrack(state.playback.currentTrack)) return;
       const duration = audioService.snapshot().duration || state.playback.duration;
       const target = Math.max(0, duration > 0 ? Math.min(t, duration) : t);
@@ -1033,6 +1036,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       }
     },
     async setDjMixing(enabled: boolean): Promise<boolean> {
+      recordPlaybackDiagnostic('dj.interaction', { action: 'mixing_changed' });
       const isCurrent = lifetime.capture();
       const previous = state.playback.djMixing;
       if (enabled === previous) return true;

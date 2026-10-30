@@ -45,7 +45,7 @@ de estado y en su sección; el resto sigue siendo diagnóstico.
     añadir canciones puente al pool, **siempre que se elimine o se mitigue al
     máximo la preferencia circular** por las canciones ya descargadas
     (condición del usuario).
-- Comunicar en español, claro y literal.
+- Responder en el idioma que use el usuario, con claridad y precisión.
 
 ## Síntoma que el usuario oye
 
@@ -58,6 +58,12 @@ Después de #377 el usuario (músico) no oye ningún desfase. P2 queda aparcado:
 no hay síntoma que lo justifique.
 
 ## Estado
+
+Aceptación física (2026-10-30): el usuario confirma que los cambios DJ
+funcionan como esperaba en su escucha real. Se cierra la aceptación de escucha
+de P12-b, P13, P14, P15 y P16. Esta confirmación no constituye una medición
+de fase en Android ni sustituye las referencias musicales del corpus. Las
+limitaciones de escucha anotadas en entregas anteriores son históricas.
 
 | Punto | Tema | Evidencia | Estado |
 | --- | --- | --- | --- |
@@ -77,9 +83,10 @@ no hay síntoma que lo justifique.
 | P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado (PR #395): mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
 | P12-b | Integración del método elegido y cierre de P12 | DBN igual a madmom 62/62; GTZAN tempo 24/30 y F1 del 1 0,81; P1 en verde; `beats`/`bars` en servidor, web y Android | Cerrado (PR #395, junto con P12-a) |
 | P13 | Frases y secciones sobre una base métrica explícita | Señales con cambios y papeles conocidos (4/4, 3/4, 6/8), compases equivocados y red real; AAC → SQLite → HTTP; vectores web/Android; [resultados](p13-results.json) | Cerrado (PR #399); límites en [P13](P13.md) |
-| P14 | Primera mezcla y trabajos ligados a la sesión vigente | Cola cancelable, proceso real interrumpido, intereses compartidos, caché y protocolo HTTP; refinado temprano web/Android; [contrato y evidencia](P14.md) | Cerrado en esta PR; aceptación física de escucha pendiente |
-| P15 | Continuidad ante fallos del reloj y saltos sin muestras | Dos capturas completas del 2026-10-29; tests de reproducción y WAV real; [evidencia](P15.md) | Cerrado en PR #405: correcciones y suites locales completas; escucha física posterior pendiente |
-| P16 | Continuidad medida por plato y reconexión de la PWA | Captura del viaje del 2026-10-30; regresiones antes/después, PCM real en navegador y recuperación de conexión; [contrato](P16.md) | Implementado (PR #408); aceptación física posterior pendiente |
+| P14 | Primera mezcla y trabajos ligados a la sesión vigente | Cola cancelable, proceso real interrumpido, intereses compartidos, caché y protocolo HTTP; refinado temprano web/Android; [contrato y evidencia](P14.md) | Cerrado; aceptación física confirmada por el usuario (2026-10-30) |
+| P15 | Continuidad ante fallos del reloj y saltos sin muestras | Dos capturas completas del 2026-10-29; tests de reproducción y WAV real; [evidencia](P15.md) | Cerrado en PR #405: correcciones y suites locales completas; aceptación física confirmada por el usuario (2026-10-30) |
+| P16 | Continuidad medida por plato y reconexión de la PWA | Captura del viaje del 2026-10-30; regresiones antes/después, PCM real en navegador y recuperación de conexión; [contrato](P16.md) | Cerrado (PR #408); aceptación física confirmada por el usuario (2026-10-30) |
+| P17 | Evolución de la sesión sin interacción | 12 sesiones de planificación emparejadas, 8 tramos de entregas y replay de 31 parejas; [primeras mediciones](SESSION_PROGRESS.md); [captura enlazada](SESSION_CAPTURE.md) | Estudio retrospectivo completado; captura prospectiva web/PWA implementada en PR #409. Mejora general sin demostrar: faltan sesiones reales con la captura nueva; Android fuera del recorder web |
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
@@ -102,8 +109,7 @@ el barrido automático y la adquisición especulativa de 16 previews de P5;
 la caché sigue siendo compartida y reutilizable. Quedan
 registrados, sin orden decidido: repartir el cambio de tempo entre las dos
 canciones durante la mezcla (decisión del usuario del 2026-10-26, punto
-propio), P2 en Android sin medir y la aceptación física de escucha de P12-b y
-P13. P11-a está cerrado: la rama legacy no se alcanzaba en producción y se ha
+propio) y P2 en Android sin medir. P11-a está cerrado: la rama legacy no se alcanzaba en producción y se ha
 eliminado.
 
 **P12 se cerró con P12-b; después vino P13.** Historia: el cierre
@@ -1542,7 +1548,7 @@ Límites vigentes tras P12-b:
   alineación ejecutable conservan `none`.
 - Sin anotaciones de la biblioteca del usuario, la comparación v8/v9/v10 de
   una muestra solo mide concordancia (sección P12-b de RESULTS).
-- Sin aceptación física de escucha nueva.
+- Aceptación física confirmada por el usuario el 2026-10-30.
 
 Lo siguiente describe el contrato de #394, que P12-b conserva:
 
@@ -1775,7 +1781,7 @@ Sobre los compases de P12-b (unos del modelo o proyectados), sin otro detector:
   vectores nuevos ejecutados por web y Android. Medición separada con
   `docs/dj/structure_probe.py` → [p13-results.json](p13-results.json).
 - **Límites**: sin anotaciones de estructura de música real (la biblioteca solo
-  da concordancia); sin escucha física nueva; los errores del 1 y de la
+  da concordancia); aceptación física confirmada por el usuario el 2026-10-30; los errores del 1 y de la
   agrupación se heredan tal cual; cambios solo armónicos no se detectan.
 
 Diagnóstico de partida: P12-b no cambió la agrupación de frases y secciones;

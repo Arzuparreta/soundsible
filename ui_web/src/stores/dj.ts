@@ -1,4 +1,6 @@
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
+import { createDjEvidence } from '../lib/djEvidence';
+import { recordPlaybackDiagnostic, setDiagnosticContext } from '../lib/playbackDiagnostics';
 import { api, type DjItemRef, type DjPlanResponse, type DjRouteKind, type ListeningPlanItem, type PreviewPreparation } from "../lib/api";
 import { audioService, type LiveTransitionPlan, type ProgramPlaybackSnapshot } from "../lib/audio";
 import { type MediaSessionSyncReason } from "../lib/mediaSession";
@@ -69,6 +71,9 @@ export interface DjPorts {
 
 /** Owns dj behaviour; cross-domain work enters through explicit ports. */
 export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
+  const evidence = createDjEvidence(recordPlaybackDiagnostic, randomId);
+  lifetime.own(setDiagnosticContext(() => evidence.context()));
+  function syncEvidence(): void { evidence.sync(state.autoMode.active, state.autoMode.directionRevision ?? 0); }
   let generatedQueue: GeneratedQueueController | null = null;
   let autoPlaybackPrefs: {
     shuffle: boolean;
@@ -200,7 +205,9 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     attempt.audibleAt = performance.now();
   }
   function commitTransition(next: PlaybackQueueEntry, fromKey: string, planned: LiveTransitionPlan, manual: boolean): void {
+    syncEvidence();
     const plan = state.playback.djMixing ? planned : unmixed(planned);
+    const owned = evidence.arm(fromKey, next.queueId, plan, manual, state.playback.djMixing);
     const toKey = queueIdentity(next);
     const outgoing = state.playback.currentTrack;
     const outgoingDuration = playingDuration();
@@ -220,6 +227,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     audioService.armTransition(ports.trackUrl(next), plan, {
       onDominant: () => {
         if (!owns()) return;
+        evidence.outcome(owned, 'dominant');
         autoHandoffFailures = 0;
         if (!manual) ports.listeningLearning.complete(outgoing, outgoingDuration);
         const queue = state.playback.queue;
@@ -252,6 +260,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       },
       onComplete: position => {
         if (!owns()) return;
+        evidence.outcome(owned, 'completed');
         committedTransition = null;
         setState('playback', {
           currentTime: position,
@@ -269,13 +278,15 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           void generatedQueue?.ensureRunway();
         }
       },
-      onCancel: () => {
+      onCancel: reason => {
         if (!owns()) return;
+        evidence.outcome(owned, 'cancelled', reason);
         committedTransition = null;
         setState('autoMode', 'transition', IDLE_TRANSITION);
       },
       onStaged: () => {
         if (!owns()) return;
+        evidence.outcome(owned, 'staged');
         // The blend could not be performed, but its song still comes next: the
         // deck that was cued for it is now the staged deck the ordinary handover
         // takes (`loadIndex` → `takeStaged`), from its first second.
@@ -289,6 +300,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       },
       onError: () => {
         if (!owns()) return;
+        evidence.outcome(owned, 'failed');
         committedTransition = null;
         setState('autoMode', 'transition', IDLE_TRANSITION);
         const outgoingEnded = audioService.snapshot().ended;
@@ -326,6 +338,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       }
     }, {
       manual,
+      diagnostic: owned,
       level: ports.levelFor(next)
     });
   }
@@ -372,6 +385,9 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       from: djItemRef(current),
       to: djItemRef(next)
     }, aborter.signal).then(lifetime.guard(result => {
+      if (state.autoMode.active && refinement === attempt && state.autoMode.directionRevision === revision) {
+        evidence.refine(fromKey, next.queueId, result.analysis?.from, result.analysis?.to, result.transition, false);
+      }
       if (!result.measured || !state.autoMode.active || refinement !== attempt) return;
       if (state.autoMode.directionRevision !== revision || state.autoMode.plan[next.queueId] !== item) return;
       if (committedTransition) {
@@ -384,6 +400,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         setState('autoMode', 'transition', IDLE_TRANSITION);
       }
       attempt.measured = true;
+      evidence.refine(fromKey, next.queueId, result.analysis?.from, result.analysis?.to, result.transition, true);
       setState('autoMode', 'plan', next.queueId, 'transition', result.transition);
       setState('autoMode', 'staleSeams', seams => seams.filter(id => id !== next.queueId));
       evaluateDjRunway();
@@ -540,6 +557,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   }
   function startAutoFromSourcePlan(response: DjPlanResponse): boolean {
     if (!response.opening) return false;
+    syncEvidence();
+    evidence.route(response);
     const opening = planItemTrack(response.opening);
     const openingEntry = {
       ...createQueueEntry(opening, 'generated', 'auto_mode'),
@@ -569,6 +588,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       item
     }, index) => {
       const entry = entries[index];
+      evidence.select(fromKey, entry.queueId, index ? candidates[index - 1].item.analysis : response.opening?.analysis,
+        item.analysis, item.transition, response);
       plan[entry.queueId] = {
         trackId: queueIdentity(entry),
         source: item.source_pool,
@@ -984,6 +1005,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   let runwayCheckedFor = '';
   let lastEmptyRefillAt = 0;
   function watchRunway(snapshot: ProgramPlaybackSnapshot): void {
+    syncEvidence();
     const pb = state.playback;
     const duration = snapshot.duration;
     if (!Number.isFinite(duration) || duration <= 0) return;
@@ -1201,6 +1223,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           track
         }) => queueIndexOf(retained, track) === -1);
         if (candidates.length === 0) return 0;
+        if (intent === 'auto_mode') { syncEvidence(); evidence.route(response); }
         const entries = candidates.map(({
           track
         }) => ({
@@ -1231,6 +1254,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           // breaks the chain, and the entry behind it loses a transition it can no
           // longer honour — a plain fade, rather than a cue from the wrong song.
           let previousKey = queueIdentity(anchor);
+          let previousAnalysis = (response as DjPlanResponse).seed_analysis;
           let chained = true;
           const accepted = new Map(candidates.map(({
             item
@@ -1243,6 +1267,9 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
             const track = planItemTrack(item);
             const id = queueIdentity(track);
             const entry = accepted.get(item)!;
+            evidence.select(previousKey, entry.queueId, chained ? previousAnalysis : undefined,
+              item.analysis, chained ? item.transition : undefined, response);
+            previousAnalysis = item.analysis;
             plan[entry.queueId] = {
               trackId: id,
               source: item.source_pool,
@@ -1350,6 +1377,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     }): void {
       const current = state.playback.currentTrack;
       if (state.autoMode.active || current && isPodcastTrack(current) || options && isPodcastTrack(options.source)) return;
+      evidence.start((state.autoMode.directionRevision ?? 0) + 1);
       // Asking for Auto is asking to see it. This lives here rather than in a
       // reaction to `autoMode.active`, because the flag also turns on when a
       // session is restored on boot — and a restore has no one asking for
@@ -1430,6 +1458,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       if (current) void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);else void openAutoFromCollection();
     },
     exitAutoMode(): void {
+      evidence.end('exit');
       releaseDjWork();
       cancelRunwayReplan();
       pendingImmediateAutoTrack = null;
@@ -1470,6 +1499,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       ports.updateUpcomingPreparation();
     },
     addAutoSource(tracks: Track[], label: string): void {
+      syncEvidence(); evidence.interaction('route_edit');
       const usable = tracks.filter(track => !isPodcastTrack(track));
       if (!state.autoMode.active || usable.length === 0) return;
       const source: AutoMusicSet = {
@@ -1515,6 +1545,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       const opening = { ...createQueueEntry(music[0], 'generated', 'auto_mode'),
         autoRoute: { kind: 'generated' as const, directionRevision: revision } };
 
+      evidence.start(revision);
       setState('autoMode', {
         sources: [{ id: randomId(), label: label.trim() || music[0].title, tracks: music, activation: 1 }],
         heard: [], exploration: [], avoidedIdentities: [], plan: {}, staleSeams: [],
@@ -1540,9 +1571,11 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       return changeAutoSession([track], track.title, track);
     },
     async changeAutoSession(tracks: Track[], label: string): Promise<boolean> {
+      syncEvidence(); evidence.interaction('route_edit');
       return changeAutoSession(tracks, label);
     },
     retryAutoRoute(): void {
+      syncEvidence(); evidence.interaction('route_edit');
       if (!state.playback.currentTrack) {
         void startAutoFromSources();
         return;
@@ -1550,6 +1583,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       void generatedQueue?.retry();
     },
     useAutoTrackAsSource(track: Track): void {
+      syncEvidence(); evidence.interaction('route_edit');
       if (!state.autoMode.active || isPodcastTrack(track)) return;
       const identity = queueIdentity(track);
       const existing = state.autoMode.sources.find(source => source.tracks.length === 1 && queueIdentity(source.tracks[0]) === identity);
@@ -1565,6 +1599,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       }));
     },
     removeAutoSource(id: string): void {
+      syncEvidence(); evidence.interaction('route_edit');
       if (!state.autoMode.active || state.autoMode.sources.length <= 1) return;
       setState('autoMode', 'sources', sources => sources.filter(source => source.id !== id));
       if (state.playback.currentTrack && state.autoMode.heard.length) {
@@ -1572,6 +1607,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       }
     },
     removeAutoRouteOccurrence(queueId: string): void {
+      syncEvidence(); evidence.interaction('route_edit');
       const track = dropAutoRouteOccurrence(queueId);
       if (!track) return;
       toast.action(tr('autoMode.note.dropped', {
@@ -1581,6 +1617,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       });
     },
     avoidAutoTrackForSession(queueId: string): void {
+      syncEvidence(); evidence.interaction('route_edit');
       const track = dropAutoRouteOccurrence(queueId);
       if (track) avoidAutoIdentity(track);
     },
@@ -1597,6 +1634,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       return autoSessionEpoch;
     },
     async placeAutoTracks(tracks: Track[], beforeQueueId?: string, requestGroup?: string): Promise<void> {
+      syncEvidence(); evidence.interaction('route_edit');
       const isCurrent = lifetime.capture();
       if (!state.autoMode.active) return;
       const usable = tracks.filter(track => !isPodcastTrack(track));
@@ -1733,6 +1771,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       }
     },
     async placeAutoTrack(track: Track, beforeQueueId?: string, requestGroup?: string): Promise<void> {
+      syncEvidence(); evidence.interaction('route_edit');
       const isCurrent = lifetime.capture();
       if (!state.autoMode.active || isPodcastTrack(track)) return;
       const floor = insertionFloor();
@@ -1894,6 +1933,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       }
     },
     async repairAutoRoute(): Promise<void> {
+      syncEvidence(); evidence.interaction('route_edit');
       const isCurrent = lifetime.capture();
       if (!state.autoMode.active || state.autoMode.repairing) return;
       const floor = insertionFloor();
@@ -2060,6 +2100,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       }
     },
     async autoSkip(): Promise<void> {
+      syncEvidence();
+      evidence.interaction('skip');
       const isCurrent = lifetime.capture();
       const canAdvance = () => state.playback.index < state.playback.queue.length - 1;
       if (audioService.mixPhase() !== 'idle') {
@@ -2133,6 +2175,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       }
     },
     promoteInAutoRoute(queueId: string): void {
+      syncEvidence(); evidence.interaction('route_edit');
       const pb = state.playback;
       const from = pb.queue.findIndex(entry => entry.queueId === queueId);
       const to = insertionFloor() + 1;
@@ -2144,6 +2187,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       ports.prefetchUpcoming();
     },
     moveAutoRoute(queueId: string, beforeQueueId?: string): void {
+      syncEvidence(); evidence.interaction('route_edit');
       if (!state.autoMode.active || queueId === beforeQueueId) return;
       const source = state.playback.queue.find(entry => entry.queueId === queueId);
       if (!source) return;
@@ -2295,6 +2339,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   };
   return {
     dispose() {
+      evidence.end('disposed');
       releaseDjWork();
       ++autoSessionEpoch;
       autoOpeningAborter?.abort();
