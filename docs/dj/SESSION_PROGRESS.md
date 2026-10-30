@@ -25,11 +25,14 @@ a trend within sessions.
   at segment 0 and at least one later nonempty segment. Retries at one segment
   count once, using its first nonempty response. Each session has one vote.
 - Account-local delivery logs, including their gzip rotation: eight eligible
-  continuous handoff runs, 58 completed track attempts. Runs require at least
+  inferred handoff runs, 58 completed track attempts. Runs require at least
   five tracks, with four handoffs, on the same device. Their inferred start/end
   times must join within five seconds. Selection, resume, ordinary ended/next
   loads, missing deliveries and larger gaps split runs. Changing the joining
-  allowance to two or ten seconds still gives eight runs.
+  allowance to two or ten seconds still gives eight runs. These timestamps are
+  server receipt times, not client observation times. Subtracting client
+  elapsed time estimates an opening only if delivery delay is small; delayed
+  requests can split or misjoin runs. The timing match is not a session ID.
 - Trace database: 42 captures, 157 retirement events. Only five `mix.started`
   events retain a technique; older clients omit it. One retained capture has
   missing sequences. Capture lifetime is not DJ session lifetime.
@@ -128,7 +131,7 @@ their source stamps are not revalidated against audio bytes in this study.
 | Oct 30 afternoon (8) | 8 | 0.428 → 0.761 | 50% → 0% |
 
 Only the 17-track run matches an observed planner session opening within five
-seconds. The other three start within existing sessions. **Four replayable
+seconds. The other three appear within existing sessions. **Four replayable
 runs are not four complete session starts**, and the longest run gets one vote,
 like the shortest. The replayable subset excludes half of eligible runs due
 to missing current analyses; that selection can bias the result.
