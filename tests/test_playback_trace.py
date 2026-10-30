@@ -54,6 +54,15 @@ def test_unknown_fields_never_stored():
     assert 'secret' not in json.dumps(validate_batch(batch, TEST_USER_ID))
 
 
+def test_retains_renderer_signal_and_execution_evidence():
+    batch = sample()
+    batch['events'][0].update(event='mix.started', facts=dict(technique='filter_blend', rate=0.97, overlap=42.667),
+                             program=dict(gain0Actual=0.7, gain1Actual=0.7, signal1Rms=0.15, output1Rms=0.1))
+    row = validate_batch(batch, TEST_USER_ID)['events'][0]
+    assert row['facts']['technique'] == 'filter_blend'
+    assert row['program']['output1Rms'] == 0.1
+
+
 def test_retention_and_size_budget(tmp_path, monkeypatch):
     import shared.playback_trace as trace
     monkeypatch.setattr(trace, 'MAX_BYTES', 700)

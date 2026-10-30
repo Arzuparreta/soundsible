@@ -8,6 +8,8 @@
  */
 import { createSignal } from 'solid-js';
 import { request, setUnauthorizedHandler } from './http';
+import { recoverConnection } from './connectionRecovery';
+import { noteConnectionFailure } from './connectionEvidence';
 
 export type Role = 'admin' | 'member';
 
@@ -52,12 +54,25 @@ function applyState(state: AuthState): AuthState {
 }
 
 /** Ask the engine who we are. Safe to call repeatedly. */
-export async function refreshSession(): Promise<AuthState> {
+let refreshFlight: Promise<AuthState> | undefined;
+export function refreshSession(): Promise<AuthState> {
+  return refreshFlight ??= fetchSession().finally(() => { refreshFlight = undefined; });
+}
+
+export function recoverSession(): () => void {
+  return recoverConnection(async () => {
+    await refreshSession();
+    return !sessionUnavailable();
+  });
+}
+
+async function fetchSession(): Promise<AuthState> {
   try {
     const state = await request<AuthState>('/api/auth/state');
     setSessionUnavailable(false);
     return applyState(state);
-  } catch {
+  } catch (error) {
+    noteConnectionFailure(error);
     if (!ready()) setSessionUnavailable(true);
     // The engine is unreachable; leave the app in whatever state it had rather
     // than bouncing a working session to the login screen.

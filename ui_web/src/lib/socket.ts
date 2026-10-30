@@ -33,9 +33,11 @@ export function createSocket(): AppSocket {
     // Fresh Manager so Engine.IO assigns a new sid (matches legacy behaviour).
     forceNew: true,
     reconnection: true,
-    reconnectionAttempts: 5,
+    // A station may be unreachable longer than five attempts while a phone
+    // changes networks. The manager owns backoff until the runtime disconnects.
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
+    reconnectionDelayMax: 30_000,
     timeout: 8000,
     transports: ['websocket', 'polling'],
   });

@@ -152,6 +152,8 @@ function createAudioRuntime() {
     }
   }, lifetime);
   const mixer = createMixer({
+    deckSignal: index => graph.deckSignal(index),
+    deckOutputSignal: index => graph.deckOutputSignal(index),
     get decks() {
       return transport.decks;
     },
@@ -287,6 +289,13 @@ function createAudioRuntime() {
     outputMode: graph.programCarrier?.snapshot().mode ?? 'direct_fallback',
     gain0Target: graph.mixGains[0],
     gain1Target: graph.mixGains[1],
+    gain0Actual: graph.deckGains?.[0].gain.value ?? graph.mixGains[0],
+    gain1Actual: graph.deckGains?.[1].gain.value ?? graph.mixGains[1],
+    signal0Rms: graph.deckSignal(0),
+    signal1Rms: graph.deckSignal(1),
+    output0Rms: graph.deckOutputSignal(0),
+    output1Rms: graph.deckOutputSignal(1),
+    technique: mixer.mix?.technique ?? null,
     localVolume: graph.masterVolume,
     localMuted: graph.allMuted
   }));

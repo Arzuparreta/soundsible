@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { mockMusicEngine, TRACKS, silentWav } from './music-browser-fixture';
+import { mockMusicEngine, TRACKS, fixtureWav } from './music-browser-fixture';
 import { dragTouch } from './playerGestures';
 
 const FOLLOWED = { id: 'show-1', title: 'Programa seguido', author: 'Autora', rss_url: 'https://feeds.example.com/seguido.xml', image_url: null };
@@ -167,10 +167,10 @@ test('podcast buttons jump 15 seconds and each show resumes after switching and 
   await page.route('**/api/podcasts/stream/**', route => {
     const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '');
     const start = range ? Number(range[1]) : 0;
-    const end = range?.[2] ? Math.min(Number(range[2]), silentWav.length - 1) : silentWav.length - 1;
+    const end = range?.[2] ? Math.min(Number(range[2]), fixtureWav.length - 1) : fixtureWav.length - 1;
     return route.fulfill({
-      status: range ? 206 : 200, contentType: 'audio/wav', body: silentWav.subarray(start, end + 1),
-      headers: { 'Accept-Ranges': 'bytes', ...(range ? { 'Content-Range': `bytes ${start}-${end}/${silentWav.length}` } : {}) },
+      status: range ? 206 : 200, contentType: 'audio/wav', body: fixtureWav.subarray(start, end + 1),
+      headers: { 'Accept-Ranges': 'bytes', ...(range ? { 'Content-Range': `bytes ${start}-${end}/${fixtureWav.length}` } : {}) },
     });
   });
   await page.goto('/player/#/podcasts/show-1');
@@ -278,7 +278,7 @@ test('changing country cancels a pending episode lookup and allows immediate pla
       episode: { ...episode(id === '900' ? 'Capítulo de us' : 'Capítulo de es'), guid: `guid-${id}` } } }).catch(() => {});
   });
   await page.route('**/api/podcasts/enclosure/peek', route => route.fulfill({ json: { stream_token: 'episode-token' } }));
-  await page.route('**/api/podcasts/stream/**', route => route.fulfill({ contentType: 'audio/wav', body: silentWav }));
+  await page.route('**/api/podcasts/stream/**', route => route.fulfill({ contentType: 'audio/wav', body: fixtureWav }));
   try {
     await page.goto('/player/#/podcasts');
     const old = page.getByText('Capítulo de us', { exact: true });
@@ -306,7 +306,7 @@ test('a popular episode resolves and plays its exact audio without subscribing',
       episode: { ...episode('Capítulo popular exacto'), guid: 'guid-900' } } });
   });
   await page.route('**/api/podcasts/enclosure/peek', route => route.fulfill({ json: { stream_token: 'episode-token' } }));
-  await page.route('**/api/podcasts/stream/**', route => route.fulfill({ contentType: 'audio/wav', body: silentWav }));
+  await page.route('**/api/podcasts/stream/**', route => route.fulfill({ contentType: 'audio/wav', body: fixtureWav }));
   await page.goto('/player/#/podcasts');
   const row = page.getByText('Capítulo popular exacto', { exact: true });
   await expect(row).toBeVisible();
@@ -338,7 +338,7 @@ for (const oldFeedId of [undefined, 'previous-subscription']) {
     const streams: string[] = [], previews: string[] = [];
     await page.route('**/api/static/stream/**', route => {
       streams.push(new URL(route.request().url()).pathname);
-      return route.fulfill({ contentType: 'audio/wav', body: silentWav });
+      return route.fulfill({ contentType: 'audio/wav', body: fixtureWav });
     });
     await page.route('**/api/podcasts/enclosure/peek', route => {
       previews.push(route.request().url());

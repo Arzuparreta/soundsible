@@ -2,6 +2,7 @@ import { SILENT_WAV } from './unlockSample';
 import type { RuntimeLifetime } from '../runtimeLifetime';
 import { diagnosticLoad, diagnosticPause, diagnosticPlay, diagnosticSource, observeDiagnosticMedia, recordPlaybackDiagnostic } from "../playbackDiagnostics";
 import { ProgramOutput } from "./programOutput";
+import { MediaClockHealth } from './mediaClock';
 import type { AudioService, DeckBinding, ProgramMediaEventName, ProgramPlaybackSnapshot, OutputHealth, MixPhase, MixCancelReason, ProgramTransportOrigin, ProgramTransportEvent, ActiveMix } from "./contracts";
 export interface TransportPorts {
   setDeckGain: (index: number, value: number) => void;
@@ -209,8 +210,12 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     since: number;
     startPosition: number;
   } | null = null;
+  const sourceClock = new MediaClockHealth();
+  let observedSource: HTMLAudioElement | null = null;
   function resetClockSample(): void {
     clockSample = null;
+    sourceClock.reset();
+    observedSource = null;
   }
   function publishOutputHealth(health: OutputHealth): void {
     outputHealth = health;
@@ -239,6 +244,21 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     const previous = clockSample;
     const position = deck.currentTime;
     const clock = context.currentTime;
+    if (observedSource !== deck) {
+      sourceClock.reset();
+      observedSource = deck;
+    }
+    // The mixer supervises variable speed while it owns both decks. Once a
+    // song is alone, a loaded but stalled renderer also needs recovery even
+    // when the AudioContext itself keeps ticking and no `waiting` arrives.
+    if (!ports.mix && deck.playbackRate === 1 && (!previous || clock > previous.context)) {
+      const failure = sourceClock.observe(deck, wall);
+      if (failure) {
+        recordPlaybackDiagnostic('output.clock_failure', { reason: failure });
+        void recoverProgramOutput();
+        return;
+      }
+    } else sourceClock.reset();
     const continuous = previous && previous.deck === deck && wall - previous.wall <= 1000 && position >= previous.position && position - previous.position <= 2;
     const frozen = continuous && clock === previous.context;
     clockSample = {
@@ -457,6 +477,9 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       observeClock();
       if (ports.mix && !outputRecovering) ports.tick();
     });
+    // Fast seeks and cached resource changes can settle between two watchdog
+    // ticks. Their events still invalidate the previous renderer clock.
+    for (const event of ['seeking', 'loadstart', 'emptied']) onDeckEvent(event as ProgramMediaEventName, resetClockSample);
     onDeckEvent('ended', event => {
       ports.settleEndedEvent(event);
       queueMicrotask(() => {

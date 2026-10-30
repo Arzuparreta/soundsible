@@ -95,12 +95,16 @@ def report(path: Path, since: str | None = None) -> str:
                         advancing.append(media['id'])
             mismatch = row.get('declaredState') != 'playing' and bool(advancing)
             previous = row
-            if not is_window and not mismatch and row['event'] not in {'reject.play', 'media.error', 'context.statechange', 'mix.rate_fallback'}:
+            if not is_window and not mismatch and not row['event'].startswith(('mix.', 'connection.', 'output.')) and row['event'] not in {'reject.play', 'media.error', 'context.statechange'}:
                 continue
             timestamp = datetime.fromtimestamp(start + row['elapsedMs'] / 1000, timezone.utc).isoformat(timespec='milliseconds')
             media = ','.join(f"{m.get('id')}:{'paused' if m.get('paused') else 'playing'}:{'muted' if m.get('muted') else 'unmuted'}@{m.get('position')}" for m in row['media'])
             flag = ' DECLARED_NOT_PLAYING_WHILE_POSITION_ADVANCES' if mismatch else ''
-            output.append(f"{timestamp} #{row['sequence']} +{row['elapsedMs']:.1f}ms {row['event']} declared={row.get('declaredState')} {json.dumps(row['facts'], sort_keys=True)} [{media}]{flag}")
+            measured = {key: row.get('program', {})[key] for key in
+                        ('technique', 'gain0Actual', 'gain1Actual', 'signal0Rms', 'signal1Rms', 'output0Rms', 'output1Rms')
+                        if key in row.get('program', {})}
+            evidence = f' graph={json.dumps(measured, sort_keys=True)}' if measured else ''
+            output.append(f"{timestamp} #{row['sequence']} +{row['elapsedMs']:.1f}ms {row['event']} declared={row.get('declaredState')} {json.dumps(row['facts'], sort_keys=True)} [{media}]{evidence}{flag}")
     if not sessions:
         output.append('No captured sessions in this time range. Old play-timing logs cannot reconstruct these events.')
     return '\n'.join(output)
