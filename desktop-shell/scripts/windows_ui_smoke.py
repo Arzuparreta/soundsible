@@ -222,7 +222,7 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
             time.sleep(0.5)
             chooser.click_input()
 
-    control(window, "Choose folder").click_input()
+    invoke_or_click(control(window, "Choose folder"))
     dialog = folder_dialog(reopen_picker_after_oobe)
     screenshot(artifact_path / "picker-cancel.png")
     cancelled_handle = dialog.handle
@@ -343,7 +343,9 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
 
     try:
         window = main_window(process.pid)
-        control(window, "Use this computer as server").click_input()
+        # Explorer can retain the foreground after OOBE. UIA Invoke targets
+        # this app's button; a physical click can instead activate Explorer.
+        invoke_or_click(control(window, "Use this computer as server"))
         control(window, "Choose folder")
         dump_tree(window, artifact_path / "onboarding-tree.txt")
         screenshot(artifact_path / "onboarding.png")

@@ -61,6 +61,14 @@ tras abrir el selector de carpetas. Los fallos adjuntan los árboles UIA además
 de la captura. Dos pruebas aisladas cubren el OOBE/arranque tardío y que los
 errores UIA inesperados no se oculten.
 
+El primer run de verificación confirmó el smoke y la atestación x64. En ARM,
+el OOBE ya se cerraba, pero Explorer conservaba el primer plano: el click
+físico de «Use this computer as server» activaba otra aplicación y Soundsible
+seguía en la pantalla de conexión. Las capturas y árboles UIA lo demostraron.
+Las acciones iniciales pasan por UIA Invoke, como ya hacían Continue y la
+reapertura del selector, para actuar sobre el control de Soundsible aunque
+otra ventana cubra sus coordenadas.
+
 La atestación reintenta una vez. Si el segundo intento falla, falla el job;
 no se suprime la atestación ni se publica un instalador sin ella. La ejecución
 real Windows se comprueba en la PR; este equipo Linux no sustituye esa prueba.
