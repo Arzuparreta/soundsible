@@ -187,6 +187,20 @@ def test_retired_local_playback_preserves_error_contract(tmp_path, path, status,
     assert not any(e.get("event") == "setup_first_play" for e in _parse_setup_events(runtime))
 
 
+@pytest.mark.parametrize("body,content_type,status", [
+    ("{", "application/json", 400),
+    ("not-json", "text/plain", 415),
+])
+def test_retired_play_still_rejects_invalid_json(tmp_path, body, content_type, status):
+    _make_runtime(tmp_path)
+    app = Flask(__name__)
+    app.register_blueprint(playback_bp)
+    token = _agent_play(instance_db())
+    response = app.test_client().post("/api/playback/play", data=body, content_type=content_type,
+        headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == status
+
+
 @pytest.mark.parametrize("command", ["pause", "play", "next", "previous", "seek"])
 def test_agent_command_without_device_keeps_409(tmp_path, monkeypatch, command):
     _make_runtime(tmp_path)

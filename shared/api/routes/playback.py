@@ -1108,6 +1108,7 @@ def get_next_from_queue():
 def play_track():
     # Preserve the old endpoint's response. Playback runs on registered devices;
     # get_core has not supplied a server-side player since the browser port.
+    request.get_json()  # Keep Flask's existing malformed-JSON/content-type errors.
     return jsonify({"error": "Track not found or engine not ready"}), 404
 
 
