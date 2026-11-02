@@ -41,6 +41,29 @@ test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
 });
 
+test('a temporary provider outage recovers in the open panel without a retry click', async ({ page }) => {
+  let calls = 0;
+  await page.route('**/api/library/tracks/*/lyrics**', (route) => {
+    calls += 1;
+    return route.fulfill({ json: {
+      status: calls === 1 ? 'unavailable' : calls === 2 ? 'pending' : 'ready',
+      pending: calls === 2,
+      synced: calls >= 3 ? LRC : null,
+      plain: null, instrumental: false, cached: false,
+    } });
+  });
+  await openMusicPlayer(page);
+  const stage = page.locator('[data-now-playing-tile="stage"]');
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    await page.locator('[data-player-surface-open] nav[data-no-surface-swipe]').locator('button').nth(1).click();
+  }
+  await stage.getByRole('button', { name: 'Mostrar letra' }).click();
+  await expect(stage.getByLabel('Cargando letra')).toBeVisible();
+  await expect(stage.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);
+  await expect(stage.getByRole('button', { name: 'Line 1', exact: true })).toBeInViewport();
+  expect(calls).toBe(3);
+});
+
 test('lyrics timed for another cut ask for a tap, then follow it', async ({ page }) => {
   const saved = await mockLyrics(page, { timing_safe: false, synced_duration: 236 });
   const panel = await showLyrics(page);
