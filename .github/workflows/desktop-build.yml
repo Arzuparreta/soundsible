@@ -253,7 +253,17 @@ jobs:
           } | Set-Content -Encoding ASCII "$bundle/SHA256SUMS-${{ matrix.arch }}.txt"
 
       - name: Attest Windows installer
+        id: attest
         if: github.event_name != 'pull_request'
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-path: desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
+
+      # Rekor occasionally times out after the installer has been built and
+      # tested. Retry once; the retry still gates publication on a valid attestation.
+      - name: Retry Windows installer attestation
+        if: github.event_name != 'pull_request' && steps.attest.outcome == 'failure'
         uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-path: desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
