@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import type { Track } from '../types/music';
 import { installPageVisibility } from '../lib/pageVisibility';
 
@@ -28,6 +29,7 @@ vi.mock('../lib/api', () => ({ api }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 
 import { LyricsPanel } from './LyricsPanel';
+import { LyricsPanelView } from './LyricsPanelView';
 
 describe('LyricsPanel', () => {
   beforeEach(() => {
@@ -201,29 +203,87 @@ describe('LyricsPanel', () => {
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
-  it('reports a provider outage honestly and lets the listener retry', async () => {
-    state.library = [];
-    state.playback.currentTrack = {
-      id: 'song',
-      title: 'Song',
-      artist: 'Artist',
-      source: 'preview',
-    };
-    api.getLyricsByMetadata.mockResolvedValue({
-      status: 'unavailable',
-      synced: null,
-      plain: null,
-      instrumental: false,
-      cached: false,
-      pending: false,
-    });
+  it('reports a persistent provider outage after automatic recovery and lets the listener retry', async () => {
+    vi.useFakeTimers();
+    try {
+      state.library = [];
+      state.playback.currentTrack = {
+        id: 'song',
+        title: 'Song',
+        artist: 'Artist',
+        source: 'preview',
+      };
+      api.getLyricsByMetadata.mockResolvedValue({
+        status: 'unavailable',
+        synced: null,
+        plain: null,
+        instrumental: false,
+        cached: false,
+        pending: false,
+      });
 
-    render(() => <LyricsPanel />);
+      const view = render(() => <LyricsPanel />);
 
-    expect(await screen.findByText('lyricsPanel.unavailable')).toBeInTheDocument();
-    expect(screen.queryByText('lyricsPanel.notFound')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'lyricsPanel.retry' }));
-    await vi.waitFor(() => expect(api.getLyricsByMetadata).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(screen.getByText('lyricsPanel.unavailable')).toBeInTheDocument();
+      expect(screen.queryByText('lyricsPanel.notFound')).not.toBeInTheDocument();
+      const attempts = api.getLyricsByMetadata.mock.calls.length;
+      fireEvent.click(screen.getByRole('button', { name: 'lyricsPanel.retry' }));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.getLyricsByMetadata).toHaveBeenCalledTimes(attempts + 1);
+      view.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows lyrics after a temporary outage without a manual retry', async () => {
+    vi.useFakeTimers();
+    try {
+      api.getTrackLyrics.mockResolvedValueOnce({ status: 'unavailable', pending: false });
+      const view = render(() => <LyricsPanel />);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByLabelText('lyricsPanel.loading')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'lyricsPanel.retry' })).not.toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(2_250);
+      expect(screen.getByRole('button', { name: 'First line' })).toBeInTheDocument();
+      expect(api.getTrackLyrics).toHaveBeenCalledTimes(2);
+      view.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels an old song during recovery and never replaces the new song with its late answer', async () => {
+    vi.useFakeTimers();
+    try {
+      let finishOld!: (value: unknown) => void;
+      let oldSignal!: AbortSignal;
+      const [track, setTrack] = createSignal<Track>({ id: 'old', artist: 'Artist', title: 'Old song' });
+      api.getTrackLyrics.mockImplementation((id, options) => {
+        if (id === 'old') {
+          oldSignal = options.signal;
+          return new Promise((resolve) => { finishOld = resolve; });
+        }
+        return Promise.resolve({ status: 'ready', plain: 'New lyrics', synced: null, instrumental: false });
+      });
+      const view = render(() => <LyricsPanelView playback={{
+        currentTrack: track, currentTime: () => 0, inLibrary: () => true, saved: () => false, seek: vi.fn(),
+      }} />);
+      await vi.advanceTimersByTimeAsync(0);
+      setTrack({ id: 'new', artist: 'Artist', title: 'New song' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(oldSignal.aborted).toBe(true);
+      expect(screen.getByText('New lyrics')).toBeInTheDocument();
+      finishOld({ status: 'ready', plain: 'Old lyrics', synced: null, instrumental: false });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(screen.getByText('New lyrics')).toBeInTheDocument();
+      expect(screen.queryByText('Old lyrics')).not.toBeInTheDocument();
+      expect(api.getTrackLyrics).toHaveBeenCalledTimes(2);
+      view.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe('timing', () => {

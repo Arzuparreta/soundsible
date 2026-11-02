@@ -1,0 +1,203 @@
+{
+  "measured_utc": "2026-11-02",
+  "method": "Same lookup observed through its first completed engine job and then through lookupLyrics; isolated Flask library routes, real LRCLIB, no user database or persisted cache.",
+  "scope": "Ten selected songs from one server and network during an external incident. A paired observation, not a service-wide availability estimate.",
+  "lookups": 10,
+  "ready_at_first_completed_job": 5,
+  "ready_with_automatic_recovery": 10,
+  "provider_answers": {
+    "503": 54,
+    "200": 10
+  },
+  "results": [
+    {
+      "artist": "Leprous",
+      "title": "The Price",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:14:40.404Z",
+      "first_completed_job": "ready",
+      "first_completed_job_seconds": 3.78,
+      "recovery_result": "ready",
+      "total_seconds": 3.781,
+      "api_requests": 4,
+      "completed_job_answers": [
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 1,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "Third Law",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:14:51.522Z",
+      "first_completed_job": "unavailable",
+      "first_completed_job_seconds": 6.771,
+      "recovery_result": "ready",
+      "total_seconds": 11.117,
+      "api_requests": 9,
+      "completed_job_answers": [
+        "unavailable",
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 4,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "Rewind",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:14:55.283Z",
+      "first_completed_job": "ready",
+      "first_completed_job_seconds": 3.761,
+      "recovery_result": "ready",
+      "total_seconds": 3.761,
+      "api_requests": 4,
+      "completed_job_answers": [
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 1,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "The Flood",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:15:07.957Z",
+      "first_completed_job": "unavailable",
+      "first_completed_job_seconds": 6.764,
+      "recovery_result": "ready",
+      "total_seconds": 12.674,
+      "api_requests": 10,
+      "completed_job_answers": [
+        "unavailable",
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 5,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "Triumphant",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:15:13.217Z",
+      "first_completed_job": "ready",
+      "first_completed_job_seconds": 5.26,
+      "recovery_result": "ready",
+      "total_seconds": 5.26,
+      "api_requests": 5,
+      "completed_job_answers": [
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 2,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "Within My Fence",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:15:54.696Z",
+      "first_completed_job": "unavailable",
+      "first_completed_job_seconds": 6.761,
+      "recovery_result": "ready",
+      "total_seconds": 41.479,
+      "api_requests": 24,
+      "completed_job_answers": [
+        "unavailable",
+        "unavailable",
+        "unavailable",
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 15,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "Red",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:16:51.107Z",
+      "first_completed_job": "unavailable",
+      "first_completed_job_seconds": 6.771,
+      "recovery_result": "ready",
+      "total_seconds": 56.411,
+      "api_requests": 30,
+      "completed_job_answers": [
+        "unavailable",
+        "unavailable",
+        "unavailable",
+        "unavailable",
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 19,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "Slave",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:16:54.867Z",
+      "first_completed_job": "ready",
+      "first_completed_job_seconds": 3.759,
+      "recovery_result": "ready",
+      "total_seconds": 3.759,
+      "api_requests": 4,
+      "completed_job_answers": [
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 1,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "Moon",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:17:09.107Z",
+      "first_completed_job": "unavailable",
+      "first_completed_job_seconds": 6.762,
+      "recovery_result": "ready",
+      "total_seconds": 14.24,
+      "api_requests": 11,
+      "completed_job_answers": [
+        "unavailable",
+        "ready"
+      ],
+      "provider_answers": {
+        "503": 6,
+        "200": 1
+      }
+    },
+    {
+      "artist": "Leprous",
+      "title": "Down",
+      "album": "The Congregation",
+      "completed_utc": "2026-11-02T18:17:11.363Z",
+      "first_completed_job": "ready",
+      "first_completed_job_seconds": 2.256,
+      "recovery_result": "ready",
+      "total_seconds": 2.256,
+      "api_requests": 3,
+      "completed_job_answers": [
+        "ready"
+      ],
+      "provider_answers": {
+        "200": 1
+      }
+    }
+  ]
+}

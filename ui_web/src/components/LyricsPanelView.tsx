@@ -2,6 +2,7 @@ import { createEffect, createMemo, createResource, createSignal, For, on, onClea
 import { api } from '../lib/api';
 import { pageVisible } from '../lib/pageVisibility';
 import { activeLineIndex, parseLrc, timingFits } from '../lib/lrc';
+import { lookupLyrics } from '../lib/lyricsLookup';
 import { isPodcastTrack } from '../lib/track';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
@@ -63,30 +64,17 @@ export function LyricsPanelView(props: {
   const [lyrics, { refetch }] = createResource(lyricsKey, async (key): Promise<LyricsResponse> => {
     activeLookup?.abort();
     const lookup = new AbortController(); activeLookup = lookup;
-    // Cold LRCLIB calls run on two dedicated, zero-backlog server workers.
-    // Polling keeps this resource in its loading state without tying up an API
-    // worker while LRCLIB responds (typically several seconds on a cold miss).
-    for (let attempt = 0; attempt < 16; attempt += 1) {
-      const result = key.inLibrary
-        ? await api.getTrackLyrics(key.id, { signal: lookup.signal })
-        : await api.getLyricsByMetadata({
-            artist: key.artist,
-            title: key.title,
-            album: key.album,
-            duration: key.duration,
-            sourceKind: key.sourceKind ?? undefined,
-            youtubeId: key.youtubeId ?? undefined,
-            persist: key.saved,
-          }, { signal: lookup.signal });
-      if (lookup.signal.aborted) throw new DOMException('Lyrics lookup cancelled', 'AbortError');
-      if (!result.pending) return result;
-      await new Promise<void>((resolve, reject) => {
-        const abort = () => { clearTimeout(timer); reject(new DOMException('Lyrics lookup cancelled', 'AbortError')); };
-        const timer = window.setTimeout(() => { lookup.signal.removeEventListener('abort', abort); resolve(); }, 750);
-        lookup.signal.addEventListener('abort', abort, { once: true });
-      });
-    }
-    throw new Error('Lyrics lookup timed out');
+    return lookupLyrics((signal) => key.inLibrary
+      ? api.getTrackLyrics(key.id, { signal })
+      : api.getLyricsByMetadata({
+          artist: key.artist,
+          title: key.title,
+          album: key.album,
+          duration: key.duration,
+          sourceKind: key.sourceKind ?? undefined,
+          youtubeId: key.youtubeId ?? undefined,
+          persist: key.saved,
+        }, { signal }), lookup.signal);
   });
 
   createEffect(() => { if (!lyricsKey()) activeLookup?.abort(); });

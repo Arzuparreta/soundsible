@@ -87,7 +87,7 @@ test('a saved song still streaming spaces heart and download evenly', async ({ p
 
 test('the lyrics dock spaces what it keeps of the row evenly', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.endsWith('mobile'), 'the lyrics dock is the desktop stage');
-  await page.route('**/lyrics**', (route) => route.fulfill({ json: {
+  await page.route('**/api/library/tracks/*/lyrics**', (route) => route.fulfill({ json: {
     status: 'ready', synced: '[00:00.00]Una línea\n[00:04.00]Otra línea', plain: null, instrumental: false, cached: true,
   } }));
   await openMusicPlayer(page);

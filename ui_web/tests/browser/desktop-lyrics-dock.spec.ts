@@ -59,7 +59,7 @@ async function resizeStage(page: Page, key: 'ArrowLeft' | 'ArrowRight', presses:
 test.beforeEach(async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.endsWith('mobile'), 'the lyrics dock is the desktop stage');
   await mockMusicEngine(page);
-  await page.route('**/lyrics**', (route) => route.fulfill({ json: {
+  await page.route('**/api/library/tracks/*/lyrics**', (route) => route.fulfill({ json: {
     status: 'ready', synced: LRC, plain: null, instrumental: false, cached: true,
   } }));
   await page.route('**/api/discovery/music/dj-plan', async (route) => {
