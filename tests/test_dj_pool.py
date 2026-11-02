@@ -1,13 +1,11 @@
-"""Cold-cache fairness, measured bridge safety and full-library coverage."""
+"""Cold-cache fairness and measured bridge safety."""
 
 import copy
-import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-from shared import dj_library
 from shared.dj.contracts import fallback_analysis as _fallback
 from shared.dj_engine import analysis_identity, order_continuous_route, plan_transition
 from shared.dj_pool import add_measured_bridges
@@ -54,66 +52,6 @@ def test_compatible_seam_and_useless_spares_add_no_delay():
         seed = measured(100)
         route = order_continuous_route(seed, [({"id": "target"}, measured(tempo))])
         assert add_measured_bridges(seed, route, [({"id": "spare"}, measured(spare))]) == route
-
-
-def test_library_sweep_continues_after_broken_files_and_honours_stop(tmp_path):
-    paths = [tmp_path / str(i) for i in range(4)]
-    for path in paths:
-        path.write_bytes(b"audio")
-    stop = threading.Event()
-    seen = []
-    def measure(path, identity, **kwargs):
-        seen.append(identity)
-        if identity == "0":
-            raise OSError("deleted while reading")
-        if identity == "2":
-            stop.set()
-    with (patch.object(dj_library, "analyse_audio", side_effect=measure),
-          patch.object(dj_library, "cached_analysis", return_value=None),
-          patch.object(dj_library, "requests_waiting", return_value=False)):
-        dj_library.sweep_library(((str(p), p.name, 240) for p in paths), stop)
-    assert seen == ["0", "1", "2"]
-
-
-def test_library_sweep_waits_for_songs_a_dj_session_asked_for(tmp_path):
-    # With the beat model a song costs seconds of CPU; after an analyser update
-    # the session's songs must not queue behind the whole library.
-    paths = [tmp_path / name for name in ("cached", "new")]
-    for path in paths:
-        path.write_bytes(b"audio")
-    stop = threading.Event()
-    seen, pending = [], {"waits": 0}
-
-    def waiting():
-        pending["waits"] += 1
-        return pending["waits"] <= 3  # A session request finishes after three checks.
-
-    with (patch.object(dj_library, "analyse_audio", side_effect=lambda path, identity, **_: seen.append((identity, pending["waits"]))),
-          patch.object(dj_library, "cached_analysis", side_effect=lambda path, identity: {} if identity == "cached" else None),
-          patch.object(dj_library, "requests_waiting", side_effect=waiting),
-          patch.object(stop, "wait", return_value=False)):
-        dj_library.sweep_library(((str(p), p.name, 240) for p in paths), stop)
-    # A measured song is a cache hit and does not wait; the new one waits.
-    assert seen == [("cached", 0), ("new", 4)]
-
-
-def test_library_inventory_spans_accounts_and_skips_podcasts_missing_audio_and_duplicates(tmp_path):
-    from shared.user_context import current_user_id
-    def track(key, kind=None):
-        return SimpleNamespace(id=key, media_kind=kind, duration=240)
-    inventories = {"a": [track("one"), track("cloud"), track("podcast", "podcast_episode")],
-                   "b": [track("one"), track("two")]}
-    accounts = []
-    def core(user_id):
-        assert current_user_id() == user_id
-        accounts.append(user_id)
-        return SimpleNamespace(library=SimpleNamespace(metadata=SimpleNamespace(tracks=inventories[user_id])))
-    with (patch("shared.users.list_users", return_value=[{"id": "a"}, {"id": "b"}]),
-          patch("shared.api.get_user_core", side_effect=core),
-          patch.object(dj_library, "resolve_local_track_path", side_effect=lambda t: None if t.id == "cloud" else str(tmp_path / t.id))):
-        inventory = list(dj_library.library_inventory())
-    assert accounts == ["a", "b"]
-    assert [row[1] for row in inventory] == [analysis_identity({"track_id": key}) for key in ("one", "two")]
 
 
 def test_bridge_legs_must_fit_the_players_rate_limit():

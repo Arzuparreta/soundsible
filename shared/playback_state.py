@@ -167,14 +167,6 @@ def unregister_socket(sid: str) -> Optional[dict[str, Any]]:
     return None
 
 
-def is_device_socket_active(scope: str, device_id: str) -> bool:
-    with _lock:
-        _ensure_scope(scope)
-        _cleanup_scope(scope)
-        device = _registered_devices.get(scope, {}).get(device_id)
-        return bool(device and device.get("active_sid"))
-
-
 def get_registered_device(scope: str, device_id: str) -> Optional[dict[str, Any]]:
     with _lock:
         _ensure_scope(scope)

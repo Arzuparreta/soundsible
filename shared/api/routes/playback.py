@@ -16,7 +16,7 @@ from shared import preview_cache, request_scope
 from shared.api.memo import Memo
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
-from shared.stream_resolution import ResolvedStream, resolved_stream
+from shared.stream_resolution import ResolvedStream
 from shared.url_utils import validate_youtube_video_id
 
 logger = logging.getLogger(__name__)
@@ -177,35 +177,6 @@ def _get_preview_stream_url_cached(api, video_id: str) -> str:
     """Compatibility helper for catalog and older tests."""
     resolved = _get_preview_stream_cached(api, video_id)
     return resolved.url if resolved else ""
-
-
-def warm_preview_stream_cache(
-    video_id: str,
-    url: str,
-    ttl_sec: int = PREVIEW_STREAM_CACHE_TTL_SEC,
-    *,
-    egress: str | None = None,
-) -> None:
-    """Warm the in-process preview URL cache from another route.
-
-    Catalog/discovery resolve knows the best video_id before the user clicks the
-    preview, and during that resolve it can resolve the googlevideo URL itself
-    (the same `extract_info` already runs there). Pre-filling this cache here
-    eliminates the second yt-dlp call that the upcoming `/api/preview/stream/<id>`
-    request would otherwise perform. Pure internal optimization — no new state,
-    no client contract change, no extra cache layer.
-    """
-    if not video_id or not isinstance(url, str) or not url:
-        return
-    proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-    selected_egress = egress if egress in {"direct", "relay"} else ("relay" if proxy else "direct")
-    stream = resolved_stream(
-        url,
-        egress="relay" if selected_egress == "relay" else "direct",
-        proxy_url=proxy or None,
-    )
-    _preview_stream_urls.put(video_id, stream, ttl_sec=min(ttl_sec, stream.cache_ttl(ttl_sec)))
-    _durable_stream_cache_put(video_id, stream)
 
 
 def _get_api():
@@ -1135,36 +1106,14 @@ def get_next_from_queue():
 @playback_bp.route("/api/playback/play", methods=["POST"])
 @require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def play_track():
-    api = _get_api()
-    lib, engine, _ = api["get_core"]()
-    data = request.json or {}
-    track_id = data.get("track_id")
-    setup_session_id = (data.get("setup_session_id") or "").strip() or None
-    track = api["get_track_by_id"](lib, track_id)
-    if track and engine:
-        url = lib.get_track_url(track)
-        engine.play(url, track)
-        resolved = resolve_local_track_path(track)
-        source = "local" if (resolved and url == resolved) else "remote"
-        if setup_session_id:
-            from shared.setup_session import try_emit_setup_first_play
-
-            try_emit_setup_first_play(
-                setup_session_id,
-                track_id=str(track_id) if track_id is not None else None,
-            )
-        return jsonify({"status": "playing", "track": track.title, "source": source})
+    # Preserve the old endpoint's response. Playback runs on registered devices;
+    # get_core has not supplied a server-side player since the browser port.
     return jsonify({"error": "Track not found or engine not ready"}), 404
 
 
 @playback_bp.route("/api/playback/toggle", methods=["POST"])
 @require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def toggle_playback():
-    api = _get_api()
-    _, engine, _ = api["get_core"]()
-    if engine:
-        engine.pause()
-        return jsonify({"status": "toggled", "is_playing": engine.is_playing})
     return jsonify({"error": "Engine not ready"}), 500
 
 
@@ -1486,7 +1435,7 @@ def playback_remote_command():
                 "session": None,
             }
         elif track_id:
-            lib, engine, queue = api["get_core"]()
+            lib, _, queue = api["get_core"]()
             track = api["get_track_by_id"](lib, track_id)
             if track:
                 queue.consume_head_if_id(track_id)

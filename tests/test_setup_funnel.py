@@ -4,17 +4,16 @@ import json
 import sys
 import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from flask import Flask
 
 import pytest
 
 from shared.api.routes.playback import playback_bp
+from shared.api.routes import agent as agent_routes
 from shared.api.routes.setup import setup_bp
 from shared.database import DatabaseManager, instance_db
 from shared.hardening import ALL_SCOPES, SCOPE_PLAYBACK_CONTROL
-from shared.models import LibraryMetadata, Track
 from tests.conftest import TEST_USER_ID
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.setup_session import reset_sessions_for_tests
@@ -70,21 +69,6 @@ def _agent_play(db: DatabaseManager) -> str:
         user_id=TEST_USER_ID,
     )
     return token
-
-
-def _sample_track(suffix: str) -> Track:
-    return Track(
-        id=f"id-{suffix}",
-        title=f"Song {suffix}",
-        artist="Artist Unit",
-        album="Album Unit",
-        duration=120,
-        file_hash=f"hash-{suffix}",
-        original_filename=f"{suffix}.mp3",
-        file_size=1000,
-        bitrate=320,
-        format="mp3",
-    )
 
 
 def _parse_setup_events(runtime: RuntimeConfig) -> list[dict]:
@@ -160,48 +144,6 @@ def test_setup_error_emitted_on_bad_path(tmp_path, monkeypatch):
     assert any(e.get("event") == "setup_error" for e in events)
 
 
-def test_play_track_emits_setup_first_play(tmp_path):
-    runtime = _make_runtime(tmp_path)
-    init_telemetry(runtime)
-
-    track = _sample_track("x")
-    meta = LibraryMetadata(version=1, tracks=[track], playlists={}, settings={})
-    mock_lib = MagicMock()
-    mock_lib.metadata = meta
-
-    def get_core():
-        engine = MagicMock()
-        mock_lib.get_track_url = MagicMock(return_value="/tmp/fake.mp3")
-        return mock_lib, engine, None
-
-    fake_api = {
-        "get_core": get_core,
-        "get_track_by_id": lambda lib, tid: track if tid == track.id else None,
-    }
-
-    app = Flask(__name__)
-    app.register_blueprint(playback_bp)
-    client = app.test_client()
-    db = instance_db()
-    play_tok = _agent_play(db)
-
-    sid = str(uuid.uuid4())
-
-    with patch("shared.api.routes.playback._get_api", return_value=fake_api):
-        res = client.post(
-            "/api/playback/play",
-            json={"track_id": track.id, "setup_session_id": sid},
-            headers={"Authorization": f"Bearer {play_tok}"},
-        )
-    assert res.status_code == 200
-
-    events = _parse_setup_events(runtime)
-    fp = [e for e in events if e.get("event") == "setup_first_play"]
-    assert len(fp) == 1
-    assert fp[0].get("setup_session_id") == sid
-    assert "elapsed_ms_since_session" in fp[0]
-
-
 def test_setup_gate_rollup_summarize():
     root = Path(__file__).resolve().parents[1]
     spec = importlib.util.spec_from_file_location("setup_gate_rollup", root / "scripts" / "setup_gate_rollup.py")
@@ -225,6 +167,38 @@ def test_setup_gate_rollup_summarize():
     assert out["sessions_first_play_within_10min"] == 1
     assert out["success_rate_vs_started_sessions"] == 1.0
     assert out["median_elapsed_ms_first_play"] == 60_000
+
+
+@pytest.mark.parametrize("path,status,error", [
+    ("play", 404, "Track not found or engine not ready"),
+    ("toggle", 500, "Engine not ready"),
+])
+def test_retired_local_playback_preserves_error_contract(tmp_path, path, status, error):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    app = Flask(__name__)
+    app.register_blueprint(playback_bp)
+    token = _agent_play(instance_db())
+    response = app.test_client().post(f"/api/playback/{path}",
+        json={"track_id": "existing", "setup_session_id": str(uuid.uuid4())},
+        headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == status
+    assert response.get_json() == {"error": error}
+    assert not any(e.get("event") == "setup_first_play" for e in _parse_setup_events(runtime))
+
+
+@pytest.mark.parametrize("command", ["pause", "play", "next", "previous", "seek"])
+def test_agent_command_without_device_keeps_409(tmp_path, monkeypatch, command):
+    _make_runtime(tmp_path)
+    app = Flask(__name__)
+    app.register_blueprint(agent_routes.agent_bp)
+    monkeypatch.setattr(agent_routes, "_scope", lambda: "test")
+    monkeypatch.setattr(agent_routes, "_get_api", lambda: {"list_registered_devices": lambda scope: []})
+    token = _agent_play(instance_db())
+    response = app.test_client().post("/api/agent/command", json={"command": command},
+        headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 409
+    assert response.get_json() == {"error": "No target device registered and local engine is not ready"}
 
 
 def test_setup_gate_rollup_date_window():

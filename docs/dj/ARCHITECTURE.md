@@ -43,13 +43,15 @@ vuelta desde el planificador hacia HTTP. Los endpoints ya no contienen la
 búsqueda de hueco, puntuación de peticiones ni reconstrucción musical de la
 reparación. Las fuentes y el recomendador siguen eligiendo el conjunto.
 
-Desde P14 no se arranca `shared/dj_library.py`: no hay análisis automático de
+Desde P14 no hay análisis automático de
 la biblioteca ni de reproducciones NORMAL. Los clientes publican canción actual
 y próximas ocho de la ruta aceptada. El conjunto de alternativas para ordenar
 sigue fijado antes de leer caché; los descartes fríos no se adquieren. Los
 puentes ya medidos se pueden reutilizar dentro de ese conjunto. La caché no
 posee trabajos: solo los consumidores vigentes los mantienen. Contrato, reservas
 y límites de desconexión en [P14](P14.md).
+El módulo del barrido que ya no se arrancaba se retiró en la
+[limpieza de código heredado](../audits/2026-11-03-unused-code.md).
 
 ## Contratos, unidades y cobertura
 

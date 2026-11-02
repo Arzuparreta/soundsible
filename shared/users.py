@@ -393,14 +393,6 @@ def revoke_user_sessions(user_id: str) -> int:
     return len(sessions)
 
 
-def list_user_sessions(user_id: str) -> list[dict[str, Any]]:
-    return [
-        record
-        for record in instance_db().list_auth_tokens(kind=SESSION_KIND, user_id=user_id)
-        if not record.get("revoked_at")
-    ]
-
-
 # ---------------------------------------------------------------------------
 # Invitations
 # ---------------------------------------------------------------------------

@@ -794,20 +794,6 @@ def test_preview_status_reports_truthful_batch_state(tmp_path, monkeypatch):
     }
 
 
-def test_warm_preview_stream_cache_fills_ttl_entry():
-    """Catalog/discovery resolve warms the in-process preview URL cache so the
-    next /api/preview/stream/<id> request cannot pay the yt-dlp resolution."""
-    playback_routes._preview_stream_urls.clear()
-    try:
-        assert playback_routes._preview_stream_urls.get(VID) is None
-        playback_routes.warm_preview_stream_cache(VID, "https://rr.googlevideo.com/warmed")
-        warmed = playback_routes._preview_stream_urls.get(VID)
-        assert warmed is not None
-        assert warmed.url == "https://rr.googlevideo.com/warmed"
-    finally:
-        playback_routes._preview_stream_urls.clear()
-
-
 def test_preview_stream_url_resolution_is_single_flight(monkeypatch):
     """Ten taps on the same preview must cost one yt-dlp extraction, not ten.
 

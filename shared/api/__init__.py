@@ -567,7 +567,6 @@ def serve_web_player_assets(path):
     return resp
 
 # Note: Global instances
-playback_engine = None
 downloader_service = None
 _downloader_lock = threading.Lock()  # Note: Prevent concurrent init when many discover/resolve requests hit at once
 # One queue for the whole instance: downloads land in a shared pool, and a single
@@ -643,12 +642,6 @@ def get_user_core(user_id: Optional[str] = None) -> _UserCore:
         return core
 
 
-def drop_user_core(user_id: str) -> None:
-    """Forget a cached core (config change, account deleted)."""
-    with _user_cores_lock:
-        _user_cores.pop(user_id, None)
-
-
 def reset_user_cores() -> None:
     """Forget every cached core (tests, storage reconfiguration)."""
     with _user_cores_lock:
@@ -656,9 +649,9 @@ def reset_user_cores() -> None:
 
 
 def get_core():
-    """Legacy triple used across the blueprints: ``(library, playback, queue)``."""
+    """Blueprint triple: ``(library, None, queue)``; devices own playback."""
     core = get_user_core()
-    return core.library, playback_engine, core.queue
+    return core.library, None, core.queue
 
 
 def get_favourites_manager(user_id: Optional[str] = None):
@@ -1306,24 +1299,6 @@ def _ensure_lib_metadata():
     else:
         lib.refresh_if_stale()
     return lib, lib.metadata if lib else None
-
-
-# Note: Discover / downloader background helpers (used by downloader blueprint)
-_resolve_executor = None
-
-def _get_resolve_executor():
-    global _resolve_executor
-    if _resolve_executor is None:
-        from concurrent.futures import ThreadPoolExecutor
-        _resolve_executor = ThreadPoolExecutor(max_workers=8)
-    return _resolve_executor
-
-
-def _warm_downloader():
-    try:
-        get_downloader(open_browser=False)
-    except Exception:
-        pass
 
 
 def _loaded_user_library():

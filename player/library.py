@@ -997,42 +997,6 @@ class LibraryManager:
             self._log(f"Library clear failed: {exc}")
             return False
 
-    def disconnect_storage(self, wipe_local: bool = False) -> bool:
-        """
-        Disconnect from the current storage provider.
-        Removes the local config.json file.
-        If wipe_local is True, also clears the local database and cache.
-        """
-        try:
-            config_path = get_config_dir() / "config.json"
-            
-            # Note: 1. Clear local metadata if requested
-            if wipe_local:
-                self._log("Wiping local database and cache as requested...")
-                self.db.clear_all()
-                if self.cache:
-                    self.cache.clear_cache()
-                
-                # Note: Remove local library.JSON
-                metadata_path = self.manifest_path
-                if metadata_path.exists():
-                    os.remove(metadata_path)
-
-            # Note: 2. Remove configuration file
-            if config_path.exists():
-                os.remove(config_path)
-                self._log("Configuration file removed. You are now disconnected.")
-            
-            # Note: 3. Reset internal state
-            self.config = None
-            self.provider = None
-            self.metadata = None
-            
-            return True
-        except Exception as e:
-            self._log(f"Failed to disconnect: {e}")
-            return False
-
     @serialized
     def purge_missing_tracks(self) -> dict:
         """

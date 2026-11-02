@@ -168,16 +168,6 @@ class CacheManager:
         """Free up space if needed using LRU policy."""
         self.prune_to_size(self.max_size_bytes - new_bytes)
 
-    def get_current_usage(self) -> int:
-        """Get total bytes used by cache."""
-        with self.lock:
-            try:
-                cursor = self.conn.execute("SELECT SUM(file_size) FROM cache_entries")
-                result = cursor.fetchone()[0]
-                return result if result else 0
-            except Exception:
-                return 0
-
     def clear_cache(self):
         """Delete all cached files and reset DB."""
         try:

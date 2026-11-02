@@ -138,7 +138,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       deviceId: state.device.device_id,
       platform: /(?:iPhone|iPad|iPod)/.test(navigator.userAgent) ? `ios-reported-${navigator.userAgent.match(/OS ([\d_]+)/)?.[1]?.replaceAll('_', '.') ?? 'unknown'}` : 'other',
       displayMode: displayMode()
-    }, api.sendPlaybackTrace, () => user()?.id === diagnosticUser));
+    }, api.sendPlaybackTrace, () => user()?.id === diagnosticUser, import.meta.env.DEV));
 
     // Read now, spent later. Live clears the marker as soon as it has opened the
     // room it was sent here to open, and that can happen before the library sync

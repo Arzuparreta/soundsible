@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlaybackTraceOutbox, type TraceBatch } from './playbackTraceOutbox';
-import { recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from './playbackDiagnostics';
+import { diagnosticStatus, playbackDiagnosticExport, recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from './playbackDiagnostics';
 
 const setup = { userId: 'user', deviceId: 'device', platform: 'test', displayMode: 'browser' };
 const cleanups: Array<() => void> = [];
@@ -65,6 +65,10 @@ describe('automatic trace delivery', () => {
     await vi.advanceTimersByTimeAsync(5000);
     const samples = sent.flatMap((b) => b.events).filter((row) => (row as { event: string }).event === 'sample');
     expect(samples).toHaveLength(60);
+    // Delivery already owns durable evidence; automatic captures do not also
+    // retain the manually exported history in memory after acknowledgement.
+    expect(diagnosticStatus().retained).toBe(0);
+    expect(JSON.parse(playbackDiagnosticExport()).events).toEqual([]);
   });
 
   it('does not send queued evidence after the authenticated account changes', async () => {

@@ -218,7 +218,7 @@ def agent_play():
     if requested_device_id and not target:
         return jsonify({"error": "Target device not found", "device_id": requested_device_id}), 404
 
-    lib, engine, queue = api["get_core"]()
+    lib, _, queue = api["get_core"]()
     track = None
     payload = None
     track_id = (data.get("track_id") or "").strip()
@@ -275,13 +275,7 @@ def agent_play():
             "track": payload,
         }, target))
 
-    if not track or not engine:
-        return jsonify({"error": "No target device registered and local engine cannot play this item"}), 409
-
-    queue.consume_head_if_id(track_id)
-    url = lib.get_track_url(track)
-    engine.play(url, track)
-    return jsonify({"status": "playing", "track": payload})
+    return jsonify({"error": "No target device registered and local engine cannot play this item"}), 409
 
 
 @agent_bp.route("/api/agent/command", methods=["POST"])
@@ -345,26 +339,7 @@ def agent_command():
             **({"position_sec": position_sec} if command == "seek" else {}),
         }, target))
 
-    lib, engine, queue = api["get_core"]()
-    if not engine:
-        return jsonify({"error": "No target device registered and local engine is not ready"}), 409
-    if command == "pause":
-        engine.pause()
-    elif command == "play":
-        engine.pause()
-    elif command == "previous":
-        return jsonify({"error": "No target device registered and local engine does not support agent previous"}), 409
-    elif command == "seek":
-        return jsonify({"error": "No target device registered and local engine does not support agent seek"}), 409
-    else:
-        item = queue.get_next()
-        if not item:
-            return jsonify({"error": "Queue is empty"}), 404
-        track = api["get_track_by_id"](lib, item.id)
-        if not track:
-            return jsonify({"error": "Next queue item is not a local library track"}), 409
-        engine.play(lib.get_track_url(track), track)
-    return jsonify({"status": "ok", "command": command})
+    return jsonify({"error": "No target device registered and local engine is not ready"}), 409
 
 @agent_bp.route('/api/agent/debug/socketio', methods=['GET'])
 @require_agent_scope(SCOPE_LIBRARY_READ)

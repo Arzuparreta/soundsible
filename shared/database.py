@@ -1956,27 +1956,6 @@ class DatabaseManager:
             by_id = {track.id: track for track in self._rows_to_tracks(conn, rows)}
             return [by_id[track_id] for track_id in track_ids if track_id in by_id]
 
-    def get_tracks_by_album(self, album_name: str, artist_name: str = None) -> List[Track]:
-        """
-        Fetch all tracks for a specific album.
-        If artist_name is provided, it's used as a secondary filter for identically named albums.
-        """
-        with self._get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            if artist_name:
-                cursor = conn.execute("""
-                    SELECT * FROM tracks 
-                    WHERE album = ? AND (album_artist = ? OR artist = ?)
-                    ORDER BY track_number
-                """, (album_name, artist_name, artist_name))
-            else:
-                cursor = conn.execute("""
-                    SELECT * FROM tracks 
-                    WHERE album = ?
-                    ORDER BY track_number
-                """, (album_name,))
-            return self._rows_to_tracks(conn, cursor.fetchall())
-
     def get_tracks_by_album_id(self, catalog_album_id: str) -> List[Track]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row

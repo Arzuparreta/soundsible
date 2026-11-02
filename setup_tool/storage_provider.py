@@ -264,26 +264,3 @@ class S3StorageProvider(ABC):
         except Exception as e:
             print(f"Failed to save library: {e}")
             return False
-    
-    def calculate_bucket_size(self) -> int:
-        """
-        Calculate total size of all objects in bucket.
-        
-        Returns:
-            Total size in bytes, or 0 if error
-        """
-        try:
-            total_size = 0
-            # Note: List all objects in bucket
-            paginator = self.s3_client.get_paginator('list_objects_v2')
-            pages = paginator.paginate(Bucket=self.bucket_name)
-            
-            for page in pages:
-                if 'Contents' in page:
-                    for obj in page['Contents']:
-                        total_size += obj['Size']
-            
-            return total_size
-        except Exception as e:
-            print(f"Error calculating bucket size: {e}")
-            return 0

@@ -200,10 +200,6 @@ export async function useCatalogCollection(items: CatalogItem[], label: string, 
   return tracks.length > 0 && isCurrent() && actions.autoSessionToken() === epoch;
 }
 
-export async function addCatalogItemsAsAutoSource(items: CatalogItem[], label: string): Promise<void> {
-  await useCatalogCollection(items, label, 'reference');
-}
-
 /** Whether a catalog row is mid-flight — being matched, or matched and buffering.
  * Both read the same to a listener: it is working. */
 export function itemBusy(item: CatalogItem): boolean {
