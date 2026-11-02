@@ -17,7 +17,6 @@ const apiMock = vi.hoisted(() => ({
   emitDiscoveryEvent: vi.fn(),
   resolveCatalogItem: vi.fn(),
   saveCatalogItem: vi.fn(),
-  saveDiscoveryTrack: vi.fn(),
   prefetchPreviews: vi.fn(() => Promise.resolve({ status: 'queued' })),
 }));
 const storeMock = vi.hoisted(() => ({
@@ -90,7 +89,6 @@ describe('Search route', () => {
     apiMock.emitDiscoveryEvent.mockResolvedValue({ status: 'ok' });
     apiMock.resolveCatalogItem.mockResolvedValue({});
     apiMock.saveCatalogItem.mockResolvedValue({ status: 'queued' });
-    apiMock.saveDiscoveryTrack.mockResolvedValue({ status: 'queued' });
   });
 
   afterEach(() => {

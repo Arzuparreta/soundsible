@@ -408,31 +408,6 @@ export interface DjRepairResponse {
   degraded: boolean;
 }
 
-export interface DiscoverySaveCandidate {
-  id?: string;
-  video_id?: string;
-  title?: string;
-  channel?: string;
-  duration?: number;
-  thumbnail?: string;
-  confidence?: number;
-  confidence_level?: string;
-}
-
-export interface DiscoverySaveResponse {
-  status?: 'queued' | 'needs_review' | 'failed' | string;
-  queue_id?: string;
-  video_id?: string;
-  confidence?: number;
-  confidence_level?: string;
-  confidence_reason?: string;
-  reason?: string;
-  best?: DiscoverySaveCandidate;
-  candidates?: DiscoverySaveCandidate[];
-}
-
-
-
 export interface DeviceRegistration {
   device_id: string;
   device_name: string;
@@ -505,35 +480,6 @@ export interface PlaylistMutation {
   status?: string;
   playlists?: PlaylistMap;
   settings?: LibrarySettings;
-}
-
-/** One matched (or unmatched) source row from a migration preview. */
-export interface MigrationMatch {
-  source_index: number;
-  source_title: string;
-  source_artist: string;
-  source_album: string;
-  /** 0..1 match score; 0 when unmatched. */
-  confidence: number;
-  matched_track_id: string | null;
-  auto_accept: boolean;
-  needs_confirmation: boolean;
-}
-
-export interface MigrationStats {
-  total: number;
-  matched: number;
-  auto_accept: number;
-  needs_confirmation: number;
-  unmatched: number;
-  matched_ratio: number;
-}
-
-export interface MigrationPreview {
-  batch_id: string;
-  format: string;
-  stats: MigrationStats;
-  matches: MigrationMatch[];
 }
 
 export interface LibrarySnapshot {
@@ -870,13 +816,6 @@ export const api = {
       timeoutMs: 30000,
     });
   },
-  /** Copy the cover art from another library track. */
-  copyTrackCover: (id: string, sourceTrackId: string) =>
-    request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/cover/from-track`, {
-      method: 'POST',
-      body: { source_track_id: sourceTrackId },
-      timeoutMs: 20000,
-    }),
   /** Remove the cover art. */
   clearTrackCover: (id: string) =>
     request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/cover/none`, {
@@ -917,17 +856,6 @@ export const api = {
       { method: 'DELETE' },
     ),
 
-  // ── Migration (import Spotify/Apple Music exports) ──
-  /** Match an exported playlist against the local library (no writes). */
-  migrationPreview: (body: { format: string; text: string }) =>
-    request<MigrationPreview>('/api/migration/preview', { method: 'POST', body, timeoutMs: 30000 }),
-  /** Create a playlist from the confirmed (matched) library track ids. */
-  migrationImportPlaylist: (body: { playlist_name: string; track_ids: string[]; batch_id?: string }) =>
-    request<PlaylistMutation & { playlist_name?: string; track_count?: number }>(
-      '/api/migration/import-playlist',
-      { method: 'POST', body, timeoutMs: 30000 },
-    ),
-
   /** Internet search. The first path is the fast YouTube extractor; YouTube
    * Music metadata enrichment is intentionally kept out of the blocking path. */
   searchYouTube: async (q: string, signal?: AbortSignal): Promise<SearchResult[]> => {
@@ -947,14 +875,6 @@ export const api = {
     }
     return search('ytmusic', false);
   },
-  /** Optional metadata-only YouTube Music search for background enrichment. */
-  searchYouTubeMusic: async (q: string, signal?: AbortSignal): Promise<SearchResult[]> => {
-    const data = await request<{ results?: RawResult[] }>(
-      `/api/downloader/youtube/search?q=${encodeURIComponent(q)}&source=ytmusic&limit=20&enrich=0`,
-      { signal, timeoutMs: 8000 },
-    );
-    return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
-  },
   /** Search-as-you-type suggestions (Google suggest, ds=yt). Best-effort. */
   suggest: async (q: string, signal?: AbortSignal): Promise<string[]> => {
     const data = await request<{ suggestions?: string[] }>(
@@ -962,14 +882,6 @@ export const api = {
       { signal, timeoutMs: 5000 },
     );
     return Array.isArray(data.suggestions) ? data.suggestions : [];
-  },
-  /** Discover radio: related/mix tracks for a seed video id. */
-  relatedYouTube: async (id: string, signal?: AbortSignal, enrich = false): Promise<SearchResult[]> => {
-    const data = await request<{ results?: RawResult[] }>(
-      `/api/downloader/youtube/related?id=${encodeURIComponent(id)}&limit=25&enrich=${enrich ? 1 : 0}`,
-      { signal, timeoutMs: 45000 },
-    );
-    return (data.results ?? []).map(normalizeResult).filter((r) => r.id);
   },
   /** Node feed: resolve seeds server-side, return cache-hit recs immediately,
    * and schedule async expansion for misses (streamed via `discover_seed_ready`
@@ -997,14 +909,6 @@ export const api = {
       pending: data.pending ?? [],
     };
   },
-  /** Pre-expand seeds into the persistent server cache so future Discover opens
-   * are instant. Fire-and-forget; called on library_updated. */
-  warmDiscoverSeeds: (seeds: string[]) =>
-    request<{ status?: string; warmed?: number }>('/api/discover/warm', {
-      method: 'POST',
-      body: { seeds },
-      timeoutMs: 5000,
-    }),
   /** Resolve a pasted YouTube URL/video id to display metadata without downloading. */
   peekYouTube: async (urlOrId: string, signal?: AbortSignal): Promise<SearchResult | null> => {
     const data = await request<{ peek?: RawResult | null }>(
@@ -1158,14 +1062,6 @@ export const api = {
     }),
   updateDjWork: (body: { active: boolean; revision: number; tracks?: DjItemRef[] }, work?: WorkReference) =>
     request<void>('/api/discovery/music/dj-work', { method: 'POST', body, work, keepalive: true }),
-  saveDiscoveryTrack: (body: {
-    artist: string;
-    title: string;
-    duration?: number;
-    deezer_id?: string;
-    cover?: string;
-    confirm_video_id?: string;
-  }) => request<DiscoverySaveResponse>('/api/discovery/save', { method: 'POST', body, timeoutMs: 30000 }),
   emitDiscoveryEvent: (event: string, payload?: Record<string, unknown>) =>
     request<{ status?: string; recorded?: boolean }>('/api/discovery/events', {
       method: 'POST',
@@ -1382,10 +1278,6 @@ export const api = {
       method: 'POST',
       body: { track_ids: trackIds },
     }),
-  getLoudnessStatus: () =>
-    request<{ enabled: boolean; activity: string; measured?: number; pending?: number }>(
-      '/api/loudness/status',
-    ),
   setDiscoveryLearning: (enabled: boolean) =>
     request<{ learning_enabled?: boolean }>('/api/discovery/settings', {
       method: 'PATCH',

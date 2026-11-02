@@ -293,15 +293,6 @@ def has_valid_admin_token() -> bool:
     return _request_supplied_admin_token() == configured
 
 
-def is_admin_request(*, allow_trusted_network: bool = True) -> bool:
-    """
-    Admin request policy:
-    - If SOUNDSIBLE_ADMIN_TOKEN is configured: token is required for all admin routes.
-    - If not configured: trusted LAN/Tailscale callers are allowed (compat mode).
-    """
-    return request_has_scopes(SCOPE_ADMIN_CONFIG, allow_trusted_network=allow_trusted_network)
-
-
 def require_scope(*required_scopes: str, allow_trusted_network: bool = False):
     required = _normalize_scope_list(required_scopes)
 

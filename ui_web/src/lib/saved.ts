@@ -32,13 +32,6 @@ export function savedVideoId(entry: SavedEntry): string | null {
   return key ? key.slice(3) : null;
 }
 
-/** The library track id an entry claims to be, if any. Prefer resolving through
- * the identity index — this is for the rare caller that only speaks ids. */
-export function savedLibraryId(entry: SavedEntry): string | null {
-  const key = entry.keys.find((k) => k.startsWith('lib:'));
-  return key ? key.slice(4) : null;
-}
-
 const snapshot = (
   keys: string[],
   title: string,

@@ -149,7 +149,6 @@ export const CloseIcon = line('M18 6 6 18M6 6l12 12');
 export const SearchIcon = (props: GlyphProps) => <Glyph {...props}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></Glyph>;
 export const SortIcon = line('M3 6h18M6 12h12M10 18h4');
 export const MoreIcon = (props: GlyphProps) => <Glyph {...props}><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></Glyph>;
-export const BroadcastIcon = line('M8.5 8.5a5 5 0 000 7M15.5 8.5a5 5 0 010 7M5.6 5.6a9 9 0 000 12.8M18.4 5.6a9 9 0 010 12.8M12 12h.01');
 
 /** Menu-sized glyphs. Action sheets and context menus hold one per row, all at
  * the same box, so every builder reaches for the same set. */
@@ -222,28 +221,6 @@ export function SourceIcon(props: { size?: number }) {
     >
       <circle cx="12" cy="12" r="1.6" />
       <path d="M12 4a8 8 0 0 1 8 8M12 20a8 8 0 0 1-8-8" />
-    </svg>
-  );
-}
-
-/** Downward chevron — the "this title opens a menu" mark. Lucide's
- * "chevron-down" (ISC): 45° arms with rounded joins, which reads as a control
- * at text size where the sharper `⌄` glyph reads as a stray character and
- * sits wherever its font decides. Unsized on purpose: the caller gives it an
- * `em` box so it tracks the text it follows across the interface scales. */
-export function ChevronDownIcon(props: { class?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-      aria-hidden="true"
-    >
-      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }

@@ -61,7 +61,7 @@ All events are append-only JSON lines. Common fields: `v`, `event`, `ts` (Unix s
 | `setup_music_dir_saved` | `POST /api/setup/music-dir` succeeds | `env_override` (bool) | **Implemented** |
 | `setup_session_started` | First contact of a guided setup session (future: wizard open) | `setup_session_id` (uuid), optional `client` | **Implemented** (`POST /api/setup/session`; emits once per new id) |
 | `setup_step_completed` | Operator completes a named setup step | `setup_session_id`, `step` (string) | **Implemented** (`music_dir` on `POST /api/setup/music-dir` when `setup_session_id` present) |
-| `setup_first_play` | First confirmed playback after session start (gate: time-to-first-play) | `setup_session_id`, optional `track_id`, `elapsed_ms_since_session` | **Implemented** (`POST /api/setup/first-play` or `POST /api/playback/play` with `setup_session_id`) |
+| `setup_first_play` | First confirmed playback after session start (gate: time-to-first-play) | `setup_session_id`, optional `track_id`, `elapsed_ms_since_session` | **Implemented** (`POST /api/setup/first-play`; the retired local-player endpoint cannot confirm playback) |
 | `setup_error` | Recoverable setup failure | `setup_session_id`, `code`, `message` (no secrets) | **Implemented** (invalid music dir path with `setup_session_id`) |
 
 **Gate note:** The Phase 1 setup gate in [PREMIUM_QUALITY_CONTRACT.md](./PREMIUM_QUALITY_CONTRACT.md) needs a correlated `setup_session_id` and `setup_first_play`; the web player registers a session (`POST /api/setup/session`) and posts `setup_first_play` (or play-with-session) for eligible library tracks. Rollups: `scripts/setup_gate_rollup.py`.

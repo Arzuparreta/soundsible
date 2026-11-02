@@ -119,21 +119,3 @@ def user_data_dir(user_id: Optional[str] = None, *, create: bool = True) -> Path
     if create:
         path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def user_id_from_path(path: Path) -> Optional[str]:
-    """Recover the user id from a path under ``users_config_root()``, if it is one.
-
-    Kept for per-user filesystem integrations that need to map an absolute path
-    back to its owner.
-    """
-    try:
-        relative = Path(path).resolve().relative_to(users_config_root().resolve())
-    except (ValueError, OSError):
-        return None
-    if not relative.parts:
-        return None
-    try:
-        return validate_user_id(relative.parts[0])
-    except InvalidUserId:
-        return None

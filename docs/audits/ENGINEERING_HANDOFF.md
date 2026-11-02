@@ -418,3 +418,11 @@ its raw results supersede the older statement that ODST/Station publication has
 no shared coordination. They do not close physical-device acceptance or the
 full real-listening/Live/remote-provider load matrix. Remaining full-model
 fingerprints and exports are explicitly retained, not silently trusted away.
+
+## Limpieza posterior de código sin consumidores (2026-11-03)
+
+El usuario autorizó una PR abierta contra `main`, sin fusionarla, para retirar
+código muerto conservando el comportamiento del producto y corregir el fallo
+Windows del último CI. Esta entrega tiene su propio alcance y evidencia en
+[código heredado sin uso](2026-11-03-unused-code.md); no declara completada la
+matriz de escucha/carga pendiente de esta auditoría histórica.

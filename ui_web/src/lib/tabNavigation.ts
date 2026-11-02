@@ -23,8 +23,6 @@ export function reselectPrimaryTab(href: string): void {
   }
 }
 
-export const primaryScrollAttribute = 'data-primary-scroll';
-
 /** Navigation entries carry their destination here (TabBar, sidebar, drawer). */
 const navHrefAttribute = 'data-nav-href';
 

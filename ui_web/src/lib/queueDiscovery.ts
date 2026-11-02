@@ -29,35 +29,3 @@ export function resultCredit(result: SearchResult): Pick<Track, 'artist' | 'arti
     ? { artist: result.artist, artist_is_channel: result.artist_is_channel ?? true }
     : { artist: result.channel ?? '', artist_is_channel: true };
 }
-
-/** Preview Track for an online result (streams via the preview endpoint). */
-export function resultToTrack(result: SearchResult): Track {
-  return {
-    id: result.id,
-    title: result.title,
-    ...resultCredit(result),
-    duration: result.duration,
-    cover: result.thumbnail,
-    source: 'preview',
-    recommendation: result.recommendation_identity
-      ? {
-          identity: result.recommendation_identity,
-          source:
-            result.recommendation_source === 'auto_mode'
-              ? 'auto_mode'
-              : result.recommendation_source === 'podcast'
-                ? 'podcast'
-                : result.recommendation_source === 'discover'
-                  ? 'discover'
-                  : 'radio',
-          reason: result.reason,
-          reason_code: result.reason_code,
-        }
-      : undefined,
-  };
-}
-
-/** The library track an online result is already downloaded as, if any. */
-export function libraryTrackFor(library: Track[], result: SearchResult): Track | null {
-  return library.find((t) => t.youtube_id === result.id || t.id === result.id) ?? null;
-}

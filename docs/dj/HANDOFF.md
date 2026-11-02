@@ -77,7 +77,7 @@ limitaciones de escucha anotadas en entregas anteriores son históricas.
 | P8 | Secciones medidas y no usadas | AAC → SQLite → HTTP; vectores comunes ejecutados por web y Android | Cerrado (implementación `90b6c7e9`) |
 | P9 | Eco no sincronizado con el tempo | AAC → SQLite → HTTP; impulsos en Web Audio real y PCM nativo | Cerrado (`a8a22618`); activación automática cerrada en P7 (`d678f625`) |
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
-| P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados | Cerrado (#385 y `d678f625`) |
+| P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados; [limpieza posterior](../audits/2026-11-03-unused-code.md) del barrido desactivado en P14 | Cerrado (#385 y `d678f625`); retirado también el módulo sin arranque de P14 |
 | P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); P11-a cerrado (rama `dj/p11a-remove-legacy`) |
 | P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector integrado en #395; [revalidación final](detector_comparison/FINAL_RESULTS.md) del corpus, parejas y caché/HTTP | Cerrado con P12-b; revalidado el 2026-10-27; límites abajo |
 | P12-a | Estimación conjunta y comparativa de detectores abiertos | 29 configuraciones × 62 entradas + 5 AAC, contrato HTTP y ejecución sin PyTorch; [resultados](detector_comparison/RESULTS.md) | Cerrado (PR #395): mediciones completas y decisión del usuario (2026-10-26): Beat This! `final0` |
@@ -926,10 +926,11 @@ salvo en el estado de la caché.
   reloj LRU, cambia al servir rangos y ya no invalida el análisis. Sustituir el
   contenido o remuxarlo sí lo invalida. `ANALYSER_VERSION` 8 renueva la caché;
   las medidas musicales de P1/P4/P6 no cambian.
-- **Biblioteca entera.** `shared/dj_library.py` hace un recorrido serial de todas
-  las cuentas, deduplica archivos compartidos y revalida cada cinco minutos.
-  Un error de archivo no aborta el resto. Arranque y parada pertenecen al motor;
-  no se crea una cola de trabajos del tamaño de la biblioteca.
+- **Biblioteca entera (histórico).** El barrido serial de todas las cuentas
+  deduplicaba archivos y revalidaba cada cinco minutos. P14 retiró su arranque
+  porque los trabajos pertenecen a sesiones vigentes. Su módulo y las pruebas
+  de ese comportamiento abandonado se retiraron en la
+  [limpieza de código heredado](../audits/2026-11-03-unused-code.md).
 - **Puentes medidos.** `shared/dj_pool.py`: solo si la semilla y **todo** el
   conjunto están analizados. Una candidata fría bloquea la inserción, aunque
   otra ya descargada sirva de puente. Se admite como máximo un puente por tramo,
@@ -1295,6 +1296,11 @@ tempo, key and energy" de `README.md`.
 `plan_transition`, los vectores compartidos y los tipos web; ningún reproductor
 lo leía y ambos siguen ejecutando `technique`. La documentación de usuario y
 las secciones de funcionamiento de este handoff describen la política vigente.
+
+Limpieza posterior: retirado el módulo de barrido completo que P14 ya no
+arrancaba y sus fixtures. No cambia el analizador, la caché, los planes ni los
+trabajos asociados a sesiones; no requiere invalidar análisis guardados.
+Ver [alcance y validación](../audits/2026-11-03-unused-code.md).
 
 ---
 

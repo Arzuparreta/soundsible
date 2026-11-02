@@ -73,6 +73,42 @@ def test_reject_bad_image_and_variant(tmp_path):
         store.variant('a' * 64, 900)
 
 
+@pytest.mark.parametrize('asynchronous', [False, True])
+def test_embedded_cover_keeps_original_and_serves_current_variant_without_old_thumbnail(tmp_path, monkeypatch, asynchronous):
+    from player.cover_manager import CoverFetchManager
+    from shared.audio_files import AudioProcessor
+
+    monkeypatch.setattr('player.cover_manager.DEFAULT_CACHE_DIR', str(tmp_path / 'covers-cache'))
+    manager = CoverFetchManager()
+    original = picture((600, 338))
+    monkeypatch.setattr(AudioProcessor, 'extract_cover_art', lambda _: original)
+    source = tmp_path / 'song.mp3'
+    source.write_bytes(b'audio')
+    track = SimpleNamespace(id='embedded', title='Song', cover_source=None)
+    try:
+        if asynchronous:
+            manager.request_cover(track, embedded_cache_info=str(source))
+            manager.executor.shutdown(wait=True)
+            path = manager.get_cached_path(track.id)
+            # The HTTP path adopts an original left by the old extractor.
+            store = artwork_store()
+            store.bind(track.id, store.put(Path(path).read_bytes()), None, only_missing=True)
+        else:
+            path = manager.extract_now(track, str(source))
+            store = artwork_store()
+        assert Path(path).read_bytes() == original
+        assert Path(store.path(track.id)).read_bytes() == original
+        variant = store.open_variant(store.ref(track.id)['hash'], 320)
+        try:
+            with Image.open(variant.file) as image:
+                assert image.size == (320, 180)
+        finally:
+            variant.file.close()
+        assert not list(Path(manager.covers_dir).glob('*_thumb.jpg'))
+    finally:
+        manager.executor.shutdown(wait=True)
+
+
 def test_match_requires_same_picture_aspect_and_more_detail():
     original = picture()
     small = resize(original, (600, 338))

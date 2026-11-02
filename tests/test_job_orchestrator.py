@@ -1,7 +1,8 @@
-"""Tests for JobOrchestrator HDD profile + two executor pools (plan T1)."""
+"""Disk profiles, background jobs and synchronous metadata serialization."""
 
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -29,7 +30,6 @@ def test_default_profile_is_ssd_with_three_background_workers(orch):
     assert orch.profile == PROFILE_SSD
     assert orch.background_workers == 3
     assert orch.background_executor._max_workers == 3
-    assert orch.metadata_executor._max_workers == 1
 
 
 def test_hdd_profile_caps_background_at_one():
@@ -38,8 +38,6 @@ def test_hdd_profile_caps_background_at_one():
         assert o.profile == PROFILE_HDD
         assert o.background_workers == 1
         assert o.background_executor._max_workers == 1
-        # Metadata stays serialized regardless of profile.
-        assert o.metadata_executor._max_workers == 1
     finally:
         o.shutdown(wait=False)
 
@@ -50,9 +48,6 @@ def test_configure_disk_profile_rebuilds_background_pool(orch):
     assert resolved == PROFILE_HDD
     assert orch.background_executor is not initial
     assert orch.background_executor._max_workers == 1
-    # Metadata executor is preserved (not torn down).
-    # No assertion on identity required — but worker count must remain 1.
-    assert orch.metadata_executor._max_workers == 1
 
 
 def test_configure_disk_profile_noop_when_size_unchanged(orch):
@@ -129,50 +124,26 @@ def test_hdd_background_pool_serializes_disk_jobs():
         o.shutdown(wait=False)
 
 
-def test_metadata_lane_is_serialized_even_under_concurrent_submits(orch):
-    overlap = {"max": 0, "current": 0}
-    lock = threading.Lock()
-
-    def writer():
-        with lock:
-            overlap["current"] += 1
-            overlap["max"] = max(overlap["max"], overlap["current"])
-        time.sleep(0.05)
-        with lock:
-            overlap["current"] -= 1
-
-    futs = [orch.submit_metadata(f"m{i}", writer) for i in range(4)]
-    for f in futs:
-        f.result(timeout=3)
-    assert overlap["max"] == 1
-
-
-def test_background_and_metadata_pools_are_independent():
-    """A blocked metadata commit must not stall background jobs."""
-    o = JobOrchestrator(profile=PROFILE_SSD)
-    try:
-        meta_release = threading.Event()
-        bg_done = threading.Event()
-
-        def slow_meta():
-            meta_release.wait(timeout=2)
-
-        def bg():
-            bg_done.set()
-
-        o.submit_metadata("meta_block", slow_meta)
-        time.sleep(0.05)
-        o.submit_background("bg1", bg)
-        assert bg_done.wait(timeout=1), "background pool blocked by metadata lane"
-        meta_release.set()
-    finally:
-        o.shutdown(wait=False)
-
-
 def test_run_serialized_still_works(orch):
     out = []
     orch.run_serialized(lambda: out.append(1))
     assert out == [1]
+
+
+def test_run_serialized_prevents_overlapping_writes(orch):
+    overlap = {"max": 0, "current": 0}
+
+    def writer():
+        overlap["current"] += 1
+        overlap["max"] = max(overlap["max"], overlap["current"])
+        time.sleep(0.01)
+        overlap["current"] -= 1
+
+    with ThreadPoolExecutor(max_workers=4) as callers:
+        futures = [callers.submit(orch.run_serialized, writer) for _ in range(4)]
+        for future in futures:
+            future.result(timeout=3)
+    assert overlap["max"] == 1
 
 
 def test_failing_task_clears_active_jobs(orch):

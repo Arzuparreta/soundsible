@@ -17,6 +17,7 @@ export function setDiagnosticContext(reader: (() => Facts) | null): () => void {
 const CAPACITY = 4096;
 let setup: (DiagnosticSetup & { id: string; startedAt: string; clientRevision: string }) | null = null;
 let active = false;
+let retainEvents = true;
 let sequence = 0;
 let dropped = 0;
 let start = 0;
@@ -34,8 +35,9 @@ let snapshot: (() => Facts) | null = null;
 export function setDiagnosticSnapshot(reader: () => Facts): void { snapshot = reader; }
 export function diagnosticStatus() { return { active, setup, retained: buffer.length, dropped }; }
 
-export function startPlaybackDiagnostics(options: DiagnosticSetup): void {
+export function startPlaybackDiagnostics(options: DiagnosticSetup, retain = true): void {
   if (active) throw new Error('diagnostic_already_active');
+  retainEvents = retain;
   setup = { ...options, id: globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`, startedAt: new Date().toISOString(),
     clientRevision: typeof __PLAYBACK_SOURCE_REVISION__ === 'string' ? __PLAYBACK_SOURCE_REVISION__ : 'test-unverified' };
   start = performance.now();
@@ -81,11 +83,13 @@ export function recordPlaybackDiagnostic(event: string, facts: Facts = {}): void
     if (event === 'handoff.retirement' || String(facts.reason ?? '').startsWith('handoff')) denseUntil = performance.now() + 10_000;
     const contextual = /^(dj\.|mix\.|handoff\.|transport\.|connection\.|media_session\.action)/.test(event);
     const row = entry(event, contextual ? { ...context?.(), ...facts } : facts);
-    if (buffer.length === CAPACITY) {
-      buffer[cursor] = row;
-      cursor = (cursor + 1) % CAPACITY;
-      ringDiscarded++;
-    } else buffer.push(row);
+    if (retainEvents) {
+      if (buffer.length === CAPACITY) {
+        buffer[cursor] = row;
+        cursor = (cursor + 1) % CAPACITY;
+        ringDiscarded++;
+      } else buffer.push(row);
+    }
     collect?.(row);
   } catch { dropped++; }
 }
@@ -170,7 +174,7 @@ let stopAutomatic: (() => void) | null = null;
 
 /** Called after authentication, before installing audio unlock or restoring playback. */
 export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send: (batch: TraceBatch) => Promise<{ id: string; enabled: boolean }>,
-  stillSameUser: () => boolean = () => true): () => void {
+  stillSameUser: () => boolean = () => true, retain = false): () => void {
   if (stopAutomatic) return stopAutomatic;
   const outbox = new PlaybackTraceOutbox(options.userId);
   let pending: Array<ReturnType<typeof entry>> = [];
@@ -284,7 +288,7 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
   window.addEventListener('pagehide', lifecycle);
   window.addEventListener('online', online);
   document.addEventListener('visibilitychange', lifecycle);
-  startPlaybackDiagnostics(options);
+  startPlaybackDiagnostics(options, retain);
   void flush();
   return stop;
 }

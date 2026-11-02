@@ -82,14 +82,6 @@ def _venv_python_path(venv_dir: Path) -> Path:
     return venv_dir / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
 
 
-def _venv_site_packages_path(venv_dir: Path) -> Path:
-    return venv_dir / (
-        "Lib/site-packages"
-        if platform.system() == "Windows"
-        else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
-    )
-
-
 def _venv_has_pip(py: Path) -> bool:
     if not py.exists():
         return False
@@ -360,12 +352,6 @@ def _run_legacy_daemon(args: argparse.Namespace) -> None:
         start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
     except (KeyboardInterrupt, SystemExit):
         console.print("[yellow]Shutting down...[/yellow]")
-
-
-def _run_desktop_engine(args: argparse.Namespace) -> None:
-    from shared.desktop_engine_entry import run_desktop_engine
-
-    run_desktop_engine(args)
 
 
 def run_desktop_engine_cli(argv: list[str] | None = None) -> int:

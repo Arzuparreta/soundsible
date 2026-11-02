@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { libraryTrackFor, queueIndexOf, resultToTrack } from './queueDiscovery';
+import { queueIndexOf, resultCredit } from './queueDiscovery';
 import type { SearchResult, Track } from '../types/music';
 
 const libTrack: Track = { id: 'lib1', title: 'Downloaded Song', artist: 'Someone', youtube_id: 'yt111yt111y' };
@@ -21,33 +21,20 @@ describe('queueIndexOf', () => {
   });
 });
 
-describe('resultToTrack / libraryTrackFor', () => {
+describe('resultCredit', () => {
   const result: SearchResult = { id: 'yt111yt111y', title: 'Downloaded Song', channel: 'Chan', duration: 200, thumbnail: 'x.jpg' };
 
-  it('maps an online result onto a preview track', () => {
-    expect(resultToTrack(result)).toEqual({
-      id: 'yt111yt111y',
-      title: 'Downloaded Song',
-      artist: 'Chan',
-      artist_is_channel: true,
-      duration: 200,
-      cover: 'x.jpg',
-      source: 'preview',
-    });
+  it('credits the channel when the performer is unknown', () => {
+    expect(resultCredit(result)).toEqual({ artist: 'Chan', artist_is_channel: true });
   });
 
   it('credits the performer the server read, keeping bare channels as channels', () => {
     const read = { ...result, title: 'La vereda', channel: 'Extremoduro (Oficial)', artist: 'Extremoduro', artist_is_channel: false };
-    expect(resultToTrack(read)).toMatchObject({ artist: 'Extremoduro', artist_is_channel: false });
+    expect(resultCredit(read)).toEqual({ artist: 'Extremoduro', artist_is_channel: false });
     const bare = { ...result, channel: 'Music Mirror', artist: 'Music Mirror', artist_is_channel: true };
-    expect(resultToTrack(bare)).toMatchObject({ artist: 'Music Mirror', artist_is_channel: true });
+    expect(resultCredit(bare)).toEqual({ artist: 'Music Mirror', artist_is_channel: true });
     // Cached before the server read performers: artist was the channel, with no flag.
     const cached = { ...result, artist: 'Chan' };
-    expect(resultToTrack(cached)).toMatchObject({ artist: 'Chan', artist_is_channel: true });
-  });
-
-  it('finds the downloaded twin of an online result', () => {
-    expect(libraryTrackFor([other, libTrack], result)?.id).toBe('lib1');
-    expect(libraryTrackFor([other], result)).toBeNull();
+    expect(resultCredit(cached)).toEqual({ artist: 'Chan', artist_is_channel: true });
   });
 });

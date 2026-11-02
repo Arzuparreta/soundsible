@@ -16,6 +16,7 @@ from pathlib import Path
 from PIL import ImageGrab
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys
+from pywinauto.timings import TimeoutError as UIATimeoutError
 
 
 def wait_until(predicate, message: str, timeout: float = 30.0):
@@ -59,7 +60,7 @@ def main_window(pid: int, timeout: float = 30.0):
     )
 
 
-def control(window, title: str, control_type: str = "Button", timeout: float = 30.0):
+def control(window, title: str, control_type: str = "Button", timeout: float = 90.0):
     title_pattern = rf"^{re.escape(title)}(?:…|\.\.\.)?$"
     # ``Desktop.windows`` returns a UIAWrapper, while ``child_window`` belongs
     # to WindowSpecification. Re-wrap the stable native handle before querying.
@@ -69,8 +70,18 @@ def control(window, title: str, control_type: str = "Button", timeout: float = 3
         else Desktop(backend="uia").window(handle=window.handle)
     )
     spec = root.child_window(title_re=title_pattern, control_type=control_type)
-    spec.wait("exists enabled visible ready", timeout=timeout)
-    return spec.wrapper_object()
+    def ready_control():
+        # Explorer can start its privacy OOBE before *any* onboarding control,
+        # not just after opening the folder picker. Clear it during every wait.
+        if dismiss_runner_first_boot(Desktop(backend="uia")):
+            return None
+        try:
+            spec.wait("exists enabled visible ready", timeout=0.25, retry_interval=0.05)
+        except UIATimeoutError:
+            return None
+        return spec.wrapper_object()
+
+    return wait_until(ready_control, f"Control {title!r} did not become ready", timeout)
 
 
 def invoke_or_click(item) -> None:
@@ -211,7 +222,7 @@ def choose_unicode_folder(window, music_path: Path, artifact_path: Path) -> None
             time.sleep(0.5)
             chooser.click_input()
 
-    control(window, "Choose folder").click_input()
+    invoke_or_click(control(window, "Choose folder"))
     dialog = folder_dialog(reopen_picker_after_oobe)
     screenshot(artifact_path / "picker-cancel.png")
     cancelled_handle = dialog.handle
@@ -321,12 +332,20 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
 
     environment = os.environ.copy()
     environment["SOUNDSIBLE_CONFIG_DIR"] = str(config_path)
+    # Hosted runners have no dependable GPU. Use WebView2's software renderer
+    # for this smoke, including the returning-user launch, without changing the
+    # installed application's normal rendering configuration.
+    environment["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
+        environment.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "") + " --disable-gpu"
+    ).strip()
     state_file = config_path / "desktop-engine-state.json"
     process = subprocess.Popen([app_path], env=environment)
 
     try:
         window = main_window(process.pid)
-        control(window, "Use this computer as server").click_input()
+        # Explorer can retain the foreground after OOBE. UIA Invoke targets
+        # this app's button; a physical click can instead activate Explorer.
+        invoke_or_click(control(window, "Use this computer as server"))
         control(window, "Choose folder")
         dump_tree(window, artifact_path / "onboarding-tree.txt")
         screenshot(artifact_path / "onboarding.png")
@@ -390,6 +409,11 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         quit_via_global_shortcut(process, window)
     except Exception:
         screenshot(artifact_path / "failure.png")
+        try:
+            for index, window in enumerate(Desktop(backend="uia").windows()):
+                dump_tree(window, artifact_path / f"failure-window-{index}.txt")
+        except Exception as error:
+            print(f"Could not dump failure UI tree: {error}", flush=True)
         raise
     finally:
         if process.poll() is None:

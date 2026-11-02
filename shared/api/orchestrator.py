@@ -15,9 +15,7 @@ PROFILE_HDD = "hdd"
 PROFILE_SSD = "ssd"
 PROFILE_AUTO = "auto"
 
-# Pool sizing by profile. Metadata lane is always serialized (1 worker)
-# regardless of profile so commit ordering is preserved (see run_serialized
-# and canonical library writes).
+# Pool sizing by profile. Metadata writes use run_serialized in their caller.
 _PROFILE_BACKGROUND_WORKERS = {
     PROFILE_HDD: 1,   # HDD: cap disk-heavy concurrency at 1 (plan 6A)
     PROFILE_SSD: 3,
@@ -63,14 +61,9 @@ def detect_rotational_disk(path: Optional[Path] = None) -> bool:
 
 class JobOrchestrator:
     """
-    Manages background jobs with two executor pools and a serialized
-    metadata lane.
-
-    Pools (plan 6A):
-    - background pool: disk-heavy work (downloads, transcodes, scans, sync).
-      Sized by disk profile — HDD=1, SSD=3.
-    - metadata pool:   serialized commits (max_workers=1). Combined with
-      `commit_lock` to preserve ordering across pump callers.
+    Manages disk-heavy background work (downloads, transcodes, scans, sync).
+    The pool follows the disk profile — HDD=1, SSD=3. Metadata writes run in
+    their caller under commit_lock, through run_serialized.
     """
 
     _instance = None
@@ -111,7 +104,6 @@ class JobOrchestrator:
 
         self.profile = PROFILE_SSD
         self.background_executor: Optional[ThreadPoolExecutor] = None
-        self.metadata_executor: Optional[ThreadPoolExecutor] = None
         self.configure_disk_profile(profile, music_dir=music_dir)
 
     # ----- Pool configuration -----
@@ -119,8 +111,7 @@ class JobOrchestrator:
     def configure_disk_profile(self, profile: str, music_dir: Optional[Path] = None) -> str:
         """
         Apply a disk profile. Resolves "auto" via detect_rotational_disk.
-        Rebuilds the background pool if the worker count changes; the
-        metadata pool is always 1.
+        Rebuilds the background pool if the worker count changes.
         Returns the resolved profile string.
         """
         if profile == PROFILE_AUTO:
@@ -147,14 +138,10 @@ class JobOrchestrator:
                 self.background_executor = ThreadPoolExecutor(
                     max_workers=target_bg, thread_name_prefix="JobOrch-bg"
                 )
-            if self.metadata_executor is None:
-                self.metadata_executor = ThreadPoolExecutor(
-                    max_workers=1, thread_name_prefix="JobOrch-meta"
-                )
             self.profile = resolved
 
         logger.info(
-            f"Orchestrator: profile={resolved} background_workers={target_bg} metadata_workers=1"
+            f"Orchestrator: profile={resolved} background_workers={target_bg}"
         )
         return resolved
 
@@ -185,28 +172,6 @@ class JobOrchestrator:
     def submit_task(self, task_id: str, func: Callable, *args, **kwargs) -> Future:
         return self.submit_background(task_id, func, *args, **kwargs)
 
-    def submit_metadata(self, task_id: str, func: Callable, *args, **kwargs) -> Future:
-        """Submit a metadata job to the serialized metadata lane."""
-        with self.state_lock:
-            if task_id in self.active_jobs:
-                return self.active_jobs[task_id]
-
-            def _serialized():
-                with self.commit_lock:
-                    return func(*args, **kwargs)
-
-            self._job_timing[task_id] = {'lane': 'metadata', 'submitted': time.monotonic(), 'started': None}
-            try:
-                future = self.metadata_executor.submit(self._wrap_task, task_id, _serialized)
-            except BaseException:
-                self._job_timing.pop(task_id, None)
-                raise
-            self.active_jobs[task_id] = future
-        # Register outside state_lock: an already-cancelled future invokes its
-        # callback synchronously, and must be able to take that lock.
-        future.add_done_callback(lambda done: self._clear_cancelled(task_id, done))
-        return future
-
     def _clear_cancelled(self, task_id, future):
         if not future.cancelled():
             return
@@ -220,6 +185,8 @@ class JobOrchestrator:
         """Constant-size diagnostic counters; no completed task history retained."""
         now = time.monotonic()
         with self.state_lock:
+            # Keep the diagnostic schema stable; the retired metadata queue
+            # never had production submissions, so these counters remain zero.
             result = {lane: {'running': 0, 'queued': 0, 'oldest_wait_seconds': 0.0}
                       for lane in ('background', 'metadata')}
             for item in self._job_timing.values():
@@ -318,8 +285,6 @@ class JobOrchestrator:
         self.stop_downloader_pump(wait=wait)
         if self.background_executor:
             self.background_executor.shutdown(wait=wait)
-        if self.metadata_executor:
-            self.metadata_executor.shutdown(wait=wait)
 
 
 orchestrator = JobOrchestrator.get_instance()
