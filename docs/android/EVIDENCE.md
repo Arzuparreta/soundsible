@@ -284,3 +284,21 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   CarLibrary, CarEvents, OfflineRestart, OfflineRemoval, CarOfflineExpiry y
   OfflinePluginLifecycle HTTP/TLS: 23/0 en 3 rondas
   (`/tmp/soundsible-offline-fresh-{1..3}.log`); 65 JVM y lint.
+
+## 2026-11-03 · Diagnóstico de silencio Live en CI
+
+- Main `9986f87b`, run `41548539741`, shard 6: falla únicamente
+  `LiveListenerTest.tlsCoreRelay` al esperar PCM audible después de recuperar
+  WHEP y cerrar Activity. Estado READY/reproduciendo, callbacks PCM activos,
+  fuente sintética activa y RMS cero; publisher/reader siguen conectados.
+  Los artefactos originales no contienen métricas suficientes para atribuir
+  la causa. Reintento del mismo head solicitado, sin cambiar aserciones.
+- Rama `fix/android-live-ci-diagnostics`: cronología de fases, PCM, foco,
+  ganancia, estados de peers y estadísticas WebRTC/relay; logcat continuo
+  con limpieza por trap y código de error conservado. Guía:
+  [CI_DIAGNOSTICS](CI_DIAGNOSTICS.md).
+- Compilación de instrumentación, 80 pruebas JVM y lint aprobados; ocho
+  pruebas Python de redacción de métricas, dependencia WebRTC y conservación
+  de evidencias/código de salida aprobadas; Ruff y `git diff --check` aprobados.
+  Log local `/tmp/soundsible-android-ci-final-validation.log`. Aceptación nativa
+  de las nuevas trazas y checks de la PR pendientes de GitHub.

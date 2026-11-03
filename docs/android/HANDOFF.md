@@ -108,3 +108,5 @@ Estado vigente y forma de trabajar. Lo superado está en
 - UI: `cd ui_web && npm test && npm run typecheck`. Core: `PYTHONPATH=. .venv/bin/pytest -q tests/…`.
 - Fixtures desechables: nunca motor ni cuentas reales. Un vaciado real de biblioteca
   en el fixture retiraría audio compartido: no ejecutarlo.
+- Fallos de shards y silencio Live: artefactos, señales y lectura de trazas en
+  [CI_DIAGNOSTICS](CI_DIAGNOSTICS.md). Un reintento aprobado no identifica la causa.

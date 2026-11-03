@@ -52,9 +52,43 @@ class LiveListenerTest {
         val audibleFrames = AtomicLong()
         val publishedFrames = AtomicLong()
         val rms = AtomicReference(0.0)
+        val lastAudible = AtomicLong()
+        val lastPublished = AtomicLong()
+        val phase = AtomicReference("setup")
+        val diagnosticRoom = AtomicReference<String?>()
+        val diagnosticClient = okhttp3.OkHttpClient.Builder().callTimeout(2, TimeUnit.SECONDS).build()
+        val diagnostics = LiveTestDiagnostics(snapshot = {
+            val state = AtomicReference(JSONObject())
+            instrumentation.runOnMainSync { browser?.let {
+                state.set(JSONObject().put("state", it.playbackState).put("requested", it.playWhenReady)
+                    .put("playing", it.isPlaying).put("volume", it.volume).put("suppression", it.playbackSuppressionReason)
+                    .put("errorCode", it.playerError?.errorCode))
+            } }
+            val now = android.os.SystemClock.elapsedRealtime()
+            state.get().put("phase", phase.get()).put("decoded", decodedFrames.get()).put("audible", audibleFrames.get())
+                .put("published", publishedFrames.get()).put("rms", rms.get())
+                .put("audibleAgeMs", if (lastAudible.get() == 0L) -1 else now - lastAudible.get())
+                .put("publishedAgeMs", if (lastPublished.get() == 0L) -1 else now - lastPublished.get())
+        }, relay = {
+            diagnosticRoom.get()?.let { id ->
+                diagnosticClient.newCall(okhttp3.Request.Builder()
+                    .url("https://10.0.2.2:28443/__fixture/relay-state?session_id=$id")
+                    .header("X-Android-Fixture", "isolated").build()).execute().use { response ->
+                    if (response.isSuccessful) JSONObject(response.body!!.string()) else JSONObject().put("status", response.code)
+                }
+            }
+        })
+        fun mark(value: String) { phase.set(value); diagnostics.mark(value) }
         fun await(label: String, condition: () -> Boolean) {
+            phase.set(label)
+            diagnostics.mark("await.begin")
             val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
-            while (System.nanoTime() < until) { if (condition()) return; Thread.sleep(50) }
+            while (System.nanoTime() < until) {
+                if (condition()) { diagnostics.mark("await.passed"); return }
+                Thread.sleep(50)
+            }
+            diagnostics.mark("await.failed")
+            LivePeer.sampleAllDiagnostics()
             val state = AtomicReference("no controller")
             instrumentation.runOnMainSync { browser?.let {
                 state.set("state=${it.playbackState}, requested=${it.playWhenReady}, playing=${it.isPlaying}, volume=${it.volume}")
@@ -70,7 +104,7 @@ class LiveListenerTest {
                     val level = sqrt(squares / count)
                     rms.set(level)
                     decodedFrames.incrementAndGet()
-                    if (level > 500) audibleFrames.incrementAndGet()
+                    if (level > 500) { audibleFrames.incrementAndGet(); lastAudible.set(android.os.SystemClock.elapsedRealtime()) }
                 }
             }
         }
@@ -84,6 +118,7 @@ class LiveListenerTest {
             await("Native programme not playing") { NativeProgramOutput.playing }
             val room = request("/api/community/sessions", "POST", "{\"title\":\"Isolated native relay\"}").getJSONObject("session")
             sessionId = room.getString("id")
+            diagnosticRoom.set(sessionId)
             var frame = 0L
             val input = org.webrtc.audio.WebRtcAudioRecord.ProgramInput { bytes, rate, channels ->
                 for (offset in bytes.indices step channels * 2) {
@@ -92,6 +127,7 @@ class LiveListenerTest {
                     frame++
                 }
                 publishedFrames.incrementAndGet()
+                lastPublished.set(android.os.SystemClock.elapsedRealtime())
             }
             publisher = LivePeer(context, connection, room.getString("whip_url"), room.getString("publish_token"), true, {}, inputFactory = { input })
             publisher.start()
@@ -150,10 +186,12 @@ class LiveListenerTest {
                 programme.read(encodedSource, 48000, 2)
                 assertTrue("Received Live was recaptured for broadcast", encodedSource.all { it == 0.toByte() })
             }
+            mark("pause.before-relay-kick")
             instrumentation.runOnMainSync { active.volume = .4f; active.pause() }
             await("MediaSession pause was ignored") {
                 instrumentation.runOnMainSync { playing.set(!active.playWhenReady && !active.isPlaying && active.volume == .4f) }; playing.get()
             }
+            mark("relay.kick")
             okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build().newCall(okhttp3.Request.Builder()
                 .url("https://10.0.2.2:28443/__fixture/relay-kick").header("X-Android-Fixture", "isolated")
                 .post(JSONObject().put("session_id", sessionId).put("role", "read").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
@@ -161,13 +199,16 @@ class LiveListenerTest {
             await("Automatic listener recovery failed") {
                 instrumentation.runOnMainSync { playing.set(active.playbackState == androidx.media3.common.Player.STATE_READY && !active.playWhenReady && active.volume == .4f && active.currentMediaItem?.mediaId == "soundsible:live:$sessionId") }; playing.get()
             }
+            mark("relay.resume")
             instrumentation.runOnMainSync { active.play() }
             await("MediaSession resume was ignored") { instrumentation.runOnMainSync { playing.set(active.isPlaying) }; playing.get() }
             // READY can precede decoded media after WHEP recovery. Verify that
             // recovery separately before attributing missing PCM to Activity close.
             val beforeResumeAudio = audibleFrames.get()
             await("Relay recovered its connection but not decoded programme") { audibleFrames.get() >= beforeResumeAudio + 10 }
+            mark("activity.close.begin")
             scenario.close(); scenario = null
+            mark("activity.close.end")
             // Observe fresh non-silent frames, including ones between polls.
             val beforeCloseAudio = audibleFrames.get()
             await("Activity close stopped remote programme") { audibleFrames.get() >= beforeCloseAudio + 50 }
@@ -188,6 +229,10 @@ class LiveListenerTest {
             instrumentation.runOnMainSync { active.setMediaItem(song); active.prepare(); active.play() }
             await("Return to local programme failed") { instrumentation.runOnMainSync { playing.set(active.isPlaying && active.currentMediaItem?.mediaId == "member-track") }; playing.get() }
         } finally {
+            diagnostics.close()
+            diagnosticClient.dispatcher.cancelAll()
+            diagnosticClient.connectionPool.evictAll()
+            diagnosticClient.dispatcher.executorService.shutdown()
             NativeLivePlayer.decodedObservers.remove(sink)
             hostSocket?.close()
             browser?.let { active -> if (receiving) instrumentation.runOnMainSync { active.pause(); active.stop() } }

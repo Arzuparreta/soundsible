@@ -27,6 +27,17 @@ MEDIAMTX_SHA256 = "121be6e00397e473a95d83c75f4fcd3819a6af3b0e1a50889cba43ab4fab6
 MEDIAMTX_URL = f"https://github.com/bluenviron/mediamtx/releases/download/{MEDIAMTX_VERSION}/{MEDIAMTX_ARCHIVE}"
 
 
+def relay_peer_diagnostics(peer: dict) -> dict:
+    """Allowlisted media counters, never query tokens, candidates or addresses."""
+    counters = ("inboundBytes", "inboundRTPPackets", "inboundRTCPPackets",
+                "inboundRTPPacketsLost", "inboundRTPPacketsJitter", "outboundBytes",
+                "outboundRTPPackets", "outboundRTCPPackets", "outboundFramesDiscarded")
+    result = {key: peer[key] for key in counters if type(peer.get(key)) in (int, float)}
+    result["state"] = peer["state"] if peer.get("state") in ("read", "publish") else "unknown"
+    result["peerConnectionEstablished"] = peer.get("peerConnectionEstablished") is True
+    return result
+
+
 def mediamtx() -> Path:
     """The pinned relay binary, downloaded and checked once per machine."""
     cache = Path(os.getenv("XDG_CACHE_HOME") or Path.home() / ".cache") / "soundsible" / "mediamtx" / MEDIAMTX_VERSION
@@ -245,7 +256,8 @@ def main():
         with urlopen("http://127.0.0.1:29997/v3/webrtcsessions/list", timeout=2) as response:
             peers = json.load(response)["items"]
         selected = [peer for peer in peers if peer["path"] == room["stream_path"]]
-        return jsonify(publishers=sum(peer["state"] == "publish" for peer in selected), readers=sum(peer["state"] == "read" for peer in selected))
+        return jsonify(publishers=sum(peer["state"] == "publish" for peer in selected), readers=sum(peer["state"] == "read" for peer in selected),
+                       peers=[relay_peer_diagnostics(peer) for peer in selected])
     internal = WSGIServer(("127.0.0.1", 28080), app, handler_class=WebSocketHandler)
     internal.start()
     WSGIServer(("127.0.0.1", 28443), app, handler_class=WebSocketHandler,
