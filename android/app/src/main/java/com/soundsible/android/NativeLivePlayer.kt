@@ -135,7 +135,11 @@ internal class NativeLivePlayer(
     }
     private fun current() = !closed && epoch == connection.generation
     private fun audible() = requested && !suppressed && state == Player.STATE_READY && current()
-    private fun gain() { peer?.setVolume(if (audible()) (volumeValue * duck).toDouble() else 0.0) }
+    private fun gain() {
+        peer?.diagnostic("listener.gain") { JSONObject().put("requested", requested).put("suppressed", suppressed)
+            .put("state", state).put("volume", volumeValue).put("duck", duck) }
+        peer?.setVolume(if (audible()) (volumeValue * duck).toDouble() else 0.0)
+    }
     private fun setRequested(value: Boolean, changeReason: Int) {
         requested = value && current() && failure == null; reason = changeReason
         suppressed = false; duck = 1f
@@ -144,6 +148,7 @@ internal class NativeLivePlayer(
         gain(); changed(snapshot()); invalidateState()
     }
     private fun focusChanged(change: Int) {
+        peer?.diagnostic("listener.focus") { JSONObject().put("change", change) }
         when (change) {
             AudioManager.AUDIOFOCUS_GAIN -> { suppressed = false; duck = 1f }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> suppressed = true

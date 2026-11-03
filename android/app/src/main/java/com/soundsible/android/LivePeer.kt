@@ -16,6 +16,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.CopyOnWriteArraySet
+import org.json.JSONObject
 
 /** Native WHIP/WHEP resource. Call start/close on a worker, never the UI/player looper. */
 @UnstableApi
@@ -43,6 +46,8 @@ internal class LivePeer(
     private var source: AudioSource? = null
     private var outgoing: AudioTrack? = null
     private var incoming: AudioTrack? = null
+    private val diagnosticId = diagnosticIds.incrementAndGet()
+    private val statsLock = Any()
     private var resource: HttpUrl? = null
     private val selected = endpoint.toHttpUrl().also { require(it.isHttps && it.username.isEmpty() && it.password.isEmpty()) }
     private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
@@ -53,6 +58,16 @@ internal class LivePeer(
             chain.proceed(chain.request())
         }.build()
     private fun owns() = !closed.get() && !cancelled.get() && epoch == connection.generation
+    internal fun diagnostic(event: String, values: () -> JSONObject = { JSONObject() }) {
+        LiveDiagnostics.emit(event) { values().put("peer", diagnosticId).put("publishing", publishing) }
+    }
+    private fun sampleDiagnostics() {
+        synchronized(statsLock) {
+            if (!owns()) return
+            runCatching { peer?.getStats { report -> diagnostic("rtc.stats") { JSONObject().put("stats", LiveDiagnostics.stats(report)) } } }
+                .onFailure { diagnostic("rtc.stats.unavailable") { JSONObject().put("error", it.javaClass.simpleName) } }
+        }
+    }
     private fun request(url: HttpUrl, method: String, sdp: String? = null): okhttp3.Response {
         val builder = Request.Builder().url(url).method(method, sdp?.toRequestBody("application/sdp".toMediaType()))
         token?.let { builder.header("Authorization", "Bearer $it") }
@@ -84,7 +99,7 @@ internal class LivePeer(
             val config = PeerConnection.RTCConfiguration(ice).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN }
             val next = owner.createPeerConnection(config, object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState) {}
-                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {}
+                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) { diagnostic("ice.state") { JSONObject().put("state", state.name) } }
                 override fun onIceConnectionReceivingChange(receiving: Boolean) {}
                 override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) { if (state == PeerConnection.IceGatheringState.COMPLETE) gathered.countDown() }
                 override fun onIceCandidate(candidate: IceCandidate) {}
@@ -93,13 +108,24 @@ internal class LivePeer(
                 override fun onRemoveStream(stream: MediaStream) {}
                 override fun onDataChannel(channel: DataChannel) {}
                 override fun onRenegotiationNeeded() {}
-                override fun onConnectionChange(state: PeerConnection.PeerConnectionState) { if (owns()) onState(state) }
+                override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
+                    diagnostic("peer.state") { JSONObject().put("state", state.name) }
+                    if (owns()) onState(state)
+                }
                 override fun onTrack(transceiver: RtpTransceiver) {
                     if (!owns()) return
-                    (transceiver.receiver.track() as? AudioTrack)?.let { track -> incoming = track; track.setVolume(volume); onAudio?.let(track::addSink) }
+                    (transceiver.receiver.track() as? AudioTrack)?.let { track ->
+                        incoming = track
+                        val applied = volume
+                        track.setVolume(applied)
+                        diagnostic("track.bound") { JSONObject().put("appliedVolume", applied).put("requestedVolume", volume) }
+                        onAudio?.let(track::addSink)
+                    }
                 }
             }) ?: error("LIVE_PEER_FAILED")
-            peer = next
+            synchronized(statsLock) { peer = next }
+            diagnosticPeers.add(this)
+            diagnostic("peer.start")
             if (publishing) {
                 source = owner.createAudioSource(MediaConstraints().apply {
                     for (name in listOf("googEchoCancellation", "googAutoGainControl", "googNoiseSuppression", "googHighpassFilter")) mandatory.add(MediaConstraints.KeyValuePair(name, "false"))
@@ -128,20 +154,29 @@ internal class LivePeer(
             }
             check(owns())
             set { next.setRemoteDescription(it, SessionDescription(SessionDescription.Type.ANSWER, answer)) }
-        } catch (failure: Exception) { close(); throw failure }
+        } catch (failure: Exception) {
+            diagnostic("peer.start.failed") { JSONObject().put("error", failure.javaClass.simpleName) }
+            close(); throw failure
+        }
     }
-    fun setVolume(volume: Double) { require(volume in 0.0..1.0); this.volume = volume; incoming?.setVolume(volume) }
+    fun setVolume(volume: Double) {
+        require(volume in 0.0..1.0); this.volume = volume; incoming?.setVolume(volume)
+        diagnostic("track.volume") { JSONObject().put("volume", volume).put("bound", incoming != null) }
+    }
     /** Safe on the player looper: invalidation is immediate, socket teardown stays off-main. */
     fun cancel() {
         if (!cancelled.compareAndSet(false, true)) return
+        diagnostic("peer.cancel")
         gathered.countDown(); pendingSdp.get()?.cancel(false)
         CompletableFuture.runAsync { client.dispatcher.cancelAll() }
     }
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        diagnostic("peer.close")
+        diagnosticPeers.remove(this)
         cancelled.set(true); gathered.countDown(); pendingSdp.get()?.cancel(false)
         incoming?.let { track -> onAudio?.let(track::removeSink) }
-        peer?.close(); peer?.dispose(); peer = null
+        synchronized(statsLock) { peer?.close(); peer?.dispose(); peer = null }
         outgoing?.dispose(); source?.dispose(); outgoing = null; source = null
         factory?.dispose(); factory = null; adm?.release(); adm = null
         input?.let { WebRtcAudioRecord.detach(it); (it as? AutoCloseable)?.close() }; input = null
@@ -154,6 +189,11 @@ internal class LivePeer(
         client.dispatcher.cancelAll(); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown()
     }
     companion object {
+        private val diagnosticIds = AtomicLong()
+        private val diagnosticPeers = CopyOnWriteArraySet<LivePeer>()
+        internal fun sampleAllDiagnostics() {
+            if (LiveDiagnostics.observers.isNotEmpty()) diagnosticPeers.forEach { it.sampleDiagnostics() }
+        }
         private val publisher = AtomicReference<LivePeer>()
         private var initialized = false
         @Synchronized private fun initialize(context: Context) {
