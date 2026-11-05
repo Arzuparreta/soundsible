@@ -86,7 +86,7 @@ def test_write_error_keeps_previous_file_and_releases_lock(tmp_path):
 def test_encoding_failure_propagates_and_allows_next_save(tmp_path):
     target = writer(tmp_path)
 
-    def broken(self):
+    def broken(self, **kwargs):
         yield '{'
         raise ValueError('encoding failed')
 
@@ -105,8 +105,8 @@ def test_lock_covers_every_serialized_block(tmp_path):
     target = writer(tmp_path)
     original = LibraryMetadata.iter_json
 
-    def checked(model):
-        for block in original(model):
+    def checked(model, **kwargs):
+        for block in original(model, **kwargs):
             assert not target._lock.acquire(blocking=False)
             yield block
 
@@ -227,3 +227,96 @@ def test_unchanged_manifest_does_not_rebuild_the_resident_library(tmp_path, monk
     monkeypatch.setattr(target, '_load_library', lambda: pytest.fail('unnecessary full model reload'))
     target.commit_track(library(2).tracks[1])
     assert len(target.library.tracks) == 2
+
+
+def test_verified_own_manifest_reads_only_podcast_tail(tmp_path, monkeypatch):
+    from shared.downloader import service
+    from shared.file_revision import revision
+    target = writer(tmp_path, 257)
+    target.library.podcast_subscriptions = [{'title': 'Español 東京'}]
+    target.save_library()
+    assert target._manifest_revision == revision(target.library_path)
+    original = service.read_podcast_fields
+    offsets = []
+
+    def read(source, **kwargs):
+        offsets.append(kwargs['offset'])
+        assert kwargs['offset'] > target.library_path.stat().st_size * .9
+        return original(source, **kwargs)
+
+    monkeypatch.setattr(service, 'read_podcast_fields', read)
+    # Even a caller that changes the in-memory podcast fields gets the exact
+    # disk projection, as with the full reader.
+    target.library.podcast_subscriptions = [{'id': 'memory'}]
+    target.save_library()
+    assert target.library.podcast_subscriptions == [{'title': 'Español 東京'}]
+    assert len(offsets) == 1
+    assert target._manifest_revision == revision(target.library_path)
+
+
+def test_foreign_snapshot_never_reuses_podcast_offset(tmp_path, monkeypatch):
+    from shared.downloader import service
+    target = writer(tmp_path, 3)
+    target.save_library()
+    changed = library(1)
+    changed.podcast_subscriptions = [{'id': 'foreign'}]
+    target.library_path.write_text(changed.to_json(indent=None))
+    original = service.read_podcast_fields
+
+    def read(source, **kwargs):
+        assert kwargs['offset'] is None
+        return original(source, **kwargs)
+
+    monkeypatch.setattr(service, 'read_podcast_fields', read)
+    target.commit_track(library(2).tracks[1])
+    assert target.library.podcast_subscriptions == [{'id': 'foreign'}]
+
+
+def test_failed_publication_does_not_publish_new_offset_or_revision(tmp_path):
+    target = writer(tmp_path, 2)
+    target.save_library()
+    old = target._manifest_revision, target._podcast_revision, target._podcast_offset
+    target.library.tracks[0].title = 'A much longer title'
+    with patch('shared.atomic_file.os.replace', side_effect=OSError('rename failed')):
+        with pytest.raises(OSError):
+            target.save_library()
+    assert old == (target._manifest_revision, target._podcast_revision, target._podcast_offset)
+    target.save_library()
+    assert target.library_path.read_text() == target.library.to_json()
+
+
+def test_model_invalid_own_export_keeps_full_reader_semantics(tmp_path):
+    target = writer(tmp_path, 1)
+    target.library.version = float('inf')
+    target.save_library()
+    assert target._podcast_offset is None
+    target.library.podcast_subscriptions = [{'id': 'memory'}]
+    target.save_library()
+    # The old model reader rejects Infinity-as-version and retains memory.
+    assert target.library.podcast_subscriptions == [{'id': 'memory'}]
+
+
+def test_commit_hashes_the_existing_manifest_only_once(tmp_path):
+    from shared.downloader import service
+    target = writer(tmp_path, 2)
+    target.save_library()
+    with patch.object(service, 'revision', wraps=service.revision) as checked:
+        target.commit_track(library(3).tracks[2])
+    assert checked.call_count == 1
+    assert len(LibraryMetadata.from_json(target.library_path.read_text()).tracks) == 3
+
+
+def test_publication_digest_and_offset_include_windows_newlines(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from shared import library_json
+    from shared.file_revision import revision
+    target = writer(tmp_path, 2)
+    target.library.podcast_subscriptions = [{'title': '東京😀'}]
+    with monkeypatch.context() as scoped:
+        scoped.setattr(library_json, 'os', SimpleNamespace(linesep='\r\n'))
+        target.save_library()
+    assert b'\r\n' in target.library_path.read_bytes()
+    assert target._manifest_revision == revision(target.library_path)
+    target.library.podcast_subscriptions.clear()
+    target.save_library()
+    assert target.library.podcast_subscriptions == [{'title': '東京😀'}]

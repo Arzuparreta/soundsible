@@ -66,6 +66,66 @@ def test_undeclared_unsaved_changes_are_not_committed(manager):
     assert manager.db.load_library_metadata().tracks[1].title != 'Unrelated dirty edit'
 
 
+@pytest.mark.parametrize('dirty', ['same_field', 'other_field', 'header', 'order'])
+def test_incremental_proof_rejects_every_dirty_source(manager, dirty):
+    track_id = manager.metadata.tracks[0].id
+    if dirty == 'same_field':
+        manager.metadata.tracks[0].title = 'Unsaved title'
+    elif dirty == 'other_field':
+        manager.metadata.tracks[0].artists.append('Unsaved artist')
+    elif dirty == 'header':
+        manager.metadata.settings['dirty'] = ['Unsaved']
+    else:
+        manager.metadata.tracks.reverse()
+    previous = manager._library_revision
+    with pytest.raises(LibraryPersistenceError):
+        manager.patch_track_metadata(track_id, {'title': 'Declared title'})
+    assert manager.db.get_library_revision() == previous
+
+
+def test_direct_patch_refuses_unrequested_candidate_edits(manager):
+    before = fingerprint(manager.metadata)
+    candidate = deepcopy(manager.metadata)
+    track = candidate.tracks[0]
+    track.title = 'Declared'
+    track.duration += 1
+    with pytest.raises(ValueError, match='unchanged canonical source'):
+        manager.db.patch_track_metadata(track.id, {'title': 'Declared'},
+                                       expected_revision=manager._library_revision,
+                                       previous_fingerprint=before, metadata=candidate)
+    assert fingerprint(manager.db.load_library_metadata()) == before
+
+
+def test_incremental_edit_does_not_select_unrelated_proof_rows(manager, monkeypatch):
+    from contextlib import contextmanager
+    original = manager.db._get_connection
+    statements = []
+
+    @contextmanager
+    def traced():
+        with original() as conn:
+            conn.set_trace_callback(statements.append)
+            try:
+                yield conn
+            finally:
+                conn.set_trace_callback(None)
+
+    monkeypatch.setattr(manager.db, '_get_connection', traced)
+    assert manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': 'Directed'})
+    assert not any('SELECT lt.track_id,lt.position,p.hash' in query for query in statements)
+    assert manager.db.public_source()['fingerprint'] == fingerprint(manager.metadata)
+
+
+def test_incremental_edit_repairs_nullable_changed_row_proof(manager):
+    track = manager.metadata.tracks[0]
+    with manager.db._get_connection() as conn:
+        conn.execute('UPDATE library_public_rows SET hash=NULL,identity=NULL WHERE id=?', (track.id,))
+    assert manager.patch_track_metadata(track.id, {'title': track.title})
+    with manager.db._get_connection() as conn:
+        row = conn.execute('SELECT hash,identity FROM library_public_rows WHERE id=?', (track.id,)).fetchone()
+    assert row[0] is not None and row[1] == track.file_hash
+
+
 def test_unknown_fields_and_missing_track_are_refused(manager):
     with pytest.raises(ValueError):
         manager.patch_track_metadata(manager.metadata.tracks[0].id, {'id': 'replacement'})

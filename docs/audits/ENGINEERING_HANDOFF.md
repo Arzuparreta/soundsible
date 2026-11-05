@@ -1,10 +1,13 @@
 # Traspaso de la optimización de recursos de Soundsible
 
 Punto de entrada para continuar con otro agente sin el historial del chat.
+La continuación vigente es la [entrega medida del 2026-11-05](#continuación-medida-2026-11-05).
+Las restricciones originales de rama/sin push/sin PR que siguen son históricas;
+el usuario autorizó esta entrega en una única PR contra `main`.
 Estado verificado al preparar este documento: rama `fix/sqlite-connection-lifecycle`,
 último chunk funcional `32929f7`. Este traspaso se incorpora en un commit posterior.
 
-## Instrucciones del usuario que siguen vigentes
+## Instrucciones de la entrega original
 
 - Trabajar en **esta misma rama, chunk por chunk**. No abrir PR contra `main`
   hasta que esté terminado todo el trabajo de la auditoría y el usuario lo indique.
@@ -426,3 +429,33 @@ código muerto conservando el comportamiento del producto y corregir el fallo
 Windows del último CI. Esta entrega tiene su propio alcance y evidencia en
 [código heredado sin uso](2026-11-03-unused-code.md); no declara completada la
 matriz de escucha/carga pendiente de esta auditoría histórica.
+
+## Continuación medida (2026-11-05)
+
+El usuario autorizó implementar las optimizaciones demostrables en una única
+PR para evitar ejecuciones repetidas del CI. Criterio explícito: mejora medible
+superior al 0,5 % de una operación completa, o beneficio demostrado de
+funcionalidad, mantenibilidad o fiabilidad. No basta un helper más rápido ni
+una propuesta sin evidencia. Esta autorización sustituye las restricciones de
+rama, push y PR de la entrega original; no autoriza fusionar.
+
+Contrato, límites, reproducción y resultados en
+[optimizaciones medidas](../performance/measured-runtime-optimizations.md).
+
+| Candidato | Estado actual |
+| --- | --- |
+| Construcción/copia de pistas y fingerprints públicos | Acelerados manteniendo todas las pruebas de mutabilidad y los bytes públicos. |
+| Ediciones dirigidas | Solo se actualiza el hash de la pista afectada; se conservan la verificación completa del modelo, revisión, catálogo, búsqueda y exportaciones. |
+| Guardados ODST | Se eliminan dos lecturas de revisión redundantes por adquisición; los podcasts se leen por offset solo tras verificar la huella completa de una publicación propia. Los archivos ajenos conservan el lector completo. |
+| Serialización portable | Encoder medido según intérprete: vía plana en Python anterior a 3.13 y estándar en los más recientes; igualdad exacta de bytes comprobada en ambas vías. |
+| Huella de búsqueda local | SHA-256, resultados/orden iguales, migración por rehash sin volver a normalizar todas las pistas. |
+| Carátulas calientes | Aciertos recientes sin conexión SQLite, con metadatos acotados a 256 nombres/plazos e invalidación por cambios del índice/cuota. Sin imágenes ni descriptores residentes. |
+| Comprobación del shell | Una pasada de directorios y un manifiesto de entrada; también detecta borrados, renombrados y cambios durante la compilación. |
+| Priorización/cancelación DJ | El pendiente antiguo ya fue abordado por P14, fusionado y aceptado físicamente. Ver [P14](../dj/P14.md). Esta entrega no cambia la política musical ni añade otro scheduler. |
+| Matriz real de escucha, Live, proveedores remotos y sesiones de horas | Sigue siendo una aceptación distinta; las mediciones HTTP/CPU de esta entrega no la sustituyen. |
+
+Siguen existiendo pasadas completas necesarias para comprobar modelos mutables,
+hashear el archivo ODST y publicar sus bytes portables. No se ha sustituido esa
+prueba por confiar solo en la revisión SQL, ni se ha añadido una copia residente
+de la biblioteca. Las restricciones de validación física de otras plataformas
+siguen vigentes.

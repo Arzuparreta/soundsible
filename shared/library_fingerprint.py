@@ -3,11 +3,14 @@ from dataclasses import fields
 from hashlib import sha256
 from pickle import Pickler
 from io import BytesIO
+from operator import attrgetter, itemgetter
 
 from shared.models import LibraryMetadata, Track
 
 TRACK_FIELDS = tuple(f.name for f in fields(Track) if f.name not in {"local_path", "local_mtime_ns"})
 HEADER_FIELDS = ("version", "playlists", "settings", "last_updated", "podcast_subscriptions", "podcast_episode_cache")
+track_values = attrgetter(*TRACK_FIELDS)
+_public_values = itemgetter(*TRACK_FIELDS)
 
 
 class _DigestWriter:
@@ -38,7 +41,7 @@ def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None, public_
             for track in tracks:
                 if len(track) != len(TRACK_FIELDS):
                     raise TypeError("Unsupported public track")
-                yield tuple(track[name] for name in TRACK_FIELDS)
+                yield _public_values(track)
 
         rows = public_values()
     else:
@@ -53,11 +56,11 @@ def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None, public_
                     row = public_tracks[position]
                     if len(row) != len(TRACK_FIELDS):
                         raise TypeError("Unsupported public track")
-                    yield tuple(row[name] for name in TRACK_FIELDS)
+                    yield _public_values(row)
                     continue
                 if type(track) is not Track:
                     raise TypeError("Unsupported track model")
-                yield tuple(getattr(track, name) for name in TRACK_FIELDS)
+                yield track_values(track)
 
         rows = values()
     encoder.dump((header, len(tracks)))

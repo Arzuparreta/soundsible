@@ -1226,7 +1226,7 @@ class DatabaseManager:
         allowed = {'title', 'artist', 'album', 'album_artist', 'cover_source', 'metadata_modified_by_user'}
         if not changes or not set(changes) <= allowed:
             raise ValueError('Unsupported track metadata edit')
-        from shared.library_changes import source, sync_source
+        from shared.library_changes import source, sync_track_source
         from shared import library_search
         with self._get_connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
@@ -1242,6 +1242,11 @@ class DatabaseManager:
                 row = conn.execute(f'SELECT {",".join(fields)} FROM tracks WHERE id=?', (track_id,)).fetchone()
                 if row is None:
                     raise KeyError(track_id)
+                position = conn.execute('SELECT position FROM library_tracks WHERE track_id=?', (track_id,)).fetchone()
+                if position is None or metadata.tracks[position[0]].id != track_id:
+                    raise ValueError('Track edit changed library membership')
+                previous_values = {name: bool(row[i]) if name == 'metadata_modified_by_user' else row[i]
+                                   for i, name in enumerate(fields)}
                 assignments = ','.join(f'{field}=?' for field in fields)
                 conn.execute(f'UPDATE tracks SET {assignments} WHERE id=?', [*(changes[field] for field in fields), track_id])
                 catalog_changed = any(field in {'artist', 'album', 'album_artist'} and row[i] != changes[field]
@@ -1249,7 +1254,7 @@ class DatabaseManager:
                 if catalog_changed:
                     self._replace_catalog_projection(conn, metadata.tracks)
                 conn.execute('UPDATE library_state SET revision=revision+1 WHERE singleton=1')
-                sync_source(conn, metadata, False)
+                sync_track_source(conn, metadata, position[0], changes, previous_values, previous_fingerprint)
                 library_search.sync(conn)
                 conn.execute('COMMIT')
                 return revision + 1

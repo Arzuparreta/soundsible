@@ -17,6 +17,15 @@ ROOT = Path(__file__).resolve().parents[1]
 def child(args):
     from gevent import monkey
     monkey.patch_all()
+    if args.reference:
+        sys.path.insert(0, str(ROOT))
+        from scripts.benchmark_runtime_optimizations import controls, variant
+        with variant(controls(args.reference), 'baseline'):
+            return workload(args)
+    return workload(args)
+
+
+def workload(args):
     import gevent
     from gevent.pywsgi import WSGIServer
     import hashlib
@@ -96,7 +105,7 @@ def child(args):
 
         def writer():
             with user_context('load-benchmark'):
-                manager.patch_track_metadata(track_id, {'title': f'Load edit {counts["edits"]}'})
+                assert manager.patch_track_metadata(track_id, {'title': f'Load edit {counts["edits"]}'})
             counts['edits'] += 1
 
         def scanner():
@@ -156,6 +165,7 @@ def child(args):
             ordered = sorted(values)
             return ordered[min(len(ordered) - 1, int((len(ordered) - 1) * fraction))] if ordered else None
         result = {'scenario': args.scenario, 'profile': args.profile, 'blocking_fsync': args.blocking_fsync, 'tracks': args.tracks,
+                  'reference': args.reference,
                   'clients': args.clients, 'elapsed_s': end - started, 'requests': len(samples),
                   'range_p50_ms': percentile(samples, .5), 'range_p95_ms': percentile(samples, .95),
                   'range_max_ms': max(samples, default=None), 'hub_p95_ms': percentile(lag, .95),
@@ -167,7 +177,8 @@ def child(args):
         result['source_sha256'] = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
                                    for name in ('shared/atomic_file.py', 'shared/api/orchestrator.py',
                                                 'player/library.py', 'shared/database.py',
-                                                'scripts/benchmark_playback_load.py')}
+                                                'scripts/benchmark_playback_load.py', 'shared/library_fingerprint.py',
+                                                'shared/library_changes.py', 'shared/models.py')}
         print(json.dumps(result), flush=True)
         if failures or (args.scenario != 'idle' and not samples):
             raise SystemExit(1)
@@ -181,6 +192,7 @@ if __name__ == '__main__':
     parser.add_argument('--profile', choices=('hdd', 'ssd'), default='ssd')
     parser.add_argument('--scenario', choices=('idle', 'normal', 'loaded', 'dj'), default='normal')
     parser.add_argument('--blocking-fsync', action='store_true', help='Benchmark the prior synchronous fsync path')
+    parser.add_argument('--reference', help='Use the historical library operations from this git revision')
     parser.add_argument('--child', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if min(args.seconds, args.tracks, args.clients) <= 0:

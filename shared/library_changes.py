@@ -28,7 +28,7 @@ def install(conn):
 def sync_source(conn, metadata, order_changed):
     # Hash exactly the same bounded encoded rows that populate the index.
     # Re-reading a mutable model afterward could associate the wrong proof.
-    from shared.library_fingerprint import TRACK_FIELDS, HEADER_FIELDS, encoded_values
+    from shared.library_fingerprint import TRACK_FIELDS, HEADER_FIELDS, encoded_values, track_values
     from shared.models import LibraryMetadata, Track
     if type(metadata) is not LibraryMetadata:
         return
@@ -48,7 +48,7 @@ def sync_source(conn, metadata, order_changed):
             previous = stored.get(track_id)
             if type(track) is not Track or previous is None or previous[0] != position:
                 return
-            values = tuple(getattr(track, name) for name in TRACK_FIELDS)
+            values = track_values(track)
             if values[TRACK_FIELDS.index("id")] != track_id:
                 return
             encoded = encoded_values(values)
@@ -67,6 +67,31 @@ def source(conn):
     if row is None or not row[0]:
         return None
     return {'fingerprint': row[1], 'ordering': row[2], 'cursor': cursor(conn).to_list()}
+
+
+def sync_track_source(conn, metadata, position, changes, previous_values, previous_fingerprint):
+    """Reprove one declared edit without rereading/hashing every stored row.
+
+    Substituting only the edited fields proves that the candidate, including
+    all other fields of this track, headers and track ordering, derives from
+    the verified pre-edit source. Both full-model passes remain mandatory.
+    Call inside the revision-checked write transaction; errors roll it back.
+    """
+    from shared.library_fingerprint import fingerprint, encoded_values, track_values
+    track = metadata.tracks[position]
+    before = track.to_public_dict()
+    if any(before[name] != value for name, value in changes.items()):
+        raise ValueError('Candidate does not contain the declared edit')
+    before.update(previous_values)
+    if fingerprint(metadata, public_tracks={position: before}) != previous_fingerprint:
+        raise ValueError('Track edit requires an unchanged canonical source')
+    updated = fingerprint(metadata)
+    values = track_values(track)
+    encoded = encoded_values(values)
+    conn.execute('INSERT INTO library_public_rows VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET '
+                 'hash=excluded.hash,identity=excluded.identity WHERE hash IS NOT excluded.hash OR identity IS NOT excluded.identity',
+                 (track.id, sha256(encoded).digest(), str(track.file_hash or track.id or '')))
+    conn.execute('UPDATE library_public_source SET valid=1,fingerprint=? WHERE singleton=1', (updated,))
 
 
 def affected(conn, previous, expected, artwork_ids, identities):

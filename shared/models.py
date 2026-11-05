@@ -109,22 +109,31 @@ class Track:
     def to_public_dict(self) -> Dict[str, Any]:
         """Detached portable metadata, excluding machine-local scan fields."""
         result = {}
-        for item in fields(self):
-            if item.name in {"local_path", "local_mtime_ns"}:
-                continue
-            value = getattr(self, item.name)
+        names = _PUBLIC_TRACK_FIELDS if type(self) is Track else (
+            item.name for item in fields(self) if item.name not in {"local_path", "local_mtime_ns"})
+        for name in names:
+            value = getattr(self, name)
             # Track fields are scalars except structured performer names.
             # Copy mutable values without asdict's recursive work on scalars.
-            result[item.name] = value if isinstance(value, (str, int, float, bool, type(None))) else deepcopy(value)
+            if isinstance(value, (str, int, float, bool, type(None))):
+                result[name] = value
+            elif type(value) is list and all(type(item) is str for item in value):
+                result[name] = value.copy()
+            else:
+                result[name] = deepcopy(value)
         return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Track':
         """Create Track from dictionary, filtering unknown keys."""
-        import dataclasses
-        field_names = {f.name for f in dataclasses.fields(cls)}
+        field_names = _TRACK_FIELDS if cls is Track else {f.name for f in fields(cls)}
         filtered_data = {k: v for k, v in data.items() if k in field_names}
         return cls(**filtered_data)
+
+
+_TRACK_FIELDS = frozenset(item.name for item in fields(Track))
+_PUBLIC_TRACK_FIELDS = tuple(item.name for item in fields(Track)
+                             if item.name not in {"local_path", "local_mtime_ns"})
 
 
 @dataclass
@@ -338,15 +347,18 @@ class LibraryMetadata:
         """Serialize portable library metadata to JSON."""
         return json.dumps(self.to_public_dict(), indent=indent)
 
-    def iter_json(self, chunk: int = 128) -> Iterator[str]:
+    def iter_json(self, chunk: int = 128, *, on_section=None) -> Iterator[str]:
         """`to_json()` in pieces: the same text, without the whole document in memory.
 
         Header values are encoded as `to_json()` encodes them. Tracks are encoded
         `chunk` at a time and moved one indentation level deeper; JSON escapes
         newlines inside strings, so every newline in an encoded block is layout.
         """
+        from shared.library_json import encode_track_block
         tracks = list(self.tracks)
         for index, (key, value) in enumerate(self._public_fields(None).items()):
+            if on_section is not None:
+                on_section(key)
             yield ("{" if index == 0 else ",") + "\n  " + json.dumps(key) + ": "
             if key != "tracks":
                 yield json.dumps(value, indent=2).replace("\n", "\n  ")
@@ -357,7 +369,7 @@ class LibraryMetadata:
                 for offset in range(0, len(tracks), chunk):
                     block = [track.to_public_dict() for track in tracks[offset:offset + chunk]]
                     # `[\n  {...},\n  {...}\n]` without its brackets.
-                    yield ("," if offset else "") + json.dumps(block, indent=2)[1:-2].replace("\n", "\n  ")
+                    yield ("," if offset else "") + encode_track_block(block)
                 yield "\n  ]"
         yield "\n}"
 
