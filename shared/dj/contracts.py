@@ -148,6 +148,10 @@ class TransitionPlan(TypedDict):
     overlap_seconds: Seconds
     overlap_bars: float | None
     playback_rate: PlaybackRatio
+    # Split clients only (`timing.deck_rates`): outgoing deck speed through
+    # the overlap, and the ramp to it in outgoing media seconds before out_cue.
+    out_playback_rate: NotRequired[PlaybackRatio]
+    out_rate_ramp: NotRequired[dict[str, Seconds]]
     echo_delay_seconds: NotRequired[Seconds]
     score: float  # Pair ranking, not a certificate of executable beatmatch.
     confidence: float

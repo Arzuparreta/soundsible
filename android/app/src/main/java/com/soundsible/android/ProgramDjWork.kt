@@ -21,6 +21,8 @@ internal class ProgramDjWork(private val connection: EngineConnection) : AutoClo
     @Synchronized fun headers(requestId: String? = null): Map<String, String> = buildMap {
         put("X-Soundsible-Work", JSONObject().put("client", client).put("epoch", epoch).toString())
         requestId?.let { put("X-Soundsible-Work-Request", it.replace(':', '-')) }
+        // This player moves both decks toward a shared tempo (ProgramDjSession).
+        put("X-Soundsible-Dj-Rates", "split")
     }
     @Synchronized fun begin() { epoch++; active = true; signature = ""; lastSent = 0; sync(JSONArray()) }
     @Synchronized fun sync(tracks: JSONArray) {

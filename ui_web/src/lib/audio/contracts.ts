@@ -71,7 +71,11 @@ export interface LiveTransitionPlan {
   in_cue: number;
   overlap_seconds: number;
   overlap_bars: number;
+  /** Incoming media seconds per outgoing media second. */
   playback_rate: number;
+  /** Outgoing deck speed through the overlap (see `DjTransitionPlan`). */
+  out_playback_rate?: number;
+  out_rate_ramp?: { lead_seconds: number; seconds: number };
   echo_delay_seconds?: number;
   confidence: number;
   sync?: {
@@ -124,7 +128,13 @@ export interface ActiveMix {
   inCue: number;
   /** Overlap in wall seconds. */
   overlap: number;
+  /** Incoming media seconds per outgoing media second. */
   rate: number;
+  /** Outgoing deck speed through the overlap, reached over `outRamp`. */
+  outRate: number;
+  /** Outgoing media positions of the preparation ramp; null when the outgoing
+   * deck keeps its speed. `from` is the speed it had when the ramp began. */
+  outRamp: { start: number; end: number; from: number | null } | null;
   preroll: number;
   /** Incoming media position at which the crossfade started. */
   mixStart: number | null;

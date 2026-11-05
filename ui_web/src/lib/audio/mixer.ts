@@ -3,6 +3,7 @@ import { diagnosticLoad, diagnosticPause, diagnosticSource, recordPlaybackDiagno
 import type { DiagnosticFacts } from "../playbackDiagnostics";
 import type { DeckEffects, ProgramMixSnapshot, LiveTransitionPlan, MixPhase, MixCancelReason, ProgramTransportOrigin, ProgramTransportEvent, MixCallbacks, ActiveMix } from "./contracts";
 import { MediaClockHealth } from './mediaClock';
+import { MAX_STRETCH, RATE_STEP, clampDeckSpeed, planDeckRates } from '../djRates';
 export interface MixerPorts {
   deckSignal: (index: number) => number | null;
   deckOutputSignal: (index: number) => number | null;
@@ -52,11 +53,15 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   const PHASE_NUDGE_SECONDS = 1;
   const PHASE_SEEK_SECONDS = 0.1;
   const HELD_TECHNIQUES = new Set<LiveTransitionPlan['technique']>(['bass_swap', 'filter_blend', 'long_blend']);
+  // Speed changes move in quarter-percent steps, at most every 200 ms: some
+  // renderers restart on every playbackRate assignment (P15).
+  const RATE_QUANTUM = 400;
+  const RATE_CHANGE_MS = 200;
   function blendProgress(current: ActiveMix): number {
     if (current.suspended || current.mixStart === null) return 0;
     const elapsed = ports.audioContext && current.mixContextStart !== null
       ? ports.audioContext.currentTime - current.mixContextStart
-      : (ports.decks()[current.toIndex].currentTime - current.mixStart) / current.rate;
+      : (ports.decks()[current.toIndex].currentTime - current.mixStart) / current.rate / current.outRate;
     return Math.min(1, Math.max(0, elapsed / Math.max(0.001, current.overlap)));
   }
   function programMixSnapshot(): ProgramMixSnapshot {
@@ -101,6 +106,15 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   // variable speed, do not expose the listener to the same failure every song.
   let rateControlAvailable = true;
   const rateChangedAt = new WeakMap<HTMLAudioElement, number>();
+  const outgoingClock = new MediaClockHealth();
+  /** Assigns a speed at most every RATE_CHANGE_MS unless `force`. */
+  function setDeckSpeed(deck: HTMLAudioElement, speed: number, force = false): void {
+    if (Math.abs(deck.playbackRate - speed) <= 1e-6) return;
+    const now = performance.now();
+    if (!force && now - (rateChangedAt.get(deck) ?? -Infinity) < RATE_CHANGE_MS) return;
+    deck.playbackRate = speed;
+    rateChangedAt.set(deck, now);
+  }
   function rateFallback(deck: HTMLAudioElement, reason: string, phase: string, diagnostic = mix?.diagnostic): void {
     rateControlAvailable = false;
     if (deck.playbackRate !== 1) deck.playbackRate = 1;
@@ -176,11 +190,16 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       deck.playbackRate = 1;
       return;
     }
-    const startedAt = Date.now();
     if (!rateControlAvailable) { deck.playbackRate = 1; return; }
     const clock = new MediaClockHealth();
     clock.observe(deck);
+    // Progress counts playing time only: a pause holds the ramp where it is.
+    let elapsed = 0;
+    let lastAt = Date.now();
     rateTimer = lifetime.setInterval(() => {
+      const now = Date.now();
+      const step = now - lastAt;
+      lastAt = now;
       if (ports.decks()[ports.activeIndex] !== deck) {
         stopRateReturn();
         return;
@@ -194,13 +213,74 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         return;
       }
       if (deck.paused || deck.seeking) return;
-      const progress = Math.min(1, (Date.now() - startedAt) / RATE_RETURN_MS);
+      elapsed += step;
+      const progress = Math.min(1, elapsed / RATE_RETURN_MS);
       // Quarter-percent steps, as in phase riding. Reassigning playbackRate
       // every 200 ms for an almost imperceptible change restarts some renderers.
-      const wanted = progress >= 1 ? 1 : Math.round((from + (1 - from) * progress) * 400) / 400;
+      const wanted = progress >= 1 ? 1 : Math.round((from + (1 - from) * smoothstep(progress)) * RATE_QUANTUM) / RATE_QUANTUM;
       if (Math.abs(deck.playbackRate - wanted) > 1e-6) deck.playbackRate = wanted;
       if (progress >= 1) stopRateReturn();
     }, 200);
+  }
+  /** Zero slope at both ends: a speed ramp starts and settles without a kink. */
+  function smoothstep(progress: number): number {
+    const x = Math.min(1, Math.max(0, progress));
+    return x * x * (3 - 2 * x);
+  }
+  /**
+   * The outgoing deck cannot reach the shared tempo: only the incoming deck
+   * may move, if its relation fits the pitch range on its own; otherwise the
+   * blend stops promising beat alignment. The outgoing deck keeps the speed it
+   * has now; the phase target follows whatever speed it plays at.
+   */
+  function abandonOutRamp(current: ActiveMix, reason: string, rateControl = true): void {
+    const from = ports.decks()[current.fromIndex];
+    current.overlap *= current.outRate;
+    current.outRamp = null;
+    current.outRate = from.playbackRate;
+    current.overlap /= current.outRate;
+    recordPlaybackDiagnostic('mix.execution_fallback', { ...current.diagnostic, reason, technique: current.technique });
+    if (!HELD_TECHNIQUES.has(current.technique)) return;
+    if (rateControl && Math.abs(1 - current.rate * from.playbackRate) <= MAX_STRETCH - RATE_STEP) return;
+    current.technique = 'structural_fade';
+    current.rate = 1;
+    ports.decks()[current.toIndex].playbackRate = 1;
+  }
+  /** Drives the outgoing deck toward the shared tempo from its own media position. */
+  function rampOutgoing(current: ActiveMix, from: HTMLAudioElement): void {
+    const ramp = current.outRamp;
+    if (!ramp || from.paused || from.seeking) return;
+    const position = from.currentTime;
+    if (position < ramp.start) return;
+    if (ramp.from === null) {
+      // The ramp owns this deck from here on, from the speed it has now
+      // (a previous blend may still be returning it to normal speed).
+      stopRateReturn();
+      outgoingClock.reset();
+      outgoingClock.observe(from);
+      // The same slope as a full ramp from normal speed, never steeper.
+      const needed = Math.abs(current.outRate - from.playbackRate) / MAX_STRETCH * (ramp.end - ramp.start);
+      if (ramp.end - position < needed) {
+        abandonOutRamp(current, 'rate_ramp_late');
+        return;
+      }
+      ramp.from = from.playbackRate;
+      ramp.start = position;
+    }
+    const failure = outgoingClock.observe(from);
+    if (failure) {
+      rateFallback(from, failure, 'prepare');
+      abandonOutRamp(current, 'rate_control_unavailable', false);
+      return;
+    }
+    const progress = ramp.end > ramp.start ? (position - ramp.start) / (ramp.end - ramp.start) : 1;
+    if (progress >= 1) {
+      setDeckSpeed(from, current.outRate, true);
+      current.outRamp = null;
+      return;
+    }
+    const wanted = Math.round((ramp.from + (current.outRate - ramp.from) * smoothstep(progress)) * RATE_QUANTUM) / RATE_QUANTUM;
+    setDeckSpeed(from, wanted);
   }
   function cancelMix(reason: MixCancelReason): void {
     const current = mix;
@@ -218,7 +298,9 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     ports.resetDeckEffects(keep);
     ports.resetDeckEffects(drop);
     ports.releaseDeck(drop);
-    if (current.dominant) scheduleRateReturn(keep, current.diagnostic);
+    // Either deck may be off normal speed: the incoming one after the
+    // handoff, the outgoing one once it has started toward a shared tempo.
+    scheduleRateReturn(keep, current.diagnostic);
     current.callbacks.onCancel(reason);
   }
   function finishMix(): void {
@@ -259,6 +341,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     ports.resetDeckEffects(keep);
     ports.resetDeckEffects(1 - keep);
     ports.releaseDeck(1 - keep);
+    scheduleRateReturn(keep, current.diagnostic);
     current.callbacks.onError(error);
   }
   function cutOver(current: ActiveMix): void {
@@ -304,12 +387,10 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     const nudge = current.nudging
       ? Math.round(Math.max(-PHASE_NUDGE_MAX, Math.min(PHASE_NUDGE_MAX, error / PHASE_NUDGE_SECONDS)) * 400) / 400
       : 0;
-    const wanted = current.rate * from.playbackRate * (1 - nudge);
-    const now = performance.now();
-    if (Math.abs(to.playbackRate - wanted) > 1e-6 && now - (rateChangedAt.get(to) ?? -Infinity) >= 200) {
-      to.playbackRate = wanted;
-      rateChangedAt.set(to, now);
-    }
+    // The target is in media time, so the phase holds whatever speed the
+    // outgoing deck plays at. A correction never takes the deck beyond the
+    // pitch range; split plans leave one step of room for it.
+    setDeckSpeed(to, clampDeckSpeed(current.rate * from.playbackRate * (1 - nudge)));
   }
   function incomingSounding(current: ActiveMix, to: HTMLAudioElement): boolean {
     const signal = ports.deckSignal(current.toIndex);
@@ -331,6 +412,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     ports.setDeckParticipation(to, false);
     to.playbackRate = 1;
     if (to.readyState >= 1) to.currentTime = 0;
+    scheduleRateReturn(current.fromIndex, current.diagnostic);
     ports.stagedUrl = current.url;
     current.callbacks.onStaged?.();
     ports.notifySourcesSettled();
@@ -426,6 +508,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
           if (to.playbackRate !== 1) rateFallback(to, 'signal_lost', 'blend');
           to.playbackRate = 1;
           current.rate = 1;
+          current.outRate = from.playbackRate;
           ports.setDeckGain(current.fromIndex, 1);
           ports.setDeckGain(current.toIndex, 0);
           ports.resetDeckEffects(current.fromIndex);
@@ -445,6 +528,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     }
     if (current.phase === 'armed') {
       if (from.paused) return;
+      rampOutgoing(current, from);
       const due = from.currentTime >= current.outCue - current.preroll;
       if (!due) return;
       // A whole song ends on its own `ended`, which hands the next one over the
@@ -461,6 +545,11 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         cutOver(current);
         return;
       }
+      if (current.outRamp) abandonOutRamp(current, 'rate_ramp_unfinished');
+      // A held blend starts in step with the outgoing deck, whatever speed it
+      // reached; a fade has no beat to follow.
+      to.playbackRate = HELD_TECHNIQUES.has(current.technique) ? clampDeckSpeed(current.rate * from.playbackRate) : current.rate;
+      rateChangedAt.set(to, performance.now());
       void ports.playProgramDeck(to).catch(lifetime.guard(error => {
         if (mix === current) failMix(error);
       }));
@@ -486,6 +575,10 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         current.phaseCorrected = true;
         return;
       }
+      // Ride the phase while the deck is still silent: a seek or play() on a
+      // deck leaves it tens of milliseconds behind (measured in Chromium:
+      // 40-50 ms at the cue), which the blend would otherwise start with.
+      holdPhase(current, from, to);
       const due = current.manual || outRemaining <= current.phaseTolerance && inRemaining <= current.phaseTolerance;
       if (!due) return;
       // A seek is under way: the blend opens once the deck plays again.
@@ -508,7 +601,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       incomingClock.reset();
       incomingClock.observe(to);
       recordPlaybackDiagnostic('mix.started', { ...current.diagnostic, phase: 'crossfading', technique: current.technique,
-        rate: current.rate, overlap: current.overlap });
+        rate: current.rate, outRate: from.playbackRate, overlap: current.overlap });
       scheduleCrossfade(current);
     }
 
@@ -595,15 +688,34 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       const to = ports.decks()[toIndex];
       ports.pendingDetach.delete(to);
       const manual = options.manual === true;
-      const rate = rateControlAvailable && !manual ? Math.min(1.08, Math.max(0.92, Number(plan.playback_rate) || 1)) : 1;
-      const technique = !rateControlAvailable && HELD_TECHNIQUES.has(plan.technique) ? 'structural_fade' : plan.technique;
-      if (technique !== plan.technique) recordPlaybackDiagnostic('mix.execution_fallback', { ...options.diagnostic,
-        reason: 'rate_control_unavailable', technique, requestedTechnique: plan.technique });
-      const overlap = manual ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4)) : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6);
+      const outCue = manual ? from.currentTime : Math.max(0, Number(plan.out_cue) || 0);
+      const held = HELD_TECHNIQUES.has(plan.technique);
+      let speeds = rateControlAvailable && !manual ? planDeckRates(plan) : null;
+      let fallbackReason = !rateControlAvailable && held ? 'rate_control_unavailable' : held && !manual && !speeds ? 'rate_out_of_range' : null;
+      let outRamp: ActiveMix['outRamp'] = null;
+      if (speeds && Math.abs(speeds.out - 1) > 1e-6) {
+        const start = outCue - plan.out_rate_ramp!.lead_seconds;
+        const end = start + plan.out_rate_ramp!.seconds;
+        // Armed after the ramp should have begun (a late refinement, a seek):
+        // the rest of it must still allow the planned slope from this speed.
+        const needed = Math.abs(speeds.out - from.playbackRate) / MAX_STRETCH * plan.out_rate_ramp!.seconds;
+        if (start >= 0 && end - Math.max(start, from.currentTime) >= needed) outRamp = { start, end, from: null };
+        else if (Math.abs(1 - Number(plan.playback_rate)) <= MAX_STRETCH - RATE_STEP) speeds = { out: 1, in: Number(plan.playback_rate) };
+        else { speeds = null; fallbackReason = 'rate_ramp_late'; }
+        if (!outRamp) recordPlaybackDiagnostic('mix.execution_fallback', { ...options.diagnostic,
+          reason: 'rate_ramp_late', technique: speeds ? plan.technique : 'structural_fade', requestedTechnique: plan.technique });
+      }
+      const rate = speeds ? Number(plan.playback_rate) : 1;
+      const outRate = speeds?.out ?? 1;
+      const technique = held && !manual && !speeds ? 'structural_fade' : !rateControlAvailable && held ? 'structural_fade' : plan.technique;
+      if (technique !== plan.technique && fallbackReason !== 'rate_ramp_late') recordPlaybackDiagnostic('mix.execution_fallback', { ...options.diagnostic,
+        reason: fallbackReason ?? 'rate_control_unavailable', technique, requestedTechnique: plan.technique });
+      // Overlap and preroll are planned in outgoing media seconds; the gain
+      // envelope runs on the output clock.
+      const overlap = manual ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4)) : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6) / outRate;
       const inCue = Math.max(0, Number(plan.in_cue) || 0);
       const preroll = manual ? 0 : Math.min(MAX_PREROLL, inCue / rate);
       const startPosition = Math.max(0, inCue - preroll * rate);
-      const outCue = manual ? from.currentTime : Math.max(0, Number(plan.out_cue) || 0);
       ports.setDeckGain(toIndex, 0);
       // The incoming deck gets its own level; the outgoing one keeps its own,
       // because it is still playing its own track. Set before `src` and before
@@ -617,7 +729,7 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         to.src = url;
       });
       diagnosticLoad(to);
-      to.playbackRate = rate;
+      to.playbackRate = clampDeckSpeed(rate * outRate);
       const cue = () => {
         if (generation !== mixGeneration) return;
         to.currentTime = startPosition;
@@ -645,6 +757,8 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         inCue,
         overlap,
         rate,
+        outRate,
+        outRamp,
         preroll,
         mixStart: null,
         mixContextStart: null,

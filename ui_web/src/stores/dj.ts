@@ -184,6 +184,9 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       overlap_seconds: overlap,
       overlap_bars: chained?.overlap_bars ?? 0,
       playback_rate: trusted && !metricFallback ? chained!.playback_rate : 1,
+      // Both decks meet at a shared tempo; the mixer checks it can still ramp.
+      ...(trusted && !metricFallback && chained!.out_playback_rate != null
+        ? { out_playback_rate: chained!.out_playback_rate, out_rate_ramp: chained!.out_rate_ramp } : {}),
       confidence: chained?.confidence ?? 0,
       ...(trusted && chained!.echo_delay_seconds != null ? { echo_delay_seconds: chained!.echo_delay_seconds } : {}),
       // The planner's phase tolerance, as Android already receives it.

@@ -116,3 +116,35 @@ describe('coverage edge', () => {
     }
   });
 });
+
+describe('shared tempo plans', () => {
+  it('keep their alignment only while both decks stay inside the pitch range', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { metricCuePlacement } = await import('./djCue');
+    const cases = JSON.parse(readFileSync(new NodeURL('../../../shared/contracts/dj_metric_plans.json', import.meta.url), 'utf8'));
+    const split = cases.filter((row: { split?: boolean }) => row.split);
+    expect(split.length).toBeGreaterThan(0);
+    for (const { name, transition } of split) {
+      expect(metricCuePlacement(transition.out_cue, 90, 215, transition, transition.overlap_seconds).aligned, name).toBe(true);
+      const alone = { ...transition, out_playback_rate: undefined, out_rate_ramp: undefined };
+      const fitsAlone = Math.abs(1 - transition.playback_rate) <= .08;
+      expect(metricCuePlacement(transition.out_cue, 90, 215, alone, transition.overlap_seconds).aligned, name).toBe(fitsAlone);
+      for (const change of [{ out_playback_rate: 1.09 }, { out_rate_ramp: undefined }, { out_rate_ramp: { lead_seconds: 8, seconds: 8 } }]) {
+        expect(metricCuePlacement(transition.out_cue, 90, 215, { ...transition, ...change }, transition.overlap_seconds).aligned,
+          `${name} ${JSON.stringify(change)}`).toBe(false);
+      }
+    }
+  });
+});
+
+describe('planDeckRates', () => {
+  it('derives the incoming speed from the relation and the outgoing speed', async () => {
+    const { planDeckRates } = await import('./djRates');
+    expect(planDeckRates({ playback_rate: .96 })).toEqual({ out: 1, in: .96 });
+    const shared = planDeckRates({ playback_rate: 120 / 140, out_playback_rate: 2 / (1 + 120 / 140),
+      out_rate_ramp: { lead_seconds: 15, seconds: 8 } })!;
+    expect(shared.out * 120).toBeCloseTo(shared.in * 140, 9);
+    expect(planDeckRates({ playback_rate: .85 })).toBeNull();
+    expect(planDeckRates({ playback_rate: 1, out_playback_rate: Number.NaN })).toBeNull();
+  });
+});

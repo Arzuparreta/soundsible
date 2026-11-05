@@ -965,7 +965,9 @@ describe('two-deck mixer', () => {
     for (let i = 0; i < 40; i++) {
       incoming.currentTime += 0.2 * incoming.playbackRate;
       await vi.advanceTimersByTimeAsync(200);
-      if (i === 4) {
+      // The return starts with zero slope: its first quarter-percent step
+      // comes after a couple of seconds, not at once.
+      if (i === 12) {
         expect(incoming.playbackRate).not.toBe(1);
         expect(Math.abs(incoming.playbackRate - 1)).toBeLessThan(Math.abs(initial - 1));
       }
@@ -2188,5 +2190,177 @@ describe('measured echo delay', () => {
     await play(outgoing, 110); await play(incoming, 2);
     expect(module.audioService.mixPhase()).toBe('crossfading');
     expect(contexts[0].delays).toHaveLength(0);
+  });
+});
+
+describe('shared tempo across both decks', () => {
+  // 120 BPM outgoing, 132 BPM incoming: they meet at 125.71 BPM, each deck
+  // 4.76 % from normal speed. The incoming alone would need 9.1 %.
+  const split = {
+    ...plan,
+    technique: 'bass_swap' as const,
+    overlap_seconds: 8,
+    playback_rate: 120 / 132,
+    out_playback_rate: 2 / (1 + 120 / 132),
+    out_rate_ramp: { lead_seconds: 15, seconds: 8 },
+  };
+  const inSpeed = split.playback_rate * split.out_playback_rate;
+
+  async function armedAt(position: number, overrides: Partial<typeof split> = {}) {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await module.audioService.load('/current', 1);
+    const outgoing = module.audioEl() as unknown as FakeAudio;
+    outgoing.currentTime = position;
+    const handlers = callbacks();
+    module.audioService.armTransition('/next', { ...split, ...overrides }, handlers, { level: 1 });
+    const incoming = created.find(deck => deck !== outgoing && deck.src === '/next')!;
+    return { ...module, outgoing, incoming, handlers };
+  }
+
+  /** Plays the outgoing deck at its own speed, as the element does. */
+  async function playOut(deck: FakeAudio, until: number, speeds: number[] = []) {
+    while (deck.currentTime < until - 1e-9) {
+      deck.currentTime = Math.min(until, deck.currentTime + 0.25 * deck.playbackRate);
+      await vi.advanceTimersByTimeAsync(250);
+      speeds.push(deck.playbackRate);
+    }
+  }
+
+  it('brings the outgoing deck to the shared tempo before the incoming one starts', async () => {
+    const { outgoing, incoming } = await armedAt(80);
+    expect(incoming.playbackRate).toBeCloseTo(inSpeed, 9);
+    const speeds: number[] = [];
+    await playOut(outgoing, 94.9, speeds);
+    expect(new Set(speeds)).toEqual(new Set([1]));
+    await playOut(outgoing, 103.5, speeds);
+    const ramp = speeds.filter(speed => speed !== 1);
+    // Smooth and monotonic, in quarter-percent steps, ending exactly on the plan.
+    expect(ramp.every((speed, index) => index === 0 || speed >= ramp[index - 1])).toBe(true);
+    expect(ramp.filter(speed => speed !== split.out_playback_rate)
+      .every(speed => Math.abs(speed * 400 - Math.round(speed * 400)) < 1e-9)).toBe(true);
+    expect(outgoing.playbackRate).toBe(split.out_playback_rate);
+    expect(ramp.length).toBeGreaterThan(10);
+    expect(incoming.paused).toBe(true);
+  });
+
+  it('holds the ramp while the listener pauses, then resumes it from the same speed', async () => {
+    const { outgoing } = await armedAt(90);
+    await playOut(outgoing, 99);
+    const held = outgoing.playbackRate;
+    expect(held).toBeGreaterThan(1);
+    expect(held).toBeLessThan(split.out_playback_rate);
+    outgoing.paused = true;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(outgoing.playbackRate).toBe(held);
+    outgoing.paused = false;
+    await playOut(outgoing, 104);
+    expect(outgoing.playbackRate).toBe(split.out_playback_rate);
+  });
+
+  it('keeps the incoming deck on the outgoing beat at both shared speeds through the blend', async () => {
+    const { audioService, outgoing, incoming, handlers } = await armedAt(80);
+    await playOut(outgoing, 108.5);
+    expect(audioService.mixPhase()).toBe('prerolling');
+    // Still silent and behind its beat: it catches up before it is heard.
+    expect(incoming.playbackRate).toBeCloseTo(inSpeed * 1.02, 9);
+    incoming.currentTime = 2 + (outgoing.currentTime - 110) * split.playback_rate;
+    await vi.advanceTimersByTimeAsync(250);
+    expect(incoming.playbackRate).toBeCloseTo(inSpeed, 9);
+    // Exactly on phase at the cue.
+    outgoing.currentTime = 110;
+    incoming.currentTime = 2;
+    await vi.advanceTimersByTimeAsync(40);
+    expect(audioService.mixPhase()).toBe('crossfading');
+    // The gain envelope spans the planned outgoing media at its actual speed.
+    const curve = contexts[0].gains.flatMap(gain => gain.gain.setValueCurveAtTime.mock.calls).at(-1) as unknown as [Float32Array, number, number];
+    expect(curve[2]).toBeCloseTo(8 / split.out_playback_rate, 6);
+    for (let step = 0; step < 20; step++) {
+      await advancePair(outgoing, incoming, 100);
+      const expected = 2 + (outgoing.currentTime - 110) * split.playback_rate;
+      expect(Math.abs(incoming.currentTime - expected)).toBeLessThan(0.005);
+      expect(incoming.playbackRate).toBeCloseTo(inSpeed, 9);
+      expect(outgoing.playbackRate).toBe(split.out_playback_rate);
+    }
+    await advancePair(outgoing, incoming, 6000);
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
+    // The incoming deck then returns to its own tempo, gradually.
+    const returning: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      incoming.currentTime += 0.2 * incoming.playbackRate;
+      await vi.advanceTimersByTimeAsync(200);
+      returning.push(incoming.playbackRate);
+    }
+    expect(returning.every((speed, index) => index === 0 || speed >= returning[index - 1])).toBe(true);
+    expect(returning.at(-1)).toBe(1);
+    expect(new Set(returning).size).toBeGreaterThan(10);
+  });
+
+  it('never rides the incoming deck beyond the pitch range', async () => {
+    const edge = { playback_rate: 120 / 140, out_playback_rate: 2 / (1 + 120 / 140) };
+    const { audioService, outgoing, incoming } = await armedAt(80, edge);
+    await playOut(outgoing, 108.5);
+    outgoing.currentTime = 110;
+    incoming.currentTime = 2.05; // Ahead by ten times the tolerance.
+    await vi.advanceTimersByTimeAsync(40);
+    expect(audioService.mixPhase()).toBe('crossfading');
+    for (let step = 0; step < 10; step++) {
+      await advancePair(outgoing, incoming, 300);
+      expect(incoming.playbackRate).toBeGreaterThanOrEqual(0.92 - 1e-12);
+    }
+  });
+
+  it('returns the outgoing deck gradually when a session change cancels the blend', async () => {
+    const { audioService, outgoing, handlers } = await armedAt(80);
+    await playOut(outgoing, 104);
+    expect(outgoing.playbackRate).toBe(split.out_playback_rate);
+    audioService.cancelMix('superseded');
+    expect(handlers.onCancel).toHaveBeenCalledWith('superseded');
+    const speeds: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      outgoing.currentTime += 0.2 * outgoing.playbackRate;
+      await vi.advanceTimersByTimeAsync(200);
+      speeds.push(outgoing.playbackRate);
+    }
+    expect(speeds[0]).toBeGreaterThan(1.04);
+    expect(speeds.every((speed, index) => index === 0 || speed <= speeds[index - 1])).toBe(true);
+    expect(speeds.at(-1)).toBe(1);
+  });
+
+  it('arms too late for the ramp: only the incoming deck moves when its relation fits alone', async () => {
+    const { audioService, outgoing, incoming } = await armedAt(104, { playback_rate: 120 / 126, out_playback_rate: 2 / (1 + 120 / 126) });
+    expect(incoming.playbackRate).toBeCloseTo(120 / 126, 9);
+    await playOut(outgoing, 109);
+    expect(outgoing.playbackRate).toBe(1);
+    expect(audioService.programMixSnapshot().technique).toBe('bass_swap');
+  });
+
+  it('arms too late for the ramp of a pair beyond one deck: a fade without beat promises', async () => {
+    const diagnostics = await import('./playbackDiagnostics');
+    diagnostics.startPlaybackDiagnostics({ userId: 'user', deviceId: 'device', platform: 'test', displayMode: 'browser' });
+    try {
+      const { audioService, outgoing, incoming } = await armedAt(104);
+      expect(incoming.playbackRate).toBe(1);
+      await playOut(outgoing, 109);
+      expect(outgoing.playbackRate).toBe(1);
+      expect(audioService.programMixSnapshot().technique).toBe('structural_fade');
+      const rows = JSON.parse(diagnostics.playbackDiagnosticExport()).events;
+      expect(rows.find((row: { event: string }) => row.event === 'mix.execution_fallback').facts)
+        .toMatchObject({ reason: 'rate_ramp_late', technique: 'structural_fade' });
+    } finally { diagnostics.stopPlaybackDiagnostics(); }
+  });
+
+  it('stops changing speed if the outgoing clock regresses during the ramp', async () => {
+    const { audioService, outgoing, incoming } = await armedAt(90);
+    await playOut(outgoing, 98);
+    expect(outgoing.playbackRate).toBeGreaterThan(1);
+    outgoing.currentTime = 97.8;
+    await vi.advanceTimersByTimeAsync(250);
+    expect(outgoing.playbackRate).toBe(1);
+    await playOut(outgoing, 106);
+    expect(outgoing.playbackRate).toBe(1);
+    expect(incoming.playbackRate).toBe(1);
+    expect(audioService.programMixSnapshot().technique).toBe('structural_fade');
   });
 });

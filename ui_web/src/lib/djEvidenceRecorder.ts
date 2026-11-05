@@ -19,7 +19,8 @@ export function pairObservations(from?: Analysis, to?: Analysis): DiagnosticFact
 
 export function planObservations(plan?: Partial<DjTransitionPlan> | LiveTransitionPlan): DiagnosticFacts {
   return { requestedTechnique: plan?.technique ?? null, outCue: number(plan?.out_cue), inCue: number(plan?.in_cue),
-    overlap: number(plan?.overlap_seconds), rate: number(plan?.playback_rate), confidence: number(plan?.confidence),
+    overlap: number(plan?.overlap_seconds), rate: number(plan?.playback_rate),
+    outRate: plan?.out_playback_rate == null ? null : number(plan.out_playback_rate), confidence: number(plan?.confidence),
     score: plan && 'score' in plan ? number(plan.score) : null,
     alignment: plan && 'sync' in plan && plan.sync && 'alignment' in plan.sync ? plan.sync.alignment ?? null : null };
 }

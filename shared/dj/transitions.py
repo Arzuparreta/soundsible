@@ -11,12 +11,14 @@ from .features import _KEY_NAMES
 from .contracts import AnalysisInput, TransitionPlan
 from .timing import (
     MAX_STRETCH as _MAX_STRETCH,
-    BEATMATCH_TECHNIQUES, PHASE_TOLERANCE_SECONDS,
-    local_period as _local_period, projected_bar, pulse_relations, rate_fits as _rate_fits,
-    metric_sync,
+    BEATMATCH_TECHNIQUES, PHASE_TOLERANCE_SECONDS, RATE_RAMP_END_LEAD, RATE_RAMP_SECONDS, RATE_STEP,
+    deck_rates, deviation, local_period as _local_period, projected_bar, pulse_relations,
+    rate_fits as _rate_fits, metric_sync, split_enabled,
 )
 
 _TEMPO_SCORE_RANGE = 0.08
+# Outgoing media seconds between the start of its speed ramp and `out_cue`.
+_RAMP_LEAD = RATE_RAMP_SECONDS + RATE_RAMP_END_LEAD
 
 
 # Seconds kept between a planned blend start and `duration - overlap`.
@@ -131,7 +133,7 @@ def _structural_exit(analysis: Mapping[str, Any], proposed: float, overlap: floa
 
 
 def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
-                out_cue: float, intro: float, overlap: float, max_stretch: float) -> tuple[float, float] | None:
+                out_cue: float, intro: float, overlap: float) -> tuple[float, float] | None:
     """Finish on a measured outgoing phrase as the incoming drop arrives.
 
     Only align actual downbeats, within the existing overlap/intro limits. The
@@ -165,7 +167,7 @@ def _drop_entry(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
             for _ in range(2):
                 cue = _nearest_grid_point(incoming, drop - span * ratio_at(cue))
             ratio = ratio_at(cue)
-            if (abs(1 - ratio) <= max_stretch and intro <= cue <= float(incoming.get("duration") or 0) * 0.25
+            if (deck_rates(ratio) is not None and intro <= cue <= float(incoming.get("duration") or 0) * 0.25
                     and abs((drop - cue) / round(ratio, 6) - span) <= PHASE_TOLERANCE_SECONDS):
                 return cue, span
     return None
@@ -188,7 +190,9 @@ def plan_transition(outgoing: AnalysisInput, incoming: AnalysisInput) -> Transit
     # Closeness to the nearest common cycle (1:1, 2:1, 3:2, 4:3...): every
     # reading of a pulse is as mixable as another.
     ratio = _closest_rate(ratio)
-    tempo_score = max(0.0, 1 - abs(1 - ratio) / _TEMPO_SCORE_RANGE)
+    # The larger speed change either deck makes: with split clients both
+    # decks share it (`deck_rates`).
+    tempo_score = max(0.0, 1 - deviation(ratio) / _TEMPO_SCORE_RANGE)
     harmonic = _harmonic_score(outgoing, incoming)
     confidence = min(float(outgoing.get("confidence") or 0), float(incoming.get("confidence") or 0))
     score = 0.46 * tempo_score + 0.32 * harmonic + 0.22 * confidence
@@ -308,8 +312,7 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
         in_cue = _nearest_grid_point(incoming, in_cue)
 
     if technique in BEATMATCH_TECHNIQUES and out_cue is not None:
-        entry = _drop_entry(outgoing, incoming, out_cue, in_cue, overlap,
-                            _MAX_STRETCH)
+        entry = _drop_entry(outgoing, incoming, out_cue, in_cue, overlap)
         if entry is not None:
             in_cue, overlap = entry
 
@@ -324,9 +327,15 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
     # Beyond the players' 8 % pitch range, a fallback replaces the beatmatch. The
     # score can still select a safe technique, but never asks the player to
     # torture a recording merely to claim that it beatmatched.
-    playback_rate = local_ratio if abs(1 - local_ratio) <= _MAX_STRETCH else 1.0
-    if technique not in BEATMATCH_TECHNIQUES:
-        playback_rate = 1.0
+    rates = deck_rates(local_ratio) if technique in BEATMATCH_TECHNIQUES else None
+    out_rate = rates[0] if rates else 1.0
+    if rates and abs(out_rate - 1) > 1e-6 and (out_cue is None or out_cue < _RAMP_LEAD):
+        # No room before the cue for the outgoing deck to reach its speed:
+        # only the incoming deck may move, within the same range.
+        out_rate = 1.0
+        if abs(1 - local_ratio) > _MAX_STRETCH - RATE_STEP:
+            rates = None
+    playback_rate = local_ratio if rates else 1.0
     # Echo repeats one measured outgoing beat at the actual exit, never an
     # invented period from bar_seconds or the incoming song. Two seconds is
     # the bounded delay supported by both renderers (30 BPM at normal speed).
@@ -358,7 +367,16 @@ def _transition_plan(outgoing: Mapping[str, Any], incoming: Mapping[str, Any],
         "overlap_seconds": round(overlap, 3),
         "overlap_bars": round(overlap / measured_bar, 3) if measured_bar else None,
         # Over a 48 s overlap, 1e-6 of rate error is 0.05 ms of drift.
+        # Incoming media seconds per outgoing media second, whatever speed
+        # the outgoing deck plays at: cues, coverage and phase use it as is.
         "playback_rate": round(playback_rate, 6),
+        # Split clients only. The outgoing deck's speed through the overlap;
+        # the incoming deck plays at playback_rate · out_playback_rate. The
+        # outgoing reaches it over `out_rate_ramp`, which ends
+        # lead − seconds before out_cue, and returns with the song's end.
+        **({"out_playback_rate": round(out_rate, 6)} if split_enabled() else {}),
+        **({"out_rate_ramp": {"lead_seconds": _RAMP_LEAD, "seconds": RATE_RAMP_SECONDS}}
+           if split_enabled() and abs(out_rate - 1) > 1e-6 else {}),
         **({"echo_delay_seconds": echo_delay} if echo_delay is not None else {}),
         "score": round(blend_score, 3),
         "confidence": round(confidence, 3),

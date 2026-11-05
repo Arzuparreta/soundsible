@@ -21,7 +21,18 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private val tap: ProgramPcmTap, private val leveling: () -> Boolean,
     initial: List<Row>, startPositionMs: Long = 0, private val mixing: () -> Boolean = { true },
     private val refine: (ProgramDjSession) -> Unit = {}, private val changed: () -> Unit = {}, startIndex: Int = 0, initialHeard: Set<String> = emptySet()) : AutoCloseable {
-    companion object { const val CONTEXT_LEAD = "soundsible_dj_context_lead" }
+    companion object {
+        const val CONTEXT_LEAD = "soundsible_dj_context_lead"
+        /** Playout the outgoing deck holds its final speed before the blend is armed on it. */
+        const val RAMP_SETTLE_US = 1000000L
+        // Outgoing media seconds of a ramp when the plan sends none (the
+        // deck is still returning from the last blend): shared/dj/timing.py.
+        private const val DEFAULT_RAMP_LEAD_US = 15000000L
+        private const val DEFAULT_RAMP_US = 8000000L
+    }
+    /** The outgoing deck's way to the plan's speed; `fromSpeed` is captured when it begins. */
+    private class Ramp(var fromSpeed: Float? = null, var startUs: Long, val endUs: Long, var settledAtUs: Long? = null)
+    private var ramp: Ramp? = null
     data class Row(val item: MediaItem, val proposal: ProgramDjPlan.Proposal? = null, val kind: String = "user") {
         val ownerKey: String? get() = item.mediaMetadata.extras?.getString(ProgramQueue.BRIDGE_OWNER)
     }
@@ -118,7 +129,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             // its clock. Retire the stalled decoder before planning another overlap.
             player.replaceInput(failed, decoder(failed)); indices[failed] = -1
             streams = streams.copyOf().also { it[failed] = null }
-            armed = false; plan = null; pendingSince = 0; recovering = true
+            armed = false; plan = null; ramp = null; pendingSince = 0; recovering = true
             changed()
         }
         val slot = output.dominantInput()
@@ -144,7 +155,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             indices[old] = -1; streams = streams.copyOf().also { it[old] = null }
             decks[old].pause(); decks[old].stop(); decks[old].clearMediaItems()
             rateReturns[window.incoming].start(decks[window.incoming].playbackParameters.speed)
-            armed = false; plan = null; pendingSince = 0
+            armed = false; plan = null; ramp = null; pendingSince = 0
         }
         if (recovering) {
             val restored = output.restoredAt() ?: return
@@ -155,6 +166,11 @@ internal class ProgramDjSession(private val context: Context, private val genera
             pendingSince = 0
             return
         }
+        if (current + 1 >= route.size && !armed && plan == null) {
+            // Nothing follows: a deck left off normal speed by an edit returns to it.
+            val speed = decks[slot].playbackParameters.speed
+            if (kotlin.math.abs(speed - 1f) > 1e-6f && !rateReturns[slot].running) rateReturns[slot].start(speed.coerceIn(0.92f, 1.08f))
+        }
         if (current + 1 >= route.size || armed) return
         val outgoing = decks[slot]
         val duration = outgoing.duration.takeIf { it > 0 } ?: return
@@ -164,12 +180,19 @@ internal class ProgramDjSession(private val context: Context, private val genera
         if (remainingUs > 45000000) return
         val standby = 1 - slot
         if (indices[standby] != current + 1) {
-            plan = resolved
-            // A silent preroll starts before the cue, so its seek target includes the tempo ratio.
-            val prerollUs = minOf(4000000L, maxOf(0L, remainingUs - 500000), (resolved.inCueUs / resolved.rate).toLong())
-            load(standby, current + 1, maxOf(0L, resolved.inCueUs - (prerollUs * resolved.rate).toLong()) / 1000, resolved.rate)
+            plan = resolved; ramp = null
+            // A silent preroll starts before the cue, so its seek target includes
+            // the incoming deck's speed: the relation times the outgoing speed.
+            val speed = resolved.inSpeed
+            val prerollUs = minOf(4000000L, maxOf(0L, remainingUs - 500000), (resolved.inCueUs / speed).toLong())
+            load(standby, current + 1, maxOf(0L, resolved.inCueUs - (prerollUs * speed).toLong()) / 1000, speed)
             pendingSince = android.os.SystemClock.elapsedRealtime()
             return
+        }
+        when (prepareOutgoing(slot, standby, resolved)) {
+            Preparation.WAIT -> return
+            Preparation.REPLANNED -> { changed(); return }
+            Preparation.READY -> Unit
         }
         if (!output.readyInput(standby)) {
             if (pendingSince == 0L) pendingSince = android.os.SystemClock.elapsedRealtime()
@@ -187,12 +210,68 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val leadMs = ((remainingUs / outgoing.playbackParameters.speed - queuedUs) / 1000).toLong()
         if (leadMs > 0) {
             val seekMs = streams[standby]?.positionOffsetUs ?: 0
-            val prerollMs = ((resolved.inCueUs - seekMs) / resolved.rate / 1000).toLong().coerceIn(0, minOf(4000, leadMs))
+            val prerollMs = ((resolved.inCueUs - seekMs) / resolved.inSpeed / 1000).toLong().coerceIn(0, minOf(4000, leadMs))
             output.arm(resolved.overlapUs / 1000, resolved.technique, leadMs.coerceAtMost(60000), prerollMs,
                 resolved.echoDelaySeconds?.div(outgoing.playbackParameters.speed.toDouble()))
         } else output.blend(minOf(resolved.overlapUs / 1000, 1500), ProgramMixCurve.Technique.SAFE_FADE)
         armed = true
         changed()
+    }
+    private enum class Preparation { WAIT, REPLANNED, READY }
+
+    /**
+     * Brings the outgoing deck to the plan's speed from its own media position,
+     * so a pause holds the ramp. The blend is armed only once that speed has
+     * played for RAMP_SETTLE_US: the arm lead converts media to output time at
+     * one constant speed. Without room for the ramp, only the incoming deck
+     * moves (or the blend fades), and the standby deck is reloaded at its new
+     * speed before anything of it is heard.
+     */
+    private fun prepareOutgoing(slot: Int, standby: Int, resolved: ProgramDjPlan.Plan): Preparation {
+        if (!ProgramDjPlan.held(resolved.technique)) {
+            // A fade has no beat to follow: a deck still off normal speed returns to it.
+            val speed = decks[slot].playbackParameters.speed
+            if (kotlin.math.abs(speed - 1f) > 1e-6f && !rateReturns[slot].running) rateReturns[slot].start(speed.coerceIn(0.92f, 1.08f))
+            return Preparation.READY
+        }
+        val outgoing = decks[slot]
+        val positionUs = outgoing.currentPosition * 1000
+        val speed = outgoing.playbackParameters.speed
+        val target = resolved.outRate
+        if (ramp?.fromSpeed == null && kotlin.math.abs(speed - target) <= 1e-6f) { ramp = null; return Preparation.READY }
+        val state = ramp ?: run {
+            val start = if (resolved.rampEndUs > resolved.rampStartUs) resolved.rampStartUs else resolved.outCueUs - DEFAULT_RAMP_LEAD_US
+            val end = if (resolved.rampEndUs > resolved.rampStartUs) resolved.rampEndUs else start + DEFAULT_RAMP_US
+            Ramp(startUs = start, endUs = end).also { ramp = it }
+        }
+        if (state.settledAtUs != null) return if (output.positionUs() - state.settledAtUs!! >= RAMP_SETTLE_US) Preparation.READY else Preparation.WAIT
+        if (positionUs < state.startUs) return Preparation.WAIT
+        if (state.fromSpeed == null) {
+            // From the speed it has now: the last blend may still be returning it.
+            rateReturns[slot].close()
+            val length = (state.endUs - state.startUs).coerceAtLeast(1)
+            val neededUs = (kotlin.math.abs(target - speed) / ProgramDjPlan.MAX_STRETCH * length).toLong()
+            if (state.endUs - positionUs < neededUs || state.startUs < 0) {
+                plan = resolved.withoutRamp(speed); ramp = null
+                // The standby deck was cued for the old speed: cue it again.
+                rateReturns[standby].close()
+                decks[standby].pause(); decks[standby].stop(); decks[standby].clearMediaItems()
+                indices[standby] = -1; streams = streams.copyOf().also { it[standby] = null }
+                return Preparation.REPLANNED
+            }
+            state.fromSpeed = speed; state.startUs = positionUs
+        }
+        val from = state.fromSpeed!!
+        val progress = (positionUs - state.startUs).toDouble() / (state.endUs - state.startUs).coerceAtLeast(1)
+        if (progress >= 1) {
+            outgoing.playbackParameters = PlaybackParameters(target, 1f)
+            state.settledAtUs = output.positionUs()
+            return Preparation.WAIT
+        }
+        // Quarter-percent steps, as on the web.
+        val wanted = (kotlin.math.round((from + (target - from) * ProgramDjPlan.smoothstep(progress)) * 400) / 400).toFloat()
+        if (kotlin.math.abs(wanted - speed) > 1e-6f) outgoing.playbackParameters = PlaybackParameters(wanted, 1f)
+        return Preparation.WAIT
     }
     private fun key(index: Int) = route[index].item.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: ""
     private fun decoderFailed(slot: Int, error: PlaybackException): Boolean {
@@ -202,7 +281,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             if (!owns()) return@post
             player.replaceInput(slot, decoder(slot)); indices[slot] = -1
             streams = streams.copyOf().also { it[slot] = null }
-            armed = false; plan = null; pendingSince = 0; recovering = output.restoredAt() != null
+            armed = false; plan = null; ramp = null; pendingSince = 0; recovering = output.restoredAt() != null
             // Before an overlap is armed, releasing the outgoing decoder cannot
             // restore a transition window. Promote its already prepared successor.
             if (!recovering && output.dominantInput() == slot && output.readyInput(other)) {
@@ -221,7 +300,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         decks.forEach { it.pause(); it.stop(); it.clearMediaItems() }
         output.resetTo(0)
         indices[0] = index; indices[1] = -1; current = index
-        armed = false; recovering = false; plan = null; pendingSince = 0
+        armed = false; recovering = false; plan = null; ramp = null; pendingSince = 0
         load(0, index, positionMs, 1f)
         output.pause(!resume); player.routeChanged(); changed()
     }
@@ -250,7 +329,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             rateReturns[standby].close()
             decks[standby].pause(); decks[standby].stop(); decks[standby].clearMediaItems()
             indices[standby] = -1; streams = streams.copyOf().also { it[standby] = null }
-            armed = false; plan = null; pendingSince = 0
+            armed = false; plan = null; ramp = null; pendingSince = 0
         }
         route = route.toMutableList().also { it[current + 1] = it[current + 1].copy(proposal = proposal) }
         routeRevision++; changed()
@@ -331,7 +410,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
     /** Explicit session changes replace generated runway and retain ordinary requests (never collection-wide ones). */
     fun changeContext(item: MediaItem) {
         check(owns())
-        if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
+        if (armed && output.cancelArmed()) { armed = false; plan = null; ramp = null; pendingSince = 0 }
         val floor = editableFrom() - 1
         val anchor = route[floor].item
         fun sameRecording(other: MediaItem) = other.mediaId == item.mediaId &&
@@ -371,7 +450,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val before = route.associateBy { itemKey(it.item) }
         val oldCurrent = route.getOrNull(current)?.item?.let(::itemKey)
         val slotKeys = indices.map { index -> route.getOrNull(index)?.item?.let(::itemKey) }
-        if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
+        if (armed && output.cancelArmed()) { armed = false; plan = null; ramp = null; pendingSince = 0 }
         val retained = items.map(::itemKey).toSet()
         if (!force) require(protectedKeys().all { it in retained }) { "A committed route owner cannot be removed" }
         if ((armed || recovering) && !force) require(slotKeys.filterNotNull().all { it in retained }) { "A committed transition cannot be removed" }
@@ -384,7 +463,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         routeRevision++
         if (items.isEmpty()) {
             player.stop(); decks.forEach { it.clearMediaItems() }; indices.fill(-1)
-            armed = false; recovering = false; plan = null; streams = arrayOfNulls(2)
+            armed = false; recovering = false; plan = null; ramp = null; streams = arrayOfNulls(2)
             tap.discardBuffered(); player.routeChanged(); changed(); return
         }
         val nextCurrent = items.indexOfFirst { itemKey(it) == oldCurrent }
@@ -404,7 +483,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
                 rateReturns[standby].close(); decks[standby].pause(); decks[standby].stop(); decks[standby].clearMediaItems()
                 indices[standby] = -1; streams = streams.copyOf().also { it[standby] = null }
             }
-            plan = null; pendingSince = 0
+            plan = null; ramp = null; pendingSince = 0
         }
         player.routeChanged(); changed()
     }
@@ -415,7 +494,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
     /** A replan changes only uncommitted future; already rendered inputs keep their occurrence. */
     fun replaceFuture(rows: List<Row>) {
         check(owns())
-        if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
+        if (armed && output.cancelArmed()) { armed = false; plan = null; ramp = null; pendingSince = 0 }
         val protected = protectedIndex()
         val prefix = route.take(protected + 1)
         val committedIds = prefix.map { it.item.mediaId }.toSet()
