@@ -332,10 +332,14 @@ def test_shared_metric_vectors_are_the_actual_server_plans():
     import json
     from pathlib import Path
     from shared.dj_engine import plan_transition
+    from shared.dj.timing import split_rates
     cases = json.loads((Path(__file__).resolve().parents[1] / 'shared/contracts/dj_metric_plans.json').read_text())
     assert {case['transition']['sync']['alignment'] for case in cases} == {'bars', 'beats'}
+    assert any(case.get('split') for case in cases)
     for case in cases:
-        assert plan_transition(metric_analysis(**case['outgoing']), metric_analysis(**case['incoming'])) == case['transition'], case['name']
+        # `split`: planned for players that move both decks to a shared tempo.
+        with split_rates(case.get('split', False)):
+            assert plan_transition(metric_analysis(**case['outgoing']), metric_analysis(**case['incoming'])) == case['transition'], case['name']
 
 
 def test_missing_head_or_middle_cannot_borrow_a_remote_downbeat_or_echo_pulse():

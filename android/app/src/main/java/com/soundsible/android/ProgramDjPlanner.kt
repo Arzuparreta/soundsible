@@ -198,7 +198,10 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
                 transition.optDouble("playback_rate", Double.NaN), transition.optDouble("confidence", 0.0),
                 sync?.optDouble("phase_tolerance_ms", 5.0) ?: 5.0, sync?.optDouble("out_period", 0.0) ?: 0.0,
                 transition.optDouble("echo_delay_seconds", Double.NaN).takeIf { it.isFinite() && it > 0 && it <= 2 },
-                sync?.let { JSONObject(it.toString()) })
+                sync?.let { JSONObject(it.toString()) },
+                transition.optDouble("out_playback_rate", 1.0),
+                transition.optJSONObject("out_rate_ramp")?.optDouble("lead_seconds", Double.NaN) ?: Double.NaN,
+                transition.optJSONObject("out_rate_ramp")?.optDouble("seconds", Double.NaN) ?: Double.NaN)
         } else null
     }
     fun clear() {

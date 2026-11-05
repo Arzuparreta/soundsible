@@ -1236,6 +1236,9 @@ describe('Playback load coalescing', () => {
       playback_rate: vector.transition.playback_rate,
       ...vector.resolved,
       ...(vector.transition.echo_delay_seconds != null ? { echo_delay_seconds: vector.transition.echo_delay_seconds } : {}),
+      // Plans for a shared tempo reach the mixer with both deck speeds.
+      ...(vector.transition.out_playback_rate != null ? { out_playback_rate: vector.transition.out_playback_rate,
+        out_rate_ramp: vector.transition.out_rate_ramp } : {}),
     });
     actions.exitAutoMode();
   });

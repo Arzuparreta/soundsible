@@ -153,7 +153,7 @@ class EngineConnection(private val context: Context) {
             val builder = Request.Builder().url(url).method(method, body)
             headers.forEach { (key, value) ->
                 require(key.lowercase() in setOf("content-type", "if-none-match", "range", "accept",
-                    "x-soundsible-work", "x-soundsible-work-request"))
+                    "x-soundsible-work", "x-soundsible-work-request", "x-soundsible-dj-rates"))
                 builder.header(key, value)
             }
             cookieHeader(epoch)?.let { builder.header("Cookie", it) }

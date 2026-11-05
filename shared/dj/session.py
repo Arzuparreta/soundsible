@@ -10,6 +10,7 @@ import uuid
 from flask import jsonify, request
 
 from shared import work
+from shared.dj.timing import split_rates
 from shared.runtime import get_cache_dir
 
 
@@ -68,7 +69,10 @@ def scoped(fn):
                     demand.children[request_id] = child
                 parent, request_scope = demand, child
                 demand = child
-            with work.using(demand), work.interruptible(demand):
+            # Clients that play both decks at a shared tempo say so; the
+            # plans of every other client are unchanged (`timing.deck_rates`).
+            split = request.headers.get("X-Soundsible-Dj-Rates") == "split"
+            with work.using(demand), work.interruptible(demand), split_rates(split):
                 warming = False
                 try:
                     result = fn(*args, **kwargs)

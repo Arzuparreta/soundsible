@@ -70,8 +70,12 @@ the players' speed limit and keep a steady shared pulse throughout the overlap.
 Whether a pair can be beatmatched is all that decides it: any two keys can be
 mixed. Key and tempo closeness choose which song comes next and which blend
 is used, never an echo cut or fade instead of a blend.
-The incoming song may be stretched up to 8 % (a turntable's pitch range) and
-returns to its own tempo after the blend. Two songs share a pulse when whole
+Both songs move toward a shared tempo, each changing by the same amount and
+never more than 8 % (a turntable's pitch range): 120 and 132 BPM meet at
+125.7 BPM, each 4.8 % from its own tempo. The playing song reaches that tempo
+gradually in the seconds before the next one comes in, and the next song
+returns to its own tempo gradually after the blend. Without room for that
+ramp, only the incoming song moves, within the same range. Two songs share a pulse when whole
 numbers of their beats last the same: one
 to one, two to one, three to two (116 and 174 BPM) or four to three (90 and
 120 BPM). Reading a song in two or in three is a choice of level — a 12/8 is a

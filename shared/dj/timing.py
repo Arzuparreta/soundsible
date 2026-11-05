@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import bisect
 import math
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from .contracts import AnalysisInput, PlanInput, PlaybackRatio, Seconds
 
@@ -21,6 +23,60 @@ from .contracts import AnalysisInput, PlanInput, PlaybackRatio, Seconds
 MAX_STRETCH = 0.08
 PHASE_TOLERANCE_SECONDS = 0.005
 BEATMATCH_TECHNIQUES = frozenset({'bass_swap', 'filter_blend', 'long_blend'})
+# The smallest speed change the players make: phase riding and the return to
+# normal speed move in quarter-percent steps. A split plan leaves one step
+# inside the pitch range, so the incoming deck can still be nudged both ways.
+RATE_STEP = 0.0025
+# The outgoing deck reaches its mix speed with the same 8 s ramp the players
+# already use to return to normal speed, measured in outgoing media seconds.
+RATE_RAMP_SECONDS = 8.0
+# The ramp ends this long before `out_cue`: the players' silent preroll lasts
+# at most 4 s, and Android arms the blend only after the outgoing speed has
+# settled (1 s), at up to 7.75 % above normal speed (4 + 1 s at 1.0775 is
+# 5.4 media seconds). The rest is margin for the cue the player relocates.
+RATE_RAMP_END_LEAD = 7.0
+
+# Clients that can play both decks at a shared tempo send
+# `X-Soundsible-Dj-Rates: split` (`session.scoped`). Every other client keeps
+# the plans it was built for: only the incoming deck changes speed.
+_SPLIT_RATES: ContextVar[bool] = ContextVar('dj_split_rates', default=False)
+
+
+@contextmanager
+def split_rates(enabled: bool):
+    """Plan for clients that move both decks toward a common tempo."""
+    token = _SPLIT_RATES.set(bool(enabled))
+    try:
+        yield
+    finally:
+        _SPLIT_RATES.reset(token)
+
+
+def split_enabled() -> bool:
+    return _SPLIT_RATES.get()
+
+
+def deck_rates(relation: PlaybackRatio) -> tuple[PlaybackRatio, PlaybackRatio] | None:
+    """(outgoing, incoming) deck speeds that hold `relation`, or None.
+
+    `relation` is incoming media seconds per outgoing media second. Without
+    split clients only the incoming deck moves (outgoing 1.0, 8 % range).
+    With them, both share the change so that neither moves more than the
+    other: s_out = 2 / (1 + r) and s_in = r · s_out deviate from normal speed
+    by the same |1 − r| / (1 + r), the smallest possible largest change of the
+    two (120 ↔ 140 BPM: 129.23 BPM, each deck 7.69 %).
+    """
+    if not (math.isfinite(relation) and relation > 0):
+        return None
+    if not split_enabled():
+        return (1.0, relation) if abs(1 - relation) <= MAX_STRETCH else None
+    out = 2 / (1 + relation)
+    return (out, relation * out) if abs(1 - out) <= MAX_STRETCH - RATE_STEP + 1e-12 else None
+
+
+def deviation(relation: PlaybackRatio) -> float:
+    """The larger speed change of the two decks that hold `relation`."""
+    return abs(1 - relation) / (1 + relation) if split_enabled() else abs(1 - relation)
 
 # (outgoing beats, incoming beats) of one common cycle. Up to four a side
 # covers every pair of tempi the beat model reports (55–215 BPM).
@@ -32,14 +88,21 @@ def pulse_relations(ratio: PlaybackRatio) -> list[tuple[int, int, PlaybackRatio]
 
     `ratio` is incoming over outgoing beat period. m outgoing beats equal n
     incoming beats played at `rate`: m · out_period = n · in_period / rate.
+    One beat against one beat comes first whenever the players can hold it
+    (decision of the user, 2026-11-05): with both decks moving, 120 ↔ 140 BPM
+    meet at 129.23 BPM in 1:1 rather than at 3:4, which needs one point less of
+    speed change but keeps only one beat in three together. Within one deck's
+    range no other cycle can also fit next to 1:1, so old clients are unchanged.
     """
-    return sorted(((m, n, ratio * n / m) for m, n in CYCLES), key=lambda row: (abs(row[2] - 1), row[0] + row[1]))
+    def key(row):
+        return (not (row[:2] == (1, 1) and deck_rates(row[2]) is not None), deviation(row[2]), row[0] + row[1])
+    return sorted(((m, n, ratio * n / m) for m, n in CYCLES), key=key)
 
 
-def pulse_relation(ratio: PlaybackRatio, max_stretch: float = MAX_STRETCH):
+def pulse_relation(ratio: PlaybackRatio):
     """The common cycle the players can hold, or None beyond their speed limit."""
     best = pulse_relations(ratio)[0]
-    return best if abs(best[2] - 1) <= max_stretch else None
+    return best if deck_rates(best[2]) is not None else None
 
 
 def tempo_coordinate(bpm: float, reference: float) -> float:
@@ -68,6 +131,16 @@ def rate_fits(plan: PlanInput, *, tolerance: Seconds | None = PHASE_TOLERANCE_SE
             return False
         if sync.get('alignment') not in ('bars', 'beats'):
             return False
+        out_rate = float(plan.get('out_playback_rate', 1.0))
+        if not (math.isfinite(out_rate) and abs(1 - out_rate) <= MAX_STRETCH + 1e-9
+                and abs(1 - out_rate * rate) <= MAX_STRETCH + 1e-9):
+            return False
+        if out_rate != 1.0:
+            ramp = plan['out_rate_ramp']
+            lead, length = float(ramp['lead_seconds']), float(ramp['seconds'])
+            if not (math.isfinite(lead) and math.isfinite(length) and 0 < length < lead
+                    and float(plan['out_cue']) - lead >= 0):
+                return False
         bars = (sync['out_bar_seconds'], sync['in_bar_seconds'])
         if sync['alignment'] == 'bars' or bars != (None, None):
             out_bar, in_bar = float(bars[0]), float(bars[1])

@@ -8,14 +8,56 @@ import kotlin.math.roundToLong
 
 /** Conservative transition policy from stores/dj.ts, with occurrence ownership checked first. */
 internal object ProgramDjPlan {
-    /** `outPeriod`: seconds per beat of the outgoing song at its cue, as measured; 0 when unknown. */
+    /** The players' pitch range, shared/dj/timing.py MAX_STRETCH. */
+    const val MAX_STRETCH = 0.08
+    /** One quarter-percent speed step, shared/dj/timing.py RATE_STEP. */
+    const val RATE_STEP = 0.0025
+    private val HELD = setOf(ProgramMixCurve.Technique.BASS_SWAP, ProgramMixCurve.Technique.FILTER_BLEND, ProgramMixCurve.Technique.LONG_BLEND)
+    fun held(technique: ProgramMixCurve.Technique) = technique in HELD
+    /** Zero slope at both ends: a speed ramp starts and settles without a kink. */
+    fun smoothstep(progress: Double): Double { val x = progress.coerceIn(0.0, 1.0); return x * x * (3 - 2 * x) }
+
+    /**
+     * `outPeriod`: seconds per beat of the outgoing song at its cue, as measured; 0 when unknown.
+     * `rate`: incoming media seconds per outgoing media second. `outRate`: the
+     * outgoing deck's speed through the overlap, reached over `rampSeconds` of
+     * its media starting `rampLead` seconds before `outCue` (shared tempo).
+     */
     data class Proposal(val fromKey: String, val technique: ProgramMixCurve.Technique,
         val outCue: Double, val inCue: Double, val overlap: Double, val rate: Double,
         val confidence: Double, val phaseToleranceMs: Double = 5.0, val outPeriod: Double = 0.0,
-        val echoDelaySeconds: Double? = null, val metricSync: JSONObject? = null)
+        val echoDelaySeconds: Double? = null, val metricSync: JSONObject? = null,
+        val outRate: Double = 1.0, val rampLead: Double = Double.NaN, val rampSeconds: Double = Double.NaN)
+    /**
+     * `rate` is the relation the phase holds; the incoming deck plays at
+     * `inSpeed` (rate × outRate for a held blend). The outgoing deck reaches
+     * `outRate` between `rampStartUs` and `rampEndUs` of its own media.
+     */
     data class Plan(val technique: ProgramMixCurve.Technique, val outCueUs: Long,
         val inCueUs: Long, val overlapUs: Long, val rate: Float, val phaseToleranceUs: Long,
-        val echoDelaySeconds: Double? = null)
+        val echoDelaySeconds: Double? = null, val outRate: Float = 1f,
+        val rampStartUs: Long = 0, val rampEndUs: Long = 0) {
+        val inSpeed: Float get() = if (held(technique)) rate * outRate else rate
+        /** Only the incoming deck moves: the outgoing one keeps `speed`, or the blend fades without beat promises. */
+        fun withoutRamp(speed: Float): Plan {
+            val incoming = rate * speed
+            return if (held(technique) && abs(1 - incoming) <= MAX_STRETCH - RATE_STEP + 1e-6)
+                copy(outRate = speed, rampStartUs = 0, rampEndUs = 0)
+            else copy(technique = if (held(technique)) ProgramMixCurve.Technique.STRUCTURAL_FADE else technique,
+                rate = 1f, outRate = speed, rampStartUs = 0, rampEndUs = 0)
+        }
+    }
+
+    /** Both deck speeds of a proposal, or null when either leaves the pitch range (`planDeckRates` in ui_web/src/lib/djRates.ts). */
+    fun deckRates(proposal: Proposal): Pair<Double, Double>? {
+        val out = proposal.outRate
+        val incoming = proposal.rate * out
+        fun fits(speed: Double) = speed.isFinite() && speed > 0 && abs(1 - speed) <= MAX_STRETCH + 1e-9
+        if (!fits(out) || !fits(incoming)) return null
+        if (abs(out - 1) > 1e-6 && !(proposal.rampLead.isFinite() && proposal.rampSeconds.isFinite() &&
+                proposal.rampSeconds > 0 && proposal.rampSeconds < proposal.rampLead)) return null
+        return out to incoming
+    }
     fun resolve(fromKey: String, durationUs: Long, proposal: Proposal?, mixing: Boolean): Plan? {
         if (durationUs <= 4000000 || durationUs > 86400000000 || fromKey.isBlank()) return null
         if (!mixing) return Plan(ProgramMixCurve.Technique.DIRECT, durationUs, 0, 0, 1f, 5000)
@@ -34,17 +76,26 @@ internal object ProgramDjPlan {
         val metricFallback = trusted && chained!!.technique in setOf(ProgramMixCurve.Technique.BASS_SWAP,
             ProgramMixCurve.Technique.FILTER_BLEND, ProgramMixCurve.Technique.LONG_BLEND) && !placement.second
         val inCue = if (trusted) chained!!.inCue.coerceIn(0.0, 86400.0) else 0.0
-        // The players' pitch range, shared/dj/timing.py MAX_STRETCH.
-        val rate = if (trusted && !metricFallback) chained!!.rate.coerceIn(0.92, 1.08).toFloat() else 1f
+        // Both decks inside the players' pitch range, or no beat promise.
+        val speeds = if (trusted && !metricFallback) deckRates(chained!!) else null
+        val rateFallback = trusted && !metricFallback && held(chained!!.technique) && speeds == null
+        val rate = if (speeds != null) chained!!.rate.toFloat() else 1f
         val tolerance = chained?.phaseToleranceMs?.takeIf { it.isFinite() && it != 0.0 } ?: 5.0
         val echoDelay = chained?.echoDelaySeconds?.takeIf { trusted && chained.technique == ProgramMixCurve.Technique.ECHO_CUT && it.isFinite() && it > 0 && it <= 2 }
         val technique = if (!trusted) ProgramMixCurve.Technique.SAFE_FADE
-            else if (metricFallback) ProgramMixCurve.Technique.STRUCTURAL_FADE
+            else if (metricFallback || rateFallback) ProgramMixCurve.Technique.STRUCTURAL_FADE
             else if (chained!!.technique == ProgramMixCurve.Technique.ECHO_CUT && echoDelay == null) ProgramMixCurve.Technique.STRUCTURAL_FADE
             else chained.technique
-        return Plan(technique,
+        val plan = Plan(technique,
             (outCue * 1000000).roundToLong(), (inCue * 1000000).roundToLong(),
             (overlap * 1000000).roundToLong(), rate, (tolerance.coerceIn(1.0, 12.0) * 1000).roundToLong(), echoDelay)
+        val outRate = speeds?.first ?: 1.0
+        if (!held(technique) || abs(outRate - 1) <= 1e-6) return plan
+        // The ramp follows the cue wherever the player placed it.
+        val start = outCue - chained!!.rampLead
+        if (start < 0) return plan.withoutRamp(1f)
+        return plan.copy(outRate = outRate.toFloat(), rampStartUs = (start * 1000000).roundToLong(),
+            rampEndUs = ((start + chained.rampSeconds) * 1000000).roundToLong())
     }
 
     /** Missing bar field is the old four-pulse prior; explicit null is unknown. */
@@ -95,7 +146,7 @@ internal object ProgramDjPlan {
         if (!listOf(left, right, inStart, inEnd, tolerance).all(Double::isFinite) || left > right) return fallback to false
         val cue = placeOutCue(proposed, left, right, step)
         val pulseRatio = inPeriod * n / (outPeriod * m)
-        if (!listOf(proposal.rate, pulseRatio, tolerance).all(Double::isFinite) || proposal.rate !in 0.92..1.08 ||
+        if (!listOf(proposal.rate, pulseRatio, tolerance).all(Double::isFinite) || deckRates(proposal) == null ||
             outPeriod <= 0 || inPeriod <= 0 || tolerance < 0 ||
             abs(proposal.rate / pulseRatio - 1) * overlap > tolerance) return fallback to false
         if (alignment == "bars" || !sync.isNull("out_bar_seconds") || !sync.isNull("in_bar_seconds")) {

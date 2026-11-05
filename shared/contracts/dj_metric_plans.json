@@ -1070,5 +1070,191 @@
       "technique": "bass_swap",
       "playback_rate": 1.0
     }
+  },
+  {
+    "name": "split-shared-tempo",
+    "split": true,
+    "outgoing": {},
+    "incoming": {
+      "period": 0.45454545454545453
+    },
+    "duration": 240,
+    "transition": {
+      "technique": "filter_blend",
+      "out_cue": 206.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 32.0,
+      "overlap_bars": 16.0,
+      "playback_rate": 0.909091,
+      "out_playback_rate": 1.047619,
+      "out_rate_ramp": {
+        "lead_seconds": 15.0,
+        "seconds": 8.0
+      },
+      "score": 0.704,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "alignment": "bars",
+        "out_bar_seconds": 2.0,
+        "in_bar_seconds": 1.818182,
+        "out_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 1.0,
+          "downbeat_confidence": 1.0,
+          "subdivision_confidence": 1.0
+        },
+        "in_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 1.0,
+          "downbeat_confidence": 1.0,
+          "subdivision_confidence": 1.0
+        },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 2.0,
+        "out_period": 0.5,
+        "in_period": 0.454545,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    }
+  },
+  {
+    "name": "split-shared-tempo-pulse",
+    "split": true,
+    "outgoing": {
+      "confirmed": false
+    },
+    "incoming": {
+      "confirmed": false,
+      "period": 0.46875
+    },
+    "duration": 240,
+    "transition": {
+      "technique": "bass_swap",
+      "out_cue": 206.25,
+      "in_cue": 0.25,
+      "overlap_seconds": 32.0,
+      "overlap_bars": 16.0,
+      "playback_rate": 0.9375,
+      "out_playback_rate": 1.032258,
+      "out_rate_ramp": {
+        "lead_seconds": 15.0,
+        "seconds": 8.0
+      },
+      "score": 0.793,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "alignment": "beats",
+        "out_bar_seconds": 2.0,
+        "in_bar_seconds": 1.875,
+        "out_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "in_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 0.0,
+          "downbeat_confidence": 0.0,
+          "subdivision_confidence": 1.0
+        },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 2.0,
+        "out_period": 0.5,
+        "in_period": 0.46875,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    }
+  },
+  {
+    "name": "split-shared-tempo-faster-outgoing",
+    "split": true,
+    "outgoing": {
+      "period": 0.45454545454545453
+    },
+    "incoming": {},
+    "duration": 240,
+    "transition": {
+      "technique": "filter_blend",
+      "out_cue": 209.3409,
+      "in_cue": 0.25,
+      "overlap_seconds": 29.091,
+      "overlap_bars": 16.0,
+      "playback_rate": 1.1,
+      "out_playback_rate": 0.952381,
+      "out_rate_ramp": {
+        "lead_seconds": 15.0,
+        "seconds": 8.0
+      },
+      "score": 0.704,
+      "confidence": 0.9,
+      "fallback": false,
+      "sync": {
+        "alignment": "bars",
+        "out_bar_seconds": 1.818182,
+        "in_bar_seconds": 2.0,
+        "out_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 1.0,
+          "downbeat_confidence": 1.0,
+          "subdivision_confidence": 1.0
+        },
+        "in_metre": {
+          "start": 0.0,
+          "end": 240,
+          "pulse_unit": "quarter",
+          "beats_per_bar": 4,
+          "subdivision": 2,
+          "pulse_confidence": 1.0,
+          "metre_confidence": 1.0,
+          "downbeat_confidence": 1.0,
+          "subdivision_confidence": 1.0
+        },
+        "cycle_beats": [
+          1,
+          1
+        ],
+        "relocation_seconds": 1.818182,
+        "out_period": 0.454545,
+        "in_period": 0.5,
+        "phase_tolerance_ms": 5,
+        "grid_source": "measured"
+      }
+    }
   }
 ]

@@ -75,7 +75,9 @@ class ProgramDjPlanTest {
     @Test fun trustedTempoAndPhaseRemainInsideRuntimeBounds() {
         val plan = ProgramDjPlan.resolve("current", 200000000,
             confident.copy(rate = 2.0, inCue = -2.0, phaseToleranceMs = 30.0), true)!!
-        assertEquals(1.08, plan.rate.toDouble(), 0.0001)
+        // A speed beyond the pitch range is not clamped into a false beat promise.
+        assertEquals(ProgramMixCurve.Technique.STRUCTURAL_FADE, plan.technique)
+        assertEquals(1.0, plan.rate.toDouble(), 0.0)
         assertEquals(0L, plan.inCueUs)
         assertEquals(12000L, plan.phaseToleranceUs)
     }
@@ -95,8 +97,18 @@ class ProgramDjPlanTest {
                 transition.getDouble("out_cue"), transition.getDouble("in_cue"), transition.getDouble("overlap_seconds"),
                 transition.getDouble("playback_rate"), transition.getDouble("confidence"),
                 sync.getDouble("phase_tolerance_ms"), sync.getDouble("out_period"),
-                transition.optDouble("echo_delay_seconds").takeIf { it.isFinite() }, sync)
+                transition.optDouble("echo_delay_seconds").takeIf { it.isFinite() }, sync,
+                transition.optDouble("out_playback_rate", 1.0),
+                transition.optJSONObject("out_rate_ramp")?.getDouble("lead_seconds") ?: Double.NaN,
+                transition.optJSONObject("out_rate_ramp")?.getDouble("seconds") ?: Double.NaN)
             val plan = ProgramDjPlan.resolve("current", (vector.getDouble("duration") * 1000000).roundToLong(), proposal, true)!!
+            // Shared tempo: both deck speeds, and the ramp before the cue the player placed.
+            assertEquals(vector.getString("name"), proposal.outRate, plan.outRate.toDouble(), 0.000001)
+            transition.optJSONObject("out_rate_ramp")?.let { ramp ->
+                assertEquals(plan.outCueUs - (ramp.getDouble("lead_seconds") * 1000000).roundToLong(), plan.rampStartUs)
+                assertEquals(plan.rampStartUs + (ramp.getDouble("seconds") * 1000000).roundToLong(), plan.rampEndUs)
+                assertEquals(proposal.rate * proposal.outRate, plan.inSpeed.toDouble(), 0.000001)
+            }
             val resolved = vector.optJSONObject("resolved")
             val expectedTechnique = resolved?.optString("technique")?.let { ProgramMixCurve.Technique.valueOf(it.uppercase(java.util.Locale.ROOT)) } ?: proposal.technique
             assertEquals(vector.getString("name"), expectedTechnique, plan.technique)
@@ -106,6 +118,33 @@ class ProgramDjPlanTest {
             assertEquals(proposal.rate, plan.rate.toDouble(), 0.000001)
             assertEquals(proposal.echoDelaySeconds, plan.echoDelaySeconds)
         }
+    }
+    @Test fun sharedTempoPlansNeedBothDecksInsideThePitchRangeAndRoomForTheRamp() {
+        val rows = ProgramDjPlanTest::class.java.classLoader!!.getResourceAsStream("dj_metric_plans.json")!!.bufferedReader().use { JSONArray(it.readText()) }
+        val vectors = (0 until rows.length()).map { rows.getJSONObject(it) }.filter { it.optBoolean("split") }
+        assertTrue(vectors.isNotEmpty())
+        for (vector in vectors) {
+            val transition = vector.getJSONObject("transition")
+            val ramp = transition.getJSONObject("out_rate_ramp")
+            val proposal = metricProposal(transition).copy(outRate = transition.getDouble("out_playback_rate"),
+                rampLead = ramp.getDouble("lead_seconds"), rampSeconds = ramp.getDouble("seconds"))
+            val name = vector.getString("name")
+            assertTrue(name, ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, 215.0, proposal, proposal.overlap).second)
+            val alone = proposal.copy(outRate = 1.0, rampLead = Double.NaN, rampSeconds = Double.NaN)
+            assertEquals(name, kotlin.math.abs(1 - proposal.rate) <= 0.08,
+                ProgramDjPlan.metricCuePlacement(proposal.outCue, 90.0, 215.0, alone, proposal.overlap).second)
+            for (broken in listOf(proposal.copy(outRate = 1.09), proposal.copy(rampLead = Double.NaN), proposal.copy(rampLead = 8.0, rampSeconds = 8.0))) {
+                assertNull(name, ProgramDjPlan.deckRates(broken))
+                assertEquals(name, ProgramMixCurve.Technique.STRUCTURAL_FADE, ProgramDjPlan.resolve("current", 240000000, broken, true)!!.technique)
+            }
+        }
+        // Too close to the start of the song for the ramp: the incoming deck alone, or a fade.
+        val plan = ProgramDjPlan.Plan(ProgramMixCurve.Technique.BASS_SWAP, 10000000, 0, 8000000, (120.0 / 126).toFloat(), 5000, outRate = 1.02f)
+        assertEquals(ProgramMixCurve.Technique.BASS_SWAP, plan.withoutRamp(1f).technique)
+        assertEquals((120.0 / 126).toFloat(), plan.withoutRamp(1f).inSpeed, 1e-6f)
+        val far = plan.copy(rate = (120.0 / 132).toFloat()).withoutRamp(1f)
+        assertEquals(ProgramMixCurve.Technique.STRUCTURAL_FADE, far.technique)
+        assertEquals(1f, far.inSpeed, 0f)
     }
     @Test fun explicitUnknownBarNeverBecomesFourMeasuredPulses() {
         val unknown = confident.copy(outPeriod = 0.5, metricSync = org.json.JSONObject().put("out_bar_seconds", org.json.JSONObject.NULL))

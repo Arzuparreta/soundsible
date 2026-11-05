@@ -241,7 +241,15 @@ export interface DjTransitionPlan {
   in_cue: number;
   overlap_seconds: number;
   overlap_bars: number | null;
+  /** Incoming media seconds per outgoing media second, whatever speed the
+   * outgoing deck plays at. */
   playback_rate: number;
+  /** Outgoing deck speed through the overlap; the incoming deck plays at
+   * `playback_rate × out_playback_rate`. Absent: 1. */
+  out_playback_rate?: number;
+  /** The outgoing deck reaches `out_playback_rate` over `seconds` of its own
+   * media, starting `lead_seconds` before `out_cue`. */
+  out_rate_ramp?: { lead_seconds: number; seconds: number };
   /** One measured outgoing beat in media seconds; absent when echo is unsafe. */
   echo_delay_seconds?: number;
   score: number;

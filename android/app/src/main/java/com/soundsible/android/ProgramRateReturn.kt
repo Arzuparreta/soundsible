@@ -8,6 +8,7 @@ internal class ProgramRateReturn(private val main: Handler, private val owns: ()
     private val positionUs: () -> Long, private val applyRate: (Float) -> Unit) : AutoCloseable {
     private var tick: Runnable? = null
     private var serial = 0L
+    val running: Boolean get() = tick != null
     fun start(rate: Float) {
         check(Looper.myLooper() == main.looper)
         require(rate.isFinite() && rate in 0.92f..1.08f)
@@ -21,7 +22,8 @@ internal class ProgramRateReturn(private val main: Handler, private val owns: ()
             override fun run() {
                 if (token != serial || !owns()) { if (token == serial) tick = null; return }
                 progress = maxOf(progress, ((positionUs() - started).toDouble() / 8000000).coerceIn(0.0, 1.0))
-                applyRate((rate + (1 - rate) * progress).toFloat())
+                // Zero slope at both ends, as the outgoing ramp (ProgramDjSession).
+                applyRate((rate + (1 - rate) * ProgramDjPlan.smoothstep(progress)).toFloat())
                 if (progress < 1.0) main.postDelayed(this, 200) else tick = null
             }
         }

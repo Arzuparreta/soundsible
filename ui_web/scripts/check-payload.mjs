@@ -29,7 +29,8 @@ function graph(entries) {
 }
 const build_id = readFileSync(resolve(dist, 'index.html'), 'utf8').match(/<meta name="soundsible-build" content="([a-f0-9]{64})"/)?.[1];
 const report = { build_id, baseline_revision: baseline.revision, method: 'Production manifest static JS/CSS dependency closure; excludes fonts, locale dictionaries, dynamic routes and API. Gzip level 9, Brotli quality 5.', login: graph(['index.html']), library: graph(['index.html', 'src/AuthenticatedPlayer.tsx']) };
-for (const [name, ceiling] of [['login', 0.50], ['library', 0.85]]) {
+// library: 0.86 since shared-tempo DJ mixing (P18, decision of the user, 2026-11-05); 0.85 in #284.
+for (const [name, ceiling] of [['login', 0.50], ['library', 0.86]]) {
   report[name].gzip_reduction_percent = +(100 * (1 - report[name].gzip_bytes / baseline.initial.gzip_bytes)).toFixed(2);
   if (report[name].gzip_bytes > baseline.initial.gzip_bytes * ceiling) throw new Error(`${name} exceeds approved gzip budget: ${report[name].gzip_bytes}`);
 }
