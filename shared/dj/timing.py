@@ -88,8 +88,15 @@ def pulse_relations(ratio: PlaybackRatio) -> list[tuple[int, int, PlaybackRatio]
 
     `ratio` is incoming over outgoing beat period. m outgoing beats equal n
     incoming beats played at `rate`: m · out_period = n · in_period / rate.
+    One beat against one beat comes first whenever the players can hold it
+    (decision of the user, 2026-11-05): with both decks moving, 120 ↔ 140 BPM
+    meet at 129.23 BPM in 1:1 rather than at 3:4, which needs one point less of
+    speed change but keeps only one beat in three together. Within one deck's
+    range no other cycle can also fit next to 1:1, so old clients are unchanged.
     """
-    return sorted(((m, n, ratio * n / m) for m, n in CYCLES), key=lambda row: (deviation(row[2]), row[0] + row[1]))
+    def key(row):
+        return (not (row[:2] == (1, 1) and deck_rates(row[2]) is not None), deviation(row[2]), row[0] + row[1])
+    return sorted(((m, n, ratio * n / m) for m, n in CYCLES), key=key)
 
 
 def pulse_relation(ratio: PlaybackRatio):

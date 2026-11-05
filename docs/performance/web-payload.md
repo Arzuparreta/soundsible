@@ -22,7 +22,9 @@ closure at `d608588`. `web-payload-after.json` records the production manifest's
 bootstrap closure and its union with `AuthenticatedPlayer`. Both count JS/CSS,
 excluding HTML, fonts, locale dictionaries, deferred routes and API. The CI gate
 `node scripts/check-payload.mjs` requires at least 50% gzip reduction for login and
-15% for the authenticated library, using gzip level 9. `--record` refreshes the
+14% for the authenticated library, using gzip level 9. The library gate was 15%
+until shared-tempo DJ mixing ([P18](../dj/P18.md)) added about 850 bytes gzip to
+the mixer that every blend uses; the user raised it on 2026-11-05. `--record` refreshes the
 review artifact after the engine's automatic bundle update.
 
 Build-time gzip/Brotli files remove request-time compression work. HTTP negotiation

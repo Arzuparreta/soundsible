@@ -158,3 +158,20 @@ def test_measured_aac_pair_is_split_only_for_clients_that_ask(tmp_path):
     assert abs(1 - out_rate) == pytest.approx(abs(1 - out_rate * plan['playback_rate']), abs=1e-5)
     # The planning context never leaks into the next request of an old client.
     assert not timing.split_enabled()
+
+
+@pytest.mark.parametrize('out_bpm,in_bpm', [(120, 140), (140, 120)])
+def test_one_beat_against_one_comes_first_whenever_both_decks_can_hold_it(out_bpm, in_bpm):
+    # 3:4 would change each deck 6.67 % instead of 7.69 %, but keep only one
+    # beat in three together (decision of the user, 2026-11-05).
+    plan = split_plan(measured(bpm=out_bpm), measured(bpm=in_bpm))
+    assert plan['technique'] in timing.BEATMATCH_TECHNIQUES
+    assert plan['sync']['cycle_beats'] == [1, 1]
+    assert out_bpm * plan['out_playback_rate'] == pytest.approx(2 * 120 * 140 / 260, abs=.01)
+
+
+def test_a_wider_cycle_is_kept_where_one_against_one_does_not_fit():
+    # 120 ↔ 141 in 1:1 would need 8.05 % per deck.
+    plan = split_plan(measured(), measured(bpm=141))
+    assert plan['sync']['cycle_beats'] == [3, 4]
+    assert abs(1 - plan['out_playback_rate']) <= MAX_STRETCH - RATE_STEP
