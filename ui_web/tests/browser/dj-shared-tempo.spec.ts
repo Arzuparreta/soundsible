@@ -170,10 +170,22 @@ for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: 
   const intervals = (times: number[]) => times.slice(1).map((time, index) => time - times[index]);
   const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
   expect(median(intervals(out.slice(2, 8)))).toBeCloseTo(outBeat, 2);
-  const blend = incoming.slice(Math.floor(incoming.length * 0.2), Math.ceil(incoming.length * 0.8));
-  expect(blend.length).toBeGreaterThanOrEqual(5);
   const shared = outBeat / outRate;
-  expect(median(intervals(blend))).toBeCloseTo(shared, 2);
+  // Only kicks where both decks sound: the incoming deck goes on alone after
+  // the blend, and the faded outgoing one drops below the detector first.
+  const both = incoming.filter(time => time <= out[out.length - 1] + shared / 2);
+  const blend = both.slice(Math.floor(both.length * 0.2), Math.ceil(both.length * 0.8));
+  expect(blend.length).toBeGreaterThanOrEqual(5);
+  // Seconds per kick from a line through the blend's kicks: phase riding
+  // moves the incoming deck by up to 2 % and the renderer's stretching moves
+  // single kicks, so a median of a few intervals wanders by about 1 %. The
+  // speeds that would fail differ by more than 4.7 % (0.500 or 0.4545 s).
+  const beatOf = (times: number[]) => {
+    const mean = times.reduce((sum, time) => sum + time, 0) / times.length, middle = (times.length - 1) / 2;
+    return times.reduce((sum, time, index) => sum + (index - middle) * (time - mean), 0)
+      / times.reduce((sum, _, index) => sum + (index - middle) ** 2, 0);
+  };
+  expect(Math.abs(beatOf(blend) / shared - 1)).toBeLessThan(0.015);
   // Every incoming kick in the blend lands on an outgoing one.
   const signed = blend.map(time => { const beat = out.reduce((best, candidate) => Math.abs(candidate - time) < Math.abs(best - time) ? candidate : best); return time - beat; });
   // A renderer that time-stretches moves single kicks of a deck by several

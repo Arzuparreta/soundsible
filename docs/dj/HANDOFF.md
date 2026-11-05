@@ -68,7 +68,7 @@ limitaciones de escucha anotadas en entregas anteriores son históricas.
 | Punto | Tema | Evidencia | Estado |
 | --- | --- | --- | --- |
 | P1 | Precisión del tempo y de la rejilla de golpes | Medido | Cerrado (#377) |
-| P2 | Alineación de fase en el navegador | Traza de la estación: un `seek` en el cue dejó 115 ms de desfase 30 s, oído por el usuario | Cerrado en la web (PR #395): fase mantenida con `playbackRate` durante la mezcla; Android sin medir |
+| P2 | Alineación de fase en el navegador | Traza de la estación: un `seek` en el cue dejó 115 ms de desfase 30 s, oído por el usuario | Cerrado en la web (PR #395): fase mantenida con `playbackRate` durante la mezcla; Android medido en [P18](P18.md): la entrante suena 6–15 ms tarde, constante, causa sin identificar |
 | P3 | El orden de la ruta ignora la calidad de la transición | Tests de magnitudes, audio sintético → HTTP y replay de análisis locales | Cerrado (implementación `0e62b0fb`) |
 | P4 | La "energía" no mide intensidad | Medido | Cerrado (#385): notas/s, LUFS y planitud; `energy` eliminado |
 | P5 | Pool analizado, previews y canciones puente | AAC → caché → HTTP, pools fríos/calientes y adquisición real de 16 previews | Cerrado (implementación `31f696bc`) |
@@ -110,7 +110,7 @@ el barrido automático y la adquisición especulativa de 16 previews de P5;
 la caché sigue siendo compartida y reutilizable. Quedan
 registrados, sin orden decidido: repartir el cambio de tempo entre las dos
 canciones durante la mezcla (decisión del usuario del 2026-10-26; implementado
-en [P18](P18.md)) y P2 en Android, medido con P18: la entrante suena ~15 ms tarde con un
+en [P18](P18.md)) y P2 en Android, medido con P18: la entrante suena 6–15 ms tarde con un
 solo plato, causa sin identificar. P11-a está cerrado: la rama legacy no se alcanzaba en producción y se ha
 eliminado.
 

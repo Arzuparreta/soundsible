@@ -131,8 +131,12 @@ class DjSharedTempoTest {
                 // Before its ramp the outgoing deck keeps its own tempo...
                 assertEquals(outBeat, median(intervals(out.take(10))), 0.003)
                 // ...and through the blend both decks play the shared one.
-                val blend = incoming.subList((incoming.size * 0.2).toInt(), (incoming.size * 0.8).toInt().coerceAtLeast(1))
-                assertTrue("Too few incoming kicks during the blend: ${incoming.size}", blend.size >= 6)
+                // Only kicks where both decks sound: the incoming deck goes on
+                // alone after the blend, and the faded outgoing one drops
+                // below the detector first. The middle of that span.
+                val both = incoming.filter { it <= out.last() + shared / 2 }
+                val blend = both.subList((both.size * 0.2).toInt(), (both.size * 0.8).toInt().coerceAtLeast(1))
+                assertTrue("Too few incoming kicks during the blend: ${both.size}", blend.size >= 6)
                 val outDuring = out.filter { it > blend.first() - 1 && it < blend.last() + 0.2 }
                 assertEquals(shared, median(intervals(blend)), 0.003)
                 assertEquals(shared, median(intervals(outDuring)), 0.003)
