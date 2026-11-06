@@ -7,6 +7,9 @@
 - Engineering resource optimization handoff: read
   `docs/audits/ENGINEERING_HANDOFF.md` before continuing this audit work.
 
+- Architecture review: read `docs/audits/ARCHITECTURE_HANDOFF.md` before
+  working on its open points, and update its status table when one closes.
+
 - DJ mode review: read `docs/dj/HANDOFF.md` before working on DJ analysis,
   route ordering or transitions, and update its status table when a point closes.
 

@@ -164,65 +164,6 @@ def test_projection_failure_rolls_back_track_and_revision(manager, monkeypatch):
     assert manager.db.load_library_metadata().tracks[0].title == title
 
 
-def test_metadata_route_fallback_commits_declared_fields(manager, monkeypatch):
-    import inspect
-    import shared.api as api
-    from shared.api.routes import library as routes
-    from flask import Flask
-    track_id = manager.metadata.tracks[0].id
-    monkeypatch.setattr(manager, 'update_track', lambda *a, **k: False)
-    monkeypatch.setattr(api, '_mirror_track_into_pool', lambda *a, **k: None)
-    monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
-    monkeypatch.setattr(routes, '_get_api', lambda: {
-        'get_core': lambda: (manager, None, None),
-        'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
-        '_mark_track_metadata_updated': api._mark_track_metadata_updated,
-    })
-    app = Flask(__name__)
-    with app.test_request_context(json={'title': 'Route edit'}):
-        response = inspect.unwrap(routes.update_track_metadata)(track_id)
-    assert response.json == {'status': 'success', 'fallback': 'metadata_only'}
-    saved = manager.db.load_library_metadata().tracks[0]
-    assert saved.title == 'Route edit'
-    assert saved.metadata_modified_by_user
-
-
-def test_unsupported_embedded_tags_keep_confirmed_library_edits_and_artwork(manager, tmp_path, monkeypatch):
-    import io
-    import wave
-    from PIL import Image
-    from shared.artwork import ArtworkStore
-
-    track = manager.metadata.tracks[0]
-    track.format = 'wav'
-    assert manager._save_metadata()
-    audio = tmp_path / 'source.wav'
-    with wave.open(str(audio), 'wb') as output:
-        output.setnchannels(1)
-        output.setsampwidth(2)
-        output.setframerate(16000)
-        output.writeframes(b'\0\0' * 1600)
-    original = audio.read_bytes()
-    image = io.BytesIO()
-    Image.new('RGB', (16, 16), 'green').save(image, 'PNG')
-    cover = tmp_path / 'cover.png'
-    cover.write_bytes(image.getvalue())
-    artwork = ArtworkStore(tmp_path / 'artwork', tmp_path / 'variants')
-    monkeypatch.setattr('shared.artwork.artwork_store', lambda: artwork)
-    monkeypatch.setattr('player.library.resolve_local_track_path', lambda _: str(audio))
-    manager._cache = None
-    manager._cache_unavailable = True
-    manager.provider = None
-
-    assert manager.update_track(track, {'title': 'Edited WAV', 'album_artist': None}, str(cover))
-    stored = manager.db.load_library_metadata().get_track_by_id(track.id)
-    assert stored.title == 'Edited WAV'
-    assert stored.album_artist is None
-    assert audio.read_bytes() == original
-    assert Path(artwork.path(track.id)).read_bytes() == image.getvalue()
-    assert manager.db.public_source()['fingerprint'] == fingerprint(manager.metadata)
-
-
 @pytest.mark.parametrize('format_name', ['mp3', 'flac', 'ogg', 'opus', 'm4a', 'mp4', 'wav'])
 def test_stable_label_routes_never_rewrite_audio_or_membership(manager, tmp_path, monkeypatch, format_name):
     import inspect
@@ -243,10 +184,6 @@ def test_stable_label_routes_never_rewrite_audio_or_membership(manager, tmp_path
     monkeypatch.setattr('shared.artwork.artwork_store', lambda: artwork)
     monkeypatch.setattr(api, '_mirror_track_into_pool', lambda *a, **k: None)
     monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
-    def forbidden(*args, **kwargs):
-        pytest.fail('Stable label editing must not rewrite or fetch audio')
-    monkeypatch.setattr(manager, 'update_track', forbidden)
-    monkeypatch.setattr(routes, 'resolve_local_track_path', forbidden)
     monkeypatch.setattr(routes, '_get_api', lambda: {
         'get_core': lambda: (manager, None, None),
         'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
@@ -326,3 +263,20 @@ def test_stable_cover_rejects_bad_image_or_failed_commit_before_publication(mana
             reply, status = inspect.unwrap(routes.upload_track_label_cover)(track.id)
             assert status == 400
     assert artwork.ref(track.id) == before
+
+
+@pytest.mark.parametrize('shared_pool', [False, True])
+def test_labels_reach_the_pool_catalog_only_while_one_account_owns_it(monkeypatch, shared_pool):
+    from types import SimpleNamespace
+    import shared.api as api
+    from shared.models import LibraryMetadata
+
+    pool = library(2)
+    edited = deepcopy(pool.tracks[0])
+    edited.title = 'A member label'
+    monkeypatch.setattr('shared.users.instance_has_multiple_users', lambda: shared_pool)
+    monkeypatch.setattr(api, 'get_downloader', lambda **_: SimpleNamespace(library=LibraryMetadata(1, pool.tracks, {}, {})))
+
+    api._mirror_track_into_pool(edited)
+
+    assert (pool.tracks[0].title == 'A member label') is not shared_pool

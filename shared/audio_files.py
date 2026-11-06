@@ -447,46 +447,6 @@ class AudioProcessor:
         audio.save()
 
     @staticmethod
-    def update_tags(file_path: str, tags: Dict[str, str]) -> bool:
-        """Set title, artist, album and album artist in place. False when the
-        format is not supported or the write fails."""
-        try:
-            ext = Path(file_path).suffix.lower()
-            if ext == ".mp3":
-                from mutagen.easyid3 import EasyID3
-
-                try:
-                    audio = EasyID3(file_path)
-                except mutagen.id3.ID3NoHeaderError:
-                    audio = EasyID3()
-                    audio.save(file_path)
-                    audio = EasyID3(file_path)
-            elif ext == ".flac":
-                audio = FLAC(file_path)
-            elif ext == ".ogg":
-                audio = OggVorbis(file_path)
-            elif ext == ".opus":
-                from mutagen.oggopus import OggOpus
-
-                audio = OggOpus(file_path)
-            elif ext in (".m4a", ".mp4"):
-                from mutagen.easymp4 import EasyMP4
-
-                audio = EasyMP4(file_path)
-            else:
-                return False
-            for key in ("title", "artist", "album"):
-                if key in tags:
-                    audio[key] = tags[key]
-            if tags.get("album_artist"):
-                audio["albumartist"] = tags["album_artist"]
-            audio.save()
-            return True
-        except Exception as e:
-            logger.warning("Could not update tags on %s: %s", file_path, e)
-            return False
-
-    @staticmethod
     def embed_artwork(file_path: str, cover_path: str) -> bool:
         """Replace the cover of an MP3 or FLAC file with the image at `cover_path`."""
         try:

@@ -2,6 +2,7 @@
 Trust and path safety checks for the Station Engine.
 """
 
+import ipaddress
 import os
 import logging
 import tempfile
@@ -21,22 +22,80 @@ def _get_output_dir_root():
     return os.path.normpath(os.path.abspath(os.path.expanduser(DEFAULT_OUTPUT_DIR_FALLBACK)))
 
 
+#: Tailscale gives tailnet devices addresses from the shared CGNAT block, which
+#: Python does not count as private. The rest of 100.0.0.0/8 is public internet.
+TAILSCALE_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+
+
 def is_trusted_network(remote_addr) -> bool:
-    """
-    Automatically trusts Local, LAN, and Tailscale networks.
-    Provides 'Zero-Friction' access for friends and family on the network.
-    """
+    """Whether an address is this machine, the LAN or the tailnet."""
     try:
-        import ipaddress
-        ip = ipaddress.ip_address(remote_addr)
-        # Note: Trust if it's private (LAN/wifi) or loopback (localhost)
-        # Note: 100.X.x.x (tailscale) is explicitly caught by is_private in many versions,
-        # Note: But we check it specifically for reliability.
-        is_tailscale = str(remote_addr).startswith('100.')
-        return ip.is_private or ip.is_loopback or is_tailscale
-    except (ValueError, TypeError) as e:
+        ip = ipaddress.ip_address(str(remote_addr or "").strip())
+    except ValueError as e:
         logger.debug("is_trusted_network: invalid remote_addr %s: %s", remote_addr, e)
         return False
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip.is_private or ip.is_loopback or (ip.version == 4 and ip in TAILSCALE_NETWORK)
+
+
+def _strip_port(value: str) -> str:
+    value = value.strip().strip('"')
+    if value.startswith("["):
+        return value[1:value.index("]")] if "]" in value else ""
+    if value.count(":") == 1:
+        return value.split(":", 1)[0]
+    return value
+
+
+def _last_forwarded_for(header: str) -> str:
+    """The ``for=`` of the last element of an RFC 7239 ``Forwarded`` header."""
+    last = header.split(",")[-1]
+    for pair in last.split(";"):
+        name, _, value = pair.partition("=")
+        if name.strip().lower() == "for":
+            return _strip_port(value)
+    return ""
+
+
+def request_client_address(req=None) -> str:
+    """The address of whoever is calling, as far as it can be known.
+
+    A reverse proxy or ``tailscale serve``/``funnel`` on this machine makes
+    every request arrive from 127.0.0.1, so the socket alone would trust the
+    whole internet. When a trusted peer forwards a request, the decision is made
+    on the client it names: the right-most ``X-Forwarded-For`` entry, the one
+    the nearest proxy wrote (earlier entries are whatever the client sent).
+    A request that shows a proxy but names no client gets ``""``, which nothing
+    trusts. Headers from an untrusted peer are never believed.
+    """
+    if req is None:
+        from flask import request as req
+    peer = (req.remote_addr or "").strip()
+    if not is_trusted_network(peer):
+        return peer
+    headers = req.headers
+    if headers.get("Tailscale-Funnel-Request"):
+        # Funnel is the public internet by definition, whatever it reports.
+        return ""
+    forwarded_for = headers.get("X-Forwarded-For")
+    if forwarded_for is not None:
+        entries = [entry for entry in forwarded_for.split(",") if entry.strip()]
+        return _strip_port(entries[-1]) if entries else ""
+    forwarded = headers.get("Forwarded")
+    if forwarded is not None:
+        return _last_forwarded_for(forwarded)
+    real_ip = headers.get("X-Real-IP")
+    if real_ip is not None:
+        return _strip_port(real_ip)
+    if headers.get("X-Forwarded-Host") or headers.get("X-Forwarded-Proto"):
+        return ""
+    return peer
+
+
+def is_trusted_request(req=None) -> bool:
+    """Whether the caller of this request is on this machine, the LAN or the tailnet."""
+    return is_trusted_network(request_client_address(req))
 
 
 def is_safe_path(file_path, is_trusted: bool = False) -> bool:

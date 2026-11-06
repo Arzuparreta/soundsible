@@ -21,6 +21,7 @@ from shared.hardening import (
     require_scope,
 )
 from shared.url_utils import extract_youtube_video_id, normalize_youtube_url
+from shared.security import request_client_address
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +365,7 @@ def trigger_downloader_sync():
 @downloader_bp.route("/api/downloader/config", methods=["GET"])
 def get_downloader_config():
     api = _get_api()
-    is_trusted = api["is_trusted_network"](request.remote_addr)
+    is_trusted = api["is_trusted_network"](request_client_address())
     from shared.downloader.settings import read_settings
 
     env_vars = read_settings()

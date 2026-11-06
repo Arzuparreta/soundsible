@@ -16,6 +16,7 @@ from shared import preview_cache, request_scope
 from shared.api.memo import Memo
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
+from shared.security import request_client_address
 from shared.stream_resolution import ResolvedStream
 from shared.url_utils import validate_youtube_video_id
 
@@ -274,7 +275,7 @@ def stream_local_track(track_id):
     path = os.path.normpath(os.path.abspath(os.path.expanduser(path)))
     if not os.path.exists(path):
         return jsonify({"error": f"File not found: {path}"}), 404
-    is_trusted = api["is_trusted_network"](request.remote_addr)
+    is_trusted = api["is_trusted_network"](request_client_address())
     if not api["is_safe_path"](path, is_trusted=is_trusted):
         return jsonify({"error": "Unauthorized path access"}), 403
     ext = os.path.splitext(path)[1].lower().replace(".", "")
@@ -908,7 +909,7 @@ def get_track_cover(track_id):
             # Only local legacy extraction is allowed in the request path. A master
             # generated here is durable; future variants never re-parse the audio.
             if not store.path(track_id):
-                if not api["is_safe_path"](path, is_trusted=api["is_trusted_network"](request.remote_addr)):
+                if not api["is_safe_path"](path, is_trusted=api["is_trusted_network"](request_client_address())):
                     return jsonify({"error": "Unauthorized path"}), 403
                 with open(path, "rb") as handle:
                     store.bind(track_id, store.put(handle.read()), getattr(track, "cover_source", None), only_missing=True)
