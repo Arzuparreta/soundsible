@@ -804,12 +804,14 @@ export const api = {
       timeoutMs: 15000,
     }),
 
-  // ── Track metadata + cover (engine rewrites the file's tags) ──
+  // ── Track metadata + cover ──
+  // Library labels and a cover sidecar: the audio file, its id and its
+  // playlist slots stay as they are (the same routes the Android app uses).
   updateTrackMetadata: (
     id: string,
     meta: { title?: string; artist?: string; album?: string; album_artist?: string | null },
   ) =>
-    request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/metadata`, {
+    request<{ status?: string }>(`/api/library/track-labels/${encodeURIComponent(id)}/metadata`, {
       method: 'POST',
       body: meta,
       timeoutMs: 20000,
@@ -818,7 +820,7 @@ export const api = {
   uploadTrackCover: (id: string, file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/cover`, {
+    return request<{ status?: string }>(`/api/library/track-labels/${encodeURIComponent(id)}/cover`, {
       method: 'POST',
       body: fd,
       timeoutMs: 30000,
@@ -826,7 +828,7 @@ export const api = {
   },
   /** Remove the cover art. */
   clearTrackCover: (id: string) =>
-    request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}/cover/none`, {
+    request<{ status?: string }>(`/api/library/track-labels/${encodeURIComponent(id)}/cover/none`, {
       method: 'POST',
       timeoutMs: 20000,
     }),

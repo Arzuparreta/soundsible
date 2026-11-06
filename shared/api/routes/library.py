@@ -1,13 +1,10 @@
-from shared.library_lifecycle import serialized, LibraryPersistenceError
+from shared.library_lifecycle import serialized
 from hashlib import sha256
-from pathlib import Path
 """
 Library, metadata, playlists, favourites, and cover routes.
 """
 
 import logging
-import os
-import tempfile
 from urllib.parse import unquote
 
 from flask import Blueprint, request, jsonify
@@ -15,8 +12,6 @@ from shared.hardening import SCOPE_ADMIN_DANGEROUS, SCOPE_LIBRARY_WRITE, rate_li
 from shared.user_context import require_user_id
 
 from shared.loudness import annotate_tracks
-from shared.path_resolver import resolve_local_track_path
-from shared.artwork import download_image
 
 logger = logging.getLogger(__name__)
 
@@ -601,153 +596,6 @@ def clear_track_label_cover(track_id):
     if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="none"):
         return jsonify({"error": "Track not found"}), 404
     return jsonify({"status": "success", "storage": "library", "id": track_id})
-
-
-@library_bp.route("/api/library/tracks/<track_id>/metadata", methods=["POST"])
-@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
-@rate_limit("library_update_metadata", limit=60, window_sec=60)
-def update_track_metadata(track_id):
-    api = _get_api()
-    lib, _, _ = api["get_core"]()
-    data = request.json
-    track = api["get_track_by_id"](lib, track_id)
-    if not track:
-        return jsonify({"error": "Track not found"}), 404
-    cover_url = data.get("cover_url")
-    cover_path = None
-    if cover_url:
-        logger.info("API: Downloading cover from %s...", cover_url)
-        img_data = download_image(cover_url)
-        if img_data:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                tmp.write(img_data)
-                cover_path = tmp.name
-    clear_cover = data.get("clear_cover", False)
-    new_meta = {
-        "title": data.get("title", track.title),
-        "artist": data.get("artist", track.artist),
-        "album": data.get("album", track.album),
-        "album_artist": data.get("album_artist", track.album_artist),
-    }
-    success = lib.update_track(track, new_meta, cover_path if not clear_cover else None)
-    if cover_path and os.path.exists(cover_path):
-        os.remove(cover_path)
-    if not success and getattr(lib, "last_save_error", None):
-        raise LibraryPersistenceError(lib.last_save_error)
-    if success:
-        cover_source = "none" if clear_cover else ("youtube" if cover_url and ("youtube.com" in cover_url or "youtu.be" in cover_url) else "manual" if cover_url else None)
-        api["_mark_track_metadata_updated"](lib, track_id, cover_source=cover_source)
-        return jsonify({"status": "success"})
-    # Note: Metadata-only fallback for manual text edits when file-level reprocessing fails.
-    # This keeps user edits usable in the library UI even if the source audio file is
-    # temporarily unavailable from cache/provider.
-    if not cover_url and not clear_cover:
-        changes = {
-            "title": str(new_meta.get("title", track.title) or ""),
-            "artist": str(new_meta.get("artist", track.artist) or ""),
-            "album": str(new_meta.get("album", track.album) or ""),
-            "album_artist": str(new_meta["album_artist"] or "") if new_meta.get("album_artist") is not None else None,
-            "metadata_modified_by_user": True,
-        }
-        api["_mark_track_metadata_updated"](lib, track_id, changes=changes)
-        logger.warning("Metadata file rewrite failed for %s; applied metadata-only fallback.", track_id)
-        return jsonify({"status": "success", "fallback": "metadata_only"})
-    return jsonify({"error": "Failed to update track"}), 500
-
-
-@library_bp.route("/api/library/tracks/<track_id>/cover", methods=["POST"])
-@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
-@rate_limit("library_upload_cover", limit=30, window_sec=60)
-def upload_track_cover(track_id):
-    api = _get_api()
-    if "file" not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
-    lib, _, _ = api["get_core"]()
-    track = api["get_track_by_id"](lib, track_id)
-    if not track:
-        return jsonify({"error": "Track not found"}), 404
-    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
-        file.save(tmp.name)
-        cover_path = tmp.name
-    success = lib.update_track(track, {}, cover_path)
-    if os.path.exists(cover_path):
-        os.remove(cover_path)
-    if success:
-        api["_mark_track_metadata_updated"](lib, track_id, cover_source="manual")
-        return jsonify({"status": "success"})
-    return jsonify({"error": "Failed to update cover"}), 500
-
-
-@library_bp.route("/api/library/tracks/<track_id>/cover/from-track", methods=["POST"])
-@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
-@rate_limit("library_copy_cover", limit=30, window_sec=60)
-def copy_track_cover(track_id):
-    api = _get_api()
-    lib, _, _ = api["get_core"]()
-    data = request.json or {}
-    source_track_id = data.get("source_track_id")
-    if not source_track_id:
-        return jsonify({"error": "source_track_id required"}), 400
-    track = api["get_track_by_id"](lib, track_id)
-    if not track:
-        return jsonify({"error": "Track not found"}), 404
-    source_track = api["get_track_by_id"](lib, source_track_id)
-    if not source_track:
-        return jsonify({"error": "Source track not found"}), 404
-    from shared.artwork import artwork_store
-    master = artwork_store().path(source_track.id)
-    source_local_path = resolve_local_track_path(source_track)
-    if not master and not source_local_path:
-        return jsonify({"error": "Source track file not found"}), 404
-    try:
-        from shared.audio_files import AudioProcessor
-        cover_data = Path(master).read_bytes() if master else AudioProcessor.extract_cover_art(source_local_path)
-        if not cover_data:
-            return jsonify({"error": "No cover art found in source track"}), 404
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(cover_data)
-            cover_path = tmp.name
-        success = lib.update_track(track, {}, cover_path)
-        if os.path.exists(cover_path):
-            os.remove(cover_path)
-        if success:
-            api["_mark_track_metadata_updated"](lib, track_id, cover_source="manual")
-            return jsonify({"status": "success"})
-        return jsonify({"error": "Failed to update cover"}), 500
-    except Exception as e:
-        return jsonify({"error": f"Failed to copy cover: {str(e)}"}), 500
-
-
-@library_bp.route("/api/library/tracks/<track_id>/cover/none", methods=["POST"])
-@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
-@rate_limit("library_clear_cover", limit=30, window_sec=60)
-def clear_track_cover(track_id):
-    api = _get_api()
-    lib, _, _ = api["get_core"]()
-    track = api["get_track_by_id"](lib, track_id)
-    if not track:
-        return jsonify({"error": "Track not found"}), 404
-    try:
-        from PIL import Image
-        placeholder = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-            placeholder.save(tmp.name, "PNG")
-            placeholder_path = tmp.name
-        success = lib.update_track(track, {}, placeholder_path)
-        if os.path.exists(placeholder_path):
-            os.remove(placeholder_path)
-        if success:
-            api["_mark_track_metadata_updated"](lib, track_id, cover_source="none")
-            return jsonify({"status": "success"})
-        return jsonify({"error": "Failed to clear cover"}), 500
-    except ImportError:
-        api["_mark_track_metadata_updated"](lib, track_id, cover_source="none")
-        return jsonify({"status": "success"})
-    except Exception as e:
-        return jsonify({"error": f"Failed to clear cover: {str(e)}"}), 500
 
 
 @library_bp.route("/api/library/favourites", methods=["GET"])

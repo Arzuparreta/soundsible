@@ -18,7 +18,6 @@ from shared.constants import LIBRARY_METADATA_FILENAME
 from shared.path_resolver import resolve_local_track_path, track_storage_key
 from shared.app_config import get_output_dir
 from shared.runtime import get_config_dir
-from shared.track_identity import preserve_track_identity
 from setup_tool.provider_factory import StorageProviderFactory
 
 logger = logging.getLogger(__name__)
@@ -60,12 +59,9 @@ def _music_dir_manifest_is_shared() -> bool:
         return instance_has_multiple_users()
     except Exception:
         return False
-from shared.audio_files import AudioProcessor
-from setup_tool.uploader import UploadEngine
 from shared.database import USER_DB_FILENAME, DatabaseManager, StaleLibraryWrite
 from shared.user_context import user_config_dir
 import shutil
-import tempfile
 
 
 class LibraryManager:
@@ -786,167 +782,6 @@ class LibraryManager:
             return self.db.search_tracks(query)
         except Exception:
             return self.metadata.tracks if (self.metadata and not query) else []
-
-    @serialized
-    def update_track(self, track: Track, new_metadata: Dict[str, str], cover_path: Optional[str] = None) -> bool:
-        """
-        Update track metadata and/or cover art.
-        This involves:
-        1. Downloading the file (if not cached).
-        2. Modifying tags/embedding art.
-        3. Re-uploading (if hash changed).
-        4. Updating library.json.
-        """
-        self.last_save_error = None
-        try:
-            self.refresh_if_stale()
-            self._log(f"Updating track: {track.title}")
-            
-            # Note: 1. Get local file
-            local_path = None
-            
-            # Note: Try cache first
-            if self.cache:
-                cached = self.cache.get_cached_path(track.id)
-                if cached:
-                    # Note: Copy to temp to avoid messing up cache directly
-                    fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
-                    os.close(fd)
-                    shutil.copy2(cached, temp_path)
-                    local_path = temp_path
-            
-            # Note: If not in cache, download it
-            if not local_path and self.provider:
-                remote_key = track_storage_key(track)
-                fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
-                os.close(fd)
-                self._log("Downloading track for update...")
-                if self.provider.download_file(remote_key, temp_path):
-                    local_path = temp_path
-                else:
-                    self._log("Failed to download track.")
-                    return False
-
-            # Local and downloaded tracks live under OUTPUT_DIR; tags are updated in place via a temp copy
-            if not local_path:
-                resolved = resolve_local_track_path(track)
-                if resolved and os.path.isfile(resolved):
-                    fd, temp_path = tempfile.mkstemp(suffix=f".{track.format}")
-                    os.close(fd)
-                    shutil.copy2(resolved, temp_path)
-                    local_path = temp_path
-                    self._log(f"Using local file for metadata update: {resolved}")
-            
-            if not local_path:
-                return False
-                
-            from shared.artwork import artwork_store
-            artwork = artwork_store()
-            new_art = artwork.put(Path(cover_path).read_bytes()) if cover_path else None
-
-            # Note: 2. Modify file
-            changes_made = False
-            
-            # Note: Update tags
-            if new_metadata:
-                if AudioProcessor.update_tags(local_path, new_metadata):
-                    changes_made = True
-            
-            # Note: Embed art
-            if cover_path:
-                self._log(f"Embedding artwork from {cover_path}...")
-                if AudioProcessor.embed_artwork(local_path, cover_path):
-                    changes_made = True
-            
-            if not changes_made:
-                os.remove(local_path)
-                # Formats without embedded tag/art support still have editable
-                # library metadata and an account-scoped artwork reference.
-                if new_metadata:
-                    changes = {key: str(new_metadata[key] or "") for key in ("title", "artist", "album") if key in new_metadata}
-                    if "album_artist" in new_metadata:
-                        value = new_metadata["album_artist"]
-                        changes["album_artist"] = str(value) if value is not None else None
-                    if changes and not self.patch_track_metadata(track.id, changes):
-                        return False
-                if new_art:
-                    artwork.bind(track.id, new_art, "manual")
-                self._log("Applied library metadata/artwork without changing audio bytes.")
-                return True
-                
-            # 3. Upload the edited file as a new track: its hash, and so its id, changed.
-            self._log("Re-processing file...")
-            new_track = UploadEngine(self.config).upload(Path(local_path))
-            
-            if new_track:
-                preserve_track_identity(track, new_track)
-                if new_art:
-                    artwork.bind(new_track.id, new_art, "manual")
-                else:
-                    original_ref = artwork.ref(track.id)
-                    if original_ref:
-                        artwork.bind(new_track.id, original_ref['hash'], original_ref['source'])
-                # Note: Add the manually set album_artist if it was passed in new_metadata
-                if 'album_artist' in new_metadata:
-                    new_track.album_artist = new_metadata['album_artist']
-                elif not new_track.album_artist:
-                    # Note: Fallback to existing if not re-extracted
-                    new_track.album_artist = track.album_artist
-                
-                # Note: 4. Update library
-                self._log("Updating library registry...")
-                
-                # Note: Clear cache for this track so new version with cover will be downloaded
-                if self.cache:
-                    old_cache_key = track_storage_key(track)
-                    cache_file = self.cache.cache_dir / old_cache_key.replace('/', '_')
-                    if cache_file.exists():
-                        self._log(f"Clearing cache for updated track...")
-                        os.remove(cache_file)
-                
-                # Note: Remove old track
-                self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
-                
-                # Note: Add new track
-                self.metadata.tracks.append(new_track)
-                self.metadata.version += 1
-                
-                # Note: Save changes everywhere
-                retire(track, self.provider)
-                if not self._save_metadata():
-                    os.remove(local_path)
-                    return False
-                
-                # Note: 5. Cleanup old remote file (if hash changed).
-                # Editing tags re-hashes the file, so the old object may still be
-                # what somebody else's manifest points at. With several accounts
-                # sharing the pool, leave it: an orphan file is cheap, a broken
-                # library is not.
-                if new_track.id != track.id:
-                    drain(self.provider)
-
-                # Note: Update cache identically
-                if self.cache:
-                    self._log("Updating cache with new version...")
-                    # Note: We move the local_path to cache, so we don't need to delete it later
-                    # Note: Cache.add_to_cache(ID, path, move=true/false)
-                    # Note: We used A temp path, let's copy it to cache to be safe
-                    self.cache.add_to_cache(new_track.id, local_path, move=False)
-
-                os.remove(local_path)
-                self._log("Update complete!")
-                return True
-                
-            os.remove(local_path)
-            return False
-            
-        except Exception as e:
-            self._log(f"Update failed: {e}")
-            import traceback
-            traceback.print_exc()
-            if 'local_path' in locals() and local_path and os.path.exists(local_path):
-                os.remove(local_path)
-            return False
 
     @serialized
     def delete_track(self, track: Track) -> bool:

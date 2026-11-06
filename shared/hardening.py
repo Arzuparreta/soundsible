@@ -16,7 +16,7 @@ from flask import g, jsonify, request
 
 from shared.database import instance_db
 from shared.runtime import get_runtime_config
-from shared.security import is_trusted_network
+from shared.security import is_trusted_request
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ def get_request_auth_context(*, allow_trusted_network: bool = False) -> Optional
 
     if context is None and allow_trusted_network and _legacy_trusted_network_allowed():
         configured = _read_admin_token()
-        if not configured and is_trusted_network(request.remote_addr):
+        if not configured and is_trusted_request():
             context = {
                 "source": "legacy_trusted_network",
                 "kind": "owner",

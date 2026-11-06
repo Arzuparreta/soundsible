@@ -31,7 +31,7 @@ from flask import Blueprint, Response, request, send_file, stream_with_context
 
 from shared.hardening import rate_limit_allows
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
-from shared.security import is_safe_path
+from shared.security import is_safe_path, request_client_address
 from shared.subsonic import serialize, transcode
 from shared.subsonic.credentials import authenticate as authenticate_credential
 from shared.subsonic.envelope import (
@@ -629,7 +629,7 @@ def _playable_path(track) -> str:
         raise SubsonicError(ERR_NOT_FOUND, "Track file is missing")
     from shared.api import is_trusted_network
 
-    if not is_safe_path(path, is_trusted=is_trusted_network(request.remote_addr)):
+    if not is_safe_path(path, is_trusted=is_trusted_network(request_client_address())):
         raise SubsonicError(ERR_NOT_FOUND)
     return path
 

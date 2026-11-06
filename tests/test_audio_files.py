@@ -53,17 +53,6 @@ def test_a_malformed_date_costs_only_the_year(tmp_path):
     assert tags["year"] is None
 
 
-def test_setting_an_m4a_album_artist_keeps_its_artist(tmp_path):
-    # The m4a branch wrote the album artist into the artist atom, and its
-    # plain-MP4 keys made every m4a edit fail.
-    path = _encode(tmp_path / "song.m4a", "title=Old", "artist=The Artist")
-
-    assert AudioProcessor.update_tags(str(path), {"title": "New", "album_artist": "Various Artists"})
-
-    tags = AudioProcessor.read_tags(str(path))
-    assert (tags["title"], tags["artist"], tags["album_artist"]) == ("New", "The Artist", "Various Artists")
-
-
 def test_audio_details_report_length_and_size(tmp_path):
     path = _encode(tmp_path / "song.mp3")
 

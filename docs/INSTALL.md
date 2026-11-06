@@ -408,6 +408,18 @@ Serve Soundsible behind Nginx, Caddy, or Traefik:
    with `--host 127.0.0.1` so only the proxy can reach it.
 2. Forward a public path (e.g. `https://music.example.com`) to `http://127.0.0.1:5005`.
 3. Allow WebSocket / long-running connections in your proxy config.
+4. Make the proxy send the caller's address in `X-Forwarded-For` (Caddy,
+   Traefik and `tailscale serve` do by default; Nginx needs
+   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`).
+5. **Give the account a password first** (Settings → Account → People) if the proxy is
+   reachable from the internet.
+
+Without accounts, Soundsible trusts callers on this machine, the LAN and the
+tailnet as the owner. Behind a proxy every request comes from the proxy, so
+the engine decides on the address the proxy forwards: a caller from the
+internet gets no owner rights, and a proxy that names no caller counts as the
+internet. A proxy that forwards nothing at all looks like this machine, which is
+why a public proxy needs a password.
 
 Proxy the server port, not the desktop app's engine, which listens on a random
 local port. See your proxy's docs for TLS and exact snippets.
@@ -463,7 +475,8 @@ Soundsible is designed for trusted **LAN / Tailscale** use. For anything beyond 
 
    Send it as `Authorization: Bearer <token>` or `X-Soundsible-Admin-Token: <token>`. In desktop-engine mode, Soundsible also creates a short-lived owner token and injects it into `/player/desktop/` automatically.
 
-3. **Add a password once other people use it.** A single-account install has
+3. **Add a password once other people use it,** and before publishing it with
+   `tailscale funnel` or a public reverse proxy. A single-account install has
    no login screen. Adding a second person turns sign-in on for everyone — see
    [Accounts](CONFIGURATION.md#6-accounts-multi-user).
 

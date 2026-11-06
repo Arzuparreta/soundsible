@@ -300,9 +300,13 @@ machine, and what belongs to a person.
 | `queue_state.json` *(data dir)* | Playback queue. |
 | `telemetry/listening-events.jsonl`, `telemetry/play-timing.jsonl` *(data dir)* | Listening history — the input to *your* recommendations. |
 
-Editing a track's tags re-encodes the file and therefore changes its hash, which
-mints a new track id. That is what keeps metadata edits private: your manifest
-follows the new id while everyone else keeps the original.
+Editing a song's title, artist, album or cover never touches its audio file
+(`/api/library/track-labels/<id>/…`, used by the web player and the Android
+app). The labels are written to your `library.db` and the cover to the
+account's artwork sidecar, so the id, its playlist slots, play counts and
+offline copies stay as they are, and nobody else sees the edit. The download
+pool's own catalog only mirrors those labels while a single account owns the
+music folder.
 
 **Favourites are identity-keyed, not id-keyed.** `favourites.json` (v3) holds
 ordered entries, newest first:
