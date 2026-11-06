@@ -1,7 +1,8 @@
 # Portadas, adquisición y presupuestos de trabajo
 
-Entrega desde `main` en `1d904020`, después de revisar el flujo de audio,
-portadas y cachés. El original visual continúa separado del archivo de audio:
+Entrega iniciada desde `main` en `1d904020`, después de revisar el flujo de audio,
+portadas y cachés, y validada con la base combinada de #423/#424 (`adff0c88`).
+El original visual continúa separado del archivo de audio:
 una imagen grande no vuelve a bloquear la primera muestra en su cabecera.
 
 ## Contratos
@@ -140,16 +141,21 @@ no una garantía para otros discos, Pi o reproducción musical.
 Datos y reproducción: [JSONL](../performance/artwork-pipeline-results.jsonl),
 `python scripts/benchmark_artwork_pipeline.py --baseline 1d904020 --repeats 5`.
 
-### Validación en curso
+### Validación local y gates pendientes
 
 - Regresión principal inicial: 2645 aprobadas y dos omisiones; una expectativa
   de payload no incluía el nuevo scope y el worktree no tenía el modelo ONNX
   incluido. Se corrigió la expectativa y se preparó la copia pública verificada
-  del modelo; los 17 casos de ese radio pasaron. Se repetirá la regresión sobre
-  la base combinada antes de abrir la PR.
+  del modelo; los 17 casos de ese radio pasaron. La regresión completa sobre la
+  base combinada terminó con **2674 aprobadas y una omisión**, en 626,55 s.
 - Última regresión de portada, adquisición, HTTP y cachés: 181 aprobadas.
-- Cliente: TypeScript y 1864 pruebas aprobadas antes de incorporar la base nueva.
-- Android: APK debug, JVM y lint aprobados. Device panel no detecta SDK; no se
+- Cliente combinado: TypeScript y **1870 pruebas aprobadas** en 228 archivos.
+- Chromium completo: **382 aprobadas y 74 omisiones** entre móvil/escritorio.
+- Android combinado: preparación, APK debug, JVM y lint aprobados. Device panel no detecta SDK; no se
   presenta como aceptación de ejecución del emulador ni escucha física.
-- Los cuatro perfiles completos de navegador y CI del último head siguen siendo
-  gates de entrega. No se ha publicado ni fusionado esta implementación.
+- Contratos de procesos/worker: cinco casos aprobados tras endurecer el handshake
+  del descendiente. Los jobs existentes de Windows x64/ARM64 los ejecutan también
+  y usan el sidecar construido para probar el entrypoint visual frozen; sus
+  resultados remotos siguen pendientes.
+- WebKit móvil/escritorio completo y CI del último head siguen siendo gates de
+  entrega. No se ha publicado ni fusionado esta implementación.
