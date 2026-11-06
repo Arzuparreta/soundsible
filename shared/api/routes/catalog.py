@@ -45,6 +45,22 @@ logger = logging.getLogger(__name__)
 
 catalog_bp = Blueprint("catalog", __name__, url_prefix="")
 
+
+@catalog_bp.after_request
+def collection_references(response):
+    from shared.user_context import current_user_id
+    if response.status_code == 200 and response.is_json and current_user_id() and (
+        request.method == 'GET' or request.path == '/api/catalog/resolve'
+    ):
+        from shared.collection import Collection
+        # Decode the response, not a shallow copy of a cached provider body.
+        # Account references must never be retained in a provider's cache.
+        body = Collection().annotate_catalog(response.get_json())
+        response.set_data(jsonify(body).get_data())
+        response.headers['Cache-Control'] = 'private, no-cache'
+        response.vary.update(('Cookie', 'X-Soundsible-Admin-Token'))
+    return response
+
 _DEEZER_HOST = "https://api.deezer.com"
 _MUSICBRAINZ_HOST = "https://musicbrainz.org/ws/2"
 # Every distinct query/artist/album mints a cache entry, so these have to be

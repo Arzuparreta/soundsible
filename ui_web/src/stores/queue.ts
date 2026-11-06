@@ -161,7 +161,8 @@ export function createQueue(ports: QueuePorts, lifetime: RuntimeLifetime) {
       artist: reference.artist,
       title: reference.title,
       duration: reference.duration
-    }, signal))).then(lifetime.guard(resolved => resolved?.video_id || null), lifetime.guard(() => null)).then(lifetime.guard((videoId): ContextMatchOutcome => {
+    }, signal))).then(lifetime.guard(resolved => resolved?.video_id ? resolved : null), lifetime.guard(() => null)).then(lifetime.guard((resolved): ContextMatchOutcome => {
+      const videoId = resolved?.video_id;
       const at = state.playback.queue.findIndex(entry => entry.queueId === queueId);
       if (signal.aborted || at === -1) return 'gone';
       if (!videoId) return 'unavailable';
@@ -170,6 +171,7 @@ export function createQueue(ports: QueuePorts, lifetime: RuntimeLifetime) {
       const matched: PlaybackQueueEntry = {
         ...entry,
         id: videoId,
+        item_id: resolved?.item_id ?? entry.item_id,
         pendingResolve: undefined
       };
       const current = state.playback.queue[state.playback.index]?.queueId === queueId;

@@ -1,3 +1,4 @@
+import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { request } from '../lib/http';
 import { promptDialog } from '../lib/prompt';
@@ -58,7 +59,7 @@ export function nativePlaylistActions(name: string, state: () => PlaylistSnapsho
   }
   function cover() {
     if (!valid()) return;
-    const byId = new Map(original.tracks.map(track => [track.id, track]));
+    const byId = collectionIndex(original.tracks);
     const tracks = [...new Set(ids)].flatMap(id => { const track = byId.get(id); return track && track.source !== 'preview' ? [track] : []; });
     openOverlay(close => {
       const [busy, setBusy] = createSignal(false); const [error, setError] = createSignal(false);
@@ -77,7 +78,7 @@ export function nativePlaylistActions(name: string, state: () => PlaylistSnapsho
       return <div class={styles.picker} data-testid="android-playlist-cover"><header class={styles.head}><span class={styles.title}>{t('coverPicker.header', { name })}</span></header>
         <button class={styles.none} disabled={busy()} onClick={() => void pick(null)}>{t('coverPicker.none')}</button>
         <Show when={error()}><p role="alert">{t('toast.playlistCoverFailed')}</p></Show>
-        <For each={tracks} fallback={<EmptyState compact>{t('coverPicker.empty')}</EmptyState>}>{track => <button class={styles.cell} aria-label={track.title} disabled={busy()} onClick={() => void pick(track.id)}><img class={styles.cover} src={coverUrl(track.id, 'thumb')} alt="" /></button>}</For>
+        <For each={tracks} fallback={<EmptyState compact>{t('coverPicker.empty')}</EmptyState>}>{track => <button class={styles.cell} aria-label={track.title} disabled={busy()} onClick={() => void pick(collectionId(track))}><img class={styles.cover} src={coverUrl(track.id, 'thumb')} alt="" /></button>}</For>
       </div>;
     }, { ariaLabel: () => t('coverPicker.header', { name }) });
   }

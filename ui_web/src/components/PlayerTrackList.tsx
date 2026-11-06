@@ -669,7 +669,9 @@ function PlayerTrackListRow(props: {
               <MoreIcon size={20} />
             </button>
           </Show>
-          {props.entry.trailing}
+          <Show when={props.entry.trailing}>
+            <span class={styles.extra} data-row-extra={props.entry.menu ? 'menu' : undefined}>{props.entry.trailing}</span>
+          </Show>
         </span>
       </Show>
       </Show>

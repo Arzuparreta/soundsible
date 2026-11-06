@@ -89,6 +89,7 @@ export function artworkCandidates(src?: string | null): string | undefined {
 }
 
 interface TrackMediaIdentity {
+  unavailable?: boolean;
   id: string;
   youtube_id?: string | null;
   source?: 'preview';
@@ -183,7 +184,7 @@ export const previewUrl = (videoId: string): string =>
  * precedence over the id that is actually playing.
  */
 export const playbackYoutubeId = (track: TrackMediaIdentity): string | null =>
-  track.source === 'preview' ? track.id : track.youtube_id || null;
+  track.unavailable ? null : track.source === 'preview' ? track.id : track.youtube_id || null;
 
 /** Tokenized podcast episode stream (token minted via api.podcastPeek). */
 export const podcastStreamUrl = (token: string): string =>

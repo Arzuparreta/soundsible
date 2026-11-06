@@ -85,16 +85,11 @@ final class PlayerModel {
 
     /// Play a list from a given position in it.
     func play(items: [CarItem], startingAt index: Int) {
-        queue = PlayQueue(items: items, startIndex: nil, repeatMode: queue.repeatMode)
-        // The index the caller has is into the list it showed, which may include
-        // rows that are not playable; matching by identity avoids playing the
-        // wrong song.
-        if items.indices.contains(index) {
-            let wanted = items[index].id
-            if let resolved = queue.items.firstIndex(where: { $0.id == wanted }) {
-                queue.jump(to: resolved)
-            }
-        }
+        guard items.indices.contains(index), items[index].isPlayable else { return }
+        // Resolve the selected occurrence by position, even when a playlist
+        // contains the same musical item more than once.
+        let playableIndex = items.prefix(index).filter(\.isPlayable).count
+        queue = PlayQueue(items: items, startIndex: playableIndex, repeatMode: queue.repeatMode)
         startCurrent(fade: false)
     }
 
@@ -186,7 +181,7 @@ final class PlayerModel {
         }
         isPlaying = true
 
-        if let trackID = item.trackID { offline.markPlayed(trackID) }
+        if let trackID = offline.heldTrackID(for: item) { offline.markPlayed(trackID) }
         refreshCommandAvailability()
         preloadUpNext()
         publishStateToServer()
@@ -198,7 +193,7 @@ final class PlayerModel {
     /// point of the offline feature, and in a car it is the difference between
     /// music and a spinner in a tunnel.
     private func asset(for item: CarItem) -> AVAsset? {
-        if let trackID = item.trackID, let local = offline.localURL(for: trackID) {
+        if let trackID = offline.heldTrackID(for: item), let local = offline.localURL(for: trackID) {
             return AVURLAsset(url: local)
         }
         guard let path = item.streamURL,
@@ -307,7 +302,7 @@ final class PlayerModel {
             self.durationSec = self.decks.durationSec ?? item.durationSec.map(Double.init)
             self.publishNowPlaying(for: item)
             self.refreshCommandAvailability()
-            if let trackID = item.trackID { self.offline.markPlayed(trackID) }
+            if let trackID = self.offline.heldTrackID(for: item) { self.offline.markPlayed(trackID) }
             self.preloadUpNext()
         }
         decks.onCrossfadeFailed = { [weak self] error in

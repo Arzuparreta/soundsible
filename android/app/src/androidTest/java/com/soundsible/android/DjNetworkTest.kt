@@ -42,7 +42,11 @@ class DjNetworkTest {
                     if (web.evaluate(scenario, condition) == "true") return
                     Thread.sleep(100)
                 }
-                fail("DJ condition failed: $condition; state=" + web.evaluate(scenario, "JSON.stringify(window.__dj)"))
+                val network = runCatching {
+                    connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/dj-network")
+                        .header("X-Android-Fixture", "isolated").build()).execute().use { it.peekBody(4096).string() }
+                }.getOrDefault("unavailable")
+                fail("DJ condition failed: $condition; network=$network; state=" + web.evaluate(scenario, "JSON.stringify(window.__dj)"))
             }
             fun command(fields: String) {
                 web.evaluate(scenario, "window.__done=false;window.__failure=null;Capacitor.Plugins.SoundsiblePlayback.state().then(s=>Capacitor.Plugins.SoundsiblePlayback.command({...s,$fields})).then(()=>window.__done=true).catch(e=>window.__failure=e.code+':'+e.message)")

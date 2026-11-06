@@ -56,14 +56,22 @@ test('wallpaper retains artwork and themes and parks only when hidden', async ({
 
 
 // Every frame in which anything on the open stage changes makes the compositor
-// redo the glass over the wallpaper, so the stage's moving parts are budgeted
-// in frames, not just in pixels.
-test('the open stage\'s glass tints the wallpaper without blurring it again', async ({ page }) => {
+// redo whatever is filtered over the wallpaper, so the stage's moving parts are
+// budgeted in frames, not just in pixels. The panels are open regions of one
+// room: the veil that keeps them legible is painted once, as a plain colour
+// over the blurred artwork, and no panel runs a backdrop filter of its own.
+test('the open stage veils the wallpaper once, with no backdrop filter per panel', async ({ page }) => {
   await openMusicPlayer(page);
-  const glass = () => page.evaluate(() => [...document.querySelectorAll('[data-player-surface-open] [data-player-tile]')]
-    .map((tile) => { const css = getComputedStyle(tile); return css.backdropFilter || css.getPropertyValue('-webkit-backdrop-filter'); }));
-  await expect.poll(async () => (await glass()).length).toBeGreaterThan(0);
-  for (const filter of await glass()) expect(filter).toMatch(/^saturate\(/);
+  const tiles = () => page.evaluate(() => [...document.querySelectorAll('[data-player-surface-open] [data-player-tile]')]
+    .map((tile) => { const css = getComputedStyle(tile); return css.backdropFilter || css.getPropertyValue('-webkit-backdrop-filter') || 'none'; }));
+  await expect.poll(async () => (await tiles()).length).toBeGreaterThan(0);
+  for (const filter of await tiles()) expect(filter).toBe('none');
+  const veil = await page.evaluate(() => {
+    const wash = document.querySelector('[data-player-surface-open] [data-player-veil]');
+    return wash ? getComputedStyle(wash).backgroundColor : null;
+  });
+  expect(veil).not.toBeNull();
+  expect(veil).not.toBe('rgba(0, 0, 0, 0)');
 });
 
 test('the queue equaliser moves all its bars on the same few frames a second', async ({ page }) => {

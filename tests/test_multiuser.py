@@ -196,7 +196,7 @@ def test_two_accounts_get_separate_directories_and_favourites():
         assert get_user_core(bob["id"]).favourites.get_all() == ["track-b"]
 
     assert user_config_dir(ana["id"]) != user_config_dir(bob["id"])
-    assert (user_config_dir(ana["id"]) / "favourites.json").exists()
+    assert (user_config_dir(ana["id"]) / "library.db").exists()
 
 
 def test_queue_and_library_paths_never_collide():

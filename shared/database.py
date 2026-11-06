@@ -404,6 +404,8 @@ class DatabaseManager:
                 FOREIGN KEY (playlist_name) REFERENCES playlists(name) ON DELETE CASCADE
             )
         """)
+        from shared.collection import create_schema
+        create_schema(conn)
         # Track ids used to be content hashes, so a lossless technical rewrite
         # could change the id without changing the song.  Keep the old names as
         # durable aliases: stale clients and portable exports can then be
@@ -1059,6 +1061,7 @@ class DatabaseManager:
         id_replacements: Optional[Dict[str, str]] = None,
         expected_revision: Optional[int] = None,
         operation_id: Optional[str] = None,
+        playlist_entry=None,
     ) -> int:
         """Atomically replace the canonical library and return its revision.
 
@@ -1096,7 +1099,6 @@ class DatabaseManager:
                 # This is the persistence boundary for a complete library
                 # snapshot.  Normalize here as a final invariant even when a
                 # caller forgot to update one of the reference-bearing fields.
-                metadata.remap_track_ids(aliases)
                 conn.executemany(
                     """
                     INSERT INTO track_id_aliases (old_track_id, new_track_id)
@@ -1107,6 +1109,20 @@ class DatabaseManager:
                     """,
                     aliases.items(),
                 )
+                from shared.collection import sync as sync_collection, admit, entries, save_entries
+                metadata.remap_track_ids(aliases, references=False)
+                sync_collection(conn, metadata, self.db_path, id_replacements)
+                if playlist_entry is not None:
+                    name, entry = playlist_entry
+                    if name not in metadata.playlists:
+                        raise ValueError("Playlist not found")
+                    item_id = admit(conn, entry)
+                    entry['item_id'] = item_id
+                    saved = entries(conn)
+                    if not any(row["item_id"] == item_id for row in saved):
+                        saved.insert(0, {**entry, "item_id": item_id})
+                        save_entries(conn, saved)
+                    metadata.add_to_playlist(name, item_id)
                 replacement_state: Dict[str, sqlite3.Row] = {}
                 # The date the replaced row carried. A rescan or a lossless
                 # upgrade gives one song a new id; without this it would read as
@@ -1165,6 +1181,8 @@ class DatabaseManager:
                             state["updated_at"],
                         ),
                     )
+                from shared.collection import project_user_state
+                project_user_state(conn)
                 if catalog_dirty:
                     self._replace_catalog_projection(conn, metadata.tracks)
 
@@ -1255,6 +1273,8 @@ class DatabaseManager:
                     self._replace_catalog_projection(conn, metadata.tracks)
                 conn.execute('UPDATE library_state SET revision=revision+1 WHERE singleton=1')
                 sync_track_source(conn, metadata, position[0], changes, previous_values, previous_fingerprint)
+                from shared.collection import update_file_snapshot
+                update_file_snapshot(conn, metadata.tracks[position[0]])
                 library_search.sync(conn)
                 conn.execute('COMMIT')
                 return revision + 1
@@ -1319,44 +1339,68 @@ class DatabaseManager:
             return int(row[0]) if row else 0
 
     def load_library_metadata(self) -> Optional[LibraryMetadata]:
-        """Load the complete canonical snapshot, preserving playlist order."""
+        """Read canonical metadata; coordinate only the one-time upgrade write."""
+        from shared.collection import library_ready
+        from shared.library_lifecycle import coordinated
         with self._get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            state = conn.execute(
-                "SELECT * FROM library_state WHERE singleton = 1 AND canonical = 1"
-            ).fetchone()
-            if state is None:
-                return None
-            tracks = self._rows_to_tracks(conn, conn.execute("""
-                SELECT t.* FROM tracks t
-                JOIN library_tracks lt ON lt.track_id = t.id
-                ORDER BY lt.position
-            """).fetchall())
-            playlist_rows = conn.execute("""
-                SELECT p.name, pt.track_id
-                FROM playlists p
-                LEFT JOIN playlist_tracks pt ON pt.playlist_name = p.name
-                ORDER BY p.position, pt.position
-            """).fetchall()
-            playlists: Dict[str, List[str]] = {}
-            for row in playlist_rows:
-                playlists.setdefault(str(row["name"]), [])
-                if row["track_id"] is not None:
-                    playlists[str(row["name"])].append(str(row["track_id"]))
-            metadata = LibraryMetadata(
-                version=int(state["version"]),
-                tracks=tracks,
-                playlists=playlists,
-                settings=json.loads(state["settings_json"]),
-                last_updated=str(state["last_updated"]),
-                podcast_subscriptions=json.loads(state["podcast_subscriptions_json"]),
-                podcast_episode_cache=json.loads(state["podcast_episode_cache_json"]),
-            )
-            # Normally rows are already canonical.  This also repairs a stale
-            # write from an old client in memory before it reaches the API, and
-            # the next save makes that normalization durable.
-            metadata.remap_track_ids(self._track_id_aliases(conn))
-            return metadata
+            if not library_ready(conn):
+                with coordinated():
+                    conn.execute('BEGIN IMMEDIATE')
+                    result = self._read_library_metadata(conn)
+                    conn.commit()
+                    return result
+            return self._read_library_metadata(conn)
+
+    def _read_library_metadata(self, conn) -> Optional[LibraryMetadata]:
+        conn.row_factory = sqlite3.Row
+        state = conn.execute(
+            "SELECT * FROM library_state WHERE singleton = 1 AND canonical = 1"
+        ).fetchone()
+        if state is None:
+            return None
+        tracks = self._rows_to_tracks(conn, conn.execute("""
+            SELECT t.* FROM tracks t
+            JOIN library_tracks lt ON lt.track_id = t.id
+            ORDER BY lt.position
+        """).fetchall())
+        playlist_rows = conn.execute("""
+            SELECT p.name, pt.track_id
+            FROM playlists p
+            LEFT JOIN playlist_tracks pt ON pt.playlist_name = p.name
+            ORDER BY p.position, pt.position
+        """).fetchall()
+        playlists: Dict[str, List[str]] = {}
+        for row in playlist_rows:
+            playlists.setdefault(str(row["name"]), [])
+            if row["track_id"] is not None:
+                playlists[str(row["name"])].append(str(row["track_id"]))
+        metadata = LibraryMetadata(
+            version=int(state["version"]),
+            tracks=tracks,
+            playlists=playlists,
+            settings=json.loads(state["settings_json"]),
+            last_updated=str(state["last_updated"]),
+            podcast_subscriptions=json.loads(state["podcast_subscriptions_json"]),
+            podcast_episode_cache=json.loads(state["podcast_episode_cache_json"]),
+        )
+        from shared.collection import library_ready, sync as sync_collection, attach_ids
+        if not library_ready(conn):
+            previous_playlists = json.dumps(metadata.playlists, sort_keys=True)
+            previous_settings = json.dumps(metadata.settings, sort_keys=True)
+            sync_collection(conn, metadata, self.db_path)
+            conn.executemany('UPDATE playlist_tracks SET track_id=? WHERE playlist_name=? AND position=?',
+                             ((value, name, position) for name, ids in metadata.playlists.items()
+                              for position, value in enumerate(ids)))
+            changed = previous_playlists != json.dumps(metadata.playlists, sort_keys=True) or previous_settings != json.dumps(metadata.settings, sort_keys=True)
+            conn.execute('UPDATE library_state SET revision=revision+?,settings_json=? WHERE singleton=1',
+                         (int(changed), json.dumps(metadata.settings)))
+            conn.execute('UPDATE library_public_source SET valid=0')
+        attach_ids(conn, metadata.tracks)
+        # Normally rows are already canonical.  This also repairs a stale
+        # write from an old client in memory before it reaches the API, and
+        # the next save makes that normalization durable.
+        metadata.remap_track_ids(self._track_id_aliases(conn), references=False)
+        return metadata
 
     def backfill_added_at(self, resolver: Optional[Any] = None) -> int:
         """Date the tracks a library from before `added_at` left behind.
@@ -1956,9 +2000,13 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                f"SELECT * FROM tracks WHERE id IN ({placeholders})", tuple(track_ids)
+                f"""SELECT DISTINCT t.* FROM tracks t LEFT JOIN collection_files f ON f.file_id=t.id
+                    WHERE t.id IN ({placeholders}) OR f.item_id IN ({placeholders})""", tuple(track_ids) * 2
             ).fetchall()
             by_id = {track.id: track for track in self._rows_to_tracks(conn, rows)}
+            for track in list(by_id.values()):
+                if track.item_id:
+                    by_id.setdefault(track.item_id, track)
             return [by_id[track_id] for track_id in track_ids if track_id in by_id]
 
     def get_tracks_by_album_id(self, catalog_album_id: str) -> List[Track]:
@@ -2002,7 +2050,8 @@ class DatabaseManager:
 
     def _rows_to_tracks(self, conn, rows: list[sqlite3.Row]) -> List[Track]:
         artists = self._artist_names_by_track(conn, [str(row["id"]) for row in rows])
-        return [self._row_to_track(row, artists.get(str(row["id"]))) for row in rows]
+        from shared.collection import attach_ids
+        return attach_ids(conn, [self._row_to_track(row, artists.get(str(row["id"]))) for row in rows])
 
     def _row_to_track(self, row: sqlite3.Row, artists: Optional[List[str]] = None) -> Track:
         # Machine-local scan fields live only in SQLite and are restored here.
@@ -2019,6 +2068,11 @@ class DatabaseManager:
     def get_track_user_state(self, track_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
+            from shared.collection import item_for_keys
+            item_id = item_for_keys(conn, [f'item:{track_id}', f'lib:{track_id}'])
+            if item_id:
+                row = conn.execute('SELECT play_count,rating,last_played_at FROM collection_user_state WHERE item_id=?', (item_id,)).fetchone()
+                return dict(row) if row else {'play_count': 0, 'rating': None, 'last_played_at': None}
             exists = conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone()
             if exists is None:
                 return None
@@ -2067,6 +2121,13 @@ class DatabaseManager:
         if rating is not None and (not isinstance(rating, int) or isinstance(rating, bool) or not 1 <= rating <= 5):
             raise ValueError("rating must be null or an integer from 1 to 5")
         with self._get_connection() as conn:
+            from shared.collection import item_for_keys, project_user_state
+            item_id = item_for_keys(conn, [f'item:{track_id}', f'lib:{track_id}'])
+            if item_id:
+                conn.execute('INSERT INTO collection_user_state(item_id,rating) VALUES (?,?) '
+                             'ON CONFLICT(item_id) DO UPDATE SET rating=excluded.rating', (item_id, rating))
+                project_user_state(conn, item_id)
+                return True
             if conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
                 return False
             conn.execute("""
@@ -2082,6 +2143,14 @@ class DatabaseManager:
         if not isinstance(played_at, int) or isinstance(played_at, bool) or played_at < 0:
             raise ValueError("played_at must be a non-negative Unix timestamp")
         with self._get_connection() as conn:
+            from shared.collection import item_for_keys, project_user_state
+            item_id = item_for_keys(conn, [f'item:{track_id}', f'lib:{track_id}', f'yt:{track_id}'])
+            if item_id:
+                conn.execute('''INSERT INTO collection_user_state(item_id,play_count,last_played_at) VALUES (?,1,?)
+                    ON CONFLICT(item_id) DO UPDATE SET play_count=play_count+1,
+                    last_played_at=MAX(COALESCE(last_played_at,0),excluded.last_played_at)''', (item_id, played_at))
+                project_user_state(conn, item_id)
+                return True
             if conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
                 return False
             conn.execute("""
@@ -2113,6 +2182,8 @@ class DatabaseManager:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 conn.execute("DELETE FROM track_artists")
+                conn.execute("DELETE FROM collection_files")
+                conn.execute("DELETE FROM collection_user_state")
                 conn.execute("DELETE FROM track_user_state")
                 conn.execute("DELETE FROM tracks")
                 conn.execute("DELETE FROM albums")

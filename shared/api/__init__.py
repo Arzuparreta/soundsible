@@ -1071,6 +1071,7 @@ def _process_single_queue_item_bound(item):
             # Note: Pre-cache cover so first request serves it
             track_dict = track.to_dict()
             track_dict.pop("local_path", None)
+            track_dict.pop("item_id", None)
             shared_track = Track.from_dict(track_dict)
             
             local_track_path = resolve_local_track_path(shared_track)
@@ -1376,25 +1377,30 @@ def add_tracks_to_user_library(
         return 0
 
     song_keys = [key for key in (song_keys or ()) if isinstance(key, str) and key]
-    holdings = library_dates.Holdings(lib.metadata.tracks, _saved_entries(core))
+    from copy import deepcopy
+    metadata = deepcopy(lib.metadata)
+    holdings = library_dates.Holdings(metadata.tracks, _saved_entries(core))
     added = 0
     newly_added = []
     for track in tracks:
-        if lib.metadata.get_track_by_id(track.id):
+        if metadata.get_track_by_id(track.id):
             continue
         track_dict = track.to_dict()
         track_dict.pop("local_path", None)
+        track_dict.pop("item_id", None)
         stored = Track.from_dict(track_dict)
+        from shared.collection import Collection
+        stored.item_id = Collection(lib.db).identify(song_keys)
         stored.added_at = holdings.claim(
             library_dates.track_keys(stored) + song_keys,
             proposed=stored.added_at if keep_source_dates else None,
         )
-        lib.metadata.add_track(stored)
+        metadata.add_track(stored)
         newly_added.append(stored)
         added += 1
 
     if added or operation_id:
-        lib.require_saved(**({'operation_id': operation_id} if operation_id else {}))
+        lib.require_saved(metadata=metadata, **({'operation_id': operation_id} if operation_id else {}))
         promoted = _promote_favourites_to_library(newly_added, user_id=target, song_keys=song_keys)
         with app.app_context():
             emit_to_user('library_updated', user_id=target)
@@ -1467,8 +1473,9 @@ def _sync_pool_to_main_core():
 def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
     """Rewrite track ids across every account after stored files changed.
 
-    A repair changes each file's content hash, and the hash is the track id. Without this pass every manifest, playlist, and favourite that pointed
-    at the old id would go dead — for everyone, not just whoever ran it.
+    Persist source replacements for every account, retaining musical item IDs.
+    The initiating account may already hold the new source objects in memory;
+    its old SQLite binding still needs the same atomic replacement write.
     """
     from shared.user_context import user_context
     from shared.users import list_users
@@ -1478,6 +1485,7 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
 
     touched: dict[str, int] = {}
     failed = []
+    replacement_ids = set(id_map.values())
     for account in list_users():
         user_id = account["id"]
         try:
@@ -1490,7 +1498,11 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
                     continue
 
                 lib.refresh_if_stale()
-                changed = lib.metadata.remap_track_ids(id_map)
+                changed = lib.metadata.remap_track_ids(id_map, references=False)
+                # The repair caller can already have installed replacement
+                # objects. A no-op model remap is not evidence that the source
+                # association was committed in this account's database.
+                changed |= any(track.id in replacement_ids for track in lib.metadata.tracks)
                 for track in lib.metadata.tracks:
                     replacement = (replacements or {}).get(track.id)
                     if replacement:
@@ -1526,8 +1538,8 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
     audio-only stream that was a progressive 360p video with the music muxed in.
     The repair is a remux — the audio is moved, never re-encoded — but it does
     change the bytes, and the hash of those bytes is the track id, so the id map
-    it returns has to reach every place that names a track: the manifests, the
-    playlists (through `replace_library`) and the favourites.
+    it returns updates file manifests and the persisted source bindings through
+    `replace_library`. Musical playlist references keep their stable identity.
 
     Songs from YouTube stored as FLAC are downloaded again as the stream they
     were decoded from, which re-keys them the same way.

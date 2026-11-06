@@ -1,17 +1,19 @@
 .surface {
-  --player-chrome-top: max(14px, env(safe-area-inset-top, 0px));
-  --player-chrome-size: 48px;
-  --player-chrome-gap: 14px;
+  --player-chrome-top: max(12px, env(safe-area-inset-top, 0px));
+  --player-chrome-size: 40px;
+  --player-chrome-gap: 12px;
   --player-mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --player-carousel-height: 30px;
-  /* The band the pager pill floats in: the same air above it (to the last row
-     of panel content) as below it (to the card's bottom edge), on every device.
-     Anchoring it to the safe area alone — max(10px, inset) — let a 34px home
-     indicator swallow the gap whole, and the pill's bottom edge came to rest
-     exactly on the card's. */
-  --player-carousel-inset: 20px;
+  --player-carousel-height: 44px;
+  /* The pager has a band of its own under the pages instead of floating over
+     them: no row, card or lyric ever scrolls underneath it, so nothing needs to
+     clear it either. The band is the pager plus this air above and below it,
+     on top of whatever the device's home indicator takes. */
+  --player-carousel-inset: 0px;
   --player-carousel-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-inset));
-  --player-mobile-footer-clearance: calc(var(--player-carousel-height) + var(--player-carousel-inset) * 2);
+  --player-carousel-band: calc(var(--player-carousel-height) + var(--player-carousel-inset) * 2);
+  /* What a page still leaves at the end of its own scroller. The pager is
+     outside the pages now, so this is only the air under a last row. */
+  --player-mobile-footer-clearance: 16px;
   /* Deliberately not --ease-out: that curve spends 85% of its travel in the
      first third of the duration, which on a phone is four frames and reads as
      the sheet vanishing rather than leaving. This one commits hard enough to
@@ -137,13 +139,17 @@
   animation-play-state: var(--decorative-animation-state, running);
 }
 
+/* One veil over the whole room. The panels used to be glass cards, each
+   tinting the wallpaper under it; they are open regions of the room now, so
+   the tint that keeps their text legible is laid once, edge to edge. */
 .wash {
   z-index: -2;
-  background: var(--stage-wash);
+  background-color: var(--stage-panel);
+  background-image: var(--stage-wash);
 }
 
 .auto .wash {
-  background: var(--stage-wash-auto);
+  background-image: var(--stage-wash-auto);
 }
 
 /* Landscape Auto stands the room up sideways: artwork on the left, track and
@@ -156,7 +162,7 @@
    ever had, so it had never once reached the screen. */
 @media (min-width: 600px) and (min-aspect-ratio: 5 / 4) {
   .auto .wash {
-    background: var(--stage-wash-auto-wide);
+    background-image: var(--stage-wash-auto-wide);
   }
 }
 
@@ -172,15 +178,19 @@
   background-size: 180px 180px;
 }
 
+/* The room's one bar: what the panels are (left), which room this is
+   (centre), and the way out (right). Quiet controls with no plate of their
+   own until they are pointed at, so the bar reads as part of the room rather
+   than as three more objects floating over it. */
 .floatingChrome {
-  --player-chrome-side: max(var(--player-chrome-size), var(--control-h));
-  --player-chrome-column-gap: clamp(8px, 1.2vw, 14px);
+  --player-chrome-side: var(--player-chrome-size);
+  --player-chrome-column-gap: 12px;
 
   position: absolute;
   z-index: 40;
   top: var(--player-chrome-top);
-  left: max(clamp(14px, 2.2vw, 34px), env(safe-area-inset-left, 0px));
-  right: max(clamp(14px, 2.2vw, 34px), env(safe-area-inset-right, 0px));
+  left: max(clamp(12px, 1.6vw, 28px), env(safe-area-inset-left, 0px));
+  right: max(clamp(12px, 1.6vw, 28px), env(safe-area-inset-right, 0px));
   display: grid;
   grid-template-columns:
     var(--player-chrome-side)
@@ -188,6 +198,7 @@
     var(--player-chrome-side);
   align-items: center;
   column-gap: var(--player-chrome-column-gap);
+  height: var(--player-chrome-size);
   pointer-events: none;
 }
 
@@ -197,24 +208,37 @@
 }
 
 .chromeButton {
+  position: relative;
   display: inline-grid;
   place-items: center;
-  width: var(--control-h);
-  height: var(--control-h);
+  width: var(--player-chrome-size);
+  height: var(--player-chrome-size);
   padding: 0;
   color: var(--ink-secondary);
-  background: var(--stage-chrome);
-  border: 1px solid var(--stage-line);
+  background: transparent;
+  border: 0;
   border-radius: var(--radius-full);
-  box-shadow: var(--stage-shadow-sm), inset 0 1px var(--stage-rim);
-  backdrop-filter: var(--stage-material-filter);
-  -webkit-backdrop-filter: var(--stage-material-filter);
   cursor: pointer;
   transition:
     color var(--dur-short),
     background var(--dur-short),
-    border-color var(--dur-short),
     transform var(--dur-micro);
+}
+
+/* The visible control is 40px; the target is not. */
+.chromeButton::before {
+  position: absolute;
+  inset: -2px;
+  content: '';
+}
+
+.chromeButton:active {
+  transform: scale(0.94);
+}
+
+.chromeButton:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 
 .chromeButton:first-child {
@@ -243,75 +267,77 @@
   position: absolute;
   z-index: 42;
   top: var(--player-chrome-top);
-  left: clamp(14px, 2.2vw, 34px);
+  left: max(clamp(12px, 1.6vw, 28px), env(safe-area-inset-left, 0px));
   display: none;
 }
 
 .chromeButton svg {
-  width: 21px;
-  height: 21px;
+  width: 20px;
+  height: 20px;
 }
 
+/* Two words in a recessed track, the current one raised out of it. No rim, no
+   shadow: the raised half is the only thing on the bar with a fill. */
 .modePill {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  width: min(100%, clamp(244px, 23vw, 320px));
-  min-height: 48px;
-  padding: 4px;
-  background: var(--stage-chrome);
-  border: 1px solid var(--stage-line);
+  width: clamp(200px, 16vw, 248px);
+  height: var(--player-chrome-size);
+  padding: 3px;
+  background: var(--stage-well);
   border-radius: var(--radius-full);
-  box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
-  backdrop-filter: var(--stage-material-filter);
-  -webkit-backdrop-filter: var(--stage-material-filter);
 }
 
 .modeOption {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   min-width: 0;
-  padding: 0 16px;
-  overflow: hidden;
+  padding: 0 12px;
   color: var(--ink-secondary);
   font: inherit;
-  font-size: var(--text-label);
+  font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
   white-space: nowrap;
-  text-overflow: ellipsis;
   background: transparent;
   border: 0;
   border-radius: var(--radius-full);
   cursor: pointer;
   transition:
     color var(--dur-short),
-    background var(--dur-short),
-    box-shadow var(--dur-short);
+    background var(--dur-short);
 }
 
-.betaTag {
+/* The raised half is 34px tall; the target is the full 44px. */
+.modeOption::before {
   position: absolute;
-  right: 10px;
-  bottom: 4px;
-  color: currentColor;
-  font-size: 7.4px;
-  font-weight: var(--fw-bold, 700);
-  letter-spacing: 0.04em;
-  line-height: 1;
-  opacity: 0.45;
-  pointer-events: none;
+  inset: -5px 0;
+  content: '';
 }
 
-@media (max-width: 1023px) {
-  .betaTag {
-    right: 7px;
-    bottom: 3px;
-    font-size: 6.3px;
-  }
+.modeOption:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
+}
+
+/* Said once, beside the name it qualifies, in the same line of type. */
+.betaTag {
+  color: currentColor;
+  font-size: 9px;
+  font-weight: var(--fw-bold, 700);
+  letter-spacing: 0.08em;
+  line-height: 1;
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .modeSelected {
   color: var(--ink-primary);
   background: var(--stage-material-active);
-  box-shadow: var(--stage-shadow-sm), inset 0 1px var(--stage-rim);
 }
 
 .modeOption:disabled {
@@ -348,9 +374,12 @@
   padding: 80px 24px;
 }
 
+/* The pager: three marks in the band under the pages, nothing behind them.
+   Each mark is a 44px target; the bar that slides between them follows the
+   scroll while the finger is on it. */
 .carouselNav {
-  --carousel-dot-size: 24px;
-  --carousel-gap: 7px;
+  --carousel-dot-size: 44px;
+  --carousel-gap: 0px;
 
   position: absolute;
   z-index: 45;
@@ -359,21 +388,16 @@
   display: none;
   align-items: center;
   gap: var(--carousel-gap);
-  min-height: var(--player-carousel-height);
-  padding: 0 10px;
-  background: var(--stage-chrome);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-full);
-  backdrop-filter: blur(16px);
+  height: var(--player-carousel-height);
   transform: translateX(-50%);
 }
 
 .carouselMarker {
   position: absolute;
   top: 50%;
-  left: 14.5px;
-  width: 15px;
-  height: 5px;
+  left: calc((var(--carousel-dot-size) - 16px) / 2);
+  width: 16px;
+  height: 4px;
   pointer-events: none;
   background: var(--ink-primary);
   border-radius: var(--radius-full);
@@ -393,7 +417,7 @@
 .carouselDot {
   position: relative;
   width: var(--carousel-dot-size);
-  height: var(--carousel-dot-size);
+  height: var(--player-carousel-height);
   padding: 0;
   background: transparent;
   border: 0;
@@ -401,14 +425,19 @@
   cursor: pointer;
 }
 
+.carouselDot:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
+}
+
 .carouselDot::after {
   display: block;
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 4px;
   margin: auto;
   content: '';
   background: var(--stage-rail);
-  border-radius: inherit;
+  border-radius: var(--radius-full);
   transition:
     opacity 150ms var(--ease-out),
     transform 260ms var(--ease-out);
@@ -420,42 +449,32 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .chromeButton:hover,
-  .modeOption:not(:disabled):hover {
+  .chromeButton:hover {
     color: var(--ink-primary);
-    background-color: var(--stage-material-hover);
+    background-color: var(--stage-material);
+  }
+
+  .modeOption:not(:disabled, .modeSelected):hover {
+    color: var(--ink-primary);
   }
 }
 
 @media (max-width: 1023px) {
   .surface {
-    --player-chrome-top: calc(env(safe-area-inset-top, 0px) + 9px);
-    --player-chrome-size: 44px;
-    --player-chrome-gap: 12px;
+    --player-chrome-top: calc(env(safe-area-inset-top, 0px) + 8px);
+    --player-chrome-size: 40px;
+    --player-chrome-gap: 8px;
   }
 
   .floatingChrome {
-    --player-chrome-side: 42px;
     --player-chrome-column-gap: 8px;
 
-    left: max(10px, env(safe-area-inset-left, 0px));
-    right: max(10px, env(safe-area-inset-right, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
   }
 
   .modePill {
-    width: min(100%, 62vw, 284px);
-    min-height: 44px;
-    padding: 3px;
-  }
-
-  .modeOption {
-    padding-inline: 8px;
-    font-size: var(--text-caption);
-  }
-
-  .chromeButton {
-    width: 42px;
-    height: 42px;
+    width: min(100%, 56vw, 232px);
   }
 
   .carouselNav {
@@ -472,14 +491,6 @@
 @media all and (display-mode: standalone) {
   .surface {
     height: 100vh;
-  }
-}
-
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .chromeButton,
-  .modePill,
-  .carouselNav {
-    background: var(--stage-sheet);
   }
 }
 

@@ -9,6 +9,20 @@ históricos; buscar por nombre de función en el código vigente.
 El documento empezó como diagnóstico. Los puntos cerrados lo indican en la tabla
 de estado y en su sección; el resto sigue siendo diagnóstico.
 
+## Identidad musical y fuentes (PR #423)
+
+La colección asigna `item_id` estable a biblioteca, guardados y playlists. Los
+candidatos y planes DJ conservan esa referencia cuando se conoce, aparte del ID
+de fuente usado para análisis y de la ocurrencia usada por el transporte.
+Descargar o reparar no reemplaza audio ya preparado. Este cambio no modifica
+medidas ni su significado y no cambia `ANALYSER_VERSION`; tampoco cierra puntos
+musicales de la tabla. La regresión nativa detectó que, tras recuperar el plato
+saliente por inanición del entrante, reabrir el mismo prefijo cacheado podía
+volver a hacerlo audible antes de recibir datos nuevos. El reintento de esa
+ocurrencia exige superar el límite de buffer conocido; un seek explícito limpia
+esa guarda. Se conserva el reloj del plato saliente y no se cambian medidas.
+Contrato: [identidad de colección](../audits/COLLECTION_IDENTITY.md).
+
 ## Cómo trabajar con este documento
 
 - Revisar **un punto por sesión** (o los que el usuario indique). Para la

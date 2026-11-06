@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  savedEntryForIdentity,
+  savedIdentityKeys,
   savedFromCatalogItem,
   savedFromSearchResult,
   savedFromTrack,
@@ -196,4 +198,14 @@ describe('savedIsPlayable', () => {
     const widened: SavedEntry = { ...entry, keys: [...entry.keys, `yt:${VIDEO_ID}`] };
     expect(savedIsPlayable(widened, savedToTrack(widened, EMPTY_LIBRARY)!)).toBe(true);
   });
+});
+
+
+it('keeps stable saved entities separate when their provider evidence overlaps', () => {
+  const one: SavedEntry = { item_id: 'one', keys: ['lib:first', `yt:${VIDEO_ID}`], favourite: true };
+  const two: SavedEntry = { item_id: 'two', keys: ['lib:second', `yt:${VIDEO_ID}`] };
+  expect(savedEntryForIdentity([one, two], savedIdentityKeys(two))).toBe(two);
+  expect(savedEntryForIdentity([one, two], ['item:missing', `yt:${VIDEO_ID}`])).toBeNull();
+  expect(savedEntryForIdentity([one, two], [`yt:${VIDEO_ID}`])).toBeNull();
+  expect(savedEntryForIdentity([one, two], ['lib:second', `yt:${VIDEO_ID}`])).toBe(two);
 });

@@ -1,3 +1,4 @@
+import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createMemo, createResource, createSignal, createEffect, on, For, Show, onCleanup } from 'solid-js';
 import { registerNativeBack } from './backNavigation';
 import { request } from '../lib/http';
@@ -49,7 +50,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
   const collectionTracks = createMemo(() => {
     registerArtworkMetadata(library().tracks);
     const ids = collection()?.ids;
-    const byId = new Map(library().tracks.map(track => [track.id, track]));
+    const byId = collectionIndex(library().tracks);
     const rows = ids ? ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []) : library().tracks;
     return rows;
   });
@@ -149,7 +150,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
         </Show></>
       }><For each={playlistNames(library().playlists ?? {}, library().settings?.playlist_order)} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}>{name =>
           <MusicListRowView title={name} subtitle={trackCount(library().playlists?.[name]?.length ?? 0)} seed={name}
-            cover={props.disconnected ? undefined : (() => { const id = library().settings?.playlist_covers?.[name] ?? library().playlists?.[name]?.find(id => library().tracks.some(track => track.id === id && track.source !== 'preview')); return id ? coverUrl(id, 'thumb') : undefined; })()}
+            cover={props.disconnected ? undefined : (() => { const id = library().settings?.playlist_covers?.[name] ?? library().playlists?.[name]?.find(id => library().tracks.some(track => collectionId(track) === id && track.source !== 'preview')); return id ? coverUrl(id, 'thumb') : undefined; })()}
             onMenu={props.onPlaylistMenu ? event => props.onPlaylistMenu?.(name, event) : undefined} onActivate={() => { setCollection({ title: name, ids: library().playlists?.[name] ?? [], kind: 'playlists', id: name }); setQuery(''); }} />
       }</For></Show>
     }>
@@ -172,7 +173,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
 <VirtualBrowseRows favourite={props.isFavourite} offline={props.disconnected} onMenu={props.onMenu ? (track, event, index) => {
   const selected = collection();
   const occurrence = selected?.kind === 'playlists' && index !== undefined ? tracks().slice(0, index).filter(row => row.id === track.id).length : -1;
-  const positions = selected?.ids.flatMap((id, position) => id === track.id ? [position] : []) ?? [];
+  const positions = selected?.ids.flatMap((id, position) => id === collectionId(track) ? [position] : []) ?? [];
   props.onMenu?.(track, event, selected?.kind === 'playlists' && positions[occurrence] !== undefined ? { playlist: selected.id, index: positions[occurrence] } : undefined);
 } : undefined} tracks={tracks()} activeId={props.activeId} isActive={props.isActive} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index, collection() ? { kind: collection()!.kind === 'albums' ? 'album' : collection()!.kind === 'artists' ? 'artist' : 'playlist', id: collection()!.id } : undefined) : undefined} />
       </Show>

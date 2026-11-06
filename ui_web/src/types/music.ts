@@ -3,6 +3,9 @@ export interface Track {
   artwork_revision?: string;
   artwork_width?: number;
   artwork_height?: number;
+  /** Stable musical element in the account; id identifies the playback source. */
+  item_id?: string;
+  unavailable?: boolean;
   id: string;
   title: string;
   artist: string;
@@ -80,6 +83,7 @@ export interface Track {
  * which is why saving and marking cannot be the same act.
  */
 export interface SavedEntry {
+  item_id?: string;
   keys: string[];
   title?: string;
   artist?: string;
@@ -151,6 +155,7 @@ export interface CatalogActionState {
 }
 
 export interface CatalogItem {
+  item_id?: string | null;
   id: string;
   type: CatalogItemType;
   source: string;
@@ -190,6 +195,7 @@ export interface CatalogSearchResponse {
 }
 
 export interface CatalogResolveResponse {
+  item_id?: string;
   status?: 'resolved' | 'failed' | string;
   video_id?: string;
   confidence?: number;

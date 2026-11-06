@@ -1,3 +1,4 @@
+import { collectionId } from '../lib/collectionIdentity';
 import { registerPlugin } from '@capacitor/core';
 import type { Track, PlaylistMap } from '../types/music';
 import type { User } from '../lib/session';
@@ -10,7 +11,7 @@ export const offline = registerPlugin<{ command(command: OfflineCommand & { gene
 export const acquiredMusic = (tracks: Track[]): Track[] => tracks.filter(track => programTrack(track)?.source === 'local');
 export function availableLibrary(state: OfflineState): { tracks: Track[]; playlists: PlaylistMap } {
   const tracks = state.items.filter(item => item.state === 'ready').map(item => item.track);
-  const ids = new Set(tracks.map(track => track.id));
+  const ids = new Set(tracks.flatMap(track => [collectionId(track), track.id]));
   return { tracks, playlists: Object.fromEntries(Object.entries(state.playlists ?? {}).map(([name, rows]) => [name, rows.filter(id => ids.has(id))]).filter(([, rows]) => rows.length)) };
 }
 export function availableProgram(tracks: Track[], index: number, state: OfflineState): { tracks: Track[]; index: number } {

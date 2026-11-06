@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
 internal class CatalogDataSource(private val connection: EngineConnection, private val remote: DataSource.Factory,
     private val item: MediaItem, private val resolved: (MediaItem) -> Unit,
     private val cache: ConcurrentHashMap<String, String>) : DataSource {
+    private var collectionItem = item.mediaMetadata.extras?.getString(ProgramQueue.ITEM)
     private var delegate: DataSource? = null
     private val listeners = mutableListOf<TransferListener>()
     private var epoch = -1L
@@ -38,7 +39,9 @@ internal class CatalogDataSource(private val connection: EngineConnection, priva
                 connection.execute("/api/catalog/resolve", "POST", body.toString().toRequestBody("application/json".toMediaType()), emptyMap(), epoch, id, 30000).use {
                     if (!it.isSuccessful) throw HttpDataSource.InvalidResponseCodeException(it.code, it.message, null, it.headers.toMultimap(), spec, byteArrayOf())
                     val raw = it.peekBody(65537).string(); require(raw.toByteArray().size <= 65536)
-                    JSONObject(raw).optString("video_id").also { value -> require(Regex("^[A-Za-z0-9_-]{11}$").matches(value)) { "CATALOG_RECORDING_UNAVAILABLE" } }
+                    val response = JSONObject(raw)
+                    response.optString("item_id").takeIf { value -> value.isNotBlank() && value != "null" && value.length <= 512 }?.let { value -> collectionItem = value }
+                    response.optString("video_id").also { value -> require(Regex("^[A-Za-z0-9_-]{11}$").matches(value)) { "CATALOG_RECORDING_UNAVAILABLE" } }
                 }
             } finally { requestId = null }
             require(!cancelled && epoch == connection.generation && connection.sessionIdentity(epoch) == owner)
@@ -47,7 +50,7 @@ internal class CatalogDataSource(private val connection: EngineConnection, priva
         }
         require(!cancelled && Regex("^[A-Za-z0-9_-]{11}$").matches(video) && epoch == connection.generation && connection.sessionIdentity(epoch) == owner)
         if (reference != null) {
-            val extras = android.os.Bundle(item.mediaMetadata.extras).apply { remove(ProgramQueue.PENDING); putString(ProgramQueue.SOURCE, "preview") }
+            val extras = android.os.Bundle(item.mediaMetadata.extras).apply { collectionItem?.let { putString(ProgramQueue.ITEM, it) }; remove(ProgramQueue.PENDING); putString(ProgramQueue.SOURCE, "preview") }
             // Keep this occurrence's alias URI: Media3 can update metadata without replacing its live source.
             resolved(item.buildUpon().setMediaId(video).setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(extras).build()).build())
         }

@@ -174,6 +174,7 @@ export function createNativeCatalogActions(props: {
       if (!selected || !programTrack(selected)) throw new Error('Selected recording unavailable');
       const tracks = items.map((item, index): import('../lib/playbackQueue').ContextTrack => index === selectedIndex ? selected : trackFor(item) ?? {
         id: item.id, title: item.title, artist: itemArtist(item), album: item.album, duration: item.duration, cover: item.cover, ...catalogReleaseEvidence(item),
+        item_id: item.item_id ?? undefined,
         pendingResolve: { catalogItemId: item.id, title: item.title, artist: itemArtist(item), duration: item.duration },
       });
       if (context || shuffle) await props.onPlayCollection(tracks, selectedIndex, context, shuffle);

@@ -307,13 +307,13 @@ test('NORMAL queue scrolls vertically without sideways drift at every interface 
 });
 
 /**
- * On a phone the queue is one card of the pager, and the box holding its
+ * On a phone the queue is one page of the pager, and the box holding its
  * sections fills with them and then almost never scrolls. The requests lane is
  * the one that gives way and scrolls; the cards close the list at the bottom
- * of the card, above the pager pill — with the pill's clearance under them and
+ * of the page, above the pager's own band — with the lane's air under them and
  * no more.
  */
-test('the queue fills its card the way the browser does, and its cards clear the pill', async ({ page }) => {
+test('the queue fills its page the way the browser does, and its cards end above the pager', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'mobile-only regression');
   await restoreLongQueue(page);
   await snapPlayerCarousel(page, 'now-playing', 'queue');
@@ -349,7 +349,7 @@ test('the queue fills its card the way the browser does, and its cards clear the
 
   // Card and pill are read in the same frame: the pill, read back on its own
   // after a trip across the pager, can be caught still travelling.
-  const rests = 'the last card rests just above the pager pill';
+  const rests = 'the last card rests just above the pager';
   await expect
     .poll(async () => {
       const air = await page.evaluate(() => {
@@ -360,9 +360,10 @@ test('the queue fills its card the way the browser does, and its cards clear the
         return Math.round(pill.getBoundingClientRect().top - bottom);
       });
       if (air === null) return 'the queue has no cards or no pill';
-      if (air < 0) return `the last card sits ${-air}px under the pager pill`;
-      if (air > 24) return `${air}px of empty panel stands above the pager pill`;
+      if (air < 0) return `the last card sits ${-air}px under the pager`;
+      // The lane's 24px of air under its last card, and the pager's own 6px.
+      if (air > 32) return `${air}px of empty panel stands above the pager`;
       return rests;
-    }, { message: 'the cards must end on the pill, with its clearance and no more' })
+    }, { message: 'the cards must end above the pager, with their air and no more' })
     .toBe(rests);
 });

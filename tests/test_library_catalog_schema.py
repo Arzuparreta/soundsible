@@ -128,12 +128,14 @@ def test_catalog_ids_are_stable_across_case_spacing_and_input_order():
     assert len(first.albums) == 1
 
 
-def test_user_state_survives_resync_and_is_pruned_with_the_track(tmp_path):
+def test_personal_state_survives_resync_and_source_removal(tmp_path):
     db = DatabaseManager(str(tmp_path / "library.db"))
     db.sync_from_metadata(_metadata(_track("keep"), _track("remove")))
     assert db.set_track_rating("keep", 5) is True
     assert db.record_track_play("keep", 100) is True
     assert db.record_track_play("keep", 90) is True
+    assert db.set_track_rating("remove", 3) is True
+    assert db.record_track_play("remove", 110) is True
 
     db.sync_from_metadata(_metadata(_track("keep", title="Renamed")))
     assert db.get_track_user_state("keep") == {
@@ -141,7 +143,8 @@ def test_user_state_survives_resync_and_is_pruned_with_the_track(tmp_path):
         "rating": 5,
         "last_played_at": 100,
     }
-    assert db.get_track_user_state("remove") is None
+    assert db.get_track_user_state("remove") == {"play_count": 1, "rating": 3, "last_played_at": 110}
+    assert db.get_tracks_by_ids(["remove"]) == []
 
 
 @pytest.mark.parametrize("rating", [0, 6, 2.5, True])

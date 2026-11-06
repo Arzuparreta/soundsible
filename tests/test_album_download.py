@@ -12,7 +12,7 @@ from shared.migration import collections
 from shared.migration.models import MigrationManifest, SourceTrack
 from shared.migration.service import MigrationRunner
 from shared.migration.store import MigrationStore
-from shared.models import Track
+from shared.models import LibraryMetadata, Track
 from tests.conftest import TEST_USER_ID
 
 
@@ -71,6 +71,9 @@ def test_taking_many_out_keeps_hearts_and_files(manager):
     manager.toggle_saved({"keys": ["deezer:1"], "title": "Streamed", "artist": "A"})
     manager.set_favourite({"keys": ["deezer:2"], "title": "Marked", "artist": "A"}, True)
     manager.toggle_saved({"keys": ["deezer:3", "lib:track-3"], "title": "Downloaded", "artist": "A"})
+    # Source ownership is a persisted binding, not the mere presence of an old
+    # lib: key in a saved descriptor.
+    manager._collection.db.replace_library(LibraryMetadata(1, [_library_track("track-3", "Downloaded")], {}, {}))
     entries = [{"keys": [f"deezer:{n}"]} for n in (1, 2, 3, 4)]
 
     changed = manager.set_saved(entries, False)

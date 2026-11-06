@@ -148,6 +148,8 @@ export interface AppState {
   libraryReady: boolean;
   /** Tracks with a file behind them, as the engine scanned them. */
   library: Track[];
+  /** Authoritative server collection; null only for older engines. */
+  collectionItems: Track[] | null;
   /** Songs in the library that are not (or not only) a file, newest first.
    * Identity-keyed, so an entry follows its song across a download instead of
    * pointing at one id. `favourite` on an entry is the heart, not the save. */
@@ -218,6 +220,7 @@ function initialState(): AppState {
   libraryError: false,
   libraryReady: false,
   library: [],
+  collectionItems: null,
   saved: [],
   playlists: {},
   librarySettings: {},

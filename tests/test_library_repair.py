@@ -233,7 +233,8 @@ def test_a_repaired_track_keeps_everything_that_was_not_its_bytes(tmp_path, pool
 
 def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_path, monkeypatch):
     """The initiating repair account already has the new track objects by the
-    time the all-user pass runs. Its playlists still have to make the save."""
+    time the all-user pass runs. Source bindings must commit without changing
+    the musical references held by playlists and covers."""
     from contextlib import contextmanager
     from types import SimpleNamespace
 
@@ -243,10 +244,15 @@ def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_pat
     path.write_bytes(b"audio")
     metadata = LibraryMetadata(
         version=1,
-        tracks=[_track("new", path)],
+        tracks=[_track("old", path)],
         playlists={"Mix": ["old"]},
         settings={"playlist_covers": {"Mix": "old"}},
     )
+    from shared.database import DatabaseManager
+    db = DatabaseManager(str(tmp_path / 'library.db'))
+    db.replace_library(metadata)
+    metadata.tracks[0].id = 'new'
+    metadata.tracks[0].file_hash = 'new'
     saves = []
 
     class Library:
@@ -257,6 +263,7 @@ def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_pat
             pass
 
         def _save_metadata(self, *, id_replacements=None):
+            db.replace_library(self.metadata, id_replacements=id_replacements)
             saves.append(dict(id_replacements or {}))
             return True
 
@@ -276,8 +283,12 @@ def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_pat
     monkeypatch.setattr("shared.api.emit_to_user", lambda *_args, **_kwargs: None)
 
     assert remap_track_ids_for_all_users({"old": "new"}) == {"user": 1}
-    assert metadata.playlists == {"Mix": ["new"]}
-    assert metadata.settings["playlist_covers"] == {"Mix": "new"}
+    assert metadata.playlists == {"Mix": ["old"]}
+    assert metadata.settings["playlist_covers"] == {"Mix": "old"}
+    restored = db.load_library_metadata()
+    assert restored.tracks[0].id == 'new'
+    assert restored.tracks[0].item_id == 'old'
+    assert restored.playlists == {'Mix': ['old']}
     assert saves == [{"old": "new"}]
 
 

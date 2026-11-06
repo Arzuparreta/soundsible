@@ -1,62 +1,16 @@
-"""
-Saved-songs store for Music Player.
+"""Saved/favourite compatibility API over the account's canonical collection.
 
-Two independent facts about a song live here, and keeping them apart is the
-whole point of this module:
-
-- **Saved** — the song is in this account's library. An entry exists for it.
-- **Favourite** — the song is *marked out* among the ones you have. An entry
-  with ``favourite: True``.
-
-Saving is not downloading. A song can be in the library with no file behind it
-(it streams), and downloading it later changes nothing here — the entry simply
-starts resolving to a local track. Owning a file is likewise its own fact: a
-downloaded song is in your library whether or not it has an entry.
-
-That gives one rule per direction, and no others:
-
-- Favouriting an unsaved song saves it (you cannot mark out what you do not have).
-- Unsaving drops the favourite with it.
-- Unfavouriting leaves the song saved — it removes a mark, not a song.
-
-An entry is not a track id — it is an **identity plus a snapshot**.
-
-A song changes id every time it crosses a boundary: a Deezer row is
-`deezer:track:123`, playing it resolves to a YouTube video id, downloading it
-mints a content hash in the library. Storing one of those ids means the entry
-survives exactly one hop, which is why saving a search result used to write a
-video id that no view could ever render.
-
-So an entry carries the whole set of namespaced keys the song answers to
-(`lib:`, `yt:`, `isrc:`, `mb:`, `deezer:`, `cat:` — mirroring
-`ui_web/src/lib/playbackIdentity.ts`) plus enough metadata to render and stream
-it without the library. Two entries are the same song when their key sets
-intersect.
-
-The keys are derived by the client, which already owns that logic; this module
-only stores them, matches on intersection, and knows that `lib:` means "a track
-in this account's library".
-
-Each entry carries two dates, and they answer different questions:
-
-- ``added_at`` — when the song joined the library. It is the same fact the
-  library track of a downloaded song carries, under the one rule in
-  :mod:`shared.library_dates`: set once when an entry is created (adopting the
-  date of a file the library already holds for the song), then never rewritten
-  by anything done to the song.
-- ``favourited_at`` — when the mark went on. Present only while it is on.
-  Hearting a song is not acquiring it, so it has a date of its own rather than
-  borrowing — or moving — the library date.
+Musical items and their properties live in SQLite alongside playlist references
+and source bindings. Legacy favourites.json is imported once and retained as
+restoration data. Python entry lists are transaction-local scratch; a second
+manager always reads committed state before changing it.
 """
 
 from shared import library_dates
 from shared.library_lifecycle import serialized
-import json
+from functools import wraps
 import logging
-import os
-import tempfile
 import threading
-from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set
 
 from shared.user_context import user_config_dir
@@ -72,63 +26,7 @@ FILE_VERSION = "3.0"
 #: module has to understand — every other namespace is opaque to it.
 LIB_PREFIX = "lib:"
 
-#: Snapshot fields kept alongside the keys, so a saved song that is not
-#: downloaded is still renderable and playable.
-_TEXT_FIELDS = ("title", "artist", "album", "album_artist", "thumbnail")
-
-#: Where the song sits on its record, and when the record came out: what a
-#: download of a saved song that is not a file yet is filed under. Bounded as
-#: `/api/catalog/save` bounds them; anything else is dropped.
-_RELEASE_FIELDS = (("track_number", 1, 999), ("disc_number", 1, 99), ("year", 1000, 9999))
-
-#: A record as one thing: the album and everything that places the song on
-#: it. Merged whole, never field by field, so two releases never mix.
-_RELEASE_KEYS = ("album", "album_artist", *(name for name, _, _ in _RELEASE_FIELDS))
-
-
-def _fill_snapshot(existing: Dict[str, Any], entry: Dict[str, Any]) -> bool:
-    """Fill a saved entry's snapshot from another one of the same song.
-
-    A song saved bare (＋ from a search row) has no snapshot worth the name;
-    the heart usually arrives from a surface that has one. Returns whether
-    anything changed.
-    """
-    before = dict(existing)
-    for field in ("title", "artist", "duration"):
-        if field in entry and not existing.get(field):
-            existing[field] = entry[field]
-    _fill_release(existing, entry)
-    return existing != before
-
-
-def _fill_release(existing: Dict[str, Any], entry: Dict[str, Any]) -> None:
-    """Fill an entry's record from another snapshot of the same song.
-
-    Records never mix (the client's `withRecord` follows the same rule): the
-    same album fills in what is missing; another album replaces the record
-    whole, but only when it places the song on it — an album named and
-    nothing else is too little to overrule. An entry with no album takes any.
-    The cover belongs to the record and follows the same decision.
-    """
-    album = entry.get("album")
-    current = existing.get("album")
-    if not album or (current and current.casefold() == album.casefold()):
-        for field in (*(_RELEASE_KEYS[1:] if album else ()), "thumbnail"):
-            if field in entry and not existing.get(field):
-                existing[field] = entry[field]
-        return
-    if current and not entry.get("track_number"):
-        return
-    # The cover is the record's too: a new record brings its own, or none.
-    for field in (*_RELEASE_KEYS, "thumbnail"):
-        existing.pop(field, None)
-        if field in entry:
-            existing[field] = entry[field]
-
-
-#: Dates the engine decides. A client payload never sets them; a stored entry
-#: keeps whatever it was written with.
-_DATE_FIELDS = ("added_at", "favourited_at")
+from shared.collection_entries import _clean_keys, _normalise_entry, _fill_snapshot, _stamp_mark
 
 #: "When has this account's library held a song under any of these keys?" —
 #: answered from the library's tracks by the core that owns both stores.
@@ -140,9 +38,30 @@ def library_key(track_id: str) -> str:
     return f"{LIB_PREFIX}{track_id}"
 
 
+def saved_operation(method):
+    """Reload under the cross-process lifecycle lock, then commit atomically.
+
+    A manager is a compatibility facade over collection properties. Its Python
+    list is transaction-local scratch, never a second persisted song store.
+    """
+    @wraps(method)
+    @serialized
+    def operation(self, *args, **kwargs):
+        with self._lock, self._collection.transaction() as conn:
+            from shared.collection import entries
+            self._transaction = conn
+            self._entries = entries(conn)
+            self._reindex()
+            try:
+                return method(self, *args, **kwargs)
+            finally:
+                self._transaction = None
+    return operation
+
+
 class FavouritesManager:
     """
-    Ordered list of saved entries, persisted as JSON, newest first.
+    Ordered saved properties of stable collection items, newest first.
 
     Order is part of the data (not an accident of set iteration), so the
     library looks the same after a reload as it did before one.
@@ -167,16 +86,17 @@ class FavouritesManager:
     def get_entries(self) -> List[Dict[str, Any]]:
         """Every saved entry, newest first. Copies, so callers cannot mutate state."""
         with self._lock:
+            self._refresh()
             return [dict(entry, keys=list(entry["keys"])) for entry in self._entries]
 
     def get_favourite_entries(self) -> List[Dict[str, Any]]:
         """The subset the user marked out, newest first."""
         return [entry for entry in self.get_entries() if entry.get("favourite")]
 
-    @serialized
+    @saved_operation
     def toggle_saved(self, raw_entry: Dict[str, Any], *, added_at: Optional[str] = None) -> bool:
         """
-        Add or remove a song from the library, matching on key intersection.
+        Add or remove one song, preferring its stable collection identity.
 
         Returns True if the song is now saved, False if it was removed. Removing
         takes the favourite mark with it — there is nothing left to mark.
@@ -199,7 +119,7 @@ class FavouritesManager:
             self._admit(entry, proposed=added_at)
             return True
 
-    @serialized
+    @saved_operation
     def set_saved(
         self,
         raw_entries: Iterable[Dict[str, Any]],
@@ -244,7 +164,7 @@ class FavouritesManager:
                     changed.append(entry)
                     continue
                 for match in matches:
-                    if match.get("favourite") or any(key.startswith(LIB_PREFIX) for key in match["keys"]):
+                    if match.get("favourite") or self._transaction.execute("SELECT 1 FROM collection_files WHERE item_id=?", (match["item_id"],)).fetchone():
                         continue
                     self._entries.remove(match)
                     self._reindex()
@@ -253,7 +173,7 @@ class FavouritesManager:
                 self._persist()
         return [dict(entry, keys=list(entry["keys"])) for entry in changed]
 
-    @serialized
+    @saved_operation
     def set_favourite(self, raw_entry: Dict[str, Any], favourite: Optional[bool] = None, *, save_if_missing: bool = True) -> bool:
         """
         Mark or unmark a song, saving it first if it is not in the library yet.
@@ -281,15 +201,6 @@ class FavouritesManager:
                 if self._fill_all(entry):
                     self._persist()
                 return resolved
-            if not resolved and any(k.startswith(LIB_PREFIX) for k in existing["keys"]):
-                # The library already holds this song as a file, so the entry was
-                # only ever carrying the mark. Drop it rather than leave a record
-                # that says nothing — unsaving a downloaded song means deleting
-                # it, which is a different act entirely.
-                self._entries.remove(existing)
-                self._reindex()
-                self._persist()
-                return False
             existing["favourite"] = resolved
             _stamp_mark(existing)
             self._fill_all(entry)
@@ -306,18 +217,16 @@ class FavouritesManager:
     def is_saved_keys(self, keys: Iterable[str]) -> bool:
         """Is any of these identities in the library (file or not)?"""
         with self._lock:
-            return any(key in self._index for key in keys)
+            self._refresh()
+            return bool(self._find_all(keys))
 
     def is_favourite_keys(self, keys: Iterable[str]) -> bool:
         """Is any of these identities marked out?"""
         with self._lock:
-            return any(
-                bool(entry.get("favourite"))
-                for entry in (self._index.get(key) for key in keys)
-                if entry is not None
-            )
+            self._refresh()
+            return any(entry.get('favourite') for entry in self._find_all(keys))
 
-    @serialized
+    @saved_operation
     def update_keys(self, match_keys: Iterable[str], new_keys: Iterable[str]) -> bool:
         """
         Widen an existing entry with identities learned later — the video a
@@ -346,7 +255,7 @@ class FavouritesManager:
             self._persist()
             return True
 
-    @serialized
+    @saved_operation
     def remap_library_id(self, old_id: str, new_id: str) -> bool:
         """
         Follow a library track whose id was rewritten (a repair re-keys ids to
@@ -359,9 +268,11 @@ class FavouritesManager:
             entry = self._index.get(library_key(old_id))
             if entry is None:
                 return False
-            entry["keys"] = [k for k in entry["keys"] if k != library_key(old_id)]
-            if library_key(new_id) not in entry["keys"]:
-                entry["keys"].insert(0, library_key(new_id))
+            if library_key(new_id) in entry["keys"]:
+                return False
+            # Prepared audio may still name the previous source. Keep its
+            # historical evidence associated with the same musical entity.
+            entry["keys"].insert(0, library_key(new_id))
             self._reindex()
             self._persist()
             return True
@@ -400,6 +311,7 @@ class FavouritesManager:
         assumed, since they all intersect this list with the library.
         """
         with self._lock:
+            self._refresh()
             ids: List[str] = []
             seen: Set[str] = set()
             for entry in self._entries:
@@ -417,9 +329,10 @@ class FavouritesManager:
     def size(self) -> int:
         """Get count of favourited tracks."""
         with self._lock:
+            self._refresh()
             return sum(1 for entry in self._entries if entry.get("favourite"))
 
-    @serialized
+    @saved_operation
     def clear(self) -> None:
         """Clear all favourites."""
         with self._lock:
@@ -476,7 +389,8 @@ class FavouritesManager:
     def _persist(self) -> None:
         """Save, then notify. Always called under the lock."""
         self._save_to_file()
-        self._notify_change()
+        from shared.library_lifecycle import after_release
+        after_release(self._notify_change, key=('collection-marks', id(self)))
 
     def _reindex(self) -> None:
         """Rebuild key → entry. First entry wins, so order decides duplicates."""
@@ -487,184 +401,41 @@ class FavouritesManager:
         self._index = index
 
     def _find(self, keys: Iterable[str]) -> Optional[Dict[str, Any]]:
-        for key in keys:
-            entry = self._index.get(key)
-            if entry is not None:
-                return entry
-        return None
+        matches = self._find_all(keys)
+        return matches[0] if len(matches) == 1 else None
 
     def _find_all(self, keys: Iterable[str]) -> List[Dict[str, Any]]:
-        """Every entry these identities name — defensive against duplicates."""
-        found: List[Dict[str, Any]] = []
-        for key in keys:
-            entry = self._index.get(key)
-            if entry is not None and not any(entry is f for f in found):
-                found.append(entry)
-        return found
+        keys = list(keys)
+        internal = [key[5:] for key in keys if key.startswith('item:')]
+        if internal:
+            return [entry for entry in self._entries if entry.get('item_id') in internal]
+        if self._transaction is not None:
+            from shared.collection import admission_item
+            identified = admission_item(self._transaction, keys)
+            if identified:
+                return [entry for entry in self._entries if entry.get('item_id') == identified]
+        # A provider key shared by multiple elements is evidence of ambiguity,
+        # never permission to toggle or remove all those elements together.
+        matches = [entry for entry in self._entries if not set(keys).isdisjoint(entry['keys'])]
+        return matches if len(matches) == 1 else []
 
     def _save_to_file(self) -> None:
-        """Write favourites to JSON, atomically — a torn write would lose the lot."""
-        try:
-            self._favourites_file.parent.mkdir(parents=True, exist_ok=True)
-
-            data = {
-                "version": FILE_VERSION,
-                # Written under both names: `saved` is what the list now is,
-                # `favourites` keeps an older build readable rather than blank.
-                "saved": self._entries,
-                "favourites": self._entries,
-            }
-
-            fd, tmp_path = tempfile.mkstemp(
-                dir=str(self._favourites_file.parent), prefix=".favourites-", suffix=".json"
-            )
-            try:
-                with os.fdopen(fd, "w") as f:
-                    json.dump(data, f, indent=2)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(tmp_path, self._favourites_file)
-            except Exception:
-                Path(tmp_path).unlink(missing_ok=True)
-                raise
-
-            logger.debug("Saved %s favourites to %s", len(self._entries), self._favourites_file)
-        except Exception as e:
-            logger.warning("Error saving favourites to file: %s", e)
+        """Compatibility method name: SQLite is the only writable authority."""
+        from shared.collection import save_entries
+        if self._transaction is None:
+            self._collection.write_saved(self._entries)
+        else:
+            save_entries(self._transaction, self._entries)
 
     def _load_from_file(self) -> None:
-        """
-        Load saved songs from JSON, migrating older shapes on the way in.
-        The migrated form is written back on the next change, not eagerly.
+        """Import legacy JSON once; all later opens read the account database."""
+        from shared.collection import Collection
+        from shared.database import _manager_for
+        self._collection = Collection(_manager_for(self._favourites_file.with_name("library.db")))
+        self._transaction = None
+        self._collection.ensure_saved_store()
+        self._refresh()
 
-        Before v3 the heart was the only way to save a song, so every entry in
-        an older file is a favourite — that is what the user meant when they
-        pressed it, and reading them as plain saves would silently wipe the
-        marks off a whole library.
-        """
-        try:
-            if not self._favourites_file.exists():
-                logger.debug("No favourites file found at %s, starting fresh", self._favourites_file)
-                return
-
-            with open(self._favourites_file, 'r') as f:
-                data = json.load(f)
-
-            # Note: Validate data structure
-            if not isinstance(data, dict) or ('saved' not in data and 'favourites' not in data):
-                logger.warning("Invalid favourites file format, starting fresh")
-                return
-
-            raw_list = data.get('saved') if isinstance(data.get('saved'), list) else data.get('favourites')
-            if not isinstance(raw_list, list):
-                logger.warning("Invalid favourites list format, starting fresh")
-                return
-
-            version = str(data.get('version') or '1.0')
-            pre_split = version < "3.0"
-
-            entries: List[Dict[str, Any]] = []
-            for raw in raw_list:
-                # v1 stored bare library track ids; v2+ store entries.
-                if isinstance(raw, str) and raw.strip():
-                    entry = _bare_entry(library_key(raw))
-                elif isinstance(raw, dict):
-                    entry = _stored_entry(raw, default_favourite=pre_split)
-                else:
-                    entry = None
-                if entry is not None:
-                    entries.append(entry)
-
-            self._entries = entries
-            self._reindex()
-            logger.debug("Loaded %s favourites from %s", len(self._entries), self._favourites_file)
-
-        except json.JSONDecodeError as e:
-            logger.warning("Error decoding favourites JSON file: %s, starting fresh", e)
-        except Exception as e:
-            logger.warning("Error loading favourites from file: %s, starting fresh", e)
-
-
-def _clean_keys(keys: Any) -> List[str]:
-    """Trimmed, de-duplicated, order-preserving identity keys."""
-    if not isinstance(keys, (list, tuple)):
-        return []
-    out: List[str] = []
-    seen: Set[str] = set()
-    for key in keys:
-        if not isinstance(key, str):
-            continue
-        trimmed = key.strip()
-        if trimmed and trimmed not in seen:
-            seen.add(trimmed)
-            out.append(trimmed)
-    return out
-
-
-def _bare_entry(key: str) -> Dict[str, Any]:
-    """An entry with an identity and no snapshot — what a v1 id migrates to.
-    v1 files predate saving, so its songs are favourites."""
-    return {"keys": [key], "favourite": True, "added_at": None}
-
-
-def _normalise_entry(raw: Any, default_favourite: bool = False) -> Optional[Dict[str, Any]]:
-    """
-    Coerce a client payload into a storable entry, dropping anything unknown.
-    Returns None when there is no identity to match on.
-
-    `default_favourite` decides what an entry with no `favourite` field means —
-    which depends entirely on who is speaking. A pre-v3 file only ever held
-    hearted songs; a client saving one is not hearting it.
-    """
-    if not isinstance(raw, dict):
-        return None
-    keys = _clean_keys(raw.get("keys"))
-    if not keys:
-        return None
-
-    favourite = raw.get("favourite")
-    entry: Dict[str, Any] = {
-        "keys": keys,
-        "favourite": bool(favourite) if isinstance(favourite, bool) else default_favourite,
-    }
-    for field in _TEXT_FIELDS:
-        value = raw.get(field)
-        if isinstance(value, str) and value.strip():
-            entry[field] = value.strip()
-
-    duration = raw.get("duration")
-    if isinstance(duration, bool):
-        duration = None
-    if isinstance(duration, (int, float)) and duration > 0:
-        entry["duration"] = int(duration)
-    for field, low, high in _RELEASE_FIELDS:
-        value = raw.get(field)
-        if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high:
-            entry[field] = value
-    return entry
-
-
-def _stored_entry(raw: Any, default_favourite: bool) -> Optional[Dict[str, Any]]:
-    """An entry read back from disk: normalised, with the dates it was written with.
-
-    A date that is missing stays missing. An entry from before dates existed
-    has no record of when it was saved, and stamping it with the moment the file
-    happened to be loaded would move it every time the engine restarted.
-    """
-    entry = _normalise_entry(raw, default_favourite=default_favourite)
-    if entry is None:
-        return None
-    for field in _DATE_FIELDS:
-        value = raw.get(field)
-        if isinstance(value, str) and value.strip():
-            entry[field] = value.strip()
-    entry.setdefault("added_at", None)
-    return entry
-
-
-def _stamp_mark(entry: Dict[str, Any]) -> None:
-    """Keep `favourited_at` in step with the mark: set as it goes on, gone with it."""
-    if not entry.get("favourite"):
-        entry.pop("favourited_at", None)
-    elif not entry.get("favourited_at"):
-        entry["favourited_at"] = library_dates.now()
+    def _refresh(self):
+        self._entries = self._collection.saved()
+        self._reindex()

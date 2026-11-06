@@ -22,12 +22,10 @@ export function openNativePlaylistPicker(track: Track, playlists: () => Playlist
       try {
         if (create) await request('/api/library/playlists', { method: 'POST', body: { name }, signal: controller.signal });
         if (!valid()) return;
-        // Preview membership is a claim on the identity; acquire no audio bytes.
-        if (track.source === 'preview') await request('/api/library/saved/set', { method: 'POST', body: { entries: [savedFromTrack(track)], saved: true }, signal: controller.signal });
+        const answer = await request<{ playlists?: PlaylistMap; item_id?: string }>(`/api/library/playlists/${encodeURIComponent(name)}/tracks`, { method: 'POST', body: { entry: savedFromTrack(track) }, signal: controller.signal });
         if (!valid()) return;
-        const answer = await request<{ playlists?: PlaylistMap }>(`/api/library/playlists/${encodeURIComponent(name)}/tracks`, { method: 'POST', body: { track_id: track.id }, signal: controller.signal });
-        if (!valid()) return;
-        if (!answer.playlists?.[name]?.includes(track.id)) throw new Error('Missing playlist confirmation');
+        const membership = answer.item_id;
+        if (!answer.playlists?.[name]?.includes(membership ?? track.item_id ?? track.id)) throw new Error('Missing playlist confirmation');
         await refresh(); if (valid()) close();
       } catch { if (valid()) setError(true); }
       finally { if (valid()) setBusy(false); }

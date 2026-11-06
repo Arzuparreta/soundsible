@@ -79,9 +79,10 @@ test('full player names the record under the artist and opens it', async ({ page
   const artist = stage.getByRole('link', { name: 'Artista 7', exact: true });
   const album = stage.getByRole('link', { name: 'Biblioteca de prueba', exact: true });
   await expect(album).toBeVisible();
-  // Its own line, below the artist, inside the stage.
+  // After the artist on the same line: who, then the record, a step quieter.
   const [artistBox, albumBox] = [await artist.boundingBox(), await album.boundingBox()];
-  expect(albumBox!.y).toBeGreaterThanOrEqual(artistBox!.y + artistBox!.height - 1);
+  expect(albumBox!.x).toBeGreaterThanOrEqual(artistBox!.x + artistBox!.width);
+  expect(Math.abs((albumBox!.y + albumBox!.height / 2) - (artistBox!.y + artistBox!.height / 2))).toBeLessThanOrEqual(2);
   await activate(page, album, isMobile);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   await expect(page).toHaveURL(/#\/album\/Biblioteca%20de%20prueba\?artist=Artista\+7&view=discover/);

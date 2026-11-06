@@ -3,28 +3,25 @@ import { catalogItemKeys, searchResultKeys, trackKeys } from './playbackIdentity
 import { resultCredit } from './queueDiscovery';
 import { releasePosition } from './catalogTrack';
 
-/**
- * Your collection: every song you have claimed, downloaded or not.
- *
- * Saving a song records **what it is** (its identity keys) plus **what it looks
- * like** (a small snapshot), never where its bytes happen to live. That single
- * choice is what lets one library hold both:
- *
- * - Nothing local is required to render or play a saved song. The snapshot
- *   rebuilds a `source: 'preview'` track, which streams through
- *   `/api/preview/stream/<video_id>` exactly like any Discover row.
- * - Downloading is a separate act with no bookkeeping. The entry is resolved
- *   against the library *at read time*, so the moment a download lands, the
- *   same entry starts answering with the owned track — local audio, real cover,
- *   editable, deletable. Nothing is rewritten and no order is disturbed.
- *
- * The inverse holds too: delete the file and the song degrades back to a
- * stream instead of vanishing. You freed disk — you did not lose the song.
- *
- * `favourite` is a mark laid over all of this, never a way of holding a song.
- * See `stores/index.ts` for the two rules that connect them: marking an unsaved
- * song saves it, and unsaving drops the mark with it.
- */
+/** Saved-song descriptors. Canonical item IDs identify songs; provider keys are
+ * admission evidence and a compatibility fallback for older engines. */
+
+/** Stable identity travels separately from historical/provider keys in snapshots. */
+export const savedIdentityKeys = (entry: SavedEntry): string[] =>
+  entry.item_id ? [`item:${entry.item_id}`, ...entry.keys] : entry.keys;
+
+/** Resolve one saved entity without choosing among shared provider identities. */
+export function savedEntryForIdentity(entries: readonly SavedEntry[], keys: string[]): SavedEntry | null {
+  const item = keys.find(key => key.startsWith('item:'));
+  if (item) return entries.find(entry => entry.item_id === item.slice(5) || entry.keys.includes(item)) ?? null;
+  // A file reference is more specific than shared provider evidence.
+  for (const key of keys.filter(key => key.startsWith('lib:'))) {
+    const matches = entries.filter(entry => entry.keys.includes(key));
+    if (matches.length === 1) return matches[0];
+  }
+  const matches = entries.filter(entry => entry.keys.some(key => keys.includes(key)));
+  return matches.length === 1 ? matches[0] : null;
+}
 
 /** The YouTube video id an entry can be streamed with, if it has one yet. */
 export function savedVideoId(entry: SavedEntry): string | null {
@@ -60,7 +57,7 @@ const snapshot = (
 /** An entry for a playable track — library or preview alike. */
 export function savedFromTrack(track: Track): SavedEntry {
   const preview = track.source === 'preview';
-  return snapshot(trackKeys(track), track.title, track.artist, {
+  return { ...snapshot(trackKeys(track), track.title, track.artist, {
     album: track.album,
     duration: track.duration,
     // A library track's art comes from the engine and needs no snapshot; a
@@ -69,7 +66,7 @@ export function savedFromTrack(track: Track): SavedEntry {
     // Its record is kept either way: deleting the file degrades the entry to
     // a preview, and downloading that again files it where it sat.
     album_artist: track.album_artist, track_number: track.track_number, disc_number: track.disc_number, year: track.year,
-  });
+  }), ...(track.item_id ? { item_id: track.item_id } : {}) };
 }
 
 /** An entry for a catalog row (Deezer, MusicBrainz, YouTube, library).

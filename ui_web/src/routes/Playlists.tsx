@@ -1,3 +1,4 @@
+import { collectionIndex } from '../lib/collectionIdentity';
 import { SkeletonCards } from '../components/Skeleton';
 import { NEUTRAL_COVER } from '../lib/cover';
 import { createMemo, For, Show } from 'solid-js';
@@ -18,7 +19,7 @@ import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 export default function Playlists() {
   const navigate = useNavigate();
-  const byId = createMemo(() => new Map(musicLibrary().map((t) => [t.id, t] as const)));
+  const byId = createMemo(() => collectionIndex(musicLibrary()));
   const names = createMemo(() => Object.keys(state.playlists));
 
   const cover = (name: string, ids: string[]) => {

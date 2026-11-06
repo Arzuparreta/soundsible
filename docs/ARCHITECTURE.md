@@ -296,7 +296,8 @@ machine, and what belongs to a person.
 |------|---------|
 | `library.db` | Canonical library: ordered tracks and playlists, settings, podcast state, normalized artist/album catalog, per-track state, and machine-local scan paths/fingerprints. Also a derived local search index, rebuilt from those rows when needed. |
 | `library.json` | Portable export of your canonical library for recovery and cloud interoperability. The first migration also keeps `library.json.pre-sqlite.bak`. |
-| `favourites.json`, `playback_state.json`, `discovery_settings.json` | Saved songs, cross-device resume, discovery opt-in. |
+| `favourites.json` | Legacy saved-song import, retained once for restoration; SQLite is authoritative. |
+| `playback_state.json`, `discovery_settings.json` | Cross-device resume and discovery opt-in. |
 | `queue_state.json` *(data dir)* | Playback queue. |
 | `telemetry/listening-events.jsonl`, `telemetry/play-timing.jsonl` *(data dir)* | Listening history — the input to *your* recommendations. |
 
@@ -308,29 +309,26 @@ offline copies stay as they are, and nobody else sees the edit. The download
 pool's own catalog only mirrors those labels while a single account owns the
 music folder.
 
-**Favourites are identity-keyed, not id-keyed.** `favourites.json` (v3) holds
-ordered entries, newest first:
+**Collection identity is independent of audio.** An account's `library.db`
+stores stable `collection_items`, provider evidence in `collection_keys`,
+explicit online/file bindings in `collection_sources`/`collection_files`, and
+personal play counts/ratings in `collection_user_state`. Playlist references,
+saved status and favourites point to the same item. A file's content hash, a
+provider video ID and a queue occurrence remain separate identities.
 
-```json
-{"version": "3.0", "saved": [
-  {"keys": ["lib:9f2a…", "yt:dQw4w9WgXcQ"], "title": "…", "artist": "…",
-   "duration": 355, "thumbnail": null, "favourite": true,
-   "added_at": "…", "favourited_at": "…"}
-]}
-```
+`GET /api/library/collection` reads items, files, saved properties, playlists
+and settings in one transaction. Web and Android browse that resource instead
+of reconstructing songs from file and saved snapshots. Car/iOS browse exposes
+the same stable item alongside a separate audio source. Playback and offline
+copies retain their selected bytes when another source arrives.
 
-`keys` is the set of namespaced identities the song answers to — the same
-namespaces the player uses to track a song across hops (`lib:`, `yt:`, `isrc:`,
-`mb:`, `deezer:`, `cat:`; see `ui_web/src/lib/playbackIdentity.ts`). Two entries
-are the same song when their key sets intersect. That is what lets you save a
-song you have not downloaded: the snapshot renders and streams it on its own,
-and the entry is resolved against the library *at read time*, so downloading it
-later promotes the same entry to the owned track with nothing rewritten. v1
-files (a flat array of track ids) migrate on load. Key derivation lives in the
-client; `player/favourites_manager.py` only stores, orders and intersects.
-`added_at` is the song's library date (the same one its file carries, see
-above); `favourited_at` is when the heart went on, present only while it is on —
-marking a song is not acquiring it, so it never touches the library date.
+Legacy JSON saved songs and provider/file playlist IDs migrate once. Exact,
+unambiguous evidence associates an incoming source; shared video/ISRC evidence
+does not merge separate editions. Unresolved references remain visible and
+unavailable. Compatibility endpoints write the same SQLite entities. See
+[the collection contract](audits/COLLECTION_IDENTITY.md) for migration and API
+negotiation. Collection dates survive source changes; favourite dates track the
+mark, not acquisition.
 
 Exact filenames and fields may evolve; treat the code under `shared/` and `player/` as the source of truth.
 

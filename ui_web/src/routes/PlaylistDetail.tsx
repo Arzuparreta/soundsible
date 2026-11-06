@@ -1,3 +1,4 @@
+import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createMemo, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { state, actions, musicLibrary } from '../stores';
@@ -24,7 +25,7 @@ export default function PlaylistDetail() {
   const name = createMemo(() => decodeURIComponent(params.name ?? ''));
   const trackIds = createMemo<string[]>(() => state.playlists[name()] ?? []);
   const tracks = createMemo<Track[]>(() => {
-    const byId = new Map(musicLibrary().map((t) => [t.id, t] as const));
+    const byId = collectionIndex(musicLibrary());
     return trackIds()
       .map((id) => byId.get(id))
       .filter((t): t is Track => !!t);
@@ -87,7 +88,7 @@ export default function PlaylistDetail() {
         loading={state.loading}
         menu={{
           playlistName: name(),
-          onRemoveFromPlaylist: (t) => void actions.removeFromPlaylist(name(), t.id),
+          onRemoveFromPlaylist: (t) => void actions.removeFromPlaylist(name(), collectionId(t)),
         }}
         empty={<EmptyState>{t('playlistDetail.empty')}</EmptyState>}
       />

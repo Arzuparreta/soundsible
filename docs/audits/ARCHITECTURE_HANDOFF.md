@@ -21,6 +21,7 @@ Las comprobaciones se hicieron sobre `main` en `3c7e4af3`. Las marcadas como
 | 6 | JSON de estado escritos sin protección ante cortes | Pendiente |
 | 7 | Actualización de yt-dlp con el módulo ya importado | Pendiente, no reproducido |
 | 8 | Código muerto y detalles menores | Pendiente |
+| 9 | Identidad musical acoplada a hash/vídeo y reconstruida en cada cliente | Implementado en PR #423; pendiente de CI e integración |
 
 ## Cerrado en la primera PR
 
@@ -143,7 +144,7 @@ diccionarios: moverlas obliga a actualizar esos dobles.
 `player/queue_manager.py` (`queue_state.json`), `shared/playback_state.py`
 (en cada `PUT /api/playback/state`) y `shared/discovery_intelligence.py`
 (`discovery_settings.json`) usan `write_text`. Un corte durante la escritura
-deja el archivo truncado. `favourites_manager` ya hace temporal + `os.replace`
+deja el archivo truncado. `favourites_manager` usa ahora la colección SQLite (PR #423)
 y existe `shared/atomic_file.py`. Si se borra la cola del punto 4, sobran dos.
 
 ### 7. Actualización de yt-dlp en caliente (no reproducido)
@@ -170,3 +171,14 @@ importar o reiniciar después de actualizar.
 - `get_request_auth_context` guarda el contexto en `g` sin tener en cuenta
   `allow_trusted_network`. Hoy no falla porque todos los llamadores pasan `True`,
   pero el parámetro no tiene efecto real.
+
+
+## 9. Identidad de colección (PR #423)
+
+El incidente «2 songs» con una fila mezclaba una referencia YouTube y un archivo
+con hash: guardados deduplicaba sus fuentes, pero playlists buscaba sólo por
+`track.id`. La PR sustituye esa arquitectura por elementos musicales estables,
+relaciones de fuente persistidas y una única transacción de incorporación y
+pertenencia. Web/Android/coche/iOS consumen la identidad sin retargetear audio
+preparado u offline. Contrato, migración y aceptación en
+[COLLECTION_IDENTITY](COLLECTION_IDENTITY.md). No cierra los puntos 3–8.
