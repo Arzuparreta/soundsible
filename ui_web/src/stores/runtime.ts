@@ -3,7 +3,7 @@ import { syncSavedEntities } from "../lib/savedEntities";
 import { user } from "../lib/session";
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from "../lib/socket";
 import { api, type RemotePlaybackState } from "../lib/api";
-import { audioService, onProgramEvent, setProgramOutputReporter, setProgramTransportReporter, type ProgramMediaEventName, type ProgramPlaybackSnapshot } from "../lib/audio";
+import { audioService, onProgramEvent, setProgramTransportReporter, type ProgramMediaEventName, type ProgramPlaybackSnapshot } from "../lib/audio";
 import { ProgramMediaSession, type MediaSessionSyncReason } from "../lib/mediaSession";
 import { recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from "../lib/playbackDiagnostics";
 import { takeConnectionFailures } from '../lib/connectionEvidence';
@@ -28,13 +28,10 @@ export interface RuntimePorts {
   RESUME_SEARCH_ATTEMPTS: number;
   emitPlaybackEvent: (phase: string, extra?: Record<string, number | boolean>, strings?: {
     failure_reason?: string;
-    context_state?: string;
     display_mode?: string;
     transport_action?: string;
     transport_origin?: string;
     mix_phase?: string;
-    output_mode?: string;
-    output_event?: string;
     media_session_state?: string;
     sync_reason?: string;
     video_id?: string;
@@ -145,31 +142,12 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     // this decision waits on has come back.
     const resumeAttempts = liveHandoffPending() ? ports.RESUME_HANDOFF_ATTEMPTS : ports.RESUME_SEARCH_ATTEMPTS;
     installAudioUnlock();
-    setProgramOutputReporter(event => {
-      ports.emitPlaybackEvent('ui_program_output', {
-        carrier_playing: event.carrierPlaying,
-        carrier_paused: event.carrierPaused,
-        carrier_ready_state: event.carrierReadyState
-      }, {
-        output_mode: event.mode,
-        output_event: event.event,
-        failure_reason: event.reason,
-        context_state: event.contextState,
-        display_mode: displayMode()
-      });
-      if (state.playback.currentTrack) {
-        const modeChanged = event.event === 'fallback_entered' || event.event === 'fallback_recovered';
-        ports.updateMediaSession(state.playback.currentTrack, 'output_change', modeChanged);
-      }
-    });
     ports.programMediaSession.setReporter(event => {
       ports.emitPlaybackEvent('ui_media_session_sync', {
         metadata_revision: event.revision,
-        carrier_playing: event.carrierPlaying,
         source_playing: event.sourcePlaying,
         state_matches: event.expectedState === event.declaredState
       }, {
-        output_mode: event.outputMode,
         media_session_state: event.declaredState,
         sync_reason: event.reason,
         display_mode: displayMode()
@@ -467,7 +445,6 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       socket = null;
     });
     lifetime.own(() => {
-      setProgramOutputReporter(null);
       setProgramTransportReporter(null);
       ports.programMediaSession.setReporter(null);
       ports.programMediaSession.uninstallActions();

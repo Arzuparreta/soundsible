@@ -83,16 +83,14 @@ opaque `attempt_id`. They may include:
   from the UI or Media Session, the mix phase, visibility, dominant deck and a
   boolean playing state for each deck. These fields diagnose Bluetooth and
   lock-screen handoffs; they contain no audio, titles or control identifiers;
-- programme-output lifecycle (`ui_program_output`): whether the stable output
-  carrier or the direct compatibility fallback was active, its ready/paused
-  state, the Web Audio context state and a bounded failure reason;
 - Media Session projection (`ui_media_session_sync`): the declared platform
   playback state, why it was refreshed, a monotonic metadata revision and
-  booleans recording whether carrier/source state agreed. Track titles, artist,
+  booleans recording whether the source was playing and whether the declared
+  state matched the expected one. Track titles, artist,
   artwork URLs and other metadata are never written to telemetry.
 
 Playback diagnostics start automatically with the authenticated player. They
-record browser media state, timing, source/carrier identifiers, device ID, source
+record browser media state, timing, source identifiers, device ID, source
 fingerprint, reported platform and transport operations. They do not include
 track titles, media URLs, artwork, audio, credentials, or the car's display.
 

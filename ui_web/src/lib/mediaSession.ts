@@ -22,8 +22,6 @@ export interface MediaSessionSyncEvent {
   expectedState: MediaSessionPlaybackState;
   declaredState: MediaSessionPlaybackState;
   revision: number;
-  outputMode: ProgramPlaybackSnapshot['outputMode'];
-  carrierPlaying: boolean;
   sourcePlaying: boolean;
 }
 
@@ -131,8 +129,6 @@ export class ProgramMediaSession {
       expectedState,
       declaredState: navigator.mediaSession.playbackState,
       revision: this.revision,
-      outputMode: snapshot.outputMode,
-      carrierPlaying: snapshot.carrierPlaying,
       sourcePlaying: snapshot.sourcePlaying,
     });
   }

@@ -237,9 +237,10 @@ Puntos adicionales concretos:
 
 Conservar las mejoras ya presentes: virtualización y filas variables, rutas lazy,
 selectores de identidad memoizados, agrupación de eventos, cachés de previews,
-single-flight, límites de análisis DJ y protecciones de visibilidad. La ruta
-`ProgramOutput` distingue iOS de carrier en otros dispositivos por razones de
-compatibilidad; cambiarla exige aceptación acústica, no solo menor CPU sintética.
+single-flight, límites de análisis DJ y protecciones de visibilidad. El carrier
+`ProgramOutput` se eliminó el 2026-11-06 tras medir su salida acústica en
+Chromium (ver `docs/PLAYBACK_DIAGNOSIS.md`); toda la salida va al destino del
+contexto.
 
 ## Secuencia de trabajo y criterios de decisión
 

@@ -1,7 +1,6 @@
 import { SILENT_WAV } from './unlockSample';
 import type { RuntimeLifetime } from '../runtimeLifetime';
 import { diagnosticLoad, diagnosticPause, diagnosticPlay, diagnosticSource, observeDiagnosticMedia, recordPlaybackDiagnostic } from "../playbackDiagnostics";
-import { ProgramOutput } from "./programOutput";
 import { MediaClockHealth } from './mediaClock';
 import type { AudioService, DeckBinding, ProgramMediaEventName, ProgramPlaybackSnapshot, OutputHealth, MixPhase, MixCancelReason, ProgramTransportOrigin, ProgramTransportEvent, ActiveMix } from "./contracts";
 export interface TransportPorts {
@@ -17,7 +16,6 @@ export interface TransportPorts {
   audioService: Pick<AudioService, 'pause'>;
   mix: ActiveMix | null;
   cancelMix: (reason: MixCancelReason) => void;
-  programCarrier: ProgramOutput | null;
   primeAudioSession: (context: AudioContext) => void;
   resumeContext: () => void;
   tick: () => void;
@@ -301,7 +299,6 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     const position = deck.currentTime;
     const seek = seekGeneration;
     for (const participant of decks()) pauseDeck(participant);
-    ports.programCarrier?.pause();
     publishOutputHealth('recovering');
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -365,7 +362,6 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     const start = {};
     pendingStarts.set(deck, start);
     const started = diagnosticPlay(deck);
-    void ports.programCarrier?.play();
     return started.finally(lifetime.guard(() => {
       if (pendingStarts.get(deck) === start) pendingStarts.delete(deck);
     }));
@@ -380,15 +376,10 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
   }
   function programPlaybackSnapshot(): ProgramPlaybackSnapshot {
     const deck = audioEl();
-    const output = ports.programCarrier?.snapshot();
-    const outputMode = output?.mode ?? 'direct_fallback';
     const sourcePlaying = deckIsPlaying(deck);
-    const carrierPlaying = output?.carrierPlaying ?? false;
     return {
-      outputMode,
-      playing: sourcePlaying && !outputRecovering && (outputMode === 'carrier' ? carrierPlaying : true),
+      playing: sourcePlaying && !outputRecovering,
       sourcePlaying,
-      carrierPlaying,
       position: Number.isFinite(deck.currentTime) ? deck.currentTime : 0,
       duration: Number.isFinite(deck.duration) ? deck.duration : 0,
       playbackRate: Number.isFinite(deck.playbackRate) && deck.playbackRate > 0 ? deck.playbackRate : 1,
@@ -482,9 +473,6 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     for (const event of ['seeking', 'loadstart', 'emptied']) onDeckEvent(event as ProgramMediaEventName, resetClockSample);
     onDeckEvent('ended', event => {
       ports.settleEndedEvent(event);
-      queueMicrotask(() => {
-        if (!ports.mix && !deckIsPlaying(audioEl())) ports.programCarrier?.pause();
-      });
     });
     onDeckEvent('pause', event => {
       const deck = event.currentTarget as HTMLAudioElement;
@@ -703,7 +691,6 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       const current = ports.mix;
       const phase = current?.phase ?? 'idle';
       const dominant = current?.dominant ?? false;
-      ports.programCarrier?.pause();
       if (current && current.phase !== 'armed') ports.cancelMix('transport_pause');
       pauseDeck(audioEl());
       ports.reportProgramTransport('pause', origin, phase, dominant);
@@ -712,7 +699,6 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       playbackRequested = false;
       cancelOutputRecovery();
       loadSeq += 1;
-      ports.programCarrier?.pause();
       ports.cancelMix('stop');
       stagedUrl = '';
       releaseDeck(activeIndex);
