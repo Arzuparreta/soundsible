@@ -138,6 +138,71 @@ def test_replace_is_atomic_and_preserves_user_state(tmp_path, monkeypatch):
     assert db.get_track_user_state("keep")["rating"] == 5
 
 
+def test_existing_preview_memberships_resolve_on_load_and_next_save(tmp_path):
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    library = LibraryMetadata(
+        version=1,
+        tracks=[_track("download", youtube_id="video")],
+        playlists={"Mix": ["download", "stream-only", "download"]},
+        settings={"playlist_covers": {"Mix": "video"}},
+    )
+    db.replace_library(library)
+    # Simulate the persisted playlist an older engine wrote: a preview id
+    # even though the same song is already present as a downloaded file.
+    with db._get_connection() as conn:
+        conn.execute("UPDATE playlist_tracks SET track_id='video' WHERE track_id='download'")
+        conn.execute("UPDATE library_state SET settings_json=?", (
+            json.dumps({"playlist_covers": {"Mix": "video"}}),
+        ))
+
+    restored = db.load_library_metadata()
+    assert restored.playlists == {"Mix": ["download", "stream-only", "download"]}
+    assert restored.settings["playlist_covers"] == {"Mix": "download"}
+    assert restored.tracks[0].id == restored.tracks[0].file_hash == "download"
+    db.replace_library(restored)
+    with db._get_connection() as conn:
+        assert [row[0] for row in conn.execute(
+            "SELECT track_id FROM playlist_tracks ORDER BY position"
+        )] == ["download", "stream-only", "download"]
+        assert conn.execute("SELECT count(*) FROM track_id_aliases").fetchone()[0] == 0
+
+
+def test_downloading_a_playlist_preview_resolves_its_membership(tmp_path):
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    library = LibraryMetadata(
+        version=1, tracks=[], playlists={"Mix": ["video"]}, settings={},
+    )
+    db.replace_library(library)
+    assert db.load_library_metadata().playlists == {"Mix": ["video"]}
+
+    library.add_track(_track("download", youtube_id="video"))
+    db.replace_library(library)
+    assert library.playlists == {"Mix": ["download"]}
+    assert db.load_library_metadata().playlists == {"Mix": ["download"]}
+
+
+def test_preview_resolution_preserves_exact_ids_and_ambiguous_videos(tmp_path):
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    library = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("exact"),
+            _track("other", youtube_id="exact"),
+            _track("first", youtube_id="shared"),
+            _track("second", youtube_id="shared"),
+            _track("download", youtube_id="video"),
+            _track("unrelated", file_hash="video"),
+        ],
+        playlists={"Mix": ["exact", "shared", "stream-only", "video", "video"]},
+        settings={"playlist_covers": {"Mix": "shared"}},
+    )
+    db.replace_library(library)
+    restored = db.load_library_metadata()
+    assert restored.playlists == {"Mix": ["exact", "shared", "stream-only", "download", "download"]}
+    assert restored.settings["playlist_covers"] == {"Mix": "shared"}
+    assert restored.get_track_by_id("unrelated").file_hash == "video"
+
+
 def test_legacy_manifest_migrates_once_and_sqlite_wins_afterwards(monkeypatch):
     monkeypatch.setattr("player.library._output_dir_for_library", lambda: None)
     manager = LibraryManager(silent=True)

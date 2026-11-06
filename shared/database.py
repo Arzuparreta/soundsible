@@ -1097,6 +1097,7 @@ class DatabaseManager:
                 # snapshot.  Normalize here as a final invariant even when a
                 # caller forgot to update one of the reference-bearing fields.
                 metadata.remap_track_ids(aliases)
+                metadata.normalize_playlist_preview_ids()
                 conn.executemany(
                     """
                     INSERT INTO track_id_aliases (old_track_id, new_track_id)
@@ -1356,6 +1357,7 @@ class DatabaseManager:
             # write from an old client in memory before it reaches the API, and
             # the next save makes that normalization durable.
             metadata.remap_track_ids(self._track_id_aliases(conn))
+            metadata.normalize_playlist_preview_ids()
             return metadata
 
     def backfill_added_at(self, resolver: Optional[Any] = None) -> int:

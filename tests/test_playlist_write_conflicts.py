@@ -131,6 +131,30 @@ def test_a_stale_writer_cannot_take_the_song_back_out(client):
     }
 
 
+def test_adding_a_downloaded_song_from_search_uses_its_library_id(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    with user_context(user_id):
+        library = get_user_core(user_id).library
+        library.metadata.get_track_by_id("emparedado").youtube_id = "video"
+        assert library._save_metadata() is True
+
+    response = client.post(
+        "/api/library/playlists/Arma%20Reforger/tracks",
+        json={"track_id": "video"},
+    )
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["playlists"] == {"Arma Reforger": ["tunnel", "emparedado"]}
+    # Adding the same search result again must not create a duplicate under
+    # its preview identity. Every returned membership resolves in the library.
+    assert client.post(
+        "/api/library/playlists/Arma%20Reforger/tracks", json={"track_id": "video"},
+    ).get_json()["playlists"] == response.get_json()["playlists"]
+    snapshot = client.get("/api/library").get_json()
+    assert snapshot["playlists"] == response.get_json()["playlists"]
+    assert set(snapshot["playlists"]["Arma Reforger"]) <= {track["id"] for track in snapshot["tracks"]}
+
+
 def test_a_refused_playlist_write_is_reported_as_a_conflict(client, monkeypatch):
     """A save that did not happen must not answer with the map it would have
     written. Echoing it back is what makes the change look applied until the

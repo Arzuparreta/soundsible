@@ -532,6 +532,37 @@ class LibraryMetadata:
 
         return changed
 
+    def _playlist_preview_ids(self) -> Dict[str, str]:
+        """Resolve preview ids only when one library track owns that video.
+
+        These are read-time identities, not permanent technical-id aliases:
+        the file can leave the library, or another recording can share its
+        video. An exact library id always takes precedence.
+        """
+        track_ids = {track.id for track in self.tracks}
+        videos: Dict[str, set[str]] = {}
+        for track in self.tracks:
+            if track.youtube_id and track.youtube_id not in track_ids:
+                videos.setdefault(track.youtube_id, set()).add(track.id)
+        return {video: next(iter(ids)) for video, ids in videos.items() if len(ids) == 1}
+
+    def normalize_playlist_preview_ids(self) -> None:
+        """Keep preview memberships visible after a song becomes a file.
+
+        Preserve occurrences and order, and leave streaming-only or ambiguous
+        identities alone. Unlike a technical-id replacement, this must never
+        change a track row or its content hash.
+        """
+        aliases = self._playlist_preview_ids()
+        if not aliases:
+            return
+        for name, ids in self.playlists.items():
+            self.playlists[name] = [aliases.get(track_id, track_id) for track_id in ids]
+        covers = self.settings.get("playlist_covers")
+        if isinstance(covers, dict):
+            for name, track_id in covers.items():
+                covers[name] = aliases.get(track_id, track_id)
+
     def add_track(self, track: Track) -> None:
         """Add a track to the library, dating it if the caller has not.
 
@@ -578,6 +609,8 @@ class LibraryMetadata:
         """
         if playlist_name not in self.playlists:
             return False
+        self.normalize_playlist_preview_ids()
+        track_id = self._playlist_preview_ids().get(track_id, track_id)
         if track_id not in self.playlists[playlist_name]:
             self.playlists[playlist_name].append(track_id)
             self.last_updated = utc_now_iso_naive()
