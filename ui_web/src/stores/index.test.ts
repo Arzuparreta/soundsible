@@ -1058,6 +1058,7 @@ describe('Playback load coalescing', () => {
     actions.retryCurrent();
     expect(audioService.load).toHaveBeenCalledTimes(1);
     expect(audioService.recover).toHaveBeenCalledTimes(2);
+    expect(audioService.recover).toHaveBeenLastCalledWith('/preview/previewid01', 0, UNMEASURED_LEVEL, { requestPlayback: true });
     expect(state.playback.loadError).toBe(false);
   });
 

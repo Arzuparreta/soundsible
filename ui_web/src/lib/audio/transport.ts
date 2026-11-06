@@ -563,7 +563,10 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         throw err;
       }));
     },
-    recover(url: string, positionSec: number, level: number): Promise<void> {
+    recover(url: string, positionSec: number, level: number, options?: { requestPlayback?: boolean }): Promise<void> {
+      // Automatic recovery must honour a pause. An explicit Retry owns a new
+      // play request and must not resolve without loading the replacement.
+      if (options?.requestPlayback) playbackRequested = true;
       if (!playbackRequested) return Promise.resolve();
       cancelOutputRecovery();
       ports.cancelMix('load');

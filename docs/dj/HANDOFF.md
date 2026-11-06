@@ -85,9 +85,20 @@ limitaciones de escucha anotadas en entregas anteriores son históricas.
 | P13 | Frases y secciones sobre una base métrica explícita | Señales con cambios y papeles conocidos (4/4, 3/4, 6/8), compases equivocados y red real; AAC → SQLite → HTTP; vectores web/Android; [resultados](p13-results.json) | Cerrado (PR #399); límites en [P13](P13.md) |
 | P14 | Primera mezcla y trabajos ligados a la sesión vigente | Cola cancelable, proceso real interrumpido, intereses compartidos, caché y protocolo HTTP; refinado temprano web/Android; [contrato y evidencia](P14.md) | Cerrado; aceptación física confirmada por el usuario (2026-10-30) |
 | P15 | Continuidad ante fallos del reloj y saltos sin muestras | Dos capturas completas del 2026-10-29; tests de reproducción y WAV real; [evidencia](P15.md) | Cerrado en PR #405: correcciones y suites locales completas; aceptación física confirmada por el usuario (2026-10-30) |
-| P16 | Continuidad medida por plato y reconexión de la PWA | Captura del viaje del 2026-10-30; regresiones antes/después, PCM real en navegador y recuperación de conexión; [contrato](P16.md) | Cerrado (PR #408); aceptación física confirmada por el usuario (2026-10-30) |
+| P16 | Continuidad medida por plato y reconexión de la PWA | Captura del viaje del 2026-10-30; regresiones antes/después, PCM real en navegador y recuperación de conexión; [contrato](P16.md); seguimiento de Retry abajo | Cerrado (PR #408); aceptación física confirmada por el usuario (2026-10-30); corregido el reintento explícito tras una pausa de plataforma (2026-11-06) |
 | P18 | Tempo compartido entre las dos canciones | Planes y vectores comunes servidor/web/Android; AAC → análisis → HTTP con y sin cabecera; clics reales por el mezclador web y el servicio nativo, comparados con `main`; [método y medidas](P18.md) | Implementado (PR #416, rama `dj/split-tempo`); 1:1 primero cuando cabe; pendiente de escucha real |
 | P17 | Evolución de la sesión sin interacción | 12 sesiones de planificación emparejadas, 8 tramos de entregas y replay de 31 parejas; [primeras mediciones](SESSION_PROGRESS.md); [captura enlazada](SESSION_CAPTURE.md) | Estudio retrospectivo completado; captura prospectiva web/PWA implementada en PR #409. Mejora general sin demostrar: faltan sesiones reales con la captura nueva; Android fuera del recorder web |
+
+Seguimiento de recuperación web (2026-11-06): las trazas de la estación muestran
+un atasco de carga, recuperación agotada y `native_paused_on_restore`. Después,
+Retry publicaba «cargando», pero `recover()` terminaba sin actuar porque ya no
+había una solicitud de reproducción activa. El reintento explícito solicita
+ahora reproducción antes de cargar el otro plato; la recuperación automática
+conserva la pausa, y Pause/Stop durante la espera cancelan el arranque tardío.
+Regresión reproducida antes de corregirla, pruebas de transporte/store y botón
+Retry con WAV real en navegador. Este seguimiento corrige el reintento que no
+actuaba: no atribuye la causa del atasco inicial ni acredita una nueva escucha
+física. No cambia el análisis, los planes ni el ejecutor Android.
 
 Orden acordado con el usuario (2026-10-22): **P4 rehecho → P6 → P3 → P5
 ampliado**, después P8 y P9. P7 y P10 son decisiones y limpieza. P2 no se trabaja
