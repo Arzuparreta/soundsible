@@ -132,15 +132,25 @@ def _reconcile_library_sources(metadata, items: list[dict]) -> list[dict]:
         return by_video
 
     by_video = request_scope.scoped(f"planner_video_index:{id(metadata)}:{len(tracks)}", build)
+    by_item = request_scope.scoped(f"planner_item_index:{id(metadata)}:{len(tracks)}",
+        lambda: {track.item_id: track for track in reversed(tracks) if getattr(track, 'item_id', None)})
     reconciled = []
     for item in items:
-        track = None if item.get("track_id") else by_video.get(str(item.get("youtube_id") or ""))
+        if item.get("track_id"):
+            track = None
+        elif item.get("item_id"):
+            # Known musical identity is authoritative even if another edition
+            # happens to use the same video. A missing source stays missing.
+            track = by_item.get(item['item_id'])
+        else:
+            track = by_video.get(str(item.get("youtube_id") or ""))
         if track is None:
             reconciled.append(item)
             continue
         reconciled.append({
             **item,
             "id": str(track.id),
+            "item_id": getattr(track, "item_id", None),
             "track_id": str(track.id),
             "source": "library",
             "title": str(track.title or "Unknown"),
@@ -155,6 +165,12 @@ def _reconcile_library_sources(metadata, items: list[dict]) -> list[dict]:
     return reconciled
 
 
+def _collection_item_id(video_id, supplied=None, file_id=None):
+    from shared.collection import Collection
+    return request_scope.scoped(f'collection_item:{video_id}:{supplied or ""}:{file_id or ""}',
+        lambda: Collection().identify(([f'item:{supplied}'] if supplied else []) + ([f'lib:{file_id}'] if file_id else []) + [f'yt:{video_id}']))
+
+
 def _planner_item_from_related(row: dict) -> dict | None:
     video_id = str(row.get("video_id") or row.get("id") or "").strip()
     if not validate_youtube_video_id(video_id):
@@ -162,6 +178,7 @@ def _planner_item_from_related(row: dict) -> dict | None:
     music = youtube_music_metadata(row)
     return {
         "id": video_id,
+        "item_id": _collection_item_id(video_id),
         "youtube_id": video_id,
         "discovery_youtube_id": video_id,
         **music,
@@ -197,6 +214,7 @@ def _planner_item_from_feed(item: dict, *, pool: str) -> dict | None:
     )
     return {
         "id": item_id,
+        "item_id": item.get("item_id") or _collection_item_id(video_id),
         "track_id": track_id or None,
         "youtube_id": video_id or None,
         "title": identity.title,
@@ -590,6 +608,7 @@ def _planner_local_item(track, *, semantic_score: float, basis: str, favourite: 
     score = min(1.0, semantic_score * 0.82 + (0.16 if favourite else 0.06))
     return {
         "id": str(track.id),
+        "item_id": getattr(track, "item_id", None),
         "track_id": str(track.id),
         "youtube_id": video_id or None,
         "title": str(track.title or "Unknown"),
@@ -1115,6 +1134,7 @@ def _normalise_dj_request(raw: dict) -> dict | None:
         "kind": "track",
         "label": title,
         "id": video_id if is_preview else track_id,
+        "item_id": _collection_item_id(video_id, track.get("item_id"), track_id),
         "track_id": track_id or None,
         "youtube_id": video_id if is_preview else track.get("youtube_id"),
         "title": title,

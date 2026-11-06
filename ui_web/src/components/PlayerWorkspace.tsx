@@ -81,7 +81,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
         props.soloPanel
           ? 'minmax(0, 1fr)'
           : `minmax(${props.minimums[panel]}px, ${ratioWeight}fr)`,
-        ...(index < renderedPanels().length - 1 ? ['14px'] : []),
+        ...(index < renderedPanels().length - 1 ? ['24px'] : []),
       ];
     }).join(' '),
   );

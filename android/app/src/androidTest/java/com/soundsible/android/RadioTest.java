@@ -97,6 +97,10 @@ public class RadioTest {
             waitFor(web,scenario,"window.__radio.items.length>"+initialCount+" && new Set(window.__radio.items.map(i=>i.id)).size===window.__radio.items.length-1");
             command(web,scenario,"action:'select',index:0,key:window.__radio.items[0].key");
             command(web,scenario,"action:'pause'");
+            // Canonical recently-added songs can put the original seed outside
+            // the virtualized window. Search before interacting with its row.
+            web.evaluate(scenario,"const input=document.querySelector('[data-testid=android-library] input[type=search]');input.value='member private song';input.dispatchEvent(new Event('input',{bubbles:true}))");
+            waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song')");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Explore')");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Explore').click()");

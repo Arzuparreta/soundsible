@@ -34,6 +34,7 @@ object ProgramQueue {
     const val EPISODE = "soundsible_episode"
     const val FEED = "soundsible_feed"
     const val PROFILE = "soundsible_profile"
+    const val ITEM = "soundsible_collection_item"
     const val SOURCE = "soundsible_source"
     const val KEY = "soundsible_occurrence"
     const val BRIDGE_OWNER = "soundsible_bridge_owner"
@@ -92,6 +93,7 @@ object ProgramQueue {
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album)
                     .setAlbumArtist(release.albumArtist).setTrackNumber(release.trackNumber).setDiscNumber(release.discNumber).setReleaseYear(release.year).setArtworkUri(if (source == "local" && !offline) ProgramArtwork.uri(connection.generation, id) else null)
                     .setExtras(Bundle().apply {
+                        row.optString("item_id").takeIf { it.isNotBlank() && it != "null" && it.length <= 512 }?.let { putString(ITEM, it) }
                         putLong(ProgramPcmProcessor.GENERATION, connection.generation)
                         number(row, "loudness_lufs")?.let { putDouble(ProgramPcmProcessor.LUFS, it) }
                         number(row, "loudness_peak_dbtp")?.let { putDouble(ProgramPcmProcessor.PEAK, it) }

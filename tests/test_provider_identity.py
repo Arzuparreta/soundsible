@@ -168,3 +168,13 @@ def test_authoritative_names_are_not_channel_suffixes():
     identity = canonical_music_identity('Artist (Official)', 'A - B', authoritative=True)
     assert identity.artist == 'Artist (Official)'
     assert identity.title == 'A - B'
+
+
+def test_dj_known_collection_item_cannot_adopt_another_editions_source():
+    first, second = local('first'), local('second')
+    first.item_id, second.item_id = 'edition-one', 'edition-two'
+    item = {'id': VIDEO, 'youtube_id': VIDEO, 'source': 'preview', 'item_id': 'edition-two'}
+    metadata = SimpleNamespace(tracks=[first, second])
+    assert auto_mode._reconcile_library_sources(metadata, [item])[0]['track_id'] == 'second'
+    missing = {**item, 'item_id': 'edition-without-file'}
+    assert auto_mode._reconcile_library_sources(SimpleNamespace(tracks=[first]), [missing]) == [missing]

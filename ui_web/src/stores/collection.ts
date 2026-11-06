@@ -3,7 +3,7 @@ import { api, type LibraryScanStatus } from "../lib/api";
 import { bustCovers } from "../lib/media";
 import { toast } from "../lib/toast";
 import { vibrate } from "../lib/haptics";
-import { savedFromTrack, savedVideoId } from "../lib/saved";
+import { savedIdentityKeys, savedFromTrack, savedVideoId } from "../lib/saved";
 import { t as tr } from "../lib/i18n";
 import type { Track, SavedEntry } from "../types/music";
 import { beginLibraryEdit, endLibraryEdit, syncLibrary, syncLibrarySoon } from "./library";
@@ -31,30 +31,33 @@ export function createCollection(ports: CollectionPorts, lifetime: RuntimeLifeti
       });
     },
     toggleSaved(entry: SavedEntry): void {
-      if (!entry.keys.length) return;
+      if (!savedIdentityKeys(entry).length) return;
       vibrate();
       const prev = state.saved.slice();
-      const has = isSavedKeys(entry.keys);
-      const next = has ? prev.filter(f => !f.keys.some(k => entry.keys.includes(k))) : [{
+      const existing = savedEntryForKeys(savedIdentityKeys(entry));
+      const has = isSavedKeys(savedIdentityKeys(entry));
+      const next = has ? prev.filter(f => f !== existing) : [{
         ...entry,
-        added_at: claimedAddedAt(entry.keys)
+        added_at: claimedAddedAt(savedIdentityKeys(entry))
       }, ...prev];
       setState('saved', next); // optimistic
-      api.toggleSaved(entry).catch(lifetime.guard(() => setState('saved', prev))); // revert on failure
+      api.toggleSaved(entry).then(lifetime.guard(() => {
+        if (state.collectionItems !== null) void ports.actions.syncLibrary();
+      })).catch(lifetime.guard(() => setState('saved', prev))); // revert on failure
     },
     async setSongsSaved(entries: SavedEntry[], saved: boolean): Promise<boolean> {
       const isCurrent = lifetime.capture();
-      const usable = entries.filter(entry => entry.keys.length);
+      const usable = entries.filter(entry => savedIdentityKeys(entry).length);
       if (!usable.length) return true;
       const prev = state.saved.slice();
       if (saved) {
-        const fresh = usable.filter(entry => !savedEntryForKeys(entry.keys)).map(entry => ({
+        const fresh = usable.filter(entry => !savedEntryForKeys(savedIdentityKeys(entry))).map(entry => ({
           ...entry,
-          added_at: claimedAddedAt(entry.keys)
+          added_at: claimedAddedAt(savedIdentityKeys(entry))
         }));
         setState('saved', [...fresh, ...prev]);
       } else {
-        const leaving = new Set(prev.filter(held => !held.favourite && !held.keys.some(key => key.startsWith('lib:')) && usable.some(entry => entry.keys.some(key => held.keys.includes(key)))));
+        const leaving = new Set(usable.map(entry => savedEntryForKeys(savedIdentityKeys(entry))).filter(held => held && !held.favourite && !(state.collectionItems === null && held.keys.some(key => key.startsWith('lib:'))) && !ownedTrackForKeys(held.item_id ? [`item:${held.item_id}`] : held.keys)));
         setState('saved', prev.filter(held => !leaving.has(held)));
       }
       try {
@@ -62,6 +65,7 @@ export function createCollection(ports: CollectionPorts, lifetime: RuntimeLifeti
         if (!isCurrent()) {
           return false;
         }
+        if (state.collectionItems !== null) await ports.actions.syncLibrary();
         return true;
       } catch {
         if (!isCurrent()) {
@@ -76,23 +80,24 @@ export function createCollection(ports: CollectionPorts, lifetime: RuntimeLifeti
       ports.actions.toggleSaved(savedFromTrack(track));
     },
     toggleFavourite(entry: SavedEntry): void {
-      if (!entry.keys.length) return;
+      if (!savedIdentityKeys(entry).length) return;
       vibrate();
       const prev = state.saved.slice();
-      const has = isFavouriteKeys(entry.keys);
-      const existing = savedEntryForKeys(entry.keys);
+      const has = isFavouriteKeys(savedIdentityKeys(entry));
+      const existing = savedEntryForKeys(savedIdentityKeys(entry));
       const next = existing ? prev.map(f => f === existing ? {
         ...f,
         favourite: !has
       } : f) : [{
         ...entry,
         favourite: true,
-        added_at: claimedAddedAt(entry.keys)
+        added_at: claimedAddedAt(savedIdentityKeys(entry))
       }, ...prev];
       setState('saved', next); // optimistic
       api.toggleFavourite(entry).then(lifetime.guard(() => {
+        if (state.collectionItems !== null) void ports.actions.syncLibrary();
         if (has) return;
-        const owned = ownedTrackForKeys(entry.keys);
+        const owned = ownedTrackForKeys(savedIdentityKeys(entry));
         void api.emitDiscoveryEvent('music_favourited', {
           media_type: 'music_track',
           track_id: owned?.id,

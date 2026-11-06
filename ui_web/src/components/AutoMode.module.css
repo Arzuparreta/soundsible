@@ -6,10 +6,6 @@
   color: var(--ink-primary);
 }
 
-.tile {
-  background: color-mix(in srgb, var(--stage-panel) 72%, var(--bg-base));
-}
-
 .sourcePanel {
   display: flex;
   width: 100%;
@@ -318,7 +314,7 @@
 
 .routePanel { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
 .routeList { flex: 1; min-height: 0; }
-.references { container-type: inline-size; flex: 0 0 auto; max-height: 35%; overflow: auto; padding: 8px 12px max(10px, var(--player-mobile-footer-clearance, 10px)); border-top: 1px solid var(--stage-line); background: var(--stage-material-quiet); }
+.references { container-type: inline-size; flex: 0 0 auto; max-height: 35%; overflow: auto; padding: 6px 12px max(10px, var(--player-mobile-footer-clearance, 10px)); box-shadow: inset 0 1px var(--stage-line-soft); }
 /* Three actions share the row: each starts at its own content and gets an
    equal part of the spare width, with its icon and label kept together. */
 .sessionActions { display: flex; align-items: center; gap: 4px; }

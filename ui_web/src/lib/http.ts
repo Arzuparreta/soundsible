@@ -21,6 +21,7 @@ interface RequestOptions {
   keepalive?: boolean;
   ifNoneMatch?: string;
   onETag?: (etag: string | null) => void;
+  onResponse?: (response: Response) => void;
   cache?: RequestCache;
   work?: WorkReference;
 }
@@ -89,6 +90,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       keepalive: opts.keepalive,
       cache: opts.cache,
     }, timeoutMs);
+    opts.onResponse?.(res);
     if (res.status === 401 && !path.startsWith('/api/auth/')) onUnauthorized?.();
     if (res.status === 304 && opts.ifNoneMatch) return null as T;
     if (!res.ok) {

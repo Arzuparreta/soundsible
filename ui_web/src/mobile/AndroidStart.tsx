@@ -16,8 +16,8 @@ import { vibrate } from '../lib/haptics';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { t } from '../lib/i18n';
-import { musicLibraryRows } from '../lib/musicLibrary';
-import { buildIdentityIndex, trackKeys } from '../lib/playbackIdentity';
+import { createNativeCollectionReader } from './collectionReader';
+import { trackKeys } from '../lib/playbackIdentity';
 import { songMarkAction } from './songMarks';
 import { nativeEntityMark } from './entityMarks';
 import { createAccountRefresh } from './accountRefresh';
@@ -27,7 +27,7 @@ import { openNativeDjPlacement } from './DjPlacement';
 import { openNativeLyrics } from './Lyrics';
 import { openNativeMetadataEditor } from './metadataEditor';
 import { nativePlaylistActions, nativePlaylistOccurrenceActions, createNativePlaylist } from './playlistActions';
-import { savedToTrack } from '../lib/saved';
+import { savedEntryForIdentity } from '../lib/saved';
 import type { SavedEntry, Track } from '../types/music';
 import { registerArtworkMetadata } from '../lib/media';
 import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
@@ -95,6 +95,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   const [error, setError] = createSignal('');
   const [stale, setStale] = createSignal(false);
   const [eventsOnline, setEventsOnline] = createSignal(false);
+  let readCollection = createNativeCollectionReader();
   const [snapshot, setSnapshot] = createSignal<BrowseSnapshot | null>(null);
   const [savedEntries, setSavedEntries] = createSignal<SavedEntry[]>([]);
   const [downloadItems, setDownloadItems] = createSignal<DownloadQueueItem[]>([]);
@@ -125,7 +126,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
     void createNativePlaylist(current, sync, () => { if (current()) setError(t('common.loadFailed')); });
   }
-  const isFavourite = (track: Track) => { const keys = trackKeys(track); return savedEntries().some(entry => entry.favourite && entry.keys.some(key => keys.includes(key))); };
+  const isFavourite = (track: Track) => { const keys = trackKeys(track); return savedEntryForIdentity(savedEntries(), keys)?.favourite === true; };
   const [surface, setSurface] = createSignal<'library' | 'search' | 'podcasts' | 'downloads' | 'migrate' | 'settings'>('library');
   const [libraryTab, setLibraryTab] = createSignal<'songs' | 'playlists'>('songs');
   const [revision, setRevision] = createSignal(0);
@@ -169,6 +170,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       if (active?.queue.length) void nativeProgramTransport.command({ generation, action: 'stop', queueToken: active.queueToken, programToken: active.programToken }).catch(() => {});
       runtime.unbind();
     }
+    readCollection = createNativeCollectionReader();
     setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setSavedEntries([]); setSavedEntities([]); setDownloadItems([]); setSurface('library'); setRevision(0); setEventsOnline(false); setStale(false);
   }
   let expiration: Promise<void> | null = null;
@@ -211,20 +213,16 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       const state = await request<{ requires_login: boolean; user: User | null }>('/api/auth/state', { signal: controller.signal });
       if (current !== epoch || job !== syncEpoch) return;
       if (!state.user || (user() && user()!.id !== state.user.id)) { await expireSession(); return; }
-      const [data, saved, entities, downloads] = await Promise.all([
-        request<BrowseSnapshot>('/api/library', { timeoutMs: 30000, signal: controller.signal, cache: 'no-store' }),
-        request<{ saved: SavedEntry[] }>('/api/library/saved', { signal: controller.signal, cache: 'no-store' }),
+      const [collection, entities, downloads] = await Promise.all([
+        readCollection(controller.signal),
         request<{ entities: SavedEntity[] }>('/api/library/saved-entities', { signal: controller.signal, cache: 'no-store' }),
         request<{ queue: DownloadQueueItem[] }>('/api/downloader/queue/status', { signal: controller.signal, cache: 'no-store' }),
       ]);
       if (current !== epoch || job !== syncEpoch) return;
       if (!Array.isArray(downloads.queue)) throw new Error('Invalid download snapshot');
-      if (!Array.isArray(data.tracks)) throw new Error('Invalid library');
       if (!Array.isArray(entities.entities)) throw new Error('Invalid entity bookmark snapshot');
-      if (!Array.isArray(saved.saved)) throw new Error('Invalid saved-song snapshot');
-      const index = buildIdentityIndex(data.tracks);
-      const resolved = saved.saved.map(entry => savedToTrack(entry, index)).filter((track): track is Track => !!track);
-      setSnapshot({ ...data, podcast_tracks: data.tracks.filter(isPodcastTrack), tracks: musicLibraryRows(data.tracks, resolved) }); setSavedEntries(saved.saved); setSavedEntities(entities.entities); setDownloadItems(downloads.queue); setRevision(n => n + 1); setStale(false); setError('');
+      registerArtworkMetadata(collection.files);
+      setSnapshot(collection.snapshot); setSavedEntries(collection.saved); setSavedEntities(entities.entities); setDownloadItems(downloads.queue); setRevision(n => n + 1); setStale(false); setError('');
     } catch (failure) {
       if (current !== epoch || job !== syncEpoch) return;
       if (failure instanceof ApiError && failure.status === 401) await expireSession();

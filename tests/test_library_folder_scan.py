@@ -138,8 +138,8 @@ def test_changed_file_rekeys_references_and_user_state(tmp_path):
     assert summary == {"added": 0, "updated": 1, "unchanged": 0}
     assert [track.id for track in prewarm] == ["new"]
     assert [track.id for track in restored.tracks] == ["new"]
-    assert restored.playlists == {"Mix": ["new"]}
-    assert restored.settings["playlist_covers"] == {"Mix": "new"}
+    assert restored.playlists == {"Mix": ["old"]}
+    assert restored.settings["playlist_covers"] == {"Mix": "old"}
     assert db.get_track_user_state("new")["rating"] == 5
     assert remapped == [("old", "new")]
     # Re-keyed, not re-acquired: a rescan must not float a song you have owned

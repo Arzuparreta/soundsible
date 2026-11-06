@@ -46,6 +46,8 @@ public class OfflineRemovalTest {
             long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(40);
             File audio;
             while ((audio = store.local("member-track", generation)) == null) { assertTrue("Copy must be ready before injecting a real deletion refusal", System.nanoTime() < until); Thread.sleep(100); }
+            String membership = store.state(generation).getJSONObject("playlists").getJSONArray("member playlist").toString();
+            assertEquals("[\"member-track\",\"member-track\"]", membership);
             partial = new File(audio.getParentFile(), audio.getName().replace(".audio", ".part"));
             held = new File(partial, "held");
             // The copy reads as ready before the download's finally deletes its
@@ -77,6 +79,8 @@ public class OfflineRemovalTest {
             click(scenario, "Remove from this device");
             waitFor(scenario, "document.querySelector('[data-testid=android-offline-manager]')?.textContent.includes('No songs prepared yet.')");
             assertEquals(0, store.state(generation).getJSONArray("items").length());
+            assertEquals("Item identity may equal the initial source ID; removing bytes must not remove either occurrence",
+                membership, store.state(generation).getJSONObject("playlists").getJSONArray("member playlist").toString());
             assertTrue("Removing a copy must preserve the account", cookie.equals(connection.cookieHeader(generation)));
             try (var response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/api/static/stream/member-track").header("Cookie", cookie).header("Range", "bytes=0-31").build()).execute()) {
                 assertEquals("Removing a copy must preserve the engine file", 206, response.code()); assertEquals(32, response.body().bytes().length);

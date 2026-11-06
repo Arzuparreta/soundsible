@@ -589,7 +589,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     // unfavouriting the song. The entry stops resolving to a library track and
     // degrades to a preview on its own — and re-downloading the same audio mints
     // the same content hash, so it silently becomes local again.
-    setState('playlists', Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.filter(x => x !== id)])));
+    if (state.collectionItems === null) setState('playlists', Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.filter(x => x !== id)])));
     const pb = state.playback;
     const nextQueue = pb.queue.filter(t => t.id !== id);
     if (nextQueue.length !== pb.queue.length) {
@@ -715,7 +715,9 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       shuffled?: boolean;
       preserveManual?: boolean;
     }): void {
-      if (!tracks[i]) return;
+      if (!tracks[i] || tracks[i].unavailable) return;
+      i = tracks.slice(0, i).filter(track => !track.unavailable).length;
+      tracks = tracks.filter(track => !track.unavailable);
       ports.discardFutureAutoplay();
       const isRadio = opts?.radio === true;
       if (!isRadio) ports.cancelPendingRadio();

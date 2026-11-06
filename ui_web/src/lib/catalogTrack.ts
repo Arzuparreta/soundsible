@@ -20,6 +20,10 @@ export function catalogPreviewId(item: CatalogItem): string | null {
  * raw YouTube payload. Otherwise `null` — the row needs `playCatalogItem`.
  */
 export function catalogTrack(item: CatalogItem, library: readonly Track[]): Track | null {
+  if (item.item_id) {
+    const found = library.find(track => track.item_id === item.item_id);
+    if (found) return item.raw?.recommendation ? { ...found, recommendation: item.raw.recommendation } : found;
+  }
   if (item.track_id) {
     const found = library.find((tr) => tr.id === item.track_id);
     if (found) {
@@ -33,6 +37,7 @@ export function catalogTrack(item: CatalogItem, library: readonly Track[]): Trac
     const raw = item.raw ?? {};
     return {
       id: previewId,
+      item_id: item.item_id ?? undefined,
       title: String(raw.title || item.title),
       artist: String(raw.artist || itemArtist(item)),
       artist_is_channel: raw.artist_is_channel ?? true,

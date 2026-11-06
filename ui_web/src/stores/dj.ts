@@ -347,6 +347,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   const REFINE_RETRY_MS = 2_000;
   function djItemRef(track: Track): DjItemRef {
     return {
+      item_id: track.item_id,
       id: track.id,
       track_id: track.source === 'preview' ? undefined : track.id,
       youtube_id: track.youtube_id ?? (track.source === 'preview' ? track.id : undefined),
@@ -1127,6 +1128,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     };
     return {
       ...base,
+      item_id: item.item_id ?? base.item_id,
       artist_is_channel: local ? false : item.artist_is_channel,
       artists: local?.artists ?? item.artists ?? undefined,
       deezer_artist_id: base.deezer_artist_id ?? item.deezer_artist_id ?? undefined,
@@ -1518,7 +1520,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       return ++autoSessionEpoch;
     },
     startDjSelection(tracks: Track[], label: string): boolean {
-      const music = tracks.filter(track => !isPodcastTrack(track));
+      const music = tracks.filter(track => !isPodcastTrack(track) && !track.unavailable);
       if (!music.length || !state.autoMode.active) return false;
       // External selection owns a new session, including its transport. Drop
       // the old planner and both decks before loading the chosen opening.

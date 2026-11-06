@@ -26,8 +26,8 @@ struct BrowseView: View {
                     description: Text(failure)
                 )
             }
-            ForEach(items) { item in
-                row(for: item)
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                row(for: item, at: index)
             }
         }
         .listStyle(.plain)
@@ -78,7 +78,7 @@ struct BrowseView: View {
     }
 
     @ViewBuilder
-    private func row(for item: CarItem) -> some View {
+    private func row(for item: CarItem, at index: Int) -> some View {
         if item.isBrowsable {
             NavigationLink {
                 BrowseView(itemID: item.id, title: item.title)
@@ -87,17 +87,15 @@ struct BrowseView: View {
             }
         } else {
             Button {
-                let playable = playableItems
-                if let index = playable.firstIndex(where: { $0.id == item.id }) {
-                    player.play(items: playable, startingAt: index)
-                }
+                player.play(items: items, startingAt: index)
             } label: {
                 CarItemRow(
                     item: item,
-                    isDownloaded: item.trackID.map(offline.isAvailableOffline) ?? false
+                    isDownloaded: offline.isAvailableOffline(item)
                 )
             }
             .buttonStyle(.plain)
+            .disabled(!item.isPlayable)
         }
     }
 

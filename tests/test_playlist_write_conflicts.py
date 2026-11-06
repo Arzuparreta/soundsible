@@ -131,6 +131,58 @@ def test_a_stale_writer_cannot_take_the_song_back_out(client):
     }
 
 
+def test_playlist_admission_owns_the_song_and_membership_in_one_commit(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    entry = {"keys": ["yt:7N3rFdE3u3Y"], "title": "Autorretrato", "artist": "Extremoduro"}
+    response = client.post("/api/library/playlists/Arma%20Reforger/tracks", json={"entry": entry})
+    assert response.status_code == 200, response.get_json()
+    snapshot = response.get_json()
+    item_id = snapshot['playlists']['Arma Reforger'][-1]
+    assert item_id != '7N3rFdE3u3Y'
+    assert any(row['item_id'] == item_id for row in snapshot['saved'])
+    assert next(row for row in snapshot['items'] if row['item_id'] == item_id)['title'] == 'Autorretrato'
+    assert client.get('/api/library/collection').get_json()['playlists'] == snapshot['playlists']
+    # A second manager/session sees the same item; retries never duplicate it.
+    reset_user_cores()
+    repeated = client.post("/api/library/playlists/Arma%20Reforger/tracks", json={"entry": entry})
+    assert repeated.get_json()['playlists'] == snapshot['playlists']
+
+
+def test_playlist_admission_rolls_back_its_saved_properties_on_persistence_failure(client, monkeypatch):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    with user_context(user_id):
+        db = get_user_core(user_id).library.db
+    from shared import library_changes
+    monkeypatch.setattr(library_changes, 'sync_source', lambda *args: (_ for _ in ()).throw(RuntimeError('disk failed')))
+    response = client.post("/api/library/playlists/Arma%20Reforger/tracks", json={"entry": {
+        "keys": ["yt:7N3rFdE3u3Y"], "title": "Autorretrato",
+    }})
+    assert response.status_code == 503
+    from shared.collection import Collection
+    snapshot = Collection(db).snapshot()
+    assert snapshot['saved'] == []
+    assert snapshot['playlists'] == {'Arma Reforger': ['tunnel']}
+
+
+def test_collection_validator_changes_for_marks_and_sources_and_avoids_unchanged_body(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    response = client.get('/api/library/collection')
+    assert response.status_code == 200
+    token = response.headers['ETag']
+    assert client.get('/api/library/collection', headers={'If-None-Match': token}).status_code == 304
+    # The public mark operation updates the same collection resource, without
+    # requiring a different file-library revision or another client-side join.
+    assert client.put('/api/library/favourites', json={'entry': {'keys': ['lib:tunnel']}, 'marked': True}).status_code == 200
+    marked = client.get('/api/library/collection', headers={'If-None-Match': token})
+    assert marked.status_code == 200
+    assert marked.headers['ETag'] != token
+    assert marked.get_json()['saved'][0]['favourite']
+    assert marked.get_json()['files'][0]['item_id'] == 'tunnel'
+
+
 def test_a_refused_playlist_write_is_reported_as_a_conflict(client, monkeypatch):
     """A save that did not happen must not answer with the map it would have
     written. Echoing it back is what makes the change look applied until the
@@ -195,3 +247,54 @@ def test_new_edit_routes_require_preconditions_and_do_not_mutate_without_them(cl
     reply = client.patch("/api/library/playlist-edits/Arma%20Reforger", json={"expected_track_ids": ["tunnel"], "track_ids": []})
     assert reply.status_code == 200
     assert reply.get_json()["playlists"]["Arma Reforger"] == []
+
+
+def test_legacy_preview_addition_uses_the_same_item_after_its_file_is_removed(client):
+    user_id = ensure_multiuser_layout()['user_id']
+    _seed_library(user_id)
+    video = 'B1111111111'
+    with user_context(user_id):
+        core = get_user_core(user_id)
+        core.favourites.toggle_saved({'keys': [f'yt:{video}'], 'title': 'Saved song', 'artist': 'Artist'})
+        item_id = core.favourites.get_entries()[0]['item_id']
+        track = _track('downloaded-source')
+        track.youtube_id = video
+        core.library.metadata.add_track(track)
+        core.library.require_saved()
+        core.library.metadata.remove_track(track.id)
+        core.library.require_saved()
+    response = client.post('/api/library/playlists/Arma%20Reforger/tracks', json={'track_id': video})
+    assert response.status_code == 200
+    assert response.get_json()['playlists']['Arma Reforger'] == ['tunnel', item_id]
+    snapshot = client.get('/api/library/collection').get_json()
+    assert snapshot['playlists']['Arma Reforger'] == ['tunnel', item_id]
+    song = next(row for row in snapshot['items'] if row['item_id'] == item_id)
+    assert song['id'] == video
+    assert song['title'] == track.title  # the private source labels survive removal
+
+
+def test_acquisition_publishes_only_after_source_and_item_identity_commit(client, monkeypatch):
+    from shared.api import add_tracks_to_user_library
+    user_id = ensure_multiuser_layout()['user_id']
+    _seed_library(user_id)
+    with user_context(user_id):
+        lib = get_user_core(user_id).library
+        original = lib.db.replace_library
+        observed = []
+
+        def while_committing(metadata, **options):
+            public = client.get('/api/library').get_json()['tracks']
+            canonical = client.get('/api/library/collection').get_json()['files']
+            observed.append(([row['id'] for row in public], [row['id'] for row in canonical]))
+            assert 'pending-source' not in observed[-1][0]
+            assert observed[-1][0] == observed[-1][1]
+            return original(metadata, **options)
+
+        monkeypatch.setattr(lib.db, 'replace_library', while_committing)
+        assert add_tracks_to_user_library([_track('pending-source')], user_id=user_id) == 1
+    assert observed
+    public = client.get('/api/library').get_json()['tracks']
+    acquired = next(row for row in public if row['id'] == 'pending-source')
+    assert acquired['item_id']
+    canonical = client.get('/api/library/collection').get_json()['files']
+    assert next(row for row in canonical if row['id'] == acquired['id'])['item_id'] == acquired['item_id']

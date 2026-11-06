@@ -55,28 +55,20 @@ def test_pre_split_entries_load_as_favourites(tmp_path, monkeypatch):
     assert manager.is_saved_keys(["yt:vid"])
 
 
-def test_v1_file_is_rewritten_as_v3_on_first_change(tmp_path, monkeypatch):
+def test_v1_file_is_imported_once_and_kept_as_restoration_data(tmp_path, monkeypatch):
     _write_v1(tmp_path, ["t1"])
     manager = _reload(tmp_path, monkeypatch)
     manager.add("t2")
-
-    data = json.loads((tmp_path / "favourites.json").read_text())
-    assert data["version"] == "3.0"
-    assert [e["keys"] for e in data["saved"]] == [["lib:t2"], ["lib:t1"]]
-    # Written under the old name too, so an older build reads a list rather
-    # than a blank slate.
-    assert data["favourites"] == data["saved"]
+    assert json.loads((tmp_path / "favourites.json").read_text())["version"] == "1.0"
+    assert set(_reload(tmp_path, monkeypatch).get_all()) == {"t1", "t2"}
 
 
-def test_corrupt_file_starts_fresh(tmp_path, monkeypatch):
+def test_corrupt_legacy_file_aborts_migration_without_overwriting_it(tmp_path, monkeypatch):
     (tmp_path / "favourites.json").write_text("{not json")
-    manager = _reload(tmp_path, monkeypatch)
+    with pytest.raises(json.JSONDecodeError):
+        _reload(tmp_path, monkeypatch)
+    assert (tmp_path / "favourites.json").read_text() == "{not json"
 
-    assert manager.get_entries() == []
-    assert manager.size() == 0
-
-
-# ── Saved and favourite are different facts ──
 
 def test_saving_does_not_mark(manager):
     assert manager.toggle_saved({"keys": ["yt:vid"], "title": "S", "artist": "A"}) is True
@@ -212,7 +204,7 @@ def test_remap_library_id_preserves_the_snapshot(manager):
     assert manager.remap_library_id("old", "new") is True
     entry = manager.get_entries()[0]
     assert "lib:new" in entry["keys"]
-    assert "lib:old" not in entry["keys"]
+    assert "lib:old" in entry["keys"]
     assert "yt:vid" in entry["keys"]
     assert entry["title"] == "Song"
     assert entry["added_at"] == added_at
@@ -233,13 +225,13 @@ def test_library_id_api_round_trip(manager):
     assert not manager.is_favourite("t1")
 
 
-def test_unmarking_a_downloaded_song_drops_its_entry(manager):
-    """The library holds the file, so the entry was only ever the mark. Keeping
-    a saved-but-unmarked record of a song you own says nothing."""
+def test_unmarking_a_downloaded_song_preserves_its_saved_item(manager):
+    """The musical holding and its favourite property are independent."""
     manager.set_favourite({"keys": ["lib:hash1", "yt:vid"], "title": "Song", "artist": "A"})
     manager.remove("hash1")
 
-    assert manager.get_entries() == []
+    assert len(manager.get_entries()) == 1
+    assert manager.is_saved_keys(["yt:vid"])
     assert not manager.is_favourite_keys(["yt:vid"])
 
 
@@ -349,20 +341,25 @@ def test_a_new_record_brings_its_own_cover(manager):
     assert manager.get_entries()[0]["thumbnail"] == "https://example.invalid/album.jpg"
 
 
-def test_adding_an_album_fills_in_every_duplicate(manager):
-    manager._entries = [{"keys": ["isrc:X"], "title": "Song"}, {"keys": ["yt:vid"], "title": "Song"}]
-    manager._reindex()
+def test_provider_evidence_cannot_implicitly_merge_distinct_saved_items(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "title": "First version"})
+    manager.toggle_saved({"keys": ["yt:vid"], "title": "Second version"})
     enriched = []
-    manager.set_saved([{"keys": ["isrc:X", "yt:vid"], "album": "Album", "track_number": 4}], True, enriched)
-    assert len(enriched) == 2
-    assert all(entry.get("track_number") == 4 for entry in manager.get_entries())
+    manager.set_saved([{"keys": ["isrc:X", "yt:vid"], "title": "Unresolved version", "album": "Album", "track_number": 4}], True, enriched)
+    assert enriched == []
+    assert len(manager.get_entries()) == 3
+    assert {row['title'] for row in manager.get_entries()} == {'First version', 'Second version', 'Unresolved version'}
 
 
-def test_a_heart_fills_in_every_duplicate(manager):
-    manager._entries = [{"keys": ["isrc:X"], "title": "Song"}, {"keys": ["yt:vid"], "title": "Song"}]
-    manager._reindex()
-    manager.set_favourite({"keys": ["isrc:X", "yt:vid"], "album": "Album", "track_number": 4}, True)
-    assert all(entry.get("track_number") == 4 for entry in manager.get_entries())
+def test_a_heart_targets_a_stable_item_among_ambiguous_provider_keys(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "title": "First version"})
+    manager.toggle_saved({"keys": ["yt:vid"], "title": "Second version"})
+    selected = manager.get_entries()[0]
+    manager.set_favourite({"item_id": selected['item_id'], "keys": ["isrc:X", "yt:vid"]}, True)
+    rows = manager.get_entries()
+    assert len(rows) == 2
+    assert next(row for row in rows if row['item_id'] == selected['item_id'])['favourite']
+    assert not next(row for row in rows if row['item_id'] != selected['item_id'])['favourite']
 
 
 def test_a_new_record_without_a_cover_drops_the_old_one(manager):

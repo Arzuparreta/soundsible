@@ -29,7 +29,7 @@ export function VirtualBrowseRows(props: { tracks: Track[]; onPlay?: (index: num
       <For each={rows.getVirtualItems()}>{item => <div data-browse-track-id={props.tracks[item.index]?.id} style={{ position: 'absolute', width: '100%', top: '0', transform: `translateY(${item.start}px)` }}>
         <Show when={props.tracks[item.index]}>{track => <MusicListRowView title={track().title} subtitle={track().artist}
           favourite={props.favourite?.(track())} seed={track().id} cover={props.offline ? undefined : trackCoverUrl(track(), 'thumb')} disabled={!props.onPlay || !programTrack(track())}
-          onMenu={props.onMenu && programTrack(track()) ? event => props.onMenu?.(track(), event, item.index) : undefined}
+          onMenu={props.onMenu ? event => props.onMenu?.(track(), event, item.index) : undefined}
           active={props.isActive ? props.isActive(track()) : props.activeId === track().id} playback onActivate={() => props.onPlay?.(item.index)} />}</Show>
       </div>}</For>
     </div>

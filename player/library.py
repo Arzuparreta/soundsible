@@ -271,7 +271,7 @@ class LibraryManager:
                             (time.perf_counter() - started) * 1000)
 
     @serialized
-    def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None, operation_id=None) -> bool:
+    def _save_metadata(self, *, metadata=None, id_replacements: Optional[Dict[str, str]] = None, operation_id=None, playlist_entry=None) -> bool:
         """
         Commit the canonical SQLite snapshot, then refresh portable exports.
 
@@ -283,18 +283,23 @@ class LibraryManager:
         state is reloaded (so the next attempt builds on it) and the caller is
         told the change did not land, which is the honest answer.
         """
-        if not self.metadata:
+        candidate = metadata if metadata is not None else self.metadata
+        if candidate is None:
             return False
-            
+
         with self._lock:
             self.last_save_error = None
             try:
                 self._library_revision = self.db.replace_library(
-                    self.metadata,
+                    candidate,
                     id_replacements=id_replacements,
                     expected_revision=self._library_revision,
                     **({"operation_id": operation_id} if operation_id else {}),
+                    **({"playlist_entry": playlist_entry} if playlist_entry is not None else {}),
                 )
+                # Acquisitions stage a detached model. Publish it only after
+                # its sources and item identities have committed together.
+                self.metadata = candidate
                 # replace_library is also the alias-normalization boundary, so
                 # serialize only after it has moved every durable reference.
                 # Exports can reach remote storage: run them once every
@@ -394,14 +399,8 @@ class LibraryManager:
         canonical = self.db.load_library_metadata()
         if canonical is not None:
             self.metadata = canonical
-            recovered = self._legacy_playlist_id_replacements(canonical)
-            if recovered:
-                canonical.version += 1
-                if not self._save_metadata(id_replacements=recovered):
-                    return False
-            else:
-                self._library_revision = self.db.get_library_revision()
-                self._export_metadata(canonical)
+            self._library_revision = self.db.get_library_revision()
+            self._export_metadata(canonical)
             return True
 
         # A per-user manifest is the authoritative legacy source: it names this
@@ -578,68 +577,6 @@ class LibraryManager:
             except OSError as exc:
                 self._log(f"Could not back up legacy library manifest: {exc}")
 
-    def _legacy_playlist_id_replacements(self, current: LibraryMetadata) -> Dict[str, str]:
-        """Recover pre-alias playlist ids from the per-user migration backup.
-
-        Releases before ``track_id_aliases`` could successfully repair a file
-        but leave the initiating account's playlist references on the old
-        content hash.  The one per-user pre-SQLite backup still describes those
-        old hashes.  Only strong provider identities are considered, and a
-        replacement is accepted only when every available identity agrees on
-        exactly one current track.
-        """
-        backup = self.manifest_path.with_name(
-            f"{self.manifest_path.name}.pre-sqlite.bak"
-        )
-        if not backup.is_file() or not isinstance(current.playlists, dict):
-            return {}
-
-        current_ids = {track.id for track in current.tracks}
-        unresolved = {
-            track_id
-            for track_ids in current.playlists.values()
-            if isinstance(track_ids, list)
-            for track_id in track_ids
-            if isinstance(track_id, str) and track_id not in current_ids
-        }
-        if not unresolved:
-            return {}
-
-        try:
-            legacy = LibraryMetadata.from_json(backup.read_text(encoding="utf-8"))
-        except OSError:
-            return {}
-
-        legacy_by_id = {track.id: track for track in legacy.tracks}
-        fields = ("youtube_id", "musicbrainz_id", "isrc")
-        indexes: Dict[str, Dict[str, set[str]]] = {
-            field: {} for field in fields
-        }
-        for track in current.tracks:
-            for field in fields:
-                value = getattr(track, field, None)
-                if isinstance(value, str) and value.strip():
-                    key = value.strip() if field == "youtube_id" else value.strip().lower()
-                    indexes[field].setdefault(key, set()).add(track.id)
-
-        replacements: Dict[str, str] = {}
-        for old_id in unresolved:
-            old_track = legacy_by_id.get(old_id)
-            if old_track is None:
-                continue
-            candidates: Optional[set[str]] = None
-            for field in fields:
-                value = getattr(old_track, field, None)
-                if not isinstance(value, str) or not value.strip():
-                    continue
-                key = value.strip() if field == "youtube_id" else value.strip().lower()
-                matches = indexes[field].get(key, set())
-                if matches:
-                    candidates = set(matches) if candidates is None else candidates & matches
-            if candidates is not None and len(candidates) == 1:
-                replacements[old_id] = next(iter(candidates))
-        return replacements
-    
     def get_track_url(self, track: Track) -> Optional[str]:
         """
         Get a playable URL for a track.
@@ -800,7 +737,7 @@ class LibraryManager:
             retire(track, self.provider)
             self.metadata.remove_track(track.id)
             for name, ids in self.metadata.playlists.items():
-                self.metadata.playlists[name] = [value for value in ids if value != track.id]
+                self.metadata.playlists[name] = [value for value in ids if value != track.id or track.item_id == value]
             self.metadata.version += 1
             if not self._save_metadata():
                 return False
@@ -872,7 +809,7 @@ class LibraryManager:
             # Also remove from any playlists
             for name, playlist in list(self.metadata.playlists.items()):
                 if track.id in playlist:
-                    self.metadata.playlists[name] = [pid for pid in playlist if pid != track.id]
+                    self.metadata.playlists[name] = [pid for pid in playlist if pid != track.id or track.item_id == pid]
             removed += 1
 
         if removed > 0:

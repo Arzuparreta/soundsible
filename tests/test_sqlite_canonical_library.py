@@ -60,7 +60,7 @@ def test_complete_library_round_trips_through_sqlite(tmp_path):
     assert restored.tracks[0].artists == ["Artist", "Guest"]
 
 
-def test_track_replacement_atomically_rekeys_playlists_covers_and_user_state(tmp_path):
+def test_track_replacement_preserves_items_and_moves_audio_user_state(tmp_path):
     db = DatabaseManager(str(tmp_path / "library.db"))
     original = LibraryMetadata(
         version=1,
@@ -82,10 +82,10 @@ def test_track_replacement_atomically_rekeys_playlists_covers_and_user_state(tmp
     db.replace_library(replacement, id_replacements={"old": "new"})
 
     restored = db.load_library_metadata()
-    assert replacement.playlists == {"Mix": ["new", "preview", "new"]}
-    assert replacement.settings["playlist_covers"] == {"Mix": "new"}
-    assert restored.playlists == {"Mix": ["new", "preview", "new"]}
-    assert restored.settings["playlist_covers"] == {"Mix": "new"}
+    assert replacement.playlists == {"Mix": ["old", "preview", "old"]}
+    assert replacement.settings["playlist_covers"] == {"Mix": "old"}
+    assert restored.playlists == {"Mix": ["old", "preview", "old"]}
+    assert restored.settings["playlist_covers"] == {"Mix": "old"}
     assert db.get_track_user_state("new")["rating"] == 5
 
 
@@ -115,9 +115,9 @@ def test_track_aliases_stop_a_stale_client_from_reviving_old_playlist_ids(tmp_pa
     db.replace_library(stale)
 
     restored = db.load_library_metadata()
-    assert restored.playlists == {"Mix": ["new"]}
-    assert restored.settings["playlist_covers"] == {"Mix": "new"}
-    assert stale.playlists == {"Mix": ["new"]}
+    assert restored.playlists == {"Mix": ["middle"]}
+    assert restored.settings["playlist_covers"] == {"Mix": "middle"}
+    assert stale.playlists == {"Mix": ["middle"]}
 
 
 def test_replace_is_atomic_and_preserves_user_state(tmp_path, monkeypatch):
@@ -170,7 +170,6 @@ def test_pre_alias_broken_playlist_recovers_only_by_unique_strong_identity(monke
         playlists={"Mix": ["old", "preview", "ambiguous-old"]},
         settings={"playlist_covers": {"Mix": "old"}},
     )
-    manager.db.replace_library(current)
     legacy = LibraryMetadata(
         version=1,
         tracks=[
@@ -182,6 +181,7 @@ def test_pre_alias_broken_playlist_recovers_only_by_unique_strong_identity(monke
     )
     backup = manager.manifest_path.with_name("library.json.pre-sqlite.bak")
     backup.write_text(legacy.to_json(), encoding="utf-8")
+    manager.db.replace_library(current)
 
     restarted = LibraryManager(silent=True)
     assert restarted.sync_library() is True

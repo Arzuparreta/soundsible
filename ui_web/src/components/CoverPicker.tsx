@@ -1,3 +1,4 @@
+import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
 import { state, actions, musicLibrary } from '../stores';
@@ -17,7 +18,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 export function openPlaylistCoverPicker(name: string): void {
   openOverlay((close) => {
     const tracks = createMemo<Track[]>(() => {
-      const byId = new Map(musicLibrary().map((t) => [t.id, t] as const));
+      const byId = collectionIndex(musicLibrary());
       return (state.playlists[name] ?? []).map((id) => byId.get(id)).filter((t): t is Track => !!t);
     });
     const current = () => state.librarySettings.playlist_covers?.[name];
@@ -44,11 +45,11 @@ export function openPlaylistCoverPicker(name: string): void {
           <div class={styles.grid}>
             <For each={tracks()}>
               {(t) => {
-                const tap = createResponsiveTap({ onTap: () => pick(t.id) });
+                const tap = createResponsiveTap({ onTap: () => pick(collectionId(t)) });
                 return (
                   <button
                     class={styles.cell}
-                    classList={{ [styles.selected]: current() === t.id }}
+                    classList={{ [styles.selected]: current() === collectionId(t) }}
                     type="button"
                     aria-label={t.title}
                     data-pressable

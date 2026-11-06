@@ -388,7 +388,7 @@ export function PlayerSurface() {
           data-player-backdrop={backdrops().active === 'second' ? 'active' : 'inactive'}
           aria-hidden="true"
         />
-        <div class={styles.wash} aria-hidden="true" />
+        <div class={styles.wash} data-player-veil="" aria-hidden="true" />
         <div class={styles.grain} aria-hidden="true" />
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">

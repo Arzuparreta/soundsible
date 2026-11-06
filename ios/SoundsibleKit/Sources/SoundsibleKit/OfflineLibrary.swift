@@ -3,6 +3,7 @@ import Foundation
 /// One track held on the phone.
 public struct OfflineTrack: Codable, Equatable, Sendable {
     public let trackID: String
+    public let itemID: String?
     public let filename: String
     public let byteSize: Int64
     public var lastPlayedAt: Date?
@@ -14,6 +15,7 @@ public struct OfflineTrack: Codable, Equatable, Sendable {
 
     public init(
         trackID: String,
+        itemID: String? = nil,
         filename: String,
         byteSize: Int64,
         downloadedAt: Date,
@@ -21,6 +23,7 @@ public struct OfflineTrack: Codable, Equatable, Sendable {
         pinnedBy: Set<String> = []
     ) {
         self.trackID = trackID
+        self.itemID = itemID
         self.filename = filename
         self.byteSize = byteSize
         self.downloadedAt = downloadedAt
@@ -56,6 +59,14 @@ public struct OfflineLibrary: Equatable, Sendable {
         tracks[trackID]?.filename
     }
 
+    /// Resolve the persisted item/source association without changing copied bytes.
+    public func heldTrackID(for item: CarItem) -> String? {
+        if let source = item.trackID, tracks[source] != nil { return source }
+        guard let itemID = item.itemID else { return nil }
+        return tracks.values.filter { $0.itemID == itemID }
+            .sorted { $0.downloadedAt < $1.downloadedAt }.first?.trackID
+    }
+
     // MARK: - Pinning
 
     /// Which of `items` still need fetching for this collection.
@@ -71,9 +82,10 @@ public struct OfflineLibrary: Equatable, Sendable {
             guard let trackID = item.trackID ?? (item.kind == "track" ? item.id : nil) else {
                 continue
             }
-            if var held = tracks[trackID] {
+            let heldID = heldTrackID(for: item) ?? trackID
+            if var held = tracks[heldID] {
                 held.pinnedBy.insert(collectionID)
-                tracks[trackID] = held
+                tracks[heldID] = held
             } else {
                 missing.append(item)
             }
@@ -84,6 +96,7 @@ public struct OfflineLibrary: Equatable, Sendable {
     /// Record a finished download.
     public mutating func store(
         trackID: String,
+        itemID: String? = nil,
         filename: String,
         byteSize: Int64,
         collectionID: String,
@@ -96,6 +109,7 @@ public struct OfflineLibrary: Equatable, Sendable {
         }
         tracks[trackID] = OfflineTrack(
             trackID: trackID,
+            itemID: itemID,
             filename: filename,
             byteSize: byteSize,
             downloadedAt: now,

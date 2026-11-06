@@ -166,7 +166,7 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
             if (copy.optString("state") != "ready") continue
             val track = copy.getJSONObject("track")
             result.put(JSONObject().put("id", track.getString("id")).put("track_id", track.getString("id"))
-                .put("kind", "track").put("title", track.optString("title")).put("artist", track.optString("artist"))
+                .put("item_id", track.optString("item_id").takeIf { it.isNotBlank() && it != "null" }).put("kind", "track").put("title", track.optString("title")).put("artist", track.optString("artist"))
                 .put("album", track.optString("album")).put("duration_sec", track.optDouble("duration", 0.0))
                 .put("is_browsable", false).put("is_playable", true))
         }
@@ -233,7 +233,7 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
         })
         val decoded = org.json.JSONArray()
         selected.forEach { row ->
-            decoded.put(JSONObject().put("source", "local").put("id", row.getString("track_id"))
+            decoded.put(JSONObject().put("source", if (row.optString("source") == "preview") "preview" else "local").put("item_id", row.optString("item_id").takeIf { it.isNotBlank() && it != "null" }).put("id", row.getString("track_id"))
                 .put("title", row.optString("title")).put("artist", row.optString("artist"))
                 .put("album", row.optString("album")).put("duration", row.optDouble("duration_sec", 0.0)).apply {
                     if (row.optString("kind") == "podcast_episode") {

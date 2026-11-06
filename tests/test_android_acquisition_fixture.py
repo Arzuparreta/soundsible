@@ -63,6 +63,10 @@ def test_acquisition_retry_commit_and_cancel_keep_real_account_ownership(tmp_pat
             rows = member.get(origin + "/api/library", timeout=10).json()["tracks"]
             acquired = next(row for row in rows if row.get("youtube_id") == "B1111111111")
             assert acquired["id"] != "B1111111111" and acquired["format"] == "mp4"
+            assert acquired.get('item_id'), acquired
+            snapshot = member.get(origin + '/api/library/collection', timeout=10).json()
+            song = next(row for row in snapshot['items'] if row['item_id'] == acquired['item_id'])
+            assert song['id'] == acquired['id']
             streamed = member.get(origin + "/api/static/stream/" + acquired["id"], headers={"Range": "bytes=100-199"}, timeout=10)
             assert streamed.status_code == 206 and len(streamed.content) == 100
             assert requests.post(origin + "/__fixture/acquisition", headers=headers, json={"delaySeconds": 5}, timeout=5).status_code == 200

@@ -76,6 +76,14 @@ def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path, audio_fo
             rows = answer.json()["items"]
             assert rows, answer.text
             acquired = {row["id"]: row for row in member.get(origin + "/api/library", timeout=10).json()["tracks"]}
+            # The fixture creates distinct songs by copying synthetic bytes;
+            # those rows must not inherit the base song's collection identity.
+            expected = {'member-track', *(f'member-radio-{index}' for index in range(10))}
+            assert len({acquired[source]['item_id'] for source in expected}) == len(expected)
+            seeds = member.get(origin + '/api/car/items/radio', timeout=10).json()['items']
+            assert len(seeds) == len(expected)
+            assert len({row['id'] for row in seeds}) == len(expected)
+            assert {row['track_id'] for row in seeds} == expected
             for row in rows:
                 recording = acquired[row["track_id"]]
                 assert row["loudness_lufs"] == recording["loudness_lufs"]

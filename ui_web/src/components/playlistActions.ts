@@ -1,3 +1,4 @@
+import { collectionIndex } from '../lib/collectionIdentity';
 import { type ActionMenuOptions } from './ActionMenu';
 import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
@@ -23,7 +24,7 @@ export interface PlaylistMenuHooks {
 /** Resolve a playlist's track ids to library tracks (in order). */
 function playlistTracks(name: string): Track[] {
   const ids = state.playlists[name] ?? [];
-  const byId = new Map(musicLibrary().map((t) => [t.id, t] as const));
+  const byId = collectionIndex(musicLibrary());
   return ids.map((id) => byId.get(id)).filter((t): t is Track => !!t);
 }
 

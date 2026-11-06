@@ -96,21 +96,24 @@ def _track_item(track) -> dict:
     artist = str(data.get("artist") or "")
     album = str(data.get("album") or "")
     duration = data.get("duration_sec", data.get("duration"))
+    preview = data.get("source") == "preview"
     return {
-        "id": track_id,
+        **({"source": "preview"} if preview else {}),
+        "id": data.get("item_id") or track_id,
         "kind": data.get("media_kind") or "track",
         "podcast_feed_id": data.get("podcast_feed_id"),
         "podcast_episode_guid": data.get("podcast_episode_guid"),
         "track_id": track_id,
+        "item_id": data.get("item_id"),
         "title": title,
         "subtitle": " - ".join(part for part in (artist, album) if part),
         "artist": artist,
         "album": album,
         "duration_sec": int(duration) if isinstance(duration, (int, float)) else None,
         "artwork_url": f"/api/static/cover/{_quote_id(track_id)}" if track_id else None,
-        "stream_url": f"/api/static/stream/{_quote_id(track_id)}" if track_id else None,
+        "stream_url": f"/api/preview/stream/{_quote_id(track_id)}" if preview else f"/api/static/stream/{_quote_id(track_id)}" if track_id else None,
         "is_browsable": False,
-        "is_playable": bool(track_id),
+        "is_playable": bool(track_id) and not data.get("unavailable", False),
     }
 
 
@@ -123,7 +126,11 @@ def _load_metadata(api):
 
 
 def _tracks_by_id(metadata) -> dict[str, object]:
-    return {str(track.id): track for track in getattr(metadata, "tracks", [])}
+    index = {str(track.id): track for track in getattr(metadata, "tracks", [])}
+    for track in getattr(metadata, "tracks", []):
+        if getattr(track, 'item_id', None):
+            index[track.item_id] = track
+    return index
 
 
 def _playlist_items(metadata) -> list[dict]:
@@ -206,7 +213,7 @@ def get_car_home():
 @require_scope(SCOPE_LIBRARY_READ, allow_trusted_network=True)
 def get_car_items(item_id: str):
     api = _get_api()
-    _, metadata = _load_metadata(api)
+    lib, metadata = _load_metadata(api)
     if not metadata:
         return jsonify({"items": [], "status": "library_not_loaded"}), 404
 
@@ -219,9 +226,16 @@ def get_car_items(item_id: str):
         reverse=True,
     )
     by_id = _tracks_by_id(metadata)
+    collection = None
+    if getattr(lib, 'db', None) is not None:
+        from shared.collection import Collection
+        collection = Collection(lib.db).snapshot()
+        by_id.update({track['item_id']: track for track in collection['items']})
     item_id = str(item_id or "")
 
     if item_id == "all-tracks":
+        if collection is not None:
+            return jsonify(id=item_id, items=[_track_item(track) for track in collection['items'][:MAX_CAR_ITEMS]], status='ok')
         return jsonify({"id": item_id, "items": [_track_item(t) for t in tracks[:MAX_CAR_ITEMS]], "status": "ok"})
 
     if item_id == "playlists":
@@ -236,6 +250,9 @@ def get_car_items(item_id: str):
         return jsonify({"id": item_id, "title": name, "items": items[:MAX_CAR_ITEMS], "status": "ok"})
 
     if item_id == "favourites":
+        if collection is not None:
+            marked = [entry['item_id'] for entry in collection['saved'] if entry.get('favourite')]
+            return jsonify(id=item_id, items=[_track_item(by_id[value]) for value in marked if value in by_id][:MAX_CAR_ITEMS], status='ok')
         # Only the ones we actually hold a file for — a head unit cannot stream
         # a preview.
         favourite_ids = api["favourite_library_ids"]()
@@ -268,7 +285,11 @@ def get_car_items(item_id: str):
         return jsonify({"id": item_id, "items": [_track_item(t) for t in episodes[:MAX_CAR_ITEMS]], "status": "ok"})
 
     if item_id == "radio":
-        music = [t for t in tracks if getattr(t, "media_kind", None) != "podcast_episode"]
+        # Radio offers acquired musical items, not every file variant of one
+        # item. Its chosen source is the same one used by the collection tree.
+        music = ([t for t in collection['items'] if t.get('media_kind') != 'podcast_episode'
+                  and t.get('source') != 'preview'] if collection is not None else
+                 [t for t in tracks if getattr(t, "media_kind", None) != "podcast_episode"])
         seed_items = [_track_item(t) for t in music[:MAX_CAR_ITEMS]]
         for item in seed_items:
             item["kind"] = "radio_seed"
