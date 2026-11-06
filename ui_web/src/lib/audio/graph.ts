@@ -1,7 +1,6 @@
 import type { RuntimeLifetime } from '../runtimeLifetime';
 import { MAX_LINEAR as MAX_LEVEL, MIN_LINEAR as MIN_LEVEL } from "../loudness";
 import { recordPlaybackDiagnostic } from "../playbackDiagnostics";
-import { ProgramOutput, type ProgramOutputEvent } from "./programOutput";
 import { storedVolume } from "../audioPreferences";
 import { createSignalMeter } from './signal';
 import type { DeckEffects, GraphState, BroadcastCapture } from "./contracts";
@@ -16,8 +15,6 @@ export interface GraphPorts {
   reconcilePlatformPlayback: () => void;
   playbackRequested: boolean;
   unlockDecks: () => void;
-  deckIsPlaying: (deck: HTMLAudioElement) => boolean;
-  audioEl: () => HTMLAudioElement;
   outputRecovering: boolean;
   resetClockSample: () => void;
   broadcastCapture: BroadcastCapture | null;
@@ -39,8 +36,6 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
   let deckEffects: DeckEffects[] | null = null;
   let masterGain: GainNode | null = null;
   let monitorGain: GainNode | null = null;
-  let programCarrier: ProgramOutput | null = null;
-  let programOutputReporter: ((event: ProgramOutputEvent) => void) | null = null;
   let masterVolume = storedVolume();
   let allMuted = false;
   let limiter: DynamicsCompressorNode | null = null;
@@ -50,9 +45,6 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
   let outputMeters: Array<ReturnType<typeof createSignalMeter>> = [];
   function deckSignal(index: number): number | null { return signalMeters[index]?.read() ?? null; }
   function deckOutputSignal(index: number): number | null { return outputMeters[index]?.read() ?? null; }
-  function setProgramOutputReporter(fn: ((event: ProgramOutputEvent) => void) | null): void {
-    programOutputReporter = fn;
-  }
   function applyDeckVolume(): void {
     if (!ports.elements) return;
     if (monitorGain && audioContext) {
@@ -114,9 +106,6 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
       ports.reconcilePlatformPlayback();
       if (!ports.playbackRequested) return graphState === 'ready';
       ports.unlockDecks();
-      if (graphState === 'ready') {
-        void programCarrier?.retryFromGesture(ports.deckIsPlaying(ports.audioEl()));
-      }
       return graphState === 'ready';
     }
     const Context = globalThis.AudioContext ?? (globalThis as typeof globalThis & {
@@ -209,9 +198,12 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
       deckEffects = effects;
       masterGain = master;
       monitorGain = monitor;
-      programCarrier = new ProgramOutput(context, monitor);
-      programCarrier.subscribe(event => programOutputReporter?.(event));
-      programCarrier.initialize();
+      // The device hears the context's own destination, on every platform. A
+      // MediaStream carrier played by an <audio> element puts a second clock
+      // between the mix and the speakers, and both Chromium and WebKit correct
+      // its drift by resampling: the song starts audibly fast, drops out when
+      // the correction steps, then settles. The Live tap stays separate.
+      monitor.connect(context.destination);
       graphState = 'ready';
       watchContextState(context);
       // Routed and never played: now the sample can be spent, still inside the
@@ -298,8 +290,6 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
     const context = audioContext;
     const lostBroadcast = ports.broadcastCapture?.kind === 'program';
     ports.releaseBroadcastCapture();
-    programCarrier?.destroy();
-    programCarrier = null;
     audioContext = null;
     deckGains = null;
     signalMeters = [];
@@ -473,12 +463,6 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
     applyDeckVolume,
     setDeckLevel,
     graphReady,
-    get programCarrier() {
-      return programCarrier;
-    },
-    set programCarrier(value: ProgramOutput | null) {
-      programCarrier = value;
-    },
     primeAudioSession,
     resumeContext,
     get programOutput() {
@@ -509,7 +493,6 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
     set masterVolume(value: number) {
       masterVolume = value;
     },
-    setProgramOutputReporter,
     unlockAudio
   };
 }

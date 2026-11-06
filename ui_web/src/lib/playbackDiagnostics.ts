@@ -68,8 +68,8 @@ function entry(event: string, facts: Facts) {
       duration: Number.isFinite(element.duration) ? element.duration : null,
       rate: element.playbackRate, volume: element.volume,
       readyState: element.readyState, networkState: element.networkState,
-      hasSource: Boolean(element.srcObject || element.getAttribute('src') || element.currentSrc),
-      sourceKind: element.srcObject ? 'stream' : (element.getAttribute('src') ?? '').startsWith('data:audio/wav')
+      hasSource: Boolean(element.getAttribute('src') || element.currentSrc),
+      sourceKind: (element.getAttribute('src') ?? '').startsWith('data:audio/wav')
         ? 'unlock_sample' : element.getAttribute('src') || element.currentSrc ? 'track' : 'empty',
       errorCode: element.error?.code ?? 0,
     })),
@@ -102,7 +102,7 @@ export function playbackDiagnosticExport(): string {
 }
 
 /** Observe before store filters, without patching browser prototypes. */
-export function observeDiagnosticMedia(element: HTMLMediaElement, role: 'deck' | 'carrier', deckIndex?: number): () => void {
+export function observeDiagnosticMedia(element: HTMLMediaElement, role: 'deck', deckIndex?: number): () => void {
   const id = `${role}-${++nodeSequence}`;
   ids.set(element, id);
   nodes.set(id, element);

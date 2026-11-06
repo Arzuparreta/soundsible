@@ -376,10 +376,8 @@ async function loadStore(
     setLevelingEnabled: vi.fn(),
     levelingEnabled: vi.fn(() => true),
     snapshot: vi.fn(() => ({
-      outputMode: 'direct_fallback' as const,
       playing: !deck.paused && !deck.ended,
       sourcePlaying: !deck.paused && !deck.ended,
-      carrierPlaying: false,
       position: deck.currentTime || 0,
       duration: Number.isFinite(deck.duration) ? deck.duration : 0,
       playbackRate: deck.playbackRate || 1,
@@ -420,10 +418,6 @@ async function loadStore(
     }
   };
   let programTransportReporter: ((event: ProgramTransportEvent) => void) | null = null;
-  let programOutputReporter: ((event: {
-    event: string; mode: 'carrier' | 'direct_fallback'; carrierPaused: boolean;
-    carrierReadyState: number; carrierPlaying: boolean; contextState: AudioContextState; reason?: string;
-  }) => void) | null = null;
   vi.doMock('../lib/audio', () => ({
     onProgramEvent: vi.fn((type: string, handler: (snapshot: unknown, event: Event) => void) => {
       const list = deckHandlers.get(type) ?? [];
@@ -431,9 +425,6 @@ async function loadStore(
       list.push(callback);
       deckHandlers.set(type, list);
       return () => deckHandlers.set(type, (deckHandlers.get(type) ?? []).filter(item => item !== callback));
-    }),
-    setProgramOutputReporter: vi.fn((fn: typeof programOutputReporter) => {
-      programOutputReporter = fn;
     }),
     setProgramTransportReporter: vi.fn((fn: (event: ProgramTransportEvent) => void) => {
       programTransportReporter = fn;
@@ -560,15 +551,6 @@ async function loadStore(
     deck1Playing: false,
     ...event,
   });
-  const fireProgramOutput = (event: Partial<Parameters<NonNullable<typeof programOutputReporter>>[0]>) => programOutputReporter?.({
-    event: 'carrier_playing',
-    mode: 'carrier',
-    carrierPaused: false,
-    carrierReadyState: 4,
-    carrierPlaying: true,
-    contextState: 'running',
-    ...event,
-  });
   return {
     ...store,
     api,
@@ -579,7 +561,6 @@ async function loadStore(
     fireDeckEvent,
     fireSocketEvent,
     fireProgramTransport,
-    fireProgramOutput,
     firePreviewStatus: (id: string, status: { state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable'; retry_after?: number }) => previewStatusListener?.(id, status),
     prefetchPreviews,
     preparationOwners,

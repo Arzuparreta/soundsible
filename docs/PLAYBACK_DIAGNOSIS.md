@@ -4,6 +4,32 @@ Status: candidate iOS output and source-retirement correction, **not a device-ve
 proves what Now Playing, CarPlay or the head unit displays, or that sound reaches
 the speakers. Device acceptance is still required.
 
+## November 6: desktop songs start fast, then drop out and settle
+
+The listener reports that, on a fresh desktop client in normal mode, a song
+("Free Your Mind") starts at the wrong speed, returns to normal shortly after,
+and sometimes flickers and crackles. Capture `209dfe5a` (device `ac870b49`,
+Chromium, output mode `carrier`) shows every element `playbackRate` at 1 and
+the context clock, the source position and the carrier position all advancing
+at 1.000 against client time. Nothing the page can read changed speed.
+
+The change happened after the page: the carrier is a MediaStream played by an
+`<audio>` element, a second output with its own clock, and the browser corrects
+the drift between the two by resampling. Measured on this machine (Chromium,
+PipeWire null sink at 48 kHz, recorded from its monitor), with the app's order —
+context running for 7 s with the carrier connected but paused, then carrier and
+source played — a 1000 Hz tone came out at 1007.27 Hz (+0.73 %) for about six
+seconds, then 30 ms of silence, then 998.4 Hz and still moving. The same tone
+through the context destination came out at 1000.00 Hz for the whole recording
+with no gaps. This is the same mechanism the September 9 iPhone evidence below
+attributes to WebKit's converter.
+
+Correction: the carrier is removed on every platform. The mix connects to the
+AudioContext destination, as iOS has done since #166; the Live tap is unchanged.
+With it go the `direct_fallback` mode, the carrier retry on gestures and the
+`ui_program_output` telemetry. The server still accepts and reports the old
+fields so older open clients and history keep working.
+
 ## September 29: podcast skip on iPhone PWA
 
 The listener reports that +/-15-second taps briefly replay or loop the previous
@@ -143,7 +169,7 @@ the mixed monitor connects directly to the AudioContext destination. The
 reported mode is `direct`, distinct from a carrier failure's `direct_fallback`.
 Gestures cannot switch intentional direct output back to the carrier. The Live
 stream tap remains independent, upstream of local volume and mute. Other
-platforms retain their carrier path.
+platforms retained their carrier path until November 6 (see above).
 
 Source eligibility is tracked independently of gain: empty, staged and retired
 decks stay muted; an incoming deck is unmuted before play, including zero-gain

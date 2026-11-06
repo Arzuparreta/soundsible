@@ -15,7 +15,9 @@ class FakeAudioParam {
 }
 
 class FakeAudioNode {
+  connections: unknown[] = [];
   connect<T>(target: T): T {
+    this.connections.push(target);
     return target;
   }
   disconnect = vi.fn();
@@ -434,15 +436,21 @@ describe('two-deck mixer', () => {
     module.audioService.setVolume(1);
   });
 
-  it('keeps iPhone playback and Live independent with direct device output', async () => {
-    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+  // A MediaStream carrier between the mix and the speakers is a second clock
+  // the browser corrects by resampling: songs started audibly fast in Chromium.
+  it.each([
+    ['iPhone', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 }],
+    ['desktop Chromium', { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36', platform: 'Linux x86_64', maxTouchPoints: 0 }],
+  ])('keeps %s playback on the context destination with Live independent', async (_name, agent) => {
+    vi.stubGlobal('navigator', agent);
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
     module.audioService.unlockAudio();
     await module.audioService.load('/current', 1);
     expect(created).toHaveLength(2);
     expect(contexts[0].mediaTracks).toHaveLength(0);
-    expect(module.programPlaybackSnapshot()).toMatchObject({ outputMode: 'direct', playing: true, carrierPlaying: false });
+    expect(contexts[0].gains[1].connections).toEqual([contexts[0].destination]);
+    expect(module.programPlaybackSnapshot()).toMatchObject({ playing: true, sourcePlaying: true });
     const capture = module.audioService.acquireBroadcastCapture();
     expect(capture?.kind).toBe('program');
     expect(contexts[0].mediaTracks).toHaveLength(1);
@@ -458,7 +466,7 @@ describe('two-deck mixer', () => {
     await resumed;
     module.audioService.unlockAudio();
     expect(created).toHaveLength(2);
-    expect(module.programPlaybackSnapshot()).toMatchObject({ outputMode: 'direct', playing: true });
+    expect(module.programPlaybackSnapshot()).toMatchObject({ playing: true });
     module.audioService.releaseBroadcastStream();
     expect(contexts[0].broadcastTrack.stop).toHaveBeenCalledOnce();
     expect(module.programPlaybackSnapshot().playing).toBe(true);
@@ -471,7 +479,6 @@ describe('two-deck mixer', () => {
 
     expect(module.audioService.unlockAudio()).toBe(true);
     await module.audioService.load('/current', 1);
-    const carrierTrack = contexts[0].mediaTracks[0];
     const stream = module.audioService.broadcastStream();
     expect(stream).not.toBeNull();
     const context = contexts[0];
@@ -487,7 +494,6 @@ describe('two-deck mixer', () => {
 
     module.audioService.releaseBroadcastStream();
     expect(context.broadcastTrack.stop).toHaveBeenCalledOnce();
-    expect(carrierTrack.stop).not.toHaveBeenCalled();
     module.audioService.setMuted(false);
     module.audioService.setVolume(1);
   });
@@ -1385,9 +1391,8 @@ describe('two-deck mixer', () => {
     ]);
     // And the sample is still spent — from the same gesture, which is what
     // makes a later gestureless start legal on a locked phone.
-    expect(created).toHaveLength(3);
-    expect(created.slice(0, 2).every((deck) => deck.play.mock.calls.length === 1)).toBe(true);
-    expect(created[2].play).not.toHaveBeenCalled();
+    expect(created).toHaveLength(2);
+    expect(created.every((deck) => deck.play.mock.calls.length === 1)).toBe(true);
   });
 
   it('does not replace decks merely because a context clock is temporarily still', async () => {

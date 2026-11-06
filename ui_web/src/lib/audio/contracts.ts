@@ -1,5 +1,4 @@
 import type { DiagnosticFacts } from '../playbackDiagnostics';
-import { type ProgramOutputMode } from "./programOutput";
 export interface DeckEffects {
   low?: BiquadFilterNode;
   filter?: BiquadFilterNode;
@@ -26,10 +25,8 @@ export interface DeckBinding {
 }
 export type ProgramMediaEventName = 'outputhealth' | 'sourcesettled' | 'play' | 'pause' | 'ended' | 'error' | 'seeking' | 'waiting' | 'canplay' | 'playing' | 'timeupdate' | 'durationchange' | 'loadedmetadata' | 'seeked' | 'ratechange';
 export interface ProgramPlaybackSnapshot {
-  outputMode: ProgramOutputMode;
   playing: boolean;
   sourcePlaying: boolean;
-  carrierPlaying: boolean;
   position: number;
   duration: number;
   playbackRate: number;

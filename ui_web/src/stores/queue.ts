@@ -22,13 +22,10 @@ export interface QueuePorts {
   actions: Pick<PlayerActions, 'clearManualQueue' | 'linkCatalogItem' | 'placeAutoTrack' | 'playTrack' | 'removeFromQueue'>;
   emitPlaybackEvent: (phase: string, extra?: Record<string, number | boolean>, strings?: {
     failure_reason?: string;
-    context_state?: string;
     display_mode?: string;
     transport_action?: string;
     transport_origin?: string;
     mix_phase?: string;
-    output_mode?: string;
-    output_event?: string;
     media_session_state?: string;
     sync_reason?: string;
     video_id?: string;

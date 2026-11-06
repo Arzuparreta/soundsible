@@ -601,15 +601,12 @@ export const api = {
     egress?: 'direct' | 'relay' | 'unknown';
     failure_reason?: string;
     /** State of the Web Audio context when the event was recorded. */
-    context_state?: string;
     /** `standalone` for an installed PWA, `browser` for a tab — the two behave
      * differently enough around audio that an event is ambiguous without it. */
     display_mode?: string;
     transport_action?: string;
     transport_origin?: string;
     mix_phase?: string;
-    output_mode?: string;
-    output_event?: string;
     media_session_state?: string;
     sync_reason?: string;
     segments?: Record<string, number | boolean | string>;

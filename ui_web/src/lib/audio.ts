@@ -58,12 +58,6 @@ function createAudioRuntime() {
     get cancelMix() {
       return mixer.cancelMix;
     },
-    get programCarrier() {
-      return graph.programCarrier;
-    },
-    set programCarrier(value) {
-      graph.programCarrier = value;
-    },
     get primeAudioSession() {
       return graph.primeAudioSession;
     },
@@ -110,12 +104,6 @@ function createAudioRuntime() {
     },
     get unlockDecks() {
       return transport.unlockDecks;
-    },
-    get deckIsPlaying() {
-      return transport.deckIsPlaying;
-    },
-    get audioEl() {
-      return transport.audioEl;
     },
     get outputRecovering() {
       return transport.outputRecovering;
@@ -286,7 +274,6 @@ function createAudioRuntime() {
     dominant: mixer.mix?.dominant ?? false,
     contextState: graph.audioContext?.state ?? 'unavailable',
     contextTime: graph.audioContext?.currentTime ?? 0,
-    outputMode: graph.programCarrier?.snapshot().mode ?? 'direct_fallback',
     gain0Target: graph.mixGains[0],
     gain1Target: graph.mixGains[1],
     gain0Actual: graph.deckGains?.[0].gain.value ?? graph.mixGains[0],
@@ -302,7 +289,6 @@ function createAudioRuntime() {
   return {
     audioService,
     setBroadcastLostReporter: capture.setBroadcastLostReporter,
-    setProgramOutputReporter: graph.setProgramOutputReporter,
     onDeckEvent: transport.onDeckEvent,
     audioEl: transport.audioEl,
     isActiveDeck: transport.isActiveDeck,
@@ -369,7 +355,6 @@ export const audioService: AudioService = {
   armTransition: (...args) => current().audioService.armTransition(...args)
 };
 export const setBroadcastLostReporter = (...args: Parameters<typeof runtime.setBroadcastLostReporter>): ReturnType<typeof runtime.setBroadcastLostReporter> => current().setBroadcastLostReporter(...args);
-export const setProgramOutputReporter = (...args: Parameters<typeof runtime.setProgramOutputReporter>): ReturnType<typeof runtime.setProgramOutputReporter> => current().setProgramOutputReporter(...args);
 export const onDeckEvent = (...args: Parameters<typeof runtime.onDeckEvent>): ReturnType<typeof runtime.onDeckEvent> => current().onDeckEvent(...args);
 export const audioEl = (...args: Parameters<typeof runtime.audioEl>): ReturnType<typeof runtime.audioEl> => current().audioEl(...args);
 export const isActiveDeck = (...args: Parameters<typeof runtime.isActiveDeck>): ReturnType<typeof runtime.isActiveDeck> => current().isActiveDeck(...args);
