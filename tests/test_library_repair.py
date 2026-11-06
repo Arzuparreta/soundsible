@@ -525,18 +525,11 @@ def test_the_ultra_profile_never_converts_youtube_audio_to_flac(tmp_path, monkey
 
     launched = []
 
-    class FailedRun:
-        stdout = iter(())
-        returncode = 1
-
-        def wait(self, timeout=None):
-            return 1
-
-    def popen(args, **kwargs):
+    def run(args, **kwargs):
         launched.append(args)
-        return FailedRun()
+        return 1, 'requested format is not available'
 
-    monkeypatch.setattr(download.subprocess, "Popen", popen)
+    monkeypatch.setattr('shared.process_runner.run', run)
     downloader = ytd.YouTubeDownloader(tmp_path, quality="ultra")
 
     with pytest.raises(Exception):

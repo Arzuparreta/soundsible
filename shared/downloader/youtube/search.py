@@ -18,10 +18,12 @@ import yt_dlp
 from shared.music_identity import youtube_music_metadata
 from shared.resolution_confidence import best_candidate
 from shared.text_utils import identity_key
-from shared.work import check, WorkCancelled, context_call
+from shared.work import WorkCancelled, context_call
+from shared.process_runner import check_cancelled as check
 
 from ..config import prefer_ytmusic
 from .ids import is_valid_video_id, thumbnail_url, video_id_from_url, watch_url
+from .artwork import thumbnail
 from .web import oembed_creator
 from .ytdlp import Cookies, apply_network_options
 
@@ -107,7 +109,7 @@ def peek_brief(url_or_id: str, cookies: Cookies) -> Optional[Dict[str, Any]]:
     vid_s = str(vid_raw).strip() if vid_raw is not None else ""
     valid = is_valid_video_id(vid_s)
     title = (info.get("track") or info.get("title") or "").strip() or "Unknown"
-    thumb = (info.get("thumbnail") or "").strip()
+    thumb = (thumbnail(info) or "").strip()
     if not thumb and valid:
         thumb = thumbnail_url(vid_s) or ""
     webpage = (info.get("webpage_url") or "").strip()
@@ -162,7 +164,7 @@ def _search_row(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "id": video_id,
         "title": title,
         "duration": entry.get("duration") or 0,
-        "thumbnail": entry.get("thumbnail") or thumbnail_url(video_id),
+        "thumbnail": thumbnail(entry, thumbnail_url(video_id)),
         "webpage_url": webpage_url,
         "channel": creator,
         **music_fields(entry, creator),
@@ -319,7 +321,7 @@ def _related_row(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "id": video_id,
         "title": (entry.get("title") or "").strip() or "Unknown",
         "duration": entry.get("duration") or 0,
-        "thumbnail": entry.get("thumbnail") or thumbnail_url(video_id),
+        "thumbnail": thumbnail(entry, thumbnail_url(video_id)),
         "webpage_url": entry.get("url") or entry.get("webpage_url") or watch_url(video_id),
         "channel": channel,
         **music_fields(entry, channel),

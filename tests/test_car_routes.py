@@ -126,7 +126,7 @@ def test_car_playlist_returns_playable_track_items(tmp_path, monkeypatch):
     items = response.get_json()["items"]
     assert [item["track_id"] for item in items] == ["t2", "t1"]
     assert items[0]["stream_url"] == "/api/static/stream/t2"
-    assert items[0]["artwork_url"] == "/api/static/cover/t2"
+    assert items[0]["artwork_url"] == "/api/static/cover/t2?size=640&fit=square"
     assert items[0]["is_playable"] is True
 
 

@@ -1,4 +1,5 @@
 import { api } from './api';
+import { registerPreviewArtwork } from './media';
 import type { PreviewPreparation } from './api';
 import type { WorkReference } from './http';
 import { randomId } from './randomId';
@@ -234,6 +235,7 @@ export class PreviewPrefetch {
         e.due = Date.now() + POLL_MS;
         if (!status) continue; // older engine: unknown, never assumed ready
         e.status = status;
+        registerPreviewArtwork(id, status.artwork);
         e.retryAt = Math.max(e.retryAt, Date.now() + (status.retry_after ?? 0) * 1000);
         if (status.state === 'ready') e.due = Date.now() + READY_POLL_MS;
         if (status.state === 'unavailable') e.due = Infinity;

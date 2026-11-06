@@ -91,3 +91,16 @@ describe('track artwork comes from wherever that track keeps it', () => {
     }
   });
 });
+
+it('uses account scope in artwork cache keys and clears preview hints on account reset', async () => {
+  const { registerArtworkMetadata, registerPreviewArtwork } = await import('./media');
+  registerArtworkMetadata([{ id: 'same-audio', artwork_scope: 'account-a' }]);
+  const first = coverUrl('same-audio');
+  registerArtworkMetadata([{ id: 'same-audio', artwork_scope: 'account-b' }]);
+  expect(coverUrl('same-audio')).not.toBe(first);
+  const track = { id: 'zyxwvutsrqp', source: 'preview' as const, cover: 'https://i.ytimg.com/vi/zyxwvutsrqp/mqdefault.jpg' };
+  registerPreviewArtwork(track.id, { url: 'https://i.ytimg.com/vi/zyxwvutsrqp/maxresdefault.jpg', width: 1280, height: 720 });
+  expect(trackCoverUrl(track)).toContain('maxresdefault');
+  registerArtworkMetadata([]);
+  expect(trackCoverUrl(track)).toBe(track.cover);
+});

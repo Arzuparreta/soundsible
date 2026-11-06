@@ -119,9 +119,11 @@ class CoverFetchManager:
         """
         from shared.artwork import artwork_store
         store = artwork_store()
-        ref = store.ref(track.id)
-        if ref or getattr(track, "cover_source", None) == "none":
-            return store.path(track.id)
+        ref = store.effective_ref(track.id)
+        if getattr(track, "cover_source", None) == "none" or (ref and ref["source"] == "none"):
+            return None
+        if ref:
+            return store.effective_path(track.id)
         if not source_path or str(source_path).startswith("http"):
             return None
         dest_path = os.path.join(self.covers_dir, f"{track.id}.jpg")

@@ -78,7 +78,13 @@ def _preview_stream_rate_limit(ip: str) -> bool:
 
 
 def _current_egress() -> str:
-    return "relay" if os.getenv("SOUNDSIBLE_YT_PROXY", "").strip() else "direct"
+    from hashlib import sha256
+    proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
+    return "relay:" + sha256(proxy.encode()).hexdigest() if proxy else "direct"
+
+
+def _stream_memo_key(video_id):
+    return video_id if _current_egress() == 'direct' else video_id + ':' + _current_egress()
 
 
 def _durable_stream_cache_get(video_id: str) -> ResolvedStream | None:
@@ -101,10 +107,10 @@ def _durable_stream_cache_get(video_id: str) -> ResolvedStream | None:
     proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
     return ResolvedStream(
         url=row["url"],
-        egress="relay" if row["egress"] == "relay" else "direct",
+        egress="relay" if row["egress"].startswith("relay:") else "direct",
         resolved_at=float(row["resolved_at"]),
         expires_at=float(row["expires_at"]),
-        proxy_url=proxy or None if row["egress"] == "relay" else None,
+        proxy_url=proxy or None if row["egress"].startswith("relay:") else None,
     )
 
 
@@ -119,7 +125,8 @@ def _durable_stream_cache_put(video_id: str, stream: ResolvedStream) -> None:
         instance_db().set_cached_stream_url(
             video_id,
             stream.url,
-            stream.egress,
+            ("relay:" + __import__('hashlib').sha256((stream.proxy_url or '').encode()).hexdigest()
+             if stream.egress == 'relay' else 'direct'),
             stream.resolved_at,
             stream.expires_at,
         )
@@ -129,7 +136,7 @@ def _durable_stream_cache_put(video_id: str, stream: ResolvedStream) -> None:
 
 def _invalidate_stream(video_id: str) -> None:
     """Forget a URL the CDN rejected, in both cache layers."""
-    _preview_stream_urls.invalidate(video_id)
+    _preview_stream_urls.invalidate(_stream_memo_key(video_id))
     try:
         from shared.database import instance_db
 
@@ -167,7 +174,7 @@ def _get_preview_stream_cached(
         return stream
 
     try:
-        value = _preview_stream_urls.resolve(video_id, resolve)
+        value = _preview_stream_urls.resolve(_stream_memo_key(video_id), resolve)
         return value if isinstance(value, ResolvedStream) else None
     except TimeoutError:
         logger.warning("API: [Preview] Timed out waiting on in-flight resolution for %s", video_id)
@@ -435,7 +442,7 @@ def _emit_stream_timing(
 
 def _preview_upstream(api, video_id: str, headers: dict[str, str]):
     """Open a direct fallback stream when persistent caching is disabled."""
-    cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
+    cache_was_warm = isinstance(_preview_stream_urls.get(_stream_memo_key(video_id)), ResolvedStream)
     skip_fast_path = False
     for attempt in range(2):
         resolve_started = time.monotonic()
@@ -787,7 +794,7 @@ def preview_prefetch():
     if not isinstance(queued, list):
         return queued
     preparation = {
-        video_id: preview_cache.preparation_status(video_id).as_dict()
+        video_id: _preparation_with_artwork(video_id)
         for video_id in video_ids
     }
     return jsonify({"status": "queued", "queued": queued, "preparation": preparation})
@@ -833,10 +840,22 @@ def preview_status():
     return _preview_status_body(video_ids)
 
 
+def _preparation_with_artwork(video_id):
+    result = preview_cache.preparation_status(video_id).as_dict()
+    try:
+        from shared.artwork_sources import observed
+        values = observed(video_id)
+        if values:
+            result['artwork'] = values[0]
+    except Exception:
+        logger.debug('Optional preview artwork unavailable', exc_info=True)
+    return result
+
+
 def _preview_status_body(video_ids):
     return jsonify({
         "preparation": {
-            video_id: preview_cache.preparation_status(video_id).as_dict()
+            video_id: _preparation_with_artwork(video_id)
             for video_id in video_ids
         }
     })
@@ -896,7 +915,7 @@ def get_track_cover(track_id):
     fit = request.args.get("fit", "original")
     if size not in (None, "thumb", *(str(n) for n in SIZES)) or fit not in ("original", "square"):
         return jsonify({"error": "Invalid artwork variant"}), 400
-    ref = store.ref(track_id) if track else None
+    ref = store.effective_ref(track_id) if track else None
     removed = track and (getattr(track, "cover_source", None) == "none" or (ref and ref["source"] == "none"))
     path = None if removed else (lib.get_cover_url(track) if track else None)
     if track and not path and not removed:
@@ -908,12 +927,12 @@ def get_track_cover(track_id):
         if path and os.path.isfile(path):
             # Only local legacy extraction is allowed in the request path. A master
             # generated here is durable; future variants never re-parse the audio.
-            if not store.path(track_id):
+            if not store.effective_ref(track_id):
                 if not api["is_safe_path"](path, is_trusted=api["is_trusted_network"](request_client_address())):
                     return jsonify({"error": "Unauthorized path"}), 403
                 with open(path, "rb") as handle:
                     store.bind(track_id, store.put(handle.read()), getattr(track, "cover_source", None), only_missing=True)
-            ref = store.ref(track_id)
+            ref = store.effective_ref(track_id)
             if ref and ref["hash"]:
                 revision = f"{ref['hash']}-{ref['revision']}"
                 requested_revision = request.args.get("rev")
@@ -924,7 +943,9 @@ def get_track_cover(track_id):
                     response = redirect(request.path + '?' + urlencode(params), code=302)
                     response.headers['Cache-Control'] = 'private, no-cache'
                     return response
-                path = store.path(track_id)
+                # The hash/revision and bytes must describe one snapshot even
+                # if another request edits the account choice right now.
+                path = str(store.root / 'objects' / ref['hash'])
                 if size:
                     variant = store.open_variant(ref['hash'], 320 if size == 'thumb' else int(size), fit == 'square')
                     try:
@@ -944,24 +965,22 @@ def get_track_cover(track_id):
                     response = send_file(path, mimetype=mimetype, conditional=True)
                 response.headers['Cache-Control'] = (
                     'private, max-age=31536000, immutable' if requested_revision == revision
-                    else f'private, max-age={COVER_CACHE_SEC}'
+                    else 'private, no-cache'
                 )
                 return response
     except (OSError, ValueError) as exc:
         logger.warning("[Cover] Unreadable artwork for %s: %s", track_id, exc)
+        response = jsonify({'error': 'Artwork temporarily unavailable'})
+        response.status_code = 503
+        response.headers['Cache-Control'] = 'private, no-store'
+        response.headers['Retry-After'] = '2'
+        return response
     placeholder = os.path.join(api["WEB_UI_PATH"], "assets/icons/icon-192.png")
     if os.path.exists(placeholder):
         response = send_file(placeholder, mimetype="image/png", conditional=True)
-        # A shipped asset that never changes — and the answer for every track
-        # with no artwork at all, so it is worth pinning hard.
-        #
-        # Not for an unknown id, though. That id can become a real track at any
-        # moment (a saved song finishes downloading), and its URL does not
-        # change when it does, so pinning the app icon there for a day would
-        # outlive the thing it stood in for. Keep that answer short and private.
-        response.headers["Cache-Control"] = (
-            "public, max-age=86400" if track else "private, max-age=60"
-        )
+        # The URL names a track, not the shipped icon; its answer can change
+        # after recovery or when the next account logs into this browser.
+        response.headers['Cache-Control'] = 'private, max-age=0, no-cache'
         return response
     return jsonify({"error": "Cover not ready"}), 404
 

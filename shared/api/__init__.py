@@ -884,7 +884,7 @@ def _orient_runtime_hint(runtime_hint: dict) -> None:
         runtime_hint["title"] = decided.title
 
 
-def _process_single_queue_item(item):
+def _process_single_queue_item(item, stop_event=None):
     """Worker function for A single download queue item.
 
     Runs bound to whoever queued the item: the pump is a background thread, so
@@ -895,8 +895,14 @@ def _process_single_queue_item(item):
     claimed = item if item.get('attempt') else queue_manager_dl.claim(item['id'])
     if not claimed:
         return
+    from shared.process_runner import acquisition_scope, AcquisitionCancelled
     with user_context(claimed.get("user_id")):
-        _process_single_queue_item_bound(claimed)
+        try:
+            with acquisition_scope(lambda: (stop_event is not None and stop_event.is_set())
+                                   or not queue_manager_dl.active(claimed['id'], claimed['attempt'])):
+                _process_single_queue_item_bound(claimed)
+        except AcquisitionCancelled:
+            queue_manager_dl.update_status(claimed['id'], 'interrupted', attempt=claimed['attempt'])
 
 
 def _process_single_queue_item_bound(item):
@@ -1099,6 +1105,15 @@ def _process_single_queue_item_bound(item):
                 if not queue_manager_dl.complete(item_id, attempt):
                     return
 
+            # Schedule after membership commits. The independent recovery worker
+            # fetches the optional image; audio publication never waits on it.
+            try:
+                from shared.artwork_sources import schedule_selection
+                schedule_selection(shared_track.id, shared_track.youtube_id,
+                                   metadata_evidence.get('artwork_selection'))
+            except Exception:
+                logger.debug('Optional catalog artwork scheduling unavailable', exc_info=True)
+
             # Measure it now rather than waiting for the idle sweep: a song
             # somebody just asked for is the one they are about to play, and one
             # file costs well under a second.
@@ -1191,7 +1206,7 @@ def process_queue_background(stop_event: Optional[threading.Event] = None):
             if capacity > 0 and pending:
                 for i in range(min(capacity, len(pending))):
                     item = pending[i]
-                    orchestrator.submit_task(f"dl_{item['id']}", _process_single_queue_item, item)
+                    orchestrator.submit_task(f"dl_{item['id']}", _process_single_queue_item, item, stop_event)
                 continue # Re-check immediately
 
             # Interruptible sleep — stop_event short-circuits the wait.
@@ -1280,7 +1295,7 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
         raise LibraryPersistenceError("library_conflict")
     if cover_source == "none":
         from shared.artwork import artwork_store
-        artwork_store().bind(track_id, None, "none")
+        artwork_store().bind_override(track_id, None, "none")
     _mirror_track_into_pool(get_track_by_id(lib, track_id))
     emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
@@ -1817,6 +1832,8 @@ def stop_api() -> None:
     queue_manager_dl.accepting = False
     from shared.artwork_recovery import recovery
     recovery.stop()
+    from shared.artwork_worker import worker as artwork_worker
+    artwork_worker.close()
 
     try:
         wsgi_server = getattr(socketio, "wsgi_server", None)

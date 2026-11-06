@@ -13,6 +13,7 @@ Las comprobaciones se hicieron sobre `main` en `3c7e4af3`. Las marcadas como
 | --- | --- | --- |
 | 1 | El editor de metadatos de la web saca la canción de sus playlists | **Cerrado** en la primera PR |
 | 1b | Etiquetas de una cuenta copiadas al catálogo compartido del pool | **Cerrado** en la primera PR |
+| 1c | Portadas manuales/retiradas compartidas entre cuentas | Corregido en la [entrega de portadas](2026-11-07-artwork-requests.md): overrides por cuenta; referencias históricas ambiguas preservadas |
 | 2 | Detrás de un proxy, cualquiera en internet es administrador sin contraseña | **Cerrado** en la primera PR (ver residuo) |
 | 3 | Socket.IO acepta cualquier origen | Pendiente |
 | 4 | Cola de reproducción del servidor que ningún cliente lee; rutas stub | Pendiente, necesita decisión |

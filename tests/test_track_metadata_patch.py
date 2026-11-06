@@ -201,11 +201,11 @@ def test_stable_label_routes_never_rewrite_audio_or_membership(manager, tmp_path
     with app.test_request_context(method='POST', data={'file': (io.BytesIO(image.getvalue()), 'cover.png')}):
         reply = inspect.unwrap(routes.upload_track_label_cover)(track.id)
     assert reply.json['storage'] == 'library'
-    assert Path(artwork.path(track.id)).read_bytes() == image.getvalue()
+    assert Path(artwork.effective_path(track.id)).read_bytes() == image.getvalue()
     with app.test_request_context(method='POST'):
         reply = inspect.unwrap(routes.clear_track_label_cover)(track.id)
     assert reply.json['storage'] == 'library'
-    assert artwork.path(track.id) is None
+    assert artwork.effective_path(track.id) is None
     assert [row.id for row in manager.metadata.tracks] == ids
     assert manager.metadata.playlists == membership
     assert manager.db.load_library_metadata().get_track_by_id(track.id).format == format_name

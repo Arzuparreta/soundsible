@@ -9,6 +9,10 @@ import sys
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--artwork-worker"]:
+        from shared.artwork_worker import main
+
+        raise SystemExit(main())
     from shared.dj.worker import FROZEN_FLAG
 
     # The packaged engine is also its own DJ analysis process: a frozen

@@ -114,35 +114,53 @@ def _parse_visitor_data(payload: str) -> Optional[str]:
 
 
 def visitor_data() -> Optional[str]:
-    """A cached visitor identifier, refreshed hourly, or None if unavailable."""
-    now = time.time()
-    cached = _visitor_data_cache.get("value")
-    if cached and now - float(_visitor_data_cache.get("fetched_at") or 0) < _VISITOR_DATA_TTL_SEC:
-        return cached
-    with _visitor_data_lock:
-        cached = _visitor_data_cache.get("value")
-        if cached and now - float(_visitor_data_cache.get("fetched_at") or 0) < _VISITOR_DATA_TTL_SEC:
-            return cached
+    """One renewal per egress, with a cooldown; other resolvers never queue."""
+    key = yt_proxy()  # exact relay configuration, not merely direct/relay
+    now = time.monotonic()
+    if _visitor_data_cache.get("egress") == key:
+        if now < _visitor_data_cache.get("retry_at", 0):
+            return None
+        if _visitor_data_cache.get("value") and now < _visitor_data_cache.get("valid_until", 0):
+            return _visitor_data_cache["value"]
+    if not _visitor_data_lock.acquire(blocking=False):
+        return None
+    try:
+        if _visitor_data_cache.get("egress") != key:
+            _visitor_data_cache.clear()
+            _visitor_data_cache.update(value=None, egress=key)
+        if now < _visitor_data_cache.get("retry_at", 0):
+            return None
+        if _visitor_data_cache.get("value") and now < _visitor_data_cache.get("valid_until", 0):
+            return _visitor_data_cache["value"]
         try:
             response = requests.get(
-                _VISITOR_DATA_URL,
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=15,
-                proxies=_youtube_proxies(),
+                _VISITOR_DATA_URL, headers={"User-Agent": "Mozilla/5.0"},
+                timeout=(3, 5), proxies=_youtube_proxies(),
             )
             response.raise_for_status()
             value = _parse_visitor_data(response.text)
         except Exception as exc:
             logger.debug("[Preview] visitor_data fetch failed: %s", exc)
             value = None
-        if value:
-            _visitor_data_cache["value"] = value
-            _visitor_data_cache["fetched_at"] = now
+        finished = time.monotonic()
+        _visitor_data_cache.update(value=value, fetched_at=time.time(),
+                                  valid_until=finished + _VISITOR_DATA_TTL_SEC if value else 0,
+                                  retry_at=0 if value else finished + 60)
         return value
+    finally:
+        _visitor_data_lock.release()
+
+
+def reject_visitor_data(value: str) -> None:
+    """An old rejection cannot invalidate a newly renewed identifier."""
+    with _visitor_data_lock:
+        if (_visitor_data_cache.get("egress") == yt_proxy()
+                and _visitor_data_cache.get("value") == value):
+            _visitor_data_cache.update(value=None, valid_until=0, retry_at=time.monotonic() + 60)
 
 
 def reset_visitor_data() -> None:
-    """Drop the cached identifier so the next resolution fetches a fresh one."""
+    """Explicit runtime/test reset; provider rejection uses reject instead."""
     with _visitor_data_lock:
-        _visitor_data_cache["value"] = None
-        _visitor_data_cache["fetched_at"] = 0.0
+        _visitor_data_cache.clear()
+        _visitor_data_cache.update(value=None, fetched_at=0.0)

@@ -166,10 +166,14 @@ def test_retry_budget_survives_restart(monkeypatch):
         calls.append(1)
         raise requests.ConnectionError()
     monkeypatch.setattr(ArtworkRecovery, 'fetch', failure)
-    for _ in range(4):
+    for _ in range(3):
         ArtworkRecovery().recover(track)
         with store.connect() as db:
             db.execute('UPDATE recovery SET next_try=0')
+    # Terminal transient failures get a later bounded window, not a tombstone.
+    with store.connect() as db:
+        db.execute('UPDATE recovery SET next_try=?', (__import__('time').time() + 86400,))
+    ArtworkRecovery().recover(track)
     assert len(calls) == 3
 
 
@@ -259,7 +263,7 @@ def test_annotation_only_reads_requested_references_in_bounded_batches(tmp_path,
     store.annotate(tracks)
     assert len(rows_read) == 20
     assert all(t["artwork_revision"] == "cover-1" for t in tracks)
-    assert len([q for q in queries if q.startswith("SELECT")]) == 1
+    assert len([q for q in queries if q.startswith("SELECT")]) == 2
 
     rows_read.clear()
     queries.clear()
@@ -268,10 +272,11 @@ def test_annotation_only_reads_requested_references_in_bounded_batches(tmp_path,
     tracks += [{"id": "song-0"}, {"id": "removed"}, {"id": "missing"}, {}, {"id": None}]
     store.annotate(tracks)
     assert len(rows_read) == count + 1  # duplicate IDs are queried once
-    assert len([q for q in queries if q.startswith("SELECT")]) == 3
+    assert len([q for q in queries if q.startswith("SELECT")]) == 6
     assert tracks[count]["artwork_revision"] == "cover-1"
     assert tracks[count + 1] == {
         "id": "removed", "artwork_revision": "none-2",
+        "artwork_scope": __import__("hashlib").sha256(b"testuser").hexdigest()[:16],
         "artwork_width": None, "artwork_height": None,
     }
     assert tracks[-3:] == [{"id": "missing"}, {}, {"id": None}]

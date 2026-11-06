@@ -60,3 +60,14 @@ it('reuses the immediate decoding path only for previously painted artwork', () 
   expect(second.container.querySelector('img')).toHaveAttribute('loading', 'lazy');
   expect(second.container.querySelector('img')).toHaveAttribute('decoding', 'async');
 });
+
+it('keeps the previous preview image when an optional upgrade fails', async () => {
+  const { registerPreviewArtwork } = await import('../lib/media');
+  const track = { id: 'abcdefghijk', source: 'preview' as const, cover: 'https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg' };
+  registerPreviewArtwork(track.id, { url: 'https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg', width: 1280, height: 720 });
+  const view = render(() => <div><CoverImage src={trackCoverUrl(track)} /></div>);
+  const img = view.container.querySelector('img')!;
+  expect(img.src).toContain('maxresdefault');
+  img.dispatchEvent(new Event('error'));
+  expect(view.container.querySelector('img')?.src).toBe(track.cover);
+});

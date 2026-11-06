@@ -61,7 +61,7 @@ def test_cover_is_cacheable_and_revalidates(client, tmp_path):
 
     assert response.status_code == 200
     cache_control = response.headers["Cache-Control"]
-    assert f"max-age={COVER_CACHE_SEC}" in cache_control
+    assert "no-cache" in cache_control
     # Artwork belongs to one person's library: shared caches must not hold it.
     assert "private" in cache_control
     # The window can be long: a cover edited on another device no longer
@@ -80,7 +80,8 @@ def test_cover_placeholder_is_cacheable(client, tmp_path):
     assert response.status_code == 200
     cache_control = response.headers["Cache-Control"]
     assert "max-age=" in cache_control
-    assert "public" in cache_control
+    assert "private" in cache_control
+    assert "no-cache" in cache_control
 
 
 def test_unknown_track_gets_a_placeholder_image_not_a_404(client, tmp_path):

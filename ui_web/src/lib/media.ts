@@ -6,10 +6,53 @@ interface ArtworkMetadata {
   artwork_revision?: string;
   artwork_width?: number;
   artwork_height?: number;
+  artwork_scope?: string;
+}
+const previewFallbacks = new Map<string, string>();
+const rejectedPreviews = new Set<string>();
+export function artworkFallback(src?: string | null): string | undefined {
+  if (!src) return undefined;
+  const previous = previewFallbacks.get(src);
+  if (previous) return previous;
+  try {
+    const url = new URL(src);
+    const match = url.pathname.match(/^\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})\/(maxresdefault|hq720|sddefault|hqdefault)\.(?:jpg|webp)$/);
+    if (url.protocol === 'https:' && ['img.youtube.com', 'i.ytimg.com'].includes(url.hostname) && match)
+      return `https://i.ytimg.com/vi/${match[1]}/mqdefault.jpg`;
+  } catch { /* a local artwork URL has its own error state */ }
+  return undefined;
+}
+export function rejectPreviewArtwork(src?: string | null): void {
+  if (!src || !previewFallbacks.has(src)) return;
+  rejectedPreviews.add(src);
+  if (rejectedPreviews.size > 256) rejectedPreviews.delete(rejectedPreviews.values().next().value!);
+}
+const [previewArtwork, setPreviewArtwork] = createSignal<Record<string, { url: string; width: number; height: number }>>({});
+export function registerPreviewArtwork(id: string, art?: { url: string; width: number; height: number }): void {
+  if (!art || !Number.isFinite(art.width) || !Number.isFinite(art.height) || art.width <= 0 || art.height <= 0 || rejectedPreviews.has(art.url) || previewArtwork()[id]?.url === art.url) return;
+  setPreviewArtwork(previous => Object.fromEntries([...Object.entries(previous).filter(([key]) => key !== id), [id, art]].slice(-256)));
+}
+function previewCover(id: string, fallback?: string): string | undefined {
+  const best = previewArtwork()[id];
+  if (!best || !fallback || best.url === fallback || rejectedPreviews.has(best.url)) return artworkUrl(fallback);
+  try {
+    const old = new URL(fallback);
+    if (!['img.youtube.com', 'i.ytimg.com'].includes(old.hostname)) return artworkUrl(fallback);
+    const match = old.pathname.match(/^\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})\/(maxresdefault|hq720|sddefault|hqdefault|mqdefault|default)\.(?:jpg|webp)$/);
+    const candidate = new URL(best.url);
+    if (!match || match[1] !== id || candidate.protocol !== 'https:' || candidate.username || candidate.password || !['img.youtube.com', 'i.ytimg.com'].includes(candidate.hostname)
+        || !candidate.pathname.startsWith(`/vi/${id}/`) && !candidate.pathname.startsWith(`/vi_webp/${id}/`)) return artworkUrl(fallback);
+    const floor = ({ maxresdefault: 720, hq720: 720, sddefault: 480, hqdefault: 360, mqdefault: 180, default: 90 } as Record<string, number>)[match[2]];
+    if (Math.min(best.width, best.height) <= floor) return artworkUrl(fallback);
+    previewFallbacks.set(best.url, fallback);
+    if (previewFallbacks.size > 256) previewFallbacks.delete(previewFallbacks.keys().next().value!);
+    return best.url;
+  } catch { return artworkUrl(fallback); }
 }
 const [artworkMetadata, setArtworkMetadata] = createSignal<Record<string, ArtworkMetadata>>({});
 export function registerArtworkMetadata(tracks: ArtworkMetadata[]): void {
   setArtworkMetadata(Object.fromEntries(tracks.map(track => [track.id, track])));
+  if (!tracks.length) { setPreviewArtwork({}); previewFallbacks.clear(); rejectedPreviews.clear(); }
 }
 
 /** Apply accepted delta metadata without rebuilding entries for every track. */
@@ -65,7 +108,8 @@ export const bustCovers = (): void => {
 export const coverUrl = (id: string, size?: 'thumb'): string => {
   const v = coverVersion();
   const revision = artworkMetadata()[id]?.artwork_revision;
-  const params = [size ? `size=${size}` : '', revision ? `rev=${revision}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
+  const scope = artworkMetadata()[id]?.artwork_scope;
+  const params = [scope ? `scope=${scope}` : '', size ? `size=${size}` : '', revision ? `rev=${revision}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
   return `${mediaOrigin()}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`;
 };
 
@@ -96,7 +140,7 @@ interface TrackCoverIdentity {
  * edit views. A preview's thumbnail is already small and has no size variants.
  */
 export const trackCoverUrl = (track: TrackCoverIdentity, size?: 'thumb'): string | undefined =>
-  track.source === 'preview' ? artworkUrl(track.cover) || undefined : coverUrl(track.id, size);
+  track.source === 'preview' ? previewCover(track.id, track.cover) || undefined : coverUrl(track.id, size);
 
 /** Whether a track has any artwork to show. Defined in terms of
  * `trackCoverUrl` rather than restating the rule, so the two cannot drift:

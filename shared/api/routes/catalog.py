@@ -1458,6 +1458,21 @@ def catalog_save():
         # catalog response's nested shape.
         metadata_evidence["musicbrainz_id"] = musicbrainz_id
     metadata_evidence.update(_album_evidence(data))
+    # The client URL and claimed provider are not fetch authority. Revalidate
+    # the actual provider record and bind its image to this account/video.
+    if re.fullmatch(r'deezer:track:[0-9]+', str(data.get('catalog_item_id') or '')) and data.get('album'):
+        try:
+            record = _deezer_get('track/' + data['catalog_item_id'].rsplit(':', 1)[-1])
+            album = record.get('album') or {}
+            if (fold_text(record.get('title') or '') == fold_text(title)
+                    and fold_text((record.get('artist') or {}).get('name') or '') == fold_text(artist)
+                    and fold_text(album.get('title') or '') == fold_text(data['album'])):
+                from shared.artwork_sources import selection
+                receipt = selection(video_id, data['catalog_item_id'], deezer.image(album, 'cover'))
+                if receipt:
+                    metadata_evidence['artwork_selection'] = receipt
+        except Exception:
+            logger.debug('Catalog artwork verification unavailable; retaining source image', exc_info=True)
     item = {
         "source_type": "ytmusic_search",
         "video_id": video_id,
