@@ -8,10 +8,8 @@ const track: Track = { id: 'one', title: 'One', artist: 'Artist', duration: 180 
 
 function snapshot(playing: boolean): ProgramPlaybackSnapshot {
   return {
-    outputMode: 'carrier',
     playing,
     sourcePlaying: playing,
-    carrierPlaying: playing,
     position: 12,
     duration: 180,
     playbackRate: 1,
