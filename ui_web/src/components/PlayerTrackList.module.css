@@ -1,4 +1,5 @@
 .panel {
+  container: tracklist / inline-size;
   display: flex;
   width: 100%;
   height: 100%;
@@ -10,23 +11,24 @@
   background: transparent;
 }
 
+/* The same height and inset as the browser's search bar beside it, so the
+ * two panels' first lines sit on one line across the room. */
 .head {
+  position: relative;
   display: flex;
-  min-height: 54px;
+  min-height: 52px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--stage-material-quiet);
-  border-bottom: 1px solid var(--stage-line-soft);
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) 14px;
 }
 
 .heading {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 5px;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .heading h2 {
@@ -39,21 +41,15 @@
 }
 
 .count {
-  display: inline-grid;
-  min-width: 24px;
-  height: 24px;
-  place-items: center;
-  padding: 0 7px;
-  color: var(--ink-tertiary);
-  font-size: var(--text-caption);
+  color: var(--ink-secondary);
+  font-size: var(--text-label);
+  font-weight: var(--fw-medium);
   font-variant-numeric: tabular-nums;
-  background: var(--stage-well);
-  border-radius: var(--radius-full);
 }
 
 .headAction {
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 36px;
+  padding: 0 12px;
   color: var(--ink-secondary);
   font: inherit;
   font-size: var(--text-caption);
@@ -111,7 +107,7 @@
    * to that edge. The clearance belongs at the end of the bottom lane's own
    * scroller, where it is content rather than a floor. */
   /* Match the section heads' negative margins at every interface size. */
-  padding: 8px var(--space-sm) 0;
+  padding: 4px var(--space-sm) 0;
 }
 
 /* Every lane keeps its label and at least one row. Shrinking proportionally
@@ -178,31 +174,22 @@
   padding-bottom: max(24px, var(--player-mobile-footer-clearance, 24px));
 }
 
-/* Sticky for the fallback above, where `.rows` is the one scrolling and a lane
- * label would otherwise leave with its rows. The negative side margins span the
- * padding `.rows` sets, so nothing scrolls past the label at its edges — and
- * stopping exactly at the padding box is what keeps it from overflowing
- * sideways. `top` stays at the scrollport edge: a negative one pinned the label
- * above it and had the scroller clip its first pixels. */
+/* A label in the margin, not a band across the panel: the lanes are told
+ * apart by the air between them (`.rows` gap). Each lane scrolls inside its
+ * own box under its label, so the label never has rows passing beneath it;
+ * in the fallback where `.rows` scrolls instead, it leaves with its lane. */
 .sectionHead {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 26px;
   flex: 0 0 auto;
-  margin: 0 calc(-1 * var(--space-sm));
-  padding: 0 var(--space-md);
-  color: var(--ink-tertiary);
+  padding: 0 var(--space-xs);
+  color: var(--ink-secondary);
   font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: var(--stage-sheet);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 /* The label now carries the name of wherever the lane came from, which is as
@@ -230,7 +217,6 @@
   align-items: center;
   min-width: 0;
   min-height: max(var(--row-h), 48px);
-  border-bottom: 1px solid var(--stage-line-soft);
 }
 
 .row::before {
@@ -303,7 +289,7 @@
 .position {
   display: grid;
   place-items: center;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
@@ -315,7 +301,7 @@
   background-color: var(--stage-material);
   background-position: center;
   background-size: cover;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs, 4px);
 }
 
 .meta {
@@ -371,7 +357,7 @@
   height: 34px;
   place-items: center;
   padding: 0;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   background: transparent;
   border: 0;
   border-radius: var(--radius-full);
@@ -436,7 +422,6 @@
   min-height: max(var(--row-h), 48px);
   background: var(--stage-material-quiet);
   border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px var(--stage-line-soft);
 }
 
 /* Lined up with the rows' artwork column: their position column and its gap
@@ -504,7 +489,7 @@
   height: 34px;
   place-items: center;
   padding: 0;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   background: transparent;
   border: 0;
   border-radius: var(--radius-full);
@@ -700,3 +685,15 @@
 .cardMore { display: flex; justify-content: center; padding: 8px 12px 4px; }
 .cardEmpty { padding: 12px; color: var(--ink-secondary); font-size: var(--text-caption); }
 .card[data-mobile] .cardExpand, .card[data-mobile] .cardRemove { width: 44px; height: 44px; }
+
+.extra {
+  display: contents;
+}
+
+/* A narrow list keeps the title before a second button: what the button does
+ * is in the row's menu as well, one press away. */
+@container tracklist (max-width: 340px) {
+  .extra[data-row-extra='menu'] {
+    display: none;
+  }
+}

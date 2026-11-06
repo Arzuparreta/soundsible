@@ -75,47 +75,43 @@ describe('unified player geometry', () => {
     const surfaceGeometry = scopedDeclarations(surface, '.surface');
     expect(surfaceGeometry).toMatchObject({
       height: 'var(--app-viewport-height, 100dvh)',
-      '--player-chrome-top': 'max(14px, env(safe-area-inset-top, 0px))',
+      '--player-chrome-top': 'max(12px, env(safe-area-inset-top, 0px))',
       '--player-mobile-safe-bottom': 'env(safe-area-inset-bottom, 0px)',
-      // The pager pill keeps this margin on both sides — below it to the card's
-      // bottom edge, above it to the last row of panel content — whatever the
-      // device's home indicator costs.
-      '--player-carousel-inset': '20px',
       '--player-carousel-bottom':
         'calc(var(--player-mobile-safe-bottom) + var(--player-carousel-inset))',
-      '--player-mobile-footer-clearance':
+      // The pager has a band of its own: the pager and its air on both sides.
+      '--player-carousel-band':
         'calc(var(--player-carousel-height) + var(--player-carousel-inset) * 2)',
     });
+    // The pages stop above that band and the home indicator under it, so no
+    // row, card or lyric ever passes beneath the pager.
     expect(scopedDeclarations(workspace, '.workspace', 'max-width: 1023px')).toMatchObject({
       'padding-top':
         'calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))',
-      'padding-bottom': 'var(--player-mobile-safe-bottom)',
+      'padding-bottom': 'calc(var(--player-mobile-safe-bottom) + var(--player-carousel-band))',
     });
   });
 
-  it('hangs the footer clearance off the bottom lane, not off the box that holds the lanes', () => {
+  it('ends the bottom lane with air inside its own scroller, not under the box that holds the lanes', () => {
     // The lanes fill this box and then it almost never scrolls, so a bottom
     // padding on it is never a band the list is scrolled past: it is permanent
-    // empty panel, and it is what held the queue a whole clearance short of the
-    // card's edge. It belongs at the end of the bottom lane's own scroller,
-    // where the rows can be scrolled through it. The lanes keep no trailing
-    // margin of their own either — the air between them is the box's `gap`.
+    // empty panel. The air under the last row belongs at the end of the bottom
+    // lane's own scroller, where the rows can be scrolled through it. The
+    // lanes keep no trailing margin of their own either — the air between them
+    // is the box's `gap`.
     expect(scopedDeclarations(trackList, '.rows')).toMatchObject({
       gap: 'var(--space-lg)',
-      padding: '8px var(--space-sm) 0',
+      padding: '4px var(--space-sm) 0',
     });
     expect(scopedDeclarations(trackList, '.section')['margin-bottom']).toBeUndefined();
     expect(scopedDeclarations(trackList, '.section:last-child .sectionRows')).toMatchObject({
       'padding-bottom': 'max(24px, var(--player-mobile-footer-clearance, 24px))',
     });
-    // Desktop trades the pill's band for plain air, and it moves with it.
     expect(scopedDeclarations(trackList, '.rows', 'min-width: 1024px')['padding-bottom'])
       .toBeUndefined();
     expect(
       scopedDeclarations(trackList, '.section:last-child .sectionRows', 'min-width: 1024px'),
     ).toMatchObject({ 'padding-bottom': '24px' });
-    // The panel the queue is measured against reserves the same band, and can
-    // leave it as padding because its body always overflows.
     expect(scopedDeclarations(browser, '.body').padding).toContain(
       'var(--player-mobile-footer-clearance',
     );

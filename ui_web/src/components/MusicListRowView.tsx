@@ -111,7 +111,7 @@ export function MusicListRowView(props: MusicListRowViewProps) {
         <span class={styles.meta} data-row-meta>
           <span class={styles.subtitle}>
             <span class={styles.detail} data-row-detail><Show when={props.index != null}><span class={styles.index}>{props.index} · </span></Show>
-              {props.subtitleContent ?? props.subtitle}</span>
+              <span class={styles.detailText}>{props.subtitleContent ?? props.subtitle}</span></span>
             <Show when={props.annotation}><span class={styles.annotation}>{props.subtitle ? ' · ' : ''}{props.annotation}</span></Show>
           </span>
         </span>

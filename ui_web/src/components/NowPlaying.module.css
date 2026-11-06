@@ -5,8 +5,7 @@
    The shell around all of it is not here: `PlayerSurface` owns the sliding
    surface and its swipe-to-close, `PlayerWorkspace` owns the resizable
    browser│stage│queue columns and their splitters, and `PlayerTrackList` owns
-   the queue itself. This file kept a full second copy of all three, unreached
-   since that split, and it has been removed. */
+   the queue itself. */
 
 .empty {
   flex: 1;
@@ -16,8 +15,7 @@
   color: var(--ink-secondary);
 }
 
-.desktopLyrics,
-.desktopLyricsToggle {
+.desktopLyrics {
   display: none;
 }
 
@@ -29,19 +27,51 @@
   place-items: center;
 }
 
-/* ── Stage ── */
+/* ── Stage ──────────────────────────────────────────────────────────────────
+   One column, as wide as the artwork, centred in the tile: the cover, then
+   the song, the seek bar, the transport and the actions, every one of them
+   starting and ending on the cover's edges.
+
+   The tile is a size container (PlayerWorkspace), so the artwork is fitted to
+   both of its sides at once: as wide as the tile allows, as tall as what is
+   left once the rows under it have taken theirs. `--stage-reserve` is that
+   height — padded slightly, never short, so the column it sets is the width
+   the cover really gets. If a long title wraps to a second line anyway, the
+   artwork's own box (`.media`, a size container too) gives up the difference
+   and the cover shrinks a little inside the column instead of pushing the
+   transport off the tile. */
 .body {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+  --stage-pad-x: clamp(18px, 6cqw, 44px);
+  --stage-pad-top: clamp(8px, 2.6cqh, 28px);
+  --stage-pad-bottom: clamp(8px, 2.6cqh, 24px);
+  --stage-gap: clamp(12px, 2.6cqh, 28px);
+  --stage-row-gap: clamp(6px, 1.5cqh, 16px);
+  --stage-title: clamp(20px, 5.4cqw, 30px);
+  --stage-icon-inset: calc((var(--control-h) - 20px) / -2);
+  --stage-reserve: calc(
+    var(--stage-pad-top) + var(--stage-pad-bottom) + var(--stage-gap)
+    + var(--stage-title) * 1.25 + 26px
+    + 44px + 64px + var(--control-h)
+    + var(--stage-row-gap) * 3 + 12px
+  );
+  --stage-art: min(100cqw - 2 * var(--stage-pad-x), 100cqh - var(--stage-reserve), 760px);
+  --stage-col: min(100cqw - 2 * var(--stage-pad-x), max(var(--stage-art), 300px));
+
   display: flex;
+  flex: 1;
   flex-direction: column;
-  justify-content: space-between;
-  gap: clamp(14px, 2.6dvh, 24px);
-  padding: var(--space-sm) var(--gutter) calc(var(--space-md) + env(safe-area-inset-bottom, 0));
-  max-width: 560px;
+  align-items: center;
+  gap: var(--stage-gap);
   width: 100%;
-  margin: 0 auto;
+  height: 100%;
+  min-height: 0;
+  padding: var(--stage-pad-top) var(--stage-pad-x) var(--stage-pad-bottom);
+  /* The last resort, not the layout: the artwork gives way first (and goes
+     altogether in a very short tile, below), so this only scrolls when even
+     the rows under it do not fit — the large interface size in a window a
+     few hundred pixels tall. */
+  overflow-x: hidden;
+  overflow-y: auto;
   /* Lock the body to its content: no overscroll bounce (rubber-band) at the
      top, and no scroll-chaining to the surface behind it. Swipe-down is
      handled by `PlayerSurface` (pointer events), not by the body's native
@@ -49,47 +79,18 @@
   overscroll-behavior-y: none;
 }
 
-:global([data-player-workspace] [data-player-tile='stage']) > .body {
-  width: 100%;
-  height: 100%;
-}
-
-.media,
-.controlsPanel {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex-shrink: 0;
-}
-
 .media {
-  align-items: center;
-  justify-content: center;
-  flex: 1 1 auto;
-  min-height: 0;
-  gap: clamp(12px, 2.4dvh, 20px);
-}
-
-.controlsPanel {
-  gap: clamp(12px, 2.2dvh, 20px);
-}
-
-/* The cover is the one part of the stage that can give way. The frame starts
-   out square at the cover's full size, and when the song, the transport and
-   the actions leave less height than that it is the frame's height that
-   shrinks; the cover inside stays square at whichever side is shorter. A
-   window-height guess (`42dvh`, `100dvh - 510px`) used to stand in for this,
-   and every line added under the cover, or a short phone, pushed the stage
-   past its card instead. */
-.visualFrame {
   container-type: size;
   display: flex;
+  flex: 1 1 0;
   align-items: center;
   justify-content: center;
-  width: min(100%, 360px);
-  aspect-ratio: 1;
-  flex: 0 1 auto;
+  width: var(--stage-col);
   min-height: 96px;
+}
+
+.visualFrame {
+  display: contents;
 }
 
 .visualSlot {
@@ -107,125 +108,123 @@
   aspect-ratio: 1;
   flex-shrink: 0;
   margin: 0 auto;
+  overflow: hidden;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--stage-line-soft);
-  box-shadow: var(--stage-shadow-lg), 0 0 0 1px var(--stage-rim) inset;
+  box-shadow: var(--stage-shadow-sm);
 }
 
+.controlsPanel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--stage-row-gap);
+  width: var(--stage-col);
+  min-width: 0;
+}
+
+/* Title and who, left on the cover's edge; the two marks that belong to the
+   song itself — keep it, love it — on the right. */
 .info {
-  width: 100%;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.meta {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .title {
   display: -webkit-box;
-  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   margin: 0;
   overflow: hidden;
-  font-size: var(--text-h1);
+  font-size: var(--stage-title);
   font-weight: var(--fw-bold);
-  line-height: var(--lh-snug);
-  letter-spacing: -0.01em;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
   overflow-wrap: anywhere;
   text-overflow: ellipsis;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.titleRow {
+/* Artist · record on one line. The record gives way first: it is the
+   quieter of the two, and it is the one the cover already shows. */
+.byline {
   display: flex;
-  width: 100%;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-sm);
-}
-
-.radioBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--control-h);
-  height: var(--control-h);
-  padding: 0;
-  flex-shrink: 0;
-  border: 1px solid var(--accent-soft);
-  border-radius: var(--radius-full);
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-  cursor: pointer;
-  transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.radioBadge:hover {
-  background: var(--accent);
-  color: var(--ink-on-accent);
-}
-}
-
-.radioBadgeLoading {
-  animation: radioBadgePulse 1.2s var(--ease-out) infinite;
-  animation-play-state: var(--decorative-animation-state, running);
-}
-
-@keyframes radioBadgePulse {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
-}
-
-.artist {
-  margin: var(--space-xs) 0 0;
-  color: var(--ink-secondary);
-}
-
-/* Title, then who, then the record: each a step quieter than the one above.
-   Its own line, so a long artist and a long album each get the full width. */
-.album {
-  display: block;
-  width: fit-content;
-  max-width: 100%;
   min-height: 24px;
-  margin: 0 auto;
+  margin: 0;
   overflow: hidden;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   font-size: var(--text-label);
   line-height: 24px;
   white-space: nowrap;
+}
+
+.artist {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A link carries its own touch target as an inline-block, and an inline-block
+   that does not fit is replaced whole by the line's ellipsis. Clipping its own
+   text keeps the first letters of the name instead. */
+.artist a,
+.byline .album {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Drawn inside the link: the line clips anything outside it. */
+.artist a:focus-visible,
+.byline .album:focus-visible {
+  outline-offset: -2px;
+}
+
+.bylineSeparator {
+  flex: none;
+  color: var(--ink-secondary);
+}
+
+.album {
+  flex: 0 1000 auto;
+  min-width: 2.5em;
+  overflow: hidden;
+  color: var(--ink-secondary);
   text-overflow: ellipsis;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .album:hover {
+  .byline .album:hover {
     color: var(--ink-secondary);
   }
 }
 
-.artistLink {
-  margin: var(--space-xs) 0 0;
-  padding: 0;
-  font: inherit;
-  color: var(--ink-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out);
+.infoActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-right: var(--stage-icon-inset);
 }
 
-:global(html[data-interface-size='normal']) .artistLink,
-:global(html[data-interface-size='large']) .artistLink {
-  min-height: 24px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.artistLink:hover {
-  color: var(--accent-ink);
-  text-decoration: underline;
-}
+/* An episode, or a song with nothing to keep: no box, so no negative margin
+   pulling the title past the cover's edge. */
+.infoActions:not(:has(button)) {
+  display: none;
 }
 
 /* ── Seek + volume (custom ranges: thin track, accent fill, thumb on hover) ── */
@@ -365,8 +364,14 @@
 }
 }
 
-/* Touch: no hover — the thumb is always there. */
+/* Touch: no hover — the thumb is always there, and the bar is a 44px target
+   whose extra height is taken out of the space around it, not added to it. */
 @media (pointer: coarse) {
+  .seek {
+    height: 44px;
+    margin-block: -11px;
+  }
+
   .seek::-webkit-slider-thumb,
   .volRange::-webkit-slider-thumb {
     opacity: 1;
@@ -381,18 +386,39 @@
 .times {
   display: flex;
   justify-content: space-between;
+  margin-top: 2px;
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
 }
 
-/* ── Transport ── */
+.seekWrap {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Transport ── shuffle and repeat stand on the column's edges, the three
+   that move the music in the middle. DJ has no shuffle or repeat: its three
+   stay together in the centre. */
+/* Across a wide column (a tablet held upright, a wide stage) the transport
+   and the actions stop at a hand's width and centre under the cover. */
+.controls,
+.actionsBar {
+  align-self: center;
+  width: calc(min(100%, 480px) - 2 * var(--stage-icon-inset));
+  max-width: calc(100% - 2 * var(--stage-icon-inset));
+}
+
 .controls {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+[data-player-stage-mode='auto'] .controls {
   justify-content: center;
-  gap: var(--space-lg);
+  gap: clamp(20px, 8cqw, 44px);
 }
 
 .ctrl,
@@ -407,20 +433,21 @@
 }
 
 .ctrl {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: var(--radius-full);
   transition:
     color var(--dur-short) var(--ease-out),
     background var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
+
 @media (hover: hover) and (pointer: fine) {
-.ctrl:hover {
-  color: var(--accent-ink);
-  background: var(--accent-faint);
+  .ctrl:hover {
+    background: var(--stage-material);
+  }
 }
-}
+
 .ctrl:active {
   transform: scale(0.92);
 }
@@ -429,29 +456,32 @@
   position: relative;
   width: var(--control-h);
   height: var(--control-h);
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   border-radius: var(--radius-full);
   transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
 }
+
 @media (hover: hover) and (pointer: fine) {
-.toggle:hover {
-  color: var(--ink-secondary);
-  background: var(--stage-row-hover);
+  .toggle:hover {
+    color: var(--ink-primary);
+    background: var(--stage-material);
+  }
 }
-}
+
 .on {
   color: var(--accent-ink);
 }
+
 @media (hover: hover) and (pointer: fine) {
-.on:hover {
-  color: var(--accent-ink-hover);
-}
+  .on:hover {
+    color: var(--accent-ink-hover);
+  }
 }
 
 .repeatOne {
   position: absolute;
-  top: 2px;
-  right: 4px;
+  top: 4px;
+  right: 6px;
   font-size: var(--text-nano);
   font-weight: var(--fw-bold);
   font-family: var(--font-mono);
@@ -463,36 +493,43 @@
   justify-content: center;
   width: 64px;
   height: 64px;
+  flex: none;
   color: var(--ink-on-accent);
   background: var(--accent);
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  box-shadow: 0 1px 0 var(--stage-gloss) inset, 0 14px 36px var(--accent-glow);
   transition:
     background var(--dur-short) var(--ease-out),
-    box-shadow var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
+
 @media (hover: hover) and (pointer: fine) {
-.play:hover {
-  background: var(--accent-hover);
-  box-shadow: 0 1px 0 var(--stage-gloss) inset, 0 18px 42px var(--accent-glow);
-  transform: scale(1.035);
+  .play:hover {
+    background: var(--accent-hover);
+    transform: scale(1.04);
+  }
 }
-}
+
 .play:active {
   transform: scale(0.94);
 }
 
-/* Action bar. Deliberately short: queue (mobile) · favourite · save (previews)
-   · radio · volume (desktop) · more. Radio is here because it has state to
-   show; everything else lives in the ⋯ menu. */
+.ctrl:focus-visible,
+.toggle:focus-visible,
+.play:focus-visible,
+.actBtn:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+/* ── Actions ── lyrics · queue (compact) · radio · volume · more, spread
+   from edge to edge of the column, so whichever of them the song leaves sit
+   evenly. The icons, not their targets, land on the edges. */
 .actionsBar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-lg);
+  justify-content: space-between;
 }
 
 .actBtn {
@@ -501,6 +538,7 @@
   justify-content: center;
   width: var(--control-h);
   height: var(--control-h);
+  flex: none;
   color: var(--ink-secondary);
   background: transparent;
   border: none;
@@ -511,28 +549,46 @@
     background var(--dur-short) var(--ease-out),
     transform var(--dur-micro) var(--ease-out);
 }
+
 .actBtn:active {
   transform: scale(0.92);
 }
+
 @media (hover: hover) and (pointer: fine) {
-.actBtn:hover {
-  color: var(--ink-primary);
-  background: var(--stage-row-hover);
+  .actBtn:hover {
+    color: var(--ink-primary);
+    background: var(--stage-material);
+  }
 }
+
+.actBtn:disabled {
+  cursor: default;
 }
+
 .actOn {
   color: var(--accent-ink);
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .actOn:hover {
+    color: var(--accent-ink-hover);
+  }
+}
+
 .actPulse {
-  animation: radioBadgePulse 1.2s var(--ease-out) infinite;
+  animation: radioPulse 1.2s var(--ease-out) infinite;
   animation-play-state: var(--decorative-animation-state, running);
+}
+
+@keyframes radioPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 .volume {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: 2px;
 }
 
 /* Layout-transparent outside the lyrics dock, which is what gives them a box. */
@@ -542,78 +598,30 @@
 }
 
 @media (max-width: 767px) {
-  .volume {
-    gap: 0;
-  }
-
   .volRange {
     display: none;
   }
 }
 
+/* Which of the stage's buttons a layout carries. Declared after `.actBtn`,
+   which would otherwise show them all. */
 .mobileLyrics,
-.mobileLyricsToggle {
+.mobileLyricsToggle,
+.desktopLyricsToggle {
   display: none;
 }
 
 .mobileLyrics {
-  --lyrics-overlay-clearance: 62px;
-
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--stage-sheet);
-  border: 1px solid var(--stage-line);
+  background: var(--stage-well);
   border-radius: var(--radius-lg);
-  box-shadow: var(--stage-shadow-md);
 }
 
-.mobileLyricsToggle {
-  position: absolute;
-  top: var(--space-sm);
-  right: var(--space-sm);
-  z-index: 3;
-  align-items: center;
-  justify-content: center;
-  width: var(--control-h);
-  height: var(--control-h);
-  color: var(--ink-primary);
-  background: var(--stage-material);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-full);
-  box-shadow: var(--stage-shadow-sm);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  cursor: pointer;
-  transition:
-    color var(--dur-short) var(--ease-out),
-    background var(--dur-short) var(--ease-out),
-    border-color var(--dur-short) var(--ease-out),
-    transform var(--dur-micro) var(--ease-out);
-}
-
-.mobileLyricsToggle:active {
-  transform: scale(0.94);
-}
-
-.mobileLyricsToggleOn {
-  color: var(--ink-on-accent);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .mobileLyricsToggle:hover {
-    color: var(--ink-on-accent);
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-}
-
-/* Search/Lyrics only gains its desktop side panel at 1024px. Until then,
-   Lyrics reuses the measured cover slot so phones and tablets never lose the
-   feature and the Auto handoff keeps the exact same rectangle. */
+/* Below 1024px lyrics take the cover's own square, so phones and tablets
+   never lose them and the DJ handoff keeps the exact same rectangle. */
 @media (max-width: 1023px) {
   .visualSlot[data-lyrics-open] .art {
     display: none;
@@ -623,161 +631,87 @@
     display: flex;
   }
 
-  .mobileLyricsToggle {
+  .mobileLyricsToggle,
+  .mobileQueueToggle {
     display: inline-flex;
   }
-}
-
-/* ── Mobile fine-tuning ── */
-@media (max-width: 767px) {
-  .title {
-    display: -webkit-box;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    font-size: clamp(22px, 6vw, 30px);
-  }
-
-  .artist,
-  .artistLink {
-    max-width: 100%;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-}
-
-@media (max-width: 420px) {
-  .body {
-    gap: clamp(10px, 2dvh, 16px);
-    padding-top: var(--space-xs);
-  }
-
-  .media {
-    gap: var(--space-sm);
-  }
-
-  .controlsPanel {
-    gap: clamp(10px, 1.8dvh, 16px);
-  }
-
-  .controls {
-    gap: clamp(4px, 3vw, 16px);
-  }
-
-  .actionsBar {
-    gap: clamp(4px, 3vw, 16px);
-  }
-}
-
-/* ── Tablet & desktop: hairline-separated columns, stage in the middle ── */
-@media (min-width: 768px) {
 
   .body {
-    flex: 1;
-    max-width: none;
-    margin: 0;
-    /* The top clears the stage tile's drag grip (6px down, 32px tall), which
-       the cover otherwise slides under once it grows into the room. */
-    padding: 44px clamp(16px, 1.6vw, 32px) var(--space-xl);
-    justify-content: center;
-    gap: clamp(16px, 3.2dvh, 36px);
+    --stage-pad-x: clamp(20px, 6cqw, 40px);
   }
+}
 
-  .media {
-    flex: 0 1 auto;
-  }
-
-  .visualFrame {
-    width: min(100%, 400px);
-  }
-
-  .controlsPanel {
-    width: min(100%, 520px);
-    margin: 0 auto;
-  }
-
-  .controls {
-    gap: var(--space-xl);
-  }
-
-  /* Fewer controls than before, so they read better grouped in the middle than
-     stretched across the full seek-bar width. */
-  .actionsBar {
-    justify-content: center;
-    gap: var(--space-lg);
-  }
-
-  .title {
-    font-size: clamp(22px, 2.2vw, 32px);
-    overflow-wrap: anywhere;
-  }
-
+@media (min-width: 1024px) {
   .mobileQueueToggle {
     display: none;
   }
 
-  .actBtn {
-    width: 40px;
-    height: 40px;
+  .desktopLyricsToggle {
+    display: inline-flex;
   }
 
-  .radioBadge {
-    width: 36px;
-    height: 36px;
-  }
-
-  .toggle {
-    width: 40px;
-    height: 40px;
+  .volRange {
+    width: clamp(64px, 18cqw, 104px);
   }
 }
-@media (min-width: 1024px) {
 
-  .desktopLyricsToggle {
-    position: absolute;
-    z-index: 7;
-    top: var(--space-sm);
-    right: var(--space-sm);
-    display: inline-flex;
-    align-items: center;
+/* A phone on its side, or any tile much wider than it is tall: the artwork
+   on the left at the tile's full height, everything else beside it. */
+@container stage (min-aspect-ratio: 5 / 4) and (max-height: 560px) {
+  .body:not(.desktopLyricsStage) {
+    --stage-land-art: min(100cqh - var(--stage-pad-top) - var(--stage-pad-bottom), 44cqw);
+
+    flex-direction: row;
     justify-content: center;
-    width: var(--control-h);
-    height: var(--control-h);
-    color: var(--ink-primary);
-    background: var(--stage-material);
-    border: 1px solid var(--stage-line);
-    border-radius: var(--radius-full);
-    box-shadow: var(--stage-shadow-sm);
-    backdrop-filter: blur(16px);
-    cursor: pointer;
+    gap: clamp(20px, 5cqw, 48px);
   }
 
-  .desktopLyricsToggleOn {
-    color: var(--ink-on-accent);
-    background: var(--accent);
-    border-color: var(--accent);
+  .body:not(.desktopLyricsStage) .media {
+    flex: none;
+    width: var(--stage-land-art);
+    height: var(--stage-land-art);
+    min-height: 0;
   }
 
-  /* Lyrics fill the stage and the player folds into a dock below them: the
-     seek bar across the full width, then the song, the transport and its
-     actions on one row. The transport keeps the centre; the two sides share
-     what is left and give way before it does. Everything is sized against the
-     stage tile (a size container), never the window: the tile is resizable. */
+  .body:not(.desktopLyricsStage) .controlsPanel {
+    flex: 0 1 440px;
+    width: auto;
+    min-width: 0;
+  }
+}
+
+/* A tile too short for artwork and controls together — a desktop window a few
+   hundred pixels tall — keeps the controls and lets the cover go: the room
+   behind them is already that cover, blurred. Lyrics opened in the cover's
+   square keep it. */
+@container stage (max-height: 420px) and (max-aspect-ratio: 5 / 4) {
+  .body:not(.desktopLyricsStage) {
+    justify-content: center;
+  }
+
+  .body:not(.desktopLyricsStage) .media:not(:has([data-lyrics-open])) {
+    display: none;
+  }
+}
+
+/* ── Lyrics dock (desktop) ────────────────────────────────────────────────
+   Lyrics fill the stage and the player folds into a dock below them: the
+   seek bar across the full width, then the song, the transport and its
+   actions on one row. The transport keeps the centre; the two sides share
+   what is left and give way before it does. Everything is sized against the
+   stage tile (a size container), never the window: the tile is resizable. */
+@media (min-width: 1024px) {
   .desktopLyricsStage {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto 46px;
+    grid-template-rows: minmax(0, 1fr) auto 48px;
     column-gap: 12px;
     row-gap: 4px;
-    padding: 14px;
-    max-width: none;
+    padding: 4px 0 8px;
     overflow: hidden;
   }
 
   .desktopLyricsStage .media,
-  .desktopLyricsStage .visualFrame,
   .desktopLyricsStage .controlsPanel {
     display: contents;
   }
@@ -792,11 +726,8 @@
     max-width: none;
     aspect-ratio: auto;
     overflow: hidden;
-    border: 1px solid var(--stage-line);
-    border-radius: var(--radius-panel);
-    box-shadow: var(--stage-shadow-lg), inset 0 1px var(--stage-rim);
-    background: var(--stage-panel);
-    backdrop-filter: var(--stage-material-filter);
+    border-radius: var(--radius-lg);
+    background: var(--stage-well);
   }
 
   .desktopLyricsStage .art {
@@ -806,7 +737,6 @@
     height: auto;
     margin: 0;
     aspect-ratio: auto;
-    border: 0;
     border-radius: 0;
     filter: var(--stage-media-filter);
     transform: scale(1.08);
@@ -836,37 +766,29 @@
     grid-row: 3;
     align-self: center;
     min-width: 0;
-    padding: 0 0 0 8px;
-    text-align: left;
+    padding-left: 4px;
   }
 
   .desktopLyricsStage .title {
     font-size: clamp(14px, 3cqi, 18px);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    -webkit-line-clamp: 1;
   }
 
-  .desktopLyricsStage .artist,
-  .desktopLyricsStage .artistLink {
-    max-width: 100%;
+  .desktopLyricsStage .byline {
+    min-height: 20px;
     font-size: var(--text-caption);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .desktopLyricsStage .titleRow {
-    justify-content: flex-start;
+    line-height: 20px;
   }
 
   /* The dock row holds two lines; the record waits for the cover's return. */
-  .desktopLyricsStage .album {
+  .desktopLyricsStage .bylineSeparator,
+  .desktopLyricsStage .byline .album {
     display: none;
   }
 
-  .desktopLyricsStage .radioBadge {
-    display: none;
+  .desktopLyricsStage .infoActions {
+    margin-right: 0;
   }
 
   /* 0:42 ━━━━━━━━━━━━ 3:00 — its own row, so nothing below can reach it. */
@@ -878,13 +800,14 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     column-gap: 10px;
-    padding: 4px 8px 0;
+    padding: 4px 4px 0;
   }
 
   .desktopLyricsStage .seek {
     grid-column: 2;
     grid-row: 1;
     height: 16px;
+    margin-block: 0;
   }
 
   .desktopLyricsStage .times {
@@ -909,7 +832,10 @@
     grid-column: 2;
     grid-row: 3;
     align-self: center;
+    justify-content: center;
     gap: 10px;
+    width: auto;
+    max-width: none;
   }
 
   .desktopLyricsStage .controls .toggle {
@@ -917,13 +843,23 @@
   }
 
   .desktopLyricsStage .play {
-    width: 46px;
-    height: 46px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .desktopLyricsStage .play svg {
+    width: 24px;
+    height: 24px;
   }
 
   .desktopLyricsStage .ctrl {
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .desktopLyricsStage .ctrl svg {
+    width: 24px;
+    height: 24px;
   }
 
   .desktopLyricsStage .actionsBar {
@@ -933,6 +869,8 @@
     align-self: center;
     justify-content: flex-end;
     gap: 2px;
+    width: auto;
+    max-width: none;
     min-width: 0;
     padding-right: 4px;
   }
@@ -943,8 +881,7 @@
     display: none;
   }
 
-  .desktopLyricsStage .actionsBar .actBtn {
-    flex-shrink: 0;
+  .desktopLyricsStage .actBtn {
     width: 36px;
     height: 36px;
   }
@@ -965,12 +902,9 @@
     display: flex;
     align-items: center;
     padding: 6px 14px;
-    background: var(--stage-material);
-    border: 1px solid var(--stage-line);
+    background: var(--stage-sheet);
     border-radius: var(--radius-full);
     box-shadow: var(--stage-shadow-sm);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     opacity: 0;
     visibility: hidden;
     transform: translateY(4px);
@@ -1010,13 +944,32 @@
     width: 112px;
   }
 
-  @container (min-width: 460px) {
+  /* A narrow dock cannot hold the song, the transport and the actions on one
+     row without the actions running over the transport. The transport takes
+     a row of its own under them instead. */
+  @container stage (max-width: 439px) {
+    .desktopLyricsStage {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: minmax(0, 1fr) auto 48px 52px;
+    }
+
+    .desktopLyricsStage .actionsBar {
+      grid-column: 2;
+    }
+
+    .desktopLyricsStage .controls {
+      grid-column: 1 / -1;
+      grid-row: 4;
+    }
+  }
+
+  @container stage (min-width: 460px) {
     .desktopLyricsStage .favouriteAction {
       display: contents;
     }
   }
 
-  @container (min-width: 640px) {
+  @container stage (min-width: 640px) {
     .desktopLyricsStage .actionsBar {
       gap: 4px;
     }
@@ -1038,41 +991,6 @@
       width: 88px;
     }
   }
-
-}
-
-/* Short desktop windows still get a complete, usable player rather than an
-   oversized composition. */
-@media (min-width: 768px) and (max-height: 559px) {
-  .body {
-    gap: var(--space-md);
-    padding-bottom: var(--space-sm);
-  }
-
-  .controlsPanel {
-    gap: var(--space-md);
-  }
-}
-
-/* At large interface size an 8–10 inch tablet does not have enough effective
-   width for a permanent queue beside the stage. Reuse the proven single-stage
-   mobile interaction until desktop space is genuinely available. */
-@media (min-width: 768px) and (max-width: 1023px) {
-
-  :global(html[data-interface-size='large']) .body {
-    max-width: 620px;
-    margin: 0 auto;
-    padding: var(--space-sm) var(--gutter) calc(var(--space-md) + env(safe-area-inset-bottom, 0));
-  }
-
-  :global(html[data-interface-size='large']) .visualFrame {
-    width: min(100%, 400px);
-  }
-
-  :global(html[data-interface-size='large']) .mobileQueueToggle {
-    display: inline-flex;
-  }
-
 }
 
 /* Empty Now Playing still occupies the same room as the shared workspace. */
@@ -1085,7 +1003,7 @@
   padding:
     calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))
     clamp(12px, 2vw, 28px)
-    clamp(48px, 6vh, 68px);
+    clamp(10px, 1.6vh, 20px);
   overflow: hidden;
 }
 
@@ -1096,38 +1014,10 @@
 
 @media (max-width: 1023px) {
   .emptyWorkspace {
-    padding-top:
-      calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
-    padding-right: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-right, 0px));
-    padding-bottom: var(--player-mobile-safe-bottom);
-    padding-left: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-left, 0px));
-  }
-
-  :global([data-player-workspace] [data-player-tile='stage']) > .body {
-    max-width: none;
-    margin: 0;
-    /* Exactly the clearance, nothing on top of it: the contract already carries
-       the pager pill's own margin on both sides, and the extra clamp that used
-       to sit here was what pushed the action row up and left the pill low in
-       its band. */
-    padding:
-      clamp(10px, 2vh, 20px)
-      clamp(14px, 4vw, 34px)
-      var(--player-mobile-footer-clearance);
-    overflow-y: auto;
-  }
-
-  .mobileQueueToggle,
-  :global(html[data-interface-size='large']) .mobileQueueToggle {
-    display: inline-flex;
+    padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-band));
   }
 }
 
-@media (min-width: 1024px) {
-  .emptyWorkspace {
-    padding-bottom: clamp(18px, 2.4vh, 30px);
-  }
-}
 .browserWithLive,
 .liveBrowser {
   position: relative;
@@ -1171,6 +1061,7 @@
 }
 
 .liveBrowser > header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-sm);

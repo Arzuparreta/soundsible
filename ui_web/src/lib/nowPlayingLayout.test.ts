@@ -18,6 +18,19 @@ describe('nowPlayingLayout', () => {
     );
   });
 
+  it('lets the old equal thirds follow the new default, and keeps any layout someone chose', () => {
+    const thirds = { browser: 1 / 3, stage: 1 / 3, queue: 1 / 3 };
+    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['browser', 'stage', 'queue'], ratios: thirds })))
+      .toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
+    expect(DEFAULT_NOW_PLAYING_LAYOUT.ratios).toEqual({ browser: 0.32, stage: 0.36, queue: 0.32 });
+    // Reordered, or resized, it was somebody's choice.
+    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['stage', 'browser', 'queue'], ratios: thirds })))
+      .toEqual({ version: 1, order: ['stage', 'browser', 'queue'], ratios: thirds });
+    const chosen = { browser: 0.25, stage: 0.5, queue: 0.25 };
+    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['browser', 'stage', 'queue'], ratios: chosen })).ratios)
+      .toEqual(chosen);
+  });
+
   it('keeps all three panels while moving or dropping one', () => {
     expect(movePanel(['browser', 'stage', 'queue'], 'stage', -1)).toEqual(['stage', 'browser', 'queue']);
     expect(reorderPanel(['browser', 'stage', 'queue'], 'queue', 0)).toEqual(['queue', 'browser', 'stage']);
