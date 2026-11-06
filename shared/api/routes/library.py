@@ -634,9 +634,8 @@ def get_saved_entries():
     """Every song in this account's library that is not (or not only) a file:
     identity keys, snapshot, and whether it is marked a favourite. Newest first.
 
-    The player unions this with the scanned library to draw one collection —
-    a saved song streams until a download gives it a file, and nothing about
-    the entry changes when that happens.
+    Compatibility facade over canonical collection properties. New clients use
+    /api/library/collection for items, sources and playlists in one snapshot.
     """
     api = _get_api()
     api["get_core"]()
@@ -661,6 +660,7 @@ def get_collection():
         response.status_code = 304
         response.set_etag(token, weak=True)
         response.headers['Cache-Control'] = 'private, no-cache'
+        response.vary.update(('Cookie', 'X-Soundsible-Admin-Token'))
         return response
     payload = _collection_payload(lib)
     response = jsonify(payload)

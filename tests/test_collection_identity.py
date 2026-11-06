@@ -40,6 +40,8 @@ def test_one_item_survives_stream_download_repair_and_source_removal(tmp_path):
     assert metadata.tracks[0].item_id == item_id
     assert metadata.playlists == {'Mix': [item_id]}
     assert Collection(db).snapshot()['items'][0]['id'] == 'file'
+    assert db.set_track_rating('file', 5)
+    assert db.record_track_play('file', 100)
 
     metadata.tracks = [replace(metadata.tracks[0], id='repaired', file_hash='repaired')]
     db.replace_library(metadata, id_replacements={'file': 'repaired'})
@@ -55,6 +57,10 @@ def test_one_item_survives_stream_download_repair_and_source_removal(tmp_path):
     assert after['items'][0]['id'] == VIDEO
     assert after['saved'][0]['added_at'] == before['saved'][0]['added_at']
     assert after['saved'][0]['favourite']
+    assert db.get_track_user_state(item_id) == {'play_count': 1, 'rating': 5, 'last_played_at': 100}
+    metadata.add_track(file('another-download'))
+    db.replace_library(metadata)
+    assert db.get_track_user_state('another-download') == {'play_count': 1, 'rating': 5, 'last_played_at': 100}
 
 
 def test_legacy_preview_and_file_reference_migrate_once_without_losing_occurrences(tmp_path):
@@ -121,3 +127,115 @@ def test_migration_rolls_back_instead_of_dropping_unreadable_saved_songs(tmp_pat
     with db._get_connection() as conn:
         assert conn.execute('SELECT count(*) FROM collection_state').fetchone()[0] == 0
         assert conn.execute('SELECT count(*) FROM collection_items').fetchone()[0] == 0
+
+
+def test_retries_of_a_direct_stream_do_not_choose_between_ambiguous_file_editions(tmp_path):
+    db = DatabaseManager(str(tmp_path / 'library.db'))
+    metadata = library(file('one'), file('two'))
+    db.replace_library(metadata)
+    entry = {'keys': [f'yt:{VIDEO}'], 'title': 'Autorretrato', 'artist': 'Extremoduro'}
+    db.replace_library(metadata, playlist_entry=('Mix', dict(entry)))
+    item_id = metadata.playlists['Mix'][0]
+    db.replace_library(metadata, playlist_entry=('Mix', dict(entry)))
+    snapshot = Collection(db).snapshot()
+    assert snapshot['playlists'] == {'Mix': [item_id]}
+    assert len(snapshot['items']) == 3
+    assert next(row for row in snapshot['items'] if row['item_id'] == item_id)['source'] == 'preview'
+
+
+def test_two_saved_managers_cannot_overwrite_each_others_changes():
+    from player.favourites_manager import FavouritesManager
+    first, second = FavouritesManager(), FavouritesManager()
+    first.set_saved([{'keys': ['yt:7N3rFdE3u3Y'], 'title': 'First'}], True)
+    second.set_saved([{'keys': ['yt:kJoC5KDWtAI'], 'title': 'Second'}], True)
+    assert {row['title'] for row in first.get_entries()} == {'First', 'Second'}
+
+
+def test_migrated_undated_files_keep_their_existing_newest_first_order(tmp_path):
+    db = DatabaseManager(str(tmp_path / 'library.db'))
+    tracks = [file('first'), file('second'), file('third')]
+    for index, track in enumerate(tracks):
+        track.youtube_id = f'video-{index}'
+    db.replace_library(library(*tracks))
+    assert [row['id'] for row in Collection(db).snapshot()['items']] == ['third', 'second', 'first']
+
+
+def test_unsaving_after_the_last_file_leaves_is_independent_of_historical_file_keys():
+    from player.favourites_manager import FavouritesManager
+    db = DatabaseManager()
+    metadata = library(file())
+    db.replace_library(metadata, playlist_entry=('Mix', {'keys': [f'yt:{VIDEO}'], 'title': 'Autorretrato'}))
+    item_id = metadata.playlists['Mix'][0]
+    metadata.tracks = []
+    metadata.playlists['Mix'] = []
+    db.replace_library(metadata)
+    manager = FavouritesManager()
+    entry = manager.get_entries()[0]
+    assert entry['item_id'] == item_id
+    assert 'lib:file' in entry['keys']
+    manager.set_saved([entry], False)
+    assert Collection(db).snapshot()['items'] == []
+
+
+def test_catalog_references_are_current_account_annotations_not_provider_cache(tmp_path, monkeypatch):
+    from flask import Flask, jsonify
+    from shared.api.routes.catalog import collection_references
+    from shared.user_context import current_user_id, user_context
+    from shared import database
+
+    databases = {name: DatabaseManager(str(tmp_path / f'{name}.db')) for name in ('alice', 'bob')}
+    for name, db in databases.items():
+        db.replace_library(library(file(name)))
+    monkeypatch.setattr(database, 'user_db', lambda: databases[current_user_id()])
+    cached_provider_body = {'items': [{'type': 'track', 'id': 'youtube:track:video',
+        'external_ids': {'youtube_id': VIDEO}, 'raw': {'id': VIDEO}}]}
+    app = Flask(__name__)
+    app.after_request(collection_references)
+    app.add_url_rule('/api/catalog/search', view_func=lambda: jsonify(cached_provider_body))
+    client = app.test_client()
+    for name in ('alice', 'bob'):
+        with user_context(name):
+            response = client.get('/api/catalog/search')
+            assert response.get_json()['items'][0]['item_id'] == name
+            assert response.headers['Cache-Control'] == 'private, no-cache'
+            assert 'Cookie' in response.vary
+    assert 'item_id' not in cached_provider_body['items'][0]
+    databases['alice'].replace_library(library(file('alice'), file('another-edition')))
+    with user_context('alice'):
+        # The same cached provider result is now ambiguous; it cannot choose a file.
+        assert 'item_id' not in client.get('/api/catalog/search').get_json()['items'][0]
+
+
+def test_car_playlist_uses_stable_rows_and_separate_audio_sources(tmp_path, monkeypatch):
+    from flask import Flask
+    from types import SimpleNamespace
+    from shared.api.routes import car
+    db = DatabaseManager(str(tmp_path / 'library.db'))
+    metadata = library()
+    entry = {'keys': [f'yt:{VIDEO}'], 'title': 'Autorretrato', 'artist': 'Extremoduro'}
+    db.replace_library(metadata, playlist_entry=('Mix', entry))
+    item_id = entry['item_id']
+    lib = SimpleNamespace(db=db, metadata=metadata, refresh_if_stale=lambda: None)
+    monkeypatch.setattr(car, '_get_api', lambda: {'get_core': lambda: (lib, None, None)})
+    app = Flask(__name__)
+    app.register_blueprint(car.car_bp)
+    client = app.test_client()
+    streamed = client.get('/api/car/items/playlist:Mix').get_json()['items'][0]
+    assert streamed['id'] == item_id
+    assert streamed['stream_url'] == f'/api/preview/stream/{VIDEO}'
+    metadata.add_track(file())
+    db.replace_library(metadata)
+    downloaded = client.get('/api/car/items/playlist:Mix').get_json()['items'][0]
+    assert downloaded['id'] == item_id
+    assert downloaded['track_id'] == 'file'
+    assert downloaded['stream_url'] == '/api/static/stream/file'
+
+
+@pytest.mark.parametrize('document', [{}, {'saved': {}}, {'saved': [{'title': 'Missing identity'}]}])
+def test_invalid_legacy_shapes_cannot_silently_complete_an_empty_migration(tmp_path, document):
+    (tmp_path / 'favourites.json').write_text(json.dumps(document))
+    db = DatabaseManager(str(tmp_path / 'library.db'))
+    with pytest.raises(ValueError):
+        db.replace_library(library(file()))
+    with db._get_connection() as conn:
+        assert conn.execute('SELECT count(*) FROM collection_state').fetchone()[0] == 0

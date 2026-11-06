@@ -267,3 +267,31 @@ it('refetches after an edit only when a reply landed while its request was out',
   await vi.waitFor(() => expect(state.library[0].id).toBe('after-write'));
   expect(mocks.getLibrary).toHaveBeenCalledTimes(3);
 });
+
+
+it('uses the canonical snapshot as one resource and retains it on 304', async () => {
+  const { syncLibrary, invalidateLibrarySync } = await import('./library');
+  const { state } = await import('./core');
+  const collection = {
+    items: [{ id: 'video', item_id: 'stable', title: 'Song', artist: 'Artist', source: 'preview' }],
+    files: [], saved: [{ item_id: 'stable', keys: ['yt:video'], favourite: true }],
+    playlists: { Mix: ['stable', 'stable'] }, settings: {}, podcast_subscriptions: [],
+    revision: 1, library_revision: 10, etag: 'collection-one',
+  };
+  mocks.getLibrary.mockResolvedValue({ tracks: [], collection_identity: true });
+  mocks.getCollection.mockResolvedValueOnce(collection).mockResolvedValueOnce(null);
+  await syncLibrary();
+  const items = state.collectionItems;
+  expect(state.playlists).toEqual({ Mix: ['stable', 'stable'] });
+  await syncLibrary();
+  expect(state.collectionItems).toBe(items);
+  expect(mocks.getCollection.mock.calls).toEqual([[], ['collection-one']]);
+  expect(mocks.getLibrary).toHaveBeenCalledTimes(1);
+  expect(mocks.getSaved).toHaveBeenCalledTimes(1);
+  expect(mocks.syncCatalog).toHaveBeenCalledTimes(1);
+  invalidateLibrarySync();
+  mocks.getCollection.mockResolvedValueOnce({ ...collection, etag: 'collection-two' });
+  await syncLibrary();
+  expect(mocks.getCollection).toHaveBeenLastCalledWith(undefined);
+  expect(mocks.getLibrary).toHaveBeenCalledTimes(1);
+});

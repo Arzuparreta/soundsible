@@ -96,7 +96,7 @@ class FavouritesManager:
     @saved_operation
     def toggle_saved(self, raw_entry: Dict[str, Any], *, added_at: Optional[str] = None) -> bool:
         """
-        Add or remove a song from the library, matching on key intersection.
+        Add or remove one song, preferring its stable collection identity.
 
         Returns True if the song is now saved, False if it was removed. Removing
         takes the favourite mark with it — there is nothing left to mark.
@@ -218,17 +218,13 @@ class FavouritesManager:
         """Is any of these identities in the library (file or not)?"""
         with self._lock:
             self._refresh()
-            return any(key in self._index for key in keys)
+            return bool(self._find_all(keys))
 
     def is_favourite_keys(self, keys: Iterable[str]) -> bool:
         """Is any of these identities marked out?"""
         with self._lock:
             self._refresh()
-            return any(
-                bool(entry.get("favourite"))
-                for entry in (self._index.get(key) for key in keys)
-                if entry is not None
-            )
+            return any(entry.get('favourite') for entry in self._find_all(keys))
 
     @saved_operation
     def update_keys(self, match_keys: Iterable[str], new_keys: Iterable[str]) -> bool:

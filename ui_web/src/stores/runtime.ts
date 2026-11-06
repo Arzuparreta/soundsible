@@ -491,6 +491,10 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     // a playable video.
     socket.on('saved_entities_updated', lifetime.guard(() => void syncSavedEntities()));
     socket.on('favourites_updated', lifetime.guard(() => {
+      if (state.collectionItems !== null) {
+        ports.actions.syncLibrarySoon();
+        return;
+      }
       void api.getSaved().then(lifetime.guard(saved => setState('saved', saved))).catch(lifetime.guard(() => {}));
     }));
     socket.on('downloader_update', lifetime.guard(data => applyDownloadEvent((data ?? {}) as DownloadEvent)));

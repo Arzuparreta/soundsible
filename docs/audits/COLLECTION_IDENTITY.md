@@ -12,6 +12,8 @@ La colección canónica vive en `users/<cuenta>/library.db`: `collection_items`
 guarda el elemento y sus propiedades personales, `collection_keys` sus
 identificadores externos, `collection_sources` las fuentes online y
 `collection_files` las asociaciones explícitas con el catálogo de archivos.
+`collection_user_state` conserva valoraciones y reproducciones aunque se retire
+la fuente; `track_user_state` es su proyección para consultas antiguas.
 `playlist_tracks.track_id` conserva el nombre histórico en SQLite, pero su valor
 es la referencia al elemento, no la dirección del audio.
 
@@ -30,6 +32,19 @@ Añadir desde búsqueda/DJ envía un descriptor musical a la operación de playl
 Admisión, guardado y pertenencia se confirman en una sola transacción. No hay una
 segunda petición de guardado que pueda fallar después de añadir la referencia.
 
+El motor anuncia la capacidad con la cabecera `X-Soundsible-Collection`; no la
+inyecta en ajustes del usuario. El snapshot devuelve un ETag por cuenta y
+revisiones de colección/biblioteca/artwork/loudness; las recargas sin cambios
+responden 304 antes de materializarlo. Una vez negociado, la web actualiza un
+solo recurso. El catálogo añade referencias privadas después de sus cachés de
+proveedor; nunca almacena `item_id` de una cuenta en ellas.
+
+Android conserva `item_id` en programa, planes, resolución de catálogo y
+metadatos offline; las URI y IDs de ocurrencia siguen fijando el audio. iOS y
+coche reciben `id` estable y `track_id` de fuente por separado. La copia offline
+retiene la asociación persistida aunque el servidor seleccione otro archivo.
+Las filas repetidas de playlist se seleccionan por posición, no por canción.
+
 ## Migración y compatibilidad
 
 La primera apertura incorpora los archivos, las canciones guardadas del antiguo
@@ -40,7 +55,10 @@ ID opaco. Orden, repeticiones, fechas, marcas y selección de carátula se conse
 
 El JSON antiguo queda como restauración, sin volver a leerse después de completar
 la migración. Los endpoints antiguos de guardados/favoritos son fachadas sobre
-SQLite. Los nombres técnicos antiguos sólo se interpretan en las fronteras de
+SQLite. La copia completa y restaurable de la colección es `library.db`
+(incluida por `shared.instance_backup`); `library.json` sigue siendo el manifiesto
+portable de archivos y referencias, no un backup de elementos online y marcas.
+Los nombres técnicos antiguos sólo se interpretan en las fronteras de
 compatibilidad y en la incorporación, no en cada lectura de una playlist.
 
 Una referencia histórica sin suficiente evidencia permanece visible como elemento
@@ -58,3 +76,21 @@ colección vacía.
    retirada de fuente, ambigüedad, aislamiento de cuentas y escritores concurrentes.
 6. Ejecutar Python, UI, cuatro perfiles de navegador y comprobaciones nativas;
    incorporar el `main` remoto vigente antes de dejar lista la única PR.
+
+
+## Decisión y alcance de la PR #423
+
+La separación original tenía sentido para las fuentes: el hash identifica bytes
+y permite compartir audio/análisis; el ID de YouTube identifica un recurso
+remoto. El fallo fue utilizarlos además como identidad musical de la cuenta y
+reconstruir esa identidad en cada consumidor. La colección persistida elimina
+esa doble responsabilidad. No se alteran medidas, ordenación ni curvas del DJ:
+siguen dependiendo del audio analizado, no de la identidad de colección.
+
+Las pruebas cubren migración y reapertura, referencias duplicadas y carátula,
+incorporación y pertenencia atómicas con rollback, dos escritores, retirada y
+reparación de fuentes, estado personal durable, ambigüedad, cachés por cuenta,
+ETag/304, playlists del coche y copias offline. El ensayo de datos del incidente
+usa una copia SQLite consistente; no aplica la migración al servicio activo.
+La evidencia de ejecución y sus límites se registra en la PR, no equivale a
+aceptación física ni despliegue.

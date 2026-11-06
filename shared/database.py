@@ -1181,6 +1181,8 @@ class DatabaseManager:
                             state["updated_at"],
                         ),
                     )
+                from shared.collection import project_user_state
+                project_user_state(conn)
                 if catalog_dirty:
                     self._replace_catalog_projection(conn, metadata.tracks)
 
@@ -2066,6 +2068,11 @@ class DatabaseManager:
     def get_track_user_state(self, track_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
+            from shared.collection import item_for_keys
+            item_id = item_for_keys(conn, [f'item:{track_id}', f'lib:{track_id}'])
+            if item_id:
+                row = conn.execute('SELECT play_count,rating,last_played_at FROM collection_user_state WHERE item_id=?', (item_id,)).fetchone()
+                return dict(row) if row else {'play_count': 0, 'rating': None, 'last_played_at': None}
             exists = conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone()
             if exists is None:
                 return None
@@ -2114,6 +2121,13 @@ class DatabaseManager:
         if rating is not None and (not isinstance(rating, int) or isinstance(rating, bool) or not 1 <= rating <= 5):
             raise ValueError("rating must be null or an integer from 1 to 5")
         with self._get_connection() as conn:
+            from shared.collection import item_for_keys, project_user_state
+            item_id = item_for_keys(conn, [f'item:{track_id}', f'lib:{track_id}'])
+            if item_id:
+                conn.execute('INSERT INTO collection_user_state(item_id,rating) VALUES (?,?) '
+                             'ON CONFLICT(item_id) DO UPDATE SET rating=excluded.rating', (item_id, rating))
+                project_user_state(conn, item_id)
+                return True
             if conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
                 return False
             conn.execute("""
@@ -2129,6 +2143,14 @@ class DatabaseManager:
         if not isinstance(played_at, int) or isinstance(played_at, bool) or played_at < 0:
             raise ValueError("played_at must be a non-negative Unix timestamp")
         with self._get_connection() as conn:
+            from shared.collection import item_for_keys, project_user_state
+            item_id = item_for_keys(conn, [f'item:{track_id}', f'lib:{track_id}', f'yt:{track_id}'])
+            if item_id:
+                conn.execute('''INSERT INTO collection_user_state(item_id,play_count,last_played_at) VALUES (?,1,?)
+                    ON CONFLICT(item_id) DO UPDATE SET play_count=play_count+1,
+                    last_played_at=MAX(COALESCE(last_played_at,0),excluded.last_played_at)''', (item_id, played_at))
+                project_user_state(conn, item_id)
+                return True
             if conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
                 return False
             conn.execute("""
@@ -2160,6 +2182,8 @@ class DatabaseManager:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 conn.execute("DELETE FROM track_artists")
+                conn.execute("DELETE FROM collection_files")
+                conn.execute("DELETE FROM collection_user_state")
                 conn.execute("DELETE FROM track_user_state")
                 conn.execute("DELETE FROM tracks")
                 conn.execute("DELETE FROM albums")

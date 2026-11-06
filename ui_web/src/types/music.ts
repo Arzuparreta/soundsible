@@ -154,6 +154,7 @@ export interface CatalogActionState {
 }
 
 export interface CatalogItem {
+  item_id?: string | null;
   id: string;
   type: CatalogItemType;
   source: string;
@@ -193,6 +194,7 @@ export interface CatalogSearchResponse {
 }
 
 export interface CatalogResolveResponse {
+  item_id?: string;
   status?: 'resolved' | 'failed' | string;
   video_id?: string;
   confidence?: number;

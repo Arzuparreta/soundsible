@@ -1,15 +1,7 @@
 import { collectionIndex } from '../lib/collectionIdentity';
 import { isMusicTrack } from '../lib/track';
-/**
- * One definition of "this is the thing that is playing", and everything derived
- * from it: queued, saved, favourited, owned, downloading.
- *
- * A song has several names — a library id, a video id, an ISRC, a catalog row
- * — and the same song can arrive under any of them. Matching on one id meant a
- * Deezer row and the file it produced looked like different songs. These
- * selectors compare key *sets* instead, and are memoized inside a `createRoot`
- * so a library refresh rebuilds the index once rather than per consumer.
- */
+/** Collection selectors use stable item identity. Provider keys remain useful
+ * for transient search/playback candidates and older engine snapshots. */
 
 import { createMemo, createRoot, createSignal } from 'solid-js';
 
@@ -17,7 +9,6 @@ import { state } from './core';
 import {
   buildIdentityIndex,
   catalogItemKeys,
-  collectIdentityKeys,
   keysMatch,
   podcastEpisodeKeys,
   resolvePlayingKeys,
@@ -26,7 +17,7 @@ import {
   withLinkedKeys,
 } from '../lib/playbackIdentity';
 import { libraryNow } from '../lib/libraryOrder';
-import { savedToTrack } from '../lib/saved';
+import { savedEntryForIdentity, savedToTrack } from '../lib/saved';
 import { musicLibraryRows } from '../lib/musicLibrary';
 import { futureEntries } from '../lib/playbackQueue';
 import type { CatalogItem, SavedEntry, SearchResult, Track } from '../types/music';
@@ -52,27 +43,6 @@ export function musicLibrary(): Track[] {
 }
 
 
-/* ── Playback identity ──
- *
- * One definition of "this is the thing that is playing", shared by every
- * surface. See `lib/playbackIdentity.ts` for why identity is a set of keys and
- * not an id.
- *
- * Two derived values, and nothing else moves:
- *
- * - `libraryIndex` maps every key the library answers to → its track. Rebuilt
- *   only when `state.library` actually changes.
- * - `playingKeys` is the current track's keys *plus* the keys of its library
- *   twin, looked up through that index.
- *
- * That second union is what closes the download case. Finishing a download
- * emits `downloader_update`, which already calls `syncLibrary()`; the new
- * library array invalidates `libraryIndex`, which invalidates `playingKeys`,
- * which now contains the freshly minted `lib:` id — and the row in the library
- * lights up on its own. Socket event → store write → memo → one class toggle.
- * No polling, no extra request, no timer.
- */
-
 /** Catalog row id → YouTube video id, learned when a row is resolved or saved.
  * The engine's search response cannot know this (the resolution happens after
  * the search), so a Deezer row you just downloaded would otherwise keep
@@ -87,17 +57,22 @@ export const identity = createRoot(() => {
   // Queue membership has the same identity problem as the playing highlight: a
   // Deezer row already lined up must say so, whatever id the row holds.
   const queuedKeys = createMemo(() =>
-    collectIdentityKeys(futureEntries(state.playback.queue, state.playback.index, 'manual')),
+    new Set(futureEntries(state.playback.queue, state.playback.index, 'manual').flatMap(entry =>
+      [...resolvePlayingKeys(entry, libraryIndex(), catalogLinks())])),
   );
   // Saved songs have the same identity problem, one hop further out: the row
   // you saved in Search, the preview that played, and the file you downloaded
   // are three ids for one song. Matching on keys is what makes every surface
   // agree about what you own without any of them knowing where the song lives.
   const savedKeys = createMemo(() => new Set(state.saved.flatMap((f) => [...f.keys, ...(f.item_id ? [`item:${f.item_id}`] : [])])));
-  // Key → the entry that answers to it. First entry wins, as in the library.
+  // Shared provider evidence cannot choose between different saved entities.
   const savedIndex = createMemo(() => {
     const index = new Map<string, SavedEntry>();
-    for (const entry of state.saved) for (const key of [...entry.keys, ...(entry.item_id ? [`item:${entry.item_id}`] : [])]) if (!index.has(key)) index.set(key, entry);
+    const ambiguous = new Set<string>();
+    for (const entry of state.saved) for (const key of [...entry.keys, ...(entry.item_id ? [`item:${entry.item_id}`] : [])]) {
+      if (index.has(key)) { index.delete(key); ambiguous.add(key); }
+      else if (!ambiguous.has(key)) index.set(key, entry);
+    }
     return index as ReadonlyMap<string, SavedEntry>;
   });
   // The mark is a strict subset — a property of a saved song, never a way of
@@ -148,7 +123,7 @@ export const identity = createRoot(() => {
     const index = libraryIndex();
     for (const entry of state.saved) {
       if (!entry.favourite) continue;
-      for (const key of entry.keys) {
+      for (const key of entry.item_id ? [`item:${entry.item_id}`] : entry.keys) {
         const track = index.get(key);
         if (track) {
           owned.add(track.id);
@@ -247,7 +222,7 @@ export const ownedTrackForResult = (result: SearchResult): Track | null =>
  * claimed cannot be marked out among the ones you have.
  */
 export const isSavedKeys = (keys: string[]): boolean =>
-  !!ownedTrackForKeys(keys) || keysMatch(keys, identity.savedKeys(), catalogLinks());
+  !!ownedTrackForKeys(keys) || savedEntryForKeys(keys) !== null;
 
 export const isSavedTrack = (track: Track): boolean => isSavedKeys(trackKeys(track));
 export const isSavedItem = (item: CatalogItem): boolean => isSavedKeys(catalogItemKeys(item));
@@ -256,7 +231,7 @@ export const isSavedResult = (result: SearchResult): boolean =>
 
 /** Is anything with these identities marked out among the songs you have? */
 export const isFavouriteKeys = (keys: string[]): boolean =>
-  keysMatch(keys, identity.favouriteKeys(), catalogLinks());
+  savedEntryForKeys(keys)?.favourite === true;
 
 export const isFavouriteTrack = (track: Track): boolean => isFavouriteKeys(trackKeys(track));
 export const isFavouriteItem = (item: CatalogItem): boolean =>
@@ -277,13 +252,7 @@ export const favouriteTracks = (): Track[] => identity.favouriteRows().map((row)
 /** The saved entry behind these identities, if the library holds one. Used by
  * the surfaces that need to know *how* a song is held, not just whether. */
 export function savedEntryForKeys(keys: string[]): SavedEntry | null {
-  const item = keys.find(key => key.startsWith('item:'));
-  if (item) return state.saved.find(entry => entry.item_id === item.slice(5)) ?? null;
-  const all = withLinkedKeys(keys, catalogLinks());
-  for (const entry of state.saved) {
-    if (entry.keys.some((key) => all.includes(key))) return entry;
-  }
-  return null;
+  return savedEntryForIdentity(state.saved, withLinkedKeys(keys, catalogLinks()));
 }
 
 /** Is a download for this song in flight? Keyed off the video id, which is what

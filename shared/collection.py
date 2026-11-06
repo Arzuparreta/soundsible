@@ -6,12 +6,13 @@ The file catalogue remains a catalogue of bytes, not the user's collection.
 """
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import datetime
 import json
 from pathlib import Path
 import sqlite3
 import uuid
 
-from shared.library_dates import earliest, now, track_keys
+from shared.library_dates import earliest, now, parse, track_keys
 from shared.library_lifecycle import serialized
 from shared.url_utils import validate_youtube_video_id
 
@@ -31,6 +32,10 @@ def create_schema(conn):
     conn.execute('''CREATE TABLE IF NOT EXISTS collection_sources (
         item_id TEXT NOT NULL REFERENCES collection_items(id), kind TEXT NOT NULL,
         source_id TEXT NOT NULL, PRIMARY KEY(item_id,kind,source_id))''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS collection_user_state (
+        item_id TEXT PRIMARY KEY REFERENCES collection_items(id),
+        play_count INTEGER NOT NULL DEFAULT 0 CHECK(play_count>=0),
+        rating INTEGER, last_played_at INTEGER)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS collection_state (
         singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL)''')
     conn.execute('CREATE TABLE IF NOT EXISTS collection_migrations (name TEXT PRIMARY KEY)')
@@ -207,15 +212,18 @@ def _legacy_saved(path):
         return []
     data = json.loads(path.read_text(encoding='utf-8'))
     from shared.collection_entries import _bare_entry, _stored_entry
-    values = data.get('saved', data.get('favourites', []))
+    if not isinstance(data, dict) or not ({'saved', 'favourites'} & data.keys()):
+        raise ValueError('Invalid legacy saved-song document')
+    values = data.get('saved', data.get('favourites'))
     if not isinstance(values, list):
         raise ValueError('Invalid legacy saved songs')
     entries = []
     for raw in values:
-        entry = (_bare_entry(f'lib:{raw}') if isinstance(raw, str)
+        entry = (_bare_entry(f'lib:{raw.strip()}') if isinstance(raw, str) and raw.strip()
                  else _stored_entry(raw, default_favourite=str(data.get('version') or '1') < '3'))
-        if entry:
-            entries.append(entry)
+        if entry is None:
+            raise ValueError('Invalid legacy saved-song entry')
+        entries.append(entry)
     return entries
 
 
@@ -232,6 +240,30 @@ def update_file_snapshot(conn, track):
     if encoded != row[1]:
         conn.execute('UPDATE collection_items SET snapshot=? WHERE id=?', (encoded, row[0]))
         bump(conn)
+
+
+def remember_user_state(conn):
+    """Import old file-keyed personal facts before a source can disappear."""
+    conn.execute('''INSERT INTO collection_user_state(item_id,play_count,rating,last_played_at)
+        SELECT f.item_id,MAX(s.play_count),MAX(s.rating),MAX(s.last_played_at)
+        FROM track_user_state s JOIN collection_files f ON f.file_id=s.track_id GROUP BY f.item_id
+        ON CONFLICT(item_id) DO UPDATE SET play_count=MAX(play_count,excluded.play_count),
+        rating=COALESCE(rating,excluded.rating),
+        last_played_at=MAX(COALESCE(last_played_at,0),COALESCE(excluded.last_played_at,0))
+        WHERE play_count<excluded.play_count OR (rating IS NULL AND excluded.rating IS NOT NULL)
+        OR COALESCE(last_played_at,0)<COALESCE(excluded.last_played_at,0)''')
+
+
+def project_user_state(conn, item_id=None):
+    """Legacy catalog queries keep a file-indexed projection, never authority."""
+    conn.execute('''INSERT INTO track_user_state(track_id,play_count,rating,last_played_at)
+        SELECT f.file_id,s.play_count,s.rating,s.last_played_at FROM collection_user_state s
+        JOIN collection_files f ON f.item_id=s.item_id JOIN tracks t ON t.id=f.file_id
+        WHERE (? IS NULL OR s.item_id=?)
+        ON CONFLICT(track_id) DO UPDATE SET play_count=excluded.play_count,rating=excluded.rating,
+        last_played_at=excluded.last_played_at
+        WHERE play_count IS NOT excluded.play_count OR rating IS NOT excluded.rating
+        OR last_played_at IS NOT excluded.last_played_at''', (item_id, item_id))
 
 
 def sync_files(conn, metadata, replacements=None):
@@ -278,11 +310,13 @@ def sync(conn, metadata, db_path, replacements=None):
     migrating = not ready(conn)
     if migrating:
         conn.execute('INSERT INTO collection_state VALUES (1,0)')
+    remember_user_state(conn)
     if not conn.execute("SELECT 1 FROM collection_migrations WHERE name='legacy-playlists'").fetchone():
         for old, new in _legacy_reference_evidence(metadata, db_path).items():
             conn.execute('INSERT OR IGNORE INTO track_id_aliases VALUES (?,?)', (old, new))
         conn.execute("INSERT INTO collection_migrations VALUES ('legacy-playlists')")
     sync_files(conn, metadata, replacements)
+    remember_user_state(conn)
     metadata._indexes = None
     for old, new in (replacements or {}).items():
         # Explicit, proven recovery of an old orphan is a migration operation,
@@ -415,6 +449,39 @@ class Collection:
                 WHERE c.singleton=1''').fetchone()
             return tuple(row) if row else (0, 0)
 
+    def annotate_catalog(self, body):
+        """Attach account item references after provider caches, without admission."""
+        with self.db._get_connection() as conn:
+            def visit(value):
+                if isinstance(value, list):
+                    for row in value:
+                        visit(row)
+                elif isinstance(value, dict):
+                    if value.get('type') in {'track', 'library_track'}:
+                        keys = [f'cat:{value.get("id", "")}']
+                        if value.get('track_id'):
+                            keys.insert(0, f'lib:{value["track_id"]}')
+                        external = value.get('external_ids') or {}
+                        for field, namespace in (('youtube_id', 'yt'), ('isrc', 'isrc'), ('musicbrainz_id', 'mb'), ('deezer_id', 'deezer')):
+                            identity = external.get(field)
+                            if identity and not isinstance(identity, bool):
+                                identity = str(identity)
+                                if namespace == 'isrc':
+                                    identity = identity.replace('-', '').replace(' ', '').upper()
+                                keys.append(f'{namespace}:{identity}')
+                        item_id = admission_item(conn, keys)
+                        if item_id:
+                            value['item_id'] = item_id
+                    elif value.get('status') == 'resolved' and value.get('video_id'):
+                        item_id = admission_item(conn, [f'yt:{value["video_id"]}'])
+                        if item_id:
+                            value['item_id'] = item_id
+                    for key, child in list(value.items()):
+                        if key != 'raw':
+                            visit(child)
+            visit(body)
+        return body
+
     def snapshot(self):
         """Materialize source descriptors by persisted relations, not guessing."""
         with self.db._get_connection() as conn:
@@ -425,7 +492,10 @@ class Collection:
                 rows = conn.execute('''SELECT DISTINCT i.id,i.snapshot,i.added_at FROM collection_items i
                     WHERE i.saved=1 OR EXISTS(SELECT 1 FROM collection_files f WHERE f.item_id=i.id)
                     OR EXISTS(SELECT 1 FROM playlist_tracks p WHERE p.track_id=i.id)
-                    ORDER BY i.added_at DESC''').fetchall()
+                    ORDER BY COALESCE((SELECT MAX(l.position) FROM collection_files f
+                        JOIN library_tracks l ON l.track_id=f.file_id WHERE f.item_id=i.id),-1) DESC,
+                    i.saved_position''').fetchall()
+                rows.sort(key=lambda row: parse(row[2]) or datetime.min, reverse=True)
                 files = self.db._rows_to_tracks(conn, conn.execute('''SELECT t.* FROM tracks t
                     JOIN library_tracks l ON l.track_id=t.id ORDER BY l.position''').fetchall())
                 file_rows = [track.to_public_dict() for track in files]

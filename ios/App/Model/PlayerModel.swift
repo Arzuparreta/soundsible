@@ -85,16 +85,11 @@ final class PlayerModel {
 
     /// Play a list from a given position in it.
     func play(items: [CarItem], startingAt index: Int) {
-        queue = PlayQueue(items: items, startIndex: nil, repeatMode: queue.repeatMode)
-        // The index the caller has is into the list it showed, which may include
-        // rows that are not playable; matching by identity avoids playing the
-        // wrong song.
-        if items.indices.contains(index) {
-            let wanted = items[index].id
-            if let resolved = queue.items.firstIndex(where: { $0.id == wanted }) {
-                queue.jump(to: resolved)
-            }
-        }
+        guard items.indices.contains(index), items[index].isPlayable else { return }
+        // Resolve the selected occurrence by position, even when a playlist
+        // contains the same musical item more than once.
+        let playableIndex = items.prefix(index).filter(\.isPlayable).count
+        queue = PlayQueue(items: items, startIndex: playableIndex, repeatMode: queue.repeatMode)
         startCurrent(fade: false)
     }
 

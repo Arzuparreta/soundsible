@@ -1,31 +1,9 @@
 import type { CatalogItem, SearchResult, Track } from '../types/music';
 import { isPodcastTrack } from './track';
 
-/**
- * Identity keys — the one answer to "is this row the thing that is playing?".
- *
- * A song changes id every time it crosses a boundary: a Deezer row is
- * `deezer:track:123`, playing it resolves to a YouTube video id, downloading it
- * mints a content hash in the library. Comparing `currentTrack.id === row.id`
- * therefore works only *within* one hop, which is why the highlight used to
- * vanish on the search list and again in the library after a download.
- *
- * So identity is not a string, it is a **set of namespaced keys**. Two things
- * are the same song when their key sets intersect. Every key is exact — an id
- * someone assigned — never a fuzzy artist/title match, which would happily
- * conflate a live take, a remix and a re-recording.
- *
- * Namespaces (mirroring the engine's own dedupe keys in
- * `shared/api/routes/catalog.py`):
- *
- * - `lib:`    library track id (content hash)
- * - `yt:`     YouTube video id — the bridge between a preview and its download
- * - `isrc:`   recording code, the bridge between catalogs
- * - `mb:`     MusicBrainz recording id
- * - `deezer:` Deezer track id
- * - `pod:`    podcast episode guid
- * - `cat:`    catalog row id, the bridge back to the row that started playback
- */
+/** Stable `item:` keys name collection entities. Source/provider keys describe
+ * unregistered candidates and legacy engines; they never override a known
+ * item. Audio source IDs and queue occurrence IDs keep their own meaning. */
 
 /** Shared empty set, so "nothing is playing" costs no allocation per row. */
 export const NO_KEYS: ReadonlySet<string> = new Set<string>();
@@ -88,6 +66,7 @@ export function trackKeys(track: Track): string[] {
  */
 export function catalogItemKeys(item: CatalogItem): string[] {
   const keys: string[] = [];
+  push(keys, 'item', str(item.item_id));
   push(keys, 'cat', str(item.id));
   push(keys, 'lib', str(item.track_id));
 
@@ -140,8 +119,7 @@ export function withLinkedKeys(keys: string[], links: ReadonlyMap<string, string
   return out;
 }
 
-/** Every identity a set of tracks answers to → the track. First entry wins, so
- * the mapping stays stable when the library holds duplicates. */
+/** Index stable/file references directly and omit ambiguous provider evidence. */
 export function buildIdentityIndex(tracks: Iterable<Track>): Map<string, Track> {
   const index = new Map<string, Track>();
   const ambiguous = new Set<string>();
@@ -197,7 +175,7 @@ export function keysMatch(
 ): boolean {
   if (!set.size) return false;
   const item = keys.find(key => key.startsWith('item:'));
-  if (item && [...set].some(key => key.startsWith('item:'))) return set.has(item);
+  if (item) return set.has(item);
   for (const key of withLinkedKeys(keys, links)) if (set.has(key)) return true;
   return false;
 }

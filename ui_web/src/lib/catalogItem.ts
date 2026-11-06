@@ -114,6 +114,7 @@ export function catalogContextTrack(item: CatalogItem): ContextTrack | null {
     source: 'preview',
     originKeys: catalogItemKeys(item),
     recommendation: item.raw?.recommendation,
+    item_id: item.item_id ?? undefined,
     pendingResolve: { catalogItemId: item.id, artist, title: item.title, duration: item.duration },
   };
 }
@@ -158,7 +159,7 @@ export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSigna
   actions.linkCatalogItem(item.id, resolved.video_id);
   const music = catalogMusic(item);
   return {
-    id: resolved.video_id, title: item.title, artist, album: item.album, artist_is_channel: false,
+    id: resolved.video_id, item_id: resolved.item_id ?? item.item_id ?? undefined, title: item.title, artist, album: item.album, artist_is_channel: false,
     artists: item.raw?.artists, album_artist: item.raw?.album_artist, ...releasePosition(item),
     deezer_artist_id: music.deezerArtistId, deezer_album_id: music.deezerAlbumId,
     duration: item.duration, cover: item.cover, source: 'preview', originKeys: catalogItemKeys(item),
