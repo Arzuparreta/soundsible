@@ -37,3 +37,32 @@ test('NORMAL and DJ choose artwork for the rendered slot and device density', as
   expect(images.filter(src => !new URL(src).searchParams.has('size'))).toEqual([]);
   await page.screenshot({ path: `/tmp/soundsible-artwork-${test.info().project.name}.png` });
 });
+
+for (const catalog of [false, true]) {
+  test(`preview artwork keeps ${catalog ? 'catalog provenance' : 'its working image after a failed upgrade'}`, async ({ page }) => {
+    await mockMusicEngine(page);
+    const requested: string[] = [];
+    await page.route('https://i.ytimg.com/**', async route => {
+      requested.push(route.request().url());
+      if (route.request().url().includes('maxresdefault')) return route.fulfill({ status: 404, body: '' });
+      return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="blue"/></svg>' });
+    });
+    await page.route('https://cdn-images.dzcdn.net/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000"><rect width="1000" height="1000" fill="green"/></svg>' }));
+    const initial = catalog ? 'https://cdn-images.dzcdn.net/images/cover/fixture/1000.jpg'
+      : 'https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg';
+    await page.goto('/player/');
+    await page.evaluate(async cover => {
+      const path = '/player/tests/browser/fixtures/artwork-probe.tsx';
+      (await import(path)).mount(cover);
+    }, initial);
+    const img = page.locator('[data-cover-probe] img');
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+    await page.evaluate(async () => {
+      const path = '/player/tests/browser/fixtures/artwork-probe.tsx';
+      (await import(path)).upgrade();
+    });
+    if (!catalog) await expect.poll(() => requested.filter(url => url.includes('maxresdefault')).length).toBe(1);
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0 && el.currentSrc)).toBe(initial);
+    if (catalog) expect(requested).toEqual([]);
+  });
+}
