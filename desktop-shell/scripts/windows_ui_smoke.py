@@ -73,7 +73,7 @@ def player_window(pid: int, timeout: float = 90.0):
             if window.window_text() != "Soundsible" or not window.is_visible():
                 continue
             if any(
-                item.window_text() == "Search"
+                item.window_text() == "Library"
                 for item in window.descendants(control_type="Hyperlink")
             ):
                 return window
