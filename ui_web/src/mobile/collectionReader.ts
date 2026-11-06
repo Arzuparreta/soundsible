@@ -3,7 +3,7 @@ import type { CollectionSnapshot } from '../lib/api';
 import { buildIdentityIndex } from '../lib/playbackIdentity';
 import { musicLibraryRows } from '../lib/musicLibrary';
 import { savedToTrack } from '../lib/saved';
-import { isPodcastTrack } from '../lib/track';
+import { isMusicTrack, isPodcastTrack } from '../lib/track';
 import type { SavedEntry, Track } from '../types/music';
 import type { BrowseSnapshot } from './LibraryBrowser';
 
@@ -36,7 +36,7 @@ export function createNativeCollectionReader() {
       return previous;
     }
     if (!Array.isArray(collection.items) || !Array.isArray(collection.files) || !Array.isArray(collection.saved)) throw new Error('Invalid collection');
-    previous = { snapshot: { tracks: collection.items, podcast_tracks: collection.files.filter(isPodcastTrack),
+    previous = { snapshot: { tracks: collection.items.filter(isMusicTrack), podcast_tracks: collection.files.filter(isPodcastTrack),
       playlists: collection.playlists, settings: collection.settings, podcast_subscriptions: collection.podcast_subscriptions },
       saved: collection.saved, files: collection.files };
     etag = nextETag;

@@ -271,3 +271,30 @@ def test_legacy_preview_addition_uses_the_same_item_after_its_file_is_removed(cl
     song = next(row for row in snapshot['items'] if row['item_id'] == item_id)
     assert song['id'] == video
     assert song['title'] == track.title  # the private source labels survive removal
+
+
+def test_acquisition_publishes_only_after_source_and_item_identity_commit(client, monkeypatch):
+    from shared.api import add_tracks_to_user_library
+    user_id = ensure_multiuser_layout()['user_id']
+    _seed_library(user_id)
+    with user_context(user_id):
+        lib = get_user_core(user_id).library
+        original = lib.db.replace_library
+        observed = []
+
+        def while_committing(metadata, **options):
+            public = client.get('/api/library').get_json()['tracks']
+            canonical = client.get('/api/library/collection').get_json()['files']
+            observed.append(([row['id'] for row in public], [row['id'] for row in canonical]))
+            assert 'pending-source' not in observed[-1][0]
+            assert observed[-1][0] == observed[-1][1]
+            return original(metadata, **options)
+
+        monkeypatch.setattr(lib.db, 'replace_library', while_committing)
+        assert add_tracks_to_user_library([_track('pending-source')], user_id=user_id) == 1
+    assert observed
+    public = client.get('/api/library').get_json()['tracks']
+    acquired = next(row for row in public if row['id'] == 'pending-source')
+    assert acquired['item_id']
+    canonical = client.get('/api/library/collection').get_json()['files']
+    assert next(row for row in canonical if row['id'] == acquired['id'])['item_id'] == acquired['item_id']

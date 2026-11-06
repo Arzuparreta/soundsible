@@ -24,3 +24,14 @@ it('a new account reader starts with no capability or validator from the previou
   expect(mocks.request.mock.calls.map(call => call[0])).toEqual(['/api/library', '/api/library/saved']);
   expect(mocks.request.mock.calls[0][1].ifNoneMatch).toBeUndefined();
 });
+
+it('keeps podcast items out of music browse while retaining acquired podcast sources', async () => {
+  const episode = { id: 'episode-file', item_id: 'episode-item', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode' };
+  mocks.request.mockImplementationOnce(async (_path, options) => {
+    options.onResponse(new Response(null, { headers: { 'X-Soundsible-Collection': 'true' } }));
+    return { tracks: [] };
+  }).mockResolvedValueOnce({ ...snapshot, items: [...snapshot.items, episode], files: [episode] });
+  const result = await createNativeCollectionReader()(new AbortController().signal);
+  expect(result.snapshot.tracks.map(track => track.item_id)).toEqual(['stable']);
+  expect(result.snapshot.podcast_tracks).toEqual([episode]);
+});

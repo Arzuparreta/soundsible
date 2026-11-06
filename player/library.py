@@ -271,7 +271,7 @@ class LibraryManager:
                             (time.perf_counter() - started) * 1000)
 
     @serialized
-    def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None, operation_id=None, playlist_entry=None) -> bool:
+    def _save_metadata(self, *, metadata=None, id_replacements: Optional[Dict[str, str]] = None, operation_id=None, playlist_entry=None) -> bool:
         """
         Commit the canonical SQLite snapshot, then refresh portable exports.
 
@@ -283,19 +283,23 @@ class LibraryManager:
         state is reloaded (so the next attempt builds on it) and the caller is
         told the change did not land, which is the honest answer.
         """
-        if not self.metadata:
+        candidate = metadata if metadata is not None else self.metadata
+        if candidate is None:
             return False
-            
+
         with self._lock:
             self.last_save_error = None
             try:
                 self._library_revision = self.db.replace_library(
-                    self.metadata,
+                    candidate,
                     id_replacements=id_replacements,
                     expected_revision=self._library_revision,
                     **({"operation_id": operation_id} if operation_id else {}),
                     **({"playlist_entry": playlist_entry} if playlist_entry is not None else {}),
                 )
+                # Acquisitions stage a detached model. Publish it only after
+                # its sources and item identities have committed together.
+                self.metadata = candidate
                 # replace_library is also the alias-normalization boundary, so
                 # serialize only after it has moved every durable reference.
                 # Exports can reach remote storage: run them once every

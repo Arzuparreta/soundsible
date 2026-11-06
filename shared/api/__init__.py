@@ -1362,11 +1362,13 @@ def add_tracks_to_user_library(
         return 0
 
     song_keys = [key for key in (song_keys or ()) if isinstance(key, str) and key]
-    holdings = library_dates.Holdings(lib.metadata.tracks, _saved_entries(core))
+    from copy import deepcopy
+    metadata = deepcopy(lib.metadata)
+    holdings = library_dates.Holdings(metadata.tracks, _saved_entries(core))
     added = 0
     newly_added = []
     for track in tracks:
-        if lib.metadata.get_track_by_id(track.id):
+        if metadata.get_track_by_id(track.id):
             continue
         track_dict = track.to_dict()
         track_dict.pop("local_path", None)
@@ -1378,12 +1380,12 @@ def add_tracks_to_user_library(
             library_dates.track_keys(stored) + song_keys,
             proposed=stored.added_at if keep_source_dates else None,
         )
-        lib.metadata.add_track(stored)
+        metadata.add_track(stored)
         newly_added.append(stored)
         added += 1
 
     if added or operation_id:
-        lib.require_saved(**({'operation_id': operation_id} if operation_id else {}))
+        lib.require_saved(metadata=metadata, **({'operation_id': operation_id} if operation_id else {}))
         promoted = _promote_favourites_to_library(newly_added, user_id=target, song_keys=song_keys)
         with app.app_context():
             emit_to_user('library_updated', user_id=target)

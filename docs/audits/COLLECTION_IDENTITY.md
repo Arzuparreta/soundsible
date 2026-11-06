@@ -29,7 +29,9 @@ reconstruye la colección emparejando archivos y favoritos. Las referencias de
 colección se indexan por `item_id`; el audio usa su descriptor de fuente.
 
 Añadir desde búsqueda/DJ envía un descriptor musical a la operación de playlist.
-Admisión, guardado y pertenencia se confirman en una sola transacción. No hay una
+Admisión, guardado y pertenencia se confirman en una sola transacción. La adquisición construye un
+snapshot separado y sólo lo publica en memoria después de confirmar fuentes e
+identidades; las lecturas de compatibilidad no ven archivos a medio incorporar. No hay una
 segunda petición de guardado que pueda fallar después de añadir la referencia.
 
 El motor anuncia la capacidad con la cabecera `X-Soundsible-Collection`; no la

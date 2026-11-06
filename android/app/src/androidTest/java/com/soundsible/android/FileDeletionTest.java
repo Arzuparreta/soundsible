@@ -108,6 +108,7 @@ public class FileDeletionTest {
             api(connection, origin, member, "/__fixture/acquisition", "POST", new JSONObject().put("delaySeconds", 0).put("failNext", 0));
             var file = acquire(connection, origin, member, "B1111111111", "member saved song");
             String id = file.getString("id");
+            assertFalse("A visible acquired source must have its committed item identity", file.isNull("item_id"));
             String itemId = file.getString("item_id");
             assertNotEquals("A saved song must keep its identity when downloaded", id, itemId);
             owner = ownerCookie(connection, origin);
