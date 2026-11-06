@@ -185,6 +185,15 @@ jobs:
           SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe
         run: pytest tests/test_desktop_engine_smoke.py::test_desktop_engine_smoke_sidecar -q
 
+      - name: Exercise process ownership and packaged image worker
+        shell: bash
+        env:
+          PYTHONPATH: .
+          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe
+        run: >-
+          pytest tests/test_artwork_pipeline.py -q
+          -k "downloader or acquisition_cancel_probe or real_image_child or packaged_entrypoint"
+
       - name: Build Tauri bundles
         working-directory: desktop-shell
         env:

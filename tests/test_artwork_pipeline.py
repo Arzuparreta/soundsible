@@ -1,6 +1,7 @@
 """Contracts at the image/network/account/process boundaries, without real accounts."""
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -287,8 +288,10 @@ def test_packaged_entrypoint_dispatches_artwork_worker(tmp_path):
     source.write_bytes(picture())
     target = tmp_path / 'out.jpg'
     root = Path(__file__).resolve().parents[1]
-    # Dispatch used by a frozen engine, exercised from the real entrypoint.
-    child = subprocess.Popen([sys.executable, str(root / 'soundsible_engine.py'), '--artwork-worker'],
+    # Windows build jobs use the actual frozen sidecar, local runs the entrypoint.
+    binary = os.environ.get('SOUNDSIBLE_ENGINE_BIN')
+    command = [str((root / binary).resolve())] if binary else [sys.executable, str(root / 'soundsible_engine.py')]
+    child = subprocess.Popen([*command, '--artwork-worker'],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     child.stdin.write((json.dumps({'source': str(source), 'target': str(target), 'size': 160, 'square': True}) + '\n').encode())
     child.stdin.flush()
@@ -362,12 +365,19 @@ def test_source_429_persists_pause_without_more_requests(monkeypatch):
 
 
 def test_downloader_kills_a_descendant_even_when_its_parent_has_exited(tmp_path):
-    from shared.process_runner import run
+    from shared.process_runner import run, acquisition_scope, AcquisitionCancelled
     marker = tmp_path / 'escaped.txt'
-    descendant = f"import time;from pathlib import Path;time.sleep(1);Path({str(marker)!r}).write_text('escaped')"
+    descendant = f"import time;from pathlib import Path;print('READY',flush=True);time.sleep(1);Path({str(marker)!r}).write_text('escaped')"
     parent = f"import subprocess,sys;subprocess.Popen([sys.executable,'-c',{descendant!r}])"
-    start = time.monotonic()
-    with pytest.raises(subprocess.TimeoutExpired):
-        run([sys.executable, '-c', parent], deadline=start + .2)
+    ready = []
+    def progress(line):
+        if line == 'READY':
+            ready.append(time.monotonic())
+    # A startup timeout could pass without ever spawning the descendant on a
+    # slow Windows runner. Wait for its handshake before cancelling the tree.
+    with acquisition_scope(lambda: bool(ready) and time.monotonic() - ready[0] > .1):
+        with pytest.raises(AcquisitionCancelled):
+            run([sys.executable, '-c', parent], deadline=time.monotonic() + 10, on_line=progress)
+    assert ready
     time.sleep(1.1)
     assert not marker.exists()
