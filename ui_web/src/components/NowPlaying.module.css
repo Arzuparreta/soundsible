@@ -110,7 +110,7 @@
   margin: 0 auto;
   overflow: hidden;
   border-radius: var(--radius-lg);
-  box-shadow: var(--stage-shadow-lg);
+  box-shadow: var(--stage-shadow-sm);
 }
 
 .controlsPanel {
@@ -189,16 +189,22 @@
   white-space: nowrap;
 }
 
+/* Drawn inside the link: the line clips anything outside it. */
+.artist a:focus-visible,
+.byline .album:focus-visible {
+  outline-offset: -2px;
+}
+
 .bylineSeparator {
   flex: none;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
 }
 
 .album {
   flex: 0 1000 auto;
   min-width: 2.5em;
   overflow: hidden;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   text-overflow: ellipsis;
 }
 
@@ -358,8 +364,14 @@
 }
 }
 
-/* Touch: no hover — the thumb is always there. */
+/* Touch: no hover — the thumb is always there, and the bar is a 44px target
+   whose extra height is taken out of the space around it, not added to it. */
 @media (pointer: coarse) {
+  .seek {
+    height: 44px;
+    margin-block: -11px;
+  }
+
   .seek::-webkit-slider-thumb,
   .volRange::-webkit-slider-thumb {
     opacity: 1;
@@ -378,7 +390,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
 }
 
 .seekWrap {
@@ -795,6 +807,7 @@
     grid-column: 2;
     grid-row: 1;
     height: 16px;
+    margin-block: 0;
   }
 
   .desktopLyricsStage .times {

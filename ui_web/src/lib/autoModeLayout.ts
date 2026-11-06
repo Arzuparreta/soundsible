@@ -15,9 +15,10 @@ export const AUTO_MODE_PANELS: readonly AutoModePanelId[] = ['browser', 'stage',
 export const DEFAULT_AUTO_MODE_LAYOUT: AutoModeDesktopLayout = {
   version: 1,
   order: ['browser', 'stage', 'route'],
-  // The stage takes the wider middle: it is the panel whose artwork grows
-  // with the room, and the two lists beside it read as well at 30 percent.
-  ratios: { browser: 0.3, stage: 0.4, route: 0.3 },
+  // The stage takes the wider middle, the panel whose artwork grows with the
+  // room; at 36 percent a 1536x864 window's cover is already as tall as the
+  // window allows, and the lists keep the width their titles need.
+  ratios: { browser: 0.32, stage: 0.36, route: 0.32 },
 };
 export const AUTO_MODE_LAYOUT_PRESETS = buildThreePanelLayoutPresets(
   { left: 'browser', stage: 'stage', right: 'route' } as const,

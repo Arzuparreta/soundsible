@@ -528,7 +528,6 @@
   --stage-rail: rgba(255, 255, 255, 0.18);
 
   --stage-shadow-sm: 0 10px 34px rgba(0, 0, 0, 0.22);
-  --stage-shadow-lg: 0 30px 90px rgba(0, 0, 0, 0.56);
 
   /* Halo behind type that shares its box with artwork. Light glass drops it —
      a dark halo on a bright panel only muddies the letterforms. */
@@ -588,7 +587,6 @@
   --stage-rail: rgba(15, 15, 22, 0.16);
 
   --stage-shadow-sm: 0 8px 24px rgba(15, 15, 22, 0.08);
-  --stage-shadow-lg: 0 26px 64px rgba(15, 15, 22, 0.14);
   --stage-text-halo: none;
 }
 

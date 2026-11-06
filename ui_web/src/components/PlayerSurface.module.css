@@ -3,12 +3,12 @@
   --player-chrome-size: 40px;
   --player-chrome-gap: 12px;
   --player-mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --player-carousel-height: 28px;
+  --player-carousel-height: 44px;
   /* The pager has a band of its own under the pages instead of floating over
      them: no row, card or lyric ever scrolls underneath it, so nothing needs to
      clear it either. The band is the pager plus this air above and below it,
      on top of whatever the device's home indicator takes. */
-  --player-carousel-inset: 6px;
+  --player-carousel-inset: 0px;
   --player-carousel-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-inset));
   --player-carousel-band: calc(var(--player-carousel-height) + var(--player-carousel-inset) * 2);
   /* What a page still leaves at the end of its own scroller. The pager is
@@ -297,14 +297,12 @@
   gap: 5px;
   min-width: 0;
   padding: 0 12px;
-  overflow: hidden;
   color: var(--ink-secondary);
   font: inherit;
   font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.04em;
   white-space: nowrap;
-  text-overflow: ellipsis;
   background: transparent;
   border: 0;
   border-radius: var(--radius-full);
@@ -312,6 +310,13 @@
   transition:
     color var(--dur-short),
     background var(--dur-short);
+}
+
+/* The raised half is 34px tall; the target is the full 44px. */
+.modeOption::before {
+  position: absolute;
+  inset: -5px 0;
+  content: '';
 }
 
 .modeOption:focus-visible {
@@ -370,11 +375,11 @@
 }
 
 /* The pager: three marks in the band under the pages, nothing behind them.
-   Each mark is a 28px target; the bar that slides between them follows the
+   Each mark is a 44px target; the bar that slides between them follows the
    scroll while the finger is on it. */
 .carouselNav {
-  --carousel-dot-size: 28px;
-  --carousel-gap: 2px;
+  --carousel-dot-size: 44px;
+  --carousel-gap: 0px;
 
   position: absolute;
   z-index: 45;
@@ -412,7 +417,7 @@
 .carouselDot {
   position: relative;
   width: var(--carousel-dot-size);
-  height: var(--carousel-dot-size);
+  height: var(--player-carousel-height);
   padding: 0;
   background: transparent;
   border: 0;

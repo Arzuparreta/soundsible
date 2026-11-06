@@ -37,6 +37,8 @@
 .detail { display: flex; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .index { flex: none; font-variant-numeric: tabular-nums; white-space: pre; }
 .detailText { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Drawn inside the link: the text box clips anything outside it. */
+.detailText a:focus-visible { outline-offset: -2px; }
 /* Who gives way when the line is too narrow. The artist is the song's identity
    and the note beside it is a remark about it, so the note gets the room that
    is left over and never a pixel the name still needs: a zero basis is what

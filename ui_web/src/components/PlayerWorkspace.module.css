@@ -97,8 +97,8 @@
     position: relative;
     z-index: 8;
     display: block;
-    width: 21px;
-    min-width: 21px;
+    width: 24px;
+    min-width: 24px;
     cursor: col-resize;
     touch-action: none;
     background: transparent;
@@ -110,7 +110,7 @@
     position: absolute;
     top: 8px;
     bottom: 8px;
-    left: 10px;
+    left: 11.5px;
     width: 1px;
     content: '';
     background: var(--stage-line-soft);
@@ -127,7 +127,7 @@
   }
 
   .splitter:focus-visible::after {
-    left: 9px;
+    left: 10.5px;
     width: 3px;
     background: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-faint);

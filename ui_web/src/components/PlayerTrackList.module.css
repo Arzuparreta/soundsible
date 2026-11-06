@@ -41,7 +41,7 @@
 }
 
 .count {
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   font-size: var(--text-label);
   font-weight: var(--fw-medium);
   font-variant-numeric: tabular-nums;
@@ -185,7 +185,7 @@
   min-height: 26px;
   flex: 0 0 auto;
   padding: 0 var(--space-xs);
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.08em;
@@ -289,7 +289,7 @@
 .position {
   display: grid;
   place-items: center;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
@@ -357,7 +357,7 @@
   height: 34px;
   place-items: center;
   padding: 0;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   background: transparent;
   border: 0;
   border-radius: var(--radius-full);
@@ -489,7 +489,7 @@
   height: 34px;
   place-items: center;
   padding: 0;
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   background: transparent;
   border: 0;
   border-radius: var(--radius-full);

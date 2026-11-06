@@ -16,7 +16,9 @@
   align-items: center;
   gap: var(--space-xs);
   min-height: 52px;
-  padding: var(--space-xs) var(--space-xs) var(--space-xs) 14px;
+  /* 20px: clear of the 24px circle around the 14px grip in this inset, so the
+     grip and the field's first button never compete for a press. */
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) 20px;
 }
 
 /* A recessed field, no outline until it has focus. */
@@ -132,7 +134,7 @@
 .toolbarLabel {
   margin: 0 0 var(--space-sm);
   padding: 0 var(--space-xs);
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.07em;
@@ -168,7 +170,7 @@
 }
 
 .toolbarSubtitle {
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   font-size: var(--text-caption);
   white-space: nowrap;
   overflow: hidden;
@@ -278,7 +280,7 @@
 }
 
 .navRow small {
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
   font-size: var(--text-caption);
   white-space: nowrap;
   overflow: hidden;
@@ -334,7 +336,7 @@
   width: 17px;
   height: 17px;
   fill: none;
-  stroke: var(--ink-tertiary);
+  stroke: var(--ink-secondary);
   stroke-width: 2;
 }
 
