@@ -1202,6 +1202,59 @@ describe('two-deck mixer', () => {
     expect(activeErrors).toBe(0);
   });
 
+  it('starts an explicit retry after a platform pause without replaying the failed deck', async () => {
+    const module = await import('./audio');
+    await module.audioService.load('/current', 1);
+    const failed = module.audioEl() as unknown as FakeAudio;
+    module.audioService.pause('platform', 'native_paused_on_restore');
+    failed.play.mockClear();
+    const replacement = created.find(deck => deck !== failed)!;
+    replacement.readyState = 0;
+
+    const retry = module.audioService.recover('/current', 0, 1, { requestPlayback: true });
+    expect(module.audioEl()).toBe(replacement);
+    expect(replacement.src).toBe('/current');
+    replacement.readyState = 4;
+    replacement.dispatchEvent(new Event('loadedmetadata'));
+    await retry;
+
+    expect(failed.play).not.toHaveBeenCalled();
+    expect(replacement.play).toHaveBeenCalledOnce();
+    expect(replacement.paused).toBe(false);
+  });
+
+  it('does not let automatic recovery restart a paused programme', async () => {
+    const module = await import('./audio');
+    await module.audioService.load('/current', 1);
+    const paused = module.audioEl() as unknown as FakeAudio;
+    module.audioService.pause();
+    paused.play.mockClear();
+
+    await module.audioService.recover('/current', 42, 1);
+
+    expect(module.audioEl()).toBe(paused);
+    expect(paused.paused).toBe(true);
+    expect(paused.play).not.toHaveBeenCalled();
+  });
+
+  it.each(['pause', 'stop'] as const)('honours %s while an explicit retry is waiting for metadata', async action => {
+    const module = await import('./audio');
+    await module.audioService.load('/current', 1);
+    module.audioService.pause('platform', 'native_paused_on_restore');
+    const failed = module.audioEl() as unknown as FakeAudio;
+    const replacement = created.find(deck => deck !== failed)!;
+    replacement.readyState = 0;
+
+    const retry = module.audioService.recover('/current', 0, 1, { requestPlayback: true });
+    module.audioService[action]();
+    replacement.readyState = 4;
+    replacement.dispatchEvent(new Event('loadedmetadata'));
+    await retry;
+
+    expect(replacement.play).not.toHaveBeenCalled();
+    expect(replacement.paused).toBe(true);
+  });
+
   it('rejects a recovery whose replacement deck never receives metadata', async () => {
     const module = await import('./audio');
     await module.audioService.load('/current', 1);

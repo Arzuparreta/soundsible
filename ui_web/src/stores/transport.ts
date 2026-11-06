@@ -411,7 +411,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       if (!stream_token) throw new Error('no podcast stream token');
       ports.podcastSourcePending = false;
       return audioService.load(podcastStreamUrl(stream_token), 1, resumePosition);
-    })) : staged ?? (opts.freshDeck ? audioService.recover(trackUrl(track), resumePosition, level) : isPodcastTrack(track) ? audioService.load(trackUrl(track), level, resumePosition) : audioService.load(trackUrl(track), level));
+    })) : staged ?? (opts.freshDeck ? audioService.recover(trackUrl(track), resumePosition, level, { requestPlayback: true }) : isPodcastTrack(track) ? audioService.load(trackUrl(track), level, resumePosition) : audioService.load(trackUrl(track), level));
     void Promise.resolve(start).catch(lifetime.guard((error: unknown) => onStartRejected(generation, error)));
     // `waiting` is not guaranteed for a media element whose play promise never
     // settles. Arm startup supervision from the request itself so an infinite
