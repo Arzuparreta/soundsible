@@ -391,7 +391,7 @@ def main() -> None:
                         # add_track only appends: an earlier case may have left (or deleted) either PCM track.
                         while library.metadata.remove_track(f"{name}-pcm-soft"):
                             pass
-                        library.metadata.add_track(replace(original, id=f"{name}-pcm-soft", title=f"{name} softer PCM song",
+                        library.metadata.add_track(replace(original, id=f"{name}-pcm-soft", item_id=None, title=f"{name} softer PCM song",
                             album=f"{name} PCM album", file_hash=f"{name}-pcm-soft-hash",
                             duration=first_duration if custom else original.duration, format="wav" if custom else original.format,
                             file_size=soft.stat().st_size, bitrate=256 if custom else original.bitrate,

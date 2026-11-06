@@ -285,7 +285,11 @@ def get_car_items(item_id: str):
         return jsonify({"id": item_id, "items": [_track_item(t) for t in episodes[:MAX_CAR_ITEMS]], "status": "ok"})
 
     if item_id == "radio":
-        music = [t for t in tracks if getattr(t, "media_kind", None) != "podcast_episode"]
+        # Radio offers acquired musical items, not every file variant of one
+        # item. Its chosen source is the same one used by the collection tree.
+        music = ([t for t in collection['items'] if t.get('media_kind') != 'podcast_episode'
+                  and t.get('source') != 'preview'] if collection is not None else
+                 [t for t in tracks if getattr(t, "media_kind", None) != "podcast_episode"])
         seed_items = [_track_item(t) for t in music[:MAX_CAR_ITEMS]]
         for item in seed_items:
             item["kind"] = "radio_seed"

@@ -247,3 +247,27 @@ def test_new_edit_routes_require_preconditions_and_do_not_mutate_without_them(cl
     reply = client.patch("/api/library/playlist-edits/Arma%20Reforger", json={"expected_track_ids": ["tunnel"], "track_ids": []})
     assert reply.status_code == 200
     assert reply.get_json()["playlists"]["Arma Reforger"] == []
+
+
+def test_legacy_preview_addition_uses_the_same_item_after_its_file_is_removed(client):
+    user_id = ensure_multiuser_layout()['user_id']
+    _seed_library(user_id)
+    video = 'B1111111111'
+    with user_context(user_id):
+        core = get_user_core(user_id)
+        core.favourites.toggle_saved({'keys': [f'yt:{video}'], 'title': 'Saved song', 'artist': 'Artist'})
+        item_id = core.favourites.get_entries()[0]['item_id']
+        track = _track('downloaded-source')
+        track.youtube_id = video
+        core.library.metadata.add_track(track)
+        core.library.require_saved()
+        core.library.metadata.remove_track(track.id)
+        core.library.require_saved()
+    response = client.post('/api/library/playlists/Arma%20Reforger/tracks', json={'track_id': video})
+    assert response.status_code == 200
+    assert response.get_json()['playlists']['Arma Reforger'] == ['tunnel', item_id]
+    snapshot = client.get('/api/library/collection').get_json()
+    assert snapshot['playlists']['Arma Reforger'] == ['tunnel', item_id]
+    song = next(row for row in snapshot['items'] if row['item_id'] == item_id)
+    assert song['id'] == video
+    assert song['title'] == track.title  # the private source labels survive removal

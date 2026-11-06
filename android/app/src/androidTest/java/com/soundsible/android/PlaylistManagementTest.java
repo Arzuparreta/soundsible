@@ -6,6 +6,7 @@ import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import java.util.concurrent.TimeUnit;
@@ -46,20 +47,27 @@ public class PlaylistManagementTest {
             web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('input[type=password]')");web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('[data-testid=android-library]')");
-            api(connection,origin,"/api/library/playlists/member%20playlist/tracks","{\"track_id\":\"B1111111111\"}");
+            // This test owns its preview descriptor; other acceptance cases may
+            // have acquired and relabelled the shared fixture's saved song.
+            var admission=api(connection,origin,"/api/library/playlists/member%20playlist/tracks",new JSONObject().put("entry",new JSONObject()
+                .put("keys",new JSONArray().put("yt:M1111111111")).put("title","Managed preview").put("artist","member artist")).toString());
+            String previewId=admission.getString("item_id");
+            assertNotEquals("M1111111111",previewId);
+            String afterRemoval=new JSONArray().put("member-track").put(previewId).toString();
+            String afterMove=new JSONArray().put(previewId).put("member-track").toString();
             choose(web,scenario,"Refresh");Thread.sleep(500);choose(web,scenario,"Playlists");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member playlist')");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member playlist').click()");
             waitFor(web,scenario,"Array.from(document.querySelectorAll('[data-row-main]')).filter(b=>b.textContent==='member private song').length===2");
-            waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member saved song')");
+            waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='Managed preview')");
             web.evaluate(scenario,"document.querySelector('[data-testid=android-library] input[type=search]').value='private';document.querySelector('[data-testid=android-library] input[type=search]').dispatchEvent(new Event('input',{bubbles:true}))");
-            rowMenu(web,scenario,"member private song",1,"Remove from playlist");awaitIds(connection,origin,"member playlist","[\"member-track\",\"B1111111111\"]");
+            rowMenu(web,scenario,"member private song",1,"Remove from playlist");awaitIds(connection,origin,"member playlist",afterRemoval);
             waitFor(web,scenario,"Array.from(document.querySelectorAll('[data-row-main]')).filter(b=>b.textContent==='member private song').length===1");
-            rowMenu(web,scenario,"member private song",0,"Move down");awaitIds(connection,origin,"member playlist","[\"B1111111111\",\"member-track\"]");
+            rowMenu(web,scenario,"member private song",0,"Move down");awaitIds(connection,origin,"member playlist",afterMove);
             // Server acknowledgement precedes the refreshed UI. Observe the new order
             // before capturing the next conditional edit, including under TLS latency.
             web.evaluate(scenario,"document.querySelector('[data-testid=android-library] input[type=search]').value='';document.querySelector('[data-testid=android-library] input[type=search]').dispatchEvent(new Event('input',{bubbles:true}))");
-            waitFor(web,scenario,"document.querySelector('[data-testid=android-library] [data-row-main]')?.textContent==='member saved song'");
+            waitFor(web,scenario,"document.querySelector('[data-testid=android-library] [data-row-main]')?.textContent==='Managed preview'");
             web.evaluate(scenario,"document.querySelector('[data-collection-menu]').click()");choose(web,scenario,"Change cover");
             waitFor(web,scenario,"!!document.querySelector('[data-testid=android-playlist-cover] button[aria-label=\"member private song\"]')");
             web.evaluate(scenario,"document.querySelector('[data-testid=android-playlist-cover] button[aria-label=\"member private song\"]').click()");waitFor(web,scenario,"!document.querySelector('[data-testid=android-playlist-cover]')");
@@ -67,7 +75,7 @@ public class PlaylistManagementTest {
             web.evaluate(scenario,"document.querySelector('[data-collection-menu]').click()");choose(web,scenario,"Rename");prompt(web,scenario,"Managed playlist");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='Managed playlist')");
             rowMenu(web,scenario,"Managed playlist",0,"Duplicate");prompt(web,scenario,"Managed copy");
-            waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='Managed copy')");awaitIds(connection,origin,"Managed copy","[\"B1111111111\",\"member-track\"]");
+            waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='Managed copy')");awaitIds(connection,origin,"Managed copy",afterMove);
             int before=Integer.parseInt(web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).findIndex(b=>b.textContent==='Managed playlist')"));
             assertTrue("Playlist must have a preceding row",before>0);
             String preceding=web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]'))["+(before-1)+"].textContent");

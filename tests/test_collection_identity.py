@@ -258,3 +258,21 @@ def test_saved_source_repair_keeps_history_for_already_prepared_audio():
     db.replace_library(metadata)
     assert db.record_track_play('before', 123)
     assert db.get_track_user_state(item_id)['play_count'] == 1
+
+
+def test_car_radio_offers_one_seed_for_an_item_with_several_acquired_sources(tmp_path, monkeypatch):
+    from flask import Flask
+    from types import SimpleNamespace
+    from shared.api.routes import car
+    db = DatabaseManager(str(tmp_path / 'library.db'))
+    metadata = library(file('first-source'))
+    db.replace_library(metadata)
+    item_id = metadata.tracks[0].item_id
+    metadata.add_track(replace(metadata.tracks[0], id='second-source', file_hash='second-source'))
+    db.replace_library(metadata)
+    lib = SimpleNamespace(db=db, metadata=metadata, refresh_if_stale=lambda: None)
+    monkeypatch.setattr(car, '_get_api', lambda: {'get_core': lambda: (lib, None, None)})
+    app = Flask(__name__)
+    app.register_blueprint(car.car_bp)
+    rows = app.test_client().get('/api/car/items/radio').get_json()['items']
+    assert [(row['id'], row['track_id'], row['kind']) for row in rows] == [(item_id, 'first-source', 'radio_seed')]

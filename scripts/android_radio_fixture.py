@@ -90,7 +90,7 @@ def install(app, root, accounts):
                     target = Path(root) / "music/tracks" / f"{identity}.{original.format}"
                     shutil.copyfile(Path(root) / "music/tracks" / f"{name}-track.{original.format}", target)
                     library.metadata.add_track(
-                        replace(original, id=identity, title=f"{name} radio song {index}", file_hash=identity)
+                        replace(original, id=identity, item_id=None, title=f"{name} radio song {index}", file_hash=identity)
                     )
                     if measurement is not None:
                         from shared.loudness.store import LoudnessStore, source_stamp

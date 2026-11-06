@@ -108,14 +108,17 @@ public class FileDeletionTest {
             api(connection, origin, member, "/__fixture/acquisition", "POST", new JSONObject().put("delaySeconds", 0).put("failNext", 0));
             var file = acquire(connection, origin, member, "B1111111111", "member saved song");
             String id = file.getString("id");
+            String itemId = file.getString("item_id");
+            assertNotEquals("A saved song must keep its identity when downloaded", id, itemId);
             owner = ownerCookie(connection, origin);
             assertTrue("Owner fixture login must not replace the native account", member.equals(connection.cookieHeader(connection.getGeneration())));
             var shared = acquire(connection, origin, owner, "B1111111111", "member saved song");
             assertEquals("Both accounts must share the actual acquired source", id, shared.getString("id"));
             String playlist = "Android source deletion";
             api(connection, origin, member, "/api/library/playlists", "POST", new JSONObject().put("name", playlist));
+            String membership = new JSONArray().put(itemId).put("member-track").put(itemId).toString();
             api(connection, origin, member, "/api/library/playlist-edits/Android%20source%20deletion", "PATCH",
-                new JSONObject().put("expected_track_ids", new JSONArray()).put("track_ids", new JSONArray().put(id).put("member-track").put(id)));
+                new JSONObject().put("expected_track_ids", new JSONArray()).put("track_ids", new JSONArray(membership)));
             click(scenario, "Playlists");
             waitFor(scenario, "!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='Android source deletion' && b.closest('[data-music-list-row]').querySelector('[data-row-detail]')?.textContent==='3 tracks')");
             click(scenario, "Songs");
@@ -126,7 +129,7 @@ public class FileDeletionTest {
             long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(40);
             while (store.local(id, epoch) == null) { assertTrue("Explicit copy must become ready", System.nanoTime() < until); Thread.sleep(100); }
             var copied = store.local(id, epoch); assertNotNull(copied); assertTrue(copied.exists());
-            assertEquals(new JSONArray().put(id).put("member-track").put(id).toString(), store.state(epoch).getJSONObject("playlists").getJSONArray(playlist).toString());
+            assertEquals(membership, store.state(epoch).getJSONObject("playlists").getJSONArray(playlist).toString());
             command(scenario, "action:'queue',index:0,tracks:[{source:'preview',id:'B1111111111',title:'member saved song',artist:'member artist'},{source:'local',id:" + JSONObject.quote(id) + ",title:'Acquired one',artist:'member artist'},{source:'local',id:'member-track',title:'Other song',artist:'member artist'},{source:'local',id:" + JSONObject.quote(id) + ",title:'Acquired two',artist:'member artist'}]");
             waitFor(scenario, "window.__deletionState?.playing && window.__deletionState.items.length===4");
             command(scenario, "action:'pause'"); command(scenario, "action:'seek',positionMs:20000");
@@ -147,7 +150,21 @@ public class FileDeletionTest {
             assertEquals(program, web.evaluate(scenario, "window.__deletionState.programToken"));
             assertNull(acquired(connection, origin, member, "B1111111111")); assertNull(store.local(id, epoch)); assertFalse(copied.exists());
             assertEquals(0, store.state(epoch).getJSONArray("items").length());
-            assertEquals(new JSONArray().put("member-track").toString(), store.state(epoch).getJSONObject("playlists").getJSONArray(playlist).toString());
+            assertEquals("Removing source bytes must retain musical occurrences", membership,
+                store.state(epoch).getJSONObject("playlists").getJSONArray(playlist).toString());
+            var collection = api(connection, origin, member, "/api/library/collection", "GET", null);
+            assertEquals(membership, collection.getJSONObject("playlists").getJSONArray(playlist).toString());
+            boolean retainedSong = false;
+            var songs = collection.getJSONArray("items");
+            for (int i = 0; i < songs.length(); i++) {
+                var song = songs.getJSONObject(i);
+                if (itemId.equals(song.getString("item_id"))) {
+                    assertEquals("preview", song.getString("source"));
+                    assertEquals("B1111111111", song.getString("id"));
+                    retainedSong = true;
+                }
+            }
+            assertTrue("Source removal must retain the collection item", retainedSong);
             assertNotNull("Other owner must retain membership", acquired(connection, origin, owner, "B1111111111"));
             try (var response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/api/static/stream/" + id).header("Cookie", owner).header("Range", "bytes=0-31").build()).execute()) {
                 assertEquals("Member deletion must preserve shared audio", 206, response.code()); assertEquals(32, response.body().bytes().length);

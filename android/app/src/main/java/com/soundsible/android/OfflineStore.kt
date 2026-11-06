@@ -168,13 +168,8 @@ class OfflineStore private constructor(private val context: Context) {
                 database.update("copies", ContentValues().apply { put("bytes", OfflineFileRemoval.retainedBytes(file(id), part(id))) }, "id=?", arrayOf(id))
             }
         }
-        val playlists = JSONObject(prefs.getString("playlists", "{}") ?: "{}")
-        for (name in playlists.keys().asSequence().toList()) {
-            val rows = playlists.getJSONArray(name); val retained = JSONArray()
-            for (index in 0 until rows.length()) if (rows.getString(index) !in sources) retained.put(rows.getString(index))
-            playlists.put(name, retained)
-        }
-        prefs.edit().putString("playlists", playlists.toString()).apply()
+        // Playlist references describe musical membership from the account
+        // snapshot. Removing copied bytes changes availability, not membership.
         changed()
         if (failed) throw java.io.IOException("storage")
     }
