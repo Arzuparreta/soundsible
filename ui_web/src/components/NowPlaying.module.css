@@ -66,7 +66,12 @@
   height: 100%;
   min-height: 0;
   padding: var(--stage-pad-top) var(--stage-pad-x) var(--stage-pad-bottom);
-  overflow: hidden;
+  /* The last resort, not the layout: the artwork gives way first (and goes
+     altogether in a very short tile, below), so this only scrolls when even
+     the rows under it do not fit — the large interface size in a window a
+     few hundred pixels tall. */
+  overflow-x: hidden;
+  overflow-y: auto;
   /* Lock the body to its content: no overscroll bounce (rubber-band) at the
      top, and no scroll-chaining to the surface behind it. Swipe-down is
      handled by `PlayerSurface` (pointer events), not by the body's native
@@ -621,8 +626,6 @@
 
   .body {
     --stage-pad-x: clamp(20px, 6cqw, 40px);
-
-    overflow-y: auto;
   }
 }
 
@@ -662,6 +665,20 @@
     flex: 0 1 440px;
     width: auto;
     min-width: 0;
+  }
+}
+
+/* A tile too short for artwork and controls together — a desktop window a few
+   hundred pixels tall — keeps the controls and lets the cover go: the room
+   behind them is already that cover, blurred. Lyrics opened in the cover's
+   square keep it. */
+@container stage (max-height: 420px) and (max-aspect-ratio: 5 / 4) {
+  .body:not(.desktopLyricsStage) {
+    justify-content: center;
+  }
+
+  .body:not(.desktopLyricsStage) .media:not(:has([data-lyrics-open])) {
+    display: none;
   }
 }
 
@@ -912,6 +929,25 @@
 
   .desktopLyricsStage .volRange {
     width: 112px;
+  }
+
+  /* A narrow dock cannot hold the song, the transport and the actions on one
+     row without the actions running over the transport. The transport takes
+     a row of its own under them instead. */
+  @container stage (max-width: 439px) {
+    .desktopLyricsStage {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: minmax(0, 1fr) auto 48px 52px;
+    }
+
+    .desktopLyricsStage .actionsBar {
+      grid-column: 2;
+    }
+
+    .desktopLyricsStage .controls {
+      grid-column: 1 / -1;
+      grid-row: 4;
+    }
   }
 
   @container stage (min-width: 460px) {
