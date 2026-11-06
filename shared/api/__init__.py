@@ -1456,8 +1456,9 @@ def _sync_pool_to_main_core():
 def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
     """Rewrite track ids across every account after stored files changed.
 
-    A repair changes each file's content hash, and the hash is the track id. Without this pass every manifest, playlist, and favourite that pointed
-    at the old id would go dead — for everyone, not just whoever ran it.
+    Persist source replacements for every account, retaining musical item IDs.
+    The initiating account may already hold the new source objects in memory;
+    its old SQLite binding still needs the same atomic replacement write.
     """
     from shared.user_context import user_context
     from shared.users import list_users
@@ -1467,6 +1468,7 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
 
     touched: dict[str, int] = {}
     failed = []
+    replacement_ids = set(id_map.values())
     for account in list_users():
         user_id = account["id"]
         try:
@@ -1480,6 +1482,10 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
 
                 lib.refresh_if_stale()
                 changed = lib.metadata.remap_track_ids(id_map, references=False)
+                # The repair caller can already have installed replacement
+                # objects. A no-op model remap is not evidence that the source
+                # association was committed in this account's database.
+                changed |= any(track.id in replacement_ids for track in lib.metadata.tracks)
                 for track in lib.metadata.tracks:
                     replacement = (replacements or {}).get(track.id)
                     if replacement:
@@ -1515,8 +1521,8 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
     audio-only stream that was a progressive 360p video with the music muxed in.
     The repair is a remux — the audio is moved, never re-encoded — but it does
     change the bytes, and the hash of those bytes is the track id, so the id map
-    it returns has to reach every place that names a track: the manifests, the
-    playlists (through `replace_library`) and the favourites.
+    it returns updates file manifests and the persisted source bindings through
+    `replace_library`. Musical playlist references keep their stable identity.
 
     Songs from YouTube stored as FLAC are downloaded again as the stream they
     were decoded from, which re-keys them the same way.
