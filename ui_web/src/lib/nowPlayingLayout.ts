@@ -19,7 +19,9 @@ export const NOW_PLAYING_LAYOUT_KEY = 'np:desktopLayout:v1';
 export const DEFAULT_NOW_PLAYING_LAYOUT: NowPlayingDesktopLayout = {
   version: 1,
   order: ['browser', 'stage', 'queue'],
-  ratios: { browser: 1 / 3, stage: 1 / 3, queue: 1 / 3 },
+  // The stage takes the wider middle: it is the panel whose artwork grows
+  // with the room, and the two lists beside it read as well at 30 percent.
+  ratios: { browser: 0.3, stage: 0.4, queue: 0.3 },
 };
 
 export const NOW_PLAYING_LAYOUT_PRESETS = buildThreePanelLayoutPresets(

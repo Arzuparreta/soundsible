@@ -1,3 +1,7 @@
+/* The panels are open regions of one room, not cards laid on it: no plate,
+   rim, shadow or corner of their own. What tells them apart on a desktop is
+   the hairline between them, which is also the handle that resizes them. The
+   veil that keeps their text legible is the room's (PlayerSurface `.wash`). */
 .workspace {
   position: relative;
   width: 100%;
@@ -6,8 +10,8 @@
   min-height: 0;
   padding:
     calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))
-    clamp(12px, 2vw, 28px)
-    clamp(18px, 2.4vh, 30px);
+    clamp(8px, 1.2vw, 20px)
+    clamp(10px, 1.6vh, 20px);
   overflow: hidden;
 }
 
@@ -23,16 +27,12 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--stage-panel);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
-  backdrop-filter: var(--stage-material-filter);
-  -webkit-backdrop-filter: var(--stage-material-filter);
 }
 
+/* A size container: the stage fits its artwork to both of the tile's sides,
+   and the lyrics dock sizes its row against the tile, never the window. */
 .tile[data-player-tile='stage'] {
-  container-type: inline-size;
+  container: stage / size;
 }
 
 .splitter,
@@ -44,15 +44,15 @@
   .workspace {
     padding-top:
       calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
-    padding-right: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-right, 0px));
-    padding-bottom: var(--player-mobile-safe-bottom);
-    padding-left: max(clamp(10px, 2.5vw, 20px), env(safe-area-inset-left, 0px));
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-band));
+    padding-left: env(safe-area-inset-left, 0px);
   }
 
   .main {
     display: flex;
     align-items: stretch;
-    gap: clamp(10px, 2.2vw, 18px);
+    gap: 0;
     max-width: none;
     overflow-x: auto;
     overflow-y: hidden;
@@ -61,7 +61,7 @@
     /* The pager owns the horizontal axis and stops there: nothing sideways
        reaches the page behind it. Its panels contain their own scrolling on y
        alone, deliberately — a list that contained x too would swallow every
-       swipe that started on it, and the card it fills could not be left by the
+       swipe that started on it, and the page it fills could not be left by the
        gesture that reached it. */
     overscroll-behavior-x: contain;
     scrollbar-width: none;
@@ -97,49 +97,82 @@
     position: relative;
     z-index: 8;
     display: block;
-    width: 14px;
-    min-width: 14px;
+    width: 21px;
+    min-width: 21px;
     cursor: col-resize;
     touch-action: none;
     background: transparent;
   }
 
+  /* Always there, at a hairline: the seam between two panels. Pointed at or
+     focused, it becomes the handle it also is. */
   .splitter::after {
     position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 6px;
-    width: 2px;
+    top: 8px;
+    bottom: 8px;
+    left: 10px;
+    width: 1px;
     content: '';
-    background: var(--stage-line-strong);
-    opacity: 0;
+    background: var(--stage-line-soft);
+    border-radius: var(--radius-full);
     transition:
-      opacity var(--dur-short),
+      left var(--dur-short),
+      width var(--dur-short),
       background var(--dur-short),
       box-shadow var(--dur-short);
   }
 
+  .splitter:focus-visible {
+    outline: none;
+  }
+
   .splitter:focus-visible::after {
-    opacity: 1;
+    left: 9px;
+    width: 3px;
     background: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-faint);
   }
 
+  /* Six dots, faint until the panel they move is pointed at or holds focus.
+     The layout menu (top left) moves panels too, so the grip never has to
+     announce itself to be found. */
+  /* In a panel's header it hangs in the header's left inset, on its own
+     layer, so the title and the search field start where the rows below them
+     do whether the grip is showing or not. */
   .panelGrip {
+    position: absolute;
+    z-index: 3;
+    top: 50%;
+    left: 0;
     display: grid;
-    grid-template-columns: repeat(3, 3px);
-    grid-template-rows: repeat(2, 3px);
+    grid-template-columns: repeat(2, 3px);
+    grid-template-rows: repeat(3, 3px);
     place-content: center;
     gap: 3px;
-    width: 28px;
+    width: 14px;
     height: 32px;
-    flex: 0 0 auto;
+    transform: translateY(-50%);
     padding: 0;
     color: var(--ink-tertiary);
     background: transparent;
     border: 0;
     border-radius: var(--radius-full);
     cursor: grab;
+    opacity: 0;
+    transition:
+      opacity var(--dur-short),
+      color var(--dur-short),
+      background var(--dur-short);
+  }
+
+  .tile:has(:focus-visible) .panelGrip,
+  .panelGrip:focus-visible {
+    opacity: 1;
+  }
+
+  .panelGrip:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: -2px;
   }
 
   .panelGrip:active {
@@ -153,34 +186,37 @@
     border-radius: 50%;
   }
 
+  /* The stage has no header to hold it: it floats over the top edge, turned
+     on its side so it reads as a handle on the panel rather than a control
+     inside it. */
   .tile[data-player-tile='stage'] > .panelGrip {
-    position: absolute;
     z-index: 12;
-    top: 6px;
+    top: 0;
     left: 50%;
+    grid-template-columns: repeat(3, 3px);
+    grid-template-rows: repeat(2, 3px);
+    width: 44px;
+    height: 24px;
     transform: translateX(-50%);
-    background: var(--stage-material);
-    backdrop-filter: blur(10px);
   }
 
   @media (hover: hover) and (pointer: fine) {
+    .tile:hover .panelGrip {
+      opacity: 1;
+    }
+
     .splitter:hover::after,
     .splitter:active::after {
-      opacity: 1;
+      left: 9px;
+      width: 3px;
       background: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-faint);
     }
 
     .panelGrip:hover {
       color: var(--ink-primary);
-      background: var(--stage-material-hover);
+      background: var(--stage-material);
     }
-  }
-}
-
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .tile {
-    background: var(--stage-panel-opaque);
   }
 }
 

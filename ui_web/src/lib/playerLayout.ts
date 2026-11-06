@@ -78,10 +78,17 @@ export function parsePanelLayout<PanelId extends string>(
         && new Set(parsed.order).size === ids.length
         && parsed.ratios
       ) {
+        const ratios = normalizePanelRatios(ids, parsed.ratios, fallback.ratios);
+        // Three equal thirds in the default order is the layout the player
+        // shipped with before the stage was given the wider middle, saved by
+        // nobody's choice: it follows the default rather than pinning it.
+        const untouched = parsed.order.every((id, index) => id === fallback.order[index])
+          && ids.every((id) => Math.abs(ratios[id] - 1 / ids.length) < 1e-6);
+        if (untouched) return clonePanelLayout(fallback);
         return {
           version: 1,
           order: [...parsed.order],
-          ratios: normalizePanelRatios(ids, parsed.ratios, fallback.ratios),
+          ratios,
         };
       }
     } catch {

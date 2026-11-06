@@ -23,7 +23,7 @@ import { LyricsPanel } from './LyricsPanel';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { openPlaylistPicker } from './PlaylistPicker';
-import { RadioBadge, onStopRadio } from './RadioBadge';
+import { onStopRadio } from './RadioBadge';
 import { Spinner } from './Spinner';
 import { buildTrackMenu, openTrackMenu } from './trackActions';
 import type { Track } from '../types/music';
@@ -260,67 +260,47 @@ export function PlayerStage(props: {
                         </Suspense>
                       </div>
                     </Show>
-                    <Show when={!podcast()}>
-                      <button
-                        classList={{
-                          [styles.mobileLyricsToggle]: true,
-                          [styles.mobileLyricsToggleOn]: mobileVisual().content === 'lyrics',
-                        }}
-                        type="button"
-                        aria-label={mobileVisual().content === 'lyrics' ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-                        aria-pressed={mobileVisual().content === 'lyrics'}
-                        onClick={() => setMobileVisual(toggleMobileLyrics)}
-                      >
-                        <KaraokeMicIcon size={21} />
-                      </button>
-                    </Show>
                     <Show when={desktopLyricsActive()}>
                       <div class={styles.desktopLyrics}>
                         <StageLyrics />
                       </div>
                     </Show>
-                    <Show when={!podcast()}>
-                      <button
-                        classList={{
-                          [styles.desktopLyricsToggle]: true,
-                          [styles.desktopLyricsToggleOn]: desktopLyricsActive(),
-                        }}
-                        type="button"
-                        aria-label={desktopLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-                        aria-pressed={desktopLyricsActive()}
-                        disabled={layoutBusy()}
-                        onClick={toggleDesktopLyrics}
-                      >
-                        <Show
-                          when={!desktopLyricsActive()}
-                          fallback={
-                            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                              <rect x="4" y="4" width="16" height="16" rx="2" />
-                              <path d="m7 16 4-4 3 3 2-2 2 3" />
-                            </svg>
-                          }
-                        >
-                          <KaraokeMicIcon size={21} />
-                        </Show>
-                      </button>
-                    </Show>
                   </div>
-                </div>
-                <div class={styles.info} data-lyrics-morph="">
-                  <div class={styles.titleRow}>
-                    <h1 class={styles.title}>{current().title}</h1>
-                    <Show when={props.mode === 'now-playing'}>
-                      <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
-                    </Show>
-                  </div>
-                  <ArtistLinks class={styles.artist} music={playerTrackMusic(current())} />
-                  <Show when={playerTrackMusic(current()).linkable !== false && current().album?.trim()}>
-                    <AlbumLink class={styles.album} music={playerTrackMusic(current())} />
-                  </Show>
                 </div>
               </div>
 
               <div class={styles.controlsPanel}>
+                <div class={styles.info} data-lyrics-morph="">
+                  <div class={styles.meta}>
+                    <h1 class={styles.title} title={current().title}>{current().title}</h1>
+                    <p class={styles.byline}>
+                      <ArtistLinks class={styles.artist} music={playerTrackMusic(current())} />
+                      <Show when={playerTrackMusic(current()).linkable !== false && current().album?.trim()}>
+                        <span class={styles.bylineSeparator} aria-hidden="true">·</span>
+                        <AlbumLink class={styles.album} music={playerTrackMusic(current())} />
+                      </Show>
+                    </p>
+                  </div>
+                  <div class={styles.infoActions}>
+                    {/* No wrapper here: once the song is downloaded the button
+                        renders nothing, and an empty box would still be a flex
+                        item — a second gap beside the heart. */}
+                    <Show when={!podcast()}>
+                      <CollectionButton
+                        entry={savedFromTrack(current())}
+                        class={`${styles.actBtn} ${styles.collectionAction}`}
+                        hideOwned
+                        tooltip
+                      />
+                    </Show>
+                    <Show when={!podcast() && isSavedTrack(current())}>
+                      <span class={styles.favouriteAction}>
+                        <FavouriteButton favourite={savedFromTrack(current())} class={styles.actBtn} tooltip />
+                      </span>
+                    </Show>
+                  </div>
+                </div>
+
                 <div class={styles.seekWrap} data-lyrics-morph="">
                   <input
                     class={styles.seek}
@@ -409,11 +389,44 @@ export function PlayerStage(props: {
                 </div>
 
                 <div class={styles.actionsBar} data-lyrics-morph="">
+                  <Show when={!podcast()}>
+                    <button
+                      classList={{
+                        [styles.actBtn]: true,
+                        [styles.mobileLyricsToggle]: true,
+                        [styles.actOn]: mobileVisual().content === 'lyrics',
+                      }}
+                      type="button"
+                      aria-label={mobileVisual().content === 'lyrics' ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
+                      title={mobileVisual().content === 'lyrics' ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
+                      aria-pressed={mobileVisual().content === 'lyrics'}
+                      onClick={() => setMobileVisual(toggleMobileLyrics)}
+                    >
+                      <KaraokeMicIcon size={20} />
+                    </button>
+                    <button
+                      classList={{
+                        [styles.actBtn]: true,
+                        [styles.desktopLyricsToggle]: true,
+                        [styles.actOn]: desktopLyricsActive(),
+                      }}
+                      type="button"
+                      aria-label={desktopLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
+                      title={desktopLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
+                      aria-pressed={desktopLyricsActive()}
+                      disabled={layoutBusy()}
+                      onClick={toggleDesktopLyrics}
+                    >
+                      <KaraokeMicIcon size={20} />
+                    </button>
+                  </Show>
+
                   <Show when={props.onOpenList && state.playback.queue.length > 1}>
                     <button
                       classList={{ [styles.actBtn]: true, [styles.mobileQueueToggle]: true }}
                       type="button"
                       aria-label={props.listLabel ?? t('nowPlaying.queue')}
+                      title={props.listLabel ?? t('nowPlaying.queue')}
                       onClick={props.onOpenList}
                     >
                       <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -421,24 +434,6 @@ export function PlayerStage(props: {
                         <path d="M17 17V4h4M13 5H3M3 9h10M9 13H3" />
                       </svg>
                     </button>
-                  </Show>
-
-                  <Show when={!podcast() && isSavedTrack(current())}>
-                    <span class={styles.favouriteAction}>
-                      <FavouriteButton favourite={savedFromTrack(current())} class={styles.actBtn} tooltip />
-                    </span>
-                  </Show>
-
-                  {/* No wrapper here: once the song is downloaded the button
-                      renders nothing, and an empty box would still be a flex
-                      item — a second gap beside the heart. */}
-                  <Show when={!podcast()}>
-                    <CollectionButton
-                      entry={savedFromTrack(current())}
-                      class={`${styles.actBtn} ${styles.collectionAction}`}
-                      hideOwned
-                      tooltip
-                    />
                   </Show>
 
                   <Show when={props.mode === 'now-playing' && !podcast()}>

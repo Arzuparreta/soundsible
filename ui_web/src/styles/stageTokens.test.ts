@@ -32,16 +32,6 @@ const stageLight = () =>
   declarations((selector) => selector === ":root[data-theme='light'] [data-player-stage]");
 const lightTheme = () => declarations((selector) => selector === ":root[data-theme='light']");
 
-/* Painted on the photograph or on an orange fill rather than on glass, so both
-   materials share one value. */
-const SHARED_STAGE_TOKENS = new Set([
-  '--stage-on-art-ink',
-  '--stage-on-art-ink-soft',
-  '--stage-on-art-shadow',
-  '--stage-on-art-scrim',
-  '--stage-gloss',
-]);
-
 describe('player stage tokens', () => {
   it('declares both materials for every token', () => {
     const dark = stageDark();
@@ -49,7 +39,7 @@ describe('player stage tokens', () => {
 
     expect(Object.keys(dark).length).toBeGreaterThan(20);
     const missing = Object.keys(dark).filter(
-      (token) => !SHARED_STAGE_TOKENS.has(token) && !(token in light),
+      (token) => !(token in light),
     );
     expect(missing).toEqual([]);
     // and nothing light-only, which would be a token the dark room never got

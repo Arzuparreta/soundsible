@@ -15,7 +15,9 @@ export const AUTO_MODE_PANELS: readonly AutoModePanelId[] = ['browser', 'stage',
 export const DEFAULT_AUTO_MODE_LAYOUT: AutoModeDesktopLayout = {
   version: 1,
   order: ['browser', 'stage', 'route'],
-  ratios: { browser: 1 / 3, stage: 1 / 3, route: 1 / 3 },
+  // The stage takes the wider middle: it is the panel whose artwork grows
+  // with the room, and the two lists beside it read as well at 30 percent.
+  ratios: { browser: 0.3, stage: 0.4, route: 0.3 },
 };
 export const AUTO_MODE_LAYOUT_PRESETS = buildThreePanelLayoutPresets(
   { left: 'browser', stage: 'stage', right: 'route' } as const,

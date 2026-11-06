@@ -75,7 +75,9 @@ export function NowPlaying(props: {
       ? null
       : contextContinuation(state.playback.queue, state.playback.index, state.playback.repeat === 'all'),
   );
-  const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 240, stage: 360, queue: 240 };
+  // The browser's widest fixed row (three scope chips and its tools) fits in
+  // 320px; the three minimums and the seams between them fit a 1024px window.
+  const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 320, stage: 330, queue: 280 };
 
   createEffect(() => {
     try {

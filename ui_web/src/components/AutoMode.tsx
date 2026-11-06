@@ -31,7 +31,9 @@ import { buildTrackMenu } from './trackActions';
 import { SourceIcon, menuIcons } from './icons';
 import styles from './AutoMode.module.css';
 
-const AUTO_MINIMUMS = { browser: 280, stage: 390, route: 280 };
+// As in Now Playing: the browser's fixed rows fit in 320px, and the three
+// minimums with their seams fit a 1024px window.
+const AUTO_MINIMUMS = { browser: 320, stage: 330, route: 280 };
 
 type CarriedTrack = {
   track: Track;
@@ -350,7 +352,6 @@ export function AutoMode(props: {
           onSelect={applyLayoutPreset}
           onReset={resetDesktopLayout}
         />}
-        tileClass={styles.tile}
         renderPanel={(panel, dragHandle) => panel === 'browser' ? Browser(dragHandle) : panel === 'stage' ? Stage(dragHandle) : Route(dragHandle)}
       />
       <Show when={carriedTrack()}>

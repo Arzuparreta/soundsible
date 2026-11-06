@@ -11,31 +11,29 @@
 }
 
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  min-height: 54px;
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: 1px solid var(--stage-line-soft);
-  background: var(--stage-material-quiet);
-  backdrop-filter: blur(18px);
+  gap: var(--space-xs);
+  min-height: 52px;
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) 14px;
 }
 
+/* A recessed field, no outline until it has focus. */
 .search {
   display: flex;
   align-items: center;
   flex: 1;
   min-width: 0;
-  height: 38px;
-  border: 1px solid var(--stage-line);
+  height: 40px;
   border-radius: var(--radius-full);
   background: var(--stage-well);
-  transition: border-color var(--dur-short);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow var(--dur-short), background var(--dur-short);
 }
 
 .search:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-faint);
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 3px var(--accent-faint);
 }
 
 .search input {
@@ -412,7 +410,7 @@
   }
 }
 
-.destinations { display: flex; flex: 0 0 auto; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--stage-line-soft); padding-inline: 8px; }
+.destinations { display: flex; flex: 0 0 auto; overflow-x: auto; scrollbar-width: none; box-shadow: inset 0 -1px var(--stage-line-soft); padding-inline: 6px; }
 .destinations button { flex: 0 0 auto; min-height: 42px; padding: 0 10px; color: var(--ink-secondary); background: none; border: 0; border-bottom: 2px solid transparent; font: inherit; font-size: var(--text-caption); cursor: pointer; }
 .destinations button[aria-current] { color: var(--ink-primary); border-bottom-color: var(--accent); }
 .searchFilters { display: flex; align-items: center; gap: 8px; padding: 4px 12px; flex: 0 0 auto; }
@@ -432,3 +430,6 @@
 .rowActivate { position: absolute; inset: 0; z-index: 1; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
 .rowActivate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
 .navRow a:not(.rowActivate) { position: relative; z-index: 2; }
+.destinations[data-overflow='end'] { mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+.destinations[data-overflow='start'] { mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
+.destinations[data-overflow='both'] { mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }

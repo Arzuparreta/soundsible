@@ -8,7 +8,7 @@ import {
 describe('Auto Mode desktop layout', () => {
   it('starts with three equally sized panels', () => {
     expect(parseAutoModeLayout(null)).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
-    expect(new Set(Object.values(DEFAULT_AUTO_MODE_LAYOUT.ratios))).toEqual(new Set([1 / 3]));
+    expect(DEFAULT_AUTO_MODE_LAYOUT.ratios).toEqual({ browser: 0.3, stage: 0.4, route: 0.3 });
   });
 
   it('accepts only complete Auto panel layouts and normalizes their ratios', () => {

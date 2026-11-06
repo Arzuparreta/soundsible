@@ -148,6 +148,27 @@ async function enqueueCatalogItem(item: CatalogItem): Promise<void> {
  * before handing it back to whoever is reading. */
 const RESTORE_GRACE_MS = 1500;
 
+/** Marks which ends of a horizontal row have more of it out of view, so its
+ * edge can fade there instead of cutting a label in half with no sign that the
+ * row scrolls. */
+function markOverflow(element: HTMLElement) {
+  const update = () => {
+    const max = element.scrollWidth - element.clientWidth;
+    const start = element.scrollLeft > 1;
+    const end = max - element.scrollLeft > 1;
+    if (start || end) element.dataset.overflow = start && end ? 'both' : start ? 'start' : 'end';
+    else delete element.dataset.overflow;
+  };
+  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(update) : null;
+  observer?.observe(element);
+  element.addEventListener('scroll', update, { passive: true });
+  queueMicrotask(update);
+  onCleanup(() => {
+    observer?.disconnect();
+    element.removeEventListener('scroll', update);
+  });
+}
+
 export function NowPlayingBrowser(props: {
   onClose: () => void;
   dragHandle?: JSX.Element;
@@ -612,7 +633,7 @@ export function NowPlayingBrowser(props: {
         </button>
       </header>
 
-      <nav class={styles.destinations} aria-label={t('musicExplorer.title')}>
+      <nav class={styles.destinations} aria-label={t('musicExplorer.title')} ref={markOverflow}>
         <For each={(['library', 'favourites', 'playlists', 'bookmarks', 'root'] as const)}>{(section) =>
           <button type="button" aria-current={navigation.section() === section ? 'page' : undefined} onClick={() => selectSection(section)}>{section === 'root' ? t('musicExplorer.explore') : section === 'bookmarks' ? t('savedEntities.title') : t(`nav.${section}`)}</button>
         }</For>
