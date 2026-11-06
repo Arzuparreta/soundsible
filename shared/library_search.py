@@ -7,7 +7,7 @@ used only when a fingerprint proves it describes the caller's in-memory model:
 unsaved edits, raw SQL and other writers make it fall back to a full scan
 instead of returning different results.
 """
-from hashlib import blake2b
+from hashlib import sha256
 import logging
 from operator import attrgetter
 from pickle import Pickler
@@ -24,8 +24,9 @@ logger = logging.getLogger(__name__)
 # The interpreter release and its Unicode data are part of VERSION because
 # casefolding, decomposition and `\w` tokenization depend on them.
 INDEX_FORMAT = 1
-VERSION = (f"{INDEX_FORMAT}:{sys.implementation.name}-{platform.python_version()}:"
-           f"{unicodedata.unidata_version}")
+_PREVIOUS_HASH_VERSION = (f"{INDEX_FORMAT}:{sys.implementation.name}-{platform.python_version()}:"
+                          f"{unicodedata.unidata_version}")
+VERSION = _PREVIOUS_HASH_VERSION + ':sha256'
 
 # Fingerprints encode rows in chunks of this size, identically on both sides.
 CHUNK = 512
@@ -138,7 +139,7 @@ class _Digest:
     __slots__ = ('digest',)
 
     def __init__(self):
-        self.digest = blake2b(digest_size=32)
+        self.digest = sha256()
 
     def write(self, data):
         self.digest.update(data)
@@ -238,7 +239,9 @@ def sync(conn) -> None:
         if valid != 1 or version != VERSION:
             conn.execute('UPDATE library_search_state SET syncing=1 WHERE singleton=1')
             try:
-                if version != VERSION:
+                # The old digest has the exact same folded rows and triggers.
+                # Rehash those rows once, without refolding the entire library.
+                if version not in (VERSION, _PREVIOUS_HASH_VERSION):
                     raise _Rebuild
                 fingerprint = _repair(conn)
             except _Rebuild:

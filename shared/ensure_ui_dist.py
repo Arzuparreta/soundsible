@@ -8,12 +8,15 @@ stale or missing ``dist/`` is rebuilt automatically when Node is available.
 from __future__ import annotations
 
 import logging
+from hashlib import sha256
+import json
 import os
 import shutil
+import stat
 import subprocess
 import threading
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -28,25 +31,52 @@ _INPUT_FILES = (
     "vitest.config.ts",
 )
 _LOCK = threading.Lock()
+_INPUT_MANIFEST = '.soundsible-inputs.json'
 
 
 def _truthy_env(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def _iter_input_files(ui_web: Path) -> Iterable[Path]:
+def _input_signature(root: Path):
+    """One stat per input; directory entries avoid rglob's repeated probes."""
+    digest = sha256()
+    newest = 0
+
+    def record(relative, info):
+        nonlocal newest
+        newest = max(newest, info.st_mtime_ns)
+        digest.update(os.fsencode(relative) + b'\0'
+                      + f'{info.st_mtime_ns}:{info.st_size}\0'.encode('ascii'))
+
     for name in _INPUT_FILES:
-        path = ui_web / name
-        if path.is_file():
-            yield path
-    for directory in (ui_web / "src", ui_web / "public"):
-        if directory.is_dir():
-            for path in directory.rglob("*"):
-                if path.is_file():
-                    yield path
-    logo = ui_web.parent / "branding" / "logo-mark.svg"
-    if logo.is_file():
-        yield logo
+        path = root / name
+        try:
+            info = path.stat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(info.st_mode):
+            record(name, info)
+    pending = [(root / 'src', 'src'), (root / 'public', 'public')]
+    while pending:
+        directory, relative = pending.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in sorted(entries, key=lambda item: item.name):
+                    if entry.is_dir(follow_symlinks=False):
+                        pending.append((entry.path, relative + '/' + entry.name))
+                    elif entry.is_file():
+                        record(relative + '/' + entry.name, entry.stat())
+        except FileNotFoundError:
+            continue
+    logo = root.parent / 'branding' / 'logo-mark.svg'
+    try:
+        info = logo.stat()
+        if stat.S_ISREG(info.st_mode):
+            record('../branding/logo-mark.svg', info)
+    except FileNotFoundError:
+        pass
+    return digest.hexdigest(), newest
 
 
 def ui_dist_is_stale(ui_web: Path | None = None) -> bool:
@@ -56,16 +86,16 @@ def ui_dist_is_stale(ui_web: Path | None = None) -> bool:
     if not dist_index.is_file():
         return True
     try:
-        dist_mtime = dist_index.stat().st_mtime
+        dist_stat = dist_index.stat()
+        signature, newest = _input_signature(root)
     except OSError:
         return True
-    for path in _iter_input_files(root):
-        try:
-            if path.stat().st_mtime > dist_mtime:
-                return True
-        except OSError:
-            continue
-    return False
+    try:
+        recorded = json.loads((root / 'dist' / _INPUT_MANIFEST).read_text())
+    except (OSError, ValueError):
+        # Bundles built before input manifests retain the mtime contract.
+        return newest > dist_stat.st_mtime_ns
+    return recorded != {'inputs': signature, 'bundle': [dist_stat.st_mtime_ns, dist_stat.st_size]}
 
 
 def ensure_ui_dist(
@@ -124,6 +154,7 @@ def ensure_ui_dist(
 
         logger.info("Rebuilding ui_web/dist (source newer than bundle)…")
         try:
+            signature, _ = _input_signature(root)
             # Vite only — typecheck stays in ``npm test`` / ``npm run build``.
             result = subprocess.run(
                 [npm, "exec", "--", "vite", "build"],
@@ -146,6 +177,16 @@ def ensure_ui_dist(
         if not dist_index.is_file():
             logger.error("ui_web vite build finished but dist/index.html is still missing")
             return False
+
+        try:
+            # Record the inputs seen BEFORE building. An edit during the build
+            # therefore stays stale on the next render instead of being hidden.
+            from shared.atomic_file import publish, text_pieces
+            built = dist_index.stat()
+            publish(root / 'dist' / _INPUT_MANIFEST, text_pieces([json.dumps({
+                'inputs': signature, 'bundle': [built.st_mtime_ns, built.st_size]})]))
+        except OSError:
+            logger.warning('Could not record UI build inputs', exc_info=True)
 
         logger.info("ui_web/dist rebuilt successfully")
         return True

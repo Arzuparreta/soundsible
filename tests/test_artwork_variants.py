@@ -331,3 +331,48 @@ def test_index_cannot_direct_cleanup_outside_variant_names(tmp_path):
         db.execute('UPDATE state SET bytes=bytes+1000')
     put(c, 2).file.close()
     assert outside.read_bytes() == b'original'
+
+
+def test_recent_hit_avoids_index_and_keeps_open_descriptor(tmp_path, monkeypatch):
+    c = cache(tmp_path)
+    put(c, 1).file.close()
+    monkeypatch.setattr(c, '_connect_index', lambda: pytest.fail('recent hit opened SQLite'))
+    result = c.open(name(1), lambda _: pytest.fail('recent hit regenerated'))
+    assert result.file.read() == b'\x01' * 40
+    result.file.close()
+
+
+def test_recent_hit_rechecks_other_writer_quota_and_index_replacement(tmp_path):
+    first = cache(tmp_path, 100)
+    put(first, 1).file.close()
+    other = cache(tmp_path, 1000)
+    put(other, 2).file.close()
+    put(other, 3).file.close()
+    assert retained(first) == 120
+    put(first, 1).file.close()
+    assert retained(first) <= 100
+    (first.root / 'variants.sqlite3').unlink()
+    put(first, 1).file.close()
+    with sqlite3.connect(first.root / 'variants.sqlite3') as db:
+        assert db.execute('SELECT bytes FROM state').fetchone()[0] == retained(first)
+
+
+def test_recent_hit_expires_and_recovers_dirty_index(tmp_path):
+    c = cache(tmp_path)
+    put(c, 1).file.close()
+    c._recent[name(1)] = 0
+    with sqlite3.connect(c.root / 'variants.sqlite3') as db:
+        db.execute('UPDATE variants SET used=0')
+        db.execute('UPDATE state SET dirty=1')
+    put(c, 1).file.close()
+    with sqlite3.connect(c.root / 'variants.sqlite3') as db:
+        assert db.execute('SELECT dirty FROM state').fetchone()[0] == 0
+        assert db.execute('SELECT used FROM variants').fetchone()[0] > 0
+
+
+def test_recent_hit_metadata_is_bounded(tmp_path):
+    c = cache(tmp_path, 20000)
+    for i in range(300):
+        put(c, i).file.close()
+    assert len(c._recent) == 256
+    assert all(isinstance(value, float) for value in c._recent.values())

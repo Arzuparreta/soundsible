@@ -18,6 +18,20 @@ from shared.database import DatabaseManager
 from shared.models import LibraryMetadata, Track
 from shared.text_utils import fold_text, match_tokens
 
+
+def test_digest_migration_rehashes_without_refolding(library, monkeypatch):
+    search = library(_base())
+    with search.db._get_connection() as conn:
+        conn.execute('UPDATE library_search_state SET version=? WHERE singleton=1', (library_search._PREVIOUS_HASH_VERSION,))
+        before = conn.execute('SELECT * FROM library_search ORDER BY position').fetchall()
+        monkeypatch.setattr(library_search, 'search_row', lambda *a: pytest.fail('unnecessary full refold'))
+        library_search.sync(conn)
+        after = conn.execute('SELECT * FROM library_search ORDER BY position').fetchall()
+        state = conn.execute('SELECT version,fingerprint FROM library_search_state').fetchone()
+    assert [tuple(row) for row in after] == [tuple(row) for row in before]
+    assert state[0] == library_search.VERSION
+    assert state[1] == library_search.model_fingerprint(search.metadata.tracks)
+
 _ROOT = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location("catalog_search_index_under_test", _ROOT / "shared/api/routes/catalog.py")
 catalog = importlib.util.module_from_spec(_SPEC)

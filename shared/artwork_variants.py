@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import stat
 import tempfile
 import threading
 import time
@@ -28,6 +29,10 @@ class VariantCache:
         self.root = Path(root)
         self.lock = threading.Lock()
         self.ready = False
+        # Only names and deadlines, never image bytes. The index stamp makes
+        # another process's admission, eviction or interrupted write a miss.
+        self._recent = {}
+        self._stamp = None
         self.limit = DEFAULT_LIMIT
         raw = os.getenv('SOUNDSIBLE_ARTWORK_CACHE_MB', '512')
         try:
@@ -95,6 +100,7 @@ class VariantCache:
 
     @contextmanager
     def index(self):
+        clean = False
         try:
             db = self._connect_index()
         except sqlite3.DatabaseError as exc:
@@ -134,8 +140,41 @@ class VariantCache:
                 db.commit()
                 self.ready = True
             yield db
+            total, dirty = db.execute('SELECT bytes,dirty FROM state').fetchone()
+            clean = self.ready and not dirty and total <= self.limit
         finally:
             db.close()
+            self._stamp = self._index_stamp() if clean else None
+
+    def _index_stamp(self):
+        try:
+            if (self.root / '.quota.lock').is_symlink() or os.path.lexists(self.root / 'variants.sqlite3-journal'):
+                return None
+            info = (self.root / 'variants.sqlite3').lstat()
+            if not stat.S_ISREG(info.st_mode):
+                return None
+            return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, self.limit
+        except OSError:
+            return None
+
+    def _recent_hit(self, name):
+        if not self.ready or self.limit <= 0 or self._recent.get(name, 0) <= time.monotonic():
+            return None
+        if self._stamp is None or self._stamp != self._index_stamp():
+            return None
+        path = self.root / name
+        if path.is_symlink():
+            return None
+        try:
+            handle = open(path, 'rb')
+        except OSError:
+            return None
+        try:
+            info = os.fstat(handle.fileno())
+        except BaseException:
+            handle.close()
+            raise
+        return Variant(handle, info.st_size, info.st_mtime, name)
 
     def evict(self, db, incoming=0):
         total = db.execute('SELECT bytes FROM state').fetchone()[0]
@@ -185,6 +224,11 @@ class VariantCache:
             now = time.time()
             db.execute('UPDATE variants SET used=? WHERE name=? AND used<=?', (now, name, now - 60))
             db.commit()
+            row = db.execute('SELECT used FROM variants WHERE name=?', (name,)).fetchone()
+            if row is not None:
+                self._recent[name] = time.monotonic() + max(0, min(60, row[0] + 60 - now))
+                if len(self._recent) > 256:
+                    self._recent.pop(next(iter(self._recent)))
             return Variant(handle, stat.st_size, stat.st_mtime, name)
         except BaseException:
             handle.close()
@@ -195,6 +239,9 @@ class VariantCache:
             raise ValueError('Invalid variant filename')
         if self.safe:
             try:
+                found = self._recent_hit(name)
+                if found:
+                    return found
                 with self.coordinated(), self.index() as db:
                     self.evict(db)
                     if self.limit:

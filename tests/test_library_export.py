@@ -43,7 +43,9 @@ def _library(count, seed=0):
 
 @pytest.mark.parametrize("count", [0, 1, 511, 512, 513, 1025])
 @pytest.mark.parametrize("chunk", [1, 2, 128, 512])
-def test_streamed_json_is_byte_identical_to_to_json(count, chunk):
+@pytest.mark.parametrize('flat', [False, True])
+def test_streamed_json_is_byte_identical_to_to_json(count, chunk, flat, monkeypatch):
+    monkeypatch.setattr('shared.library_json._FLAT_JSON', flat)
     library = _library(count, seed=count)
     assert "".join(library.iter_json(chunk)) == library.to_json()
 
@@ -51,6 +53,24 @@ def test_streamed_json_is_byte_identical_to_to_json(count, chunk):
 def test_streamed_json_matches_empty_headers():
     library = LibraryMetadata(1, [], {}, {}, podcast_subscriptions=[], podcast_episode_cache={})
     assert "".join(library.iter_json()) == library.to_json()
+
+
+@pytest.mark.parametrize('value', [1.25, float('inf'), float('-inf'), {'nested': ['x', {'v': True}]},
+                                  'quote"\n\\\x00東京😀', 12345678901234567890])
+@pytest.mark.parametrize('flat', [False, True])
+def test_track_export_preserves_general_json_values(value, flat, monkeypatch):
+    monkeypatch.setattr('shared.library_json._FLAT_JSON', flat)
+    library = _library(1)
+    library.tracks[0].title = value
+    assert ''.join(library.iter_json()) == library.to_json()
+
+
+def test_public_snapshot_remains_detached():
+    library = _library(1)
+    library.tracks[0].artists = ['Original']
+    snapshot = library.to_public_dict()
+    snapshot['tracks'][0]['artists'].append('Detached')
+    assert library.tracks[0].artists == ['Original']
 
 
 @pytest.fixture
