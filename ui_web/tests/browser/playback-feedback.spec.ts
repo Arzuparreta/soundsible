@@ -8,6 +8,45 @@ test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
 });
 
+test('Retry starts the failed track after a platform pause without reloading the page', async ({ page }) => {
+  let available = false;
+  await page.route('**/api/static/stream/**', route => available
+    ? route.fulfill({ contentType: 'audio/wav', body: fixtureWav })
+    : route.abort());
+  await page.goto('/player/#/library?view=songs');
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  const retry = page.locator('[data-omni-player]').getByRole('button', { name: 'Reintentar', exact: true });
+  await expect(retry).toBeVisible();
+
+  // Returning to a failed, natively paused deck revoked playback intent in the
+  // incident. Retry must request it again, rather than silently doing nothing.
+  const before = await page.evaluate(async () => {
+    const audioPath = '/player/src/lib/audio.ts';
+    const storePath = '/player/src/stores/index.ts';
+    const { audioService } = await import(audioPath);
+    const { state } = await import(storePath);
+    audioService.pause('platform', 'native_paused_on_restore');
+    return { deck: audioService.snapshot().activeIndex, queueId: state.playback.currentTrack?.queueId };
+  });
+  available = true;
+  await retry.click();
+  await expect(page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(async () => {
+    const path = '/player/src/lib/audio.ts';
+    const { audioService } = await import(path);
+    return audioService.snapshot().position;
+  })).toBeGreaterThan(0.2);
+  const after = await page.evaluate(async () => {
+    const audioPath = '/player/src/lib/audio.ts';
+    const storePath = '/player/src/stores/index.ts';
+    const { audioService } = await import(audioPath);
+    const { state } = await import(storePath);
+    return { deck: audioService.snapshot().activeIndex, queueId: state.playback.currentTrack?.queueId };
+  });
+  expect(after.queueId).toBe(before.queueId);
+  expect(after.deck).not.toBe(before.deck);
+});
+
 test('a large queue remains bounded and transport updates preserve its rows in the pill, NORMAL and DJ', async ({ page }) => {
   await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();

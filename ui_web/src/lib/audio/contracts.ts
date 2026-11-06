@@ -160,7 +160,10 @@ export interface ActiveMix {
 }
 export interface AudioService {
   load: (url: string, level: number, positionSec?: number) => Promise<void>;
-  recover: (url: string, positionSec: number, level: number) => Promise<void>;
+  recover: (url: string, positionSec: number, level: number, options?: {
+    /** An explicit Retry is a new play request, even after a platform pause. */
+    requestPlayback?: boolean;
+  }) => Promise<void>;
   prime: (url: string, positionSec: number, level: number) => void;
   resume: (origin?: ProgramTransportOrigin) => Promise<void>;
   pause: (origin?: ProgramTransportOrigin, reason?: string) => void;
