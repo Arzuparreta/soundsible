@@ -21,6 +21,8 @@ def smoke(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module.time, "sleep", lambda _: None)
+    module.real_native_window_visible = module.native_window_visible
+    monkeypatch.setattr(module, "native_window_visible", lambda window: window.is_visible())
     return module
 
 
@@ -79,3 +81,14 @@ def test_player_ignores_hidden_previous_window(smoke):
 
     assert smoke.player_window(123) is player
     hidden.descendants.assert_not_called()
+
+
+def test_native_visibility_uses_hwnd_instead_of_stale_uia(smoke, monkeypatch):
+    native = ModuleType("win32gui")
+    native.IsWindowVisible = Mock(return_value=0)
+    monkeypatch.setitem(sys.modules, "win32gui", native)
+    window = SimpleNamespace(handle=456, is_visible=Mock(return_value=True))
+
+    assert smoke.real_native_window_visible(window) is False
+    native.IsWindowVisible.assert_called_once_with(456)
+    window.is_visible.assert_not_called()

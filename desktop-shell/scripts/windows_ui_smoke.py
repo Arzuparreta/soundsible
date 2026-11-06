@@ -44,6 +44,14 @@ def dump_tree(window, path: Path) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def native_window_visible(window) -> bool:
+    # WebView2's UIA IsOffscreen can remain false after its top-level HWND is
+    # hidden to tray. Query the native window whose lifecycle we are testing.
+    import win32gui
+
+    return bool(win32gui.IsWindowVisible(window.handle))
+
+
 def main_window(pid: int, timeout: float = 30.0):
     desktop = Desktop(backend="uia")
     return wait_until(
@@ -51,7 +59,7 @@ def main_window(pid: int, timeout: float = 30.0):
             (
                 window
                 for window in desktop.windows(process=pid)
-                if window.window_text() == "Soundsible" and window.is_visible()
+                if window.window_text() == "Soundsible" and native_window_visible(window)
             ),
             None,
         ),
@@ -70,7 +78,7 @@ def player_window(pid: int, timeout: float = 90.0):
 
     def loaded_player():
         for window in desktop.windows(process=pid):
-            if window.window_text() != "Soundsible" or not window.is_visible():
+            if window.window_text() != "Soundsible" or not native_window_visible(window):
                 continue
             if any(
                 item.window_text() == "Library"
@@ -410,7 +418,7 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         # Closing the native window hides to tray. Ctrl+Alt+O restores it.
         window.close()
         wait_until(
-            lambda: not window.is_visible(),
+            lambda: not native_window_visible(window),
             "Player window did not hide to tray",
             timeout=10,
         )
@@ -419,7 +427,7 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         global_shortcut("^%o")
         try:
             restored_window = wait_until(
-                lambda: window if window.is_visible() else None,
+                lambda: window if native_window_visible(window) else None,
                 "Player window did not restore from tray",
                 timeout=10,
             )
