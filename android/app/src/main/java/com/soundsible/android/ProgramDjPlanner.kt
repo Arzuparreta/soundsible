@@ -161,6 +161,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         retry = request; main.post(request)
     }
     fun reference(item: MediaItem) = JSONObject().put("id", item.mediaId)
+        .put("item_id", item.mediaMetadata.extras?.getString(ProgramQueue.ITEM))
         .put(if (item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "preview") "youtube_id" else "track_id", item.mediaId)
         .put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "")
         .put("album", item.mediaMetadata.albumTitle?.toString() ?: "")

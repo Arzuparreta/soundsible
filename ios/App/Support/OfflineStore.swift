@@ -44,6 +44,13 @@ final class OfflineStore {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    func heldTrackID(for item: CarItem) -> String? {
+        guard let source = library.heldTrackID(for: item), localURL(for: source) != nil else { return nil }
+        return source
+    }
+
+    func isAvailableOffline(_ item: CarItem) -> Bool { heldTrackID(for: item) != nil }
+
     func isAvailableOffline(_ trackID: String) -> Bool {
         localURL(for: trackID) != nil
     }
@@ -73,6 +80,7 @@ final class OfflineStore {
             else { continue }
             await download(
                 trackID: trackID,
+                itemID: item.itemID,
                 from: url,
                 token: connection.token,
                 collectionID: collectionID
@@ -98,6 +106,7 @@ final class OfflineStore {
 
     private func download(
         trackID: String,
+        itemID: String?,
         from url: URL,
         token: String,
         collectionID: String
@@ -130,6 +139,7 @@ final class OfflineStore {
             let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
             library.store(
                 trackID: trackID,
+                itemID: itemID,
                 filename: filename,
                 byteSize: size,
                 collectionID: collectionID

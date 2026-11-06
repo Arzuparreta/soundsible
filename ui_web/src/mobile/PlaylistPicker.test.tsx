@@ -31,9 +31,10 @@ it('closes and aborts an in-flight request on account change', async () => {
   await waitFor(() => expect(mocks.close).toHaveBeenCalled());
   expect(mocks.request.mock.calls[0][1].signal.aborted).toBe(true);
 });
-it('saves preview identity explicitly before adding it without acquisition', async () => {
+it('admits preview identity and playlist membership in one operation', async () => {
   mocks.request.mockImplementation((path: string) => Promise.resolve(path.endsWith('/tracks') ? { playlists: { Mix: ['abcdefghijk'] } } : {}));
   const { view } = picker(() => true, { ...track, id: 'abcdefghijk', source: 'preview' });fireEvent.click(view.getByText('Mix'));
   await waitFor(() => expect(mocks.close).toHaveBeenCalled());
-  expect(mocks.request.mock.calls.map(([path]) => path)).toEqual(['/api/library/saved/set', '/api/library/playlists/Mix/tracks']);
+  expect(mocks.request.mock.calls.map(([path]) => path)).toEqual(['/api/library/playlists/Mix/tracks']);
+  expect(mocks.request.mock.calls[0][1].body.entry.keys).toContain('yt:abcdefghijk');
 });

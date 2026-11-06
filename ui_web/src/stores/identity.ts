@@ -1,3 +1,5 @@
+import { collectionIndex } from '../lib/collectionIdentity';
+import { isMusicTrack } from '../lib/track';
 /**
  * One definition of "this is the thing that is playing", and everything derived
  * from it: queued, saved, favourited, owned, downloading.
@@ -91,28 +93,29 @@ export const identity = createRoot(() => {
   // you saved in Search, the preview that played, and the file you downloaded
   // are three ids for one song. Matching on keys is what makes every surface
   // agree about what you own without any of them knowing where the song lives.
-  const savedKeys = createMemo(() => new Set(state.saved.flatMap((f) => f.keys)));
+  const savedKeys = createMemo(() => new Set(state.saved.flatMap((f) => [...f.keys, ...(f.item_id ? [`item:${f.item_id}`] : [])])));
   // Key → the entry that answers to it. First entry wins, as in the library.
   const savedIndex = createMemo(() => {
     const index = new Map<string, SavedEntry>();
-    for (const entry of state.saved) for (const key of entry.keys) if (!index.has(key)) index.set(key, entry);
+    for (const entry of state.saved) for (const key of [...entry.keys, ...(entry.item_id ? [`item:${entry.item_id}`] : [])]) if (!index.has(key)) index.set(key, entry);
     return index as ReadonlyMap<string, SavedEntry>;
   });
   // The mark is a strict subset — a property of a saved song, never a way of
   // holding one.
   const favouriteKeys = createMemo(
-    () => new Set(state.saved.filter((f) => f.favourite).flatMap((f) => f.keys)),
+    () => new Set(state.saved.filter((f) => f.favourite).flatMap((f) => [...f.keys, ...(f.item_id ? [`item:${f.item_id}`] : [])])),
   );
   // Each saved song as something playable: the owned track when we have it,
   // a streaming preview when we don't. Resolved here rather than at save time,
   // so a download promotes the entry with no write and no reordering. The entry
   // is kept alongside its track, because only the entry knows whether a source
   // has been attached to it yet — and whether it is marked.
-  const savedRows = createMemo(() =>
-    state.saved
-      .map((entry) => ({ entry, track: savedToTrack(entry, libraryIndex()) }))
-      .filter((row): row is SavedRow => !!row.track),
-  );
+  const savedRows = createMemo(() => {
+    const collection = state.collectionItems === null ? null : collectionIndex(state.collectionItems);
+    return state.saved
+      .map((entry) => ({ entry, track: collection ? collection.get(entry.item_id ?? '') ?? null : savedToTrack(entry, libraryIndex()) }))
+      .filter((row): row is SavedRow => !!row.track);
+  });
   const favouriteRows = createMemo(() => savedRows().filter((row) => row.entry.favourite));
   /**
    * The library as the user thinks of it: everything they have claimed, newest
@@ -134,7 +137,9 @@ export const identity = createRoot(() => {
    * Each half is handed over newest-first so that a library the engine has not
    * dated yet still comes out in the order it always did.
    */
-  const libraryTracks = createMemo(() => musicLibraryRows(state.library, savedRows().map(row => row.track)));
+  const libraryTracks = createMemo(() => state.collectionItems !== null
+    ? state.collectionItems.filter(isMusicTrack)
+    : musicLibraryRows(state.library, savedRows().map(row => row.track)));
 
   // The marked subset that lives on disk, by library id — what the surfaces
   // that only speak library ids (sort, radio seeds, Auto Mode) already expect.
@@ -194,6 +199,8 @@ export const isQueuedResult = (result: SearchResult): boolean =>
 /** The library track this identity is owned as, if it is owned at all. */
 export function ownedTrackForKeys(keys: string[]): Track | null {
   const index = identity.libraryIndex();
+  const item = keys.find(key => key.startsWith('item:'));
+  if (item) return index.get(item) ?? null;
   const linked = withLinkedKeys(keys, catalogLinks());
   for (const key of linked) {
     const owned = index.get(key);
@@ -270,6 +277,8 @@ export const favouriteTracks = (): Track[] => identity.favouriteRows().map((row)
 /** The saved entry behind these identities, if the library holds one. Used by
  * the surfaces that need to know *how* a song is held, not just whether. */
 export function savedEntryForKeys(keys: string[]): SavedEntry | null {
+  const item = keys.find(key => key.startsWith('item:'));
+  if (item) return state.saved.find(entry => entry.item_id === item.slice(5)) ?? null;
   const all = withLinkedKeys(keys, catalogLinks());
   for (const entry of state.saved) {
     if (entry.keys.some((key) => all.includes(key))) return entry;

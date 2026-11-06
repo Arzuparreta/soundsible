@@ -6,7 +6,7 @@
  * it is not fine once per finished download.
  */
 
-import { api } from '../lib/api';
+import { api, type CollectionSnapshot } from '../lib/api';
 import { batch } from 'solid-js';
 import { reconcile, unwrap } from 'solid-js/store';
 import { applyLibraryDelta } from '../lib/libraryDelta';
@@ -19,6 +19,7 @@ let inFlight: SyncFlight | undefined;
 let version = 0;
 let generation = 0;
 let revision: string | undefined;
+let collectionRevision: string | undefined;
 let catalogRevision: string | undefined;
 let catalogSync: Promise<boolean> | undefined;
 let coalesceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -48,6 +49,7 @@ export function invalidateLibrarySync(): void {
   generation += 1;
   catalogSync = undefined;
   revision = undefined;
+  collectionRevision = undefined;
   catalogRevision = undefined;
   // A different account/storage must not wait behind the abandoned request.
   inFlight = undefined;
@@ -73,6 +75,7 @@ function supersedeLibrarySync(): void {
   generation += 1;
   catalogSync = undefined;
   revision = undefined;
+  collectionRevision = undefined;
   catalogRevision = undefined;
   if (inFlight) {
     inFlight = undefined;
@@ -121,15 +124,56 @@ export function syncLibrary(): Promise<void> {
   return flight.promise;
 }
 
+function installCollection(collection: CollectionSnapshot): void {
+  if (!Array.isArray(collection.items) || !Array.isArray(collection.saved) || !Array.isArray(collection.files)) throw new Error('Invalid collection snapshot');
+  registerArtworkMetadata(collection.files);
+  batch(() => {
+    setState('library', reconcile(collection.files, { key: 'id' }));
+    setState('collectionItems', reconcile(collection.items, { key: 'item_id' }));
+    setState('saved', reconcile(collection.saved, { key: 'item_id' }));
+    setState('playlists', reconcile(collection.playlists));
+    setState('librarySettings', reconcile(collection.settings));
+    setState('podcastSubscriptions', reconcile(collection.podcast_subscriptions));
+  });
+  collectionRevision = collection.etag;
+  revision = String(collection.library_revision);
+  applied += 1;
+}
+
+function refreshCatalog(): void {
+  if (!revision || catalogRevision !== revision || catalogSync) {
+    const targetRevision = revision;
+    const targetGeneration = generation;
+    const syncing = syncCatalog(targetRevision);
+    catalogSync = syncing;
+    void syncing.then(success => {
+      if (catalogSync === syncing) catalogSync = undefined;
+      // Another unchanged manifest refresh does not invalidate this success.
+      if (success && targetGeneration === generation && targetRevision === revision) {
+        catalogRevision = targetRevision;
+      }
+    });
+  }
+}
+
 async function syncOnce(): Promise<void> {
   const syncVersion = ++version;
   setState('loading', true);
   try {
+    if (state.collectionItems !== null) {
+      const collection = await api.getCollection(collectionRevision);
+      if (syncVersion !== version) return;
+      if (collection) installCollection(collection);
+      setState('libraryError', false);
+      refreshCatalog();
+      return;
+    }
     let [lib, saved] = await Promise.all([
       api.getLibrary(revision),
-      api.getSaved().catch(() => state.saved.slice()),
+      state.collectionItems !== null ? Promise.resolve(state.saved.slice()) : api.getSaved().catch(() => state.saved.slice()),
     ]);
     if (syncVersion !== version) return;
+    const canonicalCollection = lib?.collection_identity ?? (state.collectionItems !== null);
     if (lib !== null && 'kind' in lib && lib.kind === 'delta') {
       try {
         const next = applyLibraryDelta(unwrap(state.library), lib, revision);
@@ -163,24 +207,19 @@ async function syncOnce(): Promise<void> {
       revision = lib.revision;
       applied += 1;
     }
+    if (canonicalCollection) {
+      const collection = await api.getCollection();
+      if (syncVersion !== version) return;
+      if (!collection) throw new Error('Expected initial collection snapshot');
+      installCollection(collection);
+      saved = collection.saved;
+    } else setState('collectionItems', null);
     setState({ saved, libraryError: false });
     // Retry failed projection fetches even when the manifest is unchanged.
     // Older engines without validators keep the previous full-refresh behavior.
     // Even an already acknowledged revision must supersede other pending
     // work (A -> B -> A). Otherwise B could publish after the return to A.
-    if (!revision || catalogRevision !== revision || catalogSync) {
-      const targetRevision = revision;
-      const targetGeneration = generation;
-      const syncing = syncCatalog(targetRevision);
-      catalogSync = syncing;
-      void syncing.then(success => {
-        if (catalogSync === syncing) catalogSync = undefined;
-        // Another unchanged manifest refresh does not invalidate this success.
-        if (success && targetGeneration === generation && targetRevision === revision) {
-          catalogRevision = targetRevision;
-        }
-      });
-    }
+    refreshCatalog();
   } catch {
     // Preserve the last accepted snapshot and validator on transient failures.
     if (syncVersion === version) setState('libraryError', true);

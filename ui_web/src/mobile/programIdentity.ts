@@ -6,6 +6,7 @@ import type { Track } from '../types/music';
 export function nativePlayingTrack(state: ProgramState | null, library: Track[], row: Track): boolean {
   const item = state?.items[state.index];
   if (!item) return false;
+  if (item.item_id && row.item_id) return item.item_id === row.item_id;
   const source = item.source === 'preview' ? { id: item.id, title: item.title, artist: item.artist, source: 'preview' as const }
     : library.find(track => track.id === item.id && track.source !== 'preview') ?? { id: item.id, title: item.title, artist: item.artist };
   const keys = new Set(trackKeys(source));

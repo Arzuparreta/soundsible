@@ -2,6 +2,9 @@ export interface Track {
   artwork_revision?: string;
   artwork_width?: number;
   artwork_height?: number;
+  /** Stable musical element in the account; id identifies the playback source. */
+  item_id?: string;
+  unavailable?: boolean;
   id: string;
   title: string;
   artist: string;
@@ -79,6 +82,7 @@ export interface Track {
  * which is why saving and marking cannot be the same act.
  */
 export interface SavedEntry {
+  item_id?: string;
   keys: string[];
   title?: string;
   artist?: string;

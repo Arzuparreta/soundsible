@@ -65,6 +65,7 @@ export default function SongRow(props: SongRowProps) {
   const entry = createMemo(() => savedFromTrack(props.track));
 
   const onRowClick = () => {
+    if (props.track.unavailable) return;
     props.onPlay?.(props.track);
   };
   const tap = createResponsiveTap({
@@ -115,12 +116,12 @@ export default function SongRow(props: SongRowProps) {
     <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.track.title} subtitle={props.track.artist} music={props.music ?? trackMusic(props.track)} seed={props.track.id}
       cover={props.cover ?? props.track.cover} index={props.index} annotation={props.compact ? undefined : props.badge}
       menuOnHold={props.compact}
-      active={props.active} busy={props.busy || (props.active && state.playback.isLoading)}
+      active={props.active} disabled={props.track.unavailable} busy={props.busy || (props.active && state.playback.isLoading)}
       // A compact row carries no collection marks — the same trim the desktop
       // row makes — so the shared row is told there is no entry to mark.
       entry={props.compact || props.favouritable === false ? undefined : entry()}
       favouritesKnown={props.favouritesKnown} actionLabel={label()} primaryAction={props.primaryAction}
-      onActivate={() => props.onPlay?.(props.track)} onMenu={props.hideMenu ? undefined : (event) => props.onMenu
+      onActivate={onRowClick} onMenu={props.hideMenu ? undefined : (event) => props.onMenu
         ? props.onMenu(props.track, event)
         : openTrackMenu(props.track, { music: props.music, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor,
             onPlayOnDevice: openPlayOnDevice }, event)} />}>

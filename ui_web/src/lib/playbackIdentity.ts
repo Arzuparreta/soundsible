@@ -56,6 +56,7 @@ function push(keys: string[], prefix: string, value: string | null): void {
  */
 export function trackKeys(track: Track): string[] {
   const keys: string[] = [];
+  push(keys, 'item', str(track.item_id));
   const preview = track.source === 'preview';
 
   if (isPodcastTrack(track)) {
@@ -63,7 +64,7 @@ export function trackKeys(track: Track): string[] {
     push(keys, 'pod', str(track.podcast_episode_guid) ?? (preview ? str(track.id) : null));
     if (!preview) push(keys, 'lib', str(track.id));
   } else if (preview) {
-    push(keys, 'yt', str(track.id));
+    if (!track.unavailable) push(keys, 'yt', str(track.id));
   } else {
     push(keys, 'lib', str(track.id));
     push(keys, 'yt', str(track.youtube_id));
@@ -143,8 +144,14 @@ export function withLinkedKeys(keys: string[], links: ReadonlyMap<string, string
  * the mapping stays stable when the library holds duplicates. */
 export function buildIdentityIndex(tracks: Iterable<Track>): Map<string, Track> {
   const index = new Map<string, Track>();
+  const ambiguous = new Set<string>();
   for (const track of tracks) {
-    for (const key of trackKeys(track)) if (!index.has(key)) index.set(key, track);
+    for (const key of trackKeys(track)) {
+      const previous = index.get(key);
+      if (previous && previous.item_id && track.item_id && previous.item_id !== track.item_id) {
+        ambiguous.add(key); index.delete(key);
+      } else if (!ambiguous.has(key) && !index.has(key)) index.set(key, track);
+    }
   }
   return index;
 }
@@ -189,6 +196,8 @@ export function keysMatch(
   links: ReadonlyMap<string, string>,
 ): boolean {
   if (!set.size) return false;
+  const item = keys.find(key => key.startsWith('item:'));
+  if (item && [...set].some(key => key.startsWith('item:'))) return set.has(item);
   for (const key of withLinkedKeys(keys, links)) if (set.has(key)) return true;
   return false;
 }

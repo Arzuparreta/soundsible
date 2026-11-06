@@ -96,6 +96,8 @@ class Track:
     # existed has none; the engine backfills those once, from the audio file's
     # own mtime, rather than stamping them all with the moment of the upgrade.
     added_at: Optional[str] = None
+    # Stable account-owned musical item; id above identifies the audio source.
+    item_id: Optional[str] = None
 
     @staticmethod
     def generate_id() -> str:
@@ -440,13 +442,15 @@ class LibraryMetadata:
             # A track whose identity was edited in place would still be indexed
             # under the old one. Cheap to check, and it turns a wrong answer
             # into a rebuild.
-            if found is None or getattr(found, attribute, None) == value:
+            if found is None or getattr(found, attribute, None) == value or (attribute == "id" and found.item_id == value):
                 return found
 
         by_id: Dict[str, Track] = {}
         by_hash: Dict[str, Track] = {}
         for track in self.tracks:
             by_id.setdefault(track.id, track)
+            if track.item_id:
+                by_id.setdefault(track.item_id, track)
             if track.file_hash:
                 by_hash.setdefault(track.file_hash, track)
         self._indexes = {"id": by_id, "file_hash": by_hash}
@@ -461,7 +465,7 @@ class LibraryMetadata:
         """Find track by file hash."""
         return self._lookup("file_hash", file_hash)
 
-    def remap_track_ids(self, replacements: Optional[Dict[str, str]]) -> bool:
+    def remap_track_ids(self, replacements: Optional[Dict[str, str]], *, references: bool = True) -> bool:
         """Move every durable reference when a technical track id changes.
 
         Managed tracks historically used the content hash as their public id.
@@ -510,11 +514,14 @@ class LibraryMetadata:
         if changed:
             self._indexes = None
 
+        if not references:
+            return changed
         playlist_map = self.playlists if isinstance(self.playlists, dict) else {}
         for name, track_ids in list(playlist_map.items()):
             if not isinstance(track_ids, list):
                 continue
-            remapped = [current_id(track_id) for track_id in track_ids]
+            stable = {track.item_id for track in self.tracks if track.item_id}
+            remapped = [track_id if track_id in stable else current_id(track_id) for track_id in track_ids]
             if remapped != track_ids:
                 playlist_map[name] = remapped
                 changed = True
@@ -525,43 +532,12 @@ class LibraryMetadata:
             for name, track_id in list(covers.items()):
                 if not isinstance(track_id, str):
                     continue
-                remapped = current_id(track_id)
+                remapped = track_id if any(track.item_id == track_id for track in self.tracks) else current_id(track_id)
                 if remapped != track_id:
                     covers[name] = remapped
                     changed = True
 
         return changed
-
-    def _playlist_preview_ids(self) -> Dict[str, str]:
-        """Resolve preview ids only when one library track owns that video.
-
-        These are read-time identities, not permanent technical-id aliases:
-        the file can leave the library, or another recording can share its
-        video. An exact library id always takes precedence.
-        """
-        track_ids = {track.id for track in self.tracks}
-        videos: Dict[str, set[str]] = {}
-        for track in self.tracks:
-            if track.youtube_id and track.youtube_id not in track_ids:
-                videos.setdefault(track.youtube_id, set()).add(track.id)
-        return {video: next(iter(ids)) for video, ids in videos.items() if len(ids) == 1}
-
-    def normalize_playlist_preview_ids(self) -> None:
-        """Keep preview memberships visible after a song becomes a file.
-
-        Preserve occurrences and order, and leave streaming-only or ambiguous
-        identities alone. Unlike a technical-id replacement, this must never
-        change a track row or its content hash.
-        """
-        aliases = self._playlist_preview_ids()
-        if not aliases:
-            return
-        for name, ids in self.playlists.items():
-            self.playlists[name] = [aliases.get(track_id, track_id) for track_id in ids]
-        covers = self.settings.get("playlist_covers")
-        if isinstance(covers, dict):
-            for name, track_id in covers.items():
-                covers[name] = aliases.get(track_id, track_id)
 
     def add_track(self, track: Track) -> None:
         """Add a track to the library, dating it if the caller has not.
@@ -609,8 +585,6 @@ class LibraryMetadata:
         """
         if playlist_name not in self.playlists:
             return False
-        self.normalize_playlist_preview_ids()
-        track_id = self._playlist_preview_ids().get(track_id, track_id)
         if track_id not in self.playlists[playlist_name]:
             self.playlists[playlist_name].append(track_id)
             self.last_updated = utc_now_iso_naive()

@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 library_bp = Blueprint("library", __name__, url_prefix="")
 
 
+@library_bp.after_request
+def collection_contract(response):
+    response.headers['X-Soundsible-Collection'] = 'true'
+    response.headers.add('Access-Control-Expose-Headers', 'ETag, X-Soundsible-Collection')
+    return response
+
+
 def _lyrics_payload(
     record=None,
     *,
@@ -636,6 +643,45 @@ def get_saved_entries():
     return jsonify({"version": 3, "saved": api["favourites_manager"].get_entries()})
 
 
+@library_bp.route("/api/library/collection", methods=["GET"])
+def get_collection():
+    """One account snapshot: musical items, sources, marks and memberships."""
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    lib.refresh_if_stale()
+    from shared.collection import Collection
+    from shared.artwork import artwork_store
+    from shared.user_context import require_user_id
+    collection = Collection(lib.db)
+    dependencies = _annotation_revisions(artwork_store())
+    revisions = collection.revisions()
+    token = sha256(repr((require_user_id(), revisions, dependencies)).encode()).hexdigest()
+    if request.if_none_match.contains_weak(token):
+        response = jsonify(None)
+        response.status_code = 304
+        response.set_etag(token, weak=True)
+        response.headers['Cache-Control'] = 'private, no-cache'
+        return response
+    payload = _collection_payload(lib)
+    response = jsonify(payload)
+    if revisions != (payload['revision'], payload['library_revision']) or dependencies != _annotation_revisions(artwork_store()):
+        token = sha256(response.get_data()).hexdigest()
+    response.set_etag(token, weak=True)
+    response.headers['Cache-Control'] = 'private, no-cache'
+    response.vary.update(('Cookie', 'X-Soundsible-Admin-Token'))
+    return response
+
+
+def _collection_payload(lib):
+    from shared.collection import Collection
+    payload = Collection(lib.db).snapshot()
+    rows = [*payload['files'], *(row for row in payload['items'] if row.get('source') == 'preview')]
+    annotate_tracks(rows)
+    from shared.artwork import artwork_store
+    artwork_store().annotate(rows)
+    return payload
+
+
 @library_bp.route("/api/library/saved/toggle", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_toggle_saved", limit=120, window_sec=60)
@@ -858,9 +904,25 @@ def add_track_to_playlist(name):
     if name not in metadata.playlists:
         return jsonify({"error": "Playlist not found"}), 404
     data = request.json or {}
+    if not isinstance(data, dict):
+        return jsonify(error="object body required"), 400
+    if "entry" in data:
+        from shared.collection_entries import _normalise_entry
+        raw = data['entry']
+        entry = _normalise_entry(raw, default_favourite=False) if isinstance(raw, dict) else None
+        if entry is None:
+            return jsonify(error="entry needs an identity"), 400
+        if not lib._save_metadata(playlist_entry=(name, entry)):
+            from shared.library_lifecycle import LibraryPersistenceError
+            raise LibraryPersistenceError(lib.last_save_error)
+        api["emit_to_user"]("library_updated")
+        api["emit_to_user"]("favourites_updated")
+        return jsonify(status="success", item_id=entry['item_id'], **_collection_payload(lib))
     track_id = data.get("track_id")
-    if not track_id:
+    if not isinstance(track_id, str) or not track_id:
         return jsonify({"error": "track_id is required"}), 400
+    from shared.collection import Collection
+    track_id = Collection(lib.db).identify([f'item:{track_id}', f'lib:{track_id}', f'yt:{track_id}']) or track_id
     if not metadata.add_to_playlist(name, track_id):
         return jsonify({"error": "Add to playlist failed"}), 500
     return _commit_playlists(api, lib, metadata)

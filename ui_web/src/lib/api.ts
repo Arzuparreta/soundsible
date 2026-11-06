@@ -281,6 +281,7 @@ export interface DjMusicSetSource {
 
 /** How the DJ endpoints identify one track's audio. */
 export interface DjItemRef {
+  item_id?: string;
   id?: string;
   track_id?: string;
   youtube_id?: string;
@@ -294,6 +295,7 @@ export interface DjItemRef {
 }
 
 export interface ListeningPlanItem {
+  item_id?: string | null;
   id: string;
   track_id?: string | null;
   youtube_id?: string | null;
@@ -484,13 +486,29 @@ export interface PairedDevice {
 }
 
 /** Shape returned by every playlist mutation (`_playlist_mutation_response`). */
+export interface CollectionSnapshot {
+  files: Track[];
+  settings: LibrarySettings;
+  library_revision: number;
+  podcast_subscriptions: PodcastSubscription[];
+  etag?: string;
+  items: Track[];
+  saved: SavedEntry[];
+  playlists: PlaylistMap;
+  revision: number;
+}
+
 export interface PlaylistMutation {
+  item_id?: string;
+  items?: Track[];
+  saved?: SavedEntry[];
   status?: string;
   playlists?: PlaylistMap;
   settings?: LibrarySettings;
 }
 
 export interface LibrarySnapshot {
+  collection_identity?: boolean;
   tracks?: Track[];
   playlists?: PlaylistMap;
   settings?: LibrarySettings;
@@ -500,6 +518,7 @@ export interface LibrarySnapshot {
 }
 
 export interface LibraryDelta {
+  collection_identity?: boolean;
   kind: 'delta';
   base_revision: string;
   revision: string;
@@ -663,8 +682,16 @@ export const api = {
   /** The whole library in one payload. Deliberately past the default deadline:
    * a few thousand tracks over a phone's link to a home server can outrun 8s,
    * and giving up there is what turns a large library into an empty screen. */
+  getCollection: async (revision?: string): Promise<CollectionSnapshot | null> => {
+    let etag: string | undefined;
+    const snapshot = await request<CollectionSnapshot | null>('/api/library/collection', {
+      cache: 'no-store', timeoutMs: 30000, ifNoneMatch: revision, onETag: value => { etag = value ?? undefined; },
+    });
+    return snapshot ? { ...snapshot, etag } : null;
+  },
   getLibrary: async (revision?: string): Promise<LibrarySnapshot | LibraryDelta | null> => {
     let nextRevision: string | undefined;
+    let collection = false;
     let receivedSnapshot = false;
     const since = revision?.replace(/^W\//, '').replace(/^"|"$/g, '');
     const path = `/api/library?delta=1${since ? `&since=${encodeURIComponent(since)}` : ''}`;
@@ -675,11 +702,12 @@ export const api = {
       // snapshot from an earlier account or hide a 304 behind a cached 200.
       cache: 'no-store',
       onETag: etag => { receivedSnapshot = true; nextRevision = etag ?? undefined; },
+      onResponse: response => { collection = response.headers.get("X-Soundsible-Collection") === "true"; },
     });
     if (payload === null && !receivedSnapshot) return null;
-    if (payload && 'kind' in payload && payload.kind === 'delta') return payload;
+    if (payload && 'kind' in payload && payload.kind === 'delta') return { ...payload, ...(collection ? { collection_identity: true } : {}) };
     if (!payload || !('tracks' in payload) || !Array.isArray(payload.tracks)) throw new Error('Invalid library snapshot');
-    return { ...payload, revision: nextRevision };
+    return { ...payload, revision: nextRevision, ...(collection ? { collection_identity: true } : {}) };
   },
   /** The songs in the library that have no file of their own — identity plus
    * snapshot, newest first, each carrying whether it is marked a favourite. */
@@ -855,10 +883,10 @@ export const api = {
     }),
   reorderPlaylists: (order: string[]) =>
     request<PlaylistMutation>('/api/library/playlists', { method: 'PATCH', body: { order } }),
-  addTrackToPlaylist: (name: string, trackId: string) =>
+  addTrackToPlaylist: (name: string, trackId: string, entry?: SavedEntry) =>
     request<PlaylistMutation>(`/api/library/playlists/${encodeURIComponent(name)}/tracks`, {
       method: 'POST',
-      body: { track_id: trackId },
+      body: entry ? { entry } : { track_id: trackId },
     }),
   removeTrackFromPlaylist: (name: string, trackId: string) =>
     request<PlaylistMutation>(

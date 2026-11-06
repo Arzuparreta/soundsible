@@ -4,7 +4,7 @@ import type { LibrarySnapshot } from '../lib/api';
 import type { Track } from '../types/music';
 
 const mocks = vi.hoisted(() => ({
-  getLibrary: vi.fn(), getSaved: vi.fn(), syncCatalog: vi.fn(),
+  getCollection: vi.fn(), getLibrary: vi.fn(), getSaved: vi.fn(), syncCatalog: vi.fn(),
   invalidateCatalogSync: vi.fn(), registerArtworkMetadata: vi.fn(), patchArtworkMetadata: vi.fn(),
 }));
 vi.mock('../lib/api', () => ({ api: mocks }));
@@ -12,7 +12,7 @@ vi.mock('../lib/media', () => ({ registerArtworkMetadata: mocks.registerArtworkM
 vi.mock('./catalog', () => mocks);
 vi.mock('./core', () => {
   const [state, setState] = createStore({
-    library: [] as Track[], playlists: {}, librarySettings: {}, podcastSubscriptions: [],
+    library: [] as Track[], collectionItems: null as Track[] | null, playlists: {}, librarySettings: {}, podcastSubscriptions: [],
     saved: [], loading: false, libraryReady: false, libraryError: false,
   });
   return { state, setState };

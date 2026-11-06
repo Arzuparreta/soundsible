@@ -1065,6 +1065,7 @@ def _process_single_queue_item_bound(item):
             # Note: Pre-cache cover so first request serves it
             track_dict = track.to_dict()
             track_dict.pop("local_path", None)
+            track_dict.pop("item_id", None)
             shared_track = Track.from_dict(track_dict)
             
             local_track_path = resolve_local_track_path(shared_track)
@@ -1369,7 +1370,10 @@ def add_tracks_to_user_library(
             continue
         track_dict = track.to_dict()
         track_dict.pop("local_path", None)
+        track_dict.pop("item_id", None)
         stored = Track.from_dict(track_dict)
+        from shared.collection import Collection
+        stored.item_id = Collection(lib.db).identify(song_keys)
         stored.added_at = holdings.claim(
             library_dates.track_keys(stored) + song_keys,
             proposed=stored.added_at if keep_source_dates else None,
@@ -1475,7 +1479,7 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
                     continue
 
                 lib.refresh_if_stale()
-                changed = lib.metadata.remap_track_ids(id_map)
+                changed = lib.metadata.remap_track_ids(id_map, references=False)
                 for track in lib.metadata.tracks:
                     replacement = (replacements or {}).get(track.id)
                     if replacement:

@@ -18,10 +18,16 @@ export function createPlaylists(ports: PlaylistsPorts, lifetime: RuntimeLifetime
   function applyPlaylistMutation(res: {
     playlists?: PlaylistMap;
     settings?: LibrarySettings;
+    items?: Track[];
+    files?: Track[];
+    saved?: import("../types/music").SavedEntry[];
   }): void {
     endLibraryEdit();
     if (res.playlists) setState('playlists', res.playlists);
     if (res.settings) setState('librarySettings', res.settings);
+    if (res.items) setState('collectionItems', res.items);
+    if (res.files) setState('library', res.files);
+    if (res.saved) setState('saved', res.saved);
   }
   const domainActions = {
     async createPlaylist(name: string): Promise<boolean> {
@@ -110,12 +116,12 @@ export function createPlaylists(ports: PlaylistsPorts, lifetime: RuntimeLifetime
     },
     async addToPlaylist(name: string, track: Track): Promise<void> {
       const isCurrent = lifetime.capture();
-      if ((state.playlists[name] ?? []).includes(track.id)) {
+      if ((state.playlists[name] ?? []).includes(track.item_id ?? track.id)) {
         toast.info(tr('toast.alreadyInPlaylist'));
         return;
       }
       try {
-        applyPlaylistMutation(await api.addTrackToPlaylist(name, track.id));
+        applyPlaylistMutation(await api.addTrackToPlaylist(name, track.id, state.collectionItems !== null ? savedFromTrack(track) : undefined));
         if (!isCurrent()) {
           return;
         }
@@ -123,7 +129,7 @@ export function createPlaylists(ports: PlaylistsPorts, lifetime: RuntimeLifetime
         // A playlist membership is a durable claim on the song, same as a
         // favourite — a track played from Auto Mode/DJ or a search result has
         // no other way to stay resolvable once the session that played it ends.
-        if (!isSavedKeys(trackKeys(track))) ports.actions.toggleSaved(savedFromTrack(track));
+        if (state.collectionItems === null && !isSavedKeys(trackKeys(track))) ports.actions.toggleSaved(savedFromTrack(track));
         void api.emitDiscoveryEvent('music_added_to_playlist', {
           media_type: 'music_track',
           track_id: track.id,

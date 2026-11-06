@@ -1,3 +1,4 @@
+import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { savedEntities, entitiesError, entitiesLoading, syncSavedEntities } from '../lib/savedEntities';
 import { openSavedEntityMenu } from './savedEntityActions';
 import { ArtistLinks, MusicLink } from './MusicLinks';
@@ -225,7 +226,7 @@ export function NowPlayingBrowser(props: {
     reset?.();
   });
   const playlistNames = createMemo(() => Object.keys(state.playlists));
-  const byId = createMemo(() => new Map(musicLibrary().map((track) => [track.id, track] as const)));
+  const byId = createMemo(() => collectionIndex(musicLibrary()));
   const savePosition = () => {
     const body = panelEl?.querySelector<HTMLElement>('[data-browser-body]');
     if (body && props.active !== false && !restoringScroll) navigation.update({ scroll: body.scrollTop });
@@ -468,7 +469,7 @@ export function NowPlayingBrowser(props: {
       onEditMetadata: openMetadataEditor,
       onPlayOnDevice: openPlayOnDevice,
       music,
-      onRemoveFromPlaylist: currentView().kind === 'playlist' ? () => void actions.removeFromPlaylist((currentView() as { name: string }).name, track.id) : undefined,
+      onRemoveFromPlaylist: currentView().kind === 'playlist' ? () => void actions.removeFromPlaylist((currentView() as { name: string }).name, collectionId(track)) : undefined,
     }, event);
 
   createEffect(() => {

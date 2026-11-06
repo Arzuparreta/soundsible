@@ -186,7 +186,7 @@ final class PlayerModel {
         }
         isPlaying = true
 
-        if let trackID = item.trackID { offline.markPlayed(trackID) }
+        if let trackID = offline.heldTrackID(for: item) { offline.markPlayed(trackID) }
         refreshCommandAvailability()
         preloadUpNext()
         publishStateToServer()
@@ -198,7 +198,7 @@ final class PlayerModel {
     /// point of the offline feature, and in a car it is the difference between
     /// music and a spinner in a tunnel.
     private func asset(for item: CarItem) -> AVAsset? {
-        if let trackID = item.trackID, let local = offline.localURL(for: trackID) {
+        if let trackID = offline.heldTrackID(for: item), let local = offline.localURL(for: trackID) {
             return AVURLAsset(url: local)
         }
         guard let path = item.streamURL,
@@ -307,7 +307,7 @@ final class PlayerModel {
             self.durationSec = self.decks.durationSec ?? item.durationSec.map(Double.init)
             self.publishNowPlaying(for: item)
             self.refreshCommandAvailability()
-            if let trackID = item.trackID { self.offline.markPlayed(trackID) }
+            if let trackID = self.offline.heldTrackID(for: item) { self.offline.markPlayed(trackID) }
             self.preloadUpNext()
         }
         decks.onCrossfadeFailed = { [weak self] error in

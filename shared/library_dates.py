@@ -141,6 +141,7 @@ def track_keys(track: Any) -> List[str]:
         if value:
             keys.append(f"{prefix}:{value}")
 
+    push("item", _text(getattr(track, "item_id", None)))
     is_podcast = getattr(track, "media_kind", None) == "podcast_episode" or bool(
         _text(getattr(track, "podcast_episode_guid", None))
     )

@@ -60,7 +60,7 @@ const snapshot = (
 /** An entry for a playable track — library or preview alike. */
 export function savedFromTrack(track: Track): SavedEntry {
   const preview = track.source === 'preview';
-  return snapshot(trackKeys(track), track.title, track.artist, {
+  return { ...snapshot(trackKeys(track), track.title, track.artist, {
     album: track.album,
     duration: track.duration,
     // A library track's art comes from the engine and needs no snapshot; a
@@ -69,7 +69,7 @@ export function savedFromTrack(track: Track): SavedEntry {
     // Its record is kept either way: deleting the file degrades the entry to
     // a preview, and downloading that again files it where it sat.
     album_artist: track.album_artist, track_number: track.track_number, disc_number: track.disc_number, year: track.year,
-  });
+  }), ...(track.item_id ? { item_id: track.item_id } : {}) };
 }
 
 /** An entry for a catalog row (Deezer, MusicBrainz, YouTube, library).

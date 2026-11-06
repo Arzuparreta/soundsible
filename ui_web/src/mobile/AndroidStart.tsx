@@ -211,8 +211,9 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       const state = await request<{ requires_login: boolean; user: User | null }>('/api/auth/state', { signal: controller.signal });
       if (current !== epoch || job !== syncEpoch) return;
       if (!state.user || (user() && user()!.id !== state.user.id)) { await expireSession(); return; }
+      let collectionSupported = false;
       const [data, saved, entities, downloads] = await Promise.all([
-        request<BrowseSnapshot>('/api/library', { timeoutMs: 30000, signal: controller.signal, cache: 'no-store' }),
+        request<BrowseSnapshot>('/api/library', { timeoutMs: 30000, signal: controller.signal, cache: 'no-store', onResponse: response => { collectionSupported = response.headers.get('X-Soundsible-Collection') === 'true'; } }),
         request<{ saved: SavedEntry[] }>('/api/library/saved', { signal: controller.signal, cache: 'no-store' }),
         request<{ entities: SavedEntity[] }>('/api/library/saved-entities', { signal: controller.signal, cache: 'no-store' }),
         request<{ queue: DownloadQueueItem[] }>('/api/downloader/queue/status', { signal: controller.signal, cache: 'no-store' }),
@@ -222,9 +223,11 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       if (!Array.isArray(data.tracks)) throw new Error('Invalid library');
       if (!Array.isArray(entities.entities)) throw new Error('Invalid entity bookmark snapshot');
       if (!Array.isArray(saved.saved)) throw new Error('Invalid saved-song snapshot');
+      const collection = collectionSupported ? await request<import('../lib/api').CollectionSnapshot>('/api/library/collection', { signal: controller.signal, cache: 'no-store' }) : null;
+      if (current !== epoch || job !== syncEpoch) return;
       const index = buildIdentityIndex(data.tracks);
-      const resolved = saved.saved.map(entry => savedToTrack(entry, index)).filter((track): track is Track => !!track);
-      setSnapshot({ ...data, podcast_tracks: data.tracks.filter(isPodcastTrack), tracks: musicLibraryRows(data.tracks, resolved) }); setSavedEntries(saved.saved); setSavedEntities(entities.entities); setDownloadItems(downloads.queue); setRevision(n => n + 1); setStale(false); setError('');
+      const resolved = collection ? [] : saved.saved.map(entry => savedToTrack(entry, index)).filter((track): track is Track => !!track);
+      setSnapshot({ ...data, settings: collection?.settings ?? data.settings, podcast_subscriptions: collection?.podcast_subscriptions ?? data.podcast_subscriptions, playlists: collection?.playlists ?? data.playlists, podcast_tracks: (collection?.files ?? data.tracks).filter(isPodcastTrack), tracks: collection?.items ?? musicLibraryRows(data.tracks, resolved) }); setSavedEntries(collection?.saved ?? saved.saved); setSavedEntities(entities.entities); setDownloadItems(downloads.queue); setRevision(n => n + 1); setStale(false); setError('');
     } catch (failure) {
       if (current !== epoch || job !== syncEpoch) return;
       if (failure instanceof ApiError && failure.status === 401) await expireSession();

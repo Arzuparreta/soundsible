@@ -131,28 +131,56 @@ def test_a_stale_writer_cannot_take_the_song_back_out(client):
     }
 
 
-def test_adding_a_downloaded_song_from_search_uses_its_library_id(client):
+def test_playlist_admission_owns_the_song_and_membership_in_one_commit(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    entry = {"keys": ["yt:7N3rFdE3u3Y"], "title": "Autorretrato", "artist": "Extremoduro"}
+    response = client.post("/api/library/playlists/Arma%20Reforger/tracks", json={"entry": entry})
+    assert response.status_code == 200, response.get_json()
+    snapshot = response.get_json()
+    item_id = snapshot['playlists']['Arma Reforger'][-1]
+    assert item_id != '7N3rFdE3u3Y'
+    assert any(row['item_id'] == item_id for row in snapshot['saved'])
+    assert next(row for row in snapshot['items'] if row['item_id'] == item_id)['title'] == 'Autorretrato'
+    assert client.get('/api/library/collection').get_json()['playlists'] == snapshot['playlists']
+    # A second manager/session sees the same item; retries never duplicate it.
+    reset_user_cores()
+    repeated = client.post("/api/library/playlists/Arma%20Reforger/tracks", json={"entry": entry})
+    assert repeated.get_json()['playlists'] == snapshot['playlists']
+
+
+def test_playlist_admission_rolls_back_its_saved_properties_on_persistence_failure(client, monkeypatch):
     user_id = ensure_multiuser_layout()["user_id"]
     _seed_library(user_id)
     with user_context(user_id):
-        library = get_user_core(user_id).library
-        library.metadata.get_track_by_id("emparedado").youtube_id = "video"
-        assert library._save_metadata() is True
+        db = get_user_core(user_id).library.db
+    from shared import library_changes
+    monkeypatch.setattr(library_changes, 'sync_source', lambda *args: (_ for _ in ()).throw(RuntimeError('disk failed')))
+    response = client.post("/api/library/playlists/Arma%20Reforger/tracks", json={"entry": {
+        "keys": ["yt:7N3rFdE3u3Y"], "title": "Autorretrato",
+    }})
+    assert response.status_code == 503
+    from shared.collection import Collection
+    snapshot = Collection(db).snapshot()
+    assert snapshot['saved'] == []
+    assert snapshot['playlists'] == {'Arma Reforger': ['tunnel']}
 
-    response = client.post(
-        "/api/library/playlists/Arma%20Reforger/tracks",
-        json={"track_id": "video"},
-    )
-    assert response.status_code == 200, response.get_json()
-    assert response.get_json()["playlists"] == {"Arma Reforger": ["tunnel", "emparedado"]}
-    # Adding the same search result again must not create a duplicate under
-    # its preview identity. Every returned membership resolves in the library.
-    assert client.post(
-        "/api/library/playlists/Arma%20Reforger/tracks", json={"track_id": "video"},
-    ).get_json()["playlists"] == response.get_json()["playlists"]
-    snapshot = client.get("/api/library").get_json()
-    assert snapshot["playlists"] == response.get_json()["playlists"]
-    assert set(snapshot["playlists"]["Arma Reforger"]) <= {track["id"] for track in snapshot["tracks"]}
+
+def test_collection_validator_changes_for_marks_and_sources_and_avoids_unchanged_body(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    response = client.get('/api/library/collection')
+    assert response.status_code == 200
+    token = response.headers['ETag']
+    assert client.get('/api/library/collection', headers={'If-None-Match': token}).status_code == 304
+    # The public mark operation updates the same collection resource, without
+    # requiring a different file-library revision or another client-side join.
+    assert client.put('/api/library/favourites', json={'entry': {'keys': ['lib:tunnel']}, 'marked': True}).status_code == 200
+    marked = client.get('/api/library/collection', headers={'If-None-Match': token})
+    assert marked.status_code == 200
+    assert marked.headers['ETag'] != token
+    assert marked.get_json()['saved'][0]['favourite']
+    assert marked.get_json()['files'][0]['item_id'] == 'tunnel'
 
 
 def test_a_refused_playlist_write_is_reported_as_a_conflict(client, monkeypatch):

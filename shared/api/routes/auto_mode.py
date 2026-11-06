@@ -141,6 +141,7 @@ def _reconcile_library_sources(metadata, items: list[dict]) -> list[dict]:
         reconciled.append({
             **item,
             "id": str(track.id),
+            "item_id": getattr(track, "item_id", None),
             "track_id": str(track.id),
             "source": "library",
             "title": str(track.title or "Unknown"),
@@ -155,6 +156,12 @@ def _reconcile_library_sources(metadata, items: list[dict]) -> list[dict]:
     return reconciled
 
 
+def _collection_item_id(video_id, supplied=None):
+    from shared.collection import Collection
+    return request_scope.scoped(f'collection_item:{video_id}:{supplied or ""}',
+        lambda: Collection().identify(([f'item:{supplied}'] if supplied else []) + [f'yt:{video_id}']))
+
+
 def _planner_item_from_related(row: dict) -> dict | None:
     video_id = str(row.get("video_id") or row.get("id") or "").strip()
     if not validate_youtube_video_id(video_id):
@@ -162,6 +169,7 @@ def _planner_item_from_related(row: dict) -> dict | None:
     music = youtube_music_metadata(row)
     return {
         "id": video_id,
+        "item_id": _collection_item_id(video_id),
         "youtube_id": video_id,
         "discovery_youtube_id": video_id,
         **music,
@@ -197,6 +205,7 @@ def _planner_item_from_feed(item: dict, *, pool: str) -> dict | None:
     )
     return {
         "id": item_id,
+        "item_id": item.get("item_id") or _collection_item_id(video_id),
         "track_id": track_id or None,
         "youtube_id": video_id or None,
         "title": identity.title,
@@ -590,6 +599,7 @@ def _planner_local_item(track, *, semantic_score: float, basis: str, favourite: 
     score = min(1.0, semantic_score * 0.82 + (0.16 if favourite else 0.06))
     return {
         "id": str(track.id),
+        "item_id": getattr(track, "item_id", None),
         "track_id": str(track.id),
         "youtube_id": video_id or None,
         "title": str(track.title or "Unknown"),
@@ -1115,6 +1125,7 @@ def _normalise_dj_request(raw: dict) -> dict | None:
         "kind": "track",
         "label": title,
         "id": video_id if is_preview else track_id,
+        "item_id": _collection_item_id(video_id, track.get("item_id")),
         "track_id": track_id or None,
         "youtube_id": video_id if is_preview else track.get("youtube_id"),
         "title": title,

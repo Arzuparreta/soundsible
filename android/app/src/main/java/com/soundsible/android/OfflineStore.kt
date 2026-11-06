@@ -90,6 +90,7 @@ class OfflineStore private constructor(private val context: Context) {
             require(!row.has("source") && row.optString("media_kind") != "podcast_episode" && (row.isNull("podcast_episode_guid") || row.optString("podcast_episode_guid").isBlank())) { "LOCAL_MUSIC_ONLY" }
             val id = row.getString("id"); require(id.isNotBlank() && id.length <= 512)
             val result = JSONObject().put("id", id)
+            row.optString("item_id").takeIf { it.isNotBlank() && it != "null" && it.length <= 512 }?.let { result.put("item_id", it) }
             for (key in listOf("title", "artist", "album", "album_artist", "album_id", "artist_id")) {
                 val value = if(row.isNull(key)) "" else row.optString(key, ""); require(value.length <= 4096); result.put(key, value)
             }
@@ -134,7 +135,7 @@ class OfflineStore private constructor(private val context: Context) {
                     if (!cursor.moveToFirst()) return@use
                     val saved = JSONObject(cursor.getString(0))
                     val previous = saved.toString()
-                    for (key in listOf("title", "artist", "album", "album_artist", "album_id", "artist_id")) if (row.has(key)) saved.put(key, row.get(key))
+                    for (key in listOf("title", "artist", "album", "album_artist", "album_id", "artist_id", "item_id")) if (row.has(key)) saved.put(key, row.get(key))
                     if (previous != saved.toString()) {
                         database.update("copies", ContentValues().apply { put("metadata", saved.toString()) }, "id=?", arrayOf(id))
                         changed = true

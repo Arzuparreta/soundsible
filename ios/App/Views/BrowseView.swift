@@ -94,7 +94,7 @@ struct BrowseView: View {
             } label: {
                 CarItemRow(
                     item: item,
-                    isDownloaded: item.trackID.map(offline.isAvailableOffline) ?? false
+                    isDownloaded: offline.isAvailableOffline(item)
                 )
             }
             .buttonStyle(.plain)

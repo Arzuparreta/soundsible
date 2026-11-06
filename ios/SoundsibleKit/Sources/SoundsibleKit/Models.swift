@@ -9,6 +9,8 @@ import Foundation
 public struct CarItem: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let kind: String
+    /// Stable account element; trackID and streamURL describe its selected audio.
+    public let itemID: String?
     public let trackID: String?
     public let title: String
     public let subtitle: String
@@ -23,6 +25,7 @@ public struct CarItem: Codable, Equatable, Identifiable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id
         case kind
+        case itemID = "item_id"
         case trackID = "track_id"
         case title
         case subtitle
@@ -39,6 +42,7 @@ public struct CarItem: Codable, Equatable, Identifiable, Sendable {
         id: String,
         kind: String,
         trackID: String? = nil,
+        itemID: String? = nil,
         title: String,
         subtitle: String = "",
         artist: String = "",
@@ -52,6 +56,7 @@ public struct CarItem: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.kind = kind
         self.trackID = trackID
+        self.itemID = itemID
         self.title = title
         self.subtitle = subtitle
         self.artist = artist
@@ -68,6 +73,7 @@ public struct CarItem: Codable, Equatable, Identifiable, Sendable {
         id = try container.decode(String.self, forKey: .id)
         kind = try container.decodeIfPresent(String.self, forKey: .kind) ?? "track"
         trackID = try container.decodeIfPresent(String.self, forKey: .trackID)
+        itemID = try container.decodeIfPresent(String.self, forKey: .itemID)
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
         subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle) ?? ""
         artist = try container.decodeIfPresent(String.self, forKey: .artist) ?? ""
