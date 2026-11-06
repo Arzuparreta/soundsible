@@ -16,7 +16,12 @@ candidatos y planes DJ conservan esa referencia cuando se conoce, aparte del ID
 de fuente usado para análisis y de la ocurrencia usada por el transporte.
 Descargar o reparar no reemplaza audio ya preparado. Este cambio no modifica
 medidas ni su significado y no cambia `ANALYSER_VERSION`; tampoco cierra puntos
-musicales de la tabla. Contrato: [identidad de colección](../audits/COLLECTION_IDENTITY.md).
+musicales de la tabla. La regresión nativa detectó que, tras recuperar el plato
+saliente por inanición del entrante, reabrir el mismo prefijo cacheado podía
+volver a hacerlo audible antes de recibir datos nuevos. El reintento de esa
+ocurrencia exige superar el límite de buffer conocido; un seek explícito limpia
+esa guarda. Se conserva el reloj del plato saliente y no se cambian medidas.
+Contrato: [identidad de colección](../audits/COLLECTION_IDENTITY.md).
 
 ## Cómo trabajar con este documento
 

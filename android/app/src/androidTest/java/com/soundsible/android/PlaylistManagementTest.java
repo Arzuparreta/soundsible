@@ -47,6 +47,8 @@ public class PlaylistManagementTest {
             web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('input[type=password]')");web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('[data-testid=android-library]')");
+            web.evaluate(scenario,"window.__collectionHeader=null;Capacitor.Plugins.SoundsibleEngine.request({generation:"+connection.getGeneration()+",id:'playlist-capability',path:'/api/library',method:'GET',headers:{},timeoutMs:15000}).then(r=>window.__collectionHeader=r.headers['X-Soundsible-Collection']||'missing')");
+            waitFor(web,scenario,"window.__collectionHeader==='true'");
             // This test owns its preview descriptor; other acceptance cases may
             // have acquired and relabelled the shared fixture's saved song.
             var admission=api(connection,origin,"/api/library/playlists/member%20playlist/tracks",new JSONObject().put("entry",new JSONObject()

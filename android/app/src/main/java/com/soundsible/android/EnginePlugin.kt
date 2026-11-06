@@ -94,7 +94,7 @@ class EnginePlugin : Plugin() {
                 connection.execute(call.getString("path") ?: "", method, body, headers,
                     epoch, id, call.getInt("timeoutMs")?.toLong() ?: call.getLong("timeoutMs") ?: 8000L).use { response ->
                     val visibleHeaders = JSObject()
-                    listOf("ETag", "Content-Type", "Content-Range").forEach { key -> response.header(key)?.let { visibleHeaders.put(key, it) } }
+                    listOf("ETag", "Content-Type", "Content-Range", "X-Soundsible-Collection").forEach { key -> response.header(key)?.let { visibleHeaders.put(key, it) } }
                     val text = response.body?.string() ?: ""
                     val path = call.getString("path")
                     if (epoch == connection.generation) {

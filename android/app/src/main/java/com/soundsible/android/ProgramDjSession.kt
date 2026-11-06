@@ -58,6 +58,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private var current = startIndex
     private var armed = false
     private var recovering = false
+    private val retryProgress = ProgramDjRetryProgress()
     private var pendingSince = 0L
     private var plan: ProgramDjPlan.Plan? = null
     @Volatile private var streams = arrayOfNulls<ProgramPcmTap.Stream>(2)
@@ -127,6 +128,9 @@ internal class ProgramDjSession(private val context: Context, private val genera
         output.takeStarvedInput()?.let { failed ->
             // Output has already ramped toward the retained input, without flushing
             // its clock. Retire the stalled decoder before planning another overlap.
+            route.getOrNull(indices[failed])?.let {
+                retryProgress.stalled(key(indices[failed]), decks[failed].bufferedPosition.coerceAtLeast(0) * 1000)
+            }
             player.replaceInput(failed, decoder(failed)); indices[failed] = -1
             streams = streams.copyOf().also { it[failed] = null }
             armed = false; plan = null; ramp = null; pendingSince = 0; recovering = true
@@ -202,6 +206,10 @@ internal class ProgramDjSession(private val context: Context, private val genera
             }
             return
         }
+        // A reopened request can immediately replay the same cached prefix
+        // while its body is still stalled. Keep the recovered outgoing deck
+        // until the incoming occurrence has made actual buffering progress.
+        if (!retryProgress.ready(key(current + 1), decks[standby].bufferedPosition.coerceAtLeast(0) * 1000)) return
         if (resolved.technique == ProgramMixCurve.Technique.DIRECT || outgoing.playbackState == Player.STATE_ENDED) {
             if (output.drainedInput(slot)) { output.blend(50, ProgramMixCurve.Technique.DIRECT); armed = true; changed() }
             return
@@ -301,6 +309,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         output.resetTo(0)
         indices[0] = index; indices[1] = -1; current = index
         armed = false; recovering = false; plan = null; ramp = null; pendingSince = 0
+        retryProgress.clear()
         load(0, index, positionMs, 1f)
         output.pause(!resume); player.routeChanged(); changed()
     }
