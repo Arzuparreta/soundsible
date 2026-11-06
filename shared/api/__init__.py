@@ -62,7 +62,7 @@ from typing import Optional, Any
 from shared.url_utils import normalize_youtube_url
 # Re-exported for the blueprints, which reach back into this module rather than
 # importing `shared.security` directly (see `_get_api` in routes/).
-from shared.security import is_trusted_network, is_safe_path  # noqa: F401
+from shared.security import is_trusted_network, is_safe_path, request_client_address  # noqa: F401
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, apply_security_headers, get_request_auth_context
 from shared.telemetry import init_telemetry
 
@@ -388,7 +388,7 @@ def on_socket_connect(auth=None):
     # their database blocks independently of this scope.
     with request_scope.request_scope():
         runtime = get_runtime_config()
-        remote_addr = request.remote_addr or ""
+        remote_addr = request_client_address()
         context = get_request_auth_context(allow_trusted_network=True)
 
         if context and (context.get("kind") == "owner" or SCOPE_PLAYBACK_CONTROL in set(context.get("scopes") or [])):
@@ -1228,7 +1228,15 @@ def _mirror_track_into_pool(track: Track) -> None:
     """
     Keep the download pool's library in sync with the main manifest.
     Otherwise the next dl.save_library() overwrites library.json with stale titles/artists.
+
+    Only while one account owns the music folder's ``library.json``. With
+    several, that file is the instance catalog: one person's labels written
+    into it would reach whoever later merges the pool.
     """
+    from shared.users import instance_has_multiple_users
+
+    if instance_has_multiple_users():
+        return
     try:
         dl = get_downloader(open_browser=False)
     except Exception:

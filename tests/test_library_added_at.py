@@ -18,7 +18,6 @@ import time
 
 from shared.database import DatabaseManager
 from shared.models import LibraryMetadata, Track
-from shared.track_identity import preserve_track_identity
 
 
 def _track(track_id: str, **overrides) -> Track:
@@ -97,14 +96,6 @@ def test_a_re_keyed_song_keeps_the_date_of_the_row_it_replaced(tmp_path):
     db.replace_library(_library(_track("new")), id_replacements={"old": "new"})
 
     assert _dates(db) == {"new": "2026-07-02T10:00:00"}
-
-
-def test_a_tag_edit_that_re_hashes_the_file_keeps_the_date():
-    original = _track("before", added_at="2026-07-02T10:00:00")
-
-    refreshed = preserve_track_identity(original, _track("after"))
-
-    assert refreshed.added_at == "2026-07-02T10:00:00"
 
 
 def test_an_undated_library_is_dated_from_its_own_audio_files(tmp_path):

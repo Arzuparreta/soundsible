@@ -165,3 +165,22 @@ describe('album recording reconciliation', () => {
     await expect(api.getAlbumProfile('Record', 'Robe')).rejects.toMatchObject({ status: 503 });
   });
 });
+
+describe('track edits', () => {
+  // The old `/api/library/tracks/<id>/…` routes rewrote the audio file, which
+  // gave the song a new id and left its playlist slots on the old one.
+  it('edit labels and covers without touching the audio', async () => {
+    const { api } = await import('./api');
+    const fetcher = vi.fn(() => Promise.resolve(new Response('{"status":"success","storage":"library","id":"a b"}')));
+    globalThis.fetch = fetcher as typeof fetch;
+    await api.updateTrackMetadata('a b', { title: 'New', album_artist: null });
+    await api.uploadTrackCover('a b', new File(['x'], 'cover.png', { type: 'image/png' }));
+    await api.clearTrackCover('a b');
+    const calls = fetcher.mock.calls as unknown as [string, RequestInit][];
+    expect(calls.map(([url, init]) => [new URL(url, 'http://station').pathname, init.method])).toEqual([
+      ['/api/library/track-labels/a%20b/metadata', 'POST'],
+      ['/api/library/track-labels/a%20b/cover', 'POST'],
+      ['/api/library/track-labels/a%20b/cover/none', 'POST'],
+    ]);
+  });
+});
