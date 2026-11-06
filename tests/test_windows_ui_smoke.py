@@ -44,3 +44,38 @@ def test_control_does_not_hide_unexpected_uia_failures(smoke, monkeypatch):
     monkeypatch.setattr(smoke, "dismiss_runner_first_boot", lambda _: False)
     with pytest.raises(RuntimeError, match="UIA failed"):
         smoke.control(window, "Continue")
+
+
+def test_player_waits_past_healthy_engine_and_same_title_shell(smoke, monkeypatch):
+    shell = Mock()
+    shell.window_text.return_value = "Soundsible"
+    shell.is_visible.return_value = True
+    shell.descendants.return_value = []
+    player = Mock()
+    player.window_text.return_value = "Soundsible"
+    player.is_visible.return_value = True
+    search = Mock()
+    search.window_text.return_value = "Search"
+    player.descendants.return_value = [search]
+    desktop = smoke.Desktop.return_value
+    desktop.windows.side_effect = [[shell], [shell, player]]
+
+    assert smoke.player_window(123) is player
+    assert desktop.windows.call_count == 2
+    desktop.windows.assert_called_with(process=123)
+
+
+def test_player_ignores_hidden_previous_window(smoke):
+    hidden = Mock()
+    hidden.window_text.return_value = "Soundsible"
+    hidden.is_visible.return_value = False
+    player = Mock()
+    player.window_text.return_value = "Soundsible"
+    player.is_visible.return_value = True
+    search = Mock()
+    search.window_text.return_value = "Search"
+    player.descendants.return_value = [search]
+    smoke.Desktop.return_value.windows.return_value = [hidden, player]
+
+    assert smoke.player_window(123) is player
+    hidden.descendants.assert_not_called()

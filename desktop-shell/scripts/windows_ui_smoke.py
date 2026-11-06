@@ -60,6 +60,28 @@ def main_window(pid: int, timeout: float = 30.0):
     )
 
 
+def player_window(pid: int, timeout: float = 90.0):
+    """Wait for the loaded player, not the identically titled startup shell.
+
+    Engine health/state precede open_player(), which creates another native
+    window and then hides the shell. A title-only lookup can race that handoff.
+    """
+    desktop = Desktop(backend="uia")
+
+    def loaded_player():
+        for window in desktop.windows(process=pid):
+            if window.window_text() != "Soundsible" or not window.is_visible():
+                continue
+            if any(
+                item.window_text() == "Search"
+                for item in window.descendants(control_type="Hyperlink")
+            ):
+                return window
+        return None
+
+    return wait_until(loaded_player, "Loaded Soundsible player did not appear", timeout)
+
+
 def control(window, title: str, control_type: str = "Button", timeout: float = 90.0):
     title_pattern = rf"^{re.escape(title)}(?:…|\.\.\.)?$"
     # ``Desktop.windows`` returns a UIAWrapper, while ``child_window`` belongs
@@ -362,7 +384,8 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
 
         state = wait_for_engine_state(state_file)
         assert_healthy(state)
-        window = main_window(process.pid)
+        window = player_window(process.pid)
+        dump_tree(window, artifact_path / "player-ready-tree.txt")
         screenshot(artifact_path / "player-ready.png")
 
         # A second launch must bypass onboarding and reuse the saved folder.
@@ -380,17 +403,26 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         window = main_window(process.pid)
         state = wait_for_engine_state(state_file)
         assert_healthy(state)
-        window = main_window(process.pid)
+        window = player_window(process.pid)
+        dump_tree(window, artifact_path / "returning-user-tree.txt")
         screenshot(artifact_path / "returning-user.png")
 
         # Closing the native window hides to tray. Ctrl+Alt+O restores it.
         window.close()
-        time.sleep(2)
+        wait_until(
+            lambda: not window.is_visible(),
+            "Player window did not hide to tray",
+            timeout=10,
+        )
         if process.poll() is not None:
             raise RuntimeError("Closing the window exited instead of hiding to tray")
         global_shortcut("^%o")
         try:
-            restored_window = main_window(process.pid, timeout=10)
+            restored_window = wait_until(
+                lambda: window if window.is_visible() else None,
+                "Player window did not restore from tray",
+                timeout=10,
+            )
         except TimeoutError:
             if not is_arm_runner():
                 raise
