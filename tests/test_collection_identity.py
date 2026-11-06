@@ -239,3 +239,22 @@ def test_invalid_legacy_shapes_cannot_silently_complete_an_empty_migration(tmp_p
         db.replace_library(library(file()))
     with db._get_connection() as conn:
         assert conn.execute('SELECT count(*) FROM collection_state').fetchone()[0] == 0
+
+
+def test_saved_source_repair_keeps_history_for_already_prepared_audio():
+    from player.favourites_manager import FavouritesManager
+    db = DatabaseManager()
+    metadata = library()
+    entry = {'keys': [f'yt:{VIDEO}'], 'title': 'Autorretrato'}
+    db.replace_library(metadata, playlist_entry=('Mix', entry))
+    item_id = entry['item_id']
+    metadata.add_track(file('before'))
+    db.replace_library(metadata)
+    metadata.tracks = [replace(metadata.tracks[0], id='after', file_hash='after')]
+    db.replace_library(metadata, id_replacements={'before': 'after'})
+    manager = FavouritesManager()
+    assert manager.remap_library_id('before', 'after') is False  # already admitted by the source write
+    metadata.tracks = []
+    db.replace_library(metadata)
+    assert db.record_track_play('before', 123)
+    assert db.get_track_user_state(item_id)['play_count'] == 1

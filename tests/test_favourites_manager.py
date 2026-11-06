@@ -204,7 +204,7 @@ def test_remap_library_id_preserves_the_snapshot(manager):
     assert manager.remap_library_id("old", "new") is True
     entry = manager.get_entries()[0]
     assert "lib:new" in entry["keys"]
-    assert "lib:old" not in entry["keys"]
+    assert "lib:old" in entry["keys"]
     assert "yt:vid" in entry["keys"]
     assert entry["title"] == "Song"
     assert entry["added_at"] == added_at

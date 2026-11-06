@@ -268,11 +268,11 @@ class FavouritesManager:
             entry = self._index.get(library_key(old_id))
             if entry is None:
                 return False
-            self._transaction.execute("DELETE FROM collection_keys WHERE key=? AND item_id=?",
-                                      (library_key(old_id), entry["item_id"]))
-            entry["keys"] = [k for k in entry["keys"] if k != library_key(old_id)]
-            if library_key(new_id) not in entry["keys"]:
-                entry["keys"].insert(0, library_key(new_id))
+            if library_key(new_id) in entry["keys"]:
+                return False
+            # Prepared audio may still name the previous source. Keep its
+            # historical evidence associated with the same musical entity.
+            entry["keys"].insert(0, library_key(new_id))
             self._reindex()
             self._persist()
             return True
