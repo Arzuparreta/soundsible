@@ -20,6 +20,7 @@ on:
       - 'tests/test_desktop_engine_entry.py'
       - 'requirements.txt'
       - '.github/workflows/desktop-build.yml'
+      - '.github/actions/attest-with-retry/**'
   pull_request:
     branches: [main, dev]
     paths: *desktop-paths
@@ -28,8 +29,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
-  attestations: write
 
 # A new push to a pull request makes the previous run's installers worthless.
 # Called from release.yml on a tag, nothing is ever cancelled.
@@ -261,22 +260,6 @@ jobs:
             "$hash  $($_.Name)"
           } | Set-Content -Encoding ASCII "$bundle/SHA256SUMS-${{ matrix.arch }}.txt"
 
-      - name: Attest Windows installer
-        id: attest
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        uses: actions/attest-build-provenance@v4.2.2
-        with:
-          subject-path: desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
-
-      # Rekor occasionally times out after the installer has been built and
-      # tested. Retry once; the retry still gates publication on a valid attestation.
-      - name: Retry Windows installer attestation
-        if: github.event_name != 'pull_request' && steps.attest.outcome == 'failure'
-        uses: actions/attest-build-provenance@v4.2.2
-        with:
-          subject-path: desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
-
       - name: Compute artifact name
         shell: bash
         run: echo "ARTIFACT_NAME=soundsible-desktop-windows-${{ matrix.arch }}-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
@@ -290,3 +273,33 @@ jobs:
             desktop-shell/src-tauri/target/release/bundle/nsis/SHA256SUMS-*.txt
           if-no-files-found: error
 
+
+  # Keep tested installers even if Sigstore/GitHub is unavailable. Re-running
+  # failed jobs resumes certification from these artifacts, without rebuilding.
+  attest-windows:
+    needs: build-windows
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Compute artifact name
+        id: artifact
+        shell: bash
+        run: echo "name=soundsible-desktop-windows-${{ matrix.arch }}-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ runner.temp }}/installers
+      - name: Attest Windows installer
+        uses: ./.github/actions/attest-with-retry
+        with:
+          subject-path: ${{ runner.temp }}/installers/*.exe

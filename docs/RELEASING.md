@@ -138,3 +138,22 @@ The `vX.Y.Z` tag starts two workflows:
 
 Every push to `main` also publishes a `edge` image, which reports
 `0.0.0-edge+<sha>` so two edge builds are never confused for each other.
+
+## Recovering provenance certification
+
+Building/testing and provenance certification are separate jobs. The Windows
+build uploads its tested installer and checksum manifest before
+`attest-windows` downloads and certifies it. CI's `attest_image` certifies the
+immutable digest output by `publish`, without rebuilding or moving image tags.
+Both use the official GitHub provenance action with four attempts, separated
+by 30, 90 and 180 seconds. This covers temporary Sigstore/Rekor or GitHub
+failures; it cannot make an unavailable service succeed indefinitely.
+
+If certification still fails, the workflow remains red and the Windows release
+remains blocked. Once the service recovers, re-run **failed jobs only**
+(`gh run rerun RUN_ID --failed`). Successful build jobs and their artifacts or
+image digest are reused; no installer recompilation or container rebuild is
+needed. Installer artifacts must still be within GitHub's retention period.
+The image was already pushed by `publish`, as before; a red certification job
+means its GitHub provenance has not been confirmed. Do not report that workflow
+or a release depending on it as complete until certification passes.
