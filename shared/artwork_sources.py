@@ -68,7 +68,9 @@ def observe(video_id, candidates):
     values = [c for c in candidates[:8] if safe_image_url(c.get('url'), video_id=video_id)]
     if not values:
         return
-    with artwork_store().connect() as db:
+    # This is optional metadata on the audio resolver's critical path. A busy
+    # index must be a miss, never SQLite sleeping in that caller for 30 seconds.
+    with artwork_store().connect(timeout=0) as db:
         db.execute('CREATE TABLE IF NOT EXISTS source_images (video_id TEXT PRIMARY KEY, candidates TEXT)')
         changed = db.execute('INSERT INTO source_images VALUES (?,?) ON CONFLICT(video_id) '
                    'DO UPDATE SET candidates=excluded.candidates WHERE candidates!=excluded.candidates',

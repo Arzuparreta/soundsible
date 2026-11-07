@@ -125,6 +125,19 @@ def test_candidate_observations_survive_store_reopen_and_ignore_arbitrary_urls()
     assert observed(VIDEO)[0]['url'] == URL
 
 
+def test_optional_source_observation_never_waits_for_a_busy_writer():
+    import sqlite3
+    store = artwork_store()
+    observe(VIDEO, [{'url': URL, 'width': 1280, 'height': 720}])
+    with store.connect() as busy:
+        busy.execute('BEGIN IMMEDIATE')
+        start = time.monotonic()
+        # The resolver catches this optional cache failure and returns audio.
+        with pytest.raises(sqlite3.OperationalError, match='locked'):
+            observe(VIDEO, [{'url': URL, 'width': 1920, 'height': 1080}])
+        assert time.monotonic() - start < .2
+
+
 def test_canonical_variants_reuse_identical_bytes_and_hot_path_needs_no_sql(monkeypatch):
     store = artwork_store()
     digest = store.put(picture())
@@ -153,6 +166,8 @@ def test_real_image_child_matches_transform_and_recovers_after_a_hang(tmp_path):
         # Idle shutdown closes/reaps rather than retaining decoded images.
         process = worker.process
         worker.close()
+
+
         assert process.poll() is not None
         worker.command = [sys.executable, '-c', 'import time; time.sleep(30)']
         worker.timeout = .15
@@ -164,6 +179,20 @@ def test_real_image_child_matches_transform_and_recovers_after_a_hang(tmp_path):
         worker.render(source, io.BytesIO(), 320, True)
     finally:
         worker.close()
+
+
+@pytest.mark.parametrize('reply', ['flood', 'late'])
+def test_real_image_child_reaps_its_reader_after_invalid_or_late_replies(tmp_path, reply):
+    script = ("import sys;sys.stdout.write('{}\\n'*1000);sys.stdout.flush()"
+              if reply == 'flood' else
+              "import sys,time,json;r=json.loads(sys.stdin.readline());time.sleep(.5);print(json.dumps({'ok':True,'id':r['id']}),flush=True)")
+    child = ImageProcess(command=[sys.executable, '-c', script], timeout=.25)
+    try:
+        with pytest.raises(OSError):
+            child.render(tmp_path / 'unused.png', io.BytesIO(), 160, False)
+        assert child.process is None and child.reader is None
+    finally:
+        child.close()
 
 
 def test_downloader_deadline_includes_silent_child_and_unterminated_output():

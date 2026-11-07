@@ -116,8 +116,8 @@ class ArtworkStore:
             return read_revision(db)
 
     @contextmanager
-    def connect(self):
-        db = sqlite3.connect(self.root / "index.sqlite3", timeout=30)
+    def connect(self, *, timeout=30):
+        db = sqlite3.connect(self.root / "index.sqlite3", timeout=timeout)
         db.row_factory = sqlite3.Row
         try:
             with db:
