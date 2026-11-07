@@ -5,6 +5,61 @@ portadas y cachés, y validada con la base combinada de #423/#424 (`adff0c88`).
 El original visual continúa separado del archivo de audio:
 una imagen grande no vuelve a bloquear la primera muestra en su cabecera.
 
+## Diagnóstico y recorrido de las peticiones
+
+La función histórica no había desaparecido. PR #113 redujo la imagen incrustada
+y eliminó vídeo innecesario; PR #171 conservó originales durables, variantes y
+recuperación posterior. El contrato encontrado no era «un GET pide audio y JPEG
+mínimo y siempre los sustituye»: audio, imagen visible y recuperación eran
+operaciones independientes. Esta entrega conserva esa separación.
+
+El síntoma tenía dos causas distintas: biblioteca y preview podían elegir
+imágenes de procedencia diferente, y una miniatura 1280×720 solo aporta como
+máximo 720×720 al recortarla cuadrada. Una pantalla a DPR 3 puede necesitar más.
+Los endpoints consultados para las imágenes pequeñas de la muestra no ofrecían
+una mejora confirmada. Ampliarlas o relajar el comparador no crea detalle.
+
+| Momento | Peticiones y trabajo finales |
+| --- | --- |
+| Cargar biblioteca | `/api/library` entrega metadatos/revisiones/dimensiones/scope, no imágenes. Conserva 304 y deltas. |
+| Escuchar audio adquirido | `/api/static/stream/<id>`, posiblemente varias peticiones Range. No consulta YouTube para obtener la portada. |
+| Mostrar portada adquirida | `/api/static/cover/<id>` sirve original o variante local. Si aún falta el master, puede extraer la imagen local incrustada. No hace GET remoto en esta ruta. |
+| Mostrar escenario NORMAL/DJ | `CoverImage` construye `srcset` según slot, DPR y resolución efectiva. No descarga todos los tamaños; el navegador selecciona uno. Media Session puede pedir su propia variante. |
+| Buscar/escuchar preview | El proveedor/yt-dlp resuelve metadatos y audio; una llamada de extracción puede hacer varias peticiones HTTP. Se aprovechan candidatos ya presentes, sin una nueva extracción visual. Los bytes de la imagen requieren su GET normal. |
+| Preparar preview | Se conservan memo/singleflight, expiración del stream firmado y caché progresiva existentes. Los status ya consultados transportan opcionalmente artwork; no se añaden polls. |
+| Adquirir | yt-dlp CLI obtiene audio y metadatos con thumbnail incrustada; la reparación preserva el original antes de reducir la cabecera. Se mantiene el hash posterior al etiquetado. Una preview existente no se promociona con el contrato actual. |
+| Guardar desde álbum de catálogo | Se revalida el registro Deezer para ligar edición e imagen a un receipt. Es una consulta de autoridad deliberada, no una descarga de imagen en el camino de audio. |
+| Completar adquisición de catálogo | La pertenencia de audio se confirma antes de procesar la imagen. La cola guarda la intención durable antes de cerrarse; el recuperador descarga el candidato aparte. |
+| Recuperar biblioteca antigua | Un recuperador secuencial por instancia conserva/revisa fuentes conocidas. Negativos y backoff evitan repetir el GET en cada play; nueva evidencia o reevaluación pueden habilitarlo. |
+
+La antigua búsqueda tomaba `thumbnail` e ignoraba `thumbnails`; el resolver
+descartaba las imágenes al conservar solo el stream. El recuperador comparaba
+el lado menor con 1280: una fuente 1280×720 podía provocar otro GET de sí misma.
+Los estados finales impedían reintentar incluso fallos temporales. Además, tres
+variantes cuadradas grandes de una fuente 480×360 podían almacenar el mismo
+JPEG con claves diferentes. Las correcciones siguientes atacan esas pérdidas
+y duplicaciones concretas.
+
+## Qué permite yt-dlp
+
+`extract_info(download=False)` obtiene metadatos/formatos sin descargar el audio;
+no implica una sola petición de red. `thumbnail`/`thumbnails` permiten reutilizar
+referencias, aunque el extractor también construye URLs especulativas. Dimensiones
+declaradas y procedencia se conservan como observaciones sin verificar.
+
+`--write-thumbnail` guarda una imagen aparte; `--skip-download` evita el audio
+pero no la extracción necesaria. `--list-thumbnails` inspecciona referencias,
+`--embed-thumbnail` las incrusta y `--convert-thumbnails` cambia su formato.
+Ninguna opción crea detalle. Pedir todas las miniaturas o hacer otra extracción
+solo para descubrirlas aumentaría solicitudes. Tampoco existe un GET ordinario
+que entregue a la vez audio y un JPEG independiente. La portada se descubre en
+respuestas ya necesarias y se descarga por su consumidor visual independiente.
+
+Referencias: [opciones de miniaturas](https://github.com/yt-dlp/yt-dlp#thumbnail-options)
+y [argumentos del extractor](https://github.com/yt-dlp/yt-dlp#extractor-arguments).
+Los nombres y formatos ofrecidos dependen del extractor/proveedor vigente; el
+fallback de audio continúa siendo necesario.
+
 ## Contratos
 
 - Las búsquedas usan `thumbnails` cuando traen dimensiones, sin otra consulta
@@ -60,6 +115,9 @@ una imagen grande no vuelve a bloquear la primera muestra en su cabecera.
   por trabajo y se recoge por inactividad/apagado. La comparación perceptual
   antigua sigue siendo local: no se afirma haber aislado todo cálculo visual.
   Puede haber dos intérpretes visuales; no se afirma que su RSS sea gratuito.
+  Estos límites son fijos, no proporcionales a los núcleos: un Pi evita
+  multiplicar decodificadores y el desktop conserva el hub disponible. No hay
+  evidencia física de Pi ni ajuste automático que prometa el óptimo de cada host.
 - El visitor de YouTube tiene cooldown y renovación sin cola por configuración
   efectiva de egress. Un rechazo antiguo no invalida un identificador nuevo.
   Las cachés de streams distinguen relay A y B mediante una huella sin guardar
@@ -170,11 +228,11 @@ Datos y reproducción: [JSONL](../performance/artwork-pipeline-results.jsonl),
   base combinada terminó con **2674 aprobadas y una omisión**, en 626,55 s.
 - Regresión tras la tercera crítica: 117 aprobadas; radio adicional de identidad/procesos/replay: 66 aprobadas. Una segunda ejecución principal completa está en curso por el nuevo transporte HTTP.
 - Cliente combinado final: TypeScript y **1871 pruebas aprobadas** en 228 archivos.
-- Chromium completo previo: **382 aprobadas y 74 omisiones** entre móvil/escritorio. Tras las últimas correcciones, una pasada con Vite ya modificado falló en ocho casos de estado/imports; servidor reiniciado, los diez casos de ese radio pasan. Se repite la suite completa con fuentes estables, antes de WebKit.
+- Chromium final completo: **384 aprobadas y 74 omisiones** entre móvil/escritorio, en 3,6 min. Una pasada anterior con el grafo de Vite ya modificado falló en ocho casos de estado/imports; tras reiniciar servidor, pasan los diez casos de ese radio y la suite completa, sin cambiar sus aserciones.
 - Android combinado: preparación, APK debug, JVM y lint aprobados. Device panel no detecta SDK; no se
   presenta como aceptación de ejecución del emulador ni escucha física.
-- Contratos de procesos/worker: cinco casos aprobados tras endurecer el handshake
-  del descendiente. Los jobs existentes de Windows x64/ARM64 los ejecutan también
+- Contratos de procesos/worker: 37 casos aprobados en la suite de pipeline;
+  radio posterior de audio/observación: 57 aprobados y cuatro pruebas de lector/contención aprobadas. La observación opcional usa SQLite sin espera para no retener audio. Los jobs existentes de Windows x64/ARM64 los ejecutan también
   y usan el sidecar construido para probar el entrypoint visual frozen; sus
   resultados remotos siguen pendientes.
 - WebKit móvil/escritorio completo y CI del último head siguen siendo gates de
