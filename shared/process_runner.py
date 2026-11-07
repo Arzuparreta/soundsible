@@ -149,7 +149,9 @@ def run(args, *, deadline, cwd=None, on_line=None, diagnostics=True):
             pending = lines.pop()[-4096:]
             if on_line:
                 for line in lines:
-                    on_line(line[-4096:].decode('utf-8', 'replace'))
+                    # Binary pipes retain Windows CRLF. Callers receive logical
+                    # lines, as with the old universal-newline text stream.
+                    on_line(line[-4096:].decode('utf-8', 'replace').removesuffix('\r'))
         output = b''.join(tail).decode('utf-8', 'replace')
         return process.returncode, ('\n'.join(sorted(markers)) + '\n' + output) if diagnostics else output
     finally:

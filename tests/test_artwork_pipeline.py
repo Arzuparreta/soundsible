@@ -208,6 +208,15 @@ def test_downloader_deadline_includes_silent_child_and_unterminated_output():
     assert len(output.encode()) <= 65540
 
 
+def test_downloader_callbacks_normalize_windows_line_endings():
+    from shared.process_runner import run
+    lines = []
+    result, _ = run([sys.executable, '-c', "import sys;sys.stdout.buffer.write(b'READY\\r\\nnext\\n');sys.stdout.flush()"],
+                    deadline=time.monotonic() + 5, on_line=lines.append)
+    assert result == 0
+    assert lines == ['READY', 'next']
+
+
 def test_visitor_failure_is_cooled_and_a_changed_relay_does_not_reuse_it(monkeypatch):
     from shared.downloader.youtube import web
     import requests

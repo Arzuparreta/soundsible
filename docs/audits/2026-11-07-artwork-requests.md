@@ -249,3 +249,13 @@ Datos y reproducción: [JSONL](../performance/artwork-pipeline-results.jsonl),
   resultados remotos siguen pendientes.
 - WebKit final completo: **371 aprobadas y 87 omisiones** entre móvil/escritorio, en 7,1 min, Docker con montaje de solo lectura y un worker; ejecutado después de Chromium y de la carga Python. Servidor Vite de pruebas detenido.
 - Ruff y comprobación de manifests aprobados. CI del último head sigue siendo gate de entrega. No se ha fusionado ni publicado esta implementación.
+- Primer CI remoto: shards Android 2/5 fallaron antes de ejecutar la app, al
+  perder ADB durante la preparación Wi-Fi. Se acotó la recuperación de ese único
+  comando y se añadieron cuatro regresiones (ocho pruebas del módulo aprobadas).
+  Diagnóstico y límites en `docs/android/CI_DIAGNOSTICS.md`. No se ocultan ni se
+  reintentan automáticamente pruebas de producto; se exige CI completo del nuevo head.
+- Windows x64 ejecutó los contratos del sidecar, pero la prueba de descendiente
+  no reconoció el handshake: el runner binario conservaba `\r` de CRLF en los
+  callbacks. Se restauró el contrato de líneas sin terminadores y se añadió una
+  regresión de bytes CRLF ejecutable también en Linux, manteniendo la aserción
+  real de cancelación y cierre del descendiente.

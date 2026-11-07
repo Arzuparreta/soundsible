@@ -7,6 +7,18 @@ las pruebas: conserva los casos iniciales aunque el buffer circular del
 emulador se haya sobrescrito al terminar. El código de salida original se
 conserva; no se reintentan ni se omiten casos automáticamente.
 
+## Arranque de ADB y red del fixture
+
+En la PR #426, run `42362004721`, los shards 2 y 5 terminaron antes de
+instalar o ejecutar la app: tras `boot_completed`, ADB volvió temporalmente
+a `device offline` al ejecutar `svc wifi enable` (salidas 255 y 1).
+`scripts/android.py` fija el serial validado y da a ese comando de preparación
+un presupuesto total de 30 segundos, con cada proceso limitado a cinco.
+Solo los fallos transitorios de transporte/servicio se reintentan; errores
+de permisos fallan de inmediato. Se conserva el último diagnóstico, incluida
+una salida 255 sin texto. No se reintentan casos de instrumentación. Agotar el
+presupuesto sigue siendo un fallo de CI, no una omisión ni un éxito simulado.
+
 ## Silencio en Live después de recuperar WHEP
 
 Buscar `LiveTestDiagnostics` en el logcat de `LiveListenerTest` o del shard.
