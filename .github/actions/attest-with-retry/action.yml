@@ -1,0 +1,75 @@
+name: Attest with recovery
+description: Retry official provenance attestation after spaced delays, without allowing unsigned success.
+inputs:
+  subject-path:
+    description: Files to attest (mutually exclusive with subject-digest).
+    required: false
+  subject-name:
+    description: OCI image name when using subject-digest.
+    required: false
+  subject-digest:
+    description: Immutable digest of the built OCI image.
+    required: false
+  push-to-registry:
+    description: Also publish the attestation to the image registry.
+    default: 'false'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Attest (attempt 1/4)
+      id: attempt_1
+      continue-on-error: true
+      uses: actions/attest-build-provenance@v4.2.2
+      with:
+        subject-path: ${{ inputs.subject-path }}
+        subject-name: ${{ inputs.subject-name }}
+        subject-digest: ${{ inputs.subject-digest }}
+        push-to-registry: ${{ inputs.push-to-registry }}
+    - name: Wait before attempt 2
+      if: steps.attempt_1.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::Attestation service attempt 1 failed; retrying in 30 seconds."
+        sleep 30
+    - name: Attest (attempt 2/4)
+      id: attempt_2
+      if: steps.attempt_1.outcome == 'failure'
+      continue-on-error: true
+      uses: actions/attest-build-provenance@v4.2.2
+      with:
+        subject-path: ${{ inputs.subject-path }}
+        subject-name: ${{ inputs.subject-name }}
+        subject-digest: ${{ inputs.subject-digest }}
+        push-to-registry: ${{ inputs.push-to-registry }}
+    - name: Wait before attempt 3
+      if: steps.attempt_2.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::Attestation service attempt 2 failed; retrying in 90 seconds."
+        sleep 90
+    - name: Attest (attempt 3/4)
+      id: attempt_3
+      if: steps.attempt_2.outcome == 'failure'
+      continue-on-error: true
+      uses: actions/attest-build-provenance@v4.2.2
+      with:
+        subject-path: ${{ inputs.subject-path }}
+        subject-name: ${{ inputs.subject-name }}
+        subject-digest: ${{ inputs.subject-digest }}
+        push-to-registry: ${{ inputs.push-to-registry }}
+    - name: Wait before attempt 4
+      if: steps.attempt_3.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::Attestation service attempt 3 failed; retrying in 180 seconds."
+        sleep 180
+    - name: Attest (attempt 4/4)
+      id: attempt_4
+      if: steps.attempt_3.outcome == 'failure'
+      uses: actions/attest-build-provenance@v4.2.2
+      with:
+        subject-path: ${{ inputs.subject-path }}
+        subject-name: ${{ inputs.subject-name }}
+        subject-digest: ${{ inputs.subject-digest }}
+        push-to-registry: ${{ inputs.push-to-registry }}

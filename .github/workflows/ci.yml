@@ -489,11 +489,11 @@ jobs:
       )
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
     permissions:
       contents: read
       packages: write
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: docker/setup-qemu-action@v4.4.0
@@ -549,9 +549,29 @@ jobs:
             type=gha,scope=docker-publish
           # Tags read main's cache without saving another isolated copy of it.
           cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=docker-publish' || '' }}
+
+  # The image is already built and pushed. Certify its immutable digest in a
+  # separate job so service outages never force a rebuild or move image tags.
+  attest_image:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Sign in to the GitHub Container Registry
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4.2.2
+        uses: ./.github/actions/attest-with-retry
         with:
           subject-name: ghcr.io/${{ github.repository }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ needs.publish.outputs.image_digest }}
           push-to-registry: true
