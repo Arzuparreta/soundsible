@@ -1,4 +1,5 @@
 import type { JSX } from 'solid-js';
+import { artworkFallback } from './artworkHints';
 
 /**
  * Deterministic placeholder gradient for anything without artwork.
@@ -22,7 +23,9 @@ export function coverGradient(seed: string): string {
  */
 export function coverBackground(seed: string, url?: string | null): string {
   const gradient = coverGradient(seed);
-  return url ? `url("${url}") center / cover no-repeat, ${gradient}` : gradient;
+  const previous = artworkFallback(url);
+  const fallback = previous && previous !== url ? `url("${previous}") center / cover no-repeat, ` : '';
+  return url ? `url("${url}") center / cover no-repeat, ${fallback}${gradient}` : gradient;
 }
 
 /** `coverBackground` as an inline style object. */

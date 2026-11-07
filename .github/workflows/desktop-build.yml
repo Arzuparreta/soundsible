@@ -192,7 +192,7 @@ jobs:
           SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe
         run: >-
           pytest tests/test_artwork_pipeline.py -q
-          -k "downloader or acquisition_cancel_probe or real_image_child or packaged_entrypoint"
+          -k "downloader or acquisition_cancel_probe or real_image_child or packaged_entrypoint or http_transport or quota_lock or repair_processes"
 
       - name: Build Tauri bundles
         working-directory: desktop-shell

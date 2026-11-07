@@ -29,6 +29,7 @@ import logging
 import os
 import shutil
 import subprocess
+import time
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -140,7 +141,10 @@ def _ffprobe() -> str:
 
 
 def _run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True, check=False, **kwargs)
+    from shared.process_runner import run, process_deadline
+    code, output = run(args, deadline=process_deadline() or time.monotonic() + 600,
+                       diagnostics=False, **kwargs)
+    return subprocess.CompletedProcess(args, code, output, output)
 
 
 def extract_cover(path: str | Path) -> Optional[bytes]:

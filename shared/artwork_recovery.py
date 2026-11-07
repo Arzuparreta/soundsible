@@ -39,8 +39,8 @@ def same_better_image(old: bytes, new: bytes) -> bool:
 
 
 class RetryLater(Exception):
-    def __init__(self, seconds: float):
-        self.seconds = seconds
+    def __init__(self, seconds: float, *, contacted=True):
+        self.seconds, self.contacted = seconds, contacted
 
 
 class ArtworkRecovery:
@@ -66,14 +66,14 @@ class ArtworkRecovery:
             return None
         remaining = 1 - (time.monotonic() - self.last_request)
         if self.stop_event.wait(max(0, remaining)):
-            raise RetryLater(60)
+            raise RetryLater(60, contacted=False)
         self.last_request = time.monotonic()
         from shared.artwork_sources import fetch_image, ArtworkDeferred
         try:
             return fetch_image(self.candidate_url or f'https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg',
                                video_id=video_id, stop=self.stop_event)
         except ArtworkDeferred as exc:
-            raise RetryLater(exc.seconds) from exc
+            raise RetryLater(exc.seconds, contacted=exc.contacted) from exc
 
     def recover(self, track) -> bool:
         from shared.audio_files import AudioProcessor
@@ -156,6 +156,8 @@ class ArtworkRecovery:
                 return changed
             self.finish(track.id, 'complete', 'no confirmed improvement', attempts)
         except (requests.RequestException, ValueError, OSError, RetryLater) as exc:
+            if isinstance(exc, RetryLater) and not exc.contacted:
+                attempts -= 1
             delay = exc.seconds if isinstance(exc, RetryLater) else 60 * (2 ** (min(attempts, 3) - 1)) * random.uniform(1, 1.25)
             self.finish(track.id, 'failed' if attempts >= 3 else 'pending', type(exc).__name__, attempts, time.time() + (max(delay, 86400) if attempts >= 3 else delay))
         return revision != ref['revision']
@@ -190,11 +192,13 @@ class ArtworkRecovery:
                     last_notify = time.monotonic()
                     with user_context(uid):
                         from shared.artwork_sources import pending_selections, adopt
-                        selections = pending_selections({track.id for track in getattr(core.library.metadata, 'tracks', ())})
+                        identities = {track.id: getattr(track, 'youtube_id', None)
+                                      for track in getattr(core.library.metadata, 'tracks', ())}
+                        selections = pending_selections(identities, video_ids=identities)
                         for track in list(getattr(core.library.metadata, 'tracks', ())):
                             if track.id in selections:
                                 choice = selections[track.id]
-                                changed = adopt(track.id, choice['video_id'], choice['token'], stop=self.stop_event) or changed
+                                changed = adopt(track.id, getattr(track, 'youtube_id', None), choice['token'], stop=self.stop_event) or changed
                             if track.id in finished:
                                 continue
                             if self.stop_event.wait(.05):

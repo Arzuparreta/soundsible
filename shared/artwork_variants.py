@@ -16,6 +16,15 @@ DEFAULT_LIMIT = 512 * 1024 * 1024
 NAME = re.compile(r'[0-9a-f]{64}-(160|320|640|960|1280)-(square|original)-[a-zA-Z0-9_-]+\.jpg\Z')
 
 
+class VariantDeadline(OSError):
+    pass
+
+
+def checkpoint(deadline):
+    if deadline is not None and time.monotonic() >= deadline:
+        raise VariantDeadline('Artwork cache deadline exceeded')
+
+
 @dataclass
 class Variant:
     file: object
@@ -49,23 +58,43 @@ class VariantCache:
             log.warning('Artwork cache overlaps originals; retention disabled')
 
     @contextmanager
-    def coordinated(self):
+    def coordinated(self, deadline=None):
+        deadline = deadline if deadline is not None else time.monotonic() + 30
         self.root.mkdir(parents=True, exist_ok=True)
         for name in ('.quota.lock', 'variants.sqlite3', 'variants.sqlite3-journal'):
             if (self.root / name).is_symlink():
                 raise OSError('Symlink in artwork cache bookkeeping')
-        with self.lock, open(self.root / '.quota.lock', 'a+b') as handle:
+        if not self.lock.acquire(timeout=max(0, deadline - time.monotonic())):
+            raise VariantDeadline('Artwork cache lock deadline exceeded')
+        try:
+            with self._file_lock(deadline):
+                yield
+        finally:
+            self.lock.release()
+
+    @contextmanager
+    def _file_lock(self, deadline):
+        with open(self.root / '.quota.lock', 'a+b') as handle:
             handle.seek(0, 2)
             if not handle.tell():
                 handle.write(b'0')
                 handle.flush()
             handle.seek(0)
-            if os.name == 'nt':
-                import msvcrt
-                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            while True:
+                checkpoint(deadline)
+                try:
+                    if os.name == 'nt':
+                        import msvcrt
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError as exc:
+                    import errno
+                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                        raise
+                    time.sleep(min(.01, max(0, deadline - time.monotonic())))
             try:
                 yield
             finally:
@@ -77,7 +106,9 @@ class VariantCache:
 
     def _connect_index(self):
         path = self.root / 'variants.sqlite3'
-        db = sqlite3.connect(path, timeout=1)
+        # The quota lease serializes cooperating writers. Never let SQLite's
+        # native busy handler sleep inside the gevent hub on an external writer.
+        db = sqlite3.connect(path, timeout=0)
         try:
             db.execute('PRAGMA cache_size=-512')
             try:
@@ -99,9 +130,10 @@ class VariantCache:
             raise
 
     @contextmanager
-    def index(self):
+    def index(self, deadline=None):
         clean = False
         try:
+            checkpoint(deadline)
             db = self._connect_index()
         except sqlite3.DatabaseError as exc:
             if getattr(exc, 'sqlite_errorcode', None) not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
@@ -113,6 +145,7 @@ class VariantCache:
             (self.root / 'variants.sqlite3-journal').unlink(missing_ok=True)
             db = self._connect_index()
         try:
+            db.set_progress_handler(lambda: int(deadline is not None and time.monotonic() >= deadline), 1000)
             if not self.ready or db.execute('SELECT dirty FROM state').fetchone()[0]:
                 db.execute('UPDATE state SET dirty=1')
                 db.commit()
@@ -121,7 +154,10 @@ class VariantCache:
                 db.execute('CREATE TEMP TABLE seen(name TEXT PRIMARY KEY)')
                 total = 0
                 with os.scandir(self.root) as entries:
-                    for entry in entries:
+                    for count, entry in enumerate(entries):
+                        checkpoint(deadline)
+                        if count % 100 == 0:
+                            time.sleep(0)
                         if entry.is_symlink():
                             continue
                         if NAME.fullmatch(entry.name) and entry.is_file(follow_symlinks=False):
@@ -176,7 +212,8 @@ class VariantCache:
             raise
         return Variant(handle, info.st_size, info.st_mtime, name)
 
-    def evict(self, db, incoming=0):
+    def evict(self, db, incoming=0, *, deadline=None):
+        checkpoint(deadline)
         total = db.execute('SELECT bytes FROM state').fetchone()[0]
         if total + incoming <= self.limit:
             return True
@@ -186,6 +223,8 @@ class VariantCache:
         # Iterate via indexed keyset pages. Failed unlinks advance too.
         last = (-1.0, '')
         while total > target:
+            checkpoint(deadline)
+            time.sleep(0)
             rows = db.execute('SELECT name,bytes,used FROM variants WHERE (used,name)>(?,?) '
                               'ORDER BY used,name LIMIT 100', last).fetchall()
             if not rows:
@@ -234,7 +273,9 @@ class VariantCache:
             handle.close()
             raise
 
-    def open(self, name, generate):
+    def open(self, name, generate, *, deadline=None):
+        deadline = deadline if deadline is not None else time.monotonic() + 30
+        checkpoint(deadline)
         if not NAME.fullmatch(name):
             raise ValueError('Invalid variant filename')
         if self.safe:
@@ -242,30 +283,35 @@ class VariantCache:
                 found = self._recent_hit(name)
                 if found:
                     return found
-                with self.coordinated(), self.index() as db:
-                    self.evict(db)
+                with self.coordinated(deadline), self.index(deadline) as db:
+                    self.evict(db, deadline=deadline)
                     if self.limit:
                         found = self.hit(db, name)
                         if found:
                             return found
+            except VariantDeadline:
+                raise
             except (OSError, sqlite3.Error):
+                checkpoint(deadline)
                 self.ready = False
                 log.warning('Artwork variant index unavailable; serving temporary image', exc_info=True)
         # TemporaryFile is anonymous/delete-on-close; never retained in RAM.
         self.root.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryFile(dir=self.root)
         try:
+            checkpoint(deadline)
             generate(temporary)
+            checkpoint(deadline)
             size = temporary.tell()
             temporary.seek(0)
             if self.safe and 0 < size <= self.limit:
                 try:
-                    with self.coordinated(), self.index() as db:
+                    with self.coordinated(deadline), self.index(deadline) as db:
                         found = self.hit(db, name)
                         if found:
                             temporary.close()
                             return found
-                        if not (self.root / name).is_symlink() and self.evict(db, size):
+                        if not (self.root / name).is_symlink() and self.evict(db, size, deadline=deadline):
                             db.execute('UPDATE state SET dirty=1')
                             db.commit()
                             fd, staging = tempfile.mkstemp(prefix='.variant-', dir=self.root)
@@ -275,6 +321,7 @@ class VariantCache:
                                     shutil.copyfileobj(temporary, output, length=64 * 1024)
                                     output.flush()
                                     os.fsync(output.fileno())
+                                checkpoint(deadline)
                                 os.replace(staging, self.root / name)
                             finally:
                                 Path(staging).unlink(missing_ok=True)
@@ -285,7 +332,10 @@ class VariantCache:
                             if found:
                                 temporary.close()
                                 return found
+                except VariantDeadline:
+                    raise
                 except (OSError, sqlite3.Error):
+                    checkpoint(deadline)
                     self.ready = False
                     log.warning('Artwork variant admission failed; serving temporary image', exc_info=True)
             temporary.seek(0)

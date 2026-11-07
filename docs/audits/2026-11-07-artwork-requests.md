@@ -24,7 +24,9 @@ una imagen grande no vuelve a bloquear la primera muestra en su cabecera.
   pausas persistidas y lotes acotados. Publicar la portada y completar el intento
   comparten transacción. Una intención antigua o un resultado tardío no puede
   sustituir una nueva, manual o retirada. Las selecciones huérfanas se retiran
-  por páginas y los cambios de identidad copian las pendientes.
+  por páginas y los cambios de identidad copian solo las pendientes de la cuenta.
+  El receipt se contrasta con el vídeo actual de la pista entrante. El job sigue
+  siendo reproducible hasta persistir esa intención, también tras el commit de biblioteca.
 - Objetos por hash y portada de fuente son compartidos. Selecciones y overrides
   pertenecen a una cuenta. `none` es un tombstone. Las referencias globales
   manuales históricas se conservan: no se inventa a quién pertenecían.
@@ -39,26 +41,32 @@ una imagen grande no vuelve a bloquear la primera muestra en su cabecera.
   conservadores: no son prueba de identidad de edición.
 - Las descargas visuales solo aceptan HTTPS de hosts/rutas concretos, sin
   redirects, cookies de usuario, netrc ni proxy ambiental. Reutilizan una única
-  sesión pública. `Retry-After` pausa el host de forma durable y un 404 conserva
-  un negativo. Lecturas parciales comprueban el plazo y parada; hay un límite
-  de bytes y de cuatro millones de píxeles en imágenes remotas automáticas.
-  El límite de inactividad de una lectura también acota la reacción a la parada;
-  no se promete interrumpir instantáneamente una operación de red del sistema.
+  sesión pública en un hijo HTTP perezoso separado del transformador. Solo admite
+  un trabajo; la saturación aplaza sin contacto ni consumir intento. El padre
+  supervisa el plazo completo desde antes de admisión, incluidos arranque, DNS,
+  TLS y cabeceras; parada o timeout matan y recogen el hijo y lector IPC.
+  `Retry-After` pausa el host de forma durable y un 404 conserva un negativo.
+  El cuerpo va por staging con límite de bytes y cuatro millones de píxeles.
+  Al plazo operativo se suma el margen acotado de recogida del proceso; no se
+  promete interrumpir instantáneamente una operación del kernel.
 - En el motor gevent, un hijo perezoso valida originales nuevos y transforma
   variantes. El padre conserva cuota, publicación atómica y descriptores abiertos.
   Un hit caliente no espera al hijo ni consulta SQLite si su metadata está
   reciente. Los buckets equivalentes comparten bytes y clave. Cola y espera
-  comparten deadline; no hay fallback de Pillow al hub tras fallar el hijo.
-  El staging está en caché y tiene lease entre procesos y reconciliación tras
+  comparten deadline, también al esperar la cuota con locks no bloqueantes y
+  pausas cooperativas. No hay fallback de Pillow al hub tras fallar el hijo.
+  El staging está en caché y tiene leases de padre/escritor y reconciliación tras
   crash. El hijo limpia su último resultado al perder al padre, tiene watchdog
   por trabajo y se recoge por inactividad/apagado. La comparación perceptual
   antigua sigue siendo local: no se afirma haber aislado todo cálculo visual.
+  Puede haber dos intérpretes visuales; no se afirma que su RSS sea gratuito.
 - El visitor de YouTube tiene cooldown y renovación sin cola por configuración
   efectiva de egress. Un rechazo antiguo no invalida un identificador nuevo.
   Las cachés de streams distinguen relay A y B mediante una huella sin guardar
   sus credenciales en la clave.
 - Una descarga tiene presupuesto único entre intento nativo, cookies y fallback.
-  Incluye stdout silencioso, salida sin newline, espera y descendientes. La
+  Incluye stdout silencioso, salida sin newline, espera, descendientes y
+  FFprobe/remux posteriores, que comparten el primer deadline. La
   vigencia real del item/attempt y el apagado llegan al runner y a las fases
   posteriores; cancelar no deja el slot consumiendo red otros diez minutos.
   POSIX usa grupo de procesos; Windows asigna un proceso suspendido a un Job
@@ -100,6 +108,18 @@ se incorporaron aislamiento y autoridad de fuente. La segunda encontró:
 | Doble decode en el hub | Validación de master fuera del hub; límite remoto menor y hits sin decode. |
 | Upgrade fallido quitaba portada | Fallback a la portada anterior y negativo acotado de sesión. |
 
+La tercera crítica reprodujo cierres parciales y carreras adicionales:
+
+| Hallazgo | Disposición |
+| --- | --- |
+| Rekey personal copiaba elecciones ajenas | Copia de overrides/receipts limitada a la cuenta activa; regresión Alice/Bob. |
+| Lock de cuota bloqueaba el hub y excedía plazo | Locks de archivo no bloqueantes, espera cooperativa y deadline hasta publicación; sonda gevent real. |
+| Receipt de vídeo anterior sobrevivía al cambio de contenido | Se retira al contrastarlo con el vídeo actual; la adopción recibe esa identidad actual. |
+| FFprobe/remux fuera de cancelación | Runner común con presupuesto heredado entre etapas; cancelación y timeout reales. |
+| Trickle de cabeceras eludía plazo | Cuarta crítica de diseño recomendó hijo HTTP separado, con una admisión, supervisión y kill/reap. DNS/cabeceras/cuerpo/parada cubiertos. |
+| Fallback incompleto en CSS | Las filas pequeñas mantienen el thumbnail; las superficies CSS grandes conservan la imagen previa como capa. Prueba del componente real de fila. |
+| Crash perdía intención después de incorporar audio | Persistencia antes de completar el job y replay tras commit; crash/error SQLite cubiertos sin redescargar ni resucitar una pista eliminada. |
+
 ## Evidencia y límites
 
 Las pruebas y mediciones finales de esta entrega se registran aquí antes de
@@ -124,16 +144,16 @@ los lotes; la columna de hub es la mediana del máximo observado en cada lote:
 
 | Operación | Base | Pipeline |
 | --- | ---: | ---: |
-| Lote frío completo | 323,01 ms | 198,34 ms |
-| HTTP p95 del lote frío | 322,84 ms | 195,73 ms |
-| Retraso máximo del hub, frío | 262,67 ms | 17,88 ms |
-| CPU del **padre**, lote frío | 176,34 ms | 49,68 ms |
-| Lote caliente completo | 26,05 ms | 29,38 ms |
-| HTTP p95 del lote caliente | 25,91 ms | 28,53 ms |
+| Lote frío completo | 363,56 ms | 207,69 ms |
+| HTTP p95 del lote frío | 362,24 ms | 204,38 ms |
+| Retraso máximo del hub, frío | 300,47 ms | 21,92 ms |
+| CPU del **padre**, lote frío | 189,19 ms | 52,87 ms |
+| Lote caliente completo | 28,58 ms | 29,76 ms |
+| HTTP p95 del lote caliente | 28,43 ms | 29,45 ms |
 
 Los cuerpos son idénticos en todos los casos. El aislamiento reduce el trabajo
 CPU dentro del servidor, no demuestra menor CPU total: la CPU del hijo no está
-en esa columna. El lote caliente añade unos 3,3 ms; no se afirma que toda
+en esa columna. El lote caliente añade unos 1,2 ms; no se afirma que toda
 petición sea más rápida. La mejora relevante es no monopolizar el hub durante
 el lote frío y conservar la selección por cuenta. Son medidas de este equipo,
 no una garantía para otros discos, Pi o reproducción musical.
@@ -148,9 +168,9 @@ Datos y reproducción: [JSONL](../performance/artwork-pipeline-results.jsonl),
   incluido. Se corrigió la expectativa y se preparó la copia pública verificada
   del modelo; los 17 casos de ese radio pasaron. La regresión completa sobre la
   base combinada terminó con **2674 aprobadas y una omisión**, en 626,55 s.
-- Última regresión de portada, adquisición, HTTP y cachés: 181 aprobadas.
-- Cliente combinado: TypeScript y **1870 pruebas aprobadas** en 228 archivos.
-- Chromium completo: **382 aprobadas y 74 omisiones** entre móvil/escritorio.
+- Regresión tras la tercera crítica: 117 aprobadas; radio adicional de identidad/procesos/replay: 66 aprobadas. Una segunda ejecución principal completa está en curso por el nuevo transporte HTTP.
+- Cliente combinado final: TypeScript y **1871 pruebas aprobadas** en 228 archivos.
+- Chromium completo previo: **382 aprobadas y 74 omisiones** entre móvil/escritorio. Tras las últimas correcciones, una pasada con Vite ya modificado falló en ocho casos de estado/imports; servidor reiniciado, los diez casos de ese radio pasan. Se repite la suite completa con fuentes estables, antes de WebKit.
 - Android combinado: preparación, APK debug, JVM y lint aprobados. Device panel no detecta SDK; no se
   presenta como aceptación de ejecución del emulador ni escucha física.
 - Contratos de procesos/worker: cinco casos aprobados tras endurecer el handshake

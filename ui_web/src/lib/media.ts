@@ -1,5 +1,7 @@
 import { createSignal } from 'solid-js';
 import { apiOrigin, mediaOrigin, artworkUrl } from './config';
+import { previewFallbacks, rejectedPreviews } from './artworkHints';
+export { artworkFallback, rejectPreviewArtwork } from './artworkHints';
 
 interface ArtworkMetadata {
   id: string;
@@ -7,25 +9,6 @@ interface ArtworkMetadata {
   artwork_width?: number;
   artwork_height?: number;
   artwork_scope?: string;
-}
-const previewFallbacks = new Map<string, string>();
-const rejectedPreviews = new Set<string>();
-export function artworkFallback(src?: string | null): string | undefined {
-  if (!src) return undefined;
-  const previous = previewFallbacks.get(src);
-  if (previous) return previous;
-  try {
-    const url = new URL(src);
-    const match = url.pathname.match(/^\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})\/(maxresdefault|hq720|sddefault|hqdefault)\.(?:jpg|webp)$/);
-    if (url.protocol === 'https:' && ['img.youtube.com', 'i.ytimg.com'].includes(url.hostname) && match)
-      return `https://i.ytimg.com/vi/${match[1]}/mqdefault.jpg`;
-  } catch { /* a local artwork URL has its own error state */ }
-  return undefined;
-}
-export function rejectPreviewArtwork(src?: string | null): void {
-  if (!src || !previewFallbacks.has(src)) return;
-  rejectedPreviews.add(src);
-  if (rejectedPreviews.size > 256) rejectedPreviews.delete(rejectedPreviews.values().next().value!);
 }
 const [previewArtwork, setPreviewArtwork] = createSignal<Record<string, { url: string; width: number; height: number }>>({});
 export function registerPreviewArtwork(id: string, art?: { url: string; width: number; height: number }): void {
@@ -141,7 +124,9 @@ interface TrackCoverIdentity {
  * edit views. A preview's thumbnail is already small and has no size variants.
  */
 export const trackCoverUrl = (track: TrackCoverIdentity, size?: 'thumb'): string | undefined =>
-  track.source === 'preview' ? previewCover(track.id, track.cover) || undefined : coverUrl(track.id, size);
+  track.source === 'preview'
+    ? (size === 'thumb' ? artworkUrl(track.cover) : previewCover(track.id, track.cover)) || undefined
+    : coverUrl(track.id, size);
 
 /** Whether a track has any artwork to show. Defined in terms of
  * `trackCoverUrl` rather than restating the rule, so the two cannot drift:

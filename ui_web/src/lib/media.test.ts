@@ -101,6 +101,7 @@ it('uses account scope in artwork cache keys and clears preview hints on account
   const track = { id: 'zyxwvutsrqp', source: 'preview' as const, cover: 'https://i.ytimg.com/vi/zyxwvutsrqp/mqdefault.jpg' };
   registerPreviewArtwork(track.id, { url: 'https://i.ytimg.com/vi/zyxwvutsrqp/maxresdefault.jpg', width: 1280, height: 720 });
   expect(trackCoverUrl(track)).toContain('maxresdefault');
+  expect(trackCoverUrl(track, 'thumb')).toBe(track.cover);
   registerArtworkMetadata([]);
   expect(trackCoverUrl(track)).toBe(track.cover);
 });

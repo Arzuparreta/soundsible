@@ -23,6 +23,12 @@ describe('cover placeholders', () => {
     expect(coverStyle('t1', 'x.jpg')).toEqual({ background: coverBackground('t1', 'x.jpg') });
   });
 
+  it('keeps a lower-resolution image underneath an optional CSS upgrade', () => {
+    const background = coverBackground('video', 'https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg');
+    expect(background).toContain('maxresdefault.jpg');
+    expect(background).toContain('mqdefault.jpg');
+  });
+
   it('uses surface tokens for non-track artwork', () => {
     expect(neutralCoverStyle()).toEqual({ background: NEUTRAL_COVER });
     expect(neutralCoverStyle('s.jpg').background).toContain(NEUTRAL_COVER);

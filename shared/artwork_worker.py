@@ -12,11 +12,23 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 
 FROZEN_FLAG = '--artwork-worker'
 TIMEOUT = 30
 IDLE_SECONDS = 60
 MAX_PENDING = 16
+
+
+class ImageBusy(OSError):
+    pass
+
+
+def check_operation(deadline, stop=None):
+    from shared.process_runner import check_cancelled
+    check_cancelled()
+    if (stop and stop.is_set()) or time.monotonic() >= deadline:
+        raise OSError('Artwork worker deadline exceeded or cancelled')
 
 
 def transform(source, target, size, square):
@@ -46,18 +58,21 @@ def inspect_image(source):
 
 
 class ImageProcess:
-    def __init__(self, command=None, timeout=TIMEOUT, idle=IDLE_SECONDS):
+    def __init__(self, command=None, timeout=TIMEOUT, idle=IDLE_SECONDS, pending=MAX_PENDING):
         self.command, self.timeout, self.idle = command, timeout, idle
         self.lock = threading.Lock()
-        self.slots = threading.BoundedSemaphore(MAX_PENDING)
+        self.slots = threading.BoundedSemaphore(pending)
         self.process = None
+        self.reader = None
+        self.reader_stop = None
+        self.broken = False
         self.timer = None
         self.generation = 0
 
-    def render(self, source, output, size, square, *, deadline=None, staging_dir=None, operation='transform'):
+    def render(self, source, output, size, square, *, deadline=None, staging_dir=None, operation='transform', stop=None, video_id=None):
         deadline = min(deadline or float("inf"), time.monotonic() + self.timeout)
         if not self.slots.acquire(blocking=False):
-            raise OSError('Artwork queue full')
+            raise ImageBusy('Artwork queue full')
         try:
             if not self.lock.acquire(timeout=max(0, deadline - time.monotonic())):
                 raise OSError('Artwork queue deadline exceeded')
@@ -65,7 +80,8 @@ class ImageProcess:
                 self.generation += 1
                 if self.timer:
                     self.timer.cancel()
-                return self._render(source, output, size, square, deadline, staging_dir, operation)
+                check_operation(deadline, stop)
+                return self._render(source, output, size, square, deadline, staging_dir, operation, stop, video_id)
             finally:
                 self.timer = threading.Timer(self.idle, self._idle_close, (self.generation,))
                 self.timer.daemon = True
@@ -74,15 +90,15 @@ class ImageProcess:
         finally:
             self.slots.release()
 
-    def _render(self, source, output, size, square, deadline, staging_dir, operation):
+    def _render(self, source, output, size, square, deadline, staging_dir, operation, stop, video_id):
         from shared.artwork_staging import staging
         root = Path(staging_dir) if staging_dir else Path(source).parent / '.image-workers'
         with staging(root) as target:
-            return self._exchange(source, output, size, square, deadline, target, operation)
+            return self._exchange(source, output, size, square, deadline, target, operation, stop, video_id)
 
-    def _exchange(self, source, output, size, square, deadline, target, operation):
+    def _exchange(self, source, output, size, square, deadline, target, operation, stop, video_id):
         try:
-            if self.process is None or self.process.poll() is not None:
+            if self.broken or self.process is None or self.process.poll() is not None:
                 self._stop()
                 command = self.command or ([sys.executable, FROZEN_FLAG] if getattr(sys, 'frozen', False)
                                            else [sys.executable, '-m', 'shared.artwork_worker'])
@@ -90,31 +106,60 @@ class ImageProcess:
                        'OPENBLAS_NUM_THREADS': '1'}
                 self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                                 env=env)
+                self.broken = False
                 self.replies = queue.Queue(maxsize=1)
-                process, replies = self.process, self.replies
+                self.reader_stop = threading.Event()
+                process, replies, reader_stop = self.process, self.replies, self.reader_stop
 
                 def read():
                     try:
-                        while True:
+                        while not reader_stop.is_set():
                             line = process.stdout.readline(4097)
-                            replies.put(line)
+                            while not reader_stop.is_set():
+                                try:
+                                    replies.put(line, timeout=.1)
+                                    break
+                                except queue.Full:
+                                    pass
                             if not line or len(line) > 4096:
                                 return
                     except (OSError, ValueError):
                         pass
-                threading.Thread(target=read, name='image-replies', daemon=True).start()
-            request = {'source': str(source), 'target': str(target), 'size': size, 'square': square, 'operation': operation}
-            self.process.stdin.write((json.dumps(request) + '\n').encode())
+                self.reader = threading.Thread(target=read, name='image-replies', daemon=True)
+                self.reader.start()
+            check_operation(deadline, stop)
+            identifier = uuid.uuid4().hex
+            request = {'source': str(source), 'target': str(target), 'size': size, 'square': square,
+                       'operation': operation, 'id': identifier, 'video_id': video_id,
+                       'timeout': min(TIMEOUT, max(.1, deadline - time.monotonic()))}
+            payload = (json.dumps(request) + '\n').encode()
+            if len(payload) > 4096:
+                raise OSError('Artwork request exceeds protocol limit')
+            self.process.stdin.write(payload)
             self.process.stdin.flush()
-            try:
-                reply = self.replies.get(timeout=max(0, deadline - time.monotonic()))
-            except queue.Empty:
-                raise OSError('Artwork worker deadline exceeded') from None
+            while True:
+                check_operation(deadline, stop)
+                try:
+                    reply = self.replies.get(timeout=min(.1, max(0, deadline - time.monotonic())))
+                    break
+                except queue.Empty:
+                    pass
+            check_operation(deadline, stop)
             result = json.loads(reply) if len(reply) <= 4096 and reply else {}
-            if not result.get('ok'):
+            if not isinstance(result, dict) or not result.get('ok') or result.get('id') != identifier:
                 raise OSError('Artwork worker failed')
             if operation == 'inspect':
                 return result['image']
+            if operation == 'fetch':
+                from shared.artwork import MAX_BYTES
+                data = b''
+                if result['http']['status'] == 200:
+                    with open(target, 'rb') as image:
+                        data = image.read(MAX_BYTES + 1)
+                    if len(data) > MAX_BYTES or len(data) != result['http']['bytes']:
+                        raise OSError('Invalid artwork body')
+                check_operation(deadline, stop)
+                return {**result['http'], 'data': data}
             with open(target, 'rb') as image:
                 import shutil
                 shutil.copyfileobj(image, output, 64 * 1024)
@@ -128,15 +173,23 @@ class ImageProcess:
                 self._stop()
 
     def _stop(self):
-        process, self.process = self.process, None
+        process = self.process
         if process:
+            self.broken = True
+            if self.reader_stop:
+                self.reader_stop.set()
             try:
                 process.kill()
             except OSError:
                 pass
             process.wait(timeout=5)
             process.stdin.close()
+            if self.reader:
+                self.reader.join(timeout=1)
+                if self.reader.is_alive():
+                    raise OSError('Artwork IPC reader did not stop')
             process.stdout.close()
+            self.process, self.reader, self.reader_stop = None, None, None
 
     def close(self):
         with self.lock:
@@ -147,7 +200,9 @@ class ImageProcess:
 
 
 worker = ImageProcess()
+http_worker = ImageProcess(timeout=15, pending=1)
 atexit.register(worker.close)
+atexit.register(http_worker.close)
 
 
 def generate(source, output, size, square, *, deadline=None, staging_dir=None):
@@ -176,22 +231,34 @@ def image_info(data, cache):
 
 def main():
     import faulthandler
+    from contextlib import ExitStack
+    from shared.artwork_staging import protect
     target = None
     try:
         for line in sys.stdin.buffer:
+            request = {}
             try:
                 request = json.loads(line)
                 target = request['target']
-                faulthandler.dump_traceback_later(TIMEOUT, exit=True)
-                if request.get('operation') == 'inspect':
-                    reply = {'ok': True, 'image': inspect_image(request['source'])}
-                else:
-                    transform(request['source'], target, request['size'], request['square'])
-                    reply = {'ok': True}
-            except Exception:
-                reply = {'ok': False}
+                faulthandler.dump_traceback_later(min(TIMEOUT, max(.1, request.get('timeout', TIMEOUT))), exit=True)
+                with ExitStack() as leases:
+                    leases.enter_context(protect(target))
+                    if request.get('operation') != 'fetch':
+                        leases.enter_context(protect(request['source']))
+                    if request.get('operation') == 'inspect':
+                        reply = {'ok': True, 'image': inspect_image(request['source'])}
+                    elif request.get('operation') == 'fetch':
+                        from shared.artwork_http import fetch
+                        reply = {'ok': True, 'http': fetch(request['source'], target, request.get('video_id'))}
+                    else:
+                        transform(request['source'], target, request['size'], request['square'])
+                        reply = {'ok': True}
+            except Exception as exc:
+                reply = {'ok': False, 'error': type(exc).__name__}
             finally:
                 faulthandler.cancel_dump_traceback_later()
+            if request.get('id'):
+                reply['id'] = request['id']
             sys.stdout.write(json.dumps(reply) + '\n')
             sys.stdout.flush()
     finally:

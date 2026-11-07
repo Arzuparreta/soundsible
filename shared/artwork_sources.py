@@ -22,8 +22,6 @@ from shared.runtime import get_config_dir
 from shared.user_context import require_user_id
 
 _key_lock = threading.Lock()
-_network_lock = threading.Lock()
-_image_session = None
 IMAGE_DEADLINE_SEC = 15
 
 
@@ -145,11 +143,8 @@ def verify(token, video_id):
 
 def fetch_image(url, *, video_id=None, stop=None):
     """One pooled public-CDN lane, absolute budget and persisted provider pause."""
-    from shared.artwork import MAX_BYTES, artwork_store
-    from PIL import Image
-    import io
-    from shared.process_runner import check_cancelled
-    global _image_session
+    from shared.artwork import artwork_store
+    from shared.artwork_worker import http_worker, ImageBusy
     if not safe_image_url(url, video_id=video_id):
         raise ValueError('Untrusted artwork reference')
     deadline = time.monotonic() + IMAGE_DEADLINE_SEC
@@ -163,53 +158,28 @@ def fetch_image(url, *, video_id=None, stop=None):
         return None
     if pause and pause[0] > time.time():
         raise ArtworkDeferred(pause[0] - time.time())
-    if not _network_lock.acquire(timeout=max(0, deadline - time.monotonic())):
-        raise requests.Timeout('Artwork queue deadline exceeded')
     try:
-        check_cancelled()
-        if stop and stop.is_set():
-            raise requests.Timeout('Artwork cancelled')
-        if _image_session is None:
-            _image_session = requests.Session()
-            _image_session.trust_env = False
-        _image_session.cookies.clear()
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise requests.Timeout('Artwork deadline exceeded')
-        with _image_session.get(url, stream=True, timeout=(min(3, remaining), min(5, remaining)),
-                                allow_redirects=False) as response:
-            if response.status_code in (429, 503):
-                delay = retry_delay(response.headers.get('Retry-After', '60'))
-                with store.connect() as db:
-                    db.execute('INSERT INTO image_backoff VALUES (?,?) ON CONFLICT(host) '
-                               'DO UPDATE SET next_try=excluded.next_try', (host, time.time() + delay))
-                raise ArtworkDeferred(delay, contacted=True)
-            if response.status_code == 404:
-                with store.connect() as db:
-                    db.execute('INSERT INTO image_absent VALUES (?,?) ON CONFLICT(url) '
-                               'DO UPDATE SET next_try=excluded.next_try', (url, time.time() + 30 * 86400))
-                return None
-            response.raise_for_status()
-            if 300 <= response.status_code < 400:
-                raise ValueError('Artwork redirects are not allowed')
-            data = bytearray()
-            for chunk in iter(lambda: response.raw.read1(64 * 1024), b''):
-                check_cancelled()
-                if (stop and stop.is_set()) or time.monotonic() > deadline:
-                    raise requests.Timeout('Artwork deadline exceeded')
-                data.extend(chunk)
-                if len(data) > MAX_BYTES:
-                    raise ValueError('Artwork exceeds byte limit')
-        value = bytes(data)
-        with Image.open(io.BytesIO(value)) as image:
-            if image.width * image.height > 4_000_000:
-                raise ValueError('Remote artwork exceeds pixel limit')
-            image.verify()  # RGB decode occurs once in store.put, before publication.
-        return value
-    finally:
-        if _image_session is not None:
-            _image_session.cookies.clear()
-        _network_lock.release()
+        result = http_worker.render(url, None, 0, False, deadline=deadline,
+                                    staging_dir=store.cache / '.image-http', operation='fetch',
+                                    video_id=video_id, stop=stop)
+    except ImageBusy as exc:
+        raise ArtworkDeferred(1) from exc
+    except OSError as exc:
+        raise requests.Timeout('Artwork transport failed or exceeded its deadline') from exc
+    if result['status'] in (429, 503):
+        delay = retry_delay(result['retry_after'] or '60')
+        with store.connect() as db:
+            db.execute('INSERT INTO image_backoff VALUES (?,?) ON CONFLICT(host) '
+                       'DO UPDATE SET next_try=excluded.next_try', (host, time.time() + delay))
+        raise ArtworkDeferred(delay, contacted=True)
+    if result['status'] == 404:
+        with store.connect() as db:
+            db.execute('INSERT INTO image_absent VALUES (?,?) ON CONFLICT(url) '
+                       'DO UPDATE SET next_try=excluded.next_try', (url, time.time() + 30 * 86400))
+        return None
+    if result['status'] != 200:
+        raise requests.HTTPError('Artwork HTTP status ' + str(result['status']))
+    return result['data']
 
 
 def schedule_selection(track_id, video_id, token):
@@ -274,7 +244,7 @@ def adopt(track_id, video_id, token, *, stop=None):
     return False
 
 
-def pending_selections(valid_ids=None):
+def pending_selections(valid_ids=None, *, video_ids=None):
     """Keyset-paged cleanup ensures orphaned selections cannot starve a batch."""
     from shared.artwork import artwork_store
     account, found, cursor = require_user_id(), {}, ''
@@ -289,7 +259,8 @@ def pending_selections(valid_ids=None):
                 break
             for row in rows:
                 cursor = row['track_id']
-                if valid_ids is not None and row['track_id'] not in valid_ids:
+                if ((valid_ids is not None and row['track_id'] not in valid_ids)
+                        or (video_ids is not None and video_ids.get(row['track_id']) != row['video_id'])):
                     db.execute('DELETE FROM selections WHERE account=? AND track_id=? AND token=?',
                                (account, row['track_id'], row['token']))
                     continue

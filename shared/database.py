@@ -1703,6 +1703,24 @@ class DatabaseManager:
             row = conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
             return self._rows_to_tracks(conn, [row])[0] if row else None
 
+    def get_library_track(self, track_id: str) -> Optional[Track]:
+        """Resolve an acquisition checkpoint alias only while still a member."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            seen = set()
+            for _ in range(64):
+                if track_id in seen:
+                    return None
+                seen.add(track_id)
+                alias = conn.execute('SELECT new_track_id FROM track_id_aliases WHERE old_track_id=?',
+                                     (track_id,)).fetchone()
+                if not alias:
+                    row = conn.execute('SELECT t.* FROM tracks t JOIN library_tracks l ON l.track_id=t.id '
+                                       'WHERE t.id=?', (track_id,)).fetchone()
+                    return self._rows_to_tracks(conn, [row])[0] if row else None
+                track_id = alias[0]
+        return None
+
     def get_albums(self) -> List[Dict[str, Any]]:
         """Fetch first-class albums without merging homonymous releases."""
         return self._albums_query("GROUP BY a.id ORDER BY a.album_artist, a.title")

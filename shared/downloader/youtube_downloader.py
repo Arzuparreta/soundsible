@@ -14,6 +14,7 @@ from shared.constants import DEFAULT_CONFIG_DIR
 from shared.models import Track
 from shared.resolution_confidence import best_candidate
 from shared.stream_resolution import ResolvedStream
+from shared.process_runner import media_budget
 
 from shared.audio_files import AudioProcessor
 from .config import DEFAULT_OUTPUT_DIR, DEFAULT_QUALITY, TRACKS_DIR
@@ -125,6 +126,7 @@ class YouTubeDownloader:
             progress_callback=progress_callback,
         )
 
+    @media_budget(600)
     def process_video(
         self,
         url: str,

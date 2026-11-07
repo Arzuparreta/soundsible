@@ -1,6 +1,7 @@
 """Deadline-bound child execution with bounded diagnostics and cancellation."""
 from contextlib import contextmanager
 from contextvars import ContextVar
+from functools import wraps
 from collections import deque
 import os
 import queue
@@ -12,6 +13,27 @@ import time
 from shared.work import check as check_work
 
 _cancel_probe = ContextVar('acquisition_cancel_probe', default=None)
+_budget = ContextVar('media_process_deadline', default=None)
+
+
+def process_deadline():
+    return _budget.get()
+
+
+def media_budget(seconds):
+    """Nested media operations share the earliest deadline, including remux."""
+    def decorate(function):
+        @wraps(function)
+        def bounded(*args, **kwargs):
+            deadline = min(process_deadline() or float('inf'), time.monotonic() + seconds)
+            token = _budget.set(deadline)
+            try:
+                check_cancelled()
+                return function(*args, **kwargs)
+            finally:
+                _budget.reset(token)
+        return bounded
+    return decorate
 
 
 class AcquisitionCancelled(BaseException):
@@ -32,6 +54,8 @@ def check_cancelled():
     probe = _cancel_probe.get()
     if probe and probe():
         raise AcquisitionCancelled()
+    if process_deadline() is not None and time.monotonic() >= process_deadline():
+        raise subprocess.TimeoutExpired('media acquisition', 0)
 
 
 OUTPUT_BYTES = 64 * 1024
@@ -52,12 +76,13 @@ def stop_tree(process):
             pass
 
 
-def run(args, *, deadline, cwd=None, on_line=None):
+def run(args, *, deadline, cwd=None, on_line=None, diagnostics=True):
     """One budget includes pipe reading, silence, descendants and child exit.
 
     The pump's bounded chunks also bound a child printing without newlines.
     Callback lines are capped; diagnostics retain a byte tail plus retry causes.
     """
+    deadline = min(deadline, process_deadline() or float('inf'))
     check_cancelled()
     if deadline <= time.monotonic():
         raise subprocess.TimeoutExpired(args, 0)
@@ -125,7 +150,8 @@ def run(args, *, deadline, cwd=None, on_line=None):
             if on_line:
                 for line in lines:
                     on_line(line[-4096:].decode('utf-8', 'replace'))
-        return process.returncode, '\n'.join(sorted(markers)) + '\n' + b''.join(tail).decode('utf-8', 'replace')
+        output = b''.join(tail).decode('utf-8', 'replace')
+        return process.returncode, ('\n'.join(sorted(markers)) + '\n' + output) if diagnostics else output
     finally:
         stopped.set()
         # Even an exited parent can leave a descendant holding the pipe open.

@@ -5,12 +5,14 @@ from __future__ import annotations
 import logging
 import os
 import re
+import subprocess
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from shared.venv_utils import get_subprocess_python
+from shared.process_runner import media_budget, process_deadline
 
 from ..config import DEFAULT_QUALITY, QUALITY_PROFILES
 from .ytdlp import (
@@ -98,6 +100,8 @@ def audio_only(path: Path) -> Path:
 
         result = repair_file(path)
         return Path(result.path) if result else path
+    except subprocess.TimeoutExpired:
+        raise
     except Exception as exc:  # never let tidying cost a completed download
         logger.debug("Could not strip non-audio streams from %s: %s", path, exc)
         return path
@@ -132,6 +136,7 @@ def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) 
     return args
 
 
+@media_budget(600)
 def download_audio(
     url: str,
     temp_dir: Path,
@@ -151,7 +156,7 @@ def download_audio(
     profile = QUALITY_PROFILES.get(quality, QUALITY_PROFILES[DEFAULT_QUALITY])
     cookie_args = cookies.cli_args()
 
-    deadline = time.monotonic() + 600
+    deadline = process_deadline()
 
     def run(args: List[str]) -> tuple[int, str]:
         from shared.process_runner import run as run_child

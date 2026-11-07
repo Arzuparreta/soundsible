@@ -66,3 +66,25 @@ for (const catalog of [false, true]) {
     if (catalog) expect(requested).toEqual([]);
   });
 }
+
+test('CSS row artwork retains its thumbnail when a larger candidate is registered', async ({ page }) => {
+  await mockMusicEngine(page);
+  const requests: string[] = [];
+  await page.route('https://i.ytimg.com/**', route => {
+    requests.push(route.request().url());
+    return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="blue"/></svg>' });
+  });
+  await page.goto('/player/');
+  await page.evaluate(async () => {
+    const path = '/player/tests/browser/fixtures/artwork-probe.tsx';
+    (await import(path)).mount('https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg', true);
+  });
+  const cover = page.locator('[data-cover-probe] [data-row-cover]');
+  await expect(cover).toHaveCSS('background-image', /mqdefault/);
+  await page.evaluate(async () => {
+    const path = '/player/tests/browser/fixtures/artwork-probe.tsx';
+    (await import(path)).upgrade();
+  });
+  await expect(cover).toHaveCSS('background-image', /mqdefault/);
+  expect(requests.some(url => url.includes('maxresdefault'))).toBe(false);
+});

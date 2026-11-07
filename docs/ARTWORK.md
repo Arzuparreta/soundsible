@@ -60,12 +60,25 @@ an account-bound authenticated receipt. Audio publication does not wait for it;
 the recovery worker processes that durable choice. User-edited and removed
 covers belong to that account, shadowing the shared source. Ambiguous legacy
 global manual refs are preserved. No arbitrary URL proxy is introduced.
+Personal rekeys copy only that account's choices; pending receipts are checked
+against the incoming track's current video. The durable queue job is completed
+only after its optional artwork intent is recorded, including crash replay.
+
+Public image downloads use a separate lazy child with one admission and a
+pooled session without ambient credentials or proxies. The parent supervises
+the entire operation, including DNS and response headers, and kills/reaps it
+on deadline or cancellation. A slow download never occupies the transform
+child. There can be two image-related interpreters; both retire when idle.
+The operational deadline excludes a bounded process-reaping margin. Staging
+leases cover both parent and child, including parent death.
 
 YouTube search uses declared thumbnail candidates already present in extractor
 responses. Resolution retains public source observations; the existing preview
 status response can carry a better same-video primary thumbnail. Failed optional
 upgrades retain their previous image. Guessed dimensionless extractor URLs and
 alternative video frames do not outrank known primary references.
+Small preview rows retain their original thumbnail rather than requesting the
+large upgrade. Large CSS surfaces layer the preceding image under an upgrade.
 
 See [architecture and validation](audits/2026-11-07-artwork-requests.md) for
 resource ownership, cancellation, recovery and remaining platform limits.

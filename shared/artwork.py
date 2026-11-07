@@ -223,16 +223,19 @@ class ArtworkStore:
     def remap(self, aliases: dict[str, str]) -> None:
         # Copy before the library transaction; retain the old reference so a
         # failed transaction or another account still using it remains valid.
+        from shared.user_context import current_user_id
+        account = current_user_id()
         with self.connect() as db:
             for old, new in aliases.items():
-                if db.execute("SELECT 1 FROM sqlite_master WHERE name='selections'").fetchone():
+                if account and db.execute("SELECT 1 FROM sqlite_master WHERE name='selections'").fetchone():
                     db.execute('INSERT INTO selections SELECT account,?,video_id,token,attempts,next_try,issued,NULL '
-                               'FROM selections WHERE track_id=? ON CONFLICT(account,track_id) DO UPDATE SET '
+                               'FROM selections WHERE account=? AND track_id=? ON CONFLICT(account,track_id) DO UPDATE SET '
                                'video_id=excluded.video_id,token=excluded.token,attempts=excluded.attempts,'
                                'next_try=excluded.next_try,issued=excluded.issued,lease=NULL '
-                               'WHERE issued<excluded.issued', (new, old))
-                db.execute('INSERT OR IGNORE INTO overrides SELECT account,?,hash,source,revision '
-                           'FROM overrides WHERE track_id=?', (new, old))
+                               'WHERE issued<excluded.issued', (new, account, old))
+                if account:
+                    db.execute('INSERT OR IGNORE INTO overrides SELECT account,?,hash,source,revision '
+                               'FROM overrides WHERE account=? AND track_id=?', (new, account, old))
                 db.execute("INSERT OR IGNORE INTO refs SELECT ?, hash, source, revision FROM refs WHERE track_id=?",
                            (new, old))
 
@@ -276,7 +279,7 @@ class ArtworkStore:
             if not lock.acquire(timeout=max(0, deadline - time.monotonic())):
                 raise OSError('Artwork queue deadline exceeded')
             try:
-                return self._variants.open(name, generate)
+                return self._variants.open(name, generate, deadline=deadline)
             finally:
                 lock.release()
         finally:

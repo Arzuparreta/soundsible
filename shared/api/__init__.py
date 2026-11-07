@@ -918,6 +918,14 @@ def _process_single_queue_item_bound(item):
     def _emit_item(payload):
         queue_manager_dl._emit_item_update(item, payload)
 
+    def _schedule_artwork(track):
+        # Receipt is already durable in this job's intake/checkpoint. Keep the
+        # job replayable until the optional intent is durable too; no image I/O.
+        token = metadata_evidence.get('artwork_selection')
+        if token:
+            from shared.artwork_sources import schedule_selection
+            schedule_selection(track.id, track.youtube_id, token)
+
     queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
     with app.app_context():
         _emit_item({'id': item_id, 'status': 'downloading'})
@@ -931,6 +939,10 @@ def _process_single_queue_item_bound(item):
         # deletion must not be undone by replaying this job.
         lib = get_user_core(item_user_id).library
         if lib.db.has_library_operation(item_id):
+            checkpoint = item.get('result') or {}
+            existing = lib.db.get_library_track(checkpoint.get('id')) if checkpoint.get('id') else None
+            if existing:
+                _schedule_artwork(existing)
             if queue_manager_dl.complete(item_id, attempt):
                 _emit_item({'id': item_id, 'status': 'completed'})
             return
@@ -1103,17 +1115,9 @@ def _process_single_queue_item_bound(item):
                     operation_id=item_id,
                     song_keys=item.get('identity_keys') or (),
                 )
+                _schedule_artwork(shared_track)
                 if not queue_manager_dl.complete(item_id, attempt):
                     return
-
-            # Schedule after membership commits. The independent recovery worker
-            # fetches the optional image; audio publication never waits on it.
-            try:
-                from shared.artwork_sources import schedule_selection
-                schedule_selection(shared_track.id, shared_track.youtube_id,
-                                   metadata_evidence.get('artwork_selection'))
-            except Exception:
-                logger.debug('Optional catalog artwork scheduling unavailable', exc_info=True)
 
             # Measure it now rather than waiting for the idle sweep: a song
             # somebody just asked for is the one they are about to play, and one
@@ -1844,8 +1848,9 @@ def stop_api() -> None:
     queue_manager_dl.accepting = False
     from shared.artwork_recovery import recovery
     recovery.stop()
-    from shared.artwork_worker import worker as artwork_worker
+    from shared.artwork_worker import worker as artwork_worker, http_worker
     artwork_worker.close()
+    http_worker.close()
 
     try:
         wsgi_server = getattr(socketio, "wsgi_server", None)

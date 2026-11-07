@@ -75,9 +75,35 @@ def test_two_accounts_share_objects_but_not_manual_choices_or_tombstones():
     with user_context('alice'):
         assert store.effective_ref('song')['hash'] == manual
     assert store.ref('song')['hash'] == shared
-    store.remap({'song': 'rekeyed'})
     with user_context('bob'):
+        store.remap({'song': 'rekeyed'})
         assert store.effective_ref('rekeyed')['source'] == 'none'
+
+
+def test_personal_rekey_never_copies_another_accounts_overrides_or_receipts():
+    from shared.artwork_sources import schedule_selection, pending_selections
+    store = artwork_store()
+    store.bind('new', store.put(picture()), 'youtube')
+    with user_context('bob'):
+        store.bind_override('old', store.put(picture(color='blue')), 'manual')
+        token = selection(VIDEO, 'deezer:track:1', CATALOG)
+        schedule_selection('old', VIDEO, token)
+    with user_context('alice'):
+        store.remap({'old': 'new'})
+    with user_context('bob'):
+        assert store.effective_ref('new')['source'] == 'youtube'
+        assert set(pending_selections()) == {'old'}
+
+
+def test_rekeyed_receipt_is_retired_when_incoming_video_differs():
+    from shared.artwork_sources import schedule_selection, pending_selections
+    token = selection(VIDEO, 'deezer:track:1', CATALOG)
+    schedule_selection('old', VIDEO, token)
+    artwork_store().remap({'old': 'new'})
+    assert not adopt('new', 'zyxwvutsrqp', token)
+    assert pending_selections({'new'}, video_ids={'new': 'zyxwvutsrqp'}) == {}
+    with artwork_store().connect() as db:
+        assert db.execute('SELECT count(*) FROM selections').fetchone()[0] == 0
 
 
 def test_manual_edit_wins_over_late_catalog_download(monkeypatch):
@@ -283,6 +309,60 @@ def test_acquisition_cancel_probe_stops_silent_child_promptly():
     assert time.monotonic() - start < 2
 
 
+def test_repair_processes_share_cancellation_and_the_earliest_budget():
+    from shared.library_repair import _run
+    from shared.process_runner import acquisition_scope, AcquisitionCancelled, media_budget
+    start = time.monotonic()
+    with acquisition_scope(lambda: time.monotonic() - start > .1):
+        with pytest.raises(AcquisitionCancelled):
+            _run([sys.executable, '-c', 'import time;time.sleep(30)'])
+    assert time.monotonic() - start < 2
+    @media_budget(.3)
+    def remux():
+        _run([sys.executable, '-c', 'import time;time.sleep(.15)'])
+        _run([sys.executable, '-c', 'import time;time.sleep(30)'])
+    start = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        remux()
+    assert time.monotonic() - start < 2
+
+
+def test_quota_lock_wait_is_cooperative_and_obeys_the_complete_deadline(tmp_path):
+    script = r'''
+from gevent import monkey
+monkey.patch_all()
+import gevent, os, subprocess, sys, time
+from pathlib import Path
+from shared.artwork_variants import VariantCache, VariantDeadline
+root = Path(sys.argv[1])
+root.mkdir()
+locker = """import os,sys,time
+f=open(sys.argv[1], 'w+b');f.write(b'0');f.flush();f.seek(0)
+if os.name=='nt':
+ import msvcrt;msvcrt.locking(f.fileno(),msvcrt.LK_LOCK,1)
+else:
+ import fcntl;fcntl.flock(f.fileno(),fcntl.LOCK_EX)
+print('READY',flush=True);time.sleep(10)
+"""
+p = subprocess.Popen([sys.executable,'-c',locker,str(root/'.quota.lock')],stdout=subprocess.PIPE)
+try:
+ assert p.stdout.readline().strip()==b'READY'
+ cache=VariantCache(root,root.parent/'originals')
+ start=time.monotonic();ticks=[]
+ gevent.spawn_later(.02,lambda:ticks.append(time.monotonic()-start))
+ try:
+  cache.open('a'*64+'-160-original-jpeg90-v1.jpg',lambda _: (_ for _ in ()).throw(AssertionError('generated after deadline')),deadline=start+.15)
+  raise AssertionError('deadline ignored')
+ except VariantDeadline:
+  pass
+ assert time.monotonic()-start<.5
+ assert ticks and ticks[0]<.12,ticks
+finally:
+ p.kill();p.wait(timeout=5);p.stdout.close()
+'''
+    subprocess.run([sys.executable, '-c', script, str(tmp_path / 'cache')], check=True, timeout=10)
+
+
 def test_packaged_entrypoint_dispatches_artwork_worker(tmp_path):
     source = tmp_path / 'source.png'
     source.write_bytes(picture())
@@ -298,6 +378,12 @@ def test_packaged_entrypoint_dispatches_artwork_worker(tmp_path):
     try:
         assert json.loads(child.stdout.readline()) == {'ok': True}
         assert Image.open(target).size == (160, 160)
+        child.stdin.write((json.dumps({'source': 'http://127.0.0.1/private', 'target': str(target),
+                                      'operation': 'fetch'}) + '\n').encode())
+        child.stdin.flush()
+        # The packaged HTTP module must load and reject the reference before
+        # doing I/O, rather than fail with a missing frozen import.
+        assert json.loads(child.stdout.readline()) == {'ok': False, 'error': 'ValueError'}
     finally:
         child.stdin.close()
         assert child.wait(timeout=5) == 0
@@ -305,15 +391,172 @@ def test_packaged_entrypoint_dispatches_artwork_worker(tmp_path):
     assert not target.exists()  # EOF also cleans the child's last staging file
 
 
-def test_real_http_trickle_respects_absolute_image_budget(tmp_path, monkeypatch):
+@pytest.mark.parametrize('cancel', [False, True])
+def test_http_transport_stops_blocked_dns_and_leaves_no_reader(tmp_path, monkeypatch, cancel):
+    import threading
+    import requests
+    from shared import artwork_sources as sources
+    from shared.artwork_worker import http_worker
+    marker = tmp_path / 'dns-started'
+    command = f'''import socket,time
+from pathlib import Path
+def blocked(*a,**k):
+ Path({str(marker)!r}).touch();time.sleep(30)
+socket.getaddrinfo=blocked
+from shared.artwork_worker import main
+main()
+'''
+    http_worker.close()
+    monkeypatch.setattr(http_worker, 'command', [sys.executable, '-c', command])
+    monkeypatch.setattr(sources, 'IMAGE_DEADLINE_SEC', 2)
+    stop = threading.Event()
+    # Cancel only after DNS has actually started, including on a slow host.
+    def cancel_when_started():
+        for _ in range(300):
+            if marker.exists():
+                stop.set()
+                return
+            if stop.wait(.01):
+                return
+    watcher = threading.Thread(target=cancel_when_started) if cancel else None
+    if watcher:
+        watcher.start()
+    start = time.monotonic()
+    try:
+        with pytest.raises(requests.Timeout):
+            sources.fetch_image(URL, video_id=VIDEO, stop=stop)
+        assert marker.exists()
+        assert time.monotonic() - start < 4
+        assert http_worker.process is None and http_worker.reader is None
+        assert not list((artwork_store().cache / '.image-http').glob('.job-*'))
+    finally:
+        stop.set()
+        if watcher:
+            watcher.join(timeout=1)
+        http_worker.close()
+
+
+def test_http_transport_rejects_saturation_without_an_attempt_or_contact(monkeypatch):
+    from shared.artwork_sources import fetch_image, ArtworkDeferred
+    from shared.artwork_worker import http_worker
+    assert http_worker.slots.acquire(blocking=False)
+    try:
+        with pytest.raises(ArtworkDeferred) as failure:
+            fetch_image(URL, video_id=VIDEO)
+        assert not failure.value.contacted
+    finally:
+        http_worker.slots.release()
+
+
+def test_http_transport_never_serializes_variant_transforms(tmp_path, monkeypatch):
+    import threading
+    import requests
+    from shared import artwork_sources as sources
+    from shared.artwork_worker import http_worker
+    marker = tmp_path / 'blocked'
+    command = f'''import socket,time
+from pathlib import Path
+def blocked(*a,**k):
+ Path({str(marker)!r}).touch();time.sleep(30)
+socket.getaddrinfo=blocked
+from shared.artwork_worker import main
+main()
+'''
+    http_worker.close()
+    monkeypatch.setattr(http_worker, 'command', [sys.executable, '-c', command])
+    source = tmp_path / 'original.png'
+    source.write_bytes(picture())
+    transformer = ImageProcess(timeout=5)
+    stop, errors = threading.Event(), []
+    def fetch():
+        try:
+            sources.fetch_image(URL, video_id=VIDEO, stop=stop)
+        except requests.Timeout:
+            errors.append('cancelled')
+    thread = threading.Thread(target=fetch)
+    try:
+        transformer.render(source, io.BytesIO(), 320, True)
+        thread.start()
+        until = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < until:
+            time.sleep(.01)
+        assert marker.exists()
+        start = time.monotonic()
+        output = io.BytesIO()
+        transformer.render(source, output, 640, True)
+        assert output.getvalue() and time.monotonic() - start < 2
+    finally:
+        stop.set()
+        thread.join(timeout=3)
+        http_worker.close()
+        transformer.close()
+    assert not thread.is_alive() and errors == ['cancelled']
+
+
+def test_http_transport_parent_death_preserves_writer_until_watchdog_exit(tmp_path):
+    from shared.artwork_staging import reconcile
+    root, marker = tmp_path / 'staging', tmp_path / 'writer-pid'
+    child_code = f'''import os,time
+from pathlib import Path
+from shared import artwork_http
+def blocked(url,target,video_id=None):
+ Path(target).write_bytes(b'partial');Path({str(marker)!r}).write_text(str(os.getpid()));time.sleep(20)
+artwork_http.fetch=blocked
+from shared.artwork_worker import main
+main()
+'''
+    parent_code = f'''from shared.artwork_worker import ImageProcess
+worker=ImageProcess(command={[sys.executable, '-c', child_code]!r},timeout=1.5,pending=1)
+worker.render({URL!r},None,0,False,operation='fetch',staging_dir={str(root)!r})
+'''
+    parent = subprocess.Popen([sys.executable, '-c', parent_code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        until = time.monotonic() + 5
+        while not marker.exists() and parent.poll() is None and time.monotonic() < until:
+            time.sleep(.01)
+        assert marker.exists()
+        parent.kill()
+        parent.wait(timeout=5)
+        reconcile(root)
+        assert list(root.glob('.job-*/result.jpg'))  # child still owns it
+        time.sleep(1.8)
+        reconcile(root)
+        assert not list(root.glob('.job-*'))
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+        parent.wait(timeout=5)
+
+
+@pytest.mark.parametrize('phase', ['body', 'headers'])
+def test_real_http_trickle_respects_absolute_image_budget(tmp_path, monkeypatch, phase):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
     import requests
     from shared import artwork_sources as sources
+    from shared.artwork_worker import http_worker
     class Slow(BaseHTTPRequestHandler):
         def log_message(self, *_):
             pass
         def do_GET(self):
+            if self.path == '/fast':
+                data = picture()
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            if phase == 'headers':
+                try:
+                    self.wfile.write(b'HTTP/1.1 200 OK\r\nX-Slow: ')
+                    for _ in range(100):
+                        self.wfile.write(b'x')
+                        self.wfile.flush()
+                        time.sleep(.02)
+                    self.wfile.write(b'\r\n\r\n')
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                return
             self.send_response(200)
             self.end_headers()
             try:
@@ -328,14 +571,23 @@ def test_real_http_trickle_respects_absolute_image_budget(tmp_path, monkeypatch)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     monkeypatch.setattr(sources, 'safe_image_url', lambda *a, **k: True)
-    monkeypatch.setattr(sources, 'IMAGE_DEADLINE_SEC', .15)
+    http_worker.close()
+    # The production allowlist remains strict in both processes. Only this
+    # explicit child command substitutes a loopback provider for the test.
+    monkeypatch.setattr(http_worker, 'command', [sys.executable, '-c',
+        'from shared import artwork_sources as s;s.safe_image_url=lambda *a,**k: True;'
+        'from shared.artwork_worker import main;main()'])
     monkeypatch.setenv('HTTP_PROXY', 'http://127.0.0.1:9')
-    start = time.monotonic()
     try:
+        assert sources.fetch_image(f'http://127.0.0.1:{server.server_port}/fast') == picture()
+        monkeypatch.setattr(sources, 'IMAGE_DEADLINE_SEC', .15)
+        start = time.monotonic()
         with pytest.raises(requests.Timeout):
             sources.fetch_image(f'http://127.0.0.1:{server.server_port}/image')
         assert time.monotonic() - start < 1
+        assert http_worker.process is None
     finally:
+        http_worker.close()
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
@@ -343,20 +595,12 @@ def test_real_http_trickle_respects_absolute_image_budget(tmp_path, monkeypatch)
 
 def test_source_429_persists_pause_without_more_requests(monkeypatch):
     from shared import artwork_sources as sources
-    class Response:
-        status_code = 429
-        headers = {'Retry-After': '3600'}
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            pass
-    class Session:
-        cookies = SimpleNamespace(clear=lambda: None)
-        def get(self, *a, **k):
-            calls.append(1)
-            return Response()
+    from shared.artwork_worker import http_worker
     calls = []
-    monkeypatch.setattr(sources, '_image_session', Session())
+    def response(*a, **k):
+        calls.append(1)
+        return {'status': 429, 'retry_after': '3600', 'data': b''}
+    monkeypatch.setattr(http_worker, 'render', response)
     for _ in range(3):
         with pytest.raises(sources.ArtworkDeferred) as failure:
             sources.fetch_image(URL, video_id=VIDEO)
