@@ -226,6 +226,23 @@ def test_visitor_failure_is_cooled_and_a_changed_relay_does_not_reuse_it(monkeyp
     web.reset_visitor_data()
 
 
+def test_rejecting_an_old_visitor_never_queues_behind_network_renewal():
+    from shared.downloader.youtube import web
+    web.reset_visitor_data()
+    web._visitor_data_cache.update(value='old', egress=web.yt_proxy())
+    web._visitor_data_lock.acquire()
+    try:
+        start = time.monotonic()
+        web.reject_visitor_data('old')
+        assert time.monotonic() - start < .1
+        web._visitor_data_cache.update(value='new')
+    finally:
+        web._visitor_data_lock.release()
+    web.reject_visitor_data('old')
+    assert web._visitor_data_cache['value'] == 'new'
+    web.reset_visitor_data()
+
+
 def test_catalog_replay_is_leased_and_completion_is_atomic(monkeypatch):
     store = artwork_store()
     token = selection(VIDEO, 'deezer:track:1', CATALOG)

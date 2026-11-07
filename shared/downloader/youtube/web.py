@@ -153,10 +153,16 @@ def visitor_data() -> Optional[str]:
 
 def reject_visitor_data(value: str) -> None:
     """An old rejection cannot invalidate a newly renewed identifier."""
-    with _visitor_data_lock:
+    # A concurrent renewal already owns the next value or its cooldown. Do not
+    # make a failed fast-path wait for that network operation before fallback.
+    if not _visitor_data_lock.acquire(blocking=False):
+        return
+    try:
         if (_visitor_data_cache.get("egress") == yt_proxy()
                 and _visitor_data_cache.get("value") == value):
             _visitor_data_cache.update(value=None, valid_until=0, retry_at=time.monotonic() + 60)
+    finally:
+        _visitor_data_lock.release()
 
 
 def reset_visitor_data() -> None:
