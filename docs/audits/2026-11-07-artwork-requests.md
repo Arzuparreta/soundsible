@@ -178,6 +178,15 @@ La tercera crítica reprodujo cierres parciales y carreras adicionales:
 | Fallback incompleto en CSS | Las filas pequeñas mantienen el thumbnail; las superficies CSS grandes conservan la imagen previa como capa. Prueba del componente real de fila. |
 | Crash perdía intención después de incorporar audio | Persistencia antes de completar el job y replay tras commit; crash/error SQLite cubiertos sin redescargar ni resucitar una pista eliminada. |
 
+La última revisión comprobó el cierre de los siete hallazgos y no encontró
+otros bloqueantes confirmados. Reprodujo además la espera SQLite de `observe`
+en el camino de audio: un escritor externo retrasaba también el hub. El commit
+`f8587f4d`, preparado durante esa revisión, cambia esa observación opcional a
+`timeout=0`; el revisor verificó su salida inmediata. Sus 15 pruebas seleccionadas
+pasaron. Validó estáticamente el proceso HTTP separado, admisión única,
+supervisión, lector IPC y leases. No ejecutó las suites largas ni acreditó
+Windows frozen con tráfico real, bloqueo TLS específico, WebKit o Pi.
+
 ## Evidencia y límites
 
 Las pruebas y mediciones finales de esta entrega se registran aquí antes de
