@@ -20,7 +20,7 @@ Las comprobaciones se hicieron sobre `main` en `3c7e4af3`. Las marcadas como
 | 5 | Lógica de negocio en módulos de rutas y en el módulo Flask | Pendiente |
 | 6 | JSON de estado escritos sin protección ante cortes | Pendiente |
 | 7 | Actualización de yt-dlp con el módulo ya importado | Pendiente, no reproducido |
-| 8 | Código muerto y detalles menores | Pendiente |
+| 8 | Código muerto y detalles menores | Parcial: eliminado `gui.sh`; resto pendiente |
 | 9 | Identidad musical acoplada a hash/vídeo y reconstruida en cada cliente | Implementado en PR #423; pendiente de CI e integración |
 
 ## Cerrado en la primera PR
@@ -158,7 +158,8 @@ importar o reiniciar después de actualizar.
 
 ### 8. Código muerto y menores
 
-- `gui.sh` solo imprime que el reproductor GTK se eliminó.
+- **Cerrado:** eliminado `gui.sh`, que solo imprimía que el reproductor GTK se
+  eliminó y recomendaba `python run.py`. No tenía consumidores en el repositorio.
 - 35 iconos en `desktop-shell/src-tauri/icons/ios` e `icons/android` que
   `tauri.conf.json` no referencia.
 - `stream_local_track` devuelve la ruta absoluta en el 404
