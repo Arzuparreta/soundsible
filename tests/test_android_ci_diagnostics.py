@@ -7,6 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from android_live_fixture import relay_peer_diagnostics
+import android as android_script
 
 
 def test_relay_diagnostics_preserve_counters_without_credentials():
@@ -22,6 +23,46 @@ def test_relay_diagnostics_preserve_counters_without_credentials():
         "inboundRTPPackets": 100, "outboundRTPPackets": 90,
         "inboundRTPPacketsLost": 10, "inboundRTPPacketsJitter": .025,
     }
+
+
+def test_fixture_wifi_setup_recovers_adb_cold_boot_without_repeating_tests(monkeypatch, tmp_path):
+    monkeypatch.setattr(android_script, 'sdk', lambda: tmp_path)
+    monkeypatch.setattr(android_script.time, 'sleep', lambda _: None)
+    responses = iter([
+        subprocess.CompletedProcess([], 1, '', 'adb: device offline'),
+        subprocess.CompletedProcess([], 255, '', ''),
+        subprocess.CompletedProcess([], 0, '', ''),
+    ])
+    calls = []
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return next(responses)
+    monkeypatch.setattr(android_script.subprocess, 'run', run)
+    android_script.enable_fixture_network('emulator-5554')
+    assert len(calls) == 3
+    assert all(args[0][-6:] == ['-s', 'emulator-5554', 'shell', 'svc', 'wifi', 'enable'] for args in calls)
+    assert all(0 < args[1]['timeout'] <= 5 for args in calls)
+
+
+@pytest.mark.parametrize('failure', ['offline', 'timeout', 'permission'])
+def test_fixture_wifi_setup_is_bounded_and_keeps_the_cause(monkeypatch, tmp_path, failure):
+    monkeypatch.setattr(android_script, 'sdk', lambda: tmp_path)
+    now = [0.]
+    monkeypatch.setattr(android_script.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(android_script.time, 'sleep', lambda seconds: now.__setitem__(0, now[0] + seconds))
+    calls = []
+    def run(command, **kwargs):
+        calls.append(1)
+        if failure == 'timeout':
+            now[0] += kwargs['timeout']
+            raise subprocess.TimeoutExpired(command, kwargs['timeout'])
+        return subprocess.CompletedProcess(command, 255 if failure == 'permission' else 1, '',
+                                           'Permission denied' if failure == 'permission' else 'adb: device offline')
+    monkeypatch.setattr(android_script.subprocess, 'run', run)
+    with pytest.raises(RuntimeError, match='Permission denied' if failure == 'permission' else 'deadline exceeded'):
+        android_script.enable_fixture_network('emulator-5554', timeout=1)
+    assert len(calls) == (1 if failure in ('permission', 'timeout') else 2)
+    assert now[0] <= 1
 
 
 @pytest.mark.parametrize("shard,failed_phase,code", [(6, "integration", 7), (0, "smoke", 9), (6, "none", 0)])

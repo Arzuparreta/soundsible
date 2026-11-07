@@ -68,6 +68,7 @@ export interface LibraryScanStatus {
 }
 
 export interface PreviewPreparation {
+  artwork?: { url: string; width: number; height: number };
   state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable';
   reason?: string;
   retry_after?: number;

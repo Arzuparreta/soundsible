@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from shared.venv_utils import get_subprocess_python
+from shared.process_runner import media_budget, process_deadline
 
 from ..config import DEFAULT_QUALITY, QUALITY_PROFILES
 from .ytdlp import (
@@ -99,6 +100,8 @@ def audio_only(path: Path) -> Path:
 
         result = repair_file(path)
         return Path(result.path) if result else path
+    except subprocess.TimeoutExpired:
+        raise
     except Exception as exc:  # never let tidying cost a completed download
         logger.debug("Could not strip non-audio streams from %s: %s", path, exc)
         return path
@@ -133,6 +136,7 @@ def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) 
     return args
 
 
+@media_budget(600)
 def download_audio(
     url: str,
     temp_dir: Path,
@@ -152,54 +156,47 @@ def download_audio(
     profile = QUALITY_PROFILES.get(quality, QUALITY_PROFILES[DEFAULT_QUALITY])
     cookie_args = cookies.cli_args()
 
+    deadline = process_deadline()
+
     def run(args: List[str]) -> tuple[int, str]:
-        output = []
-        proc = subprocess.Popen(
-            args,
-            cwd=str(temp_dir),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
-        )
-        try:
-            if proc.stdout:
-                for line in proc.stdout:
-                    output.append(line)
-                    if progress_callback:
-                        try:
-                            parsed = parse_progress(line.rstrip())
-                            if parsed:
-                                progress_callback(parsed)
-                        except Exception as ex:
-                            logger.debug("progress_callback error: %s", ex)
-            proc.wait(timeout=600)
-        except subprocess.TimeoutExpired:
-            try:
-                proc.kill()
-            except OSError:
-                pass
-            raise
-        return proc.returncode, "".join(output)
+        from shared.process_runner import run as run_child
+
+        def progress(line):
+            if progress_callback:
+                try:
+                    parsed = parse_progress(line)
+                    if parsed:
+                        progress_callback(parsed)
+                except Exception as exc:
+                    logger.debug("progress_callback error: %s", exc)
+        return run_child(args, cwd=str(temp_dir), deadline=deadline, on_line=progress)
 
     def downloaded() -> Optional[Path]:
-        for path in temp_dir.glob(f"{temp_filename}.*"):
-            return audio_only(path)
+        for path in sorted(temp_dir.glob(f"{temp_filename}.*")):
+            if path.suffix.lower() in {'.m4a', '.mp4', '.webm', '.mp3', '.ogg', '.opus', '.flac', '.wav'}:
+                return audio_only(path)
         return None
 
-    native = _yt_dlp_args(output_template, convert_to=None)
-    returncode, output = run([*native, url])
-    if returncode == 0 and (path := downloaded()):
-        return path
-
-    if returncode != 0 and cookie_args and should_retry_with_cookies(output):
-        returncode, output = run([*native, *cookie_args, url])
+    try:
+        native = _yt_dlp_args(output_template, convert_to=None)
+        returncode, output = run([*native, url])
         if returncode == 0 and (path := downloaded()):
             return path
 
-    returncode, output = run([*_yt_dlp_args(output_template, convert_to=profile), *cookie_args, url])
-    if returncode == 0 and (path := downloaded()):
-        return path
+        if returncode != 0 and cookie_args and should_retry_with_cookies(output):
+            returncode, output = run([*native, *cookie_args, url])
+            if returncode == 0 and (path := downloaded()):
+                return path
 
-    raise Exception(output or f"yt-dlp exited {returncode}")
+        returncode, output = run([*_yt_dlp_args(output_template, convert_to=profile), *cookie_args, url])
+        if returncode == 0 and (path := downloaded()):
+            return path
+
+        raise Exception(output or f"yt-dlp exited {returncode}")
+    except BaseException:
+        # Only this attempt's UUID prefix is removed; completed library audio
+        # and other workers' files never participate in cancellation cleanup.
+        for path in temp_dir.glob(f"{temp_filename}.*"):
+            if path.is_file() or path.is_symlink():
+                path.unlink(missing_ok=True)
+        raise

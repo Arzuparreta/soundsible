@@ -8,19 +8,21 @@ import UIKit
 actor ArtworkLoader {
     private let token: String
     private let session: URLSession
-    private var cache: [URL: UIImage] = [:]
+    private let cache = NSCache<NSURL, UIImage>()
     private var inFlight: [URL: Task<UIImage?, Never>] = [:]
     /// Small on purpose: covers are a few hundred kilobytes decoded, and this
     /// runs on a phone that is also holding an audio buffer.
-    private let limit = 40
+    private func dataCost(_ image: UIImage) -> Int { Int(image.size.width * image.scale * image.size.height * image.scale * 4) }
 
     init(token: String, session: URLSession = .shared) {
         self.token = token
         self.session = session
+        cache.countLimit = 40
+        cache.totalCostLimit = 20 * 1024 * 1024
     }
 
     func image(at url: URL) async -> UIImage? {
-        if let cached = cache[url] { return cached }
+        if let cached = cache.object(forKey: url as NSURL) { return cached }
         if let existing = inFlight[url] { return await existing.value }
 
         let task = Task<UIImage?, Never> { [token, session] in
@@ -38,8 +40,8 @@ actor ArtworkLoader {
         inFlight.removeValue(forKey: url)
 
         if let image {
-            if cache.count >= limit { cache.removeAll() }
-            cache[url] = image
+            let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? dataCost(image)
+            cache.setObject(image, forKey: url as NSURL, cost: cost)
         }
         return image
     }

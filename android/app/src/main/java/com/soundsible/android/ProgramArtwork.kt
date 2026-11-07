@@ -20,7 +20,7 @@ class ProgramArtwork(private val connection: EngineConnection) : BitmapLoader, A
     companion object {
         const val MAX_BYTES = 2 * 1024 * 1024
         const val MAX_PIXELS = 16L * 1024 * 1024
-        const val MAX_EDGE = 512
+        const val MAX_EDGE = 640
         @JvmOverloads fun uri(epoch: Long, id: String, revision: String? = null): Uri = Uri.Builder().scheme("soundsible-artwork")
             .authority(epoch.toString()).appendPath(id).apply { if (revision != null) { require(Regex("^[a-f0-9-]{36}$").matches(revision)); appendQueryParameter("revision", revision) } }.build()
     }
@@ -55,7 +55,7 @@ class ProgramArtwork(private val connection: EngineConnection) : BitmapLoader, A
             val selected = connection.origin
             val cookie = connection.cookieHeader(epoch) ?: error("NO_SESSION")
             val client = connection.client.newBuilder().retryOnConnectionFailure(false).callTimeout(8, TimeUnit.SECONDS).build()
-            val call = client.newCall(Request.Builder().url(selected + "/api/static/cover/" + Uri.encode(id) + "?size=thumb")
+            val call = client.newCall(Request.Builder().url(selected + "/api/static/cover/" + Uri.encode(id) + "?size=640&fit=square")
                 .header("Cookie", cookie).build())
             synchronized(lock) {
                 require(!future.isCancelled && epoch == connection.generation && selected == connection.origin)

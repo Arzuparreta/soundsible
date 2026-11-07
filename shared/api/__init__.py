@@ -884,7 +884,7 @@ def _orient_runtime_hint(runtime_hint: dict) -> None:
         runtime_hint["title"] = decided.title
 
 
-def _process_single_queue_item(item):
+def _process_single_queue_item(item, stop_event=None):
     """Worker function for A single download queue item.
 
     Runs bound to whoever queued the item: the pump is a background thread, so
@@ -895,8 +895,14 @@ def _process_single_queue_item(item):
     claimed = item if item.get('attempt') else queue_manager_dl.claim(item['id'])
     if not claimed:
         return
+    from shared.process_runner import acquisition_scope, AcquisitionCancelled
     with user_context(claimed.get("user_id")):
-        _process_single_queue_item_bound(claimed)
+        try:
+            with acquisition_scope(lambda: (stop_event is not None and stop_event.is_set())
+                                   or not queue_manager_dl.active(claimed['id'], claimed['attempt'])):
+                _process_single_queue_item_bound(claimed)
+        except AcquisitionCancelled:
+            queue_manager_dl.update_status(claimed['id'], 'interrupted', attempt=claimed['attempt'])
 
 
 def _process_single_queue_item_bound(item):
@@ -912,6 +918,14 @@ def _process_single_queue_item_bound(item):
     def _emit_item(payload):
         queue_manager_dl._emit_item_update(item, payload)
 
+    def _schedule_artwork(track):
+        # Receipt is already durable in this job's intake/checkpoint. Keep the
+        # job replayable until the optional intent is durable too; no image I/O.
+        token = metadata_evidence.get('artwork_selection')
+        if token:
+            from shared.artwork_sources import schedule_selection
+            schedule_selection(track.id, track.youtube_id, token)
+
     queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
     with app.app_context():
         _emit_item({'id': item_id, 'status': 'downloading'})
@@ -925,6 +939,10 @@ def _process_single_queue_item_bound(item):
         # deletion must not be undone by replaying this job.
         lib = get_user_core(item_user_id).library
         if lib.db.has_library_operation(item_id):
+            checkpoint = item.get('result') or {}
+            existing = lib.db.get_library_track(checkpoint.get('id')) if checkpoint.get('id') else None
+            if existing:
+                _schedule_artwork(existing)
             if queue_manager_dl.complete(item_id, attempt):
                 _emit_item({'id': item_id, 'status': 'completed'})
             return
@@ -1097,6 +1115,7 @@ def _process_single_queue_item_bound(item):
                     operation_id=item_id,
                     song_keys=item.get('identity_keys') or (),
                 )
+                _schedule_artwork(shared_track)
                 if not queue_manager_dl.complete(item_id, attempt):
                     return
 
@@ -1192,7 +1211,7 @@ def process_queue_background(stop_event: Optional[threading.Event] = None):
             if capacity > 0 and pending:
                 for i in range(min(capacity, len(pending))):
                     item = pending[i]
-                    orchestrator.submit_task(f"dl_{item['id']}", _process_single_queue_item, item)
+                    orchestrator.submit_task(f"dl_{item['id']}", _process_single_queue_item, item, stop_event)
                 continue # Re-check immediately
 
             # Interruptible sleep — stop_event short-circuits the wait.
@@ -1281,7 +1300,7 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
         raise LibraryPersistenceError("library_conflict")
     if cover_source == "none":
         from shared.artwork import artwork_store
-        artwork_store().bind(track_id, None, "none")
+        artwork_store().bind_override(track_id, None, "none")
     _mirror_track_into_pool(get_track_by_id(lib, track_id))
     emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
@@ -1829,6 +1848,9 @@ def stop_api() -> None:
     queue_manager_dl.accepting = False
     from shared.artwork_recovery import recovery
     recovery.stop()
+    from shared.artwork_worker import worker as artwork_worker, http_worker
+    artwork_worker.close()
+    http_worker.close()
 
     try:
         wsgi_server = getattr(socketio, "wsgi_server", None)

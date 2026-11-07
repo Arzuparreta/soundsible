@@ -4,8 +4,8 @@ Soundsible keeps the best available artwork outside the audio file. Audio
 repair can still shrink embedded pictures without reducing UI quality.
 Original bytes are stored once by SHA-256 under `data_dir/artwork/objects`;
 `data_dir/artwork/index.sqlite3` holds references, dimensions, provenance,
-revisions and recovery progress. Back up and restore the **whole artwork
-directory**, alongside the library. The documented Docker data-volume backup
+revisions, account overrides, source observations and recovery progress. Back up and restore the **whole artwork
+directory**, alongside the library and `config_dir/.artwork-selection-key`. The documented Docker data-volume backup
 already includes it. Stop the service during a filesystem backup.
 
 Variants live under `cache_dir/artwork` and can be deleted while the service is
@@ -24,9 +24,8 @@ Manual, removed and unknown-source artwork never triggers external recovery.
 A manual edit wins over an in-flight recovery result.
 
 Recovery is resumable: one worker, at most one external request per second,
-three attempts with exponential backoff, and provider `Retry-After` support.
-Failures and unavailable improvements are recorded rather than retried on
-every boot. If a better source is unavailable, the existing image remains.
+bounded retry windows with exponential backoff, and persisted provider `Retry-After` support.
+Failures and unavailable improvements are recorded with reevaluation deadlines rather than retried on every boot. New material source evidence can reopen evaluation. If a better source is unavailable, the existing image remains.
 A perceptual match is a conservative heuristic, not proof of image identity.
 Diagnostics in the index distinguish preservation, improvement and failures;
 debug logs report state totals, stored bytes and elapsed time. The worker does
@@ -41,14 +40,12 @@ are `160`, `320`, `640`, `960`, and `1280`; `fit` is `original` (default) or
 JPEG variants use quality 90 and normalized orientation.
 
 Library responses add optional `artwork_revision`, `artwork_width` and
-`artwork_height`. The UI uses these to build `srcset` with the actual available
+`artwork_height` and account-specific `artwork_scope`. The UI uses these to build `srcset` with the actual available
 square resolution. `rev` identifies the artwork revision; current revision
 responses are privately cacheable for a year with `ETag`. A stale revision
-redirects to the current one without immutable caching. Unversioned requests
-retain the existing seven-day private cache policy. Unknown tracks and broken
-images retain placeholder behavior. Original content is deduplicated; variants
+redirects to the current one without immutable caching. Unversioned requests and placeholders revalidate privately, including after an account change. A temporary processing failure returns 503 with `no-store` and `Retry-After`, rather than caching an absent cover. Original content is deduplicated; variants
 are generated once per content hash, size, crop and transform revision with
-at most two concurrent transforms.
+one active transform in a lazy child with bounded admission and a deadline including queue wait. The same child validates new master images outside the cooperative HTTP hub. CLI tools without gevent retain local processing.
 
 The shared image component measures its slot, lets the browser choose density,
 and lazy-loads offscreen artwork. NORMAL and DJ share the same rendering path.
@@ -57,10 +54,36 @@ search cards). List rows stay a CSS background on the 320 px `thumb` variant:
 their cover is at most 60 CSS px, which that variant already covers at 3x, and
 queue lanes are not virtualized — one measured `<img>` per row there was enough
 to starve WebKit of frames on a mobile runner.
-External catalog pictures keep their provider-supplied URLs; no arbitrary URL
-proxy or speculative URL rewriting is introduced.
+External catalog pictures keep provider-supplied URLs. A catalog acquisition
+can preserve the explicitly chosen album image after server verification and
+an account-bound authenticated receipt. Audio publication does not wait for it;
+the recovery worker processes that durable choice. User-edited and removed
+covers belong to that account, shadowing the shared source. Ambiguous legacy
+global manual refs are preserved. No arbitrary URL proxy is introduced.
+Personal rekeys copy only that account's choices; pending receipts are checked
+against the incoming track's current video. The durable queue job is completed
+only after its optional artwork intent is recorded, including crash replay.
 
-## Local validation sample
+Public image downloads use a separate lazy child with one admission and a
+pooled session without ambient credentials or proxies. The parent supervises
+the entire operation, including DNS and response headers, and kills/reaps it
+on deadline or cancellation. A slow download never occupies the transform
+child. There can be two image-related interpreters; both retire when idle.
+The operational deadline excludes a bounded process-reaping margin. Staging
+leases cover both parent and child, including parent death.
+
+YouTube search uses declared thumbnail candidates already present in extractor
+responses. Resolution retains public source observations; the existing preview
+status response can carry a better same-video primary thumbnail. Failed optional
+upgrades retain their previous image. Guessed dimensionless extractor URLs and
+alternative video frames do not outrank known primary references.
+Small preview rows retain their original thumbnail rather than requesting the
+large upgrade. Large CSS surfaces layer the preceding image under an upgrade.
+
+See [architecture and validation](audits/2026-11-07-artwork-requests.md) for
+resource ownership, cancellation, recovery and remaining platform limits.
+
+## Historical local validation sample
 
 A 100-image sample from the existing local cache averaged 289.9 KiB per
 original. Square JPEG variants averaged 8.2 KiB at 160 px, 25.9 KiB at 320 px,

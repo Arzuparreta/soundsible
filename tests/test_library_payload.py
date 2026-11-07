@@ -95,7 +95,8 @@ def test_endpoint_uses_fresh_direct_snapshot_and_annotations(monkeypatch):
     app.register_blueprint(library.library_bp)
     client = app.test_client()
     expected["tracks"][0].update(loudness={"gain_db": -2}, artwork_revision="none-1",
-                                  artwork_width=None, artwork_height=None)
+                                  artwork_width=None, artwork_height=None,
+                                  artwork_scope=__import__("hashlib").sha256(b"testuser").hexdigest()[:16])
     assert client.get("/api/library").get_json() == expected
     assert "loudness" not in model.tracks[0].__dict__
 

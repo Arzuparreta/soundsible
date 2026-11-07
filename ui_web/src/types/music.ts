@@ -1,4 +1,5 @@
 export interface Track {
+  artwork_scope?: string;
   artwork_revision?: string;
   artwork_width?: number;
   artwork_height?: number;

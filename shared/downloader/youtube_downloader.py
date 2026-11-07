@@ -14,6 +14,7 @@ from shared.constants import DEFAULT_CONFIG_DIR
 from shared.models import Track
 from shared.resolution_confidence import best_candidate
 from shared.stream_resolution import ResolvedStream
+from shared.process_runner import media_budget
 
 from shared.audio_files import AudioProcessor
 from .config import DEFAULT_OUTPUT_DIR, DEFAULT_QUALITY, TRACKS_DIR
@@ -125,6 +126,7 @@ class YouTubeDownloader:
             progress_callback=progress_callback,
         )
 
+    @media_budget(600)
     def process_video(
         self,
         url: str,
@@ -139,12 +141,15 @@ class YouTubeDownloader:
                 except Exception:
                     pass
 
+        from shared.process_runner import check_cancelled
+        check_cancelled()
         report({"phase": "preparing"})
         temp_file = self._download_audio(url, progress_callback=progress_callback)
         if not temp_file.exists():
             raise Exception("Download failed: Audio file was not created by yt-dlp. Check if ffmpeg is installed.")
 
         try:
+            check_cancelled()
             report({"phase": "processing", "percent": 92.0})
             duration, bitrate, _size = AudioProcessor.audio_details(str(temp_file))
             file_tags = AudioProcessor.read_tags(str(temp_file))
@@ -164,19 +169,22 @@ class YouTubeDownloader:
                 AudioProcessor.embed_metadata(str(temp_file), meta, None, clear=dropped)
             except Exception as e:
                 logger.warning("Could not re-embed metadata on downloaded file: %s", e)
+            check_cancelled()
             report({"phase": "processing", "percent": 97.0})
             meta["track_number"] = meta.get("track_number") or 1
             return self._store(
                 temp_file, meta, duration, bitrate,
                 youtube_id=video_id_from_url(url), cover_source="youtube",
             )
-        except Exception as e:
+        except BaseException as e:
             if temp_file and temp_file.exists():
                 try:
                     os.remove(temp_file)
                 except OSError:
                     pass
-            raise Exception(f"Post-processing error: {e}")
+            if not isinstance(e, Exception):
+                raise
+            raise Exception(f"Post-processing error: {e}") from e
 
     def finalize_local_audio_file(
         self,

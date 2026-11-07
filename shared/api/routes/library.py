@@ -567,7 +567,7 @@ def update_track_labels(track_id):
 @serialized
 def upload_track_label_cover(track_id):
     """Persist a validated sidecar; never download/rewrite/re-key the audio."""
-    from shared.artwork import artwork_store, open_image, MAX_BYTES
+    from shared.artwork import artwork_store, MAX_BYTES
     from PIL import Image, UnidentifiedImageError
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -579,14 +579,13 @@ def upload_track_label_cover(track_id):
     store = artwork_store()
     data = file.stream.read(MAX_BYTES + 1)
     try:
-        open_image(data)
+        digest = store.put(data)
     except (ValueError, UnidentifiedImageError, OSError, Image.DecompressionBombError):
         return jsonify({"error": "Invalid artwork"}), 400
-    digest = store.put(data)
     # Commit account metadata first; a failed save never publishes the new cover.
     if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="manual"):
         return jsonify({"error": "Track not found"}), 404
-    store.bind(track_id, digest, "manual")
+    store.bind_override(track_id, digest, "manual")
     api["emit_to_user"]("library_updated", payload={"cover_changed": True})
     return jsonify({"status": "success", "storage": "library", "id": track_id})
 

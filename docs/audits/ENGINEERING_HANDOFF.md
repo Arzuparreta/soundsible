@@ -459,3 +459,14 @@ hashear el archivo ODST y publicar sus bytes portables. No se ha sustituido esa
 prueba por confiar solo en la revisión SQL, ni se ha añadido una copia residente
 de la biblioteca. Las restricciones de validación física de otras plataformas
 siguen vigentes.
+
+
+## Portadas y recursos de adquisición (2026-11-07)
+
+La entrega en una única PR autorizada por el usuario está descrita en
+[portadas y peticiones](2026-11-07-artwork-requests.md). Conserva originales y
+contratos de audio, añade selecciones de portada por cuenta, candidatos ya
+obtenidos, recuperación reevaluable y ejecución visual fuera del hub. Conecta
+la cancelación real de adquisiciones al presupuesto del proceso. Las críticas
+xhigh y sus correcciones están registradas allí. No habilita promoción de
+previews sin prueba de equivalencia ni afirma aceptación física/Pi.

@@ -1,6 +1,6 @@
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { artworkUrl } from '../lib/config';
-import { artworkCandidates } from '../lib/media';
+import { artworkCandidates, artworkFallback, rejectPreviewArtwork } from '../lib/media';
 
 // URLs only, not image bodies. Previously painted artwork should not re-enter
 // the lazy/async decoding path on every route mount. Bound this session hint.
@@ -15,7 +15,8 @@ export function CoverImage(props: {
   alt?: string;
   variants?: { url: string; width: number }[];
 }) {
-  const source = () => artworkUrl(props.src);
+  const [previousSource, setPreviousSource] = createSignal<string>();
+  const source = () => previousSource() || artworkUrl(props.src);
   const warm = () => !!source() && paintedSources.has(source()!);
   const rememberPaint = () => {
     const url = source();
@@ -27,7 +28,7 @@ export function CoverImage(props: {
   let image: HTMLImageElement | undefined;
   const [width, setWidth] = createSignal(320);
   const [failed, setFailed] = createSignal(false);
-  createEffect(() => { props.src; setFailed(false); });
+  createEffect(() => { props.src; setFailed(false); setPreviousSource(undefined); });
   createEffect(() => {
     if (!props.src || !image) return;
     const target = image.parentElement;
@@ -52,6 +53,12 @@ export function CoverImage(props: {
   return <Show when={props.src && !failed()}>
     <img ref={image} sizes={`${width()}px`} srcset={candidates()} src={fallback()!}
       alt={props.alt ?? ''} loading={props.eager || warm() ? 'eager' : 'lazy'} decoding={warm() ? 'sync' : 'async'}
-      draggable={false} style={style} onLoad={rememberPaint} onError={() => setFailed(true)} />
+      draggable={false} style={style} onLoad={rememberPaint} onError={() => {
+        const old = artworkFallback(props.src);
+        if (!previousSource() && old) {
+          rejectPreviewArtwork(props.src);
+          setPreviousSource(artworkUrl(old));
+        } else setFailed(true);
+      }} />
   </Show>;
 }

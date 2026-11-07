@@ -612,10 +612,10 @@ class LibraryManager:
         
         from shared.artwork import artwork_store
         store = artwork_store()
-        ref = store.ref(track.id)
+        ref = store.effective_ref(track.id)
         if getattr(track, "cover_source", None) == "none" or (ref and ref["source"] == "none"):
             return None
-        original = store.path(track.id)
+        original = store.effective_path(track.id)
         if original:
             return original
 

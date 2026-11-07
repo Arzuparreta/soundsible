@@ -99,6 +99,37 @@ def adb(*args: str, serial: str | None = None) -> None:
     run(str(binary), *(["-s", serial] if serial else []), *args)
 
 
+def enable_fixture_network(serial: str, *, timeout: float = 30) -> None:
+    """Cold boot can retire ADB after boot_completed but before svc is ready.
+
+    Retry only this idempotent setup command, never instrumentation. Keep a
+    total deadline and the last diagnostic instead of hiding a failed device.
+    """
+    binary = sdk() / "platform-tools" / ("adb.exe" if os.name == "nt" else "adb")
+    command = [str(binary), '-s', serial, 'shell', 'svc', 'wifi', 'enable']
+    deadline, last = time.monotonic() + timeout, 'device unavailable'
+    attempt = 0
+    while time.monotonic() < deadline:
+        attempt += 1
+        try:
+            result = subprocess.run(command, capture_output=True, text=True,
+                                    timeout=min(5, max(.01, deadline - time.monotonic())))
+            if result.returncode == 0:
+                return
+            last = (result.stderr + '\n' + result.stdout).strip()[-1000:] or f'exit {result.returncode}'
+            lowered = last.lower()
+            transient = (result.returncode == 255 or any(marker in lowered for marker in
+                         ('device offline', 'no devices/emulators found', 'not found',
+                          "can't find service: wifi", 'deadobjectexception')))
+            if not transient or any(marker in lowered for marker in ('permission denied', 'securityexception')):
+                raise RuntimeError(f'Cannot enable fixture Wi-Fi on {serial}: {last}')
+        except subprocess.TimeoutExpired:
+            last = 'ADB setup command timed out'
+        print(f'Fixture Wi-Fi setup not ready (attempt {attempt}): {last}', flush=True)
+        time.sleep(min(.5, max(0, deadline - time.monotonic())))
+    raise RuntimeError(f'Fixture Wi-Fi setup deadline exceeded on {serial}: {last}')
+
+
 def integration(*, restart_only: bool = False, live_restart_only: bool = False, shard: tuple[int, int] | None = None) -> None:
     """Own three disposable engines and run real native account integration on an AVD.
 
@@ -120,7 +151,7 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
     if len(devices) != 1 or run(binary, "shell", "getprop", "ro.kernel.qemu", capture=True) != "1":
         raise RuntimeError("Integration requires exactly one connected emulator and no other devices")
     # AVD networking must be enabled for 10.0.2.2; offline startup has its own smoke run.
-    adb("shell", "svc", "wifi", "enable")
+    enable_fixture_network(devices[0])
     from android_test_tls import create_fixture_tls
 
     processes: list[subprocess.Popen] = []

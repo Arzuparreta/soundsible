@@ -11,7 +11,7 @@ import yt_dlp
 from shared.stream_resolution import ResolvedStream, resolved_stream
 
 from .ids import watch_url
-from .web import reset_visitor_data, visitor_data
+from .web import reject_visitor_data, visitor_data
 from .ytdlp import YDL_FORMAT_AUDIO_PREVIEW, Cookies, apply_network_options, force_ipv4, yt_proxy
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,13 @@ def _extract(
         return None, True
     if not isinstance(info, dict) or not info:
         return None, False
+    # Optional references survive the signed URL's shorter cache lifetime.
+    try:
+        from .artwork import candidates
+        from shared.artwork_sources import observe
+        observe(video_id, candidates(info))
+    except Exception:
+        logger.debug("Cannot retain optional artwork references", exc_info=True)
     selected = info
     url = info.get("url")
     if not isinstance(url, str) or not url:
@@ -138,7 +145,7 @@ def get_resolved_stream(
             return result
         # A rejected identifier looks like a hard error; drop it so the next
         # resolution fetches a fresh one instead of failing the same way.
-        reset_visitor_data()
+        reject_visitor_data(visitor)
 
     def direct(**extra: Any) -> Dict[str, Any]:
         # Not `apply_network_options`: that injects the configured relay and

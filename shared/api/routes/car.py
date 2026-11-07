@@ -110,7 +110,7 @@ def _track_item(track) -> dict:
         "artist": artist,
         "album": album,
         "duration_sec": int(duration) if isinstance(duration, (int, float)) else None,
-        "artwork_url": f"/api/static/cover/{_quote_id(track_id)}" if track_id else None,
+        "artwork_url": f"/api/static/cover/{_quote_id(track_id)}?size=640&fit=square" if track_id else None,
         "stream_url": f"/api/preview/stream/{_quote_id(track_id)}" if preview else f"/api/static/stream/{_quote_id(track_id)}" if track_id else None,
         "is_browsable": False,
         "is_playable": bool(track_id) and not data.get("unavailable", False),
