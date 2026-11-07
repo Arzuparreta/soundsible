@@ -894,7 +894,7 @@ describe('two-deck mixer', () => {
     await play(outgoing, 110);
     await play(incoming, 6.2);
     expect(incoming.playbackRate).not.toBe(1);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 12; i++) {
       incoming.currentTime += 0.04;
       await vi.advanceTimersByTimeAsync(200);
     }
@@ -909,7 +909,7 @@ describe('two-deck mixer', () => {
     await play(outgoing, 108.5);
     incoming.currentTime = 2;
     await play(outgoing, 110);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 12; i++) {
       outgoing.currentTime += 0.2;
       incoming.currentTime += 0.08; // Still moving, no waiting, no >50ms regression.
       await vi.advanceTimersByTimeAsync(200);
@@ -921,6 +921,33 @@ describe('two-deck mixer', () => {
     audioService.armTransition('/third', { ...plan, playback_rate: 1.06 }, callbacks(), { level: 1 });
     expect(outgoing.playbackRate).toBe(1);
     expect(audioService.programMixSnapshot().technique).toBe('structural_fade');
+  });
+
+  it.each([false, true])('preserves future rate control after a 1x blend with sustained deficit=%s', async sustained => {
+    const { audioService, outgoing, incoming } = await armed();
+    const diagnostics = await import('./playbackDiagnostics');
+    diagnostics.startPlaybackDiagnostics({ userId: 'test', deviceId: 'test', platform: 'test', displayMode: 'browser' });
+    // A plain fade requests no phase nudges: a failure here cannot demonstrate
+    // incompatibility with variable speed, even when it is persistent.
+    audioService.armTransition('/next', { ...plan, technique: 'structural_fade' }, callbacks(), { level: 1 });
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    expect(audioService.mixPhase()).toBe('crossfading');
+    for (let i = 1; i <= 30; i++) {
+      outgoing.currentTime += 0.1;
+      incoming.currentTime += sustained ? 0.04 : i <= 10 ? 0.06 : 0.1;
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    await play(incoming, 6.5);
+    expect(audioService.mixPhase()).toBe('idle');
+    audioService.armTransition('/third', { ...plan, playback_rate: 1.06 }, callbacks(), { level: 1 });
+    const events = JSON.parse(diagnostics.playbackDiagnosticExport()).events as Array<{ event: string }>;
+    diagnostics.stopPlaybackDiagnostics();
+    expect(events.some(event => event.event === 'mix.rate_fallback')).toBe(sustained);
+    expect(outgoing.playbackRate).toBe(1.06);
+    expect(audioService.programMixSnapshot().technique).toBe('filter_blend');
+    audioService.stop();
   });
 
   it.each(['source', 'output'])('does not fade into an advancing but silent %s', async kind => {
@@ -2055,9 +2082,46 @@ describe('CarPlay interruption recovery', () => {
     audioService.stop();
   });
 
+  it.each(['startup', 'resume', 'seek'] as const)('continues through a finite renderer delay after %s without restarting output', async action => {
+    const { audioService, context, deck } = await setup();
+    let at = Date.now(), base = 0, frozen = 0;
+    // The renderer settles after activation; every unnecessary Play/seek would
+    // expose it to that same finite delay again, as in the reported loop.
+    const read = () => deck.paused ? frozen : base + Math.max(0, (Date.now() - at - 650) / 1000);
+    const writes: number[] = [];
+    Object.defineProperty(deck, 'currentTime', { configurable: true, get: read,
+      set(value: number) { writes.push(value); frozen = base = value; at = Date.now(); } });
+    deck.pause.mockImplementation(() => {
+      const wasPlaying = !deck.paused; frozen = read(); deck.paused = true;
+      if (wasPlaying) deck.dispatchEvent(new Event('pause'));
+    });
+    deck.play.mockImplementation(async () => {
+      if (deck.paused) { base = frozen; at = Date.now(); }
+      deck.paused = false; deck.dispatchEvent(new Event('play'));
+    });
+    if (action === 'resume') { audioService.pause(); await audioService.resume(); }
+    if (action === 'seek') {
+      audioService.seek(30);
+      deck.dispatchEvent(new Event('seeking'));
+      deck.dispatchEvent(new Event('seeked'));
+    }
+    const starts = deck.play.mock.calls.length;
+    const seeks = writes.length;
+    deck.pause.mockClear();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(context.suspend).not.toHaveBeenCalled();
+    expect(deck.pause).not.toHaveBeenCalled();
+    expect(deck.play).toHaveBeenCalledTimes(starts);
+    expect(writes).toHaveLength(seeks);
+    expect(audioService.outputHealth()).toBe('healthy');
+    expect(deck.paused).toBe(false);
+    expect(deck.currentTime).toBeCloseTo((action === 'seek' ? 30 : 0) + 4.35, 2);
+    audioService.stop();
+  });
+
   it('recovers a loaded source frozen at 1x while the output context still advances', async () => {
     const { audioService, context, deck } = await setup();
-    await vi.advanceTimersByTimeAsync(1800);
+    await vi.advanceTimersByTimeAsync(2800);
     expect(context.suspend).toHaveBeenCalledOnce();
     await advanceSource(deck, 1500);
     expect(audioService.outputHealth()).toBe('healthy');

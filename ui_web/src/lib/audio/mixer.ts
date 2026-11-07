@@ -116,8 +116,12 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     rateChangedAt.set(deck, now);
   }
   function rateFallback(deck: HTMLAudioElement, reason: string, phase: string, diagnostic = mix?.diagnostic): void {
-    rateControlAvailable = false;
-    if (deck.playbackRate !== 1) deck.playbackRate = 1;
+    // A continuity failure already at 1x is not evidence that varying speed is
+    // unsupported. Protect this blend without degrading future ones for it.
+    if (deck.playbackRate !== 1) {
+      rateControlAvailable = false;
+      deck.playbackRate = 1;
+    }
     recordPlaybackDiagnostic('mix.rate_fallback', { ...diagnostic, reason, phase });
   }
   let mixGeneration = 0;

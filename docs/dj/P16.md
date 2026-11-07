@@ -3,7 +3,9 @@
 Aceptación física (2026-10-30): el usuario confirma que los cambios
 funcionan como esperaba en su escucha real.
 
-Implementación: PR #408. Aceptación física confirmada por el usuario (2026-10-30).
+Implementación original: PR #408. Aceptación física confirmada por el usuario
+(2026-10-30). El seguimiento del 7 de noviembre descrito abajo requiere nueva
+aceptación en el iPhone.
 
 ## Evidencia
 
@@ -33,9 +35,12 @@ del repositorio.
 
 `audio/mediaClock.ts` mide continuidad del renderizador: integra la velocidad
 pedida y compara avance con tiempo monotónico. Detecta retroceso acumulado
->50 ms o déficit >250 ms en una ventana de al menos un segundo. El segundo
+>50 ms; un déficit >250 ms debe repetirse en dos ventanas completas consecutivas,
+de al menos un segundo cada una, para confirmar `clock_starved`. Una primera
+ventana deficiente solo establece sospecha. Una ventana sana la limpia: un
+desfase inicial que después deja de crecer no es inanición persistente. El
 margen admite un quantum completo de actualización del elemento. Pausas,
-seeks, falta de datos y huecos de supervisión >2 s reinician la observación.
+seeks, falta de datos y huecos de supervisión >2 s reinician también la sospecha.
 No mide ni recalibra confianza musical. Mezclador, retorno de velocidad y
 supervisión del transporte comparten este observador.
 
@@ -71,6 +76,8 @@ No se guardan muestras, audio, URLs ni títulos en la traza.
   ejecutan `structural_fade` a 1×, dejando evidencia de la degradación. Una
   sesión nueva de audio puede volver a intentarlo. No se modifica el análisis
   compartido ni la técnica elegida por el servidor para otros dispositivos.
+  Si el fallo ocurre ya a 1×, protege esa mezcla sin deducir que el control
+  de velocidad sea incompatible ni desactivarlo para las siguientes.
 - Las correcciones de fase no escriben velocidad más de una vez cada 200 ms.
   El retorno mantiene escalones de un cuarto de punto porcentual para evitar
   decenas de escrituras casi idénticas. El transporte puede recuperar también
@@ -81,6 +88,51 @@ de los objetivos, RMS antes/después y técnica de ejecución. `mix.started`,
 `mix.execution_fallback`, `mix.signal_fallback`, `mix.suspended` y
 `mix.resumed` explican los cambios de estado. El informe del operador muestra
 estos eventos y medidas incluso fuera de las ventanas de retirada.
+
+## Seguimiento del 7 de noviembre: déficit transitorio y cortes en NORMAL
+
+Tres capturas completas de la PWA del iPhone, entre las 12:21 y las 12:56
+Europe/Madrid, contienen 36 alarmas `clock_starved`, 20 ciclos de recuperación
+y 16 pausas de recuperación. En las alarmas había datos disponibles, contexto
+avanzando, velocidad 1× y RMS positivo antes y después del fader. Se disparaban
+aproximadamente un segundo después de `playing`. El supervisor pausaba las
+fuentes, suspendía/reanudaba el contexto y escribía de nuevo la posición;
+un nuevo arranque podía volver a exponer la fuente al mismo transitorio.
+
+Cinco mezclas DJ muestran un déficit inicial de 310–405 ms tras un seek y
+después avance estable. Su fallback, ya a 1×, no pausó ni reinició la fuente,
+pero declaraba indisponible el control de velocidad para mezclas futuras.
+Estas observaciones separan un transitorio de una pérdida de avance sostenida;
+no identifican el mecanismo interno de iOS ni certifican los altavoces.
+
+Se exige ahora confirmación en dos ventanas deficientes consecutivas en el
+observador compartido, sin añadir recuperación. Los retrocesos conservan su
+protección inmediata. La vigilancia del contexto realmente congelado permanece
+separada y conserva sus tiempos. Un atasco sostenido de fuente requiere una
+ventana adicional antes de intervenir; la cadencia y la disponibilidad de
+observaciones condicionan el tiempo efectivo, especialmente en segundo plano.
+
+Regresiones: arranque/Play/seek con latencia finita sin pausa, suspend ni nuevos
+seeks; déficit sostenido y fuente congelada; limpieza de sospecha; protección
+de velocidad DJ a 1× y fallback cuando realmente falla a velocidad variable.
+Una prueba de navegador retrasa solo el contador mientras un WAV real atraviesa
+el servicio y mide el PCM del programa durante más de dos ventanas. Comprueba
+continuidad, ausencia de cambios de salud y progreso, no solo `play()` resuelto.
+
+La corrección no cambia medidas musicales, planes ni el ejecutor Android. La
+aceptación física del 30 de octubre corresponde a aquella entrega. Este
+seguimiento requiere escuchar NORMAL y DJ en el iPhone afectado; no promete
+eliminar una posible latencia inicial del navegador.
+
+Validación local del seguimiento: 1.885 pruebas de UI/audio y tipos; 27 de
+trazas Python. Suites completas: Chromium móvil/escritorio, 386 aprobadas y 74
+omisiones previstas; WebKit móvil/escritorio, 373 aprobadas y 87 omisiones
+previstas (Docker, montaje de solo lectura, un trabajador). Quince regresiones
+dirigidas fallan contra el código anterior; la prueba de navegador también falla
+por recuperación indebida con aquel código y pasa con la corrección. La primera
+ejecución amplia de Chromium se descartó por módulos duplicados tras alternar
+fuentes en Vite para ese control; la suite completa anterior es la repetición
+con servidor limpio y sin cambios de fuentes durante la ejecución.
 
 ## Conexión
 
