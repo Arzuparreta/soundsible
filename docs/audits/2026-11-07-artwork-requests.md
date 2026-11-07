@@ -118,7 +118,7 @@ fallback de audio continúa siendo necesario.
   Estos límites son fijos, no proporcionales a los núcleos: un Pi evita
   multiplicar decodificadores y el desktop conserva el hub disponible. No hay
   evidencia física de Pi ni ajuste automático que prometa el óptimo de cada host.
-- El visitor de YouTube tiene cooldown y renovación sin cola por configuración
+- El visitor de YouTube tiene cooldown, renovación y rechazo sin cola por configuración
   efectiva de egress. Un rechazo antiguo no invalida un identificador nuevo.
   Las cachés de streams distinguen relay A y B mediante una huella sin guardar
   sus credenciales en la clave.
@@ -235,7 +235,7 @@ Datos y reproducción: [JSONL](../performance/artwork-pipeline-results.jsonl),
   incluido. Se corrigió la expectativa y se preparó la copia pública verificada
   del modelo; los 17 casos de ese radio pasaron. La regresión completa sobre la
   base combinada terminó con **2674 aprobadas y una omisión**, en 626,55 s.
-- Regresión tras la tercera crítica: 117 aprobadas; radio adicional de identidad/procesos/replay: 66 aprobadas. Una segunda ejecución principal completa está en curso por el nuevo transporte HTTP.
+- Regresión tras la tercera crítica: 117 aprobadas; radio adicional de identidad/procesos/replay: 66 aprobadas. La segunda ejecución principal completa, con el nuevo transporte, termina con **2688 aprobadas y una omisión**, en 594,08 s. Los cambios pequeños posteriores de observación/visitor/lector tienen sus radios finales aprobados (57, 50 y cuatro casos).
 - Cliente combinado final: TypeScript y **1871 pruebas aprobadas** en 228 archivos.
 - Chromium final completo: **384 aprobadas y 74 omisiones** entre móvil/escritorio, en 3,6 min. Una pasada anterior con el grafo de Vite ya modificado falló en ocho casos de estado/imports; tras reiniciar servidor, pasan los diez casos de ese radio y la suite completa, sin cambiar sus aserciones.
 - Android combinado: preparación, APK debug, JVM y lint aprobados. Device panel no detecta SDK; no se
