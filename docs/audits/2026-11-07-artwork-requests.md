@@ -244,5 +244,5 @@ Datos y reproducción: [JSONL](../performance/artwork-pipeline-results.jsonl),
   radio posterior de audio/observación: 57 aprobados y cuatro pruebas de lector/contención aprobadas. La observación opcional usa SQLite sin espera para no retener audio. Los jobs existentes de Windows x64/ARM64 los ejecutan también
   y usan el sidecar construido para probar el entrypoint visual frozen; sus
   resultados remotos siguen pendientes.
-- WebKit móvil/escritorio completo y CI del último head siguen siendo gates de
-  entrega. No se ha publicado ni fusionado esta implementación.
+- WebKit final completo: **371 aprobadas y 87 omisiones** entre móvil/escritorio, en 7,1 min, Docker con montaje de solo lectura y un worker; ejecutado después de Chromium y de la carga Python. Servidor Vite de pruebas detenido.
+- Ruff y comprobación de manifests aprobados. CI del último head sigue siendo gate de entrega. No se ha fusionado ni publicado esta implementación.
