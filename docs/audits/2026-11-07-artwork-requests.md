@@ -2,6 +2,9 @@
 
 Entrega iniciada desde `main` en `1d904020`, después de revisar el flujo de audio,
 portadas y cachés, y validada con la base combinada de #423/#424 (`adff0c88`).
+Antes de abrir la PR se incorporó también #425 (`9560a121`): solo retira el stub
+`gui.sh` y actualiza el punto 8 de arquitectura, sin cambiar las fuentes ejecutadas
+por las suites anteriores. Esa retirada no forma parte del diff de esta PR.
 El original visual continúa separado del archivo de audio:
 una imagen grande no vuelve a bloquear la primera muestra en su cabecera.
 
