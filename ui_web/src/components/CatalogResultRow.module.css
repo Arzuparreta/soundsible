@@ -122,3 +122,8 @@
 @media (hover: hover) and (pointer: fine) {
   .titleButton, .titleButton .title { -webkit-user-select: text; user-select: text; }
 }
+
+/* Membership shares the secondary line; a third line would overflow dense rows. */
+.subtitleLine { display: flex; align-items: baseline; gap: var(--space-xs); min-width: 0; }
+.subtitleLine .subtitle { flex: 0 1 auto; min-width: 0; }
+.collectionStatus { flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-secondary); font-size: var(--text-caption); }

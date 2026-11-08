@@ -25,7 +25,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  height: 100%;
+  height: var(--row-h);
   padding: 0 var(--space-md);
   color: var(--ink-primary);
   border: 1px solid transparent;
@@ -102,10 +102,4 @@
   stroke: currentColor;
   stroke-width: 2;
   color: var(--ink-tertiary);
-}
-
-@media (min-width: 1024px) {
-  .artistRow {
-    padding-inline: var(--space-md);
-  }
 }

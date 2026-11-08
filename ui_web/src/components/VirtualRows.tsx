@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { createVirtualizer, defaultRangeExtractor } from '@tanstack/solid-virtual';
-import { state } from '../stores';
+import { createRowHeight, type RowHeight } from '../lib/rowHeight';
 
 /**
  * Render only the rows a scroll container can actually show.
@@ -17,7 +17,7 @@ export function VirtualRows<T>(props: {
   /** The scrolling ancestor. May return null on the first render. */
   scrollElement: () => HTMLElement | null;
   /** Row height in pixels, or a CSS custom property to read it from. */
-  rowHeight: number | { cssVar: string; fallback: number };
+  rowHeight: RowHeight;
   overscan?: number;
   /** Measure variable-height queue editing controls. */
   measureRows?: boolean;
@@ -60,7 +60,7 @@ export function VirtualRows<T>(props: {
 function Rows<T>(props: {
   items: readonly T[];
   scrollElement: () => HTMLElement | null;
-  rowHeight: number | { cssVar: string; fallback: number };
+  rowHeight: RowHeight;
   overscan?: number;
   /** Measure variable-height queue editing controls. */
   measureRows?: boolean;
@@ -75,34 +75,7 @@ function Rows<T>(props: {
       height: element?.clientHeight || element?.offsetHeight || 0,
     };
   };
-  const measure = (): number => {
-    const height = props.rowHeight;
-    if (typeof height === 'number') return height;
-    if (typeof window === 'undefined') return height.fallback;
-    const raw = getComputedStyle(document.documentElement).getPropertyValue(height.cssVar);
-    return Number.parseFloat(raw) || height.fallback;
-  };
-
-  const [rowH, setRowH] = createSignal(measure());
-
-  onMount(() => {
-    const sync = () => setRowH(measure());
-    sync();
-    if (typeof window.matchMedia === 'function') {
-      const mq = window.matchMedia('(min-width: 1024px)');
-      mq.addEventListener('change', sync);
-      onCleanup(() => mq.removeEventListener('change', sync));
-    }
-    window.addEventListener('orientationchange', sync);
-    onCleanup(() => window.removeEventListener('orientationchange', sync));
-  });
-
-  // Accessibility sizing changes CSS custom properties without crossing a media
-  // query, so re-read the token once the root attribute has been applied.
-  createEffect(() => {
-    void state.interfaceSize;
-    queueMicrotask(() => setRowH(measure()));
-  });
+  const rowH = createRowHeight(() => props.rowHeight);
 
   const virtualizer = createVirtualizer({
     get count() {

@@ -1,8 +1,9 @@
+import { createRowHeight } from '../lib/rowHeight';
 import { libraryTrackMusic } from '../lib/musicNavigation';
-import { createEffect, createSignal, For, Show, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { createEffect, For, Show, on, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
-import { actions, isPlayingTrack, state } from '../stores';
+import { actions, isPlayingTrack } from '../stores';
 import SongRow from './SongRow';
 import { openTrackMenu, type TrackMenuContext } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
@@ -17,15 +18,6 @@ import styles from './TrackList.module.css';
 import { SkeletonRows } from './Skeleton';
 import { EmptyState } from './EmptyState';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
-
-/** Current value of the `--row-h` design token, in pixels. Falls back to the
- * mobile default when the stylesheet has not applied yet (SSR, tests). */
-function readRowHeight(): number {
-  if (typeof document === 'undefined') return 56;
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--row-h');
-  const parsed = parseFloat(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 56;
-}
 
 /**
  * Reusable virtualized song list. Shared by Library, Favourites and Search.
@@ -62,31 +54,7 @@ export default function TrackList(props: {
       ev,
     );
 
-  // Row height follows the adaptive --row-h token (56 mobile / 44 desktop).
-  // It has to be re-read when the viewport crosses that breakpoint — rotating a
-  // phone or dragging a desktop window narrow changes the token, and a
-  // virtualizer still positioning rows 56px apart inside 44px slots leaves the
-  // list visibly gapped (or overlapping, the other way round).
-  const [rowH, setRowH] = createSignal(readRowHeight());
-  onMount(() => {
-    const syncRowHeight = () => setRowH(readRowHeight());
-    syncRowHeight();
-    const mq = window.matchMedia('(min-width: 1024px)');
-    mq.addEventListener('change', syncRowHeight);
-    window.addEventListener('orientationchange', syncRowHeight);
-    onCleanup(() => {
-      mq.removeEventListener('change', syncRowHeight);
-      window.removeEventListener('orientationchange', syncRowHeight);
-    });
-  });
-
-  // Changing accessibility size updates CSS custom properties without crossing
-  // a media-query boundary. Read the reactive preference, then re-read the
-  // computed token after the root data attribute has been applied.
-  createEffect(() => {
-    void state.interfaceSize;
-    queueMicrotask(() => setRowH(readRowHeight()));
-  });
+  const rowH = createRowHeight();
 
   const virtualizer = createVirtualizer({
     get count() {

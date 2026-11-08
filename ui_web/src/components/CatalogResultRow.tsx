@@ -1,4 +1,3 @@
-import { CatalogCollectionStatus } from './CatalogCollectionStatus';
 import { catalogCollectionLabel } from '../lib/catalogCollection';
 import { ArtistLinks } from './MusicLinks';
 import { catalogMusic } from '../lib/musicNavigation';
@@ -54,6 +53,7 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
         onDownload: props.onDownload, busy: props.saving })} />}>
     <div
       class={styles.row}
+      data-catalog-row
       data-pressable
       data-now-playing={props.active ? '' : undefined}
       aria-busy={busy()}
@@ -82,10 +82,14 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
           }}
           aria-label={props.item.title}
           ><span class={styles.title}>{props.item.title}</span></span>
-        <Show when={props.showArtist !== false}>
-          <ArtistLinks class={styles.subtitle} music={catalogMusic(props.item)} fallback={props.item.subtitle || itemArtist(props.item)} />
-        </Show>
-        <Show when={props.showLibraryStatus}><CatalogCollectionStatus item={props.item} /></Show>
+        <span class={styles.subtitleLine}>
+          <Show when={props.showArtist !== false}>
+            <ArtistLinks class={styles.subtitle} music={catalogMusic(props.item)} fallback={props.item.subtitle || itemArtist(props.item)} />
+          </Show>
+          <Show when={props.showLibraryStatus && catalogCollectionLabel(props.item)}>{label =>
+            <span class={styles.collectionStatus}>{label()}</span>
+          }</Show>
+        </span>
       </span>
       <Show when={props.showSource}>
         <span class={styles.source}>{props.item.source}</span>
