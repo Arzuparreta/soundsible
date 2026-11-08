@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 
+// These tests own module failures and the WAV stream. A production service
+// worker can satisfy imports from cache or fetch media outside page.route.
+test.use({ serviceWorkers: 'block' });
+
 async function position(page: Page) {
   return page.locator('[data-omni-player]').evaluate(element => ({
     position: Number(element.querySelector<HTMLInputElement>('[data-omni-seek] input')!.value),
@@ -47,11 +51,16 @@ test('a failed first DJ UI load offers recovery while the current song keeps pla
   await expect.poll(async () => (await position(page)).position).toBeGreaterThan(0);
   const before = await position(page);
   const view = /\/(?:playerViews|AutoMode)(?:-[^/]+)?\.(?:js|ts|tsx)(?:\?|$)/;
-  await page.route(view, route => route.fulfill({ status: 503, body: 'temporary UI failure' }));
+  let failures = 0;
+  await page.route(view, route => {
+    failures++;
+    return route.fulfill({ status: 503, body: 'temporary UI failure' });
+  });
   // The chrome remains usable even if the first shared view load fails.
   await page.getByRole('button', { name: /^NORMAL:/ }).click();
   await page.getByRole('tab', { name: 'DJ', exact: true }).click();
   const dj = page.locator('#auto-mode-view');
+  await expect.poll(() => failures).toBeGreaterThan(0);
   await expect(dj.getByRole('button', { name: 'Reintentar', exact: true })).toBeVisible();
   await expect.poll(async () => (await position(page)).position).toBeGreaterThan(before.position);
   await page.unroute(view);
