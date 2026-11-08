@@ -1,4 +1,5 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createRowHeight } from '../lib/rowHeight';
+import { createMemo, createSignal, createEffect, on, For, Show } from 'solid-js';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { MusicListRowView } from './MusicListRowView';
 import { programCover } from '../lib/program/tracks';
@@ -10,7 +11,7 @@ import styles from './ProgramQueue.module.css';
 /** Observe the service queue; never regenerate its sources from library rows. */
 export default function ProgramQueue(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onMenu?: (entry: ProgramOccurrence, event: MouseEvent | undefined, actions: MenuAction[]) => void }) {
   const [editing, setEditing] = createSignal(false);
-  const [height, setHeight] = createSignal(56);
+  const height = createRowHeight();
   let scroll!: HTMLDivElement;
   // Primitive occurrence keys retain rows/focus across ticks and positional changes.
   const entries = createMemo(() => new Map(props.state.items.map((entry, index) => [entry.key, { entry, index }])));
@@ -42,10 +43,7 @@ export default function ProgramQueue(props: { state: ProgramState; pending: bool
     const index = props.state.items.findIndex((entry, at) => at > props.state.index && entry.lane === 'context');
     return index > props.state.index + 1 && props.state.items.slice(props.state.index + 1, index).some(entry => entry.lane === 'manual') ? index : -1;
   });
-  onMount(() => {
-    const measure = () => { setHeight(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h')) || 56); rows.measure(); };
-    const observer = new ResizeObserver(measure); observer.observe(scroll); measure(); onCleanup(() => observer.disconnect());
-  });
+  createEffect(on(height, () => rows.measure(), { defer: true }));
   return <section class={styles.queue} data-testid="program-queue" aria-label={t('nowPlaying.manualQueue')} aria-busy={props.pending}>
     <header><h2>{t('nowPlaying.manualQueue')} · {props.state.items.length}</h2><Show when={requests() > 0}><button type="button" data-queue-clear-requests disabled={disabled()}
       onClick={() => run({ action: 'clearManual', queueToken: props.state.queueToken })}>{t('nowPlaying.clearManualQueue')}</button></Show>

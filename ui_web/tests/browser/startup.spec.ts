@@ -332,10 +332,17 @@ test('plain HTTP crypto capabilities allow the player to load and play music', a
   await expect(page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true, includeHidden: true })).toBeVisible();
 });
 
+test.describe('player view module recovery', () => {
+test.use({ serviceWorkers: 'block' });
+
 test('a failed lazy player view retries without restarting playback', async ({ page }) => {
   await mockMusicEngine(page);
-  const view = /\/NowPlaying(?:-[^/]+)?\.(?:js|tsx)(?:\?|$)/;
-  await page.route(view, route => route.fulfill({ status: 503, body: 'temporary view failure', headers: { 'Cache-Control': 'no-store' } }));
+  const view = /\/(?:playerViews|NowPlaying)(?:-[^/]+)?\.(?:js|ts|tsx)(?:\?|$)/;
+  let failures = 0;
+  await page.route(view, route => {
+    failures++;
+    return route.fulfill({ status: 503, body: 'temporary view failure', headers: { 'Cache-Control': 'no-store' } });
+  });
   await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   // The mobile workspace hides the underlying pill from accessibility while
@@ -343,10 +350,12 @@ test('a failed lazy player view retries without restarting playback', async ({ p
   const playing = page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true, includeHidden: true });
   await expect(playing).toBeVisible();
   await page.getByRole('button', { name: /^NORMAL:/ }).click();
+  await expect.poll(() => failures).toBeGreaterThan(0);
   await expect(page.getByRole('button', { name: 'Reintentar', exact: true })).toBeVisible();
   await expect(playing).toHaveAttribute('aria-label', 'Pausar');
   await page.unroute(view);
   await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
   await expect(page.locator('[data-player-stage-mode="now-playing"]').getByRole('heading', { name: 'Canción de biblioteca 320', exact: true })).toBeVisible();
   await expect(page.locator('[data-player-stage-mode="now-playing"]').getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
+});
 });

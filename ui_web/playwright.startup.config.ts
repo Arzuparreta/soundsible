@@ -6,7 +6,7 @@ import base, { closedEngine } from './playwright.config';
 export default defineConfig({
   ...base,
   metadata: { startupProduction: true },
-  testMatch: 'startup.spec.ts',
+  testMatch: ['startup.spec.ts', 'dj-shell-loading.spec.ts'],
   use: { ...base.use, baseURL: 'http://127.0.0.1:4174' },
   // Docker WebKit uses the host preview over a read-only repository mount.
   webServer: process.env.SOUNDSIBLE_UI_PREVIEW_EXTERNAL ? undefined : {

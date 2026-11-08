@@ -5,7 +5,8 @@ import { libraryTrackMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openArtistMenu } from './artistActions';
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, For, on, Show } from 'solid-js';
+import { createRowHeight } from '../lib/rowHeight';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { actions, isPlayingTrack } from '../stores';
@@ -24,13 +25,6 @@ import type { LibrarySearchResult } from '../lib/librarySearch';
 import styles from './LibrarySearchResults.module.css';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 
-function readRowHeight(): number {
-  if (typeof document === 'undefined') return 60;
-  if (!mobileListLayout()) return 48;
-  const value = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h'));
-  return Number.isFinite(value) && value > 0 ? value : 56;
-}
-
 function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'artist' }>; onOpen: () => void }) {
   const tap = createResponsiveTap({ onTap: props.onOpen });
   return (
@@ -40,6 +34,7 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
       onMenu={(event) => openArtistMenu(props.result.artist.name, { artistId: props.result.artist.id }, event)} />}>
     <div
       class={styles.artistRow}
+      data-library-artist-row
       data-pressable
       role="button"
       tabindex="0"
@@ -71,7 +66,7 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
 export default function LibrarySearchResults(props: { results: LibrarySearchResult[]; query?: string }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
-  const [rowH, setRowH] = createSignal(readRowHeight());
+  const rowH = createRowHeight();
   const openMenu = (track: Extract<LibrarySearchResult, { kind: 'track' }>['track'], event?: MouseEvent) =>
     openTrackMenu(
       track,
@@ -83,16 +78,6 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       },
       event,
     );
-
-  onMount(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const sync = () => setRowH(readRowHeight());
-    sync();
-    mq.addEventListener('change', sync);
-    const observer = new MutationObserver(sync);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-interface-size'] });
-    onCleanup(() => { mq.removeEventListener('change', sync); observer.disconnect(); });
-  });
 
   const virtualizer = createVirtualizer({
     get count() {

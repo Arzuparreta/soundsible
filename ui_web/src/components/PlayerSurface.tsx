@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { actions, nowPlayingOpen, setNowPlayingOpen, state } from '../stores';
 import { trackCoverUrl } from '../lib/media';
@@ -8,15 +8,19 @@ import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import type { NowPlayingMobilePanel } from './NowPlaying';
 import { deferredComponent } from '../lib/deferredComponent';
-import { recoverNowPlaying } from './nowPlayingRecovery';
+import { recoverAutoMode, recoverNowPlaying } from './nowPlayingRecovery';
 const NowPlaying = deferredComponent<Parameters<typeof import('./NowPlaying').NowPlaying>[0]>(
-  async () => ({ default: (await import('./NowPlaying')).NowPlaying }),
+  async () => ({ default: (await import('./playerViews')).NowPlaying }),
   async () => ({ default: await recoverNowPlaying() }),
   styles.autoLoading,
 );
 import styles from './PlayerSurface.module.css';
 
-const AutoMode = lazy(() => import('./AutoMode').then((module) => ({ default: module.AutoMode })));
+const AutoMode = deferredComponent<Parameters<typeof import('./AutoMode').AutoMode>[0]>(
+  async () => ({ default: (await import('./playerViews')).AutoMode }),
+  async () => ({ default: await recoverAutoMode() }),
+  styles.autoLoading,
+);
 
 const MOBILE_QUERY = '(max-width: 1023px)';
 const SWIPE_CLOSE_THRESHOLD = 80;
@@ -473,17 +477,15 @@ export function PlayerSurface() {
           inert={!auto() || !nowPlayingOpen() ? true : undefined}
         >
           <Show when={auto()}>
-            <Suspense fallback={<div class={styles.autoLoading} aria-hidden="true" />}>
-              <AutoMode
-                panel={mobilePanel() as AutoModePanelId}
-                onPanelChange={setPanel}
-                onCarouselProgress={(index, live) => {
-                  setCarouselLive(live);
-                  setCarouselProgress(index);
-                }}
-                surfaceOpen={nowPlayingOpen() && auto()}
-              />
-            </Suspense>
+            <AutoMode
+              panel={mobilePanel() as AutoModePanelId}
+              onPanelChange={setPanel}
+              onCarouselProgress={(index, live) => {
+                setCarouselLive(live);
+                setCarouselProgress(index);
+              }}
+              surfaceOpen={nowPlayingOpen() && auto()}
+            />
           </Show>
         </div>
 
