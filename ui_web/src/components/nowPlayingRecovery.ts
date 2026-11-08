@@ -2,3 +2,7 @@
 export const recoverNowPlaying = import.meta.glob<typeof import('./NowPlaying').NowPlaying>('./NowPlaying.tsx', {
   query: '?recovery', import: 'NowPlaying',
 })['./NowPlaying.tsx'];
+
+export const recoverAutoMode = import.meta.glob<typeof import('./AutoMode').AutoMode>('./AutoMode.tsx', {
+  query: '?recovery', import: 'AutoMode',
+})['./AutoMode.tsx'];

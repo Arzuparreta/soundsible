@@ -91,6 +91,7 @@ limitaciones de escucha anotadas en entregas anteriores son históricas.
 | P8 | Secciones medidas y no usadas | AAC → SQLite → HTTP; vectores comunes ejecutados por web y Android | Cerrado (implementación `90b6c7e9`) |
 | P9 | Eco no sincronizado con el tempo | AAC → SQLite → HTTP; impulsos en Web Audio real y PCM nativo | Cerrado (`a8a22618`); activación automática cerrada en P7 (`d678f625`) |
 | UI1 | Selección externa inicia una sesión nueva desde lo seleccionado; gestión dentro del shell | Pruebas de store, navegador y contrato nativo | Cerrado (#389) |
+| UI2 | Shell vacía al cambiar de NORMAL a DJ tras actualizar la estación | 404 del módulo DJ en el journal del 2026-11-08 a las 12:52:38–43; reproducción con 404 en Chromium y regresión de cambio sin descarga, con WAV real | Corregido en PR #431: ambas vistas se cargan juntas al abrir el reproductor; carga inicial recuperable sin recargar ni detener la canción |
 | P10 | Código muerto y documentación desactualizada | Sin lectores de `automation`; tipos y contrato retirados; [limpieza posterior](../audits/2026-11-03-unused-code.md) del barrido desactivado en P14 | Cerrado (#385 y `d678f625`); retirado también el módulo sin arranque de P14 |
 | P11 | Rewrite por responsabilidades, contratos y coherencia de políticas | Igualdad antes/después: 7 análisis, 784 planes, 168 rutas y caché WAV/AAC bidireccional; contratos y políticas inventariados | Cerrado (implementación `67d086cf`); P11-a cerrado (rama `dj/p11a-remove-legacy`) |
 | P12 | Compás, subdivisión, identificación del 1 y sus confianzas | Contratos y guardas en #394; detector integrado en #395; [revalidación final](detector_comparison/FINAL_RESULTS.md) del corpus, parejas y caché/HTTP | Cerrado con P12-b; revalidado el 2026-10-27; límites abajo |
@@ -113,6 +114,18 @@ Regresión reproducida antes de corregirla, pruebas de transporte/store y botón
 Retry con WAV real en navegador. Este seguimiento corrige el reintento que no
 actuaba: no atribuye la causa del atasco inicial ni acredita una nueva escucha
 física. No cambia el análisis, los planes ni el ejecutor Android.
+
+Seguimiento de interfaz (2026-11-08, UI2): Fly en el ThinkPad pidió
+`AutoMode-DB77Yq2v.js` y recibió 404 tres veces; después de recargar, la estación
+sirvió `AutoMode-1JRlnK_1.js` con 200. El cliente abierto conservaba una referencia
+a un módulo de una compilación anterior. Reproducido: al devolver 404 a la carga
+diferida de DJ, NORMAL se oculta y la vista DJ queda vacía. Las dos vistas se
+resuelven ahora desde una entrada diferida común al abrir el reproductor: el
+cambio de modo ya no descarga código de interfaz. DJ reutiliza además la carga
+recuperable de NORMAL para los fallos al abrirlo por primera vez. Regresiones con
+WAV real verifican cambio y vuelta sin nuevas descargas, recarga ni reinicio de
+la canción, y recuperación del fallo inicial. No se ha demostrado una carrera
+del planificador; no se modifican el transporte, los planes ni Android.
 
 Seguimiento del reloj (2026-11-07): los cortes de NORMAL se correlacionan con
 alarmas de déficit al arrancar, seguidas de pausas y reactivaciones emitidas por
