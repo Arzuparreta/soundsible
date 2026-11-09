@@ -7,6 +7,7 @@ import type { CatalogItem, Track } from '../types/music';
 import { openActionMenu } from './ActionMenu';
 import { ChangeSessionIcon, MoreIcon, PlayIcon, QueueAddIcon, SourceIcon, menuIcons } from './icons';
 import styles from './CollectionActions.module.css';
+import { Spinner } from './Spinner';
 
 /** Placement context is shared by every collection nested inside the explorer. */
 export const CollectionPlacementContext = createContext<{
@@ -30,6 +31,7 @@ const PRIMARY = {
 export function CollectionActions(props: {
   title: string;
   buttonClass?: string;
+  iconOnlyOnMobile?: boolean;
   tracks?: Track[];
   items?: CatalogItem[];
   auto: boolean;
@@ -86,10 +88,11 @@ export function CollectionActions(props: {
     ? { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), onSelect: () => void use('request') }
     : { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void use('change') };
   return <>
-    <button class={props.buttonClass} type="button" data-glyph-label disabled={busy() || !count()} aria-busy={busy()} onClick={() => props.auto ? void use(purpose()) : props.onPlay?.()}>
+    <button class={props.buttonClass} classList={{ [styles.iconOnMobile]: props.iconOnlyOnMobile }} type="button" data-glyph-label disabled={busy() || !count()} aria-busy={busy()}
+      aria-label={busy() ? t('collection.resolving') : t(primary().label)} title={t(primary().label)} onClick={() => props.auto ? void use(purpose()) : props.onPlay?.()}>
       <span class={styles.content}>
-        <Show when={!busy()}><Dynamic component={primary().icon} size={16} /></Show>
-        {busy() ? t('collection.resolving') : t(primary().label)}
+        <Show when={!busy()} fallback={<Spinner size={18} />}><Dynamic component={primary().icon} size={16} /></Show>
+        <span class={styles.label}>{busy() ? t('collection.resolving') : t(primary().label)}</span>
       </span>
     </button>
     <Show when={props.auto && placement.shell && !placement.referenceOnly && placement.intent !== 'auto-route' && !props.hideReferenceMenu}>

@@ -1,31 +1,39 @@
-/* Primary bookmark, overflow actions and any active download status. */
+/* Bookmark, overflow actions and any active download status: quiet controls
+   that follow the page's playback actions. */
 .control { display: inline-flex; align-items: center; gap: var(--space-2xs); }
 
 .step {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px 14px;
+  min-width: var(--collection-control-width, var(--control-h));
+  min-height: var(--control-h);
+  padding: 0 var(--space-md);
   color: var(--ink-primary);
-  background: var(--bg-raised);
+  background: transparent;
   border: 1px solid var(--hairline);
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   /* Set like the bookmark beside it, so the pair reads as one control. */
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
+.activity { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-ink); box-shadow: 0 0 0 2px var(--bg-base); }
+.statusAnnouncement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.step:not([data-step]) { padding: 0; }
 .step:disabled { opacity: .5; cursor: default; }
 .step[data-step='owned'] { color: var(--accent-ink); cursor: default; }
 .step[data-step='review'], .step[data-step='missing'] { color: var(--accent-ink); border-color: var(--accent); }
 @media (hover: hover) and (pointer: fine) {
   button.step:hover:not(:disabled) { background: var(--bg-hover); }
 }
-/* Keep the collection controls together above playback actions on phones. */
+/* The collection controls follow the playback actions in the same wrapping
+   row; on phones the status keeps to its icon so the pair stays together. */
 @media (max-width: 519px) {
-  .control:has(.step) { flex-basis: 100%; justify-content: center; }
   .step[data-step='download'] .label, .step[data-step='owned'] .label { display: none; }
   .step[data-step='download'], .step[data-step='owned'] { padding-inline: 12px; }
 }

@@ -1,7 +1,9 @@
 import Button from '../components/Button';
+import { A } from '@solidjs/router';
+import button from '../components/Button.module.css';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
-import { useAppBar } from '../lib/appBar';
-import { desktopShell } from '../lib/shellLayout';
+import { ViewHeader } from '../components/ViewHeader';
+import { EmptyState } from '../components/EmptyState';
 import { TrashIcon } from '../components/icons';
 import { createMemo, createSignal, For, Show, onMount } from 'solid-js';
 import { state, actions, downloadCounts } from '../stores';
@@ -41,73 +43,71 @@ export default function Downloads() {
   const counts = createMemo(() => downloadCounts());
   const hasClearable = createMemo(() => state.downloads.queue.some((i) => i.status !== 'downloading'));
 
-  useAppBar({
-    title: () => t('downloads.title'),
-    actions: () => counts().failed > 0
-      ? [{ label: t('downloads.clearErrors'), icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]
-      : [],
-  });
+  const summary = () => counts().active > 0
+    ? `${t('downloads.countActive', { active: counts().active })}${counts().failed > 0 ? t('downloads.countFailed', { failed: counts().failed }) : ''}`
+    : t('downloads.noActive');
 
   return (
     <div class="view">
-      <Show when={desktopShell()}>
-      <header class={styles.header}>
-        <div class={styles.titleWrap}>
-          <h1 class={styles.title}>{t('downloads.title')}</h1>
-          <span class={styles.count}>
-            <Show when={counts().active > 0} fallback={t('downloads.noActive')}>
-              {t('downloads.countActive', { active: counts().active })}{counts().failed > 0 ? t('downloads.countFailed', { failed: counts().failed }) : ''}
-            </Show>
-          </span>
-        </div>
-        <Show when={counts().failed > 0}>
-          <button class={styles.clear} type="button" onClick={() => actions.clearFailedDownloads()}>
+      <ViewHeader
+        title={t('downloads.title')}
+        meta={summary()}
+        barActions={counts().failed > 0
+          ? [{ label: t('downloads.clearErrors'), icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]
+          : []}
+        actions={counts().failed > 0 ? (
+          <button class={styles.clear} type="button" onClick={() => void actions.clearFailedDownloads()}>
             {t('downloads.clearErrors')}
           </button>
-        </Show>
-      </header>
-      </Show>
+        ) : undefined}
+      />
 
       <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
-        <Show when={failed()}><p role="status">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void load()}>{t('common.retry')}</Button></p></Show>
-        <For each={state.downloads.recent}>
-          {(r) => (
-            <div class={styles.recentRow}>
-              <span class={styles.recentCheck} aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <path d="M5 12l5 5L20 7" />
-                </svg>
-              </span>
-              <span class={styles.recentMeta}>
-                <span class={styles.recentTitle}>{r.title}</span>
-                <span class={styles.recentSub}>{t('downloads.recentSubtitle')}</span>
-              </span>
-            </div>
-          )}
-        </For>
+        <Show when={failed()}>
+          <EmptyState compact tone="danger">
+            {t('common.loadFailed')} <Button variant="secondary" onClick={() => void load()}>{t('common.retry')}</Button>
+          </EmptyState>
+        </Show>
 
         <Show
-          when={items().length > 0}
+          when={items().length > 0 || state.downloads.recent.length > 0}
           fallback={
-            <Show when={state.downloads.recent.length === 0 && !failed()}>
+            <Show when={!failed()}>
               <Show when={!loading()} fallback={<SkeletonRows />}>
-              <div class={styles.empty}>
-                <p class={styles.emptyTitle}>{t('downloads.emptyTitle')}</p>
-                <p class={styles.emptyText}>
-                  {t('downloads.emptyBody')}
-                </p>
-              </div>
+                <EmptyState>
+                  <strong class={styles.emptyTitle}>{t('downloads.emptyTitle')}</strong>
+                  <p>{t('downloads.emptyBody')}</p>
+                  <A href="/search" class={`${button.btn} ${button.secondary} ${button.sm}`}>{t('nav.search')}</A>
+                </EmptyState>
               </Show>
             </Show>
           }
         >
-          <For each={items()}>{(i) => <DownloadRow item={i} />}</For>
-        </Show>
+          <div class={styles.column}>
+            <For each={state.downloads.recent}>
+              {(r) => (
+                <div class={styles.recentRow}>
+                  <span class={styles.recentCheck} aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M5 12l5 5L20 7" />
+                    </svg>
+                  </span>
+                  <span class={styles.recentMeta}>
+                    <span class={styles.recentTitle}>{r.title}</span>
+                    <span class={styles.recentSub}>{t('downloads.recentSubtitle')}</span>
+                  </span>
+                </div>
+              )}
+            </For>
 
-        <Show when={hasClearable()}>
-          <button class={styles.clearAll} type="button" onClick={() => actions.clearDownloads()}>
-            {t('downloads.clearQueue')}
-          </button>
+            <For each={items()}>{(i) => <DownloadRow item={i} />}</For>
+
+            <Show when={hasClearable()}>
+              <button class={styles.clearAll} type="button" onClick={() => actions.clearDownloads()}>
+                {t('downloads.clearQueue')}
+              </button>
+            </Show>
+          </div>
         </Show>
       </div>
     </div>

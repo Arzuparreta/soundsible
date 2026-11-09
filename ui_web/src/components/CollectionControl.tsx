@@ -14,7 +14,7 @@ import { ownedTrackForItem } from '../stores';
 import type { CatalogItem } from '../types/music';
 import { BookmarkIcon, CheckIcon, MoreIcon, menuIcons } from './icons';
 import { Spinner } from './Spinner';
-import { openActionMenu } from './ActionMenu';
+import { openActionMenu, type MenuAction } from './ActionMenu';
 import saveStyles from './SavedEntities.module.css';
 import styles from './CollectionControl.module.css';
 import { collectionArrivedCount as arrivedOf } from '../lib/collectionState';
@@ -31,7 +31,7 @@ const downloads = {
 };
 
 /** Bookmark first; explicit bulk song actions live in the overflow menu. */
-export function CollectionControl(props: { entity: SavedEntity; deezerId?: string; tracklist?: CatalogItem[]; onMenuReady?: (open: () => void) => void }) {
+export function CollectionControl(props: { entity: SavedEntity; deezerId?: string; tracklist?: CatalogItem[]; onMenuReady?: (open: () => void) => void; compact?: boolean; menuActions?: () => MenuAction[] }) {
   onMount(() => {
     void syncSavedEntities();
     props.onMenuReady?.(openMenu);
@@ -161,11 +161,21 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
     ? t('collectionControl.downloadArtist', { title: props.entity.name })
     : t('collectionControl.downloadAlbum');
 
+  const statusLabel = () => step() === 'downloading'
+    ? t('collectionControl.downloading', { done: arrived(), total: job()?.selected_track_count ?? total() })
+    : step() === 'review' ? t('collectionControl.review', { n: jobReviewCount(job()) })
+      : step() === 'missing' ? t('collectionControl.missing', { n: jobMissingCount(job()) })
+        : t('collectionControl.owned');
+  const menuLabel = () => props.compact && job()
+    ? `${t('savedEntities.options')}: ${statusLabel()}` : t('savedEntities.options');
   const openMenu = () => openActionMenu({
     title: props.entity.name,
     actions: [
+      ...(props.menuActions?.() ?? []),
+      ...(props.compact && job() ? [{ icon: menuIcons.download(), label: statusLabel(), onSelect: details }] : []),
       { icon: saved() ? menuIcons.unbookmark() : menuIcons.bookmark(),
         label: t(saved() ? 'savedEntities.remove' : 'savedEntities.save'),
+        selected: saved(),
         disabled: entitiesBusy() || changing(), onSelect: () => void toggleSaved() },
       ...(props.deezerId || (props.tracklist?.length ?? 0) > 0 ? [
         { icon: menuIcons.save(), label: t('collectionControl.addSongs'),
@@ -178,14 +188,20 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
 
   return (
     <span class={styles.control}>
+      <Show when={!props.compact}>
       <button type="button" class={saveStyles.save} aria-pressed={saved()} aria-busy={changing() || undefined}
+        aria-label={saved() ? t('savedEntities.saved') : t('savedEntities.save')} title={saved() ? t('savedEntities.saved') : t('savedEntities.save')}
         disabled={entitiesBusy() || changing()} onClick={() => void toggleSaved()}>
         <BookmarkIcon />
-        {saved() ? t('savedEntities.saved') : t('savedEntities.save')}
+        <span class={saveStyles.saveLabel}>{saved() ? t('savedEntities.saved') : t('savedEntities.save')}</span>
       </button>
-      <button type="button" class={styles.step} aria-label={t('savedEntities.options')}
-        aria-haspopup="dialog" onClick={openMenu}><MoreIcon size={18} /></button>
-      <Show when={job()}>
+      </Show>
+      <button type="button" class={styles.step} aria-label={menuLabel()} title={menuLabel()}
+        aria-haspopup="dialog" onClick={openMenu}><MoreIcon size={18} />
+        <Show when={props.compact && job() && step() !== 'owned'}><span class={styles.activity} aria-hidden="true" /></Show>
+      </button>
+      <Show when={props.compact && job()}><span class={styles.statusAnnouncement} role="status">{statusLabel()}</span></Show>
+      <Show when={!props.compact && job()}>
         <Switch>
           <Match when={step() === 'owned'}>
             <span class={styles.step} data-step="owned" role="status" title={t('collectionControl.owned')}>

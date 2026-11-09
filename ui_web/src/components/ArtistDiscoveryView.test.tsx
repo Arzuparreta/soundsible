@@ -23,3 +23,42 @@ it('delegates full entity identities and song context through the shared discogr
   fireEvent.click(view.getByRole('button', { name: 'Song' })); expect(play).toHaveBeenCalledWith(songs[0], 1, songs);
   expect(view.container.querySelector('audio')).toBeNull();
 });
+
+const albums = (n: number) => Array.from({ length: n }, (_, i) => ({ deezer_id: String(i), title: `Record ${i}`, cover: '' }));
+const shelf = (props: { albums?: number; related?: number; loading?: boolean }) => render(() => <ArtistDiscoveryView artistName="Artist"
+  topTracks={[]} loading={!!props.loading} albums={albums(props.albums ?? 0)} singlesEps={[]}
+  related={Array.from({ length: props.related ?? 0 }, (_, i) => ({ deezer_id: `r${i}`, name: `Related ${i}`, picture: '', nb_fans: 10 }))}
+  renderSong={() => null} renderLink={link => <a href={link.entity.destination} class={link.class}>{link.children}</a>} />);
+
+it('says once that the catalogue has nothing, instead of under every heading', () => {
+  setLocale('en');
+  const view = shelf({});
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  expect(view.getByText('No catalog data available for this artist.')).toBeInTheDocument();
+  expect(view.queryByText('No top tracks found.')).toBeNull();
+  cleanup();
+  // Nothing is claimed while the profile is still arriving.
+  expect(shelf({ loading: true }).queryByRole('status')).toBeNull();
+  cleanup();
+  // A profile with only related artists shows them and no empty line at all.
+  const related = shelf({ related: 2 });
+  expect(related.queryByRole('status')).toBeNull();
+  expect(related.getByRole('heading', { name: 'Fans also like' })).toBeInTheDocument();
+});
+
+it('opens a long shelf into a grid through a labelled, stateful control', () => {
+  setLocale('en');
+  const view = shelf({ albums: 6, related: 2 });
+  // Short shelves need no control.
+  expect(view.getAllByRole('button')).toHaveLength(1);
+  const toggle = view.getByRole('button', { name: 'See all: Albums' });
+  const rail = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(rail).toHaveAttribute('data-horizontal-scroll');
+  expect(rail.querySelectorAll('a')).toHaveLength(6);
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  expect(toggle).toHaveAccessibleName('Show less: Albums');
+  expect(rail).not.toHaveAttribute('data-horizontal-scroll');
+  expect(rail.querySelectorAll('a')).toHaveLength(6);
+});

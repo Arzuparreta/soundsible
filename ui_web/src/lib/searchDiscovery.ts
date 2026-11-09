@@ -1,5 +1,12 @@
-import type { DiscoveryFeedItem } from './api';
+import type { DiscoveryBrowseSection, DiscoveryFeedItem } from './api';
 import type { CatalogItem } from '../types/music';
+
+/** Only the opened section can keep a visible selection stable during refresh. */
+export function discoveryHasVisible(sections: readonly DiscoveryBrowseSection[], songs: readonly CatalogItem[], expanded?: string): boolean {
+  if (expanded === 'songs') return songs.length > 0;
+  return sections.some(section => (!expanded || section.id === expanded) && section.items.length > 0)
+    || (!expanded && songs.length > 0);
+}
 
 /** Preserve playable identities and recommendation feedback across the shared row. */
 export function discoveryCatalogItem(item: DiscoveryFeedItem): CatalogItem {

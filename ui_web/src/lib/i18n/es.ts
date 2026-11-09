@@ -56,7 +56,8 @@ export const es: Dict = {
     "next": "Siguiente",
     "preparing": "Buscando artistas y álbumes para ti…",
     "empty": "Busca música para empezar a explorar.",
-    "error": "No se pudieron cargar algunas recomendaciones."
+    "error": "No se pudieron cargar algunas recomendaciones.",
+    "sectionEmpty": "Todavía no hay nada que mostrar en esta sección."
 },
   musicExplorer: {
     startFromCurrent: 'Desde la actual',
@@ -138,6 +139,9 @@ export const es: Dict = {
     leave: 'Salir de la sala',
     title: 'Live',
     meta: 'Sesiones de la comunidad Soundsible',
+    roomName: 'Nombre de la sala',
+    renameFailed: 'No se ha podido renombrar la sala.',
+    defaultTitle: 'Sesión de {name}',
     goLive: 'Emitir en directo',
     end: 'Terminar sesión',
     onAir: 'On air',
@@ -516,12 +520,20 @@ export const es: Dict = {
     typeArtist: 'Artista',
     typeAlbum: 'Álbum',
     typeSong: 'Canción',
-    resultsSection: 'Resultados',
     interpretedAs: 'Mostrando resultados para {name}',
     songsSection: 'Canciones',
     artistsSection: 'Artistas',
     albumsSection: 'Albums',
     chooseVersion: 'Elige la version',
+    chooseVersionHint: 'Varias subidas coinciden con {title}. Elige la que quieres guardar.',
+    typeMore: 'Escribe al menos dos caracteres para buscar.',
+    noSongs: 'No hay canciones para esta búsqueda.',
+    noArtists: 'No hay artistas para esta búsqueda.',
+    noAlbums: 'No hay álbumes para esta búsqueda.',
+    showAllResults: 'Ver todos los resultados',
+    filterResults: 'Filtrar resultados',
+    ytMode: 'Buscando en YouTube',
+    backToMusic: 'Volver a buscar en Música',
     ytRecentsSection: 'Búsquedas recientes en YouTube',
     recentsSection: 'Búsquedas recientes',
     removeRecent: 'Quitar «{query}» de las búsquedas recientes',
@@ -766,7 +778,7 @@ export const es: Dict = {
     recentSubtitle: 'Añadido a la biblioteca',
     emptyTitle: 'Nada en la cola',
     emptyBody:
-      'Añade canciones desde Buscar y verás aquí su progreso en tiempo real.',
+      'Añade canciones desde Descubrir y verás aquí su progreso en tiempo real.',
     clearQueue: 'Vaciar cola',
     ariaRetry: 'Reintentar',
     ariaRemove: 'Quitar',
@@ -825,6 +837,10 @@ export const es: Dict = {
     ariaDownload: 'Descargar episodio',
     ariaDownloaded: 'Descargado',
     durationMin: '{m} min',
+    unsubscribing: 'Dejando de seguir…',
+    unsubscribeFailed: 'No se ha podido actualizar la suscripción. Comprueba tus podcasts e inténtalo de nuevo.',
+    noDownloaded: 'No hay episodios descargados de este programa.',
+    showAll: 'Ver todos los episodios',
   },
   migrate: {
     spotify: 'Spotify',
@@ -871,6 +887,8 @@ export const es: Dict = {
       createFailed: 'No se pudo crear la playlist',
     },
   },
+  entityView: { label: 'Contenido mostrado' },
+
   artist: {
     ariaBack: 'Volver',
     play: 'Reproducir',
@@ -886,9 +904,6 @@ export const es: Dict = {
     inLibraryCount: '{n} en biblioteca',
     notThisArtist: '¿No es este el artista?',
     noCatalogData: 'No hay datos de catálogo para este artista.',
-    noTopTracks: 'No se encontraron canciones populares.',
-    noAlbums: 'No se encontraron álbumes.',
-    noRelated: 'No se encontraron artistas relacionados.',
   },
   album: {
     ariaBack: 'Volver',
@@ -902,15 +917,8 @@ export const es: Dict = {
     noTracklist: 'No hay tracklist para este álbum.',
   },
   placeholder: {
-    overlayHeading: 'Overlay manager',
-    overlayText:
-      'Este sheet vive en el registro de overlays. Al cerrarlo — o al navegar a otra vista — su DOM, listeners y scope reactivo se limpian solos. El leak histórico de Discover es imposible por diseño.',
-    overlayClose: 'Cerrar',
-    statusOnline: 'engine ●',
-    statusOffline: 'offline ○',
-    tryOverlay: 'Probar overlay',
     notFoundTitle: 'No encontrado',
-    notFoundBlurb: 'Esta ruta no existe.',
+    notFoundBlurb: 'Esta página no existe. Puede que el enlace esté incompleto o que la página se haya movido.',
   },
   trackActions: {
     playNext: 'Reproducir a continuación',

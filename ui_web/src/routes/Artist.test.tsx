@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@solidjs/testing-library';
+import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Artist from './Artist';
@@ -7,6 +7,7 @@ import type { ArtistProfile, Track } from '../types/music';
 
 const apiMock = vi.hoisted(() => ({
   getArtistProfile: vi.fn(),
+  getLibraryArtist: vi.fn(),
   resolveCatalogItem: vi.fn(),
   saveCatalogItem: vi.fn(),
 }));
@@ -18,6 +19,11 @@ const storeMock = vi.hoisted(() => ({
 }));
 
 vi.mock('../lib/api', () => ({ api: apiMock }));
+const menuMock = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock('../components/ActionMenu', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../components/ActionMenu')>()),
+  openActionMenu: (...args: unknown[]) => menuMock.open(...args),
+}));
 vi.mock('../lib/media', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/media')>()),
   coverUrl: (id: string) => `/cover/${id}`,
@@ -190,5 +196,74 @@ describe('Artist route view mode', () => {
     // discover content shows instead of an inescapable empty list.
     await waitFor(() => expect(screen.getByText('Stranger Hit')).toBeInTheDocument());
     expect(screen.queryByText('No tracks in your library yet.')).not.toBeInTheDocument();
+  });
+
+  it('keeps a library link on its library tab when the membership read fails, and retries the same id', async () => {
+    // The failed read used to become an empty list: the toggle vanished and the
+    // page fell to Discover, as though the user owned nothing by this artist.
+    storeMock.library = [{ id: 'l1', title: 'Owned', artist: 'Someone Else', album: 'A' }];
+    apiMock.getArtistProfile.mockResolvedValue(profileFor('Owned Artist', true));
+    apiMock.getLibraryArtist.mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ artist: { id: 'ar-1', name: 'Owned Artist' }, track_ids: ['l1'] });
+
+    renderAt('/artist/Owned%20Artist?view=library&artist_id=ar-1');
+
+    const retry = await screen.findByRole('button', { name: 'Retry' });
+    expect(screen.getByRole('combobox', { name: 'Shown content' })).toHaveValue('library');
+    // Neither the catalogue listing nor a guess by name stands in for the answer.
+    expect(screen.queryByText('Owned Artist Hit')).toBeNull();
+    expect(screen.queryByText('Owned')).toBeNull();
+
+    fireEvent.click(retry);
+    await screen.findByText('Owned');
+    expect(apiMock.getLibraryArtist.mock.calls.map(([id]) => id)).toEqual(['ar-1', 'ar-1']);
+    expect(screen.getByRole('option', { name: 'My library (1)' })).toHaveProperty('selected', true);
+  });
+
+  it('still leaves the library tab when the engine answers that nothing is owned', async () => {
+    apiMock.getArtistProfile.mockResolvedValue(profileFor('Former', false));
+    apiMock.getLibraryArtist.mockResolvedValue({ artist: { id: 'ar-2', name: 'Former' }, track_ids: [] });
+
+    renderAt('/artist/Former?view=library&artist_id=ar-2');
+
+    await screen.findByText('Former Hit');
+    expect(screen.queryByRole('combobox', { name: 'Shown content' })).toBeNull();
+  });
+
+  it('puts listening first and offers other matches in the shared sheet', async () => {
+    const profile = profileFor('Twin', false);
+    profile.candidates = [{ deezer_id: '7', name: 'Twin (band)', picture: '', nb_fans: 1200 }];
+    apiMock.getArtistProfile.mockResolvedValue(profile);
+
+    renderAt('/artist/Twin?view=discover');
+    await screen.findByText('Twin Hit');
+
+    const play = screen.getByRole('button', { name: 'Play' });
+    const options = screen.getByRole('button', { name: 'Options' });
+    expect(play.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(options);
+    expect(menuMock.open).toHaveBeenCalledTimes(1);
+    const first = menuMock.open.mock.calls[0][0] as { actions: Array<{ label: string; onSelect: () => void }> };
+    expect(first.actions.some(action => action.label === 'Save')).toBe(true);
+    first.actions.find(action => action.label === 'Not this artist?')!.onSelect();
+    const [{ actions }] = menuMock.open.mock.calls[1] as [{ actions: Array<{ label: string; onSelect: () => void }> }];
+    expect(actions.map((action) => action.label)).toEqual(['Twin (band) · 1.2K fans']);
+    actions[0].onSelect();
+    await waitFor(() => expect(window.location.search).toContain('deezer_id=7'));
+  });
+
+  it('switches mode without fetching the profile again', async () => {
+    // A fresh resource key per query-string write refetched the profile and
+    // replaced the page with a skeleton under the tap.
+    storeMock.library = [{ id: 'l1', title: 'Owned', artist: 'Owned Artist', album: 'A' }];
+    apiMock.getArtistProfile.mockResolvedValue(profileFor('Owned Artist', true));
+
+    renderAt('/artist/Owned%20Artist?view=library');
+    await screen.findByText('Owned');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Shown content' }), { target: { value: 'discover' } });
+
+    await screen.findByText('Owned Artist Hit');
+    expect(screen.queryByRole('status', { name: 'Loading…' })).toBeNull();
+    expect(apiMock.getArtistProfile).toHaveBeenCalledTimes(1);
   });
 });

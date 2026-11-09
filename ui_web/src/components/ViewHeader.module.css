@@ -1,17 +1,21 @@
 .header {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: var(--space-sm) var(--space-md);
   padding: var(--space-xl) var(--gutter) var(--space-md);
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 86%, transparent), transparent);
 }
 
 .heading {
   display: flex;
+  flex: 1 1 18rem;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-md);
+  column-gap: var(--space-md);
+  row-gap: var(--space-2xs);
   min-width: 0;
 }
 
@@ -20,11 +24,12 @@
   margin: 0;
   font-size: var(--text-h1);
   font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
   letter-spacing: -0.01em;
+  /* A long name wraps rather than losing its end: the page title is the one
+     place a name is guaranteed to be read in full. */
   text-wrap: balance;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .titleButton {
@@ -39,9 +44,7 @@
   color: inherit;
   letter-spacing: inherit;
   text-align: inherit;
-  overflow: inherit;
-  text-overflow: inherit;
-  white-space: inherit;
+  overflow-wrap: inherit;
   cursor: pointer;
 }
 
@@ -55,6 +58,7 @@
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs);
   flex: none;
@@ -70,4 +74,3 @@
 /* A worded command's glyph gives way before the title does. Icon-only buttons
  * keep theirs; only the ones marked as carrying a label drop it. */
 @container (max-width: 360px) { .header[data-compact] [data-glyph-label] svg { display: none; } }
-.back { background: none; border: 0; color: var(--ink-secondary); cursor: pointer; min-width: 36px; min-height: 36px; font-size: 24px; }

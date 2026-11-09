@@ -3,6 +3,9 @@ import { expect, it, vi } from 'vitest';
 import Downloads from './Downloads';
 
 const load = vi.hoisted(() => vi.fn());
+vi.mock('@solidjs/router', () => ({
+  A: (props: { href: string; class?: string; children: unknown }) => <a href={props.href} class={props.class}>{props.children as string}</a>,
+}));
 vi.mock('../stores', () => ({
   state: { downloads: { queue: [], recent: [] } },
   actions: { loadDownloads: load },
@@ -20,4 +23,5 @@ it('distinguishes a pending queue, a failed request and a confirmed empty queue'
   await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
   expect(load).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole('status', { name: 'Loading…' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Discover' })).toHaveAttribute('href', '/search');
 });

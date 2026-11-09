@@ -76,21 +76,44 @@ test('an artist bookmark is independent of explicit bulk saving and downloading'
     await expect.poll(() => page.locator('html').getAttribute('data-hold-gesture')).toBeNull();
   }
 
+  const menu = page.getByRole('dialog');
+  const more = page.locator('[data-entity-toolbar]').getByRole('button', { name: /^Opciones/ });
+  const openMenu = async () => {
+    await expect(menu).toHaveCount(0);
+    await more.click();
+    await expect(menu).toBeVisible();
+  };
+  const setBookmark = async (saved: boolean) => {
+    await openMenu();
+    const action = menu.getByRole('button', { name: saved ? 'Guardar' : 'Quitar de guardados', exact: true });
+    if (saved) await expect(action).not.toHaveAttribute('aria-current', 'true');
+    else await expect(action).toHaveAttribute('aria-current', 'true');
+    await action.click();
+    await expect(menu).toHaveCount(0);
+    await expect.poll(() => bookmarked.length).toBe(saved ? 1 : 0);
+    // Reopening reads the persisted selection; the closed menu is not reactive.
+    await openMenu();
+    const next = menu.getByRole('button', { name: saved ? 'Quitar de guardados' : 'Guardar', exact: true });
+    if (saved) await expect(next).toHaveAttribute('aria-current', 'true');
+    else await expect(next).not.toHaveAttribute('aria-current', 'true');
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+  };
+
   // A bookmark adds only the entity and can be removed without touching Songs.
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await setBookmark(true);
   expect(bookmarked).toHaveLength(1);
   expect(savedSets).toHaveLength(0);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Guardado', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  expect(downloads).toHaveLength(0);
+  await setBookmark(false);
   expect(bookmarked).toHaveLength(0);
   expect(savedSets).toHaveLength(0);
+  expect(downloads).toHaveLength(0);
 
   expect(discographyReads).toBe(0);
 
   // Bulk saving is an explicit overflow action, independent of the bookmark.
-  await page.getByRole('button', { name: 'Opciones', exact: true }).click();
+  await openMenu();
   await page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true }).click();
   await expect(page.getByRole('dialog').getByText(/^3 canciones aparecerán/)).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true }).click();
@@ -101,16 +124,18 @@ test('an artist bookmark is independent of explicit bulk saving and downloading'
 
   // Downloading all of it says how much, then hands it to the engine.
   // Removing a bookmark after bulk saving leaves every saved song alone.
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Guardado', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await setBookmark(true);
+  await setBookmark(false);
   expect(savedSets).toHaveLength(1);
   expect(bookmarked).toHaveLength(0);
-  await page.getByRole('button', { name: 'Opciones', exact: true }).click();
+  await openMenu();
   await page.getByRole('button', { name: 'Descargar todo de Daft Punk', exact: true }).click();
   await expect(page.getByRole('dialog').getByText(/^3 canciones que aún no tienes descargadas, unos 41 MB/)).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Descargar', exact: true }).click();
   await expect.poll(() => downloads).toEqual([{ deezer_id: '27' }]);
-  await expect(page.getByRole('button', { name: 'Descargando 0 de 3', exact: true })).toBeVisible();
+  await expect(more).toHaveAccessibleName('Opciones: Descargando 0 de 3');
+  await openMenu();
+  await menu.getByRole('button', { name: 'Descargando 0 de 3', exact: true }).click();
+  await expect(menu.getByRole('status')).toHaveText('Descargando 0 de 3');
+  await expect(menu.getByRole('button', { name: 'Detener la descarga', exact: true })).toBeVisible();
 });

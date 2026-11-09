@@ -56,7 +56,8 @@ export const fr: Dict = {
     "next": "Suivant",
     "preparing": "Recherche d’artistes et d’albums pour vous…",
     "empty": "Recherchez de la musique pour commencer à explorer.",
-    "error": "Certaines recommandations n’ont pas pu être chargées."
+    "error": "Certaines recommandations n’ont pas pu être chargées.",
+    "sectionEmpty": "Rien à afficher dans cette section pour l’instant."
 },
   musicExplorer: {
     startFromCurrent: 'Depuis ce titre',
@@ -138,6 +139,9 @@ export const fr: Dict = {
     leave: 'Quitter la salle',
     title: 'Live',
     meta: 'Sessions de la communauté Soundsible',
+    roomName: 'Nom de la salle',
+    renameFailed: 'Impossible de renommer la salle.',
+    defaultTitle: 'Session de {name}',
     goLive: 'Diffuser en direct',
     end: 'Terminer la session',
     onAir: 'En direct',
@@ -520,12 +524,20 @@ export const fr: Dict = {
     typeArtist: 'Artiste',
     typeAlbum: 'Album',
     typeSong: 'Titre',
-    resultsSection: 'Résultats',
     interpretedAs: 'Résultats affichés pour {name}',
     songsSection: 'Titres',
     artistsSection: 'Artistes',
     albumsSection: 'Albums',
     chooseVersion: 'Choisissez une version',
+    chooseVersionHint: 'Plusieurs mises en ligne correspondent à {title}. Choisissez celle à enregistrer.',
+    typeMore: 'Saisissez au moins deux caractères pour rechercher.',
+    noSongs: 'Aucun titre pour cette recherche.',
+    noArtists: 'Aucun artiste pour cette recherche.',
+    noAlbums: 'Aucun album pour cette recherche.',
+    showAllResults: 'Afficher tous les résultats',
+    filterResults: 'Filtrer les résultats',
+    ytMode: 'Recherche sur YouTube',
+    backToMusic: 'Revenir à la recherche Musique',
     ytRecentsSection: 'Recherches YouTube récentes',
     recentsSection: 'Recherches récentes',
     removeRecent: 'Retirer « {query} » des recherches récentes',
@@ -772,7 +784,7 @@ export const fr: Dict = {
     recentSubtitle: 'Ajouté à la bibliothèque',
     emptyTitle: 'File vide',
     emptyBody:
-      'Ajoutez des titres depuis Rechercher et vous verrez leur progression ici en temps réel.',
+      'Ajoutez des titres depuis Découvrir et vous verrez leur progression ici en temps réel.',
     clearQueue: 'Vider la file',
     ariaRetry: 'Réessayer',
     ariaRemove: 'Retirer',
@@ -832,6 +844,10 @@ export const fr: Dict = {
     ariaDownload: 'Télécharger l’épisode',
     ariaDownloaded: 'Téléchargé',
     durationMin: '{m} min',
+    unsubscribing: 'Désabonnement…',
+    unsubscribeFailed: 'Impossible de modifier l’abonnement. Vérifiez vos podcasts et réessayez.',
+    noDownloaded: 'Aucun épisode téléchargé pour cette émission.',
+    showAll: 'Voir tous les épisodes',
   },
   migrate: {
     spotify: 'Spotify',
@@ -879,6 +895,8 @@ export const fr: Dict = {
       createFailed: 'Impossible de créer la playlist',
     },
   },
+  entityView: { label: 'Contenu affiché' },
+
   artist: {
     ariaBack: 'Retour',
     play: 'Lire',
@@ -894,9 +912,6 @@ export const fr: Dict = {
     inLibraryCount: '{n} en bibliothèque',
     notThisArtist: "Ce n'est pas cet artiste ?",
     noCatalogData: "Aucune donnée de catalogue pour cet artiste.",
-    noTopTracks: 'Aucun titre populaire trouvé.',
-    noAlbums: 'Aucun album trouvé.',
-    noRelated: 'Aucun artiste similaire trouvé.',
   },
   album: {
     ariaBack: 'Retour',
@@ -910,15 +925,8 @@ export const fr: Dict = {
     noTracklist: 'Aucune liste de pistes pour cet album.',
   },
   placeholder: {
-    overlayHeading: 'Gestionnaire d’overlays',
-    overlayText:
-      'Cette feuille vit dans le registre des overlays. En la fermant — ou en naviguant vers une autre vue — son DOM, ses listeners et son scope réactif se nettoient seuls. La fuite historique de Discover est impossible par design.',
-    overlayClose: 'Fermer',
-    statusOnline: 'engine ●',
-    statusOffline: 'offline ○',
-    tryOverlay: 'Essayer l’overlay',
     notFoundTitle: 'Introuvable',
-    notFoundBlurb: "Cette route n'existe pas.",
+    notFoundBlurb: 'Cette page n’existe pas. Le lien est peut-être incomplet ou la page a été déplacée.',
   },
   trackActions: {
     playNext: 'Lire ensuite',

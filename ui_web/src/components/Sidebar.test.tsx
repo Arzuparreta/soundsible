@@ -42,6 +42,38 @@ describe('desktop sidebar', () => {
       .toEqual(['Descargas', 'Ajustes']);
   });
 
+  it('announces one current page: the Library view, with Library marked as its branch', async () => {
+    window.history.replaceState({}, '', '/library?view=songs');
+    const view = renderSidebar();
+    const current = view.container.querySelectorAll('[aria-current="page"]');
+    expect([...current].map(link => link.textContent?.trim())).toEqual(['Canciones']);
+    const library = view.getByRole('link', { name: 'Biblioteca' });
+    expect(library).not.toHaveAttribute('aria-current');
+    expect(library).toHaveClass(styles.inside);
+    // Library is still the selected destination: choosing it climbs to its root.
+    fireEvent.click(library);
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(library).toHaveAttribute('aria-current', 'page');
+    expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+  });
+
+  it.each([['/?saved=albums', 'Biblioteca'], ['/artist/example', 'Descubrir'], ['/search', 'Descubrir']])('gives %s exactly one current entry', (path, name) => {
+    window.history.replaceState({}, '', path);
+    const view = renderSidebar();
+    const current = view.container.querySelectorAll('[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(current[0].textContent?.trim()).toBe(name);
+  });
+
+  it('keeps the brand a link home that never claims the current page', async () => {
+    window.history.replaceState({}, '', '/search');
+    const view = renderSidebar();
+    const brand = view.getByRole('link', { name: 'Soundsible' });
+    fireEvent.click(brand);
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(brand).not.toHaveAttribute('aria-current');
+  });
+
   it('navigates from a settings subroute back to its index', async () => {
     window.history.replaceState({}, '', '/settings/devices');
     const view = renderSidebar();

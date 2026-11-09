@@ -35,8 +35,12 @@ test('home has distinct entities, bounded songs, working sections and restoratio
   await expect(artist).toHaveAttribute('href', /deezer_id=1/);
   const album = albums.getByRole('link', { name: 'Un disco por descubrir 1', exact: true });
   await expect(album).toHaveAttribute('href', /deezer_id=20/);
-  expect(await artist.locator('span').first().evaluate(el => getComputedStyle(el).borderRadius)).toBe('50%');
-  expect(await album.locator('span').first().evaluate(el => getComputedStyle(el).borderRadius)).not.toBe('50%');
+  const round = async (element: typeof artist) => element.locator('span').first().evaluate(el => {
+    const radius = getComputedStyle(el).borderRadius;
+    return radius.endsWith('%') ? parseFloat(radius) >= 50 : parseFloat(radius) >= el.getBoundingClientRect().width / 2;
+  });
+  expect(await round(artist)).toBe(true);
+  expect(await round(album)).toBe(false);
   await page.screenshot({ path: info.outputPath('search-home.png') });
   const scroll = page.locator('[data-primary-scroll]').first();
   await scroll.evaluate(el => { el.scrollTop = 160; });
@@ -44,9 +48,11 @@ test('home has distinct entities, bounded songs, working sections and restoratio
   await albums.getByRole('link', { name: 'Ver todos: Álbumes para ti' }).click();
   await expect(page).toHaveURL(/browse=albums/);
   await expect(home.getByRole('link', { name: /^Un disco por descubrir / })).toHaveCount(10);
+  await expect(home.getByRole('heading', { name: 'Álbumes para ti' })).toBeFocused();
   await expect(home.getByRole('region', { name: 'Artistas por descubrir' })).toHaveCount(0);
   await home.getByRole('button', { name: 'Volver a Descubrir' }).click();
   await expect(artists).toBeVisible();
+  await expect(albums.getByRole('link', { name: 'Ver todos: Álbumes para ti' })).toBeFocused();
   await expect.poll(() => scroll.evaluate(el => el.scrollTop)).toBeCloseTo(offset, -1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

@@ -17,6 +17,7 @@ export interface SearchFieldProps {
 
 /** One responsive search control for full-page search surfaces. */
 export function SearchField(props: SearchFieldProps) {
+  let input: HTMLInputElement | undefined;
   return (
     <div class={styles.field}>
       <svg class={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
@@ -43,7 +44,7 @@ export function SearchField(props: SearchFieldProps) {
         placeholder={props.placeholder}
         aria-label={props.ariaLabel ?? props.placeholder}
         value={props.value}
-        ref={props.inputRef}
+        ref={element => { input = element; props.inputRef?.(element); }}
         onInput={(event) => props.onInput(event.currentTarget.value)}
         onFocus={props.onFocus}
         onBlur={props.onBlur}
@@ -54,7 +55,7 @@ export function SearchField(props: SearchFieldProps) {
           class={styles.clear}
           type="button"
           aria-label={props.clearLabel ?? t('library.clearSearch')}
-          onClick={() => props.onInput('')}
+          onClick={() => { props.onInput(''); input?.focus(); }}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="m7 7 10 10M17 7 7 17" />

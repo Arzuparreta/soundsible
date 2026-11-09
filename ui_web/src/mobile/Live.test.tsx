@@ -5,7 +5,7 @@ import { NativeLive } from './Live';
 const mocked = vi.hoisted(() => ({ state: vi.fn(), command: vi.fn(), listen: vi.fn(), directory: vi.fn(), share: vi.fn() }));
 vi.mock('./live', () => ({ nativeLive: { liveState: mocked.state, liveCommand: mocked.command, addListener: mocked.listen, liveDirectory: mocked.directory } }));
 vi.mock('./share', () => ({ nativeShareLive: mocked.share }));
-vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
+vi.mock('../lib/i18n', () => ({ t: (key: string, params?: { name: string }) => key === 'live.defaultTitle' ? `Session by ${params?.name}` : key }));
 const session = { id: 'room', title: 'Room', host: { display_name: 'DJ' }, listener_count: 1, whep_url: 'https://media.example/live/whep' };
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 function setup() {

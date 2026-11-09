@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { declarations } from '../styles/testing/tokens';
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setMediaQuery } from '../test-setup';
@@ -16,6 +18,23 @@ describe('ViewHeader on the desktop shell', () => {
     expect(screen.queryByRole('button', { name: 'Your library' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Your library' })).toBeInTheDocument();
     expect(document.querySelector('[data-app-bar]')).toBeNull();
+  });
+
+  it('keeps a long title whole, with its meta, rather than cutting it', () => {
+    setMediaQuery(DESKTOP, true);
+    const title = 'A podcast whose name runs far longer than any header is wide';
+    render(() => <InShell><ViewHeader title={title} meta="3 in progress" barTrailing={<select aria-label="Country" />} /></InShell>);
+
+    expect(screen.getByRole('heading', { name: title })).toHaveTextContent(title);
+    expect(screen.getByText('3 in progress')).toBeInTheDocument();
+    // On the desktop there is no top bar to hand the control to.
+    expect(screen.queryByRole('combobox', { name: 'Country' })).toBeNull();
+
+    // The page title wraps; only an ellipsis-free rule keeps its end readable.
+    const file = path.join(path.dirname(new URL(import.meta.url).pathname), 'ViewHeader.module.css');
+    const rules = declarations(selector => selector === '.title', file);
+    expect(rules['white-space']).toBeUndefined();
+    expect(rules['text-overflow']).toBeUndefined();
   });
 
   it('tapping the title invokes onTitleTap', () => {
@@ -51,6 +70,22 @@ describe('ViewHeader on the touch shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Sort' }));
     expect(onSelect).toHaveBeenCalledOnce();
+  });
+
+  it('hands a native control to the top bar as is', () => {
+    render(() => (
+      <InShell>
+        <ViewHeader
+          title="Podcasts"
+          actions={<select aria-label="Desktop country" />}
+          barTrailing={<select aria-label="Country" />}
+        />
+      </InShell>
+    ));
+
+    const bar = document.querySelector<HTMLElement>('[data-app-bar]')!;
+    expect(bar).toContainElement(screen.getByRole('combobox', { name: 'Country' }));
+    expect(screen.queryByRole('combobox', { name: 'Desktop country' })).toBeNull();
   });
 
   it('keeps compact panel headers in place, out of the top bar', () => {

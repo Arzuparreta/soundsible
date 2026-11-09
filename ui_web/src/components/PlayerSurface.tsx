@@ -248,6 +248,21 @@ export function PlayerSurface() {
     actions.enterAutoMode();
   };
 
+  /** Arrow keys, Home and End walk the mode tabs without choosing one. */
+  const moveModeFocus = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
+    const tabs = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)')];
+    const from = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    if (from < 0 || tabs.length === 0) return;
+    const to = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (from + 1) % tabs.length
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? (from - 1 + tabs.length) % tabs.length
+        : event.key === 'Home' ? 0
+          : event.key === 'End' ? tabs.length - 1
+            : -1;
+    if (to < 0) return;
+    event.preventDefault();
+    tabs[to].focus();
+  };
+
   /* The same action in both modes: the first panel of either carousel is the
      music browser, so the search affordance means "go there" and never "leave
      DJ" — Auto's own browser is where a session picks up its sources. */
@@ -411,23 +426,30 @@ export function PlayerSurface() {
             </button>
           </Show>
 
-          <div class={styles.modePill} role="tablist" aria-label={t('nowPlaying.modeSelector')}>
+          {/* Choosing a mode starts or ends DJ, so the arrows only move focus
+            * between the two (manual activation); Enter, Space or a click
+            * makes the choice. Only the chosen one is in the Tab order. */}
+          <div class={styles.modePill} role="tablist" aria-label={t('nowPlaying.modeSelector')} onKeyDown={moveModeFocus}>
             <button
+              id="now-playing-mode-normal"
               classList={{ [styles.modeOption]: true, [styles.modeSelected]: !auto() }}
               type="button"
               role="tab"
               aria-selected={!auto()}
               aria-controls="now-playing-view"
+              tabIndex={auto() && autoAvailable() ? -1 : 0}
               onClick={showNowPlaying}
             >
               {t('nowPlaying.modeLabel')}
             </button>
             <button
+              id="now-playing-mode-dj"
               classList={{ [styles.modeOption]: true, [styles.modeSelected]: auto() }}
               type="button"
               role="tab"
               aria-selected={auto()}
               aria-controls="auto-mode-view"
+              tabIndex={auto() ? 0 : -1}
               disabled={!autoAvailable()}
               onClick={showAuto}
             >
@@ -452,6 +474,7 @@ export function PlayerSurface() {
           id="now-playing-view"
           classList={{ [styles.view]: true, [styles.viewActive]: !auto() }}
           role="tabpanel"
+          aria-labelledby="now-playing-mode-normal"
           aria-hidden={auto() || !nowPlayingOpen()}
           inert={auto() || !nowPlayingOpen() ? true : undefined}
         >
@@ -473,6 +496,7 @@ export function PlayerSurface() {
           id="auto-mode-view"
           classList={{ [styles.view]: true, [styles.viewActive]: auto() }}
           role="tabpanel"
+          aria-labelledby="now-playing-mode-dj"
           aria-hidden={!auto() || !nowPlayingOpen()}
           inert={!auto() || !nowPlayingOpen() ? true : undefined}
         >

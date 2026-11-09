@@ -4,7 +4,9 @@ import { t } from '../lib/i18n';
 import { artistPath, resolveViewMode } from '../lib/artistRoute';
 import { itemArtist } from '../lib/catalogTrack';
 import { coverUrl } from '../lib/media';
-import { ArtistDiscoveryView, formatFans } from '../components/ArtistDiscoveryView';
+import { ArtistDiscoveryView, fansLabel, formatFans } from '../components/ArtistDiscoveryView';
+import { EntityViewSelect } from '../components/EntityViewSelect';
+import { BackIcon, MoreIcon, PlayIcon, menuIcons } from '../components/icons';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { CoverImage } from '../components/CoverImage';
 import { CollectionDownloadView } from '../components/CollectionDownloadView';
@@ -21,6 +23,8 @@ import type { createNativeCatalogActions } from './catalogActions';
 import type { AlbumProfile, ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { SavedEntity } from '../lib/savedEntityIdentity';
 import styles from './AndroidStart.module.css';
+import hero from '../components/EntityHero.module.css';
+import profileStyles from './EntityProfile.module.css';
 
 /** Entity browsing owns navigation and requests; the shared controller owns native playback. */
 export default function NativeEntityProfile(props: {
@@ -37,7 +41,6 @@ export default function NativeEntityProfile(props: {
   const album = () => props.subject.kind === 'album' ? profile.profile() as AlbumProfile | null : null;
   const context = () => { const id = props.subject.localId || props.subject.deezerId || profile.profile()?.deezer_id; return id ? { kind: props.subject.kind, id: String(id) } : undefined; };
   const [override, setOverride] = createSignal<'discover' | 'library' | null>(null);
-  const [candidatesOpen, setCandidatesOpen] = createSignal(false);
   const [ids, setIds] = createSignal<string[]>([]), [libraryLoading, setLibraryLoading] = createSignal(false), [libraryError, setLibraryError] = createSignal(false);
   const [libraryRetry, setLibraryRetry] = createSignal(0);
   let disposed = false, epoch = 0;
@@ -87,16 +90,26 @@ export default function NativeEntityProfile(props: {
     const disabled = !current() || collection.busy();
     setBookmarkError(false);
     openContextMenu({ title: props.subject.name, actions: [
+      { icon: menuIcons.shuffle(), label: t('artist.shuffle'), disabled: disabled || !songs().length || !!props.catalog.pending(),
+        onSelect: () => { if (current()) void props.catalog.playCollection(songs(), 0, context(), true); } },
       nativeEntityMark(bookmark(), () => props.savedEntities ?? [], current, props.onChanged, () => { if (current()) setBookmarkError(true); }),
       ...(subject().deezerId || discovered().length ? [{ label: t('collectionControl.addSongs'), disabled, onSelect: () => { if (current()) void collection.saveSongs(); } }] : []),
       ...(subject().deezerId ? [{ label: t(props.subject.kind === 'artist' ? 'collectionControl.downloadArtist' : 'collectionControl.downloadAlbum', { title: props.subject.name }), disabled,
         onSelect: () => { if (current()) void collection.download(); } }] : []),
       ...(props.offlineMenuActions?.(owned()) ?? []),
+      ...(collection.job() && ['downloading', 'review', 'missing'].includes(step()) ? [{ label: progressLabel(), onSelect: details }] : []),
+      ...(artist()?.candidates.length ? [{ label: t('artist.notThisArtist'), onSelect: () => openContextMenu({ title: t('artist.notThisArtist'),
+        actions: (artist()?.candidates ?? []).map(candidate => ({ label: `${candidate.name} · ${formatFans(candidate.nb_fans)}`,
+          onSelect: () => { if (current()) props.onOpen(artistPath(props.subject.name, { view: 'discover', deezerId: candidate.deezer_id })); } })) }) }] : []),
     ] }, event);
   }
   const collectionSongs = () => props.subject.kind === 'artist' ? collection.discography() ?? [] : discovered();
   const collectionOwned = () => collectionSongs().filter(item => !!props.catalog.trackFor(item) && props.catalog.trackFor(item)?.source !== 'preview').length;
   const step = () => collectionStep({ total: collectionSongs().length, owned: collectionOwned(), job: collection.job() });
+  const progressLabel = () => step() === 'downloading'
+    ? t('collectionControl.downloading', { done: collectionArrivedCount(collection.job()), total: collection.job()?.selected_track_count ?? 0 })
+    : step() === 'review' ? t('collectionControl.review', { n: jobReviewCount(collection.job()) })
+    : t('collectionControl.missing', { n: jobMissingCount(collection.job()) });
   const songRow = (item: CatalogItem, index: number, queue: CatalogItem[]) => {
     const track = () => props.catalog.trackFor(item);
     return <MusicListRowView playback title={item.title} subtitle={itemArtist(item)} seed={item.id}
@@ -104,34 +117,35 @@ export default function NativeEntityProfile(props: {
       active={!!track() && !!props.isActive?.(track()!)} busy={props.catalog.pending() === item.id}
       disabled={props.disconnected} onActivate={() => void props.catalog.playCollection(queue, index - 1, context())} onMenu={event => props.onTrackMenu(item, event)} />;
   };
-  return <section class={styles.library} data-testid="android-entity-profile">
-    <button type="button" onClick={props.onBack}>{t('artist.ariaBack')}</button>
-    <header>
-      <h1>{props.subject.name}</h1>
-      <Show when={bookmark().cover}><div style={{ position: 'relative', width: '120px', height: '120px' }}><CoverImage src={bookmark().cover} eager /></div></Show>
-      <Show when={props.subject.artist}><p>{props.subject.artist}</p></Show>
-      <Show when={artist()?.metadata?.nb_fans}><p>{formatFans(artist()!.metadata!.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</p></Show>
-      <button type="button" aria-label={`${t('savedEntities.options')}: ${props.subject.name}`} disabled={props.disconnected || collection.busy()} onClick={collectionMenu}>⋮</button>
-      <button type="button" disabled={props.disconnected || !songs().length || !!props.catalog.pending()} onClick={() => void props.catalog.playCollection(songs(), 0, context())}>{t('artist.play')}</button>
-      <button type="button" disabled={props.disconnected || !songs().length || !!props.catalog.pending()} onClick={() => void props.catalog.playCollection(songs(), 0, context(), true)}>{t('artist.shuffle')}</button>
-      <Show when={artist()?.candidates.length}>
-        <button type="button" aria-expanded={candidatesOpen()} onClick={() => setCandidatesOpen(value => !value)}>{t('artist.notThisArtist')}</button>
-        <Show when={candidatesOpen()}><For each={artist()?.candidates ?? []}>{candidate => <button disabled={props.disconnected} onClick={() => props.onOpen(artistPath(props.subject.name, { view: 'discover', deezerId: candidate.deezer_id }))}>
-          {candidate.name} · {formatFans(candidate.nb_fans)}
-        </button>}</For></Show>
-      </Show>
-      <Show when={owned().length}><nav aria-label={props.subject.name}>
-        <button aria-pressed={view() === 'discover'} onClick={() => setOverride('discover')}>{t('artist.discover')}</button>
-        <button aria-pressed={view() === 'library'} onClick={() => setOverride('library')}>{t('artist.library')} ({owned().length})</button>
-      </nav></Show>
+  return <section class={`${styles.library} ${profileStyles.profile}`} data-testid="android-entity-profile">
+    <header class={`${hero.header} ${profileStyles.header}`}>
+      <button class={`${hero.back} ${profileStyles.back}`} type="button" aria-label={t('artist.ariaBack')} onClick={props.onBack}><BackIcon size={20} /></button>
+      <div class={hero.hero}>
+        <div class={hero.art} classList={{ [hero.round]: props.subject.kind === 'artist' }}><CoverImage src={bookmark().cover} eager /></div>
+        <div class={hero.identity}>
+          <h1 class={`${hero.title} ${profileStyles.title}`}>{props.subject.name}</h1>
+          <Show when={props.subject.artist}><span class={hero.credit}>{props.subject.artist}</span></Show>
+          <Show when={artist()?.metadata?.nb_fans}><span class={hero.meta}>{fansLabel(artist()!.metadata!.nb_fans)}</span></Show>
+          <Show when={collection.job() && step() !== 'download'}>
+            <Show when={step() === 'owned'} fallback={<button class={profileStyles.status} type="button" data-android-collection-progress onClick={details}>
+              {progressLabel()}
+            </button>}><span class={hero.meta} role="status">{t('collectionControl.owned')}</span></Show>
+          </Show>
+        </div>
+        <div class={hero.toolbar} data-entity-toolbar>
+          <Show when={owned().length} fallback={<span class={hero.context}>{t('artist.discover')}</span>}>
+            <EntityViewSelect label={t('entityView.label')} value={view()}
+              options={[{ value: 'discover', label: t('artist.discover') }, { value: 'library', label: `${t('artist.library')} ${owned().length}` }]}
+              onChange={value => setOverride(value === 'library' ? 'library' : 'discover')} />
+          </Show>
+          <button class={`${hero.play} ${profileStyles.play}`} type="button" aria-label={t('artist.play')}
+            aria-busy={!!props.catalog.pending() || undefined} disabled={props.disconnected || !songs().length || !!props.catalog.pending()}
+            onClick={() => void props.catalog.playCollection(songs(), 0, context())}><PlayIcon size={20} /><span class={hero.primaryLabel}>{t('artist.play')}</span></button>
+          <button class={`${hero.options} ${profileStyles.options}`} type="button" aria-label={`${t('savedEntities.options')}: ${props.subject.name}`}
+            aria-haspopup="dialog" disabled={props.disconnected || collection.busy()} onClick={collectionMenu}><MoreIcon size={20} /></button>
+        </div>
+      </div>
     </header>
-    <Show when={collection.job() && step() !== 'download'}>
-      <Show when={step() === 'owned'} fallback={<button type="button" data-android-collection-progress onClick={details}>
-        {step() === 'downloading' ? t('collectionControl.downloading', { done: collectionArrivedCount(collection.job()), total: collection.job()?.selected_track_count ?? 0 })
-          : step() === 'review' ? t('collectionControl.review', { n: jobReviewCount(collection.job()) })
-          : t('collectionControl.missing', { n: jobMissingCount(collection.job()) })}
-      </button>}><p role="status">{t('collectionControl.owned')}</p></Show>
-    </Show>
     <Show when={collection.error() || bookmarkError()}><p role="alert">{collection.error() || t('savedEntities.failed')} <Show when={collection.error()}><button onClick={() => void collection.retry()}>{t('common.retry')}</button></Show></p></Show>
     <Show when={profile.error() || libraryError()}><p role="alert">{t('common.loadFailed')} <button onClick={() => { setLibraryRetry(value => value + 1); profile.retry(); }}>{t('common.retry')}</button></p></Show>
     <Show when={profile.profile()?.partial_failures?.length}><p role="status">{t('musicExplorer.partial')}</p></Show>

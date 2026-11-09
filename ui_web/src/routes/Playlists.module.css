@@ -16,6 +16,7 @@
   background: transparent;
   border: 1px dashed var(--hairline-strong);
   border-radius: var(--radius-sm);
+  font: inherit;
   font-size: var(--text-body);
   font-weight: var(--fw-semibold);
   cursor: pointer;
@@ -61,6 +62,11 @@
   opacity: 1;
 }
 }
+/* A keyboard user reaching the card, or the button itself, sees it: a control
+   that takes focus while invisible is a trap. */
+.cardWrap:focus-within .cardMenu {
+  opacity: 1;
+}
 @media (hover: none) {
   .cardMenu {
     opacity: 1;
@@ -74,22 +80,18 @@
   }
 }
 
+/* Shared browse card metrics, as for albums and artists. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
-  gap: var(--space-lg);
-}
-
-@media (min-width: 1024px) {
-  .grid {
-    grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
-  }
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--browse-card-min, 144px), calc((100% - var(--browse-card-gap, 16px)) / 2)), 1fr));
+  gap: var(--space-xl) var(--browse-card-gap, var(--space-lg));
 }
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 2px;
+  min-width: 0;
   text-decoration: none;
   color: inherit;
 }
@@ -102,36 +104,32 @@
   box-shadow: var(--shadow-1);
   transition:
     box-shadow var(--dur-short) var(--ease-out),
-    border-color var(--dur-short) var(--ease-out),
-    transform var(--dur-short) var(--ease-out);
+    border-color var(--dur-short) var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
-
-.card:hover .cover {
-  box-shadow: var(--shadow-2);
-  border-color: var(--hairline-strong);
-  transform: translateY(-3px);
-}
+  .card:hover .cover {
+    box-shadow: var(--shadow-2);
+    border-color: var(--hairline-strong);
+  }
 }
 
 .name {
+  display: -webkit-box;
   margin-top: var(--space-xs);
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
+  line-height: 1.3;
   color: var(--ink-primary);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .count {
   font-size: var(--text-caption);
   color: var(--ink-tertiary);
-}
-
-.empty {
-  padding: var(--space-3xl) var(--gutter);
-  text-align: center;
-  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
 }

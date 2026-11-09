@@ -56,4 +56,19 @@ describe('VirtualRows', () => {
     expect(screen.queryAllByTestId('row')).toHaveLength(0);
     expect((container.querySelector('[data-virtual-rows]') as HTMLElement).style.height).toBe('0px');
   });
+
+  it('keeps row positions relative to the list when a header precedes it', () => {
+    const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
+    const { container } = render(() => (
+      <div ref={setScrollRef}>
+        <header style={{ height: '800px' }}>Show with a long title</header>
+        <VirtualRows items={Array.from({ length: 100 }, (_, i) => i)} scrollElement={scrollRef} rowHeight={56} scrollMargin={800}>
+          {(item) => <div>{item()}</div>}
+        </VirtualRows>
+      </div>
+    ));
+    const spacer = container.querySelector('[data-virtual-rows]') as HTMLElement;
+    expect(spacer.style.height).toBe(`${100 * 56}px`);
+    expect(spacer.querySelector<HTMLElement>('[data-index="0"]')?.style.transform).toBe('translateY(0px)');
+  });
 });

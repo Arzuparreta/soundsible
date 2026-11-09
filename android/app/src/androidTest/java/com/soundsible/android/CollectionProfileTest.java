@@ -61,7 +61,7 @@ public class CollectionProfileTest {
             waitFor(web,scenario,"document.querySelector('[data-testid=android-entity-profile] h1')?.textContent==='fixture collection album' && !!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='fixture resolved song')");
             click(web,scenario,"Play"); waitFor(web,scenario,"window.__collection?.id==='C1111111111' && window.__collection.playing");
             assertEquals("false",web.evaluate(scenario,"!!document.querySelector('audio')"));
-            web.evaluate(scenario,"document.querySelector('[data-testid=android-entity-profile] header button[aria-label]').click()");
+            web.evaluate(scenario,"document.querySelector('[data-testid=android-entity-profile] [data-entity-toolbar] button[aria-haspopup=dialog]').click()");
             click(web,scenario,"Add all songs");
             waitFor(web,scenario,"!!document.querySelector('[role=dialog]')");
             // Confirm the explicit song action; the entity bookmark remains separate.
@@ -76,8 +76,8 @@ public class CollectionProfileTest {
             assertEquals("true",web.evaluate(scenario,"window.__collection?.playing && window.__collection.id==='C1111111111'"));
             if(acquire) {
                 String occurrences=web.evaluate(scenario,"JSON.stringify(window.__collection.items.map(i=>i.key))");
-                waitFor(web,scenario,"!!document.querySelector('[data-testid=android-entity-profile] header button[aria-label]') && !document.querySelector('[data-testid=android-entity-profile] header button[aria-label]').disabled && !document.querySelector('[role=dialog]')");
-                web.evaluate(scenario,"document.querySelector('[data-testid=android-entity-profile] header button[aria-label]').click()");
+                waitFor(web,scenario,"!!document.querySelector('[data-testid=android-entity-profile] [data-entity-toolbar] button[aria-haspopup=dialog]') && !document.querySelector('[data-testid=android-entity-profile] [data-entity-toolbar] button[aria-haspopup=dialog]').disabled && !document.querySelector('[role=dialog]')");
+                web.evaluate(scenario,"document.querySelector('[data-testid=android-entity-profile] [data-entity-toolbar] button[aria-haspopup=dialog]').click()");
                 click(web,scenario,"Download the album");
                 String acquiredId=null; JSONObject acquiredTrack=null;
                 long downloadUntil=System.nanoTime()+TimeUnit.SECONDS.toNanos(50);

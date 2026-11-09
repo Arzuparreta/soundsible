@@ -303,6 +303,7 @@
 }
 
 .drop {
+  position: relative;
   min-height: 176px;
   display: flex;
   flex-direction: column;
@@ -341,8 +342,30 @@
   font-size: 1.7rem;
 }
 
+/* Hidden from sight, not from the keyboard: Tab reaches the input, Space or
+   Enter opens the picker, and the drop zone around it shows the focus. */
 .fileInput {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+}
+
+.drop:has(.fileInput:focus-visible) {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+.drop:has(.fileInput:disabled) {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .privacy {

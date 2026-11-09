@@ -20,6 +20,7 @@ const community = vi.hoisted(() => ({
   retry: vi.fn(),
   init: vi.fn(),
   create: vi.fn(),
+  rename: vi.fn(),
 }));
 
 const stores = vi.hoisted(() => ({ publishSession: vi.fn(), togglePlay: vi.fn() }));
@@ -56,7 +57,7 @@ vi.mock('../lib/community', () => ({
   retryHostPublisher: vi.fn(),
   retryListening: vi.fn(),
   startListening: vi.fn(),
-  updateHostTitle: vi.fn(),
+  updateHostTitle: community.rename,
 }));
 
 import Live from './Live';
@@ -79,6 +80,7 @@ beforeEach(() => {
   community.retry.mockReset();
   community.init.mockReset();
   community.create.mockReset().mockResolvedValue({});
+  community.rename.mockReset().mockResolvedValue(undefined);
   stores.publishSession.mockReset();
   window.history.replaceState(null, '', '/player/');
 });
@@ -316,4 +318,63 @@ describe('Live operational UI', () => {
 });
 
 // Navigation behavior is covered by the router integration and browser tests.
+describe('Renaming a live room', () => {
+  beforeEach(() => {
+    community.host = {
+      id: 'session-test',
+      title: 'Saturday',
+      listener_count: 2,
+      host: { display_name: 'Local DJ' },
+    };
+    community.publisherState = 'connected';
+  });
+
+  it('opens a labelled field from a visible command, starting from the current name', async () => {
+    render(() => <InShell><Live /></InShell>);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    const field = screen.getByLabelText('Room name');
+
+    expect(field).toHaveValue('Saturday');
+    await vi.waitFor(() => expect(field).toHaveFocus());
+  });
+
+  it('saves only the name and closes the field', async () => {
+    render(() => <InShell><Live /></InShell>);
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    await fireEvent.input(screen.getByLabelText('Room name'), { target: { value: '  Sunday set ' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(community.rename).toHaveBeenCalledWith('Sunday set');
+    await vi.waitFor(() => expect(screen.queryByLabelText('Room name')).toBeNull());
+    expect(community.end).not.toHaveBeenCalled();
+    expect(community.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps the edit open with the typed name when the rename fails', async () => {
+    community.rename.mockRejectedValue(new Error('offline'));
+    render(() => <InShell><Live /></InShell>);
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    await fireEvent.input(screen.getByLabelText('Room name'), { target: { value: 'Sunday set' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not rename the room.');
+    expect(screen.getByLabelText('Room name')).toHaveValue('Sunday set');
+    expect(screen.getByLabelText('Room name')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Room name')).toHaveFocus();
+  });
+
+  it('cancels with Escape without sending anything', async () => {
+    render(() => <InShell><Live /></InShell>);
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    await fireEvent.input(screen.getByLabelText('Room name'), { target: { value: 'Discarded' } });
+    await fireEvent.keyDown(screen.getByLabelText('Room name'), { key: 'Escape' });
+
+    expect(screen.queryByLabelText('Room name')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Saturday' })).toBeInTheDocument();
+    expect(community.rename).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Rename' })).toHaveFocus());
+  });
+});
+
 vi.mock('../components/NavigationMenu', () => ({ NavigationMenuButton: () => null }));

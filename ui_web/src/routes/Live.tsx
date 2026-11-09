@@ -31,7 +31,7 @@ import {
 import { clearLiveHandoff, liveHandoffPending, secureLiveHandoffUrl } from '../lib/liveHandoff';
 import { t } from '../lib/i18n';
 import { ViewHeader } from '../components/ViewHeader';
-import { ShareIcon } from '../components/icons';
+import { EditIcon, ShareIcon } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { LiveRoomPanel } from '../components/LiveRoomPanel';
@@ -233,10 +233,109 @@ function ListenerRoom() {
   );
 }
 
+/**
+ * The host's room name, renamed in place. A visible command opens the edit —
+ * no hidden double-click — and only the name changes: the room, its listeners
+ * and the broadcast stay exactly as they are.
+ */
+function RoomTitle(props: { title: string }) {
+  const [editing, setEditing] = createSignal(false);
+  const [draft, setDraft] = createSignal('');
+  const [saving, setSaving] = createSignal(false);
+  const [failed, setFailed] = createSignal(false);
+  let input: HTMLInputElement | undefined;
+  let renameButton: HTMLButtonElement | undefined;
+
+  const start = () => {
+    setDraft(props.title);
+    setFailed(false);
+    setEditing(true);
+  };
+  const finish = () => {
+    setEditing(false);
+    setFailed(false);
+    queueMicrotask(() => renameButton?.focus());
+  };
+  const save = async () => {
+    const next = draft().trim();
+    if (!next || saving()) return;
+    if (next === props.title) {
+      finish();
+      return;
+    }
+    setSaving(true);
+    setFailed(false);
+    try {
+      await updateHostTitle(next);
+      finish();
+    } catch {
+      setFailed(true);
+      input?.focus();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Show
+      when={editing()}
+      fallback={
+        <div class={styles.roomTitle}>
+          <h2>{props.title}</h2>
+          <button ref={renameButton} class={styles.rename} type="button" onClick={start}>
+            <EditIcon size={16} />
+            {t('common.rename')}
+          </button>
+        </div>
+      }
+    >
+      <form
+        class={styles.renameForm}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save();
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || saving()) return;
+          event.preventDefault();
+          event.stopPropagation();
+          finish();
+        }}
+      >
+        <label for="live-room-name">{t('live.roomName')}</label>
+        <input
+          ref={(element) => {
+            input = element;
+            queueMicrotask(() => { element.focus(); element.select(); });
+          }}
+          id="live-room-name"
+          value={draft()}
+          maxlength={96}
+          required
+          readOnly={saving()}
+          aria-invalid={failed() || undefined}
+          aria-describedby={failed() ? 'live-room-name-error' : undefined}
+          onInput={(event) => setDraft(event.currentTarget.value)}
+        />
+        <div class={styles.renameActions}>
+          <button type="submit" disabled={saving() || !draft().trim()} aria-busy={saving() || undefined}>
+            {saving() ? t('common.loading') : t('common.save')}
+          </button>
+          <button class={styles.renameCancel} type="button" disabled={saving()} onClick={finish}>
+            {t('common.cancel')}
+          </button>
+        </div>
+        <Show when={failed()}>
+          <p id="live-room-name-error" class={styles.error} role="alert">{t('live.renameFailed')}</p>
+        </Show>
+      </form>
+    </Show>
+  );
+}
+
 export default function Live() {
   const [title, setTitle] = createSignal('');
   const [creating, setCreating] = createSignal(false);
-  const [editing, setEditing] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
   let refreshTimer: number | undefined;
   const hostBreak = breakElapsed();
@@ -248,7 +347,7 @@ export default function Live() {
   const handedOver = liveHandoffPending();
 
   onMount(() => {
-    setTitle(`Session by ${user()?.display_name ?? 'DJ'}`);
+    setTitle(t('live.defaultTitle', { name: user()?.display_name ?? 'DJ' }));
     void initCommunity();
     refreshTimer = window.setInterval(() => void refreshLiveSessions(), 10_000);
   });
@@ -402,18 +501,7 @@ export default function Live() {
                           ? t('live.connectingAudio')
                           : t('live.waiting')}
                 </span>
-                <Show
-                  when={editing()}
-                  fallback={<h2 onDblClick={() => setEditing(true)}>{session().title}</h2>}
-                >
-                  <form onSubmit={(event) => {
-                    event.preventDefault();
-                    void updateHostTitle(title()).then(() => setEditing(false));
-                  }}>
-                    <input value={title()} maxlength={96} onInput={(event) => setTitle(event.currentTarget.value)} />
-                    <button type="submit">{t('common.save')}</button>
-                  </form>
-                </Show>
+                <RoomTitle title={session().title} />
                 <p data-break={publisherConnected() && resting() ? '' : undefined}>
                   {!publisherConnected()
                     ? t('live.startPlaying')

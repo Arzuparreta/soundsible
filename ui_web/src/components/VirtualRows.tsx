@@ -19,6 +19,8 @@ export function VirtualRows<T>(props: {
   /** Row height in pixels, or a CSS custom property to read it from. */
   rowHeight: RowHeight;
   overscan?: number;
+  /** Content before the list inside its scrollport (for example an entity header). */
+  scrollMargin?: number;
   /** Measure variable-height queue editing controls. */
   measureRows?: boolean;
   /** Keep the edited occurrence mounted while it moves. */
@@ -62,6 +64,7 @@ function Rows<T>(props: {
   scrollElement: () => HTMLElement | null;
   rowHeight: RowHeight;
   overscan?: number;
+  scrollMargin?: number;
   /** Measure variable-height queue editing controls. */
   measureRows?: boolean;
   /** Keep the edited occurrence mounted while it moves. */
@@ -83,6 +86,7 @@ function Rows<T>(props: {
     },
     getScrollElement: () => props.scrollElement(),
     estimateSize: () => rowH(),
+    get scrollMargin() { return props.scrollMargin ?? 0; },
     // The observer reports subsequent resizes, but the first virtual range is
     // calculated synchronously. Supplying the already-mounted scrollport keeps
     // an initially visible list from starting at a zero-height range and only
@@ -128,7 +132,7 @@ function Rows<T>(props: {
               top: 0,
               left: 0,
               width: '100%',
-              transform: `translateY(${vi.start}px)`,
+              transform: `translateY(${vi.start - (props.scrollMargin ?? 0)}px)`,
             }}
           >
             {/* Read the item through an accessor rather than capturing it: the

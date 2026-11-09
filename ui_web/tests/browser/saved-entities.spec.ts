@@ -36,10 +36,15 @@ test('save artist and album, reload, browse, remove and undo without changing so
     title: 'In Rainbows', artist: 'Radiohead', tracklist: [], resolved: true,
   } }));
   await page.goto('/player/#/artist/Radiohead?deezer_id=1');
+  await page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Opciones', exact: true }).click();
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => entities.length).toBe(1);
+  await page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Opciones', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Quitar de guardados', exact: true })).toHaveAttribute('aria-current', 'true');
+  await page.keyboard.press('Escape');
   await expect.poll(() => page.evaluate(() => (window as unknown as { navPulses: string[] }).navPulses)).toContain('/');
   await page.getByRole('link', { name: /In Rainbows/ }).click();
+  await page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Opciones', exact: true }).click();
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect.poll(() => entities.length).toBe(2);
   await page.goto('/player/#/');

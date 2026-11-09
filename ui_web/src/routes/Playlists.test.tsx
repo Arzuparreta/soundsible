@@ -98,3 +98,30 @@ describe('the playlists grid draws a cover whenever any song in the list has one
 
 // Navigation behavior is covered by the router integration and browser tests.
 vi.mock('../components/NavigationMenu', () => ({ NavigationMenuButton: () => null }));
+
+describe('the playlist card options', () => {
+  it('name the playlist they act on and announce their sheet', () => {
+    show({ 'Road trip': [] }, []);
+    const button = screen.getByRole('button', { name: 'playlists.ariaOptions: Road trip' });
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+  });
+
+  /**
+   * The button was revealed by hover alone, so a keyboard user tabbed onto a
+   * control they could not see. Focus anywhere in the card shows it, on every
+   * input, not only behind the fine-pointer hover query.
+   */
+  it('show the options button whenever the card holds focus', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const { default: postcss } = await import('postcss');
+    const css = readFileSync(resolve(process.cwd(), 'src/routes/Playlists.module.css'), 'utf8');
+    const rules: string[] = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (rule.parent?.type !== 'root') return;
+      if (!/:focus-within\s+\.cardMenu/.test(rule.selector)) return;
+      rule.walkDecls('opacity', (decl) => { if (decl.value === '1') rules.push(rule.selector); });
+    });
+    expect(rules).toEqual(['.cardWrap:focus-within .cardMenu']);
+  });
+});

@@ -1,0 +1,116 @@
+/* One identity, one content/action row, then the music. Shared by web entity
+   pages and native presentation; playback belongs to each host controller. */
+.page {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: clip;
+  overflow-y: auto;
+  padding-bottom: var(--space-xl);
+}
+.page, .collection { --list-inline-padding: var(--gutter); }
+.header { flex-shrink: 0; min-width: 0; padding: var(--space-md) var(--gutter) var(--space-sm); }
+.back {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--control-h); height: var(--control-h);
+  margin: 0 0 var(--space-xs) calc(-1 * var(--space-xs)); padding: 0;
+  color: var(--ink-secondary); background: transparent; border: 0;
+  border-radius: var(--radius-full); cursor: pointer;
+}
+.hero {
+  --entity-art: 104px;
+  display: grid;
+  grid-template-columns: var(--entity-art) minmax(0, 1fr);
+  grid-template-areas: 'art identity' 'toolbar toolbar';
+  align-items: start;
+  gap: var(--space-md) var(--space-lg);
+  min-width: 0;
+}
+.compact, .podcast { --entity-art: 80px; }
+.art {
+  grid-area: art; position: relative; display: flex;
+  align-items: center; justify-content: center;
+  width: var(--entity-art); aspect-ratio: 1;
+  padding: 0; color: inherit; font: inherit;
+  border: 1px solid var(--hairline-soft); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2); overflow: hidden;
+}
+button.art { cursor: pointer; }
+.round { border-radius: var(--radius-full); }
+.initial { font-size: calc(var(--entity-art) * .4); font-weight: var(--fw-bold); color: var(--ink-primary); }
+.identity {
+  grid-area: identity; display: flex; flex-direction: column;
+  align-items: flex-start; align-self: center;
+  gap: var(--space-xs); min-width: 0;
+}
+.podcast .identity { align-self: start; }
+.title {
+  margin: 0; max-width: 100%; font-size: var(--text-h2);
+  font-weight: var(--fw-bold); line-height: 1.15;
+  overflow-wrap: break-word; hyphens: auto; text-wrap: balance;
+}
+.titleButton {
+  display: block; max-width: 100%; padding: 0; border: 0;
+  background: transparent; color: inherit; font: inherit; line-height: inherit;
+  text-align: start; overflow-wrap: inherit; hyphens: inherit; cursor: pointer;
+}
+.credit { max-width: 100%; font-size: var(--text-body); color: var(--ink-secondary); overflow-wrap: anywhere; }
+.credit a { color: inherit; }
+.meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs);
+  font-size: var(--text-caption); color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+/* An explicit grid never sends management to a second row. The flexible
+   context says which collection the adjacent primary command acts on. */
+.toolbar {
+  grid-area: toolbar; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center; gap: var(--space-sm);
+  min-width: 0; min-height: var(--control-h);
+}
+.toolbar > :last-child { grid-column: 3; }
+.context { min-width: 0; font-size: var(--text-label); font-weight: var(--fw-semibold); color: var(--ink-secondary); }
+.viewSelect {
+  min-width: 0; width: min(100%, 18rem); min-height: var(--control-h);
+  padding: 0 var(--space-sm) 0 0;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--ink-primary); background: transparent;
+  font: inherit; font-size: var(--text-label); font-weight: var(--fw-semibold);
+  text-overflow: ellipsis; cursor: pointer;
+}
+.viewSelect option { background: var(--bg-raised); color: var(--ink-primary); }
+.play, .options {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--space-xs); flex: none;
+  width: var(--control-h); height: var(--control-h);
+  padding: 0; border: 1px solid transparent; border-radius: var(--radius-full);
+  font: inherit; font-size: var(--text-label); font-weight: var(--fw-semibold);
+  white-space: nowrap; cursor: pointer;
+}
+.play { color: var(--ink-on-accent); background: var(--accent-primary); }
+.options { color: var(--ink-secondary); background: transparent; border-color: var(--hairline); }
+.play:disabled, .options:disabled { opacity: .45; cursor: not-allowed; }
+.primaryLabel { display: none; }
+.retry { margin-inline-start: var(--space-sm); }
+.viewSelect:focus-visible, .play:focus-visible, .options:focus-visible, .back:focus-visible {
+  outline: 2px solid var(--accent-ink); outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .play:hover:not(:disabled) { background: var(--accent-hover); }
+  .options:hover:not(:disabled), .back:hover, .viewSelect:hover { background: var(--bg-hover); color: var(--ink-primary); }
+  .credit a:hover { color: var(--ink-primary); }
+}
+@media (min-width: 768px) {
+  .hero {
+    --entity-art: 152px;
+    grid-template-areas: 'art identity' 'art toolbar';
+    grid-template-rows: 1fr auto;
+    column-gap: var(--space-xl);
+  }
+  .compact, .podcast { --entity-art: 136px; }
+  .identity { align-self: end; }
+  .title { font-size: clamp(28px, 3vw, 40px); }
+  .play { width: auto; padding-inline: var(--space-lg); }
+  .primaryLabel { display: inline; }
+}

@@ -1,4 +1,5 @@
 import { createMemo, Show } from 'solid-js';
+import { A } from '@solidjs/router';
 import { actions, favouriteRows, state } from '../stores';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
@@ -14,6 +15,8 @@ import type { Track } from '../types/music';
 import { EmptyState } from '../components/EmptyState';
 import { CollectionActions } from '../components/CollectionActions';
 import { favouritesContext } from '../lib/playbackContext';
+import button from '../components/Button.module.css';
+import styles from './Favourites.module.css';
 
 const context = () => favouritesContext(t('favourites.title'));
 
@@ -81,7 +84,13 @@ export default function Favourites() {
         context={context()}
         onPlay={(tracks, index) => void play(tracks, index)}
         loading={state.loading}
-        empty={<EmptyState>{t('favourites.empty')}</EmptyState>}
+        empty={(
+          <EmptyState>
+            <p>{t('favourites.empty')}</p>
+            {/* The hearts are given in the library, so that is the way on. */}
+            <A href="/library" class={`${button.btn} ${button.secondary} ${button.sm} ${styles.link}`}>{t('nav.library')}</A>
+          </EmptyState>
+        )}
       />
     </div>
   );

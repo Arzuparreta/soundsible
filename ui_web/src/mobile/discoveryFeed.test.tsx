@@ -44,6 +44,19 @@ it('bounds revalidation and surfaces exhaustion instead of polling indefinitely'
   await vi.advanceTimersByTimeAsync(60000);
   expect(fetchFeed).toHaveBeenCalledTimes(13);
 });
+it('fills an empty expanded section on retry even when another section already has content', async () => {
+  const [expanded, setExpanded] = createSignal<string | undefined>();
+  const fetchFeed = vi.fn().mockResolvedValueOnce(song('initial')).mockResolvedValue({
+    browse_sections: [{ id: 'albums', popular: false, items: [{ id: 'album:1', title: 'New album', type: 'album', source: 'deezer' }] }],
+  } satisfies DiscoveryMusicFeed);
+  let state!: ReturnType<typeof createNativeDiscoveryFeed>;
+  render(() => { state = createNativeDiscoveryFeed({ generation: () => 1, disconnected: () => false, expanded, known: () => false }, fetchFeed); return null; });
+  await waitFor(() => expect(state.songs()[0]?.title).toBe('initial'));
+  setExpanded('albums');
+  state.retry();
+  await waitFor(() => expect(state.sections()[0]?.items[0]?.title).toBe('New album'));
+  expect(state.error()).toBe(false);
+});
 it('pauses hidden browsing and restores the same valid feed without reordering on return', async () => {
   const [paused, setPaused] = createSignal(false), fetchFeed = vi.fn().mockResolvedValue(song('stable'));
   let state!: ReturnType<typeof createNativeDiscoveryFeed>;

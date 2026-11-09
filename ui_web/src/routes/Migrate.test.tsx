@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { declarations } from '../styles/testing/tokens';
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
@@ -164,6 +166,26 @@ describe('Migrate route', () => {
 
     expect(await screen.findByText('Où se trouve votre musique actuellement ?')).toBeInTheDocument();
     expect(screen.queryByText('Where is your music now?')).not.toBeInTheDocument();
+  });
+
+  it('lets the keyboard reach the file picker through its labelled input', async () => {
+    render(() => <Migrate />);
+    await fireEvent.click(await screen.findByRole('button', { name: /Spotify/ }));
+
+    // The drop zone is the input's label, so its words are the input's name.
+    const input = screen.getByLabelText(/Choose the file Spotify sent you/);
+    expect(input).toHaveAttribute('type', 'file');
+    expect(input).not.toHaveAttribute('tabindex', '-1');
+    input.focus();
+    expect(input).toHaveFocus();
+
+    // `display: none` takes an input out of the tab order whatever its label
+    // says; the stylesheet must only hide it from sight.
+    const file = path.join(path.dirname(new URL(import.meta.url).pathname), 'Migrate.module.css');
+    const hidden = declarations(selector => selector === '.fileInput', file);
+    expect(hidden.display).toBeUndefined();
+    expect(hidden.visibility).toBeUndefined();
+    expect(hidden.position).toBe('absolute');
   });
 
   it('accepts one official export and offers library plus playlist selection', async () => {

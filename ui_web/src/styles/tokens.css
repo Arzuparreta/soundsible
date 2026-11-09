@@ -190,6 +190,13 @@
   --mini-player-h: 64px;
   /* The same gap on every free side — left, right, and down to the tab bar. */
   --mini-player-inset: 10px;
+  /* Browse cards (album, artist and playlist artwork in rails and grids).
+     A grid column is at least `min` wide, narrower only where two columns
+     would not otherwise fit a small phone; a rail card is `width` wide; both
+     share `gap`. */
+  --browse-card-min: 144px;
+  --browse-card-width: 156px;
+  --browse-card-gap: var(--space-lg);
 }
 
 /* Normal is the product default. Compact is the exact pre-accessibility UI
@@ -264,6 +271,9 @@
   --gutter: 20px;
   --list-gap: 3px;
   --mini-player-h: 76px;
+  /* Larger type needs a wider rail card for two readable title lines; the
+     grid minimum stays put so phones keep two columns. */
+  --browse-card-width: 172px;
 }
 
 /* Light theme: token overrides only (every surface reads these vars). */
@@ -760,6 +770,9 @@
     --gutter: 24px;
     --list-gap: 1px;
     --text-body: 14px;
+    --browse-card-min: 160px;
+    --browse-card-width: 180px;
+    --browse-card-gap: var(--space-xl);
   }
 
   :root[data-interface-size='normal'] {
@@ -786,6 +799,8 @@
     --segment-h: 44px;
     --cover-sm: 52px;
     --gutter: 28px;
+    --browse-card-min: 184px;
+    --browse-card-width: 204px;
   }
 }
 

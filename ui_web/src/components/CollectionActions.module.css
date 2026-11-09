@@ -7,3 +7,5 @@
 .content svg {
   flex: none;
 }
+.label { min-width: 0; }
+@media (max-width: 767px) { .iconOnMobile .label { display: none; } }
