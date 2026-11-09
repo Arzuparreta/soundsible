@@ -96,3 +96,17 @@ conservó publisher y reader hasta la limpieza. Sin RTP, energía ni cronología
 de ganancia no se puede atribuir ese silencio al cierre de Activity ni decidir
 si el origen era aplicación, relay o emulador. Un reintento aprobado demuestra
 intermitencia, no una causa resuelta. No se relajan las aserciones.
+
+## Diagnóstico del traspaso remoto
+
+En la PR #434, run `42567024132`, el shard 7 ejecutó 33 casos y falló
+`QueueLanesTest.httpQueueLanesAndResume`: el portátil recibió la orden de parar,
+pero el snapshot nativo del teléfono seguía con cola vacía después de aceptar
+Resume. Esto es distinto de los shards 1 y 5, que no llegaron a instrumentación
+porque la descarga de MediaMTX agotó seis intentos HTTP 504.
+
+El HTTP exitoso de handoff no confirma que el teléfono haya aplicado el comando.
+Las trazas deben distinguir registro de socket, entrega al cliente, rechazo de
+propietario/generación y excepción al reconstruir la cola. Se conservan las
+aserciones y los plazos del caso; un reintento verde por sí solo no demuestra
+que se haya reparado la causa.

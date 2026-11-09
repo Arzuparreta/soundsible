@@ -50,6 +50,25 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         }
     }
     init { connection.resetListeners.add(resetListener); main.post(tick) }
+    /** Debug delivery phases only: never log account, device, media or exception messages. */
+    private fun diagnostic(phase: String, event: String = "", payload: JSONObject? = null, failure: Throwable? = null) {
+        if (!BuildConfig.DEBUG) return
+        val state = payload?.optJSONObject("state")
+        val session = state?.optJSONObject("session")
+        val frame = failure?.stackTrace?.firstOrNull { it.className.startsWith("com.soundsible.android.") }
+        val sessionMatches = runCatching { identity != null && connection.sessionIdentity(epoch) == identity }.getOrDefault(false)
+        val profileMatches = runCatching { profile != null && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
+        val returnedQueue = if (phase == "command_returned") runCatching {
+            val body = snapshot()
+            body?.optJSONObject("session")?.optJSONArray("queue")?.length() ?: if (body?.isNull("track_id") == false) 1 else 0
+        }.getOrDefault(-1) else null
+        val message = "phase=$phase event=$event generation=${connection.generation} epoch=$epoch serial=$serial" +
+            " owns=${owns()} sessionMatches=$sessionMatches profileMatches=$profileMatches connected=${socket?.connected() == true}" +
+            (if (returnedQueue == null) "" else " snapshotQueue=$returnedQueue") +
+            (if (payload == null) "" else " track=${payload.optJSONObject("track") != null} state=${state != null} session=${session != null} queue=${session?.optJSONArray("queue")?.length() ?: 0}") +
+            (if (failure == null) "" else " failure=${failure.javaClass.simpleName} frame=${frame?.className}:${frame?.lineNumber}")
+        if (failure == null) android.util.Log.d("DeviceSessionDelivery", message) else android.util.Log.w("DeviceSessionDelivery", message)
+    }
     private fun owns(): Boolean = !closed && identity != null && epoch == connection.generation &&
         runCatching { connection.sessionIdentity(epoch) == identity && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
     fun name(): String = DeviceName.get(appContext)
@@ -109,7 +128,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
                     val next = IO.socket(connection.origin, options); socket = next
                     next.on(Socket.EVENT_CONNECT) { main.post {
                         if (owns() && socket === next) {
-                            next.emit("playback_register", registration()); publish(state()); changed()
+                            next.emit("playback_register", registration()); diagnostic("registration_emitted"); publish(state()); changed()
                         }
                     } }
                     next.io().on(Manager.EVENT_RECONNECT_FAILED) { main.post {
@@ -119,13 +138,19 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
                         }
                     } }
                     for (event in listOf(Socket.EVENT_DISCONNECT, Socket.EVENT_CONNECT_ERROR)) next.on(event) { main.post {
-                        if (owns() && socket === next) publish(state())
+                        if (owns() && socket === next) { diagnostic("transport", event); publish(state()) }
                     } }
                     for (event in listOf("playback_stop_requested", "playback_start_requested", "playback_next_requested", "playback_previous_requested", "playback_seek_requested")) {
                         next.on(event) { arguments ->
                             val payload = (arguments.firstOrNull() as? JSONObject) ?: JSONObject()
                             if (payload.toString().length <= 256 * 1024) main.post {
-                                if (owns() && socket === next) { runCatching { command(event, payload) }; changed() }
+                                diagnostic("received", event, payload)
+                                if (owns() && socket === next) {
+                                    runCatching { command(event, payload) }
+                                        .onSuccess { diagnostic("command_returned", event) }
+                                        .onFailure { diagnostic("command_failed", event, failure = it) }
+                                    changed()
+                                } else diagnostic("obsolete_socket", event)
                             }
                         }
                     }
@@ -219,6 +244,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         return future
     }
     private fun reset() {
+        diagnostic("reset")
         socket?.io()?.off(); socket?.off(); socket?.disconnect(); socket = null
         val previous = client; client = null
         if (previous != null && !worker.isShutdown) worker.execute {

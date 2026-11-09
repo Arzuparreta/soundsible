@@ -45,7 +45,17 @@ class QueueLanesTest {
                 fun waitFor(condition: String) {
                     val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
                     while (System.nanoTime() < until) { if (web.evaluate(scenario, condition) == "true") return; Thread.sleep(100) }
-                    fail("Queue lanes: $condition; " + web.evaluate(scenario, "document.body.innerText") + " " + web.evaluate(scenario, "JSON.stringify(window.__lanes?.items?.map(i=>[i.title,i.lane]))"))
+                    // Keep delivery failures distinguishable from a command rejected by the service.
+                    // These are flags/counts only; do not dump session/media/device identifiers.
+                    val playback = web.evaluate(scenario, "JSON.stringify((()=>{const s=window.__lanes;return s?{generation:s.generation,index:s.index,count:s.items?.length,playing:s.playing,playWhenReady:s.playWhenReady,positionMs:s.positionMs,hasError:!!s.error,errorStatus:typeof s.errorStatus==='number'?s.errorStatus:null,errorKind:['','auth','permission','connection','server','source'].includes(s.errorKind)?s.errorKind:null}:null})())")
+                    val devices = runCatching {
+                        val rows = core("/api/devices").getJSONArray("devices")
+                        JSONArray().apply { for (i in 0 until rows.length()) {
+                            val row = rows.getJSONObject(i)
+                            put(JSONObject().put("peer", row.optString("device_id") == peerId).put("socket_active", row.optBoolean("socket_active")))
+                        } }.toString()
+                    }.getOrElse { "unavailable:${it.javaClass.simpleName}" }
+                    fail("Queue lanes: $condition; playback=$playback devices=$devices; " + web.evaluate(scenario, "document.body.innerText") + " " + web.evaluate(scenario, "JSON.stringify(window.__lanes?.items?.map(i=>[i.title,i.lane]))"))
                 }
                 fun command(body: String) { web.evaluate(scenario, "window.__done=false;Capacitor.Plugins.SoundsiblePlayback.command({...window.__lanes,$body}).then(()=>window.__done=true,e=>window.__done='failed:'+e.message)"); waitFor("window.__done===true") }
                 fun titles() = web.evaluate(scenario, "JSON.stringify(window.__lanes.items.map(i=>i.title+'|'+(i.lane||'')))")
