@@ -323,3 +323,72 @@ def test_enclosure_proxy_closes_failed_upstream(client):
     ):
         assert client.get("/api/podcasts/stream/token").status_code == 502
     upstream.close.assert_called_once()
+
+
+def _jpeg(width, height):
+    from io import BytesIO
+
+    from PIL import Image
+
+    out = BytesIO()
+    Image.new("RGB", (width, height), (200, 40, 40)).save(out, "JPEG")
+    return out.getvalue()
+
+
+SMALL_JPEG = _jpeg(32, 32)
+
+
+def _image_response(status=200, kind="image/jpeg", body=SMALL_JPEG, headers=None):
+    resp = MagicMock()
+    resp.__enter__.return_value = resp
+    resp.status_code = status
+    resp.is_redirect = status in (301, 302, 303, 307, 308)
+    resp.headers = {"Content-Type": kind, **(headers or {})}
+    resp.iter_content.return_value = iter([body])
+    return resp
+
+
+def test_artwork_is_fetched_by_the_engine_without_a_referer(client):
+    # esRadio's image host answers 403 to a browser that names Soundsible in
+    # its Referer, and every cover in the app is a CSS background.
+    with patch.object(podcasts.requests, "get", return_value=_image_response()) as get:
+        resp = client.get("/api/podcasts/artwork?url=https://s1.example.com//show.jpg",
+                          headers={"Referer": "http://127.0.0.1:5005/player/"})
+    assert resp.status_code == 200
+    assert resp.data == SMALL_JPEG
+    assert resp.mimetype == "image/jpeg"
+    assert "max-age" in resp.headers["Cache-Control"]
+    assert get.call_args.args == ("https://s1.example.com//show.jpg",)
+    assert "Referer" not in get.call_args.kwargs["headers"]
+
+
+def test_artwork_redirects_are_checked_like_the_first_url(client):
+    redirect = _image_response(302, headers={"Location": "http://127.0.0.1/admin.png"})
+    with patch.object(podcasts.requests, "get", return_value=redirect) as get:
+        resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg")
+    assert resp.status_code == 404
+    get.assert_called_once()
+
+
+def test_artwork_is_raster_images_only(client):
+    for refused in (_image_response(kind="image/svg+xml"), _image_response(kind="text/html"),
+                    _image_response(404), _image_response(headers={"Content-Length": str(64 * 1024 * 1024)})):
+        with patch.object(podcasts.requests, "get", return_value=refused):
+            assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/a").status_code == 404
+    with patch.object(podcasts.requests, "get") as get:
+        assert client.get("/api/podcasts/artwork?url=http://10.0.0.1/a.jpg").status_code == 400
+    get.assert_not_called()
+
+
+def test_large_artwork_is_redrawn_at_most_1024_pixels_on_a_side(client):
+    from io import BytesIO
+
+    from PIL import Image
+
+    with patch.object(podcasts.requests, "get", return_value=_image_response(body=_jpeg(3000, 1500))):
+        resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/huge.jpg")
+    assert resp.status_code == 200 and resp.mimetype == "image/jpeg"
+    assert Image.open(BytesIO(resp.data)).size == (1024, 512)
+    # Bytes claiming to be an image are not passed on as one.
+    with patch.object(podcasts.requests, "get", return_value=_image_response(body=b"<html>")):
+        assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg").status_code == 404

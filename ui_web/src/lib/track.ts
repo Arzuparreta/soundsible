@@ -1,5 +1,6 @@
 import type { Track } from '../types/music';
 import type { PodcastEpisode } from '../types/podcast';
+import { podcastArtworkPath } from './podcastArtwork';
 
 /**
  * A track is a podcast episode when it carries podcast provenance — either the
@@ -41,7 +42,7 @@ export function podcastEpisodeToTrack(
     title: ep.title,
     artist: showTitle ?? '',
     duration: ep.duration_sec,
-    cover: ep.image || showImage || undefined,
+    cover: podcastArtworkPath(ep.image || showImage),
     source: 'preview',
     media_kind: 'podcast_episode',
     podcast_episode_guid: key,

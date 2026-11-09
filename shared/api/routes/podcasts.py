@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.models import LibraryMetadata, PodcastSubscription
 from shared.podcast_preview_token import decode_enclosure_stream_token, mint_enclosure_stream_token
-from shared.podcast_rss import FeedCheck, assert_safe_http_url, check_feed, fetch_feed_body, parse_feed
+from shared.podcast_rss import FeedCheck, _off_loop, assert_safe_http_url, check_feed, fetch_feed_body, parse_feed
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,22 @@ _ITUNES_SEARCH = "https://itunes.apple.com/search"
 # within it, going back and forth between a show and its episodes costs nothing.
 _RECHECK_SEC = 60
 _CACHED_EPISODES = 500
+# Show and episode artwork is fetched by the engine, never by the page: feed
+# hosts are arbitrary, and some refuse an image whose Referer names another
+# site (esRadio's s1.staticld.com answers 403). Browsers send that Referer for
+# CSS background images whatever the page's referrer policy says, and every
+# cover in the app is one.
+_ARTWORK_MAX_BYTES = 8 * 1024 * 1024
+_ARTWORK_MAX_REDIRECTS = 3
+# Raster only: an SVG served from the engine's origin could run script if
+# opened directly.
+_ARTWORK_TYPES = ("image/jpeg", "image/png", "image/webp", "image/gif", "image/avif")
+_ARTWORK_CACHE = "public, max-age=604800"
+# Feeds publish 3000px squares of several megabytes; nothing here draws a cover
+# that large, and the Android shell refuses artwork past 2 MB.
+_ARTWORK_EDGE = 1024
+_ARTWORK_PASS_BYTES = 1024 * 1024
+_ARTWORK_MAX_PIXELS = 40_000_000
 _fetch_lock = threading.Lock()
 # When each followed show's feed was last looked at, on the monotonic clock.
 # Kept in memory rather than with the cache, so that a look that finds nothing
@@ -287,6 +303,85 @@ def episodes_by_feed_url():
         logger.warning("RSS browse fetch failed: %s", e)
         return jsonify({"error": str(e)}), 502
     return jsonify({"rss_url": rss_url, "show": show, "episodes": episodes, "next": page.next})
+
+
+def _fetch_artwork(url: str) -> Optional[tuple]:
+    """(content type, bytes) of a public raster image, or None. Every redirect
+    is checked like the first URL, so a feed cannot bounce the engine onto its
+    own network."""
+    for _ in range(_ARTWORK_MAX_REDIRECTS + 1):
+        assert_safe_http_url(url)
+        with requests.get(url, headers={"User-Agent": "SoundsiblePodcast/1.0", "Accept": "image/*"},
+                          stream=True, timeout=(5, 20), allow_redirects=False) as resp:
+            if resp.is_redirect:
+                url = requests.compat.urljoin(url, resp.headers.get("Location", ""))
+                continue
+            kind = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if resp.status_code != 200 or kind not in _ARTWORK_TYPES:
+                return None
+            size = resp.headers.get("Content-Length")
+            if size is not None and (not size.isdigit() or int(size) > _ARTWORK_MAX_BYTES):
+                return None
+            body = bytearray()
+            for chunk in resp.iter_content(chunk_size=65536):
+                body += chunk
+                if len(body) > _ARTWORK_MAX_BYTES:
+                    return None
+            return kind, bytes(body)
+    return None
+
+
+def _fit_artwork(kind: str, body: bytes) -> Optional[tuple]:
+    """The image at most `_ARTWORK_EDGE` pixels on a side. One already that
+    small and light goes out as it came; anything else is redrawn as a JPEG.
+    None for bytes that are not an image, or one too large to decode."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    try:
+        with Image.open(BytesIO(body)) as image:
+            if image.width * image.height > _ARTWORK_MAX_PIXELS:
+                return None
+            if max(image.size) <= _ARTWORK_EDGE and len(body) <= _ARTWORK_PASS_BYTES:
+                image.verify()
+                return kind, body
+            image.draft("RGB", (_ARTWORK_EDGE, _ARTWORK_EDGE))
+            image.thumbnail((_ARTWORK_EDGE, _ARTWORK_EDGE))
+            if image.mode != "RGB":
+                image = image.convert("RGBA")
+                flat = Image.new("RGB", image.size, (0, 0, 0))
+                flat.paste(image, mask=image.getchannel("A"))
+                image = flat
+            out = BytesIO()
+            image.save(out, "JPEG", quality=86, optimize=True)
+            return "image/jpeg", out.getvalue()
+    except Exception:
+        return None
+
+
+@podcasts_bp.route("/api/podcasts/artwork", methods=["GET"])
+@rate_limit("podcasts_artwork", limit=600, window_sec=60)
+def podcast_artwork():
+    url = (request.args.get("url") or "").strip()
+    try:
+        assert_safe_http_url(url)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    try:
+        image = _fetch_artwork(url)
+    except Exception as e:
+        logger.info("Podcast artwork unavailable: %s", e)
+        image = None
+    if image is not None:
+        image = _off_loop(_fit_artwork, *image)
+    if image is None:
+        return jsonify({"error": "Artwork unavailable"}), 404
+    kind, body = image
+    return Response(body, mimetype=kind, headers={
+        "Cache-Control": _ARTWORK_CACHE,
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+    })
 
 
 @podcasts_bp.route("/api/podcasts/enclosure/peek", methods=["POST"])

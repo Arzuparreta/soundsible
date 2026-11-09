@@ -26,6 +26,7 @@ import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { SearchField } from '../components/SearchField';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
+import { podcastArtwork } from '../lib/podcastArtwork';
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
@@ -250,7 +251,7 @@ export default function Podcasts() {
                       const href = `/podcasts/${encodeURIComponent(s.id)}`;
                       return (
                         <A href={href} class={styles.card} data-pressable {...openTap(() => href)}>
-                          <div class={styles.cover} style={neutralCoverStyle(s.image_url)} />
+                          <div class={styles.cover} style={neutralCoverStyle(podcastArtwork(s.image_url))} />
                           <span class={styles.name}>{s.title}</span>
                           <span class={styles.author}>{s.author}</span>
                         </A>
@@ -277,7 +278,7 @@ export default function Podcasts() {
                     {(p) => (
                       <A href={podcastPath(p)} class={styles.card} data-pressable
                         {...openTap(() => podcastPath(p), () => recommendationMenu(p))}>
-                        <div class={styles.cover} style={neutralCoverStyle(p.image_url)} />
+                        <div class={styles.cover} style={neutralCoverStyle(podcastArtwork(p.image_url))} />
                         <span class={styles.name}>{p.title}</span>
                         <span class={styles.author}>{p.author}</span>
                       </A>
@@ -293,7 +294,7 @@ export default function Podcasts() {
                 <h2 class={styles.sectionTitle}>{t('podcasts.topEpisodes', { country: countryLabel() })}</h2>
                 <div class={styles.episodeList}>
                   <For each={popularEpisodes()}>{episode => <MusicListRow title={episode.title} subtitle={episode.author}
-                    seed={episode.episode_id} cover={episode.image_url} busy={playingEpisode() === episode.episode_id}
+                    seed={episode.episode_id} cover={podcastArtwork(episode.image_url)} busy={playingEpisode() === episode.episode_id}
                     busyLabel={t('common.loading')} onActivate={() => void playPopularEpisode(episode)}
                     onMenu={() => openContextMenu({ title: episode.title, actions: [{ icon: menuIcons.play(),
                       label: t('common.play'), disabled: !!playingEpisode(), onSelect: () => void playPopularEpisode(episode) },
@@ -345,12 +346,12 @@ export default function Podcasts() {
                 });
                 return (
                   <Show when={!mobileListLayout()} fallback={<MusicListRow title={r.title} subtitle={r.author}
-                    seed={r.feed_url} cover={r.image_url} busy={disabled()} busyLabel={t('podcasts.subscribing')}
+                    seed={r.feed_url} cover={podcastArtwork(r.image_url)} busy={disabled()} busyLabel={t('podcasts.subscribing')}
                     onActivate={() => navigate(podcastPath(r))}
                     onMenu={() => openContextMenu({ title: r.title, subtitle: r.author, actions: [subscribeAction(r)] })} />}>
                   <div class={styles.row}>
                     <A href={podcastPath(r)} class={styles.rowOpen} data-pressable {...openTap(() => podcastPath(r))}>
-                      <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
+                      <div class={styles.rowCover} style={neutralCoverStyle(podcastArtwork(r.image_url))} />
                       <div class={styles.meta}>
                         <span class={styles.title}>{r.title}</span>
                         <span class={styles.sub}>{r.author}</span>

@@ -13,6 +13,7 @@ import { createPodcastCountry } from '../lib/podcastCountry';
 import { PodcastCountryPicker } from '../components/PodcastCountryPicker';
 import PodcastCharts from './PodcastCharts';
 import type { PodcastEpisode, PopularPodcastEpisode } from '../types/podcast';
+import { podcastArtwork } from '../lib/podcastArtwork';
 
 const showInfo = (row: PodcastSearchResult): PodcastShowInfo => ({ title: row.title, author: row.author, rss_url: row.feed_url, image_url: row.image_url, itunes_collection_id: row.itunes_collection_id });
 
@@ -79,7 +80,7 @@ export default function PodcastDirectory(props: { generation: number; disconnect
     <Show when={error()}><p role="alert">{t('common.loadFailed')}</p><button disabled={busy() || props.disconnected} onClick={() => setRetry(value => value + 1)}>{t('common.retry')}</button></Show>
     <Show when={query().trim() && !busy() && !error()}><For each={rows()} fallback={<EmptyState>{t('podcasts.noResults')}</EmptyState>}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.feed_url} disabled={props.disconnected} onActivate={() => props.onOpen(showInfo(row))} />}</For></Show>
     <Show when={!query().trim() && recommended().length}><section data-podcast-top aria-label={t('podcasts.top')}><h2>{t('podcasts.top')}</h2>
-      <For each={recommended()}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.feed_url} cover={row.image_url} disabled={props.disconnected}
+      <For each={recommended()}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.feed_url} cover={podcastArtwork(row.image_url)} disabled={props.disconnected}
         busy={subscribing() === row.feed_url} onActivate={() => props.onOpen(showInfo(row))} onMenu={event => topMenu(row, event)} />}</For>
     </section></Show>
   </section>;

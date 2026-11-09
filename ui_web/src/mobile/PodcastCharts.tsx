@@ -5,6 +5,7 @@ import { countryName, type PodcastCountryState } from '../lib/podcastCountry';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { toast } from '../lib/toast';
 import type { PodcastEpisode, PodcastSearchResult, PopularPodcastEpisode } from '../types/podcast';
+import { podcastArtwork } from '../lib/podcastArtwork';
 
 /** HTTP discovery only; playback is handed to the native podcast controller. */
 export default function PodcastCharts(props: { country: PodcastCountryState; generation: number; disconnected?: boolean; hidden?: boolean; activeId?: string;
@@ -46,11 +47,11 @@ export default function PodcastCharts(props: { country: PodcastCountryState; gen
       <option value="">{t('podcasts.allCategories')}</option><For each={genres()}>{g => <option value={g.id}>{g.name}</option>}</For>
     </select></label></Show>
     <Show when={shows().filter(matches).length}><h2>{t('podcasts.topCountry', { country: label() })}</h2>
-      <For each={shows().filter(matches)}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.feed_url} cover={row.image_url} onActivate={() => props.onOpen(row)} />}</For>
+      <For each={shows().filter(matches)}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.feed_url} cover={podcastArtwork(row.image_url)} onActivate={() => props.onOpen(row)} />}</For>
     </Show>
     <Show when={showError()}><p role="alert">{t('podcasts.chartFailed')} <button onClick={() => setRetry(n => n + 1)}>{t('common.retry')}</button></p></Show>
     <Show when={episodes().filter(matches).length}><h2>{t('podcasts.topEpisodes', { country: label() })}</h2>
-      <For each={episodes().filter(matches)}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.episode_id} cover={row.image_url} busy={playing() === row.episode_id} disabled={!!playing()} onActivate={() => void play(row)} />}</For>
+      <For each={episodes().filter(matches)}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.episode_id} cover={podcastArtwork(row.image_url)} busy={playing() === row.episode_id} disabled={!!playing()} onActivate={() => void play(row)} />}</For>
     </Show>
     <Show when={episodeError()}><p role="alert">{t('podcasts.episodesFailed')} <button onClick={() => setRetry(n => n + 1)}>{t('common.retry')}</button></p></Show>
     <Show when={genre() && !shows().some(matches) && !episodes().some(matches)}><p>{t('podcasts.noCategoryResults')}</p></Show>
