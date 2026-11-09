@@ -99,6 +99,39 @@ def adb(*args: str, serial: str | None = None) -> None:
     run(str(binary), *(["-s", serial] if serial else []), *args)
 
 
+def require_emulator(serial: str, *, timeout: float = 30) -> None:
+    """Verify the selected disposable device despite a cold-boot ADB reconnect.
+
+    Only transport failures are retried. A successful non-emulator response is
+    rejected immediately, before any fixture, installation or test can run.
+    """
+    binary = sdk() / "platform-tools" / ("adb.exe" if os.name == "nt" else "adb")
+    command = [str(binary), '-s', serial, 'shell', 'getprop', 'ro.kernel.qemu']
+    deadline, last = time.monotonic() + timeout, 'device unavailable'
+    attempt = 0
+    while time.monotonic() < deadline:
+        attempt += 1
+        try:
+            result = subprocess.run(command, capture_output=True, text=True,
+                                    timeout=min(5, max(.01, deadline - time.monotonic())))
+            if result.returncode == 0:
+                if result.stdout.strip() == '1':
+                    return
+                raise RuntimeError(f'Device {serial} is not a verified emulator')
+            last = (result.stderr + '\n' + result.stdout).strip()[-1000:] or f'exit {result.returncode}'
+            lowered = last.lower()
+            transient = result.returncode == 255 or any(marker in lowered for marker in
+                ('device offline', 'error: closed', 'no devices/emulators found', 'not found'))
+            if not transient or any(marker in lowered for marker in
+                                    ('permission denied', 'securityexception', 'unauthorized')):
+                raise RuntimeError(f'Cannot verify emulator {serial}: {last}')
+        except subprocess.TimeoutExpired:
+            last = 'ADB emulator probe timed out'
+        print(f'Emulator identity not ready (attempt {attempt}): {last}', flush=True)
+        time.sleep(min(.5, max(0, deadline - time.monotonic())))
+    raise RuntimeError(f'Emulator verification deadline exceeded on {serial}: {last}')
+
+
 def enable_fixture_network(serial: str, *, timeout: float = 30) -> None:
     """Cold boot can retire ADB after boot_completed but before svc is ready.
 
@@ -148,8 +181,9 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
         for line in run(binary, "devices", capture=True).splitlines()[1:]
         if len(line.split()) == 2 and line.split()[1] == "device"
     ]
-    if len(devices) != 1 or run(binary, "shell", "getprop", "ro.kernel.qemu", capture=True) != "1":
+    if len(devices) != 1:
         raise RuntimeError("Integration requires exactly one connected emulator and no other devices")
+    require_emulator(devices[0])
     # AVD networking must be enabled for 10.0.2.2; offline startup has its own smoke run.
     enable_fixture_network(devices[0])
     from android_test_tls import create_fixture_tls
