@@ -54,6 +54,29 @@ pérdidas, jitter y decodificación; callbacks de PCM con RMS cero no prueban
 que hayan llegado paquetes de audio. Si los contadores y la energía son
 normales, contrastar la ganancia aplicada y el foco con la fase exacta.
 
+## RTP detenido con ICE conectado
+
+El gate del tag de la PR #433 registró ocho paquetes RTP en el receptor durante
+veinte segundos, con ICE conectado, consultas STUN activas y callbacks de
+concealment/silencio. El relay seguía procesando media; ese contador no prueba
+entrega de datagramas. No se demostró que cerrar la Activity causara la pérdida.
+El timeout del reset del fixture ocurrió en el primer caso, varios minutos antes,
+y queda como incidente separado, sin atribuirle una causa común.
+
+El listener ahora observa progreso RTP mientras se solicita reproducción sin
+supresión de foco. Da diez segundos al inicio y recupera cinco segundos sin
+progreso después de recibir media. No usa amplitud PCM: el silencio legítimo
+sigue sano si llegan paquetes. Reutiliza el presupuesto acotado de reconexión;
+ICE conectado ya no lo reinicia hasta observar cinco segundos de progreso
+sostenido. Pausa/supresión rearman la gracia y no hacen consultas de estadísticas.
+
+La regresión nativa detiene las codificaciones RTP del emisor sintético, conserva
+ICE y sockets de sala, exige BUFFERING y comprueba recuperación automática de
+RTP/audio conservando volumen, intención de reproducir e identidad de sala.
+También exige paquetes reales después de cerrar la Activity: el concealment por
+sí solo ya no puede satisfacer ese guard. Esto repara la falta de recuperación
+ante media detenida; no identifica la causa original de pérdida de datagramas.
+
 La observación se activa sólo cuando la instrumentación instala su observer.
 No exporta PCM, SDP, URLs, tokens, cookies, candidatos ICE ni direcciones IP.
 `sample.failed`/`rtc.stats.unavailable` indican un hueco de diagnóstico, nunca

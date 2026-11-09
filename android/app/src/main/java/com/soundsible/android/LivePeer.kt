@@ -48,6 +48,7 @@ internal class LivePeer(
     private var incoming: AudioTrack? = null
     private val diagnosticId = diagnosticIds.incrementAndGet()
     private val statsLock = Any()
+    private val mediaSamplePending = AtomicBoolean()
     private var resource: HttpUrl? = null
     private val selected = endpoint.toHttpUrl().also { require(it.isHttps && it.username.isEmpty() && it.password.isEmpty()) }
     private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
@@ -66,6 +67,21 @@ internal class LivePeer(
             if (!owns()) return
             runCatching { peer?.getStats { report -> diagnostic("rtc.stats") { JSONObject().put("stats", LiveDiagnostics.stats(report)) } } }
                 .onFailure { diagnostic("rtc.stats.unavailable") { JSONObject().put("error", it.javaClass.simpleName) } }
+        }
+    }
+    /** Packet progress distinguishes actual media from decoder concealment or silence. */
+    fun sampleReceivedPackets(observed: (Long) -> Unit) {
+        if (publishing || !owns() || !mediaSamplePending.compareAndSet(false, true)) return
+        synchronized(statsLock) {
+            val selectedPeer = peer
+            if (selectedPeer == null || !owns()) { mediaSamplePending.set(false); return }
+            try {
+                selectedPeer.getStats { report ->
+                    mediaSamplePending.set(false)
+                    if (owns()) observed(report.statsMap.values.filter { it.type == "inbound-rtp" }
+                        .sumOf { (it.members["packetsReceived"] as? Number)?.toLong() ?: 0L })
+                }
+            } catch (_: IllegalStateException) { mediaSamplePending.set(false) }
         }
     }
     private fun request(url: HttpUrl, method: String, sdp: String? = null): okhttp3.Response {

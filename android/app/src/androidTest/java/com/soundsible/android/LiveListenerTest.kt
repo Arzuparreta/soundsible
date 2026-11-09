@@ -51,6 +51,32 @@ class LiveListenerTest {
         val decodedFrames = AtomicLong()
         val audibleFrames = AtomicLong()
         val publishedFrames = AtomicLong()
+        val receivedPackets = AtomicLong()
+        val receiverId = AtomicLong(-1)
+        val receiverState = AtomicReference("NEW")
+        val packetsByPeer = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+        val mediaObserver: (JSONObject) -> Unit = { event ->
+            if (!event.optBoolean("publishing", true)) {
+                val id = event.optLong("peer", -1)
+                if (event.optString("event") == "peer.start") receiverId.set(id)
+                if (id == receiverId.get()) {
+                    when (event.optString("event")) {
+                        "peer.state" -> receiverState.set(event.optString("state"))
+                        "rtc.stats" -> event.optJSONArray("stats")?.let { stats ->
+                            var count = 0L
+                            for (index in 0 until stats.length()) {
+                                val stat = stats.getJSONObject(index)
+                                if (stat.optString("type") == "inbound-rtp") count += stat.optLong("packetsReceived")
+                            }
+                            packetsByPeer.compute(id) { _, before ->
+                                if (count > (before ?: 0L)) receivedPackets.addAndGet(count - (before ?: 0L))
+                                maxOf(count, before ?: 0L)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         val rms = AtomicReference(0.0)
         val lastAudible = AtomicLong()
         val lastPublished = AtomicLong()
@@ -108,6 +134,7 @@ class LiveListenerTest {
                 }
             }
         }
+        LiveDiagnostics.observers.add(mediaObserver)
         try {
             scenario = ActivityScenario.launch(MainActivity::class.java)
             val active = call { MediaBrowser.Builder(context, SessionToken(context, android.content.ComponentName(context, PlaybackService::class.java))).buildAsync() }
@@ -205,13 +232,51 @@ class LiveListenerTest {
             // READY can precede decoded media after WHEP recovery. Verify that
             // recovery separately before attributing missing PCM to Activity close.
             val beforeResumeAudio = audibleFrames.get()
-            await("Relay recovered its connection but not decoded programme") { audibleFrames.get() >= beforeResumeAudio + 10 }
+            val beforeResumePackets = receivedPackets.get()
+            await("Relay recovered its connection but not decoded programme") {
+                audibleFrames.get() >= beforeResumeAudio + 10 && receivedPackets.get() >= beforeResumePackets + 50
+            }
+            // PLC can emit many audible callbacks from a tiny packet burst. A
+            // sustained packet window must clear the preceding retry budget.
+            await("Recovered relay never sustained RTP") { receivedPackets.get() >= beforeResumePackets + 350 }
+
+            // Fault injection stops RTP at the synthetic sender, leaving ICE,
+            // RTCP and both room sockets alive. No production-only hook is needed.
+            val publisherTransport = LivePeer::class.java.getDeclaredField("peer").apply { isAccessible = true }
+                .get(publisher) as org.webrtc.PeerConnection
+            val sender = publisherTransport.senders.single { it.track()?.kind() == "audio" }
+            fun sendMedia(enabled: Boolean) {
+                val parameters = sender.parameters
+                parameters.encodings.forEach { it.active = enabled }
+                assertTrue("Could not control isolated publisher RTP", sender.setParameters(parameters))
+            }
+            mark("rtp.cut")
+            sendMedia(false)
+            await("Connected listener did not detect missing RTP") {
+                instrumentation.runOnMainSync { playing.set(active.playbackState == androidx.media3.common.Player.STATE_BUFFERING) }
+                playing.get()
+            }
+            assertEquals("RTP fault also disconnected receiver ICE", "CONNECTED", receiverState.get())
+            assertEquals(org.webrtc.PeerConnection.PeerConnectionState.CONNECTED, publisherTransport.connectionState())
+            assertTrue("RTP fault also closed the room socket", hostSocket.connected())
+            val beforeMediaRecovery = receivedPackets.get()
+            val beforeMediaAudio = audibleFrames.get()
+            sendMedia(true)
+            mark("rtp.resume")
+            await("Connected transport did not recover received RTP and audio") {
+                instrumentation.runOnMainSync { playing.set(active.playbackState == androidx.media3.common.Player.STATE_READY &&
+                    active.playWhenReady && active.volume == .4f && active.currentMediaItem?.mediaId == "soundsible:live:$sessionId") }
+                playing.get() && receivedPackets.get() >= beforeMediaRecovery + 50 && audibleFrames.get() >= beforeMediaAudio + 10
+            }
             mark("activity.close.begin")
             scenario.close(); scenario = null
             mark("activity.close.end")
             // Observe fresh non-silent frames, including ones between polls.
             val beforeCloseAudio = audibleFrames.get()
-            await("Activity close stopped remote programme") { audibleFrames.get() >= beforeCloseAudio + 50 }
+            val beforeClosePackets = receivedPackets.get()
+            await("Activity close stopped remote programme") {
+                audibleFrames.get() >= beforeCloseAudio + 50 && receivedPackets.get() >= beforeClosePackets + 50
+            }
             okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build().newCall(okhttp3.Request.Builder()
                 .url("https://10.0.2.2:28443/__fixture/socket-cut").header("X-Android-Fixture", "isolated")
                 .post(JSONObject().put("session_id", sessionId).put("role", "guest").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
@@ -229,6 +294,7 @@ class LiveListenerTest {
             instrumentation.runOnMainSync { active.setMediaItem(song); active.prepare(); active.play() }
             await("Return to local programme failed") { instrumentation.runOnMainSync { playing.set(active.isPlaying && active.currentMediaItem?.mediaId == "member-track") }; playing.get() }
         } finally {
+            LiveDiagnostics.observers.remove(mediaObserver)
             diagnostics.close()
             diagnosticClient.dispatcher.cancelAll()
             diagnosticClient.connectionPool.evictAll()
