@@ -67,6 +67,20 @@ def test_unsafe_artwork_is_dropped_rather_than_handed_to_the_downloader():
     assert [e["image"] for e in episodes] == [""]
 
 
+def test_titles_escaped_twice_by_the_publisher_read_as_plain_text():
+    # esRadio puts `&quot;` inside CDATA, so feedparser hands it over literally.
+    xml = _feed(
+        "<itunes:author><![CDATA[Ra&amp;dio]]></itunes:author>",
+        _item("ep1").replace(
+            "<title>Episode ep1</title>",
+            "<title><![CDATA[Entrevista: &quot;El censo&quot;]]></title>",
+        ),
+    )
+    show, episodes = parse_feed(xml, "https://example.com/rss")
+    assert show["author"] == "Ra&dio"
+    assert [e["title"] for e in episodes] == ['Entrevista: "El censo"']
+
+
 def test_show_cover_reads_itunes_and_plain_rss_images():
     itunes_only = feedparser.parse(_feed(SHOW_ART)).feed
     assert parse_feed_image(itunes_only) == "https://cdn.example.com/show.jpg"

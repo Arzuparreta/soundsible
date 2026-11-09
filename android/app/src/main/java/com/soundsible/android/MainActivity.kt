@@ -35,7 +35,10 @@ class MainActivity : BridgeActivity() {
                 if (uri.host == "localhost" && uri.path?.startsWith("/__engine/") == true) {
                     return try {
                         val parts = uri.pathSegments
-                        require(parts.size >= 6 && parts[2] == "api" && parts[3] == "static" && parts[4] == "cover")
+                        // Library covers, and podcast artwork the engine fetches for the page.
+                        require(parts.size >= 5 && parts[2] == "api" && (
+                            parts.size >= 6 && parts[3] == "static" && parts[4] == "cover" ||
+                            parts.size == 5 && parts[3] == "podcasts" && parts[4] == "artwork"))
                         val plugin = bridge.getPlugin("SoundsibleEngine").instance as EnginePlugin
                         val epoch = parts[1].toLong()
                         val path = uri.encodedPath!!.substringAfter("/__engine/$epoch") + (uri.encodedQuery?.let { "?$it" } ?: "")

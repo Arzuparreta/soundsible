@@ -4,6 +4,7 @@ RSS fetch and parse for podcast feeds. Used by Station API (server-side only).
 
 from __future__ import annotations
 
+import html
 import ipaddress
 import logging
 import re
@@ -326,14 +327,21 @@ def _parse_duration(val: Any) -> int:
     return 0
 
 
+def _text(value: Any) -> str:
+    """Plain text from a feed field. Some publishers escape their titles twice
+    (`&quot;` inside CDATA, as esRadio does), and feedparser rightly leaves the
+    second layer alone, so it reached the page as literal `&quot;`."""
+    return html.unescape(str(value or "")).strip()
+
+
 def parse_feed_show(feed: Any, feed_url: str = "") -> Dict[str, str]:
     """The show a parsed feed describes: what a page needs to head its episodes
     when all it was handed is the feed's URL. The author falls back to the
     subtitle the way a subscription records it, so a show reads the same before
     and after it is followed."""
     return {
-        "title": (getattr(feed, "title", None) or "").strip(),
-        "author": (getattr(feed, "author", None) or getattr(feed, "subtitle", None) or "").strip(),
+        "title": _text(getattr(feed, "title", None)),
+        "author": _text(getattr(feed, "author", None) or getattr(feed, "subtitle", None)),
         "image_url": parse_feed_image(feed, feed_url),
     }
 
@@ -363,7 +371,7 @@ def _episodes(parsed: Any, feed_url: str) -> List[Dict[str, Any]]:
     show_image = parse_feed_image(getattr(parsed, "feed", None), feed_url)
     out: List[Dict[str, Any]] = []
     for entry in getattr(parsed, "entries", []) or []:
-        title = (getattr(entry, "title", None) or "").strip() or "Untitled"
+        title = _text(getattr(entry, "title", None)) or "Untitled"
         guid = (getattr(entry, "id", None) or getattr(entry, "guid", None) or "").strip()
         if not guid:
             guid = (getattr(entry, "link", None) or title)[:512]

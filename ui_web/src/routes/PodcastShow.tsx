@@ -24,6 +24,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { followPodcast, shownPodcast } from '../lib/podcasts';
 import { toast } from '../lib/toast';
 import { attachPullToRefresh, PULL_ARMED, type PullFrame } from '../lib/pullToRefresh';
+import { podcastArtwork } from '../lib/podcastArtwork';
 
 interface ShowFeed {
   subscription?: PodcastSubscription;
@@ -129,7 +130,9 @@ export default function PodcastShow() {
       rss_url: url,
       title: row?.title || feed?.title || '',
       author: row?.author || feed?.author,
-      image_url: row?.image_url || feed?.image_url || null,
+      // The feed's own artwork once it answers: it is what the episodes inherit
+      // and what following the show keeps; a chart row may only have a thumbnail.
+      image_url: feed?.image_url || row?.image_url || null,
       itunes_collection_id: row?.itunes_collection_id,
     };
   });
@@ -293,7 +296,7 @@ export default function PodcastShow() {
             </button>
           </Show>
           <div class={`${hero.hero} ${hero.podcast}`}>
-            <div class={hero.art} style={neutralCoverStyle(image())} />
+            <div class={hero.art} style={neutralCoverStyle(podcastArtwork(image()))} />
             <div class={hero.identity}>
               <h1 ref={setHeading} class={hero.title}>{title()}</h1>
               <Show when={show()?.author}>
@@ -349,7 +352,7 @@ export default function PodcastShow() {
               return (
                 <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={ep.title}
                   subtitle={[fmtDate(ep.published), fmtDur(ep.duration_sec)].filter(Boolean).join(' · ')}
-                  seed={id} cover={ep.image || image()} active={isPlayingEpisode(id)} busy={downloading()} busyLabel={t('collection.downloading')}
+                  seed={id} cover={podcastArtwork(ep.image || image())} active={isPlayingEpisode(id)} busy={downloading()} busyLabel={t('collection.downloading')}
                   actionLabel={`${t('podcastShow.ariaPlay')}: ${ep.title}`} onActivate={() => playEp(ep)}
                   onMenu={() => openContextMenu({ title: ep.title, subtitle: title(), actions: [
                     { icon: menuIcons.play(), label: t('podcastShow.ariaPlay'), onSelect: () => playEp(ep) },
@@ -389,7 +392,7 @@ export default function PodcastShow() {
                     * list in the app shows a thumbnail beside the title; this
                     * row was the one that did not, so a show's episodes read as
                     * a wall of text next to an album of the same length. */}
-                  <div class={styles.epCover} style={neutralCoverStyle(ep.image || image())} />
+                  <div class={styles.epCover} style={neutralCoverStyle(podcastArtwork(ep.image || image()))} />
                   <div class={styles.epMeta}>
                     <span class={styles.epTitle}>{ep.title}</span>
                     <span class={styles.epSub}>

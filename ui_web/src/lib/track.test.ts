@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { downloadEvidence, isPodcastTrack, isMusicTrack, podcastEpisodeToTrack } from './track';
+import { podcastArtworkPath } from './podcastArtwork';
 import type { Track } from '../types/music';
 import type { PodcastEpisode } from '../types/podcast';
 
@@ -47,13 +48,13 @@ describe('podcastEpisodeToTrack', () => {
 
   it('keeps the episode artwork when it has its own', () => {
     expect(podcastEpisodeToTrack(ep, 'My Show', 'feed-1', 'https://cdn.example/show.jpg').cover)
-      .toBe('https://cdn.example/cover.jpg');
+      .toBe(podcastArtworkPath('https://cdn.example/cover.jpg'));
   });
 
   it('falls back to the show artwork, so an episode never plays blank', () => {
     const noArt: PodcastEpisode = { ...ep, image: '' };
     expect(podcastEpisodeToTrack(noArt, 'My Show', 'feed-1', 'https://cdn.example/show.jpg').cover)
-      .toBe('https://cdn.example/show.jpg');
+      .toBe(podcastArtworkPath('https://cdn.example/show.jpg'));
     expect(podcastEpisodeToTrack(noArt, 'My Show', 'feed-1', null).cover).toBeUndefined();
   });
 

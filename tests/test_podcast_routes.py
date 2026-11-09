@@ -99,6 +99,30 @@ def test_subscribing_records_what_the_feed_says_about_the_show(client):
     lib.require_saved.assert_called_once()
 
 
+def test_subscribing_keeps_the_feeds_artwork_over_a_directory_thumbnail(client):
+    lib = MagicMock()
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    api = {"_ensure_lib_metadata": lambda: (lib, metadata), "socketio": None, "emit_to_user": MagicMock()}
+    thumbnail = "https://is1-ssl.mzstatic.com/image/thumb/x.jpg/100x100bb.png"
+    with patch.object(podcasts, "_get_api", return_value=api), \
+            patch("shared.hardening.get_request_auth_context", return_value={"kind": "owner"}), \
+            patch.object(podcasts, "check_feed", return_value=FeedCheck(FeedPage(FEED, None), {})):
+        sub = client.post("/api/podcasts/subscribe", json={
+            "rss_url": "https://example.com/rss", "image_url": thumbnail}).get_json()["subscription"]
+        bare = client.post("/api/podcasts/subscribe", json={
+            "rss_url": "https://example.com/bare", "image_url": thumbnail}).get_json()["subscription"]
+    assert sub["image_url"] == "https://cdn.example.com/show.jpg"
+    assert bare["image_url"] == "https://cdn.example.com/show.jpg"
+    with patch.object(podcasts, "_get_api", return_value=api), \
+            patch("shared.hardening.get_request_auth_context", return_value={"kind": "owner"}), \
+            patch.object(podcasts, "check_feed", return_value=FeedCheck(
+                FeedPage(FEED.replace(b'<itunes:image href="https://cdn.example.com/show.jpg" />', b""), None), {})):
+        artless = client.post("/api/podcasts/subscribe", json={
+            "rss_url": "https://example.com/artless", "image_url": thumbnail}).get_json()["subscription"]
+    # A feed without artwork leaves the directory's as the only one there is.
+    assert artless["image_url"] == thumbnail
+
+
 def _followed(metadata):
     metadata.podcast_subscriptions = [{"id": "feed", "title": "My Show", "rss_url": "https://example.com/rss"}]
     return {"_ensure_lib_metadata": lambda: (MagicMock(), metadata), "socketio": None, "emit_to_user": MagicMock()}
@@ -149,8 +173,8 @@ def _kept_show(metadata, feed=FEED, validators=None):
     """A followed show whose feed was read before the engine started, so the
     next open is the first look at it since."""
     looked = FeedCheck(FeedPage(feed, None), validators or {})
-    metadata.podcast_episode_cache["feed"] = podcasts._cached_episodes(
-        podcasts.parse_feed_episodes(feed, "https://example.com/rss"), None, looked)
+    show, episodes = podcasts.parse_feed(feed, "https://example.com/rss")
+    metadata.podcast_episode_cache["feed"] = podcasts._cached_episodes(episodes, None, looked, show["image_url"])
     lib = MagicMock()
     api = _followed(metadata)
     api["_ensure_lib_metadata"] = lambda: (lib, metadata)
@@ -181,7 +205,7 @@ def test_a_feed_that_has_not_changed_costs_no_parse_and_no_write(client):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     api, lib = _kept_show(metadata, validators={"etag": '"v1"'})
     kept = dict(metadata.podcast_episode_cache["feed"])
-    with patch.object(podcasts, "parse_feed_episodes") as parse:
+    with patch.object(podcasts, "parse_feed") as parse:
         resp, _ = _open(client, api, FeedCheck(None, {"etag": '"v1"'}))
     parse.assert_not_called()
     lib.require_saved.assert_not_called()
@@ -193,7 +217,7 @@ def test_a_feed_that_has_not_changed_costs_no_parse_and_no_write(client):
 def test_a_feed_without_validators_that_sends_the_same_page_is_not_parsed_again(client):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     api, lib = _kept_show(metadata)
-    with patch.object(podcasts, "parse_feed_episodes") as parse:
+    with patch.object(podcasts, "parse_feed") as parse:
         resp, _ = _open(client, api, FeedCheck(FeedPage(FEED, None), {}))
     parse.assert_not_called()
     lib.require_saved.assert_not_called()
@@ -242,6 +266,26 @@ def test_a_failed_read_is_not_kept_as_a_fresh_one(client):
     assert refreshed.status_code == 502
 
 
+def test_a_show_followed_with_a_thumbnail_takes_the_feeds_artwork_on_its_next_read(client):
+    # Kept before the cache recorded the show's artwork: the feed is read in
+    # full once, even though its validators say nothing changed.
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    api, lib = _kept_show(metadata, validators={"etag": '"v1"'})
+    del metadata.podcast_episode_cache["feed"]["show_image"]
+    metadata.podcast_subscriptions[0]["image_url"] = "https://is1-ssl.mzstatic.com/x.jpg/100x100bb.png"
+    resp, check = _open(client, api, FeedCheck(FeedPage(FEED, None), {"etag": '"v1"'}))
+    check.assert_called_once_with("https://example.com/rss", None)
+    assert resp.get_json()["subscription"]["image_url"] == "https://cdn.example.com/show.jpg"
+    assert metadata.podcast_episode_cache["feed"]["show_image"] == "https://cdn.example.com/show.jpg"
+    api["emit_to_user"].assert_called_once_with("library_updated")
+    lib.require_saved.assert_called_once()
+    # From then on an unchanged feed is an unchanged feed again.
+    podcasts._checked.clear()
+    _, again = _open(client, api, FeedCheck(None, {"etag": '"v1"'}))
+    again.assert_called_once_with("https://example.com/rss", {"etag": '"v1"'})
+    api["emit_to_user"].assert_called_once()
+
+
 def test_enclosure_proxy_closes_upstream_on_reader_cancel(client):
     upstream = MagicMock()
     upstream.status_code = 206
@@ -279,3 +323,72 @@ def test_enclosure_proxy_closes_failed_upstream(client):
     ):
         assert client.get("/api/podcasts/stream/token").status_code == 502
     upstream.close.assert_called_once()
+
+
+def _jpeg(width, height):
+    from io import BytesIO
+
+    from PIL import Image
+
+    out = BytesIO()
+    Image.new("RGB", (width, height), (200, 40, 40)).save(out, "JPEG")
+    return out.getvalue()
+
+
+SMALL_JPEG = _jpeg(32, 32)
+
+
+def _image_response(status=200, kind="image/jpeg", body=SMALL_JPEG, headers=None):
+    resp = MagicMock()
+    resp.__enter__.return_value = resp
+    resp.status_code = status
+    resp.is_redirect = status in (301, 302, 303, 307, 308)
+    resp.headers = {"Content-Type": kind, **(headers or {})}
+    resp.iter_content.return_value = iter([body])
+    return resp
+
+
+def test_artwork_is_fetched_by_the_engine_without_a_referer(client):
+    # esRadio's image host answers 403 to a browser that names Soundsible in
+    # its Referer, and every cover in the app is a CSS background.
+    with patch.object(podcasts.requests, "get", return_value=_image_response()) as get:
+        resp = client.get("/api/podcasts/artwork?url=https://s1.example.com//show.jpg",
+                          headers={"Referer": "http://127.0.0.1:5005/player/"})
+    assert resp.status_code == 200
+    assert resp.data == SMALL_JPEG
+    assert resp.mimetype == "image/jpeg"
+    assert "max-age" in resp.headers["Cache-Control"]
+    assert get.call_args.args == ("https://s1.example.com//show.jpg",)
+    assert "Referer" not in get.call_args.kwargs["headers"]
+
+
+def test_artwork_redirects_are_checked_like_the_first_url(client):
+    redirect = _image_response(302, headers={"Location": "http://127.0.0.1/admin.png"})
+    with patch.object(podcasts.requests, "get", return_value=redirect) as get:
+        resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg")
+    assert resp.status_code == 404
+    get.assert_called_once()
+
+
+def test_artwork_is_raster_images_only(client):
+    for refused in (_image_response(kind="image/svg+xml"), _image_response(kind="text/html"),
+                    _image_response(404), _image_response(headers={"Content-Length": str(64 * 1024 * 1024)})):
+        with patch.object(podcasts.requests, "get", return_value=refused):
+            assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/a").status_code == 404
+    with patch.object(podcasts.requests, "get") as get:
+        assert client.get("/api/podcasts/artwork?url=http://10.0.0.1/a.jpg").status_code == 400
+    get.assert_not_called()
+
+
+def test_large_artwork_is_redrawn_at_most_1024_pixels_on_a_side(client):
+    from io import BytesIO
+
+    from PIL import Image
+
+    with patch.object(podcasts.requests, "get", return_value=_image_response(body=_jpeg(3000, 1500))):
+        resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/huge.jpg")
+    assert resp.status_code == 200 and resp.mimetype == "image/jpeg"
+    assert Image.open(BytesIO(resp.data)).size == (1024, 512)
+    # Bytes claiming to be an image are not passed on as one.
+    with patch.object(podcasts.requests, "get", return_value=_image_response(body=b"<html>")):
+        assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg").status_code == 404

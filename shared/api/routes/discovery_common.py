@@ -9,9 +9,11 @@ and the recommendation routes read them.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,23 @@ _HTTP_HEADERS_ITUNES = {"User-Agent": "SoundsibleDiscovery/1.0"}
 
 _LOOKUP_CHUNK = 40
 _ITUNES_TOP_FALLBACK_TERMS = ("podcast", "news", "comedy", "technology", "sports")
+
+_MZSTATIC_SIZE = re.compile(r"/\d+x\d+bb(\.\w+)?$")
+
+
+def _apple_artwork(item: dict) -> str:
+    """The largest artwork an Apple row offers. The top charts only carry
+    `artworkUrl100`; Apple's image service renders the same picture at any size
+    named in the path, so that thumbnail is asked for at 600x600 instead."""
+    for key in ("artworkUrl600", "artworkUrl512", "artworkUrl100"):
+        url = item.get(key)
+        if isinstance(url, str) and url.strip():
+            url = url.strip()
+            if key == "artworkUrl100" and (urlsplit(url).hostname or "").endswith(".mzstatic.com"):
+                url = _MZSTATIC_SIZE.sub(lambda m: "/600x600bb" + (m.group(1) or ""), url)
+            return url
+    return ""
+
 
 # ── Feed cache state (shared between discovery_feed and invalidation) ──
 _DEEZER_TRACK_CACHE_TTL_SEC = 180
@@ -81,7 +100,7 @@ def _podcast_row_from_itunes_search(r: dict) -> dict | None:
         "title": (r.get("collectionName") or "").strip() or "Podcast",
         "author": (r.get("artistName") or "").strip(),
         "feed_url": feed,
-        "image_url": (r.get("artworkUrl600") or r.get("artworkUrl100") or "").strip(),
+        "image_url": _apple_artwork(r),
     }
 
 
