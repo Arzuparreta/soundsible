@@ -220,6 +220,20 @@ describe('Artist route view mode', () => {
     expect(screen.getByRole('option', { name: 'My library (1)' })).toHaveProperty('selected', true);
   });
 
+  it('does not carry a failed catalog read into a name-only library link', async () => {
+    storeMock.library = [{ id: 'l1', title: 'Already owned', artist: 'Second', album: 'A' }];
+    apiMock.getArtistProfile.mockImplementation((name: string) => Promise.resolve(profileFor(name, true)));
+    apiMock.getLibraryArtist.mockRejectedValue(new Error('offline'));
+    renderAt('/artist/First?view=library&artist_id=ar-1');
+    await screen.findByRole('button', { name: 'Retry' });
+
+    await navigateTo('/artist/Second?view=library');
+
+    await screen.findByText('Already owned');
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(apiMock.getLibraryArtist).toHaveBeenCalledTimes(1);
+  });
+
   it('still leaves the library tab when the engine answers that nothing is owned', async () => {
     apiMock.getArtistProfile.mockResolvedValue(profileFor('Former', false));
     apiMock.getLibraryArtist.mockResolvedValue({ artist: { id: 'ar-2', name: 'Former' }, track_ids: [] });

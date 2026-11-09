@@ -76,6 +76,11 @@ function renderAt(path: string) {
   return render(() => <Router><Route path="/album/:name" component={Album} /></Router>);
 }
 
+function navigateTo(path: string) {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 const headerCover = () => document.querySelector('[data-testid="collection-header-cover"] img');
 
 describe('Album route', () => {
@@ -123,6 +128,39 @@ describe('Album route', () => {
     expect(screen.getByRole('combobox', { name: 'Shown content' })).toHaveValue('discover');
     // Changing the shown mode is not a reason to ask the catalogue again.
     expect(apiMock.getAlbumProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not carry the previous catalog record metadata into a name-only link', async () => {
+    storeMock.library = [...owned, { id: 'l3', title: 'Different owned', artist: 'Band', album: 'Different' }];
+    apiMock.getAlbumProfile.mockImplementation((title: string) => Promise.resolve(profile({ title, year: undefined })));
+    apiMock.getLibraryAlbum.mockResolvedValue({
+      album: { ...libraryAlbum, album_artist_id: 'previous-artist' }, track_ids: ['l1', 'l2'],
+    });
+    renderAt('/album/Record?artist=Band&view=library&album_id=al-1');
+    await screen.findByText('Owned one');
+    expect(screen.getByText('2010')).toBeInTheDocument();
+    expect(headerCover()?.getAttribute('src')).toContain('/cover/l1');
+
+    navigateTo('/album/Different?artist=Band&view=library');
+
+    await screen.findByText('Different owned');
+    expect(screen.queryByText('2010')).toBeNull();
+    expect(headerCover()?.getAttribute('src')).toContain('/cover/l3');
+    expect(document.querySelector('header a[href*="artist_id=previous-artist"]')).toBeNull();
+    expect(apiMock.getLibraryAlbum).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not carry a failed catalog read into a name-only library link', async () => {
+    apiMock.getAlbumProfile.mockResolvedValue(profile());
+    apiMock.getLibraryAlbum.mockRejectedValue(new Error('offline'));
+    renderAt('/album/Record?artist=Band&view=library&album_id=al-1');
+    await screen.findByRole('button', { name: 'Retry' });
+
+    navigateTo('/album/Record?artist=Band&view=library');
+
+    await screen.findByText('Owned one');
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(apiMock.getLibraryAlbum).toHaveBeenCalledTimes(1);
   });
 
   it('shows the owned sleeve when the catalogue cannot be reached', async () => {

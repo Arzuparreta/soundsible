@@ -104,10 +104,13 @@ export default function Album() {
     ),
   );
   const membershipRead = () => {
+    // A disabled resource retains its last result. A name-only link must not
+    // inherit another record's artwork, credits or year from that result.
+    if (!viewParams().albumId) return undefined;
     const read = membership.loading ? undefined : membership();
     return read?.ok ? read : undefined;
   };
-  const membershipFailed = () => !membership.loading && membership()?.ok === false;
+  const membershipFailed = () => !!viewParams().albumId && !membership.loading && membership()?.ok === false;
 
   const libraryTrackList = createMemo<Track[]>(() => {
     if (viewParams().albumId) return tracksByIds(membershipRead()?.trackIds ?? []);

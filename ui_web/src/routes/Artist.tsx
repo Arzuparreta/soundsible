@@ -104,7 +104,9 @@ export default function Artist() {
       () => ({ ok: false }),
     ),
   );
-  const membershipFailed = () => !membership.loading && membership()?.ok === false;
+  // Solid retains the previous result when a name-only link disables this
+  // resource; that previous artist's error must not hide the current tracks.
+  const membershipFailed = () => !!viewParams().artistId && !membership.loading && membership()?.ok === false;
 
   const libraryTrackList = createMemo<Track[]>(() => {
     if (viewParams().artistId) {

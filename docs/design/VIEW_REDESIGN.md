@@ -70,7 +70,7 @@ to the final PR head; browser evidence is not physical iOS/Android acceptance.
 ## Validation and final review
 
 Implementation and rendered desktop/mobile/light/dark/Large acceptance are
-complete. TypeScript and all 1938 unit tests pass. The final stable tree passes
+complete. TypeScript and all 1941 unit tests pass. The initial stable tree passes
 the whole Chromium mobile/desktop suite (414 passed, 74 profile-specific skips)
 and WebKit mobile/desktop suite (401 passed, 87 profile-specific skips). WebKit
 runs in the pinned Playwright container with a read-only mount and one worker;
@@ -188,3 +188,21 @@ counts actual track selection/streaming rather than an idle audio-unlock clock
 publication with no track or session. Unit/type validation: 234 files, 1938 tests.
 Complete final browser profiles pass as recorded above. Final-head GitHub checks
 and the subsequent Codex review remain pending before handback.
+
+## Codex review after initial green CI
+
+All 36 GitHub checks passed on `bc9a7ca7`, including all browser profiles, native
+Android emulator shards, desktop builds and Docker builds. The requested remote
+Codex review then identified one P2 finding, confirmed rather than dismissed:
+Solid retains a resource result when navigation removes its catalog ID. Album
+could inherit the previous record's sleeve, artist credit ID and year; both Album
+and Artist could retain a previous membership error over valid name-only tracks.
+
+Membership accessors now require the current route's catalog ID. Name-only links
+resume the established name fallback; ID-bearing failures still retain their
+error and retry the exact same ID. Three route-navigation regressions fail on the
+reviewed implementation and pass after the fix. Full TypeScript/unit validation
+passes (234 files, 1941 tests), followed by the affected collection and detail
+browser specs on all four profiles (18 Chromium and 18 WebKit, no failures).
+The fix is submitted for final-head CI and subsequent Codex re-review; the PR
+remains open for manual review.
