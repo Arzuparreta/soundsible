@@ -14,9 +14,9 @@ from http.client import HTTPException
 import random
 import sys
 import time
-from typing import Callable, Optional, Sequence
+from typing import Callable, Mapping, Optional, Sequence
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 #: Attempts per download, spread over about a minute of backoff.
 ATTEMPTS = 6
@@ -37,6 +37,7 @@ def fetch(
     timeout: float = 60,
     attempts: int = ATTEMPTS,
     what: str = "download",
+    headers: Optional[Mapping[str, str]] = None,
 ) -> bytes:
     """The body of the first attempt that passes every check.
 
@@ -49,7 +50,8 @@ def fetch(
     for attempt in range(attempts):
         url = urls[attempt % len(urls)]
         try:
-            with urlopen(url, timeout=timeout) as response:
+            request = Request(url, headers=dict(headers)) if headers else url
+            with urlopen(request, timeout=timeout) as response:
                 body = response.read(max_bytes + 1)
                 if len(body) > max_bytes:
                     raise Rejected(f"{what} is larger than {max_bytes} bytes")

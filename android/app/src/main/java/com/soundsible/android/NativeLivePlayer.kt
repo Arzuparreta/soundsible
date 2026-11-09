@@ -43,6 +43,32 @@ internal class NativeLivePlayer(
     private var failure: PlaybackException? = null
     private var reason = Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
     private var startedAt = 0L
+    private val mediaHealth = LiveMediaHealth()
+    private var receivedPackets = 0L
+    private val mediaProbe = object : Runnable {
+        override fun run() {
+            val selectedPeer = peer ?: return
+            if (!current() || state != Player.STATE_READY) return
+            val active = requested && !suppressed
+            if (active) worker.execute {
+                selectedPeer.sampleReceivedPackets { packets -> main.post {
+                    if (current() && peer === selectedPeer) receivedPackets = packets
+                } }
+            }
+            when (mediaHealth.observe(android.os.SystemClock.elapsedRealtime(), receivedPackets, active)) {
+                LiveMediaHealth.State.HEALTHY -> reconnect.connected()
+                LiveMediaHealth.State.STALLED -> {
+                    selectedPeer.diagnostic("rtp.stalled") { JSONObject().put("packetsReceived", receivedPackets) }
+                    state = Player.STATE_BUFFERING
+                    gain(); changed(snapshot()); invalidateState()
+                    reconnect.lost()
+                    return
+                }
+                LiveMediaHealth.State.WAITING -> if (!active) reconnect.connected()
+            }
+            main.postDelayed(this, 1000)
+        }
+    }
     private val reconnect = LiveReconnect(main, { current() && peer != null }, {
         restartOutput()
     }, {
@@ -163,6 +189,7 @@ internal class NativeLivePlayer(
         return restartOutput()
     }
     private fun restartOutput(): ListenableFuture<*> {
+        main.removeCallbacks(mediaProbe)
         val previous = peer; peer = null
         previous?.cancel()
         val previousSocket = socket; socket = null
@@ -180,8 +207,20 @@ internal class NativeLivePlayer(
         next = LivePeer(context, connection, room.getString("whep_url"), null, false, { phase -> main.post {
             if (current() && peer === next) {
                 when (phase) {
-                    PeerConnection.PeerConnectionState.CONNECTED -> { reconnect.connected(); state = Player.STATE_READY }
-                    PeerConnection.PeerConnectionState.DISCONNECTED, PeerConnection.PeerConnectionState.FAILED -> { state = Player.STATE_BUFFERING; reconnect.lost() }
+                    PeerConnection.PeerConnectionState.CONNECTED -> {
+                        reconnect.transportConnected()
+                        state = Player.STATE_READY
+                        // A transport can connect and deliver only a short burst. Keep
+                        // the retry budget until media actually flows for a stable window.
+                        if (!requested || suppressed) reconnect.connected()
+                        receivedPackets = 0L
+                        mediaHealth.reset(android.os.SystemClock.elapsedRealtime())
+                        main.removeCallbacks(mediaProbe); main.postDelayed(mediaProbe, 1000)
+                    }
+                    PeerConnection.PeerConnectionState.DISCONNECTED, PeerConnection.PeerConnectionState.FAILED -> {
+                        main.removeCallbacks(mediaProbe)
+                        state = Player.STATE_BUFFERING; reconnect.lost()
+                    }
                     else -> Unit
                 }
                 gain(); changed(snapshot()); invalidateState()
@@ -212,6 +251,7 @@ internal class NativeLivePlayer(
     }
     override fun handleSetVolume(volume: Float): ListenableFuture<*> { volumeValue = volume; gain(); changed(snapshot()); invalidateState(); return Futures.immediateVoidFuture() }
     private fun stopOutput() {
+        main.removeCallbacks(mediaProbe)
         reconnect.cancel()
         main.removeCallbacks(leaseExpired)
         ++artworkRevision; artworkUrl = null; artWorker.queue.clear()
