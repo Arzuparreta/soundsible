@@ -498,8 +498,9 @@ def acceptance(plan: dict, apk: Path) -> dict:
     """Published predecessor -> exact candidate, against a disposable HTTP engine."""
     build.doctor()
     devices = [line for line in adb("devices").splitlines()[1:] if line.strip()]
-    if len(devices) != 1 or adb("shell", "getprop", "ro.kernel.qemu") != "1":
+    if len(devices) != 1:
         raise RuntimeError("Acceptance requires exactly one emulator, no physical devices")
+    build.require_emulator(devices[0].split()[0])
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 5097))
     adb("shell", "am", "force-stop", PACKAGE)

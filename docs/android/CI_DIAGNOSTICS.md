@@ -19,6 +19,15 @@ de permisos fallan de inmediato. Se conserva el último diagnóstico, incluida
 una salida 255 sin texto. No se reintentan casos de instrumentación. Agotar el
 presupuesto sigue siendo un fallo de CI, no una omisión ni un éxito simulado.
 
+Las PR #432 y #433 expusieron otro punto anterior al encendido de Wi-Fi: la
+consulta de `ro.kernel.qemu` podía devolver `error: closed` (salida 1) o una
+salida 255 sin texto tras el arranque. No se había instalado la app ni iniciado
+la instrumentación. La verificación del serial seleccionado ahora tiene un
+presupuesto de 30 segundos para esas desconexiones, con cada consulta limitada
+a cinco segundos. Una respuesta correcta que no sea `1`, falta de autorización
+o un error de permisos se rechaza de inmediato. Se usa tanto en integración
+como en la aceptación de la APK de release; ninguna prueba se reintenta.
+
 ## Silencio en Live después de recuperar WHEP
 
 Buscar `LiveTestDiagnostics` en el logcat de `LiveListenerTest` o del shard.

@@ -44,6 +44,60 @@ def test_fixture_wifi_setup_recovers_adb_cold_boot_without_repeating_tests(monke
     assert all(0 < args[1]['timeout'] <= 5 for args in calls)
 
 
+def test_emulator_probe_recovers_observed_closed_and_empty_255_failures(monkeypatch, tmp_path):
+    monkeypatch.setattr(android_script, 'sdk', lambda: tmp_path)
+    monkeypatch.setattr(android_script.time, 'sleep', lambda _: None)
+    responses = iter([
+        subprocess.CompletedProcess([], 1, '', 'error: closed'),
+        subprocess.CompletedProcess([], 255, '', ''),
+        subprocess.CompletedProcess([], 0, '1\n', ''),
+    ])
+    calls = []
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return next(responses)
+    monkeypatch.setattr(android_script.subprocess, 'run', run)
+    android_script.require_emulator('emulator-5554')
+    assert len(calls) == 3
+    assert all(command[-5:] == ['-s', 'emulator-5554', 'shell', 'getprop', 'ro.kernel.qemu']
+               and 0 < kwargs['timeout'] <= 5 for command, kwargs in calls)
+
+
+@pytest.mark.parametrize('code,output', [(0, '0'), (0, ''), (1, 'Permission denied'),
+                                         (255, 'SecurityException'), (1, 'device unauthorized'),
+                                         (1, 'unexpected error')])
+def test_emulator_probe_rejects_non_emulator_and_permanent_errors_immediately(monkeypatch, tmp_path, code, output):
+    monkeypatch.setattr(android_script, 'sdk', lambda: tmp_path)
+    calls = []
+    def run(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, code, output if code == 0 else '', output if code else '')
+    monkeypatch.setattr(android_script.subprocess, 'run', run)
+    with pytest.raises(RuntimeError, match='not a verified emulator' if code == 0 else 'Cannot verify emulator'):
+        android_script.require_emulator('selected-device')
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('failure', ['closed', 'timeout'])
+def test_emulator_probe_deadline_preserves_failure(monkeypatch, tmp_path, failure):
+    monkeypatch.setattr(android_script, 'sdk', lambda: tmp_path)
+    now = [0.]
+    monkeypatch.setattr(android_script.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(android_script.time, 'sleep', lambda seconds: now.__setitem__(0, now[0] + seconds))
+    calls = []
+    def run(command, **kwargs):
+        calls.append(command)
+        if failure == 'timeout':
+            now[0] += kwargs['timeout']
+            raise subprocess.TimeoutExpired(command, kwargs['timeout'])
+        return subprocess.CompletedProcess(command, 1, '', 'error: closed')
+    monkeypatch.setattr(android_script.subprocess, 'run', run)
+    with pytest.raises(RuntimeError, match='deadline exceeded.*' + ('timed out' if failure == 'timeout' else 'error: closed')):
+        android_script.require_emulator('emulator-5554', timeout=1)
+    assert len(calls) == (1 if failure == 'timeout' else 2)
+    assert now[0] <= 1
+
+
 @pytest.mark.parametrize('failure', ['offline', 'timeout', 'permission'])
 def test_fixture_wifi_setup_is_bounded_and_keeps_the_cause(monkeypatch, tmp_path, failure):
     monkeypatch.setattr(android_script, 'sdk', lambda: tmp_path)
