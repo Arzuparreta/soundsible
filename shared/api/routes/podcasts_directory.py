@@ -30,6 +30,7 @@ from .discovery_common import (
     _ITUNES_SEARCH,
     _ITUNES_TOP_FALLBACK_TERMS,
     _LOOKUP_CHUNK,
+    _apple_artwork,
     _get_api,
     _podcast_row_from_itunes_search,
 )
@@ -153,13 +154,7 @@ def _extract_top_podcast_chart(data: object) -> list[dict]:
                 continue
         name = (item.get("name") or item.get("collectionName") or "").strip() or "Podcast"
         author = (item.get("artistName") or "").strip()
-        img = (
-            item.get("artworkUrl600")
-            or item.get("artworkUrl100")
-            or item.get("artworkUrl512")
-            or ""
-        )
-        img = img.strip() if isinstance(img, str) else ""
+        img = _apple_artwork(item)
         out.append(
             {
                 "itunes_collection_id": cid_str,
@@ -346,7 +341,7 @@ def _top_episodes(country: str, limit: int) -> list[dict]:
             continue
         rows.append({"episode_id": str(item["id"]), "itunes_collection_id": match[1],
                      "title": item.get("name") or "Podcast", "author": item.get("artistName") or "",
-                     "image_url": item.get("artworkUrl100") or "", "genres": _chart_genres(item)})
+                     "image_url": _apple_artwork(item), "genres": _chart_genres(item)})
     feeds = _lookup_feed_urls(list(dict.fromkeys(r["itunes_collection_id"] for r in rows)), country, strict=True)
     return [dict(row, feed_url=feeds[row["itunes_collection_id"]]) for row in rows
             if row["itunes_collection_id"] in feeds]
@@ -393,7 +388,7 @@ def podcast_chart_episode():
                         "episode": {"guid": row.get("episodeGuid") or episode_id, "title": row.get("trackName"),
                                     "enclosure_url": row["episodeUrl"], "published": row.get("releaseDate"),
                                     "duration_sec": (row.get("trackTimeMillis") or 0) / 1000,
-                                    "image": row.get("artworkUrl600") or row.get("artworkUrl100")}})
+                                    "image": _apple_artwork(row) or None}})
     except Exception as exc:
         logger.info("Podcast episode lookup unavailable: %s", exc)
         return jsonify({"error": "Directory unreachable"}), 502

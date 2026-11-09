@@ -129,7 +129,9 @@ export default function PodcastShow() {
       rss_url: url,
       title: row?.title || feed?.title || '',
       author: row?.author || feed?.author,
-      image_url: row?.image_url || feed?.image_url || null,
+      // The feed's own artwork once it answers: it is what the episodes inherit
+      // and what following the show keeps; a chart row may only have a thumbnail.
+      image_url: feed?.image_url || row?.image_url || null,
       itunes_collection_id: row?.itunes_collection_id,
     };
   });

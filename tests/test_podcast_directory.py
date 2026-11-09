@@ -119,3 +119,17 @@ def test_country_only_patch_does_not_invalidate_music_recommendations(client):
         assert client.patch('/api/discovery/settings', json={'podcast_country': 'mx'}).get_json()['podcast_country'] == 'mx'
         save.assert_called_once_with({'podcast_country': 'mx'})
         invalidate.assert_not_called()
+
+
+def test_apple_thumbnails_are_asked_for_at_600_pixels():
+    # The top charts only carry `artworkUrl100`; a show followed from one used
+    # to keep a 100x100 cover.
+    from shared.api.routes.discovery_common import _apple_artwork
+
+    thumb = "https://is1-ssl.mzstatic.com/image/thumb/Podcasts115/v4/a/b.jpg/100x100bb.png"
+    assert _apple_artwork({"artworkUrl100": thumb}) == thumb.replace("100x100bb", "600x600bb")
+    assert _apple_artwork({"artworkUrl600": "https://x.mzstatic.com/a/600x600bb.jpg", "artworkUrl100": thumb}) \
+        == "https://x.mzstatic.com/a/600x600bb.jpg"
+    assert _apple_artwork({"artworkUrl100": "https://cdn.example.com/100x100bb.png"}) \
+        == "https://cdn.example.com/100x100bb.png"
+    assert _apple_artwork({}) == ""

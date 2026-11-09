@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.models import LibraryMetadata, PodcastSubscription
 from shared.podcast_preview_token import decode_enclosure_stream_token, mint_enclosure_stream_token
-from shared.podcast_rss import FeedCheck, assert_safe_http_url, check_feed, fetch_feed_body, parse_feed, parse_feed_episodes
+from shared.podcast_rss import FeedCheck, assert_safe_http_url, check_feed, fetch_feed_body, parse_feed
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,9 @@ def _get_api():
     }
 
 
-def _cached_episodes(episodes: List[Dict[str, Any]], next_after: Optional[int], looked: FeedCheck) -> Dict[str, Any]:
+def _cached_episodes(
+    episodes: List[Dict[str, Any]], next_after: Optional[int], looked: FeedCheck, show_image: str
+) -> Dict[str, Any]:
     """What a followed show keeps of its feed: its first episodes, and where the
     rest of the feed picks up after them (#250). Past a list cut here the count
     is of episodes, which can only fall short of the entries they came from, so
@@ -54,7 +56,11 @@ def _cached_episodes(episodes: List[Dict[str, Any]], next_after: Optional[int], 
 
     It also keeps what tells the next read whether the feed has changed: the
     validators the feed sent, and a digest of the page for feeds that send
-    none, so an unchanged feed is neither parsed nor saved again."""
+    none, so an unchanged feed is neither parsed nor saved again.
+
+    `show_image` is the artwork the feed gives the show. A cache without it was
+    kept before the subscription took its artwork from the feed, and is read
+    once more in full so that subscription gets it."""
     kept = episodes[:_CACHED_EPISODES]
     return {
         "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -62,11 +68,23 @@ def _cached_episodes(episodes: List[Dict[str, Any]], next_after: Optional[int], 
         "next": len(kept) if len(episodes) > len(kept) else next_after,
         "validators": looked.validators,
         "digest": _digest(looked.page.xml) if looked.page else None,
+        "show_image": show_image,
     }
 
 
 def _digest(xml: bytes) -> str:
     return hashlib.sha1(xml).hexdigest()
+
+
+def _adopt_show_image(sub: Dict[str, Any], show: Dict[str, str]) -> bool:
+    """Gives a followed show the artwork its feed carries. That is the image
+    its episodes inherit, and usually the largest there is: a directory row
+    may only offer Apple's 100x100 thumbnail. True when it changed."""
+    image = show.get("image_url") or ""
+    if not image or sub.get("image_url") == image:
+        return False
+    sub["image_url"] = image
+    return True
 
 
 def _subscription_by_id(metadata: LibraryMetadata, feed_id: str) -> Optional[Dict[str, Any]]:
@@ -113,7 +131,7 @@ def subscribe():
         show, eps = parse_feed(looked.page.xml, rss_url)
         feed_title = title_guess or show["title"]
         feed_author = author_guess or show["author"]
-        feed_image = image_guess or show["image_url"]
+        feed_image = show["image_url"] or image_guess
     except Exception as e:
         logger.warning("Podcast subscribe fetch failed: %s", e)
         return jsonify({"error": f"Could not load feed: {e}"}), 400
@@ -131,7 +149,7 @@ def subscribe():
     # Dedupe by rss_url
     metadata.podcast_subscriptions = [s for s in metadata.podcast_subscriptions if isinstance(s, dict) and s.get("rss_url") != rss_url]
     metadata.podcast_subscriptions.append(sub)
-    metadata.podcast_episode_cache[subscription_id] = _cached_episodes(eps, looked.page.next, looked)
+    metadata.podcast_episode_cache[subscription_id] = _cached_episodes(eps, looked.page.next, looked, show["image_url"])
     _checked[subscription_id] = time.monotonic()
     lib.require_saved()
     api["emit_to_user"]("library_updated")
@@ -187,8 +205,11 @@ def feed_episodes(feed_id: str):
         cache = _kept(metadata, feed_id)
         if cache is not None and not refresh and not _due(feed_id):
             return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
+        # Kept before the cache held the show's artwork: read in full once, so
+        # the subscription takes the feed's artwork even if nothing changed.
+        stale = cache is not None and "show_image" not in cache
         try:
-            looked = check_feed(rss_url, None if refresh or cache is None else cache.get("validators"))
+            looked = check_feed(rss_url, None if refresh or stale or cache is None else cache.get("validators"))
         except Exception as e:
             # What was kept stands untouched: a failed read used to be saved
             # as a fresh one, which hid new episodes for another half hour.
@@ -198,15 +219,18 @@ def feed_episodes(feed_id: str):
             _checked[feed_id] = time.monotonic()
             return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
         _checked[feed_id] = time.monotonic()
-        if looked.page is None or (cache is not None and _digest(looked.page.xml) == cache.get("digest")):
+        if looked.page is None or (cache is not None and not stale and _digest(looked.page.xml) == cache.get("digest")):
             if cache.get("validators") != looked.validators:
                 cache["validators"] = looked.validators
                 lib.require_saved()
             return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
-        episodes = parse_feed_episodes(looked.page.xml, rss_url)
+        show, episodes = parse_feed(looked.page.xml, rss_url)
         next_after = looked.page.next
-        metadata.podcast_episode_cache[feed_id] = _cached_episodes(episodes, next_after, looked)
+        metadata.podcast_episode_cache[feed_id] = _cached_episodes(episodes, next_after, looked, show["image_url"])
+        artwork_changed = _adopt_show_image(sub, show)
         lib.require_saved()
+    if artwork_changed:
+        api["emit_to_user"]("library_updated")
     return _episodes_answer(feed_id, sub, episodes, next_after, changed=True)
 
 

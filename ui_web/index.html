@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0c0c0e" />
+    <!-- Covers come straight from third-party hosts (podcast feeds, Apple, Deezer).
+         Some refuse an image whose Referer names another site (esRadio's
+         s1.staticld.com answers 403), so only same-origin requests carry one. -->
+    <meta name="referrer" content="same-origin" />
     <link rel="icon" type="image/png" sizes="192x192" href="/player/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
     <!-- Installable web app. The manifest gives Android/desktop Chrome a real
