@@ -208,6 +208,7 @@ internal class NativeLivePlayer(
             if (current() && peer === next) {
                 when (phase) {
                     PeerConnection.PeerConnectionState.CONNECTED -> {
+                        reconnect.transportConnected()
                         state = Player.STATE_READY
                         // A transport can connect and deliver only a short burst. Keep
                         // the retry budget until media actually flows for a stable window.

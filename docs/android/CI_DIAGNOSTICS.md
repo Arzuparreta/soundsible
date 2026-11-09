@@ -69,6 +69,10 @@ progreso después de recibir media. No usa amplitud PCM: el silencio legítimo
 sigue sano si llegan paquetes. Reutiliza el presupuesto acotado de reconexión;
 ICE conectado ya no lo reinicia hasta observar cinco segundos de progreso
 sostenido. Pausa/supresión rearman la gracia y no hacen consultas de estadísticas.
+Si el mismo transporte se reconecta durante el backoff, se cancela únicamente
+el reinicio pendiente: el presupuesto y su plazo original siguen activos hasta
+confirmar media sostenida. La revisión de Codex detectó este caso y se cubre con
+regresiones de reloj simulado para cancelación, plazo y backoff conservados.
 
 La regresión nativa detiene las codificaciones RTP del emisor sintético, conserva
 ICE y sockets de sala, exige BUFFERING y comprueba recuperación automática de
