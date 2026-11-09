@@ -25,6 +25,9 @@ MEDIAMTX_VERSION = "v1.21.2"
 MEDIAMTX_ARCHIVE = f"mediamtx_{MEDIAMTX_VERSION}_linux_amd64.tar.gz"
 MEDIAMTX_SHA256 = "121be6e00397e473a95d83c75f4fcd3819a6af3b0e1a50889cba43ab4fab6a27"
 MEDIAMTX_URL = f"https://github.com/bluenviron/mediamtx/releases/download/{MEDIAMTX_VERSION}/{MEDIAMTX_ARCHIVE}"
+# The same immutable upstream release asset through GitHub's asset API. This
+# avoids repeating only the browser-download route during its CDN 504 outages.
+MEDIAMTX_ASSET_URL = "https://api.github.com/repos/bluenviron/mediamtx/releases/assets/623087138"
 
 
 def relay_peer_diagnostics(peer: dict) -> dict:
@@ -44,7 +47,9 @@ def mediamtx() -> Path:
     binary = cache / "mediamtx"
     if binary.exists():
         return binary
-    archive = fetch([MEDIAMTX_URL], max_bytes=64 * 1024 * 1024, sha256=MEDIAMTX_SHA256, what=MEDIAMTX_ARCHIVE)
+    archive = fetch([MEDIAMTX_URL, MEDIAMTX_ASSET_URL], max_bytes=64 * 1024 * 1024,
+                    sha256=MEDIAMTX_SHA256, what=MEDIAMTX_ARCHIVE,
+                    headers={"Accept": "application/octet-stream", "User-Agent": "Soundsible-Android-fixture"})
     cache.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
         member = bundle.extractfile("mediamtx")

@@ -105,6 +105,12 @@ pero el snapshot nativo del teléfono seguía con cola vacía después de acepta
 Resume. Esto es distinto de los shards 1 y 5, que no llegaron a instrumentación
 porque la descarga de MediaMTX agotó seis intentos HTTP 504.
 
+El shard 3 del siguiente head falló en la misma descarga antes de instrumentar.
+Los seis intentos alternan ahora la URL de descarga y la API oficial del mismo
+asset inmutable de GitHub, con `Accept: application/octet-stream`. Ambas vías
+exigen el mismo SHA-256 y límite de tamaño. Se verificó una descarga real por
+la API contra el hash fijado; recibir JSON o bytes distintos sigue fallando.
+
 El HTTP exitoso de handoff no confirma que el teléfono haya aplicado el comando.
 Las trazas deben distinguir registro de socket, entrega al cliente, rechazo de
 propietario/generación y excepción al reconstruir la cola. Se conservan las
