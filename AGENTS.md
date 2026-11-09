@@ -68,6 +68,7 @@
   behaviour the pull request changed on purpose. WebKit — the iPhone's engine —
   runs from the Playwright image over a read-only mount, so it leaves no
   root-owned files in `node_modules/.vite` or `test-results`:
+- UI aimed PRs need before/after images. Motion or timing needs a short video.
 
   ```sh
   cd ui_web
