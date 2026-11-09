@@ -1,4 +1,4 @@
-import { useAppBar } from '../lib/appBar';
+import { ViewHeader } from '../components/ViewHeader';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
@@ -212,11 +212,13 @@ export default function Podcasts() {
     clearTimeout(debounce);
   });
 
-  useAppBar({ title: () => t('nav.podcasts'), trailing: () => <PodcastCountryPicker /> });
-
   return (
     <div class="view">
-      <div class={styles.bar}>
+      {/* The country scopes the directory, so on the desktop it sits beside
+        * the search it narrows; on a phone the top bar carries the native
+        * dropdown itself rather than a described command. */}
+      <ViewHeader title={t('nav.podcasts')} barTrailing={<PodcastCountryPicker />} />
+      <div class={styles.bar} data-under-header={desktopShell() ? '' : undefined}>
         <SearchField
           placeholder={t('podcasts.searchPlaceholder')}
           clearLabel={t('searchPanel.clear')}

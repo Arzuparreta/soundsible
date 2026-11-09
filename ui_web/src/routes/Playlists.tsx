@@ -67,7 +67,8 @@ export default function Playlists() {
                     <button
                       class={styles.cardMenu}
                       type="button"
-                      aria-label={t('playlists.ariaOptions')}
+                      aria-label={`${t('playlists.ariaOptions')}: ${name}`}
+                      aria-haspopup="dialog"
                       onClick={(e) => menu(e, name)}
                     >
                       <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">

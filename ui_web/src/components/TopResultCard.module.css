@@ -54,17 +54,23 @@
   gap: var(--space-2xs, 2px);
 }
 
-.title,
 .subtitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* The answer's name is read whole: two lines before it gives way. */
 .title {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--ink-primary);
   font-size: var(--text-h2);
   font-weight: var(--fw-bold);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .subtitle {

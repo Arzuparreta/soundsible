@@ -1,53 +1,3 @@
-.header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-lg) var(--gutter) var(--space-md);
-}
-
-.back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--control-h);
-  height: var(--control-h);
-  flex-shrink: 0;
-  color: var(--ink-secondary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.back:hover {
-  color: var(--ink-primary);
-  background: var(--bg-raised);
-}
-}
-
-.titleWrap {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.title {
-  margin: 0;
-  font-size: var(--text-h2);
-  font-weight: var(--fw-bold);
-}
-
-.count {
-  font-size: var(--text-caption);
-  color: var(--ink-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
 .clear {
   flex-shrink: 0;
   padding: var(--space-xs) var(--space-md);
@@ -74,12 +24,15 @@
   min-height: 0;
   overflow-y: auto;
   padding: 0 var(--gutter) var(--space-2xl);
+}
+
+/* A reading column on the page's own gutter, under its title — not a
+   centred island the header does not line up with. */
+.column {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  max-width: 640px;
-  width: 100%;
-  margin: 0 auto;
+  max-width: 720px;
 }
 
 /* ── Recently completed strip ── */
@@ -298,23 +251,12 @@
 }
 
 /* ── Empty ── */
-.empty {
-  padding: var(--space-3xl) var(--gutter);
-  text-align: center;
-}
-
 .emptyTitle {
-  margin: 0 0 var(--space-xs);
+  display: block;
+  margin-bottom: var(--space-xs);
   font-size: var(--text-title);
   font-weight: var(--fw-semibold);
   color: var(--ink-primary);
-}
-
-.emptyText {
-  margin: 0 auto;
-  max-width: 32ch;
-  font-size: var(--text-body);
-  color: var(--ink-secondary);
 }
 
 @keyframes slide {
@@ -338,16 +280,6 @@
 }
 
 @media (max-width: 520px) {
-  .header {
-    align-items: flex-start;
-    gap: var(--space-sm);
-  }
-
-  .clear {
-    max-width: 92px;
-    white-space: normal;
-  }
-
   .row {
     align-items: flex-start;
     gap: var(--space-sm);
@@ -365,7 +297,6 @@
 }
 
 @media (min-width: 1024px) {
-  .back,
   .iconBtn {
     width: 36px;
     height: 36px;

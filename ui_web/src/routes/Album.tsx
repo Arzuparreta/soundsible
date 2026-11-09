@@ -2,7 +2,8 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { CollectionControl } from '../components/CollectionControl';
 import Button from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
-import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
+import { BackIcon, PlayIcon, menuIcons } from '../components/icons';
+import { EntityViewSelect } from '../components/EntityViewSelect';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { CoverImage } from '../components/CoverImage';
@@ -12,18 +13,19 @@ import { createEffect, createMemo, createResource, createSignal, For, on, Show, 
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { actions, musicLibrary, isPlayingItem, state } from '../stores';
 import { api } from '../lib/api';
-import { trackCoverUrl } from '../lib/media';
+import { coverUrl, hasCoverArt, trackCoverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import { trackCount } from '../lib/format';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
 import { albumPath, artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
-import type { AlbumProfile, CatalogItem, Track } from '../types/music';
+import type { AlbumProfile, CatalogAlbum, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Album.module.css';
+import hero from '../components/EntityHero.module.css';
 import { coverGradient } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -33,6 +35,10 @@ import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { tabRoot } from '../lib/tabMemory';
 
 type ViewMode = 'discover' | 'library';
+
+/** What the engine answered about this record in the library. A failed read is
+ * kept apart from an empty one: only the second means "not owned". */
+type Membership = { ok: true; album: CatalogAlbum; trackIds: string[] } | { ok: false };
 
 /** Album detail page with discover/library toggle.
  * Reached by tapping an album card from the artist page or search. */
@@ -60,8 +66,13 @@ export default function Album() {
   };
 
   const [profileError, setProfileError] = createSignal(false);
+  // Compared by value: switching Discover / My library rewrites the query
+  // string, and a fresh object each time fetched the record again and blanked
+  // the page under the user's tap.
+  const profileKey = createMemo(() => ({ t: title(), a: artistName(), id: viewParams().deezerId }), undefined,
+    { equals: (a, b) => a.t === b.t && a.a === b.a && a.id === b.id });
   const [profile, { refetch: retryProfile }] = createResource(
-    () => ({ t: title(), a: artistName(), id: viewParams().deezerId }),
+    profileKey,
     async (args) => {
       setProfileError(false);
       try { return await fetchAlbum(args.t, args.a, args.id); }
@@ -82,14 +93,27 @@ export default function Album() {
   // lost the tracks whose credits did not repeat the album artist.
   //
   // The fallback stays for links that carry no id — a Deezer result, an album
-  // named in search — where a name is genuinely all there is.
-  const [catalogTracks] = createResource(
+  // named in search — where a name is genuinely all there is. A link with an id
+  // never falls back to it, not even when the read fails: the page says so and
+  // retries the same id instead.
+  const [membership, { refetch: retryMembership }] = createResource(
     () => viewParams().albumId,
-    (albumId) => api.getLibraryAlbum(albumId).catch(() => null),
+    (albumId): Promise<Membership> => api.getLibraryAlbum(albumId).then(
+      (res) => ({ ok: true, album: res.album, trackIds: res.track_ids ?? [] }),
+      () => ({ ok: false }),
+    ),
   );
+  const membershipRead = () => {
+    // A disabled resource retains its last result. A name-only link must not
+    // inherit another record's artwork, credits or year from that result.
+    if (!viewParams().albumId) return undefined;
+    const read = membership.loading ? undefined : membership();
+    return read?.ok ? read : undefined;
+  };
+  const membershipFailed = () => !!viewParams().albumId && !membership.loading && membership()?.ok === false;
 
   const libraryTrackList = createMemo<Track[]>(() => {
-    if (viewParams().albumId) return tracksByIds(catalogTracks.loading ? [] : catalogTracks()?.track_ids ?? []);
+    if (viewParams().albumId) return tracksByIds(membershipRead()?.trackIds ?? []);
     // artistKey folds the same Unicode/casing differences on both sides; the
     // album title is matched with it too so the two comparisons stay consistent.
     const tKey = artistKey(title());
@@ -103,9 +127,16 @@ export default function Album() {
   });
 
   const tracklist = createMemo<CatalogItem[]>(() => currentProfile()?.tracklist ?? []);
-  const inLibrary = createMemo(() => viewParams().albumId
-    ? libraryTrackList().length > 0
-    : currentProfile()?.in_library ?? libraryTrackList().length > 0);
+  // A library link (it carries the record's catalog id) keeps its library tab
+  // while the read is pending or after it failed; only an answered empty read
+  // says the record is no longer owned.
+  const inLibrary = createMemo(() => {
+    if (viewParams().albumId) {
+      if (membership.loading || membershipFailed()) return true;
+      return (membershipRead()?.trackIds.length ?? 0) > 0;
+    }
+    return currentProfile()?.in_library ?? libraryTrackList().length > 0;
+  });
   const showToggle = createMemo(() => inLibrary());
 
   // See Artist.tsx: the router reuses this component across :name changes, so
@@ -122,6 +153,26 @@ export default function Album() {
     resolveViewMode({ urlView: viewParams().view, override: viewOverride(), canToggle: showToggle() }),
   );
 
+  /** The sleeve the user owns: the catalog's cover track, else the first owned
+   * song with artwork. */
+  const localCover = createMemo(() => {
+    const coverTrack = membershipRead()?.album.cover_track_id;
+    if (coverTrack) return coverUrl(coverTrack);
+    const track = libraryTrackList().find((tr) => hasCoverArt(tr));
+    return track ? trackCoverUrl(track) : undefined;
+  });
+  /** The library copy shows its own sleeve; the catalogue listing shows the
+   * catalogue's, and either falls back to the other when it has none. */
+  const cover = () => view() === 'library'
+    ? localCover() || currentProfile()?.cover || undefined
+    : currentProfile()?.cover || localCover();
+  /** What the shown tab holds: the owned songs, or the catalogue listing. */
+  const shownCount = () => view() === 'library'
+    ? (membership.loading || membershipFailed() ? undefined : libraryTrackList().length)
+    : tracklist().length || undefined;
+  const year = () => currentProfile()?.year ?? membershipRead()?.album.year ?? undefined;
+  const displayTitle = () => currentProfile()?.title || title();
+
   /**
    * This record as a context, for the tab it is played from. The queue's card
    * leads back here, to the same tab — the library copy and the catalog
@@ -131,7 +182,7 @@ export default function Album() {
     id: `album:${title()}`,
     kind: 'album',
     label: title(),
-    cover: currentProfile()?.cover || undefined,
+    cover: cover(),
     destination: albumPath(title(), artistName(), {
       view: mode,
       albumId: mode === 'library' ? viewParams().albumId : undefined,
@@ -249,81 +300,70 @@ export default function Album() {
     heading,
   });
 
+  const playable = () => view() === 'library' ? libraryTrackList().length > 0 : tracklist().length > 0;
+
   return (
     <div class="view">
       <div
         ref={(element) => registerPrimaryScroll(element, () => !profile.loading)}
-        class={styles.pageScroll}
+        class={hero.page}
         data-primary-scroll
       >
-        <header class={styles.header}>
+        <header class={hero.header}>
         <Show when={desktopShell()}>
-          <button class={styles.back} type="button" aria-label={t('album.ariaBack')} onClick={back}>
+          <button class={hero.back} type="button" aria-label={t('album.ariaBack')} onClick={back}>
             <BackIcon size={20} />
           </button>
         </Show>
 
-        <div class={styles.hero}>
-          <button type="button" class={styles.cover} data-testid="collection-header-cover"
-            aria-label={`${t('savedEntities.options')}: ${currentProfile()?.title || title()}`} aria-haspopup="dialog"
-            {...coverMenuTap} onContextMenu={headerContextMenu} style={{ position: 'relative', background: coverGradient(title()) }}>
-            <CoverImage src={currentProfile()?.cover} eager />
-            <Show when={!currentProfile()?.cover}>
-              <span class={styles.initial}>{(title()[0] ?? '?').toUpperCase()}</span>
+        <div class={hero.hero}>
+          <button type="button" class={hero.art} data-testid="collection-header-cover"
+            aria-label={`${t('savedEntities.options')}: ${displayTitle()}`} aria-haspopup="dialog"
+            {...coverMenuTap} onContextMenu={headerContextMenu} style={{ background: coverGradient(title()) }}>
+            <CoverImage src={cover()} eager />
+            <Show when={!cover()}>
+              <span class={hero.initial} aria-hidden="true">{(title()[0] ?? '?').toUpperCase()}</span>
             </Show>
           </button>
-          <h1 ref={setHeading} class={styles.title}><button type="button" class={styles.titleButton}
+          <div class={hero.identity}>
+            <h1 ref={setHeading} class={hero.title}><button type="button" class={hero.titleButton}
               data-testid="collection-header-name" aria-haspopup="dialog" title={t('savedEntities.options')}
-              {...titleMenuTap} onContextMenu={headerContextMenu}>{currentProfile()?.title || title()}</button></h1>
-          <ArtistLinks class={styles.artistLink} music={{ artist: currentProfile()?.artist || artistName(), view: view(), artistId: catalogTracks()?.album?.album_artist_id ?? undefined }} />
-          <span class={styles.meta}>
-            <Show when={currentProfile()?.year}>{currentProfile()!.year}</Show>
-            <Show when={currentProfile()?.year && tracklist().length > 0}> · </Show>
-            <Show when={tracklist().length > 0}>{trackCount(tracklist().length)}</Show>
-          </span>
-          <div class={styles.actions}>
-            <CollectionControl
-              onMenuReady={(open) => { openCollectionMenu = open; }}
-              entity={{ kind: 'album', name: title(), artist: artistName(), cover: profile.loading ? undefined : currentProfile()?.cover || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}
-              tracklist={tracklist()}
-              deezerId={viewParams().deezerId ?? currentProfile()?.deezer_id ?? undefined} />
+              {...titleMenuTap} onContextMenu={headerContextMenu}>{displayTitle()}</button></h1>
+            <ArtistLinks class={hero.credit} music={{ artist: currentProfile()?.artist || artistName(), view: view(), artistId: membershipRead()?.album.album_artist_id ?? undefined }} />
+            <span class={hero.meta}>
+              <Show when={year()}><span>{year()}</span></Show>
+              <Show when={year() && shownCount()}><span aria-hidden="true">·</span></Show>
+              <Show when={shownCount()}>{(n) => <span>{trackCount(n())}</span>}</Show>
+            </span>
+          </div>
+          <div class={hero.toolbar} data-entity-toolbar>
+            <Show when={showToggle()} fallback={<span class={hero.context}>{t('album.discover')}</span>}>
+              <EntityViewSelect label={t('entityView.label')} value={view()} onChange={value => switchView(value as ViewMode)}
+                options={[
+                  { value: 'discover', label: t('album.discover') },
+                  { value: 'library', label: `${t('album.library')}${membership.loading || membershipFailed() ? '' : ` (${libraryTrackList().length})`}` },
+                ]} />
+            </Show>
             <Show when={state.autoMode.active} fallback={
-            <button class={styles.btnPrimary} type="button" disabled={view() === 'library' ? libraryTrackList().length === 0 : tracklist().length === 0} onClick={playAll}>
-              <PlayIcon size={16} />
-              {t('album.play')}
-            </button>
+              <button class={hero.play} type="button" aria-label={t('album.play')} title={t('album.play')} disabled={!playable()} onClick={playAll}>
+                <PlayIcon size={16} />
+                <span class={hero.primaryLabel}>{t('album.play')}</span>
+              </button>
             }>
-              <CollectionActions title={title()} auto buttonClass={styles.btnPrimary}
+              <CollectionActions title={title()} auto iconOnlyOnMobile buttonClass={hero.play}
                 tracks={view() === 'library' ? libraryTrackList() : undefined}
                 items={view() === 'library' ? undefined : tracklist()} />
             </Show>
-            <Show when={!state.autoMode.active}>
-              <button class={styles.btnSecondary} type="button" disabled={view() === 'library' ? libraryTrackList().length === 0 : tracklist().length === 0} onClick={shuffle}>
-                <ShuffleIcon size={16} />
-                {t('album.shuffle')}
-              </button>
-            </Show>
+            <CollectionControl
+              compact menuActions={() => !state.autoMode.active
+                ? [{ icon: menuIcons.shuffle(), label: t('album.shuffle'), disabled: !playable(), onSelect: shuffle }] : []}
+              onMenuReady={(open) => { openCollectionMenu = open; }}
+              entity={{ kind: 'album', name: title(), artist: artistName(), cover: cover(), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}
+              tracklist={tracklist()}
+              deezerId={viewParams().deezerId ?? currentProfile()?.deezer_id ?? undefined} />
           </div>
         </div>
 
-        <Show when={showToggle()}>
-          <div class={styles.toggleTabs}>
-            <button
-              classList={{ [styles.toggleTab]: true, [styles.toggleTabActive]: view() === 'discover' }}
-              type="button"
-              onClick={() => switchView('discover')}
-            >
-              {t('album.discover')}
-            </button>
-            <button
-              classList={{ [styles.toggleTab]: true, [styles.toggleTabActive]: view() === 'library' }}
-              type="button"
-              onClick={() => switchView('library')}
-            >
-              {t('album.library')} ({libraryTrackList().length})
-            </button>
-          </div>
-        </Show>
         </header>
 
         <Show
@@ -331,9 +371,15 @@ export default function Album() {
           fallback={
             <Show
               when={view() === 'library' || currentProfile()}
-              fallback={<EmptyState tone={profileError() ? 'danger' : undefined}>{profileError() ? t('common.loadFailed') : t('album.noTracklist')} <Show when={profileError()}><Button variant="secondary" onClick={() => void retryProfile()}>{t('common.retry')}</Button></Show></EmptyState>}
+              fallback={<EmptyState tone={profileError() ? 'danger' : undefined}>{profileError() ? t('common.loadFailed') : t('album.noTracklist')} <Show when={profileError()}><Button class={hero.retry} variant="secondary" size="sm" onClick={() => void retryProfile()}>{t('common.retry')}</Button></Show></EmptyState>}
             >
-              <Show when={view() === 'discover'} fallback={<Show when={!catalogTracks.loading && !state.loading} fallback={<SkeletonRows />}><LibraryView tracks={libraryTrackList()} context={albumContext('library')} /></Show>}>
+              <Show when={view() === 'discover'} fallback={
+                <Show when={!membershipFailed()} fallback={
+                  <EmptyState tone="danger">{t('common.loadFailed')} <Button class={hero.retry} variant="secondary" size="sm" onClick={() => void retryMembership()}>{t('common.retry')}</Button></EmptyState>
+                }>
+                  <Show when={!membership.loading && !state.loading} fallback={<SkeletonRows />}><LibraryView tracks={libraryTrackList()} context={albumContext('library')} /></Show>
+                </Show>
+              }>
                 <DiscoverView
                   tracklist={tracklist()}
                   saving={saving()}

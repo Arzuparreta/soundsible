@@ -8,7 +8,7 @@
 .share,
 .directoryHead button,
 .roomTop button,
-.hostCard form button {
+.renameActions button {
   min-height: var(--control-h);
   padding: 0 var(--space-lg);
   color: var(--ink-on-accent);
@@ -109,20 +109,89 @@
   color: var(--warning);
 }
 
-.hostCard form {
+.roomTitle {
   display: flex;
-  gap: var(--space-sm);
-  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
 }
 
-.hostCard form input {
+.roomTitle h2 {
+  overflow-wrap: anywhere;
+}
+
+/* A worded command, so it reads on touch where there is no hover to find it. */
+.rename {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--control-h);
+  padding: 0 var(--space-md);
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rename:hover {
+    color: var(--ink-primary);
+    border-color: var(--hairline-strong);
+  }
+}
+
+.renameForm {
+  display: grid;
+  gap: var(--space-xs);
+  width: 100%;
+  margin: var(--space-sm) 0;
+}
+
+.renameForm label {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  font-weight: var(--fw-medium);
+}
+
+.renameForm input {
   min-width: 0;
-  flex: 1;
+  min-height: var(--control-h);
   padding: 0 var(--space-md);
   color: var(--ink-primary);
   background: var(--bg-elevated);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-full);
+  font: inherit;
+}
+
+.renameForm input[aria-invalid] {
+  border-color: var(--danger);
+}
+
+.renameActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.renameActions button:disabled {
+  opacity: .45;
+}
+
+.renameActions .renameCancel {
+  color: var(--ink-primary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+}
+
+.renameForm .error {
+  margin: 0;
+  color: var(--danger);
 }
 
 .onAir {

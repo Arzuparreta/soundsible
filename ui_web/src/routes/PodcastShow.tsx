@@ -4,7 +4,7 @@ import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
 import { openPlayOnDevice } from '../components/DeviceSheet';
 import { podcastEpisodeToTrack } from '../lib/track';
-import { BackIcon, CheckIcon, DownloadIcon, RefreshIcon, menuIcons } from '../components/icons';
+import { BackIcon, CheckIcon, DownloadIcon, MoreIcon, RefreshIcon, menuIcons } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from 'solid-js';
@@ -14,6 +14,7 @@ import { state, actions, isPlayingEpisode } from '../stores';
 import { t } from '../lib/i18n';
 import type { PodcastEpisode, PodcastShowInfo, PodcastSubscription } from '../types/podcast';
 import styles from './PodcastShow.module.css';
+import hero from '../components/EntityHero.module.css';
 import { neutralCoverStyle } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -142,6 +143,15 @@ export default function PodcastShow() {
 
   const [onlyDownloaded, setOnlyDownloaded] = createSignal(false);
   const [scroller, setScroller] = createSignal<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = createSignal(0);
+  const measureHeader = (element: HTMLElement) => {
+    const update = () => setHeaderHeight(element.getBoundingClientRect().height);
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
+  };
   const localByGuid = createMemo(
     () =>
       new Map(
@@ -215,66 +225,38 @@ export default function PodcastShow() {
     }
   };
 
+  /** Leaving a show is the one irreversible thing on this page: the page only
+   * goes away once the engine has confirmed it, and stays — still followed —
+   * when it could not. */
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
+  const [leaving, setLeaving] = createSignal(false);
   const unsubscribe = async () => {
-    const id = sub()?.id;
-    if (!id) return;
-    await api.unsubscribePodcast(id).catch(() => {});
-    await actions.syncLibrary();
-    navigateBackOr(navigate, '/podcasts');
+    const id = sub()?.id ?? params.id;
+    if (!id || leaving()) return;
+    setLeaving(true);
+    try {
+      await api.unsubscribePodcast(id);
+    } catch {
+      toast.error(t('podcastShow.unsubscribeFailed'));
+      setLeaving(false);
+      return;
+    }
+    try { await actions.syncLibrary(); } catch { /* The next sync drops it. */ }
+    if (!disposed) navigateBackOr(navigate, '/podcasts');
   };
 
   const back = () => navigateBackOr(navigate, '/podcasts');
-  useAppBar({ title, back, backLabel: () => t('podcastShow.ariaBack') });
+  const showMenu = () => openContextMenu({ title: title(), actions: [
+    { icon: <RefreshIcon size={18} />, label: t('podcastShow.refresh'), disabled: refreshing() || !source(), onSelect: () => void refresh() },
+    ...(sub() || params.id ? [{ icon: menuIcons.trash(), label: t(leaving() ? 'podcastShow.unsubscribing' : 'podcastShow.unsubscribe'),
+      disabled: leaving(), danger: true, onSelect: () => void unsubscribe() }] : []),
+  ] });
+  const [heading, setHeading] = createSignal<HTMLElement>();
+  useAppBar({ title, back, backLabel: () => t('podcastShow.ariaBack'), heading });
 
   return (
     <div class="view">
-      <header class={styles.header}>
-        <Show when={desktopShell()}>
-          <button class={styles.back} type="button" aria-label={t('podcastShow.ariaBack')} onClick={back}>
-            <BackIcon size={20} />
-          </button>
-        </Show>
-        <div class={styles.cover} style={neutralCoverStyle(image())} />
-        <div class={styles.info}>
-          <Show when={desktopShell()}>
-            <h1 class={styles.title}>{title()}</h1>
-          </Show>
-          <span class={styles.author}>{show()?.author}</span>
-        </div>
-        <Show when={sub()} fallback={<Show when={feedUrl()}>
-          <button class={styles.follow} type="button" disabled={following()} aria-busy={following() || undefined} onClick={() => void follow()}>
-            {following() ? t('podcasts.subscribing') : t('podcasts.subscribe')}
-          </button>
-        </Show>}>
-          <button class={styles.unsub} type="button" onClick={unsubscribe}>
-            {t('podcastShow.unsubscribe')}
-          </button>
-        </Show>
-      </header>
-
-      <div class={styles.filterBar}>
-        <button
-          class={styles.filter}
-          classList={{ [styles.filterOn]: onlyDownloaded() }}
-          type="button"
-          onClick={() => setOnlyDownloaded((v) => !v)}
-        >
-          {t('podcastShow.downloadedOnly')}
-        </button>
-        <button
-          class={styles.refresh}
-          classList={{ [styles.spinning]: refreshing() }}
-          type="button"
-          aria-label={t('podcastShow.refresh')}
-          title={t('podcastShow.refresh')}
-          aria-busy={refreshing() || undefined}
-          disabled={refreshing() || !source()}
-          onClick={() => void refresh()}
-        >
-          <RefreshIcon size={18} />
-        </button>
-      </div>
-
       {/* The pull follows the finger; once let go far enough it holds while
         * the feed is read. */}
       <div
@@ -302,17 +284,62 @@ export default function PodcastShow() {
         class={styles.scroll}
         data-primary-scroll
       >
+        {/* The show's header scrolls away with its episodes, as an album's
+          * does, so a long feed gets the whole height once you are reading. */}
+        <header ref={measureHeader} class={`${hero.header} ${styles.header}`}>
+          <Show when={desktopShell()}>
+            <button class={hero.back} type="button" aria-label={t('podcastShow.ariaBack')} onClick={back}>
+              <BackIcon size={20} />
+            </button>
+          </Show>
+          <div class={`${hero.hero} ${hero.podcast}`}>
+            <div class={hero.art} style={neutralCoverStyle(image())} />
+            <div class={hero.identity}>
+              <h1 ref={setHeading} class={hero.title}>{title()}</h1>
+              <Show when={show()?.author}>
+                <span class={hero.credit}>{show()?.author}</span>
+              </Show>
+            </div>
+          <div class={`${hero.toolbar} ${styles.toolbar}`} data-entity-toolbar classList={{ [styles.followed]: !!sub() || !feedUrl() }}>
+            <button
+              class={styles.filter}
+              type="button"
+              aria-pressed={onlyDownloaded()}
+              onClick={() => setOnlyDownloaded((v) => !v)}
+            >
+              <Show when={onlyDownloaded()}><CheckIcon size={14} /></Show>
+              {t('podcastShow.downloadedOnly')}
+            </button>
+            <Show when={!sub() && feedUrl()}>
+              <button class={styles.follow} type="button" disabled={following()} aria-busy={following() || undefined} onClick={() => void follow()}>
+                {following() ? t('podcasts.subscribing') : t('podcasts.subscribe')}
+              </button>
+            </Show>
+            <button class={hero.options} type="button" aria-label={t('songRow.ariaMore')} aria-haspopup="dialog"
+              aria-busy={refreshing() || leaving() || undefined} onClick={showMenu}><MoreIcon size={20} /></button>
+          </div>
+          </div>
+        </header>
         <Show
           when={!data.loading}
           fallback={<SkeletonRows count={8} compact />}
         >
-          <Show when={episodes().length} fallback={<EmptyState tone={failed() ? 'danger' : undefined}>{failed() ? t('common.loadFailed') : t('podcastShow.empty')} <Show when={failed()}><Button variant="secondary" onClick={() => void refetch()}>{t('common.retry')}</Button></Show></EmptyState>}>
+          <Show when={episodes().length} fallback={
+            <Show when={!failed() && onlyDownloaded()} fallback={
+              <EmptyState tone={failed() ? 'danger' : undefined}>{failed() ? t('common.loadFailed') : t('podcastShow.empty')} <Show when={failed()}><Button variant="secondary" onClick={() => void refetch()}>{t('common.retry')}</Button></Show></EmptyState>
+            }>
+              {/* The filter emptied the list, not the feed: say so, and undo it here. */}
+              <EmptyState compact>
+                {t('podcastShow.noDownloaded')} <Button variant="secondary" onClick={() => setOnlyDownloaded(false)}>{t('podcastShow.showAll')}</Button>
+              </EmptyState>
+            </Show>
+          }>
           {/* Only the rows in view are built. A show that has run for years
             * lists thousands of episodes, most with artwork of their own, and
             * a cover is a background image the browser downloads the moment
             * its row exists: a whole feed's worth was a gigabyte of 3000px
             * JPEGs that took the connection from playback for minutes (#250). */}
-          <VirtualRows items={episodes()} scrollElement={scroller} rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows>
+          <VirtualRows items={episodes()} scrollElement={scroller} scrollMargin={headerHeight()} rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows>
             {(item) => <Show when={item()} keyed>{(ep) => {
               const id = ep.guid || ep.enclosure_url;
               const downloaded = () => isDownloaded(ep);

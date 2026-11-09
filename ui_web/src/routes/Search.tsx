@@ -4,8 +4,10 @@ import { openCatalogEntityMenu } from '../components/savedEntityActions';
 import { CoverImage } from '../components/CoverImage';
 import { ArtistLinks, MusicLink } from '../components/MusicLinks';
 import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
-import { useAppBar } from '../lib/appBar';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
+import { ViewHeader } from '../components/ViewHeader';
+import { openOverlay } from '../lib/overlay';
+import { desktopShell } from '../lib/shellLayout';
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
@@ -39,7 +41,7 @@ import {
   catalogReleaseEvidence,
 } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
-import type { CatalogItem, CatalogSaveResponse, CatalogSection, SearchResult } from '../types/music';
+import type { CatalogItem, CatalogSection, SearchResult } from '../types/music';
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
@@ -70,6 +72,13 @@ const tabs: Array<{ id: SearchTab; label: () => string }> = [
   { id: 'artist', label: () => tr('search.tabArtists') },
   { id: 'album', label: () => tr('search.tabAlbums') },
 ];
+
+/** What a filter says when the response holds nothing of its kind. */
+const TAB_EMPTY: Record<Exclude<SearchTab, 'all'>, () => string> = {
+  'track,library_track': () => tr('search.noSongs'),
+  artist: () => tr('search.noArtists'),
+  album: () => tr('search.noAlbums'),
+};
 
 const TAB_SECTION_ID: Record<SearchTab, string> = {
   all: 'songs',
@@ -139,7 +148,6 @@ export default function Search() {
   const [lastRun, setLastRun] = createSignal('');
   const [recents, setRecents] = createSignal<string[]>(loadRecentSearches(initialDomain));
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
-  const [review, setReview] = createSignal<{ item: CatalogItem; response: CatalogSaveResponse } | null>(null);
   const [sharedCapsule, setSharedCapsule] = createSignal<TrackShareCapsuleV1 | null>(null);
   const [sharedItem, setSharedItem] = createSignal<CatalogItem | null>(null);
   const [sharedLoading, setSharedLoading] = createSignal(false);
@@ -152,11 +160,15 @@ export default function Search() {
   let suggestDebounce: number | undefined;
   let requestId = 0;
   let suggestionId = 0;
-  let explicitDomain: SearchDomain = initialDomain;
+  // The domain the listener chose, as opposed to one a pasted link or the
+  // `yt:` prefix implies for a single query. Only a chosen YouTube mode needs
+  // a visible way back.
+  const [explicitDomain, setExplicitDomain] = createSignal<SearchDomain>(initialDomain);
   const inputDomain = (value: string): SearchDomain => {
     const { query, forceYt } = parseSearchInput(value);
-    return forceYt || parseYouTubeInput(query) ? 'youtube' : explicitDomain;
+    return forceYt || parseYouTubeInput(query) ? 'youtube' : explicitDomain();
   };
+  let closeVersions: (() => void) | undefined;
   let searchInput: HTMLInputElement | undefined;
 
   // One response, laid out by the server. The tabs slice it rather than each
@@ -182,6 +194,14 @@ export default function Search() {
       active === 'artist' ? 'grid_round' : active === 'album' ? 'grid' : 'rows';
     return [{ id: TAB_SECTION_ID[active], layout, items: members, total: members.length }];
   });
+
+  /** Whether the active filter draws anything, judged on its own content. */
+  const hasVisibleResults = createMemo(() => {
+    if (tab() === 'all' && (topResult() || songsPreview().length > 0)) return true;
+    return visibleSections().some((section) => section.items.length > 0);
+  });
+  // One character answers nothing; saying "no results" for it would be wrong.
+  const queryTooShort = () => parseSearchInput(q()).query.trim().length < 2;
 
   const sectionTitle = (id: string) => SECTION_TITLE[id]?.() ?? id;
   const openSharedTrack = (capsule: TrackShareCapsuleV1) => {
@@ -406,7 +426,7 @@ export default function Search() {
       {
         q: q().trim() || query.trim() || undefined,
         browse: undefined,
-        domain: explicitDomain === 'youtube' ? 'youtube' : undefined,
+        domain: explicitDomain() === 'youtube' ? 'youtube' : undefined,
         tab: nextDomain === 'music' && nextTab !== 'all' ? nextTab : undefined,
       },
       { replace: true },
@@ -561,7 +581,7 @@ export default function Search() {
 
   const setActiveDomain = (next: SearchDomain) => {
     invalidatePending();
-    explicitDomain = next;
+    setExplicitDomain(next);
     setDomain(next);
     setRecents(loadRecentSearches(next));
     setShowSuggest(false);
@@ -611,14 +631,13 @@ export default function Search() {
           (item.external_ids?.youtube_id ? String(item.external_ids.youtube_id) : undefined),
       });
       if (response.status === 'queued') {
-        setReview(null);
         // The row and the download now share a video id. Recording it is what
         // lets this row flip to ✓ — and light up if it is what's playing — the
         // moment the download lands, instead of waiting for a fresh search.
         if (response.video_id) actions.linkCatalogItem(item.id, response.video_id);
         toast.success(tr('search.addedToDownloads'));
-      } else if (response.status === 'needs_review') {
-        setReview({ item, response });
+      } else if (response.status === 'needs_review' && (response.candidates ?? []).some((candidate) => candidateVideoId(candidate))) {
+        chooseVersion(item, response.candidates ?? []);
       } else {
         toast.error(tr('search.notSaved'));
       }
@@ -631,6 +650,38 @@ export default function Search() {
         return next;
       });
     }
+  };
+
+  /**
+   * The server found several uploads for a song and will not guess. The
+   * shared overlay gives the choice focus, Escape and a return to the button
+   * that asked; picking one saves it after the sheet has closed.
+   */
+  const chooseVersion = (item: CatalogItem, candidates: Array<Record<string, unknown>>) => {
+    closeVersions?.();
+    const credit = itemArtist(item);
+    closeVersions = openOverlay((close) => (
+      <div class={styles.versions}>
+        <header class={styles.versionsHead}>
+          <h2>{tr('search.chooseVersion')}</h2>
+          <p>{tr('search.chooseVersionHint', { title: credit ? `${item.title} — ${credit}` : item.title })}</p>
+        </header>
+        <div class={styles.versionList}>
+          <For each={candidates.filter((candidate) => candidateVideoId(candidate)).slice(0, 5)}>
+            {(candidate) => (
+              <button
+                class={styles.candidate}
+                type="button"
+                onClick={() => close(() => void saveItem(item, candidateVideoId(candidate)))}
+              >
+                <span class={styles.candidateTitle}>{String(candidate.title || '')}</span>
+                <span class={styles.candidateSub}>{String(candidate.channel || '')}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
+    ), { ariaLabel: () => tr('search.chooseVersion') });
   };
 
   const previewYouTube = (result: SearchResult) => {
@@ -646,6 +697,7 @@ export default function Search() {
 
 
   onCleanup(() => {
+    closeVersions?.();
     requestId += 1;
     aborter?.abort();
     cancelCatalogResolve();
@@ -654,16 +706,25 @@ export default function Search() {
     clearTimeout(suggestDebounce);
   });
 
-  useAppBar({
-    title: () => tr('nav.search'),
-    onTitleTap: () => reselectPrimaryTab('/search'),
-  });
-
   return (
     <div class="view">
-      <div class={styles.searchBox} onFocusOut={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSearchFocused(false);
-      }}>
+      <ViewHeader title={tr('nav.search')} onTitleTap={() => reselectPrimaryTab('/search')} />
+      {/* Suggestions and recent searches live as long as focus stays anywhere
+          in this box, so Tab can reach them from the field. */}
+      <div
+        classList={{ [styles.searchBox]: true, [styles.underHeader]: desktopShell() }}
+        onFocusOut={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setSearchFocused(false);
+          setShowSuggest(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || event.target === searchInput) return;
+          setSearchFocused(false);
+          setShowSuggest(false);
+          searchInput?.focus();
+        }}
+      >
         <div class={styles.bar}>
           <SearchField
             placeholder={tr('search.placeholder')}
@@ -675,16 +736,15 @@ export default function Search() {
             }}
             onInput={onInput}
             onFocus={() => { setSearchFocused(true); setShowSuggest(domain() === 'youtube'); }}
-            onBlur={() => setShowSuggest(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commit(e.currentTarget.value);
-              if (e.key === 'Escape') setShowSuggest(false);
+              if (e.key === 'Escape') { setShowSuggest(false); setSearchFocused(false); }
             }}
           />
         </div>
         <Show when={searchHistoryEnabled() && searchFocused() && !q().trim() && recents().length > 0}>
-          <div class={styles.suggest} aria-label={tr('search.recentsSection')}>
-            <h2 class={styles.recentHeading}>{tr('search.recentsSection')}</h2>
+          <div class={styles.suggest} role="group" aria-labelledby="search-recents-heading">
+            <h2 class={styles.recentHeading} id="search-recents-heading">{tr('search.recentsSection')}</h2>
             <For each={recents()}>{(value) => <div class={styles.recentRow}>
               <button class={styles.suggestItem} type="button"
                 onMouseDown={(event) => event.preventDefault()} onClick={() => commit(value)}>
@@ -713,15 +773,23 @@ export default function Search() {
         </Show>
       </div>
 
-      <Show when={!sharedCapsule() && !sharedInvalid() && domain() === 'music' && q().trim().length >= 2}>
-        <div class={styles.tabs} role="tablist" aria-label={tr('search.resultsSection')}>
+      <Show when={!sharedCapsule() && !sharedInvalid() && domain() === 'youtube' && explicitDomain() === 'youtube'}>
+        <div class={styles.mode}>
+          <span class={styles.modeLabel}>{tr('search.ytMode')}</span>
+          <button class={styles.modeExit} type="button" onClick={() => setActiveDomain('music')}>
+            {tr('search.backToMusic')}
+          </button>
+        </div>
+      </Show>
+
+      <Show when={!sharedCapsule() && !sharedInvalid() && domain() === 'music' && !queryTooShort()}>
+        <div class={styles.filters} role="group" aria-label={tr('search.filterResults')}>
           <For each={tabs}>
             {(t) => (
               <button
-                classList={{ [styles.tab]: true, [styles.activeTab]: tab() === t.id }}
+                classList={{ [styles.filter]: true, [styles.activeFilter]: tab() === t.id }}
                 type="button"
-                role="tab"
-                aria-selected={tab() === t.id}
+                aria-pressed={tab() === t.id}
                 onClick={() => setActiveTab(t.id)}
               >
                 {t.label()}
@@ -788,6 +856,9 @@ export default function Search() {
             <SearchDiscovery section={typeof searchParams.browse === 'string' ? searchParams.browse : undefined}
               onReady={setDiscoveryReady} onPlay={playItem} onSave={(item) => void saveItem(item)} saving={saving()} />
           </Match>
+          <Match when={queryTooShort()}>
+            <p class={styles.hint} role="status">{tr('search.typeMore')}</p>
+          </Match>
           <Match when={domain() === 'youtube'}>
             <div class={styles.results}>
               <Show when={youtubeLoading() && youtubeResults().length === 0 && !youtubeDirect()}>
@@ -845,23 +916,29 @@ export default function Search() {
           <Match when={loading() && items().length === 0}>
             <SearchLoading tab={tab()} />
           </Match>
-          <Match when={!loading() && items().length === 0}>
+          <Match when={!loading() && !hasVisibleResults()}>
             <EmptyState compact tone={searchError() ? 'danger' : 'neutral'}>
-              {searchError() ? (
-                <>
+              <Switch>
+                <Match when={searchError()}>
                   {tr('search.catalogErrorHint')}{' '}
                   <button class={styles.retry} type="button" onClick={() => runCatalog(q())}>
                     {tr('common.retry')}
                   </button>
-                </>
-              ) : (
-                <>
+                </Match>
+                {/* The response has results, just none of this kind. */}
+                <Match when={tab() !== 'all' && items().length > 0}>
+                  {TAB_EMPTY[tab() as Exclude<SearchTab, 'all'>]()}{' '}
+                  <button class={styles.retry} type="button" onClick={() => setActiveTab('all')}>
+                    {tr('search.showAllResults')}
+                  </button>
+                </Match>
+                <Match when={true}>
                   {tr('search.catalogNoResults')}{' '}
                   <button class={styles.retry} type="button" onClick={() => setActiveDomain('youtube')}>
                     {tr('search.searchInYt')}
                   </button>
-                </>
-              )}
+                </Match>
+              </Switch>
             </EmptyState>
           </Match>
           <Match when={true}>
@@ -965,37 +1042,6 @@ export default function Search() {
           </Match>
         </Switch>
       </div>
-
-      <Show when={review()}>
-        {(r) => (
-          <div class={styles.modalBackdrop} onClick={() => setReview(null)}>
-            <div class={styles.modal} onClick={(e) => e.stopPropagation()}>
-              <div class={styles.modalHead}>
-                <h2>{tr('search.chooseVersion')}</h2>
-                <button class={styles.closeBtn} type="button" aria-label={tr('common.close')} onClick={() => setReview(null)}>
-                  x
-                </button>
-              </div>
-              <For each={(r().response.candidates ?? []).slice(0, 5)}>
-                {(candidate) => (
-                  <button
-                    class={styles.candidate}
-                    type="button"
-                    onClick={() => {
-                      const id = candidateVideoId(candidate);
-                      if (id) void saveItem(r().item, id);
-                    }}
-                  >
-                    <span class={styles.candidateTitle}>{String(candidate.title || '')}</span>
-                    <span class={styles.candidateSub}>{String(candidate.channel || '')}</span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </div>
-        )}
-      </Show>
-
     </div>
   );
 }

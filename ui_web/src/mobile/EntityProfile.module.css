@@ -1,0 +1,39 @@
+/* The native shell's legacy header rules must not resize shared entity controls. */
+.profile .title { font-size: var(--text-h2); }
+.profile .header { padding-bottom: var(--space-sm); }
+.profile .back,
+.profile .options {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  min-height: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  background: transparent;
+  color: var(--ink-primary);
+  border: 0;
+  border-radius: var(--radius-full);
+}
+.profile .play {
+  min-height: var(--control-h);
+  padding: 0;
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-size: var(--text-label);
+}
+.profile .status {
+  min-height: var(--control-h);
+  padding: 0;
+  background: transparent;
+  color: var(--download-ink);
+  border: 0;
+  font: inherit;
+  font-size: var(--text-caption);
+  text-align: start;
+}
+@media (min-width: 768px) {
+  .profile .play { padding-inline: var(--space-md); }
+}

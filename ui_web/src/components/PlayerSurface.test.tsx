@@ -182,6 +182,51 @@ describe('PlayerSurface', () => {
     expect(view.closest('[aria-hidden]')).toHaveAttribute('aria-hidden', 'true');
   });
 
+  it('walks the mode tabs with the keyboard without switching modes', () => {
+    render(() => <PlayerSurface />);
+    const normal = screen.getByRole('tab', { name: 'nowPlaying.modeLabel' });
+    const dj = screen.getByRole('tab', { name: 'autoMode.label' });
+
+    // Only the chosen mode sits in the Tab order; its panel is named by it.
+    expect(normal).toHaveAttribute('tabindex', '0');
+    expect(dj).toHaveAttribute('tabindex', '-1');
+    expect(document.getElementById('now-playing-view')).toHaveAttribute('aria-labelledby', normal.id);
+    expect(document.getElementById('auto-mode-view')).toHaveAttribute('aria-labelledby', dj.id);
+
+    normal.focus();
+    fireEvent.keyDown(normal, { key: 'ArrowRight' });
+    expect(dj).toHaveFocus();
+    fireEvent.keyDown(dj, { key: 'ArrowRight' });
+    expect(normal).toHaveFocus();
+    fireEvent.keyDown(normal, { key: 'End' });
+    expect(dj).toHaveFocus();
+    fireEvent.keyDown(dj, { key: 'Home' });
+    expect(normal).toHaveFocus();
+    fireEvent.keyDown(normal, { key: 'ArrowLeft' });
+    expect(dj).toHaveFocus();
+
+    // Starting DJ is a decision with consequences for what plays: focus alone
+    // never makes it.
+    expect(harness.actions.enterAutoMode).not.toHaveBeenCalled();
+    expect(normal).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.click(dj);
+    expect(harness.actions.enterAutoMode).toHaveBeenCalledOnce();
+    expect(dj).toHaveAttribute('tabindex', '0');
+    expect(normal).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('claims the arrow keys on the mode tabs so they do not also seek', () => {
+    render(() => <PlayerSurface />);
+    const normal = screen.getByRole('tab', { name: 'nowPlaying.modeLabel' });
+    normal.focus();
+
+    const event = new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', bubbles: true, cancelable: true });
+    normal.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('keeps the Auto half visible but disabled for podcasts', () => {
     harness.setState?.('playback', 'currentTrack', {
       id: 'episode',
@@ -193,6 +238,11 @@ describe('PlayerSurface', () => {
 
     expect(screen.getByRole('tab', { name: 'autoMode.label' })).toBeDisabled();
     expect(screen.getByRole('tab', { name: 'nowPlaying.modeLabel' })).toHaveAttribute('aria-selected', 'true');
+
+    const normal = screen.getByRole('tab', { name: 'nowPlaying.modeLabel' });
+    normal.focus();
+    fireEvent.keyDown(normal, { key: 'ArrowRight' });
+    expect(normal).toHaveFocus();
   });
 
   it('moves between the three compact panels through accessible indicators', () => {

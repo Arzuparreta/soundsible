@@ -1,17 +1,20 @@
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
-import { createMemo, Show } from 'solid-js';
+import { createMemo, createSignal, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { state, actions, musicLibrary } from '../stores';
 import TrackList from '../components/TrackList';
-import Button from '../components/Button';
 import { BackIcon, MoreIcon, PlayIcon } from '../components/icons';
+import { CoverImage } from '../components/CoverImage';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { openPlaylistMenu } from '../components/playlistActions';
 import { trackCount } from '../lib/format';
+import { trackCoverUrl } from '../lib/media';
+import { pickPlaylistCoverTrack } from '../lib/playlists';
+import { NEUTRAL_COVER } from '../lib/cover';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
-import styles from './PlaylistDetail.module.css';
+import hero from '../components/EntityHero.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { navigateBackOr } from '../lib/scrollHistory';
 import { playlistContext } from '../lib/playbackContext';
@@ -24,14 +27,18 @@ export default function PlaylistDetail() {
   // looking it up (e.g. "Road%20Trip" -> "Road Trip").
   const name = createMemo(() => decodeURIComponent(params.name ?? ''));
   const trackIds = createMemo<string[]>(() => state.playlists[name()] ?? []);
-  const tracks = createMemo<Track[]>(() => {
-    const byId = collectionIndex(musicLibrary());
-    return trackIds()
-      .map((id) => byId.get(id))
-      .filter((t): t is Track => !!t);
-  });
+  const byId = createMemo(() => collectionIndex(musicLibrary()));
+  const tracks = createMemo<Track[]>(() => trackIds()
+    .map((id) => byId().get(id))
+    .filter((t): t is Track => !!t));
 
   const context = () => playlistContext(name(), tracks(), state.librarySettings);
+  // The sleeve the playlists grid shows: the cover the user picked, else the
+  // first song with artwork.
+  const cover = createMemo(() => {
+    const track = pickPlaylistCoverTrack(name(), trackIds(), byId(), state.librarySettings);
+    return track ? trackCoverUrl(track) : undefined;
+  });
 
   const playAll = () => {
     if (tracks().length > 0) {
@@ -51,36 +58,41 @@ export default function PlaylistDetail() {
     });
 
   const back = () => navigateBackOr(navigate, '/playlists');
+  const [heading, setHeading] = createSignal<HTMLElement>();
   useAppBar({
     title: name,
     back,
     backLabel: () => t('playlistDetail.ariaBack'),
-    actions: () => [{ label: t('playlistDetail.ariaOptions'), icon: () => <MoreIcon />, opensDialog: true, onSelect: openMenu }],
+    heading,
   });
 
   return (
-    <div class="view">
-      <header class={styles.header}>
+    <div class={`view ${hero.collection}`}>
+      <header class={hero.header}>
         <Show when={desktopShell()}>
-          <button class={styles.back} type="button" aria-label={t('playlistDetail.ariaBack')} onClick={back}>
+          <button class={hero.back} type="button" aria-label={t('playlistDetail.ariaBack')} onClick={back}>
             <BackIcon size={20} />
           </button>
         </Show>
-        <div class={styles.titleWrap}>
-          <Show when={desktopShell()}>
-            <h1 class={styles.title}>{name()}</h1>
-          </Show>
-          <span class={styles.count}>{trackCount(trackIds().length)}</span>
+        <div class={`${hero.hero} ${hero.compact}`}>
+          <div class={hero.art} style={{ background: NEUTRAL_COVER }} aria-hidden="true">
+            <CoverImage src={cover()} eager />
+          </div>
+          <div class={hero.identity}>
+            <h1 ref={setHeading} class={hero.title}>{name()}</h1>
+          </div>
+          <div class={hero.toolbar} data-entity-toolbar>
+            <span class={hero.context}>{trackCount(trackIds().length)}</span>
+            <button class={hero.play} type="button" onClick={playAll} disabled={tracks().length === 0}
+              aria-label={state.autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}>
+              <PlayIcon size={16} />
+              <span class={hero.primaryLabel}>{state.autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}</span>
+            </button>
+              <button class={hero.options} type="button" aria-label={t('playlistDetail.ariaOptions')} aria-haspopup="dialog" onClick={openMenu}>
+                <MoreIcon size={20} />
+              </button>
+          </div>
         </div>
-        <Button onClick={playAll} disabled={tracks().length === 0}>
-          <PlayIcon size={16} />
-          {state.autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}
-        </Button>
-        <Show when={desktopShell()}>
-          <button class={styles.menu} type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={openMenu}>
-            <MoreIcon size={20} />
-          </button>
-        </Show>
       </header>
       <TrackList
         tracks={tracks()}

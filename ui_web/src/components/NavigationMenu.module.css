@@ -3,14 +3,46 @@
 .drawer { padding: max(12px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)); }
 .head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 12px; }
 .head strong { font-size: var(--text-h2); }
-.group { margin-bottom: 16px; }
-.group h2 { margin: 0; padding: 8px 12px; font-size: var(--text-caption); font-weight: var(--fw-medium); color: var(--ink-tertiary); }
-.item { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px; border-radius: var(--radius-sm); color: var(--ink-secondary); font-size: var(--text-body); text-decoration: none; overflow-wrap: anywhere; }
-.icon { display: inline-flex; flex: none; width: 21px; height: 21px; }
-.icon svg { width: 100%; height: 100%; }
-.active, .views .item[aria-current='page'] { background: var(--bg-raised); color: var(--accent-ink); }
-.views { margin: 4px 0 6px 20px; padding-left: 8px; border-left: 1px solid var(--hairline); }
-.badge { margin-left: auto; font-size: var(--text-caption); }
-@media (hover: hover) and (pointer: fine) { .item:hover, .trigger:hover, .close:hover { background: var(--bg-raised); } }
 
+/* Shared by the desktop rail and the touch drawer. Rows follow --control-h, so
+   the drawer keeps its touch target and the rail stays dense, at every
+   interface size. */
+.group + .group { margin-top: var(--space-lg); }
+.group h2 { margin: 0; padding: 0 var(--space-md) var(--space-xs); font-size: var(--text-caption); font-weight: var(--fw-semibold); letter-spacing: 0.02em; color: var(--ink-tertiary); }
+.group nav { display: flex; flex-direction: column; gap: 1px; }
+
+.item { position: relative; display: flex; align-items: center; gap: var(--space-md); min-height: var(--control-h); padding: var(--space-2xs) var(--space-md); border-radius: var(--radius-sm); color: var(--ink-secondary); font-size: var(--text-body); font-weight: var(--fw-medium); line-height: 1.25; text-decoration: none; transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out); }
+.icon { display: inline-flex; flex: none; width: var(--icon-md); height: var(--icon-md); }
+.icon svg { width: 100%; height: 100%; }
+.label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* The current page: a wash plus a bar, so it never rests on colour alone. */
+.active { color: var(--ink-primary); background: var(--accent-soft); }
+.active::before { position: absolute; top: 25%; bottom: 25%; left: 0; width: 3px; content: ''; background: var(--accent); border-radius: var(--radius-full); }
+.active .icon { color: var(--accent-ink); }
+/* The branch that holds the current view: marked, not announced. */
+.inside { color: var(--ink-primary); }
+.inside .icon { color: var(--accent-ink); }
+
+/* Library's views are a quiet second level under its label, not peers of it:
+   the guide line runs down the parent's icon axis and each label starts where
+   the parent's label does. */
+.views { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 var(--space-xs) calc(var(--space-md) + var(--icon-md) / 2); padding-left: var(--space-xs); border-left: 1px solid var(--hairline); }
+.view { padding-left: calc(var(--space-md) + var(--icon-md) / 2 - var(--space-xs) - 1px); font-size: var(--text-label); }
+.view.active::before { left: calc(-1 * var(--space-xs) - 2px); }
+
+.badge { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; font-family: var(--font-mono); font-size: var(--text-tiny); font-weight: var(--fw-bold); color: var(--ink-on-accent); background: var(--accent); border-radius: var(--radius-full); }
+
+@media (hover: hover) and (pointer: fine) {
+  .item:hover, .trigger:hover, .close:hover { color: var(--ink-primary); background: var(--bg-hover); }
+  .active:hover { background: var(--accent-soft); }
+}
 .item:active, .trigger:active, .close:active { opacity: 0.7; }
+.item:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+
+/* The rail is pointer-first: second-level rows tighten, top-level rows keep
+   the control height of the interface size. */
+@media (min-width: 1024px) {
+  .group + .group { margin-top: var(--space-md); }
+  .view { min-height: calc(var(--control-h) - 4px); }
+}

@@ -4,7 +4,7 @@
   align-items: center;
   gap: var(--space-md);
   height: var(--row-h);
-  padding: 0 var(--space-md);
+  padding: 0 var(--list-inline-padding, var(--space-md));
   border-radius: var(--radius-sm);
   cursor: pointer;
   border: 1px solid transparent;

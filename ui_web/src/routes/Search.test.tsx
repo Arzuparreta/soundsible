@@ -1,5 +1,5 @@
 import type { Track } from '../types/music';
-import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Search from './Search';
 import { setLocale } from '../lib/i18n';
@@ -24,6 +24,7 @@ const storeMock = vi.hoisted(() => ({
   library: [] as Array<Record<string, unknown>>,
   djActive: false,
 }));
+const shellMock = vi.hoisted(() => ({ desktop: false }));
 const routerMock = vi.hoisted(() => ({
   params: {} as Record<string, string>,
   setParams: vi.fn(),
@@ -34,6 +35,10 @@ vi.mock('@solidjs/router', () => ({
   useSearchParams: () => [routerMock.params, routerMock.setParams],
 }));
 vi.mock('../lib/api', () => ({ api: apiMock }));
+vi.mock('../lib/shellLayout', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/shellLayout')>(),
+  desktopShell: () => shellMock.desktop,
+}));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/toast', () => ({
   toast: {
@@ -64,6 +69,8 @@ vi.mock('../stores', async () => {
   };
 });
 
+const filterButtons = () => within(screen.getByRole('group', { name: 'Filter results' })).getAllByRole('button');
+
 describe('Search route', () => {
   beforeEach(() => {
     setLocale('en');
@@ -73,6 +80,7 @@ describe('Search route', () => {
     apiMock.getDiscoveryMusicFeed.mockResolvedValue({ items: [], browse_sections: [] });
     storeMock.library = [];
     storeMock.djActive = false;
+    shellMock.desktop = false;
     routerMock.params = {};
     window.location.hash = '#/search';
     apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
@@ -103,15 +111,15 @@ describe('Search route', () => {
     apiMock.searchCatalog.mockImplementation(() => new Promise((yes, no) => { resolve = yes; reject = no; }));
     render(() => <Search />);
     fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), { target: { value: 'Extremoduro' } });
-    fireEvent.click(screen.getByRole('tab', { name: 'Artists' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Artists' }));
     await vi.advanceTimersByTimeAsync(230);
     expect(apiMock.searchCatalog).toHaveBeenCalledWith('Extremoduro', expect.any(AbortSignal));
     expect(apiMock.peekYouTube).not.toHaveBeenCalled();
     if (outcome === 'resolve') resolve({ items: [], sections: [] });
     else reject(new Error('offline'));
     await vi.advanceTimersByTimeAsync(0);
-    expect(screen.getByRole('tab', { name: 'Artists' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: 'Artists' })).toHaveAttribute('aria-pressed', 'true');
+    expect(filterButtons()).toHaveLength(4);
     expect(apiMock.searchCatalog).toHaveBeenCalledTimes(1);
   });
 
@@ -183,7 +191,7 @@ describe('Search route', () => {
       fireEvent.input(input, { target: { value } });
       await vi.advanceTimersByTimeAsync(230);
       expect(apiMock.searchCatalog).toHaveBeenCalledWith(value, expect.any(AbortSignal));
-      expect(screen.getAllByRole('tab')).toHaveLength(4);
+      expect(filterButtons()).toHaveLength(4);
     }
     fireEvent.keyDown(input, { key: 'Enter' });
     await vi.advanceTimersByTimeAsync(0);
@@ -309,7 +317,7 @@ describe('Search route', () => {
     expect(await screen.findByText('Previous song')).toBeInTheDocument();
     expect(apiMock.searchCatalog).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Artists' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Artists' }));
 
     expect(await screen.findByText('Previous artist')).toBeInTheDocument();
     expect(screen.queryByText('Previous song')).not.toBeInTheDocument();
@@ -581,6 +589,73 @@ describe('Search route', () => {
     expect(await screen.findByText(/exact shared version is unavailable/i)).toBeInTheDocument();
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
     expect(apiMock.searchYouTube).not.toHaveBeenCalled();
+  });
+
+  it('titles the page with a heading on the desktop shell', () => {
+    shellMock.desktop = true;
+    render(() => <Search />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Discover' })).toBeInTheDocument();
+  });
+
+  it('explains an empty filter from its own results and returns to all of them', async () => {
+    // The response has an artist and no songs: the Songs filter used to draw
+    // nothing at all, because only the whole response was checked for emptiness.
+    apiMock.searchCatalog.mockResolvedValue({
+      items: [{ id: 'deezer:artist:1', type: 'artist', source: 'deezer', title: 'Marea', subtitle: 'Artist' }],
+      sections: [{ id: 'artists', layout: 'grid_round', item_ids: ['deezer:artist:1'], total: 1 }],
+    });
+    render(() => <Search />);
+    fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'marea' } });
+    await vi.advanceTimersByTimeAsync(230);
+    fireEvent.click(screen.getByRole('button', { name: 'Songs' }));
+    expect(screen.getByText(/No songs for this search/)).toBeInTheDocument();
+    expect(screen.queryByText(/No Music results/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show all results' }));
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Marea')).toBeInTheDocument();
+  });
+
+  it('asks for a second character instead of reporting no results', async () => {
+    render(() => <Search />);
+    fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'm' } });
+    await vi.advanceTimersByTimeAsync(230);
+    expect(screen.getByText('Type at least two characters to search.')).toBeInTheDocument();
+    expect(screen.queryByText(/No Music results/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Filter results' })).not.toBeInTheDocument();
+    expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+  });
+
+  it('offers a way back to Music search from the YouTube mode it switched to', async () => {
+    render(() => <Search />);
+    fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'rare bootleg' } });
+    await vi.advanceTimersByTimeAsync(230);
+    fireEvent.click(await screen.findByText('Search on YouTube'));
+    expect(await screen.findByText('Searching YouTube')).toBeInTheDocument();
+    expect(routerMock.setParams).toHaveBeenLastCalledWith(expect.objectContaining({ domain: 'youtube' }), { replace: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to Music search' }));
+    // The Music answer for this query is cached; it comes back without a request.
+    expect(screen.getByText(/No Music results/)).toBeInTheDocument();
+    expect(apiMock.searchCatalog).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Searching YouTube')).not.toBeInTheDocument();
+    expect(routerMock.setParams).toHaveBeenLastCalledWith(expect.objectContaining({ domain: undefined }), { replace: true });
+    expect(filterButtons()).toHaveLength(4);
+  });
+
+  it('keeps suggestions while focus moves into them and drops them when focus leaves', async () => {
+    apiMock.suggest.mockResolvedValue(['rare bootleg live']);
+    routerMock.params = { domain: 'youtube' };
+    render(() => <Search />);
+    const field = screen.getByRole('searchbox');
+    field.focus();
+    fireEvent.input(field, { target: { value: 'rare bootleg' } });
+    await vi.advanceTimersByTimeAsync(130);
+    const suggestion = screen.getByRole('button', { name: 'rare bootleg live' });
+    // Tab: the field blurs and the suggestion, in the same box, takes focus.
+    suggestion.focus();
+    expect(screen.getByRole('button', { name: 'rare bootleg live' })).toHaveFocus();
+    suggestion.blur();
+    expect(screen.queryByRole('button', { name: 'rare bootleg live' })).not.toBeInTheDocument();
   });
 });
 

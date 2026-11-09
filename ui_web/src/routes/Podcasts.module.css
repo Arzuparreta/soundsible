@@ -6,6 +6,11 @@
   padding: var(--view-top, var(--space-lg)) var(--gutter) var(--space-md);
 }
 
+/* On the desktop the page header already spaces the top. */
+.bar[data-under-header] {
+  padding-top: 0;
+}
+
 .scroll {
   flex: 1;
   min-height: 0;
@@ -57,12 +62,6 @@
   to { transform: translateX(270%); }
 }
 
-.hint {
-  padding: var(--space-3xl) var(--gutter);
-  text-align: center;
-  color: var(--ink-secondary);
-}
-
 .sectionTitle {
   margin: var(--space-md) 0 var(--space-md);
   font-size: var(--text-h2);
@@ -72,8 +71,8 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
-  gap: var(--space-lg);
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--browse-card-min, 144px), 100%), 1fr));
+  gap: var(--browse-card-gap, var(--space-lg));
 }
 
 .card {
@@ -110,10 +109,13 @@
   margin-top: var(--space-xs);
   font-size: var(--text-label);
   font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
   color: var(--ink-primary);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
 }
 
 .author {

@@ -85,19 +85,42 @@ test('an album bookmark is independent of bulk actions and download review', asy
     await expect.poll(() => page.locator('html').getAttribute('data-hold-gesture')).toBeNull();
   }
 
+  const menu = page.getByRole('dialog');
+  const more = page.locator('[data-entity-toolbar]').getByRole('button', { name: /^Opciones/ });
+  const openMenu = async () => {
+    await expect(menu).toHaveCount(0);
+    await more.click();
+    await expect(menu).toBeVisible();
+  };
+  const setBookmark = async (saved: boolean) => {
+    await openMenu();
+    const action = menu.getByRole('button', { name: saved ? 'Guardar' : 'Quitar de guardados', exact: true });
+    if (saved) await expect(action).not.toHaveAttribute('aria-current', 'true');
+    else await expect(action).toHaveAttribute('aria-current', 'true');
+    await action.click();
+    await expect(menu).toHaveCount(0);
+    await expect.poll(() => bookmarked.length).toBe(saved ? 1 : 0);
+    // Reopening reads the persisted selection; the closed menu is not reactive.
+    await openMenu();
+    const next = menu.getByRole('button', { name: saved ? 'Quitar de guardados' : 'Guardar', exact: true });
+    if (saved) await expect(next).toHaveAttribute('aria-current', 'true');
+    else await expect(next).not.toHaveAttribute('aria-current', 'true');
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+  };
+
   // A bookmark adds only the entity and can be removed without touching Songs.
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await setBookmark(true);
   expect(bookmarked).toHaveLength(1);
   expect(savedSets).toHaveLength(0);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Guardado', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  expect(downloads).toHaveLength(0);
+  await setBookmark(false);
   expect(bookmarked).toHaveLength(0);
   expect(savedSets).toHaveLength(0);
+  expect(downloads).toHaveLength(0);
 
   // Bulk saving is an explicit overflow action, independent of the bookmark.
-  await page.getByRole('button', { name: 'Opciones', exact: true }).click();
+  await openMenu();
   await page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true }).click();
   await expect(page.getByRole('dialog').getByText(/^3 canciones aparecerán/)).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true }).click();
@@ -109,18 +132,18 @@ test('an album bookmark is independent of bulk actions and download review', asy
 
   // Then the next step, for all of them at once.
   // Removing a bookmark after bulk saving leaves every saved song alone.
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Guardado', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await setBookmark(true);
+  await setBookmark(false);
   expect(savedSets).toHaveLength(1);
   expect(bookmarked).toHaveLength(0);
-  await page.getByRole('button', { name: 'Opciones', exact: true }).click();
+  await openMenu();
   await page.getByRole('button', { name: 'Descargar el álbum', exact: true }).click();
   await expect.poll(() => downloads).toEqual([{ deezer_id: '302127' }]);
 
   // The engine was unsure of one: the album says so and lets you choose.
-  await page.getByRole('button', { name: 'Revisar 1', exact: true }).click();
+  await expect(more).toHaveAccessibleName('Opciones: Revisar 1');
+  await openMenu();
+  await menu.getByRole('button', { name: 'Revisar 1', exact: true }).click();
   const sheet = page.getByRole('dialog');
   await expect(sheet.getByText('Elige la versión', { exact: true })).toBeVisible();
   await sheet.getByRole('button', { name: /Digital Love \(Official Audio\)/ }).click();
@@ -131,4 +154,27 @@ test('an album bookmark is independent of bulk actions and download review', asy
     body: expect.objectContaining({ source_key: 'album:302127:deezer:3', decision: 'use_candidate', candidate: expect.objectContaining({ video_id: 'abcdefghijk' }) }),
   });
   expect(decisions[1]).toEqual({ path: '/api/migration/jobs/job-1/control', body: { action: 'resume' } });
+});
+
+test('a restored album download exposes missing songs through its overflow menu', async ({ page }) => {
+  await mockMusicEngine(page);
+  await page.route('**/api/catalog/album?**', route => route.fulfill({ json: {
+    title: 'Discovery', artist: 'Daft Punk', cover: '', resolved: true, deezer_id: '302127',
+    in_library: false, tracklist: TRACKLIST,
+  } }));
+  await page.route(url => url.pathname === '/api/catalog/album/download', route => route.fulfill({ json: {
+    job: {
+      ...reviewJob, state: 'completed', counts: { unavailable: 3 }, selected_counts: { unavailable: 3 },
+      tracks: reviewJob.tracks.map(track => ({ ...track, state: 'unavailable', candidates: [] })),
+    },
+  } }));
+  await page.goto('/player/#/album/Discovery?artist=Daft+Punk&view=discover&deezer_id=302127');
+  const more = page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Opciones: 3 sin encontrar', exact: true });
+  await expect(more).toBeVisible();
+  await more.click();
+  await page.getByRole('dialog').getByRole('button', { name: '3 sin encontrar', exact: true }).click();
+  const sheet = page.getByRole('dialog');
+  await expect(sheet.getByRole('heading', { name: 'Sin descargar', exact: true })).toBeVisible();
+  for (const track of TRACKLIST) await expect(sheet.getByText(track.title, { exact: true })).toBeVisible();
+  await expect(sheet.getByRole('status')).toHaveText('0 de 3 canciones en tu biblioteca');
 });

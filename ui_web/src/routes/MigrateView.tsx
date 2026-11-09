@@ -575,6 +575,7 @@ function UploadStep(props: {
                 <input
                   class={styles.fileInput}
                   type="file"
+                  disabled={props.busy}
                   accept=".zip,.json,.xml,.plist,.txt,.csv,application/zip,application/json,text/xml,text/csv,text/plain"
                   onChange={(event) => props.analyze(event.currentTarget.files?.[0])}
                 />

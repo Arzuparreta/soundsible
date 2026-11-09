@@ -6,7 +6,7 @@
   width: 100%;
   min-width: 0;
   height: var(--row-h);
-  padding: 0 var(--space-md);
+  padding: 0 var(--list-inline-padding, var(--space-md));
   color: inherit;
   background: transparent;
   border: 1px solid transparent;

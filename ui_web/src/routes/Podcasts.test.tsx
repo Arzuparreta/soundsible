@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JSX } from 'solid-js';
 import Podcasts from './Podcasts';
 import { setLocale } from '../lib/i18n';
+import { setMediaQuery } from '../test-setup';
 
 const apiMock = vi.hoisted(() => ({
   searchPodcasts: vi.fn(),
@@ -112,6 +113,38 @@ describe('Podcasts route search state', () => {
 
     expect(await screen.findByText('New response')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('Old response')).not.toBeInTheDocument());
+  });
+});
+
+describe('Podcasts page header', () => {
+  const DESKTOP = '(min-width: 1024px)';
+
+  beforeEach(() => {
+    setLocale('en');
+    routerMock.params = {};
+  });
+
+  afterEach(() => {
+    setMediaQuery(DESKTOP, false);
+    vi.clearAllMocks();
+  });
+
+  it('titles the desktop page like every other root, keeping the country by the search', () => {
+    setMediaQuery(DESKTOP, true);
+    render(() => <Podcasts />);
+
+    const heading = screen.getByRole('heading', { level: 1, name: 'Podcasts' });
+    const country = screen.getByRole('combobox', { name: 'Country for discovering podcasts' });
+    expect(heading.closest('header')).not.toContainElement(country);
+    expect(country.closest('div')).toContainElement(screen.getByPlaceholderText(/Search podcasts/));
+    expect(screen.getAllByRole('combobox', { name: 'Country for discovering podcasts' })).toHaveLength(1);
+  });
+
+  it('draws no page header on a phone, where the top bar carries it', () => {
+    render(() => <Podcasts />);
+
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(screen.getByPlaceholderText(/Search podcasts/)).toBeInTheDocument();
   });
 });
 

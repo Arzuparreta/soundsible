@@ -19,11 +19,11 @@
   }
 }
 
-/* Same column rhythm as .item (20px icon slot + space-md gap) so the mark sits on
-   the nav icons' axis and the wordmark starts where the entry labels start. */
+/* Same column rhythm as a navigation row (icon slot + space-md gap) so the mark
+   sits on the nav icons' axis and the wordmark starts where the labels start. */
 .brand {
   display: grid;
-  grid-template-columns: 20px 1fr;
+  grid-template-columns: var(--icon-md) 1fr;
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md) var(--space-lg);
@@ -39,8 +39,8 @@
 }
 }
 
-/* 18px wide inside the 20px slot: the 1px of air per side matches the optical
-   inset the stroked nav icons carry inside their own 20px boxes. */
+/* 18px wide inside the icon slot: the air per side matches the optical inset
+   the stroked nav icons carry inside their own boxes. */
 .mark {
   justify-self: center;
   width: 18px;
@@ -53,110 +53,6 @@
   font-weight: var(--fw-bold);
   letter-spacing: -0.01em;
   color: var(--ink-primary);
-}
-
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.heading {
-  margin: var(--space-lg) var(--space-md) var(--space-xs);
-  font-size: var(--text-caption);
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-tertiary);
-}
-
-/* Most items are links; the one that opens a window is a button. Both wear this
-   same rule, so the reset lives here rather than in a second class. */
-.item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  width: 100%;
-  min-height: 40px;
-  padding: 0 var(--space-md);
-  border-radius: var(--radius-sm);
-  color: var(--ink-secondary);
-  text-align: start;
-  text-decoration: none;
-  font-family: inherit;
-  font-size: var(--text-body);
-  font-weight: var(--fw-medium);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition:
-    color var(--dur-short) var(--ease-out),
-    background var(--dur-short) var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.item:hover {
-  color: var(--ink-primary);
-  background: var(--bg-hover);
-}
-}
-
-.active {
-  color: var(--ink-primary);
-  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
-  box-shadow: 0 0 0 1px var(--accent-faint) inset;
-}
-
-.active::before {
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 0;
-  width: 2px;
-  content: '';
-  background: var(--accent);
-  border-radius: var(--radius-full);
-  box-shadow: 0 0 10px var(--accent-glow);
-}
-
-.active .icon {
-  color: var(--accent-ink);
-}
-
-.icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: inherit;
-}
-
-.icon svg {
-  width: var(--icon-md);
-  height: var(--icon-md);
-}
-
-.label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  font-weight: var(--fw-bold);
-  color: var(--ink-on-accent);
-  background: var(--accent);
-  border-radius: var(--radius-full);
 }
 
 .spacer {
@@ -174,12 +70,4 @@
   :global(html[data-interface-size='large']) .sidebar {
     display: none;
   }
-}
-
-:global(html[data-interface-size='normal']) .item {
-  min-height: 44px;
-}
-
-:global(html[data-interface-size='large']) .item {
-  min-height: 48px;
 }

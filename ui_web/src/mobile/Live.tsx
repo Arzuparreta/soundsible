@@ -12,7 +12,7 @@ export function NativeLive(props: { generation: () => number; current: () => boo
   const [state, setState] = createSignal<NativeLiveState | null>(null);
   const [config, setConfig] = createSignal<CommunityConfig | null>(null);
   const [rooms, setRooms] = createSignal<LiveSession[]>([]);
-  const [title, setTitle] = createSignal(`Session by ${props.username}`);
+  const [title, setTitle] = createSignal(t('live.defaultTitle', { name: props.username }));
   const [text, setText] = createSignal('');
   const [busy, setBusy] = createSignal(false), [error, setError] = createSignal(false);
   let alive = true, refreshSequence = 0, refreshing = false;
@@ -75,13 +75,13 @@ export function NativeLive(props: { generation: () => number; current: () => boo
   return <section class={styles.panel} data-native-live>
     <Show when={error()}><p role="status">{t('live.unavailable')}</p></Show>
     <Show when={host()} fallback={<form onSubmit={event => { event.preventDefault(); void command({ action: 'liveStart', title: title() }); }}>
-      <label>{t('common.rename')}<input aria-label={t('common.rename')} value={title()} maxLength={120} onInput={event => setTitle(event.currentTarget.value)} /></label>
+      <label>{t('common.rename')}<input aria-label={t('common.rename')} value={title()} maxLength={96} onInput={event => setTitle(event.currentTarget.value)} /></label>
       <button disabled={busy() || !state()?.ready || config()?.state !== 'available' || !!listening()}>{t('live.goLive')}</button>
     </form>}>{active => <section>
       <h3>{active().session!.title}</h3>
       <p role="status">{active().connected ? t('live.onAir') : t('live.connectingAudio')}</p>
       <form onSubmit={event => { event.preventDefault(); void command({ action: 'liveTitle', title: title() }); }}>
-        <label>{t('common.rename')}<input aria-label={t('common.rename')} value={title()} maxLength={120} onInput={event => setTitle(event.currentTarget.value)} /></label>
+        <label>{t('common.rename')}<input aria-label={t('common.rename')} value={title()} maxLength={96} onInput={event => setTitle(event.currentTarget.value)} /></label>
         <button disabled={busy()}>{t('common.save')}</button>
       </form>
       <button disabled={busy()} onClick={() => void command({ action: 'liveStop' })}>{t('live.end')}</button>

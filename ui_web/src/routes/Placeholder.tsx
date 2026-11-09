@@ -1,40 +1,27 @@
 import { createSignal, Show } from 'solid-js';
-import { state } from '../stores';
-import { openOverlay } from '../lib/overlay';
+import { A } from '@solidjs/router';
 import { t } from '../lib/i18n';
-import Button from '../components/Button';
 import { useAppBar } from '../lib/appBar';
+import button from '../components/Button.module.css';
 import styles from './Placeholder.module.css';
 
 /**
- * Temporary view body used by every route until the real Phase 3 views land.
- * It exercises the architecture: reads `online` from the store (reactive) and
- * opens a sheet through the overlay manager (leak-proof).
+ * The page for an address no route answers. It says so and offers the two
+ * places a listener most likely meant to be: their library and Discover.
  */
 export function Placeholder(props: { title: string; blurb?: string }) {
-  const demo = () =>
-    openOverlay((close) => (
-      <div class={styles.demo}>
-        <h2 class={styles.demoTitle}>{t('placeholder.overlayHeading')}</h2>
-        <p class={styles.demoText}>
-          {t('placeholder.overlayText')}
-        </p>
-        <Button onClick={() => close()}>{t('placeholder.overlayClose')}</Button>
-      </div>
-    ));
-
   const [heading, setHeading] = createSignal<HTMLElement>();
   useAppBar({ title: () => props.title, heading });
 
   return (
     <section class={styles.page}>
-      <span class={styles.kicker}>{state.online ? t('placeholder.statusOnline') : t('placeholder.statusOffline')}</span>
       <h1 ref={setHeading} class={styles.title}>{props.title}</h1>
       <Show when={props.blurb}>
         <p class={styles.blurb}>{props.blurb}</p>
       </Show>
       <div class={styles.actions}>
-        <Button onClick={demo}>{t('placeholder.tryOverlay')}</Button>
+        <A href="/library" class={`${button.btn} ${button.primary} ${button.md}`}>{t('nav.library')}</A>
+        <A href="/search" class={`${button.btn} ${button.secondary} ${button.md}`}>{t('nav.search')}</A>
       </div>
     </section>
   );

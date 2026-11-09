@@ -59,6 +59,34 @@ test('a followed show opens from its artwork', async ({ page, isMobile }) => {
   await expect(page.getByText('Episodio de Programa seguido', { exact: true })).toBeVisible();
 });
 
+test('episode virtualization accounts for a wrapping header at large interface size', async ({ page }) => {
+  await mockPodcasts(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('soundsible:interface-size', 'large'));
+  const subscription = { ...FOLLOWED, title: 'Conversaciones sobre música, cultura y nuevas formas de escuchar. '.repeat(12) };
+  const episodes = Array.from({ length: 150 }, (_, index) => episode(`Episodio ${index + 1}`));
+  await page.route((url) => url.pathname === '/api/library', (route) => route.fulfill({ json: {
+    tracks: TRACKS, playlists: {}, settings: {}, podcast_subscriptions: [subscription],
+  } }));
+  await page.route('**/api/podcasts/feeds/**', (route) => route.fulfill({ json: {
+    subscription, episodes, changed: false,
+  } }));
+  await page.goto('/player/#/podcasts/show-1');
+  await expect(page.getByRole('heading', { name: subscription.title.trim(), exact: true })).toBeVisible();
+  const list = page.locator('[data-virtual-rows]');
+  await expect(list).toBeAttached();
+  // Move just beyond the header: the first episodes must still be mounted,
+  // even when the header is taller than the virtualizer's overscan window.
+  await list.evaluate((element) => {
+    const scroller = element.closest('[data-primary-scroll]') as HTMLElement;
+    scroller.scrollTop += element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  });
+  await expect(page.getByText('Episodio 1', { exact: true })).toBeInViewport();
+  await page.locator('[data-primary-scroll]').evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await expect(page.getByText('Episodio 150', { exact: true })).toBeInViewport();
+  expect(await list.locator('[data-index]').count()).toBeLessThan(40);
+});
+
 test('a popular show opens before it is followed, and following it there moves to its own page', async ({ page, isMobile }) => {
   const { followed } = await mockPodcasts(page);
   await page.goto('/player/#/podcasts');
@@ -74,7 +102,9 @@ test('a popular show opens before it is followed, and following it there moves t
 
   await page.getByRole('button', { name: 'Suscribir', exact: true }).click();
   await expect(page).toHaveURL(/#\/podcasts\/show-2$/);
-  await expect(page.getByRole('button', { name: 'Dejar de seguir', exact: true })).toBeVisible();
+  await page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Más opciones', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Dejar de seguir', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
   expect(followed).toEqual([POPULAR.feed_url]);
   await page.goBack();
   await expect(page).toHaveURL(/#\/podcasts$/);
@@ -139,6 +169,7 @@ test('the refresh button reads the feed again', async ({ page, isMobile }) => {
   await page.goto('/player/#/podcasts/show-1');
   await expect(page.getByText('Episodio guardado', { exact: true })).toBeVisible();
   await expect.poll(() => asked).toEqual(['cached', 'check']);
+  await page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Más opciones', exact: true }).click();
   const button = page.getByRole('button', { name: 'Actualizar episodios', exact: true });
   if (isMobile) await button.tap(); else await button.click();
   await expect(page.getByText('Episodio recién subido', { exact: true })).toBeVisible();

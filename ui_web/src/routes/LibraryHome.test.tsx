@@ -41,12 +41,17 @@ it('hides both saved rows when the collection is empty', async () => {
   expect(screen.queryByRole('region', { name: 'Saved artists' })).toBeNull();
   expect(screen.queryByText('Save an album or artist from its page to find it here.')).toBeNull();
 });
-it('keeps an unavailable optional collection quiet on the Library root', async () => {
-  vi.mocked(api.getSavedEntities).mockRejectedValue(new Error('unavailable'));
+it('says once that the saved collection could not load, and retries it', async () => {
+  // The root used to drop a failed read silently, which reads as "nothing
+  // saved". One line covers both rows, never one per kind.
+  vi.mocked(api.getSavedEntities).mockRejectedValueOnce(new Error('unavailable'));
   show();
-  await waitFor(() => expect(api.getSavedEntities).toHaveBeenCalled());
+  const retry = await screen.findByRole('button', { name: 'Retry' });
+  expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
   expect(screen.queryByRole('region', { name: 'Saved albums' })).toBeNull();
-  expect(screen.queryByRole('region', { name: 'Saved artists' })).toBeNull();
+  expect(screen.queryByText('Save an album or artist from its page to find it here.')).toBeNull();
+  fireEvent.click(retry);
+  await screen.findByRole('link', { name: 'Record' });
   expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
 });
 

@@ -6,8 +6,8 @@
   min-width: 0;
   height: var(--row-h, 56px);
   padding-block: 0;
-  padding-left: max(12px, env(safe-area-inset-left, 0px));
-  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  padding-left: max(var(--list-inline-padding, 12px), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--list-inline-padding, 12px), env(safe-area-inset-right, 0px));
   border-radius: var(--radius-sm);
   color: var(--ink-primary);
 }

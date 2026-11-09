@@ -65,7 +65,7 @@ public class CollectionReviewTest {
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==="+JSONObject.quote("fixture review album "+action)+")");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==="+JSONObject.quote("fixture review album "+action)+").click()");
             waitFor(web,scenario,"!!document.querySelector('[data-testid=android-entity-profile] h1') && !!Array.from(document.querySelectorAll('[data-testid=android-entity-profile] [data-row-main]')).find(b=>b.textContent==="+JSONObject.quote("fixture review song "+action)+")");
-            web.evaluate(scenario,"document.querySelector('[data-testid=android-entity-profile] header button[aria-label]').click()"); click(web,scenario,"Download the album");
+            web.evaluate(scenario,"document.querySelector('[data-testid=android-entity-profile] [data-entity-toolbar] button[aria-haspopup=dialog]').click()"); click(web,scenario,"Download the album");
             waitFor(web,scenario,"!!document.querySelector('[data-android-collection-progress]')");
             web.evaluate(scenario,"document.querySelector('[data-android-collection-progress]').click()");
             if(action.equals("cancel")) {

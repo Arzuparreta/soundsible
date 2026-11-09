@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { api, type DiscoveryMusicFeed } from '../lib/api';
-import { discoveryCatalogItem } from '../lib/searchDiscovery';
+import { discoveryCatalogItem, discoveryHasVisible } from '../lib/searchDiscovery';
 import { prioritizeCatalogItems } from '../lib/catalogEntity';
 import type { CatalogItem } from '../types/music';
 
@@ -14,7 +14,8 @@ export function createNativeDiscoveryFeed(props: {
   const [loading, setLoading] = createSignal(false), [error, setError] = createSignal(false);
   const sections = createMemo(() => (feed().browse_sections ?? []).map(section => ({ ...section, items: prioritizeCatalogItems(section.items, props.known) })));
   const songs = createMemo(() => prioritizeCatalogItems((feed().items ?? []).map(discoveryCatalogItem), props.known).slice(0, 10));
-  const hasContent = () => sections().some(section => section.items.length) || songs().length > 0;
+  const hasContent = () => discoveryHasVisible(sections(), songs());
+  const hasVisibleContent = () => discoveryHasVisible(sections(), songs(), props.expanded());
   let request: AbortController | undefined, timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false, epoch = 0, attempts = 0;
   function cancel() { epoch++; request?.abort(); clearTimeout(timer); }
@@ -29,7 +30,7 @@ export function createNativeDiscoveryFeed(props: {
       const next = await fetchFeed(controller.signal, refresh);
       if (!current()) return;
       // A background revalidation must not reorder the section being explored.
-      if (!props.expanded() || !hasContent()) setFeed(next);
+      if (!props.expanded() || !hasVisibleContent()) setFeed(next);
       setError(!!next.browse_error || !!next.error);
       if (next.revalidating) {
         if (attempts++ < 12) timer = setTimeout(() => void load(), 5000);

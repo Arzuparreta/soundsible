@@ -10,30 +10,49 @@ import { CloseIcon, MenuIcon } from './icons';
 import { navigationGroups, navigationItems, mobileNavGroup } from './primaryNavigation';
 import styles from './NavigationMenu.module.css';
 
+const LIBRARY_VIEWS = ['songs', 'albums', 'artists'] as const;
+
+/**
+ * Which entry is the current page. Exactly one entry announces it: a Library
+ * view owns it while it is open, and Library itself only when no view below it
+ * does. `inside` marks the parent of a current view, which is drawn as the
+ * branch the listener is in but never announced as the page.
+ */
+export function navigationCurrent(path: string, search = ''): { href: string; inside?: string } {
+  const href = mobileNavGroup(path, search);
+  if (href.startsWith('/library?view=')) return { href, inside: '/' };
+  // Saved albums and artists are sections of the Library page, with no entry.
+  if (href.startsWith('/?saved=')) return { href: '/' };
+  return { href };
+}
+
 export function NavigationLinks(props: { path: string; search?: string; select?: (href: string, view?: string, selected?: boolean) => void }) {
+  const current = () => navigationCurrent(props.path, props.search);
   return <For each={navigationGroups}>{group => <section class={styles.group}>
     <h2>{group.label()}</h2>
     <nav aria-label={group.label()}><For each={group.hrefs}>{href => {
       const item = navigationItems.find(item => item.href === href)!;
+      const isCurrent = () => current().href === href;
+      // Re-selecting a destination climbs to its root; Library is selected
+      // from any of its views, as it is in the tab bar.
+      const selected = () => isCurrent() || current().inside === href;
       return <>
         <a href={`#${href}`} class={styles.item} data-nav-href={href}
-          classList={{ [styles.active]: mobileNavGroup(props.path) === href }}
-          aria-current={mobileNavGroup(props.path) === href ? 'page' : undefined}
-          onClick={event => { if (props.select) { event.preventDefault(); props.select(href, undefined, mobileNavGroup(props.path) === href); } }}>
-          <span class={styles.icon}>{item.icon()}</span><span>{item.label()}</span>
+          classList={{ [styles.active]: isCurrent(), [styles.inside]: current().inside === href }}
+          aria-current={isCurrent() ? 'page' : undefined}
+          onClick={event => { if (props.select) { event.preventDefault(); props.select(href, undefined, selected()); } }}>
+          <span class={styles.icon}>{item.icon()}</span><span class={styles.label}>{item.label()}</span>
           <Show when={href === '/downloads' && downloadCounts().active > 0}><span class={styles.badge}>{downloadCounts().active}</span></Show>
         </a>
-        <Show when={href === '/'}><div class={styles.views}><For each={['songs', 'albums', 'artists']}>{view =>
-          <a href={`#/library?view=${view}`} class={styles.item}
-            aria-current={props.path === '/library' && new URLSearchParams(props.search).get('view') === view ? 'page' : undefined}
-            onClick={event => { if (props.select) { event.preventDefault(); props.select(`/library?view=${view}`, view); } else setLibraryTab(view); }}>
-            <span class={styles.icon}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <Show when={view === 'songs'}><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></Show>
-              <Show when={view === 'albums'}><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></Show>
-              <Show when={view === 'artists'}><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0116 0v2"/></Show>
-            </svg></span>{t(`library.${view}` as 'library.songs')}
-          </a>
-        }</For></div></Show>
+        <Show when={href === '/'}><div class={styles.views}><For each={LIBRARY_VIEWS}>{view => {
+          const viewHref = `/library?view=${view}`;
+          return <a href={`#${viewHref}`} class={`${styles.item} ${styles.view}`}
+            classList={{ [styles.active]: current().href === viewHref }}
+            aria-current={current().href === viewHref ? 'page' : undefined}
+            onClick={event => { if (props.select) { event.preventDefault(); props.select(viewHref, view); } else setLibraryTab(view); }}>
+            <span class={styles.label}>{t(`library.${view}` as 'library.songs')}</span>
+          </a>;
+        }}</For></div></Show>
       </>;
     }}</For></nav>
   </section>}</For>;

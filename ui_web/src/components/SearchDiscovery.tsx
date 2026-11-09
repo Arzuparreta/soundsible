@@ -6,7 +6,7 @@ import { useNavigate } from '@solidjs/router';
 import { api, type DiscoveryMusicFeed } from '../lib/api';
 import { userKey } from '../lib/session';
 import { readSearchCache, writeSearchCache } from '../lib/searchCache';
-import { discoveryCatalogItem } from '../lib/searchDiscovery';
+import { discoveryCatalogItem, discoveryHasVisible } from '../lib/searchDiscovery';
 import { catalogDestination } from '../lib/musicNavigation';
 import { navigateBackOr } from '../lib/scrollHistory';
 import { MusicLink } from './MusicLinks';
@@ -36,8 +36,9 @@ export function SearchDiscovery(props: {
   let attempts = 0;
   const sections = createMemo(() => (feed().browse_sections ?? []).map(section => ({ ...section, items: prioritizeDiscoveries(section.items) })));
   const songs = createMemo(() => prioritizeDiscoveries((feed().items ?? []).map(discoveryCatalogItem)).slice(0, 10));
-  const hasContent = () => sections().some((section) => section.items.length) || songs().length > 0;
   const expanded = () => ['artists', 'albums', 'songs'].includes(props.section ?? '') ? props.section : undefined;
+  // What the listener is looking at: the opened section alone, or the home.
+  const hasVisibleContent = () => discoveryHasVisible(sections(), songs(), expanded());
 
   async function load(refresh = false) {
     clearTimeout(timer);
@@ -48,8 +49,8 @@ export function SearchDiscovery(props: {
       const next = await api.getDiscoveryMusicFeed(request.signal, refresh);
       if (disposed || request.signal.aborted) return;
       // Keep the visible selection stable while browsing a section.
-      if (!expanded() || !hasContent()) setFeed(next);
-      writeSearchCache(CACHE, cacheKey, expanded() && hasContent() ? feed() : next);
+      if (!expanded() || !hasVisibleContent()) setFeed(next);
+      writeSearchCache(CACHE, cacheKey, expanded() && hasVisibleContent() ? feed() : next);
       setError(!!next.browse_error || !!next.error);
       if (next.revalidating) {
         if (attempts++ < 12) timer = setTimeout(() => void load(), 5000);
@@ -62,7 +63,7 @@ export function SearchDiscovery(props: {
     }
   }
   onMount(() => { if (!cached || cached.revalidating || cached.browse_error) void load(); });
-  createEffect(() => props.onReady(!loading() || !!hasContent()));
+  createEffect(() => props.onReady(!loading() || hasVisibleContent()));
   onCleanup(() => { disposed = true; controller?.abort(); clearTimeout(timer); });
 
   return <SearchDiscoveryView sections={sections()} songs={songs()} expanded={expanded()}

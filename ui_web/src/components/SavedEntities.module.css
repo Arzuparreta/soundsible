@@ -1,22 +1,120 @@
 .section { min-width: 0; margin-bottom: var(--space-xl); }
 .header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm); }
 .header h2 { margin: 0; font-size: var(--text-h2); }
-.section p { color: var(--ink-secondary); font-size: var(--text-body); }
-.more { color: var(--ink-secondary); padding: 12px 0; flex-shrink: 0; }
-.rail { display: flex; gap: 16px; overflow-x: auto; padding: 12px 0; }
-.expanded { display: grid; grid-template-columns: repeat(auto-fill, minmax(144px, 1fr)); gap: 24px 16px; }
-.card { position: relative; flex: 0 0 156px; min-width: 0; }
+.empty { color: var(--ink-secondary); font-size: var(--text-body); }
+.more { display: inline-flex; align-items: center; min-height: var(--control-h); color: var(--ink-secondary); flex-shrink: 0; }
+
+/* A failed read, said once for the whole collection. */
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0 0 var(--space-xl);
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);
+  color: var(--ink-secondary);
+  font-size: var(--text-body);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-md);
+}
+.status strong { color: var(--ink-primary); font-weight: var(--fw-semibold); }
+
+/* Shared browse card metrics: the same width, gap and radius as every other
+   album and artist shelf. */
+.rail {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--browse-card-gap, var(--space-lg));
+  overflow-x: auto;
+  padding: var(--space-sm) 0;
+}
+.expanded {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--browse-card-min, 144px), calc((100% - var(--browse-card-gap, 16px)) / 2)), 1fr));
+  gap: var(--space-xl) var(--browse-card-gap, var(--space-lg));
+}
+.card { position: relative; flex: 0 0 var(--browse-card-width, 156px); min-width: 0; }
 /* A link shrinks to its name by default, and the cover's 100% with it: every
  * card would size to its title. */
-.card .link { display: block; }
-.cover { width: 100%; aspect-ratio: 1; position: relative; border-radius: 8px; overflow: hidden; }
-.round { border-radius: 50%; }
-.name, .credit { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 44px; margin-top: 6px; }
-.credit { color: var(--ink-secondary); font-size: var(--text-caption); }
-.save, .menu { color: var(--ink-primary); background: var(--bg-raised); border: 1px solid var(--hairline); border-radius: 20px; min-height: 44px; padding: 8px 14px; cursor: pointer; }
-.save { display: inline-flex; align-items: center; gap: var(--space-xs); }
+.card .link { display: block; color: inherit; text-decoration: none; }
+.cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  margin-bottom: var(--space-xs);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+  transition: box-shadow var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+.round { border-radius: var(--radius-full); }
+@media (hover: hover) and (pointer: fine) {
+  .card .link:hover .cover { box-shadow: var(--shadow-2); border-color: var(--hairline-strong); }
+}
+
+/* Two lines of title and one of credit. The options button sits beside the
+   text, so the text keeps clear of it rather than of a wide reserved band. */
+.name, .credit { display: block; padding-right: 36px; overflow: hidden; overflow-wrap: anywhere; line-height: 1.3; }
+.name {
+  display: -webkit-box;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-primary);
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.credit { color: var(--ink-secondary); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+
+.save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-height: var(--control-h);
+  padding: 0 var(--space-md);
+  color: var(--ink-primary);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .save:hover:not(:disabled) { background: var(--bg-hover); }
+}
 .save svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.save[aria-pressed='true'] { color: var(--accent-ink); border-color: var(--accent-soft); }
 .save[aria-pressed='true'] svg { fill: currentColor; }
 .save:disabled { opacity: .5; cursor: default; }
-.menu { position: absolute; right: 0; bottom: 0; padding: 0; min-width: 44px; background: transparent; border: 0; }
-@media (min-width: 768px) { .card { flex-basis: 180px; } }
+@media (max-width: 519px) {
+  .save { min-width: var(--collection-control-width, var(--control-h)); padding-inline: 0; }
+  .saveLabel { display: none; }
+}
+
+.menu {
+  position: absolute;
+  right: -4px;
+  bottom: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+/* The 44px touch target without a larger visual circle. */
+.menu::before { content: ''; position: absolute; inset: -4px; }
+@media (hover: hover) and (pointer: fine) {
+  .menu:hover { color: var(--ink-primary); background: var(--bg-raised); }
+}

@@ -1,4 +1,3 @@
-import { t } from '../lib/i18n';
 import { Show, type JSX } from 'solid-js';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { useAppBar, type AppBarAction } from '../lib/appBar';
@@ -18,9 +17,11 @@ export function ViewHeader(props: {
   meta?: JSX.Element;
   actions?: JSX.Element;
   barActions?: AppBarAction[];
+  /** A native control the top bar carries as is — a dropdown keeps its
+   * platform keyboard behaviour that a described command would lose. */
+  barTrailing?: JSX.Element;
   children?: JSX.Element;
   compact?: boolean;
-  onBack?: () => void;
   onTitleTap?: () => void;
 }) {
   const tap = createResponsiveTap({
@@ -30,8 +31,8 @@ export function ViewHeader(props: {
   if (!props.compact) {
     useAppBar({
       title: () => props.title,
-      back: props.onBack,
       actions: () => props.barActions ?? [],
+      trailing: () => props.barTrailing,
       onTitleTap: props.onTitleTap,
     });
   }
@@ -39,8 +40,7 @@ export function ViewHeader(props: {
   return (
     <Show when={props.compact || desktopShell()}>
       <header class={styles.header} data-compact={props.compact ? '' : undefined}>
-        <Show when={props.onBack}><button type="button" class={styles.back} aria-label={t('common.back')} onClick={props.onBack}>‹</button></Show>
-        <div class={styles.heading} style={{ flex: "1" }}>
+        <div class={styles.heading}>
           <Show
             when={props.onTitleTap}
             fallback={<h1 class={styles.title}>{props.title}</h1>}
