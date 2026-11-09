@@ -49,10 +49,12 @@ to the final PR head; browser evidence is not physical iOS/Android acceptance.
   duplicated chrome. Entity headers may show full musical identity and artwork.
 - Align entity hero, selector and content to the same gutter. Prefer a compact
   side-by-side mobile hero, a larger desktop composition, full wrapping titles,
-  and a separate wrapping action row. Play first; secondary management stays quiet.
-- Use grouped `aria-pressed` buttons for local filters unless implementing the
-  entire tabs keyboard and panel pattern. Active state has geometry as well as
-  color. Controls retain usable focus and touch targets at Large interface size.
+  and one content/action toolbar. Primary playback remains direct; secondary
+  management stays in the options menu.
+- Use grouped `aria-pressed` buttons for search filters and the labelled native
+  selector for compact entity content selection. Preserve the complete keyboard
+  and panel pattern for real tabs. Active state has geometry as well as color.
+  Controls retain usable focus and touch targets at Large interface size.
 - Two-line browse titles and stable secondary metadata; clear focus/hover without
   moving cards. Artwork provides identity; avoid extra decorative containers.
 - Initial skeleton, retained content during revalidation, compact error + Retry,
@@ -67,11 +69,24 @@ to the final PR head; browser evidence is not physical iOS/Android acceptance.
 
 ## Validation and final review
 
-Pending implementation, rendered desktop/mobile/light/dark/Large acceptance,
-unit/type checks, complete Chromium then WebKit browser suites on all four CI
-profiles, current remote-base verification, final-head GitHub checks and Codex
-review. Record confirmed findings and dismissed review findings with reasons.
-No claim of zero possible bugs: completion requires evidence from these gates.
+Implementation and rendered desktop/mobile/light/dark/Large acceptance are
+complete. TypeScript and all 1938 unit tests pass. The final stable tree passes
+the whole Chromium mobile/desktop suite (414 passed, 74 profile-specific skips)
+and WebKit mobile/desktop suite (401 passed, 87 profile-specific skips). WebKit
+runs in the pinned Playwright container with a read-only mount and one worker;
+the two engines run sequentially against the closed-port fixture backend.
+
+The first Chromium run exposed obsolete direct-bookmark selectors, the intended
+sidebar/header snapshot change, and a podcast menu using different desktop
+semantics. Collection specs now enter the explicit options menu; the snapshot
+was visually inspected and regenerated in the CI image; podcast management uses
+the shared focus-managed dialog on both layouts. Affected rechecks and both
+complete final suites pass. The new entity geometry suite covers the user's
+rejected composition directly, rather than relying on screenshots alone.
+
+Current remote-base verification, final-head GitHub checks and the subsequent
+Codex review remain release-review gates for this open PR. Native CI evidence is
+separate from browser acceptance; no physical-device acceptance is claimed.
 
 ## Independent Claude review: secondary-view simplification
 
@@ -171,4 +186,5 @@ visible first episode below a long podcast title. Initial failures exposed a
 negative select margin outside the toolbar; it was removed. The playback guard
 counts actual track selection/streaming rather than an idle audio-unlock clock
 publication with no track or session. Unit/type validation: 234 files, 1938 tests.
-Complete browser profiles and final-head GitHub checks are still pending.
+Complete final browser profiles pass as recorded above. Final-head GitHub checks
+and the subsequent Codex review remain pending before handback.
