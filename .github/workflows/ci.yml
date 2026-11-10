@@ -36,12 +36,25 @@ jobs:
   # goes ahead and pushes the image anyway. v0.2.0 shipped that way: built and
   # published without the dependency-lock check, the Compose contract or the
   # deployment smoke test ever running against it.
+  #
+  # `ui` gates the browser jobs the same way, on pull requests only. Those jobs
+  # never start the engine: every request is answered by a fixture or sent to a
+  # closed port, so a pull request that changes none of the paths below cannot
+  # change their result. It can still turn them red — WebKit timing failed
+  # docs-only and Android-only pull requests — and they are 8 of the ~17 jobs a
+  # pull request queues. Pushes to main, tags, the nightly run and manual runs
+  # always run them: the Android release gate reads `ui_build` and
+  # `ui_accessibility` on the released commit and needs a real result there.
+  #
+  # `tests` (pytest) is deliberately not gated: its tests read the workflows,
+  # ui_web, docs and the Android and iOS trees, so no path is irrelevant to it.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       docker: ${{ steps.filter.outputs.docker }}
       community: ${{ steps.filter.outputs.community }}
+      ui: ${{ steps.filter.outputs.ui }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: dorny/paths-filter@v4.0.3
@@ -65,46 +78,30 @@ jobs:
               - 'community_service/**'
               - 'deploy/community/**'
               - '.github/workflows/ci.yml'
+            ui:
+              - 'ui_web/**'
+              # Read from outside ui_web: the cross-language test vectors, the
+              # logo the build inlines, and the Node version.
+              - 'shared/contracts/**'
+              - 'branding/**'
+              - '.nvmrc'
+              - '.github/workflows/ci.yml'
 
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # A static build, pinned and checked, rather than `apt-get install ffmpeg`.
-      # The apt package drags in ~105 MB of codecs, speech models and GPU drivers
-      # from Ubuntu's mirror, which some days serves them at 70 kB/s: the install
-      # took 24 minutes of a 27-minute job on 2026-10-01 while pytest took three.
-      # Same month-end BtbN build the Windows desktop bundles
-      # (desktop-shell/scripts/fetch-ffmpeg.sh), and cached between runs.
-      FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-8.1.tar.xz
-      FFMPEG_SHA256: 97ce978979194b5cf7e06a5e68020dbdaa7a4f3294c5452b6a1bc347100dbb79
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: pip
-      - name: Restore FFmpeg
-        id: ffmpeg-cache
-        uses: actions/cache@v6.1.0
-        with:
-          path: ~/.cache/soundsible-ffmpeg
-          key: ffmpeg-${{ env.FFMPEG_SHA256 }}
-      - name: Install FFmpeg
-        run: |
-          dir="$HOME/.cache/soundsible-ffmpeg"
-          if [ ! -x "$dir/ffmpeg" ] || [ ! -x "$dir/ffprobe" ]; then
-            mkdir -p "$dir"
-            curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --max-time 300 \
-              "$FFMPEG_URL" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
-            echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum --check --strict
-            tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$dir" --strip-components=2 \
-              --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
-          fi
-          echo "$dir" >> "$GITHUB_PATH"
-          "$dir/ffmpeg" -hide_banner -version | head -1
+      - uses: ./.github/actions/setup-ffmpeg
+      # pytest-xdist is pinned here, like pywinauto in desktop-build.yml, rather
+      # than added to requirements.txt: everything listed there has to be in
+      # requirements.docker.lock, and the image has no use for a test runner.
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest-xdist==3.8.0
       # The Auto DJ beat model (84 MB release asset, SHA-256 in
       # shared/dj/weights.py); the analyser tests run the real network.
       - name: Restore DJ beat model
@@ -118,6 +115,13 @@ jobs:
       # lines that are covered by construction — which inflated the total enough
       # that the 30% floor could not fail. Scoped to the source packages the
       # real number is ~55%, so that is the ratchet.
+      #
+      # Four workers, one per core of the runner. One process ran the 2,727
+      # tests in 14.8 minutes (median of 103 runs), which made `tests` the last
+      # check to finish on most pull requests; most of that time is spent
+      # waiting on subprocesses and sockets, not computing. Each worker is its
+      # own process with its own temporary directories (`isolated_runtime` in
+      # tests/conftest.py), and pytest-cov merges their coverage.
       - name: Phase 1 gates (pytest + coverage)
         env:
           PYTHONPATH: .
@@ -125,7 +129,7 @@ jobs:
           # source tree declares rather than whatever the runner exported.
           SOUNDSIBLE_VERSION: ""
         run: >-
-          pytest -q
+          pytest -q -n 4 --durations=15
           --cov=shared --cov=player --cov=setup_tool
           --cov-report=term-missing --cov-fail-under=55
 
@@ -208,10 +212,15 @@ jobs:
           echo "image=mcr.microsoft.com/playwright:v${version}-noble" >> "$GITHUB_OUTPUT"
 
   ui_build:
-    needs: browser_image
+    needs: [changes, browser_image]
     # Never skipped because the image could not be resolved: a skipped required
-    # check passes. An empty image fails the job instead.
-    if: ${{ !cancelled() }}
+    # check passes. An empty image fails the job instead. The only skip is a
+    # pull request that touches nothing the bundle is built from (see `changes`,
+    # itself a required check, so its failure still blocks the merge).
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' || needs.changes.result != 'success' ||
+       needs.changes.outputs.ui == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
@@ -406,8 +415,11 @@ jobs:
     # Keep one Playwright worker per runner: sharing a runner previously made
     # browsers crash. The slow profiles are split across two runners each, so
     # the longest one stops being the whole job's wall time.
-    needs: browser_image
-    if: ${{ !cancelled() }}
+    needs: [changes, browser_image]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' || needs.changes.result != 'success' ||
+       needs.changes.outputs.ui == 'true')
     strategy:
       fail-fast: false
       matrix:
@@ -452,9 +464,11 @@ jobs:
           retention-days: 14
 
   # Preserve the existing check name and require every profile to succeed,
-  # including when a dependency fails or is cancelled.
+  # including when a dependency fails or is cancelled. The profiles may be
+  # skipped for one reason only: a pull request whose `changes` job succeeded
+  # and reported no UI path. Any other skip is a failure here.
   ui_accessibility:
-    needs: ui_accessibility_profiles
+    needs: [changes, ui_accessibility_profiles]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -462,7 +476,13 @@ jobs:
       - name: Require all browser profiles
         env:
           RESULT: ${{ needs.ui_accessibility_profiles.result }}
-        run: test "$RESULT" = success
+          NOT_NEEDED: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.ui != 'true' }}
+        run: |
+          if [ "$RESULT" = skipped ] && [ "$NOT_NEEDED" = true ]; then
+            echo "::notice::This pull request changes no path the browser suite reads; not run."
+            exit 0
+          fi
+          test "$RESULT" = success
 
   # Everything above proves the image works. This is what makes it reachable.
   # Until this job existed the only way to install Soundsible was to clone the

@@ -34,7 +34,9 @@ def test_android_preview_provider_uses_real_proxy_and_preserves_other_reader(tmp
             stderr=log,
         )
         try:
-            deadline = time.monotonic() + 40
+            # Engine start-up, not behaviour: scripts/android.py allows the same
+            # fixture 240 s on a shared CI runner. 40 s expired under `pytest -n 4`.
+            deadline = time.monotonic() + 180
             while True:
                 assert process.poll() is None, (tmp_path / "fixture.log").read_text()
                 try:

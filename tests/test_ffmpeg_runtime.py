@@ -7,12 +7,35 @@ import stat
 import sys
 from pathlib import Path
 
+import pytest
+
 import shared.ffmpeg_runtime as ff
 
 
 def _reset_module() -> None:
     ff._RESOLVED = None
     ff._STATUS.update({"available": False, "path": None, "source": None})
+
+
+@pytest.fixture(autouse=True)
+def _leave_no_ffmpeg_resolution_behind():
+    """These tests point the module at empty files that only look executable.
+
+    `resolve_ffmpeg` caches its answer in the module and `configure_ffmpeg`
+    writes `os.environ` directly, so both outlived the test. Whichever test ran
+    next in the same process and called `ffmpeg_executable()` then tried to
+    execute an empty file (`Exec format error`). File order hid it in a single
+    process; with `pytest -n 4` the next test is any test.
+    """
+    names = ("SOUNDSIBLE_FFMPEG", "FFMPEG_BINARY", "PATH")
+    before = {name: os.environ.get(name) for name in names}
+    yield
+    for name, value in before.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+    _reset_module()
 
 
 def test_resolve_from_soundsible_ffmpeg_env(tmp_path, monkeypatch):

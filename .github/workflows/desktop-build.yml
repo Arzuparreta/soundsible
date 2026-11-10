@@ -197,10 +197,16 @@ jobs:
         working-directory: desktop-shell
         env:
           SOUNDSIBLE_REPO_ROOT: ${{ github.workspace }}
+        # `npm run build` is `tauri build`. A pull request's installer is
+        # installed once by the smoke below and then discarded, so it is packed
+        # with zlib: makensis spent 4 min 24 s of this 15-minute job on LZMA
+        # (run 42609754565). Pushes to main and releases keep the
+        # default LZMA, so the installer people download is the one built and
+        # smoke-tested there.
         run: |
           npm ci
           npm test
-          npm run build
+          npx tauri build ${{ github.event_name == 'pull_request' && format('--config {0}/desktop-shell/src-tauri/tauri.pull-request.conf.json', github.workspace) || '' }}
 
       - name: Verify native binary architectures
         shell: pwsh
