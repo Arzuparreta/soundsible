@@ -248,6 +248,12 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                         environment.update(SOUNDSIBLE_ANDROID_LIVE_FIXTURE="1", SOUNDSIBLE_COMMUNITY_URL="https://10.0.2.2:28443", REQUESTS_CA_BUNDLE=str(ca_path), NO_PROXY="10.0.2.2,127.0.0.1,localhost")
                     process = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=log, stderr=log)
                     processes.append(process)
+                if shard and not restart_only and not live_restart_only:
+                    # The engines above take about a minute to encode and
+                    # measure their audio before they answer. Compile the two
+                    # APKs meanwhile rather than after: the test task below
+                    # then finds them built.
+                    gradle(":app:assembleDebug", ":app:assembleDebugAndroidTest")
                 # Each engine owns a separate database and port. Start all of them
                 # before waiting, so unrelated bootstrap work does not serialize.
                 for (port, _passwordless), process in zip(fixtures, processes, strict=True):
@@ -276,21 +282,27 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                                 raise RuntimeError("Fixture startup timed out; see android/build/fixture.log") from None
                             time.sleep(0.2)
                 if not restart_only and not live_restart_only:
+                    # Driven phase by phase further down (shard 0), or by the
+                    # release workflow; never part of the connected run.
+                    separate = tuple("com.soundsible.android." + name
+                                     for name in ("OfflineRestartTest", "LiveRestartTest", "ReleaseUpdateTest"))
+                    if shard and not test_filter:
+                        # Slices of equal measured duration; see android_shards.
+                        from android_shards import runner_arguments
+                        selection = runner_arguments(shard[0], shard[1], excluded=separate)
+                    else:
+                        selection = {"notClass": ",".join(separate)}
+                        if shard:
+                            # A single-class filter keeps the runner's own split.
+                            selection.update(shardIndex=str(shard[0]), numShards=str(shard[1]))
                     gradle(
                         ":app:connectedDebugAndroidTest",
-                        "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest,com.soundsible.android.LiveRestartTest,com.soundsible.android.ReleaseUpdateTest",
+                        *(f"-Pandroid.testInstrumentationRunnerArguments.{key}={value}"
+                          for key, value in selection.items()),
                         "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
                         "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                         "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
                         "-Pandroid.testInstrumentationRunnerArguments.listener=com.soundsible.android.FixtureIsolationListener",
-                        *(
-                            (
-                                f"-Pandroid.testInstrumentationRunnerArguments.shardIndex={shard[0]}",
-                                f"-Pandroid.testInstrumentationRunnerArguments.numShards={shard[1]}",
-                            )
-                            if shard
-                            else ()
-                        ),
                     )
                     results = (
                         ANDROID / "build/integration-targeted" / re.sub(r"[^A-Za-z0-9_.-]", "_", test_filter)[:100]
