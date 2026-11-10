@@ -573,6 +573,20 @@ def test_explicit_playback_preempts_unobserved_prefetch_without_overlapping_upst
         selected_id,
         f"http://example.invalid/{selected_id}?clen=220000&dur=120&mime=audio%2Fwebm",
     )
+    # `start_progressive` returns before its playback thread has asked for the
+    # upstream lane, and the lane goes to the best waiter present when it is
+    # released. Releasing it in that gap hands it to the queued prefetch, which
+    # is what a loaded runner did (calls == [first, queued, selected]). Wait
+    # for both to be in line, so this asserts the priority and not a thread's
+    # start-up time.
+    deadline = time.monotonic() + 5
+    while True:
+        with preview_cache._upstream_gate:
+            waiting = {token[2].video_id for token in preview_cache._upstream_waiters}
+        if {selected_id, queued_id} <= waiting:
+            break
+        assert time.monotonic() < deadline, waiting
+        time.sleep(0.005)
     release_first.set()
     assert handle.state.done.wait(timeout=5)
     speculative.join(timeout=5)
