@@ -19,7 +19,9 @@ def test_acquisition_retry_commit_and_cancel_keep_real_account_ownership(tmp_pat
     with (tmp_path / "fixture.log").open("w") as log:
         process = subprocess.Popen([sys.executable, str(root / "scripts/android_fixture.py"), "--root", str(tmp_path / "engine"), "--port", str(port), "--run-id", "acquisition-test"], cwd=root, env={**os.environ, "PYTHONPATH": str(root)}, stdout=log, stderr=log)
         try:
-            deadline = time.monotonic() + 45
+            # Engine start-up, not behaviour: scripts/android.py allows the same
+            # fixture 240 s on a shared CI runner. 40 s expired under `pytest -n 4`.
+            deadline = time.monotonic() + 180
             while True:
                 assert process.poll() is None, (tmp_path / "fixture.log").read_text()
                 try:

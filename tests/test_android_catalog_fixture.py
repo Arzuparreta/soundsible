@@ -34,7 +34,9 @@ def test_catalog_search_resolve_and_save_keep_real_account_isolation(tmp_path):
             stderr=log,
         )
         try:
-            deadline = time.monotonic() + 40
+            # Engine start-up, not behaviour: scripts/android.py allows the same
+            # fixture 240 s on a shared CI runner. 40 s expired under `pytest -n 4`.
+            deadline = time.monotonic() + 180
             while True:
                 assert process.poll() is None, (tmp_path / "fixture.log").read_text()
                 try:
@@ -108,7 +110,9 @@ def test_catalog_search_resolve_and_save_keep_real_account_isolation(tmp_path):
             started = member.post(origin + "/api/catalog/album/download", json={"deezer_id": "920002"}, timeout=15)
             assert started.status_code == 202, started.text
             job_id = started.json()["job"]["id"]
-            deadline = time.monotonic() + 40
+            # Engine start-up, not behaviour: scripts/android.py allows the same
+            # fixture 240 s on a shared CI runner. 40 s expired under `pytest -n 4`.
+            deadline = time.monotonic() + 180
             while True:
                 job = member.get(origin + f"/api/migration/jobs/{job_id}", timeout=10).json()["job"]
                 if job["state"] == "needs_review":

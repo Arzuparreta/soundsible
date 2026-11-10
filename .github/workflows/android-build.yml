@@ -58,6 +58,8 @@ env:
 
 jobs:
   # Everything that needs no emulator, and the distributable development APK.
+  # The player's typecheck and vitest suite are not repeated here: CI's
+  # `ui_build` runs both on every change to ui_web, with the same Node.
   static:
     name: Build, lint and unit tests
     runs-on: ubuntu-latest
@@ -97,8 +99,6 @@ jobs:
           # Checksum-verified on every use; the key changes with the pin.
           path: android/build/webrtc-original.aar
           key: android-webrtc-${{ hashFiles('scripts/android_webrtc.py') }}
-      - name: Validate TypeScript and shared player tests
-        run: npm test --prefix ui_web
       - name: Build development APK and instrumentation APK
         run: python scripts/android.py build
       - name: Native retry unit tests
@@ -158,10 +158,9 @@ jobs:
           # All shards can read the shared main cache; only one writes another
           # snapshot. Otherwise the matrix competes with Windows for cache space.
           cache-read-only: ${{ github.ref != 'refs/heads/main' || matrix.shard != 0 }}
-      - name: Install native audio fixture dependencies
-        run: |
-          scripts/ci_retry.sh -- sudo apt-get -o Acquire::Retries=5 update
-          scripts/ci_retry.sh -- sudo apt-get -o Acquire::Retries=5 install -y ffmpeg
+      # The fixture engines encode and probe real audio. The pinned static
+      # build CI's `tests` job uses, not apt: see the action for what apt cost.
+      - uses: ./.github/actions/setup-ffmpeg
       - name: Install SDK and JS dependencies
         run: |
           scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-37.0' 'build-tools;36.0.0'
@@ -182,6 +181,15 @@ jobs:
           key: dj-model-${{ hashFiles('shared/dj/weights.py') }}
       - name: Fetch DJ beat model
         run: scripts/ci_retry.sh -- python scripts/fetch_dj_model.py
+      # The Live relay binary (scripts/android_live_fixture.py downloads it on
+      # first use, checksummed). Every shard fetched it from GitHub's release
+      # CDN on every run; a 504 there on 2026-11-09 failed two shards after six
+      # attempts each. Cached, the CDN is asked once per pinned version.
+      - name: Cache pinned Live relay
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/soundsible/mediamtx
+          key: android-mediamtx-${{ hashFiles('scripts/android_live_fixture.py') }}
       - name: Prepare web bundle
         run: python scripts/android.py prepare
       - name: Install emulator and system image

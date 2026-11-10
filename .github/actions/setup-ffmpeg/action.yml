@@ -1,0 +1,43 @@
+name: Set up FFmpeg
+description: >-
+  Put a pinned, checksummed static FFmpeg and ffprobe on PATH, from the
+  Actions cache when it is there.
+
+# A static build rather than `apt-get install ffmpeg`. The apt package drags in
+# ~105 MB of codecs, speech models and GPU drivers from Ubuntu's mirror, which
+# some days serves them at 70 kB/s. That install took 24 minutes of a 27-minute
+# `tests` job on 2026-10-01, and up to 38 minutes of an Android emulator shard
+# in November 2026: nine of the 49 pull-request commits measured then waited
+# 41 to 50 minutes on that one step. `ci_retry.sh` cannot help with a mirror
+# that is slow rather than failing.
+#
+# Same month-end BtbN build the Windows desktop bundles
+# (desktop-shell/scripts/fetch-ffmpeg.sh). Linux x64 only.
+
+runs:
+  using: composite
+  steps:
+    - name: Pin the FFmpeg build
+      shell: bash
+      run: |
+        echo "SOUNDSIBLE_FFMPEG_URL=https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-8.1.tar.xz" >> "$GITHUB_ENV"
+        echo "SOUNDSIBLE_FFMPEG_SHA256=97ce978979194b5cf7e06a5e68020dbdaa7a4f3294c5452b6a1bc347100dbb79" >> "$GITHUB_ENV"
+    - name: Restore FFmpeg
+      uses: actions/cache@v6.1.0
+      with:
+        path: ~/.cache/soundsible-ffmpeg
+        key: ffmpeg-${{ env.SOUNDSIBLE_FFMPEG_SHA256 }}
+    - name: Install FFmpeg
+      shell: bash
+      run: |
+        dir="$HOME/.cache/soundsible-ffmpeg"
+        if [ ! -x "$dir/ffmpeg" ] || [ ! -x "$dir/ffprobe" ]; then
+          mkdir -p "$dir"
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --max-time 300 \
+            "$SOUNDSIBLE_FFMPEG_URL" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          echo "$SOUNDSIBLE_FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum --check --strict
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$dir" --strip-components=2 \
+            --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
+        fi
+        echo "$dir" >> "$GITHUB_PATH"
+        "$dir/ffmpeg" -hide_banner -version | head -1
