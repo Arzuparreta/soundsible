@@ -39,7 +39,9 @@ def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path, audio_fo
             stderr=log,
         )
         try:
-            deadline = time.monotonic() + 40
+            # Engine start-up, not behaviour: scripts/android.py allows the same
+            # fixture 240 s on a shared CI runner. 40 s expired under `pytest -n 4`.
+            deadline = time.monotonic() + 180
             while True:
                 assert process.poll() is None, (tmp_path / "fixture.log").read_text()
                 try:

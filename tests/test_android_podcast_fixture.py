@@ -34,7 +34,9 @@ def test_podcast_feed_token_and_range_keep_real_account_isolation(tmp_path):
             stderr=log,
         )
         try:
-            deadline = time.monotonic() + 40
+            # Engine start-up, not behaviour: scripts/android.py allows the same
+            # fixture 240 s on a shared CI runner. 40 s expired under `pytest -n 4`.
+            deadline = time.monotonic() + 180
             while True:
                 assert process.poll() is None, (tmp_path / "fixture.log").read_text()
                 try:

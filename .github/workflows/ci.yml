@@ -129,7 +129,7 @@ jobs:
           # source tree declares rather than whatever the runner exported.
           SOUNDSIBLE_VERSION: ""
         run: >-
-          pytest -q -n 4
+          pytest -q -n 4 --durations=15
           --cov=shared --cov=player --cov=setup_tool
           --cov-report=term-missing --cov-fail-under=55
 
