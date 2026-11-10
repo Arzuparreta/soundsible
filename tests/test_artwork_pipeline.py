@@ -447,14 +447,19 @@ def test_packaged_entrypoint_dispatches_artwork_worker(tmp_path):
 
 
 @pytest.mark.parametrize('cancel', [False, True])
-def test_http_transport_stops_blocked_dns_and_leaves_no_reader(tmp_path, monkeypatch, cancel):
+@pytest.mark.parametrize('startup_delay', [0, 2.2], ids=['normal-start', 'slow-start'])
+def test_http_transport_stops_blocked_dns_and_leaves_no_reader(tmp_path, monkeypatch, cancel, startup_delay):
     import threading
     import requests
     from shared import artwork_sources as sources
     from shared.artwork_worker import http_worker
     marker = tmp_path / 'dns-started'
     command = f'''import socket,time
+time.sleep({startup_delay!r})
 from pathlib import Path
+# Load the HTTP dependencies during warm-up, before the short DNS budget.
+from shared import artwork_http, artwork_sources
+from PIL import Image
 def blocked(*a,**k):
  Path({str(marker)!r}).touch();time.sleep(30)
 socket.getaddrinfo=blocked
@@ -463,31 +468,68 @@ main()
 '''
     http_worker.close()
     monkeypatch.setattr(http_worker, 'command', [sys.executable, '-c', command])
-    monkeypatch.setattr(sources, 'IMAGE_DEADLINE_SEC', 2)
+    source = tmp_path / 'warmup.png'
+    source.write_bytes(picture())
+    staging_dir = artwork_store().cache / '.image-http'
     stop = threading.Event()
-    # Cancel only after DNS has actually started, including on a slow host.
+    # Cancellation gets a longer deadline so an ordinary timeout cannot pass
+    # as a successful cancellation. Both paths must finish within four seconds.
+    monkeypatch.setattr(sources, 'IMAGE_DEADLINE_SEC', 15 if cancel else 2)
     def cancel_when_started():
-        for _ in range(300):
+        until = time.monotonic() + 15
+        while time.monotonic() < until:
             if marker.exists():
                 stop.set()
                 return
             if stop.wait(.01):
                 return
     watcher = threading.Thread(target=cancel_when_started) if cancel else None
-    if watcher:
-        watcher.start()
-    start = time.monotonic()
     try:
+        # A real IPC round trip acknowledges readiness within the worker's
+        # normal startup budget. Inspection is local and does not contact DNS.
+        assert http_worker.render(source, None, 0, False, operation='inspect',
+                                  staging_dir=staging_dir) == {
+            'width': 480, 'height': 360, 'format': 'PNG',
+        }
+        process, reader = http_worker.process, http_worker.reader
+        assert not marker.exists(), 'Warm-up unexpectedly contacted DNS'
+        if watcher:
+            watcher.start()
+        start = time.monotonic()
         with pytest.raises(requests.Timeout):
             sources.fetch_image(URL, video_id=VIDEO, stop=stop)
-        assert marker.exists()
+        elapsed = time.monotonic() - start
+        assert marker.exists(), f'DNS not reached after warm-up ({elapsed=:.3f}, exit={process.poll()})'
+        assert elapsed < 4, f'Artwork interruption took {elapsed:.3f}s ({cancel=})'
+        if cancel:
+            assert stop.is_set(), 'Request expired without observing cancellation'
+        assert process.poll() is not None and not reader.is_alive()
+        assert http_worker.process is None and http_worker.reader is None
+        assert not list(staging_dir.glob('.job-*'))
+    finally:
+        stop.set()
+        if watcher and watcher.ident is not None:
+            watcher.join(timeout=1)
+        http_worker.close()
+    assert watcher is None or not watcher.is_alive()
+
+
+def test_http_transport_deadline_includes_blocked_startup(monkeypatch):
+    import requests
+    from shared import artwork_sources as sources
+    from shared.artwork_worker import http_worker
+    http_worker.close()
+    monkeypatch.setattr(http_worker, 'command', [sys.executable, '-c', 'import time; time.sleep(30)'])
+    monkeypatch.setattr(sources, 'IMAGE_DEADLINE_SEC', 2)
+    start = time.monotonic()
+    try:
+        with pytest.raises(requests.Timeout) as failure:
+            sources.fetch_image(URL, video_id=VIDEO)
+        assert 'deadline' in str(failure.value.__cause__)
         assert time.monotonic() - start < 4
         assert http_worker.process is None and http_worker.reader is None
         assert not list((artwork_store().cache / '.image-http').glob('.job-*'))
     finally:
-        stop.set()
-        if watcher:
-            watcher.join(timeout=1)
         http_worker.close()
 
 
