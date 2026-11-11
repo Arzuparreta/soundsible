@@ -102,6 +102,13 @@ jobs:
       # requirements.docker.lock, and the image has no use for a test runner.
       - name: Install dependencies
         run: pip install -r requirements.txt pytest-xdist==3.8.0
+      # The same suite takes 4.5 or 8.5 minutes depending on the runner it
+      # lands on (every heavy test twice as slow, not a few). Recorded so a
+      # slow run can be told from a slow test.
+      - name: Show the runner's CPU
+        run: |
+          nproc
+          grep -m1 'model name' /proc/cpuinfo
       # The Auto DJ beat model (84 MB release asset, SHA-256 in
       # shared/dj/weights.py); the analyser tests run the real network.
       - name: Restore DJ beat model

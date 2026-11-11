@@ -248,12 +248,6 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                         environment.update(SOUNDSIBLE_ANDROID_LIVE_FIXTURE="1", SOUNDSIBLE_COMMUNITY_URL="https://10.0.2.2:28443", REQUESTS_CA_BUNDLE=str(ca_path), NO_PROXY="10.0.2.2,127.0.0.1,localhost")
                     process = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=log, stderr=log)
                     processes.append(process)
-                if shard and not restart_only and not live_restart_only:
-                    # The engines above take about a minute to encode and
-                    # measure their audio before they answer. Compile the two
-                    # APKs meanwhile rather than after: the test task below
-                    # then finds them built.
-                    gradle(":app:assembleDebug", ":app:assembleDebugAndroidTest")
                 # Each engine owns a separate database and port. Start all of them
                 # before waiting, so unrelated bootstrap work does not serialize.
                 for (port, _passwordless), process in zip(fixtures, processes, strict=True):
