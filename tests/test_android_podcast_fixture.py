@@ -1,7 +1,6 @@
 """Native podcast fixture preserves RSS/token/proxy/Range and account routes."""
 
 import os
-import socket
 import subprocess
 import sys
 import time
@@ -9,12 +8,12 @@ from pathlib import Path
 
 import requests
 
+from fixture_ports import late_bound_port
+
 
 def test_podcast_feed_token_and_range_keep_real_account_isolation(tmp_path):
     root = Path(__file__).resolve().parents[1]
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    port = late_bound_port()
     origin = f"http://127.0.0.1:{port}"
     with (tmp_path / "fixture.log").open("w") as log:
         process = subprocess.Popen(
