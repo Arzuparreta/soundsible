@@ -509,6 +509,91 @@ def test_different_preview_ids_never_download_from_upstream_in_parallel(runtime,
     assert preview_cache.get_cached(second_id) is not None
 
 
+def test_playback_is_in_line_for_upstream_before_its_thread_runs(runtime, monkeypatch):
+    """A lane released before the playback thread starts still goes to playback.
+
+    The playback thread is held back here, which is what a busy station does
+    to it for a few milliseconds. Until the fill joined the line on the
+    caller's thread, the waiting prefetch took the lane and the listener's
+    track downloaded last.
+    """
+    first_id, queued_id, selected_id = "prefetch101", "prefetch102", "selected101"
+    first_chunk = threading.Event()
+    release_first = threading.Event()
+    calls = []
+
+    class _HeldResponse(_FakeResponse):
+        def __init__(self, video_id: str):
+            super().__init__(video_id.encode() * 20_000)
+            self.video_id = video_id
+
+        def iter_content(self, chunk_size):
+            yield self._data[:chunk_size]
+            if self.video_id == first_id:
+                first_chunk.set()
+                release_first.wait(timeout=5)
+            yield self._data[chunk_size:]
+
+    def fake_get(url, **kwargs):
+        video_id = url.rsplit("/", 1)[-1].split("?", 1)[0]
+        calls.append(video_id)
+        return _HeldResponse(video_id)
+
+    _patch_upstream(monkeypatch, fake_get)
+
+    def run_speculative():
+        try:
+            preview_cache.ensure_cached(first_id, f"http://example.invalid/{first_id}", keep_warm=True)
+        except preview_cache.PreviewFillCancelled:
+            pass
+
+    speculative = threading.Thread(target=run_speculative)
+    speculative.start()
+    assert first_chunk.wait(timeout=2)
+    queued = threading.Thread(
+        target=preview_cache.ensure_cached,
+        args=(queued_id, f"http://example.invalid/{queued_id}"),
+        kwargs={"keep_warm": True},
+    )
+    queued.start()
+    deadline = time.monotonic() + 5
+    while True:
+        with preview_cache._upstream_gate:
+            if any(item[2].video_id == queued_id for item in preview_cache._upstream_waiters):
+                break
+        assert time.monotonic() < deadline
+        time.sleep(0.005)
+
+    playback_may_start = threading.Event()
+    real_thread = threading.Thread
+
+    class _LatePlaybackThread(real_thread):
+        def start(self):
+            if not self.name.startswith("preview-playback-"):
+                return super().start()
+            real_thread(target=lambda: (playback_may_start.wait(timeout=5), real_thread.start(self))).start()
+
+    monkeypatch.setattr(preview_cache.threading, "Thread", _LatePlaybackThread)
+    handle = preview_cache.start_progressive(
+        selected_id,
+        f"http://example.invalid/{selected_id}?clen=220000&dur=120&mime=audio%2Fwebm",
+    )
+    monkeypatch.setattr(preview_cache.threading, "Thread", real_thread)
+    release_first.set()
+    speculative.join(timeout=5)
+    # The lane is free and the prefetch is waiting; playback has not run yet.
+    time.sleep(0.2)
+    assert calls == [first_id]
+    playback_may_start.set()
+    assert handle.state.done.wait(timeout=5)
+    queued.join(timeout=5)
+    handle.close()
+
+    assert calls == [first_id, selected_id, queued_id]
+    with preview_cache._upstream_gate:
+        assert preview_cache._upstream_waiters == []
+
+
 def test_explicit_playback_preempts_unobserved_prefetch_without_overlapping_upstreams(runtime, monkeypatch):
     first_id = "prefetch001"
     queued_id = "prefetch002"
