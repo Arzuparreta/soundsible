@@ -204,19 +204,46 @@ _active_upstream_lock = threading.Lock()
 _active_upstream_fill: _FillState | None = None
 
 
+def _queue_for_upstream(state: _FillState) -> None:
+    """Take this fill's place in line for the lane, once.
+
+    Separate from waiting for the lane so that `start_progressive` can do it
+    on the caller's thread. A playback fill used to join the line only when
+    its own thread first ran; a lane released before that went to whichever
+    prefetch was already waiting, and the listener's track then waited for a
+    whole speculative download.
+    """
+    global _upstream_ticket
+    with _upstream_gate:
+        if any(item[2] is state for item in _upstream_waiters):
+            return
+        _upstream_ticket += 1
+        priority = 0 if state.progressive_requested else 1
+        _upstream_waiters.append((priority, _upstream_ticket, state))
+
+
+def _leave_upstream_queue(state: _FillState) -> None:
+    """Give up a place that was never used, so it cannot block the lane."""
+    with _upstream_gate:
+        remaining = [item for item in _upstream_waiters if item[2] is not state]
+        if len(remaining) != len(_upstream_waiters):
+            _upstream_waiters[:] = remaining
+            _upstream_gate.notify_all()
+
+
 @contextmanager
 def _upstream_slot(state: _FillState):
     """Acquire the station's sole upstream lane by priority, then FIFO."""
-    global _upstream_ticket, _upstream_owned
-    priority = 0 if state.progressive_requested else 1
+    global _upstream_owned
+    _queue_for_upstream(state)
     with _upstream_gate:
-        _upstream_ticket += 1
-        token = (priority, _upstream_ticket, state)
-        _upstream_waiters.append(token)
-        while _upstream_owned or min(_upstream_waiters, key=lambda item: item[:2]) is not token:
-            _upstream_gate.wait()
-        _upstream_waiters.remove(token)
-        _upstream_owned = True
+        try:
+            while _upstream_owned or min(_upstream_waiters, key=lambda item: item[:2])[2] is not state:
+                _upstream_gate.wait()
+            _upstream_owned = True
+        finally:
+            _upstream_waiters[:] = [item for item in _upstream_waiters if item[2] is not state]
+            _upstream_gate.notify_all()
     try:
         yield
     finally:
@@ -1208,6 +1235,11 @@ def start_progressive(
         state.progressive_requested = True
         state.readers += 1
 
+    # In line for the lane before anything can release it: the playback thread
+    # below may not have run yet when the cancelled fill lets go.
+    if owner:
+        _queue_for_upstream(state)
+
     # If speculative work owns the sole lane but nobody is consuming it, the
     # listener's click cancels that fill. The next loop iteration releases the
     # lock; no second upstream request overlaps it.
@@ -1251,17 +1283,24 @@ def start_progressive(
                 _record_preparation_failure(video_id, "download_failed")
                 _emit_fill_event("preview_fill_failed", state, error=type(exc).__name__)
             finally:
+                # A fill that ended without asking for the lane (already
+                # cached, unresolvable) still holds the place taken above.
+                _leave_upstream_queue(state)
                 if not state.done.is_set():
                     state.finish()
                 with _fills_lock:
                     if _fills.get(video_id) is state:
                         _fills.pop(video_id, None)
 
-        threading.Thread(
-            target=run,
-            name=f"preview-playback-{video_id}",
-            daemon=True,
-        ).start()
+        try:
+            threading.Thread(
+                target=run,
+                name=f"preview-playback-{video_id}",
+                daemon=True,
+            ).start()
+        except BaseException:
+            _leave_upstream_queue(state)
+            raise
     return ProgressiveHandle(state)
 
 
