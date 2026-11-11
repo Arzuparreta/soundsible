@@ -43,27 +43,28 @@ concurrency:
 jobs:
   build-windows:
     name: build-windows-${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: x64
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            python_arch: x64
-          - arch: arm64
-            runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            python_arch: arm64
+        # A pull request builds x64 only. In 74 builds of each (29 Oct – 10 Nov
+        # 2026) arm64 never failed where x64 passed, and it is the slower of
+        # the two: 13 minutes against 8, so it was what a pull request waited
+        # for. Pushes to main, manual runs and releases build both; an
+        # arm64-only break is found on main, before any release.
+        arch: ${{ fromJSON(github.event_name == 'pull_request' && '["x64"]' || '["x64", "arm64"]') }}
+    env:
+      # Not named RUST_*: rust-cache hashes every RUST*, CARGO* and CC* variable
+      # into its key, and a new one sent the job to a cold 7-minute Cargo build.
+      TARGET_TRIPLE: ${{ matrix.arch == 'arm64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }}
     steps:
       - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.12"
-          architecture: ${{ matrix.python_arch }}
+          architecture: ${{ matrix.arch }}
           cache: pip
 
       - uses: actions/setup-node@v7.1.0
@@ -181,14 +182,14 @@ jobs:
         env:
           PYTHONPATH: .
           SOUNDSIBLE_REQUIRE_FFMPEG: "1"
-          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe
+          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ env.TARGET_TRIPLE }}.exe
         run: pytest tests/test_desktop_engine_smoke.py::test_desktop_engine_smoke_sidecar -q
 
       - name: Exercise process ownership and packaged image worker
         shell: bash
         env:
           PYTHONPATH: .
-          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe
+          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ env.TARGET_TRIPLE }}.exe
         run: >-
           pytest tests/test_artwork_pipeline.py -q
           -k "downloader or acquisition_cancel_probe or real_image_child or packaged_entrypoint or http_transport or quota_lock or repair_processes"
@@ -213,9 +214,9 @@ jobs:
         run: |
           ./desktop-shell/scripts/verify-pe-architecture.ps1 `
             -Architecture "${{ matrix.arch }}" `
-            "desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe" `
-            "desktop-shell/src-tauri/binaries/ffprobe-${{ matrix.target }}.exe" `
-            "desktop-shell/src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe" `
+            "desktop-shell/src-tauri/binaries/soundsible-engine-${{ env.TARGET_TRIPLE }}.exe" `
+            "desktop-shell/src-tauri/binaries/ffprobe-${{ env.TARGET_TRIPLE }}.exe" `
+            "desktop-shell/src-tauri/binaries/ffmpeg-${{ env.TARGET_TRIPLE }}.exe" `
             "desktop-shell/src-tauri/target/release/soundsible-desktop.exe"
 
       # Installs the installer this job just built, drives the app's own window,

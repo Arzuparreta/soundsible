@@ -1,7 +1,6 @@
 """Real NORMAL radio planner consumes acquired fixture files."""
 
 import os
-import socket
 import subprocess
 import sys
 import time
@@ -11,13 +10,13 @@ from pathlib import Path
 import requests
 import pytest
 
+from fixture_ports import late_bound_port
+
 
 @pytest.mark.parametrize("audio_format", ["wav", "flac"])
 def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path, audio_format):
     root = Path(__file__).resolve().parents[1]
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    port = late_bound_port()
     origin = f"http://127.0.0.1:{port}"
     with (tmp_path / "fixture.log").open("w") as log:
         process = subprocess.Popen(

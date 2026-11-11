@@ -1,19 +1,18 @@
 """Synthetic provider bytes exercise the actual acquisition pipeline, ownership and cancellation."""
 import os
 from pathlib import Path
-import socket
 import subprocess
 import sys
 import time
 
 import requests
 
+from fixture_ports import late_bound_port
+
 
 def test_acquisition_retry_commit_and_cancel_keep_real_account_ownership(tmp_path):
     root = Path(__file__).resolve().parents[1]
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    port = late_bound_port()
     origin = f"http://127.0.0.1:{port}"
     headers = {"X-Android-Fixture": "isolated"}
     with (tmp_path / "fixture.log").open("w") as log:
