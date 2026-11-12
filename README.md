@@ -55,6 +55,7 @@ open source (MIT).
 | **Live** | Broadcasts what you are playing to a public web room anyone can open without an account. [Live guide](docs/LIVE.md) |
 | **Lyrics** | Time-synced lyrics, or plain text when that is all there is. |
 | **Podcasts** | Search, browse charts by country, subscribe and play episodes. |
+| **Scrobbling** | Reports what you listen to, from any device, to ListenBrainz, Last.fm or Maloja. Off until you connect one. [Scrobbling guide](docs/SCROBBLING.md) |
 | **Import** | Bring playlists and saved songs from Spotify or Apple Music exports; Soundsible finds each song. [Import guide](docs/MUSIC_MIGRATION.md) |
 | **Accounts** | Each person gets their own library, playlists, queue and history. Files are shared, so nothing downloads twice. |
 | **Languages** | English, Spanish, French and Chinese. |
@@ -131,7 +132,9 @@ suggestions (the text you type) to Google, song and artist lookups to Deezer
 and MusicBrainz, lyrics to LRCLIB, podcast searches to Apple, and podcast feeds
 and episodes to each show's own host. If you turn on automatic downloader updates,
 those come from PyPI. Your listening history and recommendation profile stay on
-the server and are never uploaded. Live goes through a relay run by the project, or your own,
+the server and are never uploaded, unless you connect a
+[scrobbling](docs/SCROBBLING.md) service: then each song you listen to is sent to
+that service. Live goes through a relay run by the project, or your own,
 and can be turned off.
 [Privacy](docs/TELEMETRY_PRIVACY.md) · [Settings](docs/CONFIGURATION.md#features)
 
@@ -158,6 +161,7 @@ there is no hosted version.
 | [Docker](docs/DOCKER.md) | [Live](docs/LIVE.md) | [Playback problems](docs/PLAYBACK_DIAGNOSIS.md) |
 | [Windows app](docs/DESKTOP_BETA.md) | [Import from Spotify / Apple Music](docs/MUSIC_MIGRATION.md) | [Architecture](docs/ARCHITECTURE.md) |
 | [Android app](docs/android/ALPHA.md) | [OpenSubsonic apps](docs/OPENSUBSONIC.md) | [Contributing](CONTRIBUTING.md) |
+| | [Scrobbling](docs/SCROBBLING.md) | |
 | [Settings & environment](docs/CONFIGURATION.md) | [Privacy](docs/TELEMETRY_PRIVACY.md) | [Security policy](SECURITY.md) |
 | [VPS relay](docs/VPS_RELAY.md) | [Roadmap](docs/ROADMAP.md) | [All guides](docs/README.md) |
 

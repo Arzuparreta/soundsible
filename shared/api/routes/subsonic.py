@@ -872,16 +872,39 @@ def set_rating():
 
 @_endpoint("scrobble")
 def scrobble():
+    """Record plays, and pass them on to the scrobbling services the account connected.
+
+    The app decides what a play is here: the protocol gives it the listening
+    position and gives the server nothing. ``submission=false`` is the song
+    that has just started.
+    """
+    from shared.scrobble import get_scrobble_service, listen_from_track
+    from shared.user_context import require_user_id
+
+    identifiers = [serialize.parse_id(raw)[1] for raw in request.values.getlist("id") or []]
+    user_id, service = require_user_id(), get_scrobble_service()
+    db = _db()
+
+    def external(identifier: str):
+        if not service.is_active(user_id):
+            return None
+        found = db.get_tracks_by_ids([identifier])
+        return listen_from_track(found[0]) if found else None
+
     if _bool_param("submission", True) is False:
-        # A "now playing" notification, not a play. Nothing here listens for
-        # one yet, and counting it would inflate every play count by one.
+        # A "now playing" notification, not a play: counting it would inflate
+        # every play count by one.
+        listen = external(identifiers[0]) if identifiers else None
+        if listen is not None:
+            service.now_playing(user_id, listen)
         return {}
     played_at = _int_param("time")
     when = int(played_at / 1000) if played_at and played_at > 10_000_000_000 else (played_at or int(time.time()))
-    db = _db()
-    for raw in request.values.getlist("id") or []:
-        _, identifier = serialize.parse_id(raw)
+    for identifier in identifiers:
         db.record_track_play(identifier, when)
+        listen = external(identifier)
+        if listen is not None:
+            service.play(user_id, listen.at(when))
     return {}
 
 

@@ -1685,6 +1685,7 @@ from shared.api.routes.migration import migration_bp
 from shared.api.routes.car import car_bp
 from shared.api.routes.auth import auth_bp
 from shared.api.routes.loudness import loudness_bp
+from shared.api.routes.scrobble import scrobble_bp
 from shared.api.routes.community import community_bp
 from shared.api.routes.subsonic import subsonic_bp
 app.register_blueprint(library_bp)
@@ -1702,6 +1703,7 @@ app.register_blueprint(migration_bp)
 app.register_blueprint(car_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(loudness_bp)
+app.register_blueprint(scrobble_bp)
 app.register_blueprint(community_bp)
 # `/rest` is not under `/api`, so `_bind_request_user` leaves it anonymous
 # on purpose: the Subsonic surface carries its own credentials and binds
@@ -1873,6 +1875,13 @@ def stop_api() -> None:
         stop_loudness_service_if_started()
     except Exception:
         logger.exception("API: Error stopping loudness idle worker")
+
+    try:
+        from shared.scrobble import stop_scrobble_service_if_started
+
+        stop_scrobble_service_if_started()
+    except Exception:
+        logger.exception("API: Error stopping scrobble delivery")
 
     from shared import work
     from shared.dj.store import stop_analysis_process
@@ -2094,6 +2103,15 @@ def start_api(
             logger.info("API: Loudness idle worker scheduled.")
         except Exception:
             logger.debug("API: Loudness idle worker start skipped", exc_info=True)
+
+        # Plays that were queued for a scrobbling service and not sent yet —
+        # the service was down, or the engine was stopped first — go out now.
+        try:
+            from shared.scrobble import get_scrobble_service
+
+            get_scrobble_service().start()
+        except Exception:
+            logger.debug("API: Scrobble delivery start skipped", exc_info=True)
 
         from shared.dj.store import start_analysis_process
         # Measurements never run in this process: see shared/dj/worker.py.

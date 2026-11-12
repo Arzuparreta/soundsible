@@ -3,7 +3,7 @@ import { searchSettings, type SettingsEntry, type SettingsSearchResult } from '.
 import { t } from '../lib/i18n';
 
 export type NativeSettingsTab = 'account' | 'appearance' | 'accessibility' | 'recommendations' | 'playback' | 'library' | 'downloads'
-  | 'subsonic' | 'users' | 'devices' | 'community' | 'about';
+  | 'subsonic' | 'scrobbling' | 'users' | 'devices' | 'community' | 'about';
 
 /** Rows the web draws that have no Android equivalent: its own bottom bar, its link-association page, its design preview. */
 const WEB_ONLY = new Set(['bottom-bar', 'shared-links', 'design-system']);

@@ -12,11 +12,8 @@ So this is a **separate credential**, not the account password:
   ``instance.db`` alone does not hand anyone a playable library;
 * shown to its owner exactly once, at the moment it is generated.
 
-The key file deliberately is not ``CredentialManager.generate_machine_key()``.
-That derives from ``/etc/machine-id``, which is regenerated when a container is
-rebuilt — every credential would go quietly unreadable and every client would
-report "wrong password" with nothing to point at. The config directory is
-already the volume an install is expected to keep.
+The key is a file in the config directory; :mod:`shared.keyfile` says why it is
+not derived from the machine.
 """
 
 from __future__ import annotations
@@ -24,14 +21,13 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-import os
 import secrets
-import threading
 from pathlib import Path
 from typing import Any, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from shared.keyfile import fernet_key, reset_key_cache  # noqa: F401  # reset_key_cache: tests
 from shared.subsonic.envelope import (
     ERR_BAD_API_KEY,
     ERR_BAD_CREDENTIALS,
@@ -51,9 +47,6 @@ _SECRET_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 _SECRET_GROUPS = 4
 _SECRET_GROUP_LEN = 4
 
-_key_cache: dict[str, bytes] = {}
-_key_lock = threading.Lock()
-
 
 def _key_path() -> Path:
     from shared.runtime import get_config_dir
@@ -63,39 +56,7 @@ def _key_path() -> Path:
 
 def _load_key() -> bytes:
     """The instance's Fernet key, created on first use with 0600 on the file."""
-    path = _key_path()
-    cache_key = str(path)
-    with _key_lock:
-        cached = _key_cache.get(cache_key)
-        if cached:
-            return cached
-
-        if path.exists():
-            existing = path.read_bytes().strip()
-            if existing:
-                _key_cache[cache_key] = existing
-                return existing
-
-        key = Fernet.generate_key()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            # O_EXCL rather than a plain write: two workers can reach this at
-            # the same moment, and the loser must adopt the winner's key rather
-            # than overwrite it and invalidate credentials already handed out.
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            key = path.read_bytes().strip()
-        else:
-            with os.fdopen(fd, "wb") as handle:
-                handle.write(key)
-        _key_cache[cache_key] = key
-        return key
-
-
-def reset_key_cache() -> None:
-    """Forget the cached key (tests, and a reconfigured runtime)."""
-    with _key_lock:
-        _key_cache.clear()
+    return fernet_key(_key_path())
 
 
 def generate_secret() -> str:

@@ -23,6 +23,20 @@ additive within a version or bump `v` with a documented migration.
 `not_interested` feedback. Search text and search-result clicks are never
 written. Skips never create a negative signal.
 
+## Scrobbling is separate, and opt-in
+
+Nothing in this contract sends listening data anywhere. [Scrobbling](SCROBBLING.md)
+does, by design: once an account connects ListenBrainz, Last.fm or Maloja, the
+server sends that service each song the account listens to (artist, title,
+album, length, start time and, when known, the MusicBrainz recording ID). It is
+off until a service is connected, it is per account, and disconnecting stops
+it. It does not depend on the learning setting below, and turning learning off
+does not turn scrobbling off.
+
+Unsent plays wait in `users/<account>/scrobble.sqlite3` under the
+**configuration** directory, next to that account's library — not in
+`telemetry/`.
+
 ## Where it lives
 
 - **Root:** `{SOUNDSIBLE_DATA_DIR or platform user-data}/users/<account>/telemetry/`

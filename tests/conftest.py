@@ -80,6 +80,16 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
             stop_loudness_service_if_started()
         except Exception:
             pass
+        try:
+            from shared.keyfile import reset_key_cache
+            from shared.scrobble import stop_scrobble_service_if_started
+
+            # Listening sessions and the delivery thread belong to this test's
+            # accounts; the key cache to this test's config directory.
+            stop_scrobble_service_if_started()
+            reset_key_cache()
+        except Exception:
+            pass
         unbind_user(token)
         try:
             import shared.api as api_mod

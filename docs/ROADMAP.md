@@ -28,6 +28,8 @@ commitments to offline listening, cars or watches on its own.
 - [Live](LIVE.md) broadcasts the program to a browser listening room.
 - [OpenSubsonic](OPENSUBSONIC.md) exposes the music library to compatible clients,
   including library search, playlists and streaming with transcoding.
+- [Scrobbling](SCROBBLING.md) reports each account's plays to ListenBrainz,
+  Last.fm and Maloja, from every client, once that account connects a service.
 
 These are implemented capabilities, not a claim that every device combination
 has been validated. Client guides describe their specific limits; physical
@@ -121,8 +123,6 @@ surface does not expose Soundsible's external search, acquisition or DJ session.
 
 Planned additions:
 
-- External scrobbling to ListenBrainz, Last.fm and Maloja. The existing Subsonic
-  `scrobble` endpoint records local plays; it is not external scrobbling.
 - ListenBrainz recommendations alongside local signals.
 - M3U and OPML import / export, alongside the existing
   [music migration](MUSIC_MIGRATION.md) workflow.
