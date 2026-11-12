@@ -19,6 +19,7 @@
 | [DJ](AUTO_MODE.md) | Start a set, choose influences, request songs and edit transitions. |
 | [Live](LIVE.md) | Broadcast, share a room and understand the relay and browser requirements. |
 | [OpenSubsonic](OPENSUBSONIC.md) | Connect other apps to your saved music library. |
+| [Scrobbling](SCROBBLING.md) | Report what you listen to, to ListenBrainz, Last.fm or Maloja. |
 | [Android app](android/ALPHA.md) | Install the alpha APK, pair it with your server, permissions and limits. Port development: [ANDROID.md](ANDROID.md). |
 | [iOS status](IOS.md) | Build and installation instructions, with device behaviour still unverified. |
 | [Car integration](CAR_INTEGRATION.md) | Web media controls and the unverified native car path. |
@@ -52,4 +53,5 @@ player is built with `npm` in `ui_web/`.
 | [LRCLIB](https://lrclib.net/) | Public API | Synced and plain lyrics |
 | [Deezer public API](https://developers.deezer.com/) | Public API | Discovery metadata only — no audio comes from Deezer |
 | [MusicBrainz](https://musicbrainz.org/) | Public API | Recording and release identification |
+| [ListenBrainz](https://listenbrainz.org/), [Last.fm](https://www.last.fm/api) and [Maloja](https://github.com/krateng/maloja) | Public APIs | Optional [scrobbling](SCROBBLING.md), per account |
 | [FFmpeg](https://ffmpeg.org/) | LGPL / GPL | Audio conversion and extraction |

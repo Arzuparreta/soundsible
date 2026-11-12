@@ -111,6 +111,7 @@ defaults are listed in [section 7](#7-where-soundsible-keeps-its-files).
 | `SOUNDSIBLE_TELEMETRY_ENABLED` | on | `0`, `false` or `off` stops recording local listening telemetry. See [Privacy](TELEMETRY_PRIVACY.md). |
 | `SOUNDSIBLE_LOUDNESS_ANALYSIS` | on | `false` stops measuring new tracks for loudness levelling; tracks already measured keep their levels. |
 | `SOUNDSIBLE_SUBSONIC_MAX_TRANSCODES` | `2` | Concurrent [OpenSubsonic](OPENSUBSONIC.md) transcodes. |
+| `SOUNDSIBLE_LASTFM_API_KEY`, `SOUNDSIBLE_LASTFM_API_SECRET` | unset | The Last.fm API account this server [scrobbles](SCROBBLING.md#lastfm) through. Both must be set. They replace the one an admin saves in **Settings → Scrobbling**, which then cannot be edited there. |
 | `SOUNDSIBLE_SKIP_UI_BUILD` | unset | `1` stops the engine rebuilding the web player on start; it serves whatever `ui_web/dist` holds. |
 
 To turn on verbose connection and playback logs in one browser, append
@@ -274,7 +275,9 @@ are copied to the new locations on first start. The `run.py` options and
 [path variables](#paths) override any of them.
 
 The configuration directory also holds `downloader.env`, the
-[downloader's saved settings](#3-downloads).
+[downloader's saved settings](#3-downloads), and what
+[scrobbling](SCROBBLING.md#where-it-is-stored) stores: `scrobble.key`,
+`lastfm_app.json` and each account's `users/<account>/scrobble.sqlite3`.
 
 The desktop app also keeps two files in the configuration directory:
 

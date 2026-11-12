@@ -113,7 +113,7 @@ is active joins the existing run instead of launching competing disk work.
 | `artists[]` on a song | ordered performers from `track_artists`, never a split of the display string |
 | Starred | the favourites the player already keeps — one mark, not two lists |
 | `userRating`, `playCount`, `played` | `track_user_state` |
-| `scrobble` | a play recorded against that same table |
+| `scrobble` | a play recorded against that same table, and passed on to the [scrobbling](SCROBBLING.md) services the account connected; `submission=false` is passed on as "now playing" |
 | `replayGain` | the EBU R128 measurements the engine takes for volume levelling |
 | Playlists | the ordered playlists in the account's canonical `library.db` |
 | Cover art | the same artwork the player shows, embedded art extracted on demand |

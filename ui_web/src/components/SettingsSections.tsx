@@ -35,6 +35,7 @@ import { DownloadsSettingsView, type DownloadQuality } from './DownloadsSettings
 import { CommunitySettingsView } from './CommunitySettingsView';
 import { AboutSettingsView } from './AboutSettingsView';
 import { UsersPanel } from './UsersPanel';
+import { ScrobblingPanel } from './ScrobblingPanel';
 import { SubsonicAccessPanel } from './SubsonicAccessPanel';
 import {
   ActionRow,
@@ -595,6 +596,19 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     content: () => <SubsonicAccessPanel />,
   },
   {
+    ...described('scrobbling'),
+    tone: 'accent',
+    icon: () =>
+      svg(
+        <>
+          <path d="M5 19V9M10 19V5M15 19v-7" />
+          <path d="M19 19v-4" />
+          <path d="M17 8.5l2-2 2 2" />
+        </>,
+      ),
+    content: () => <ScrobblingPanel />,
+  },
+  {
     ...described('community'),
     tone: 'success',
     icon: () =>
@@ -656,7 +670,7 @@ export const SETTINGS_GROUPS: { label: () => string; ids: string[] }[] = [
   { label: () => t('settings.group.preferences'), ids: ['playback', 'appearance', 'accessibility'] },
   {
     label: () => t('settings.group.system'),
-    ids: ['library', 'downloads', 'devices', 'subsonic', 'community', 'about'],
+    ids: ['library', 'downloads', 'devices', 'subsonic', 'scrobbling', 'community', 'about'],
   },
   { label: () => t('settings.group.you'), ids: ['account', 'users'] },
 ];

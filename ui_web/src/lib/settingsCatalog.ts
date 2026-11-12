@@ -303,6 +303,28 @@ export const SETTINGS_CATALOG = {
       },
     ],
   },
+  scrobbling: {
+    title: 'scrobbling.title',
+    blurb: 'settings.blurb.scrobbling',
+    aliases: ['settings.searchAliases.scrobbling'],
+    terms: ['ListenBrainz', 'Last.fm', 'Lastfm', 'Maloja', 'scrobble'],
+    settings: [
+      {
+        id: 'scrobble-listenbrainz',
+        label: 'scrobbling.listenbrainzLabel',
+        hint: 'scrobbling.listenbrainzNote',
+        terms: ['ListenBrainz', 'MusicBrainz'],
+      },
+      { id: 'scrobble-lastfm', label: 'scrobbling.lastfmLabel', hint: 'scrobbling.lastfmNote', terms: ['Last.fm', 'Lastfm'] },
+      {
+        id: 'scrobble-maloja',
+        label: 'scrobbling.malojaLabel',
+        hint: 'scrobbling.malojaNote',
+        terms: ['Maloja'],
+        requires: 'admin',
+      },
+    ],
+  },
   community: {
     title: 'settings.community',
     blurb: 'settings.blurb.community',

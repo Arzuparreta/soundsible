@@ -9,6 +9,7 @@ import NativeSettingsAccount from './SettingsAccount';
 import NativeSettingsRecommendations from './SettingsRecommendations';
 import NativeSettingsPlayback from './SettingsPlayback';
 import NativeSettingsSubsonic from './SettingsSubsonic';
+import NativeSettingsScrobbling from './SettingsScrobbling';
 import NativeSettingsLibrary from './SettingsLibrary';
 import NativeSettingsDownloads from './SettingsDownloads';
 import NativeSettingsCommunity from './SettingsCommunity';
@@ -72,6 +73,7 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
       <Show when={props.generation}><button data-android-settings-devices aria-pressed={section() === 'devices'} onClick={() => setSection('devices')}>{t('settings.devices')}</button></Show>
       <Show when={props.user.role === 'admin'}><button data-android-settings-users aria-pressed={section() === 'users'} disabled={!props.available()} onClick={() => setSection('users')}>{t('users.title')}</button></Show>
       <Show when={props.subsonic}><button data-android-settings-subsonic aria-pressed={section() === 'subsonic'} onClick={() => setSection('subsonic')}>Subsonic</button></Show>
+      <button data-android-settings-scrobbling aria-pressed={section() === 'scrobbling'} onClick={() => setSection('scrobbling')}>{t('scrobbling.title')}</button>
       <button data-android-settings-community aria-pressed={section() === 'community'} onClick={() => setSection('community')}>{t('settings.community')}</button>
       <button data-android-settings-about aria-pressed={section() === 'about'} onClick={() => setSection('about')}>{t('settings.about')}</button>
     </nav>
@@ -84,6 +86,7 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
     <Show when={section() === 'library'}><NativeSettingsLibrary identity={props.identity} available={props.available} signal={props.signal}
       admin={props.user.role === 'admin'} trackCount={props.library.trackCount} sync={props.library.sync} onImport={props.library.onImport} /></Show>
     <Show when={section() === 'downloads' && props.user.role === 'admin'}><NativeSettingsDownloads identity={props.identity} available={props.available} /></Show>
+    <Show when={section() === 'scrobbling'}><NativeSettingsScrobbling identity={props.identity} available={props.available} /></Show>
     <Show when={section() === 'community'}><NativeSettingsCommunity identity={props.identity} available={props.available} /></Show>
     <Show when={section() === 'about'}><NativeSettingsAbout identity={props.identity} available={props.available} online={props.online} /></Show>
     <Show when={section() === 'playback'}><NativeSettingsPlayback {...props.playback} />

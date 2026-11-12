@@ -216,6 +216,27 @@ export function NavRow(props: { href: string; label: string; hint?: string; anch
   );
 }
 
+/**
+ * Row that opens a page on another site, in a new tab. A real link rather than
+ * a button that calls `window.open`: browsers block a window opened after an
+ * asynchronous step, and the Android app hands a link to the system browser.
+ */
+export function ExternalLinkRow(props: { href: string; label: string; hint?: string; anchor?: SettingAnchor }) {
+  return (
+    <a
+      href={props.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      class={styles.rowLink}
+      data-pressable
+      data-setting={props.anchor}
+    >
+      <RowText label={props.label} hint={props.hint} />
+      <Chevron />
+    </a>
+  );
+}
+
 export interface SegmentOption<T extends string> {
   value: T;
   label?: string;

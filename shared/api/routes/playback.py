@@ -1263,6 +1263,27 @@ def playback_play_timing():
     return jsonify({"status": "ok"})
 
 
+def _observe_for_scrobbling(state: dict) -> None:
+    """Let scrobbling read what a device says it is playing.
+
+    Only a device's own publication is read — never the state a handoff or an
+    agent writes on a device's behalf, which is an instruction, not something
+    anybody has heard yet. Publishing playback state must not fail because a
+    scrobbling service is misconfigured.
+    """
+    from shared.user_context import current_user_id
+
+    user_id = current_user_id()
+    if not user_id or not isinstance(state, dict):
+        return
+    try:
+        from shared.scrobble import get_scrobble_service
+
+        get_scrobble_service().observe(user_id, state)
+    except Exception:
+        logger.exception("API: scrobbling could not read a playback publication")
+
+
 @playback_bp.route("/api/playback/state", methods=["PUT"])
 @require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_put_state():
@@ -1270,6 +1291,7 @@ def playback_put_state():
     scope = api["get_scope_from_request"]()
     data = request.json or {}
     api["put_playback_state"](scope, data)
+    _observe_for_scrobbling(data)
     return jsonify({"status": "ok"})
 
 
