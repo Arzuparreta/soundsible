@@ -9,6 +9,10 @@ históricos; buscar por nombre de función en el código vigente.
 El documento empezó como diagnóstico. Los puntos cerrados lo indican en la tabla
 de estado y en su sección; el resto sigue siendo diagnóstico.
 
+Direction analysis (2026-11-13): [DIRECTION](DIRECTION.md) compares the DJ with
+other products, measures what real sessions executed and proposes the order
+of the next points. It closes no point of the table below.
+
 ## Identidad musical y fuentes (PR #423)
 
 La colección asigna `item_id` estable a biblioteca, guardados y playlists. Los
