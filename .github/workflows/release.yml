@@ -168,7 +168,7 @@ jobs:
             **Android (alpha)** — `Soundsible-Android-alpha.apk` is attached;
             check it against `SHA256SUMS-android.txt`. Install it over an
             earlier alpha to keep your account and offline copies:
-            [Android alpha](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/android/ALPHA.md).
+            [Android alpha](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/ANDROID_ALPHA.md).
             `upgrade-seed-androidTest.apk` is test evidence, not an app.
 
             **iPhone and iPad** — `Soundsible.ipa` is attached. Soundsible is

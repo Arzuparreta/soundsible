@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 
 def load_engine(revision):
     if revision:
-        from docs.dj.reference import load_reference
+        from docs.internal.dj.reference import load_reference
         return load_reference(revision)
     from shared.dj import analysis, features, store
     return types.SimpleNamespace(_window_features=features._window_features,

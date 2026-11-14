@@ -1,7 +1,7 @@
 """Beat This! ONNX weights: locate, verify, download once and open one session.
 
 The file is a Soundsible release asset with a fixed SHA-256 (MIT, from
-Beat This! `final0`; export in docs/dj/detector_comparison/onnx_probe.py).
+Beat This! `final0`; export in docs/internal/dj/detector_comparison/onnx_probe.py).
 Docker images and desktop builds carry it under `models/`; a source install
 downloads it into the cache the first time it analyses. Without verified
 weights there is no pulse detector: analysis waits rather than guessing.

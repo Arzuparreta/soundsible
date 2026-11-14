@@ -12,8 +12,8 @@ on:
       # Every Android script: the fixtures the emulator suite starts are
       # as much a part of it as the tests (the Live relay's was missing).
       - 'scripts/android*'
-      - 'docs/android/CAPABILITIES.json'
-      - 'docs/android/SIGNING.json'
+      - 'docs/internal/android/CAPABILITIES.json'
+      - 'docs/internal/android/SIGNING.json'
       - '.github/workflows/android-release.yml'
       - 'scripts/download_retry.py'
       - 'scripts/ci_retry.sh'
@@ -32,8 +32,8 @@ on:
       # Every Android script: the fixtures the emulator suite starts are
       # as much a part of it as the tests (the Live relay's was missing).
       - 'scripts/android*'
-      - 'docs/android/CAPABILITIES.json'
-      - 'docs/android/SIGNING.json'
+      - 'docs/internal/android/CAPABILITIES.json'
+      - 'docs/internal/android/SIGNING.json'
       - '.github/workflows/android-release.yml'
       - 'scripts/download_retry.py'
       - 'scripts/ci_retry.sh'

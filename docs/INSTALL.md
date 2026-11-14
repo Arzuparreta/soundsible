@@ -454,7 +454,7 @@ with a drop-in (`sudo systemctl edit soundsible`):
 RequiresMountsFor=/mnt/music
 ```
 
-See [CONFIGURATION.md](./CONFIGURATION.md) for storage options.
+See [CONFIGURATION.md](CONFIGURATION.md) for storage options.
 
 ---
 
@@ -518,4 +518,4 @@ Docker updates are covered in [Docker → Operations](DOCKER.md#operations).
 
 ---
 
-For environment variables, downloader tuning, and YouTube cookies, see [CONFIGURATION.md](./CONFIGURATION.md).
+For environment variables, downloader tuning, and YouTube cookies, see [CONFIGURATION.md](CONFIGURATION.md).

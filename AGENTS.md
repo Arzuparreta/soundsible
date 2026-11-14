@@ -1,17 +1,31 @@
 # Repository instructions
 
-- Android port work: read `docs/android/HANDOFF.md` before continuing.
+- Android port work: read `docs/internal/android/HANDOFF.md` before continuing.
   Development artifacts are not releases. Public alpha requires the documented
   parity and offline-decision gates.
 
 - Engineering resource optimization handoff: read
-  `docs/audits/ENGINEERING_HANDOFF.md` before continuing this audit work.
+  `docs/internal/audits/ENGINEERING_HANDOFF.md` before continuing this audit work.
 
-- Architecture review: read `docs/audits/ARCHITECTURE_HANDOFF.md` before
+- Architecture review: read `docs/internal/audits/ARCHITECTURE_HANDOFF.md` before
   working on its open points, and update its status table when one closes.
 
-- DJ mode review: read `docs/dj/HANDOFF.md` before working on DJ analysis,
+- DJ mode review: read `docs/internal/dj/HANDOFF.md` before working on DJ analysis,
   route ordering or transitions, and update its status table when a point closes.
+
+- Documentation has two audiences, kept in two places. `docs/*.md` (directly in
+  `docs/`, no subfolders) are user guides: installing, configuring and using
+  Soundsible. The Soundsible website publishes exactly these files, and the
+  images they show live in `docs/images/`. Everything written for people and
+  agents working on Soundsible — architecture, contracts, handoffs, plans,
+  slices, audits, measurements, probes and their results — goes in
+  `docs/internal/`. Never add a working note directly to `docs/`.
+
+- Everything written in this repository is in English: documentation, code
+  comments, commit messages, pull request titles and descriptions, and
+  generated reports. This holds whatever language the conversation uses.
+  Localized strings for the apps (`ui_web/src/lib/i18n/`, the Android and
+  desktop resources) are the only exception.
 
 - Every completed implementation in Soundsible must end with a git commit. The
   user does not create these commits manually.
@@ -55,7 +69,7 @@
   rejects a pull request without one.
 - Never write a version number by hand, anywhere. `shared/version.py` declares
   it and `scripts/version_sync.py` propagates it to the desktop manifests;
-  releases are cut with `scripts/release.py` (see `docs/RELEASING.md`).
+  releases are cut with `scripts/release.py` (see `docs/internal/RELEASING.md`).
 - Never run `npm run build` in `ui_web/`, and never end a turn telling the user
   to rebuild to see their changes. `ensure_ui_dist()` rebuilds `ui_web/dist`
   from the boot sequence and on every page render, so the running engine is

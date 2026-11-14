@@ -66,7 +66,7 @@ open source (MIT).
 | --- | --- | --- |
 | **Any browser** (desktop or phone) | Open the player; add it to the home screen to use it as an app. | Main client. Needs a connection to the server. |
 | **Windows 11** (x64, ARM64) | [Desktop app](docs/DESKTOP_BETA.md): runs the server on that PC, or connects to one you already run. | Beta. Unsigned, so Windows warns about an unknown publisher. |
-| **Android** | APK attached to every [release](https://github.com/Arzuparreta/soundsible/releases); [install notes](docs/android/ALPHA.md). Offline copies and Android Auto. | Alpha. Tested on an emulator; Bluetooth and individual cars unverified. Manual updates. |
+| **Android** | APK attached to every [release](https://github.com/Arzuparreta/soundsible/releases); [install notes](docs/ANDROID_ALPHA.md). Offline copies and Android Auto. | Alpha. Tested on an emulator; Bluetooth and individual cars unverified. Manual updates. |
 | **iPhone / iPad** | The browser player. A [native app](docs/IOS.md) exists but has never been run on a device. | Native app unverified. |
 | **Other music apps** | Symfonium, Feishin, Amperfy, DSub, Tempo… through [OpenSubsonic](docs/OPENSUBSONIC.md). They play your library; search, downloads and DJ stay in Soundsible. | Depends on the app. |
 | **macOS, Linux** | No app: run the server natively or with Docker and use the browser. | — |
@@ -158,9 +158,9 @@ there is no hosted version.
 | Set up | Use | Fix and extend |
 | --- | --- | --- |
 | [Native install](docs/INSTALL.md) | [DJ mode](docs/AUTO_MODE.md) | [Download problems](docs/troubleshooting-yt-dlp-formats.md) |
-| [Docker](docs/DOCKER.md) | [Live](docs/LIVE.md) | [Playback problems](docs/PLAYBACK_DIAGNOSIS.md) |
-| [Windows app](docs/DESKTOP_BETA.md) | [Import from Spotify / Apple Music](docs/MUSIC_MIGRATION.md) | [Architecture](docs/ARCHITECTURE.md) |
-| [Android app](docs/android/ALPHA.md) | [OpenSubsonic apps](docs/OPENSUBSONIC.md) | [Contributing](CONTRIBUTING.md) |
+| [Docker](docs/DOCKER.md) | [Live](docs/LIVE.md) | [Developer documentation](docs/internal/README.md) |
+| [Windows app](docs/DESKTOP_BETA.md) | [Import from Spotify / Apple Music](docs/MUSIC_MIGRATION.md) | [Architecture](docs/internal/ARCHITECTURE.md) |
+| [Android app](docs/ANDROID_ALPHA.md) | [OpenSubsonic apps](docs/OPENSUBSONIC.md) | [Contributing](CONTRIBUTING.md) |
 | | [Scrobbling](docs/SCROBBLING.md) | |
 | [Settings & environment](docs/CONFIGURATION.md) | [Privacy](docs/TELEMETRY_PRIVACY.md) | [Security policy](SECURITY.md) |
 | [VPS relay](docs/VPS_RELAY.md) | [Roadmap](docs/ROADMAP.md) | [All guides](docs/README.md) |

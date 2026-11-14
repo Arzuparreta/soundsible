@@ -5,7 +5,7 @@ under BEAT_THIS-LICENSE (MIT), https://github.com/CPJKU/beat_this at
 `b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c`. Soundsible redistributes the
 `final0` checkpoint exported to ONNX (`beat_this-final0.onnx`, a release asset
 whose SHA-256 is in `shared/dj/weights.py`; export in
-`docs/dj/detector_comparison/onnx_probe.py`). `shared/dj/beat_model.py` ports
+`docs/internal/dj/detector_comparison/onnx_probe.py`). `shared/dj/beat_model.py` ports
 its log-mel frontend, chunked prediction and DBN input in NumPy. The export
 computes the same attention one band or head at a time; the P12-a comparison
 found identical events on all 62 inputs.

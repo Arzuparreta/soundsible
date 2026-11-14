@@ -5,7 +5,7 @@ import { gzipSync, brotliCompressSync, constants } from 'node:zlib';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = resolve(root, 'dist');
 const manifest = JSON.parse(readFileSync(resolve(dist, '.vite/manifest.json')));
-const baseline = JSON.parse(readFileSync(resolve(root, '../docs/performance/web-payload-baseline.json')));
+const baseline = JSON.parse(readFileSync(resolve(root, '../docs/internal/performance/web-payload-baseline.json')));
 function graph(entries) {
   const visited = new Set(), files = new Set();
   function visit(key) {
@@ -35,4 +35,4 @@ for (const [name, ceiling] of [['login', 0.50], ['library', 0.86]]) {
   if (report[name].gzip_bytes > baseline.initial.gzip_bytes * ceiling) throw new Error(`${name} exceeds approved gzip budget: ${report[name].gzip_bytes}`);
 }
 console.log(JSON.stringify(report, null, 2));
-if (process.argv.includes('--record')) writeFileSync(resolve(root, '../docs/performance/web-payload-after.json'), JSON.stringify(report, null, 2) + '\n');
+if (process.argv.includes('--record')) writeFileSync(resolve(root, '../docs/internal/performance/web-payload-after.json'), JSON.stringify(report, null, 2) + '\n');

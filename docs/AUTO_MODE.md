@@ -275,5 +275,5 @@ cache, not decoded copies of the audio. Listening history and recommendation
 signals remain scoped to the account on your Station.
 
 The detailed queue and route rules are recorded in
-[Playback queue contract](PLAYBACK_QUEUE_CONTRACT.md). Implementation and data
-flow are described in [Architecture](ARCHITECTURE.md).
+[Playback queue contract](internal/PLAYBACK_QUEUE_CONTRACT.md). Implementation and data
+flow are described in [Architecture](internal/ARCHITECTURE.md).

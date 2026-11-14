@@ -7,7 +7,7 @@ from collections import deque
 import numpy as np
 import pytest
 
-from docs.dj.key_probe import cadence
+from docs.internal.dj.key_probe import cadence
 from shared.dj import features as dj_features
 from shared.dj import store as dj_store
 from shared.dj import transitions as dj_transitions

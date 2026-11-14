@@ -14,7 +14,7 @@ Reach for these before writing a local copy — each one used to be duplicated a
 | `lib/format.ts` | `formatDuration` (list columns, blank when unknown), `clockTime` (transport readouts, never blank), `trackCount`. |
 | `lib/catalogItem.ts` | Catalog row → playable track, plus `playCatalogItem`: resolve-then-play with abort-on-newer-click and a `resolvingItemId` signal for per-row spinners. |
 | `components/Spinner.tsx` | The one indeterminate spinner, sized via a prop. |
-| `stores/index.ts` | `playback.isLoading` / `playback.loadError` — see the playback loading contract in [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md). |
+| `stores/index.ts` | `playback.isLoading` / `playback.loadError` — see the playback loading contract in [docs/internal/ARCHITECTURE.md](../docs/internal/ARCHITECTURE.md). |
 
 ## Prerequisites
 
@@ -93,6 +93,6 @@ Set `SOUNDSIBLE_WEB_UI_DIST=1` to require the built bundle explicitly, or `0`/`f
 
 The Android entry reuses the same Solid sources, theme, fonts and dictionaries.
 Its packaged assets are separate from the engine bundle. Follow
-[the Android guide](../docs/ANDROID.md) and
-[the handoff](../docs/android/HANDOFF.md); this is a development client with account login, shared catalogue rows and a first native local-file program, not an alpha.
+[the Android guide](../docs/internal/ANDROID.md) and
+[the handoff](../docs/internal/android/HANDOFF.md); this is a development client with account login, shared catalogue rows and a first native local-file program, not an alpha.
 It uses asynchronous Media3 commands/snapshots; previews and the complete authenticated runtime are still pending.

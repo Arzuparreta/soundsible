@@ -52,7 +52,7 @@ are **not code-signed**, so Windows warns about an unknown publisher; see
 
 The app carries the same version number as the rest of the release. "Beta"
 describes the desktop shell's maturity, not a separate version — see
-[Releasing](RELEASING.md).
+[Releasing](internal/RELEASING.md).
 
 ## Using it
 
@@ -140,7 +140,7 @@ The release workflow builds the Windows x64 and ARM64 installers, emits SHA-256
 manifests, adds GitHub build-provenance attestations to the installers, and
 publishes them on a `v*` tag alongside the server
 images. A release candidate — `vX.Y.Z-rc.N` — is marked as a prerelease and
-never moves the `latest` container tag. See [RELEASING.md](RELEASING.md).
+never moves the `latest` container tag. See [RELEASING.md](internal/RELEASING.md).
 
 ## Stable-release blockers
 

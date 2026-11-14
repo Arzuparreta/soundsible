@@ -2,16 +2,16 @@
 import numpy as np
 import pytest
 
-from docs.dj.detector_comparison.common import result
-from docs.dj.detector_comparison.metrics import events, evaluate
-from docs.dj.detector_comparison.normalize import to_analysis
-from docs.dj.detector_comparison.matching import ordered_matches
+from docs.internal.dj.detector_comparison.common import result
+from docs.internal.dj.detector_comparison.metrics import events, evaluate
+from docs.internal.dj.detector_comparison.normalize import to_analysis
+from docs.internal.dj.detector_comparison.matching import ordered_matches
 
 
 def test_integrated_probe_checks_frozen_references_and_bytes_before_inference(tmp_path):
     import hashlib
     import json
-    from docs.dj.detector_comparison.integrated_probe import frozen_manifest
+    from docs.internal.dj.detector_comparison.integrated_probe import frozen_manifest
 
     audio = tmp_path / 'relocated.wav'
     audio.write_bytes(b'frozen audio')
@@ -34,14 +34,14 @@ def test_integrated_probe_checks_frozen_references_and_bytes_before_inference(tm
 
 
 def test_integrated_comparison_rejects_missing_cases_instead_of_silently_changing_cohort():
-    from docs.dj.detector_comparison.integrated_probe import compare
+    from docs.internal.dj.detector_comparison.integrated_probe import compare
 
     with pytest.raises(ValueError, match='cohort differs'):
         compare([dict(case='a')], dict(rows=[dict(case='b')]))
 
 
 def test_bar_cue_scoring_keeps_the_event_tolerance_at_annotation_boundaries():
-    from docs.dj.detector_comparison.final_pairs import bar_cue_match
+    from docs.internal.dj.detector_comparison.final_pairs import bar_cue_match
 
     case = dict(beats=[.25, .75], downbeats=[.25])
     assert bar_cue_match(case, .2495, .01) is True
@@ -50,7 +50,7 @@ def test_bar_cue_scoring_keeps_the_event_tolerance_at_annotation_boundaries():
 
 
 def test_no_identifiable_first_beat_is_not_an_unknown_bar_cue():
-    from docs.dj.detector_comparison.final_pairs import bar_cue_match
+    from docs.internal.dj.detector_comparison.final_pairs import bar_cue_match
 
     assert bar_cue_match(dict(beats=[.25, .75], downbeats=[]), .2495, .01) is False
     assert bar_cue_match(dict(beats=[.25, .75], downbeats=None), .2495, .01) is None
@@ -159,7 +159,7 @@ def test_missing_subdivision_is_unavailable_with_zero_coverage():
 
 def test_reliability_does_not_borrow_a_high_activation_outside_the_tolerance(tmp_path):
     import json
-    from docs.dj.detector_comparison.calibration import measure
+    from docs.internal.dj.detector_comparison.calibration import measure
     corpus = tmp_path/'corpus'
     corpus.mkdir()
     case = dict(id='fixture', dataset='synthetic', split='test', duration=1.,
@@ -189,7 +189,7 @@ class _IndexSession:
 
 @pytest.mark.parametrize('frames', [100, 1488, 1489, 1501, 4000])
 def test_torch_free_chunking_gives_every_frame_its_own_prediction(frames):
-    from docs.dj.detector_comparison.onnx_probe import predict
+    from docs.internal.dj.detector_comparison.onnx_probe import predict
     spect = np.zeros((frames, 128), dtype=np.float32)
     spect[:, 0] = np.arange(frames)
     beat, downbeat = predict(_IndexSession(), spect)
@@ -197,7 +197,7 @@ def test_torch_free_chunking_gives_every_frame_its_own_prediction(frames):
 
 
 def test_torch_free_minimal_postprocessor_merges_adjacent_peaks_and_snaps_firsts_to_beats():
-    from docs.dj.detector_comparison.onnx_probe import minimal
+    from docs.internal.dj.detector_comparison.onnx_probe import minimal
     beat = np.full(100, -5., dtype=np.float32)
     downbeat = beat.copy()
     beat[[10, 11, 60]] = 3.
