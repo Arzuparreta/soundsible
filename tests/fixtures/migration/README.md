@@ -1,7 +1,7 @@
 # Reference migration fixtures
 
 Versioned files used by `tests/test_migration_reference_fixtures.py` to lock **expected**
-aggregate match statistics for the Phase 1 migration gate (`docs/LAYER_CONTRACTS.md` §5).
+aggregate match statistics for the Phase 1 migration gate (`docs/internal/LAYER_CONTRACTS.md` §5).
 
 ## `manifest.json`
 

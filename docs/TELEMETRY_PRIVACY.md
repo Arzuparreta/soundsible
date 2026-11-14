@@ -15,7 +15,7 @@ All events are **append-only JSON lines** under the runtime **data directory**, 
 
 **Schema versions:** Setup and migration records use `"v": 1`. Playback
 attempts use `"v": 2`; listening history uses `"v": 2`. Event shapes are
-catalogued in [LAYER_CONTRACTS.md](./LAYER_CONTRACTS.md) §3. Future fields are
+catalogued in [LAYER_CONTRACTS.md](internal/LAYER_CONTRACTS.md) §3. Future fields are
 additive within a version or bump `v` with a documented migration.
 
 **Listening history schema:** active records use `"v": 2`. Writers record actual
@@ -118,7 +118,7 @@ instance, with its existing authentication; it is not sent to a third party.
 
 The existing `SOUNDSIBLE_TELEMETRY_ENABLED=0` switch disables server persistence;
 the response stops automatic collection and clears the page's pending account
-outbox. See [PLAYBACK_DIAGNOSIS.md](PLAYBACK_DIAGNOSIS.md) for limits and the
+outbox. See [PLAYBACK_DIAGNOSIS.md](internal/PLAYBACK_DIAGNOSIS.md) for limits and the
 operator's report command. The listener need not activate or export anything.
 
 **Change note, 2026-10-30:** the browser recorder additionally retains linked
@@ -128,7 +128,7 @@ and executed techniques/cues/rates, candidate counts, and manual actions or
 interruptions. No song identity, title, media URL or audio is added. Existing
 account partitioning, retention, offline delivery and opt-out apply unchanged.
 Native Android is outside this browser recorder's coverage. The local report
-is `scripts/dj_session_report.py`; see [the field contract](dj/SESSION_CAPTURE.md).
+is `scripts/dj_session_report.py`; see [the field contract](internal/dj/SESSION_CAPTURE.md).
 
 Buffering before the first sound and buffering after it are recorded as separate
 fields. They used to be one counter emitted at the moment of first sound, where

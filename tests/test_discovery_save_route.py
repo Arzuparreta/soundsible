@@ -1233,7 +1233,7 @@ def test_dj_plan_v6_selects_before_analysis_and_preserves_cold_slots(tmp_path, w
 def test_dj_plan_v6_reorders_decoded_audio_and_returns_chained_plans(tmp_path):
     """Known WAVs -> FFmpeg -> real SQLite cache -> HTTP, without a provider."""
     import wave
-    from docs.dj.key_probe import cadence
+    from docs.internal.dj.key_probe import cadence
     from shared.dj_engine import analyse_audio, analysis_identity, plan_transition
 
     _make_runtime(tmp_path)

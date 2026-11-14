@@ -139,8 +139,8 @@ def release_code(item: dict) -> int | None:
 
 
 def gates(root: Path = ROOT) -> tuple[dict, dict]:
-    capabilities = json.loads((root / "docs/android/CAPABILITIES.json").read_text())
-    signing = json.loads((root / "docs/android/SIGNING.json").read_text())
+    capabilities = json.loads((root / "docs/internal/android/CAPABILITIES.json").read_text())
+    signing = json.loads((root / "docs/internal/android/SIGNING.json").read_text())
     if (
         capabilities.get("channel") != "alpha"
         or capabilities.get("offline_decision") != "B"

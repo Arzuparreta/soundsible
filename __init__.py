@@ -17,7 +17,7 @@ Repository structure:
 - tests/:         Unit and integration tests
 - docs/:          Documentation
 
-The version lives in shared/version.py. See docs/ARCHITECTURE.md for how the
+The version lives in shared/version.py. See docs/internal/ARCHITECTURE.md for how the
 pieces fit together.
 
 License: MIT

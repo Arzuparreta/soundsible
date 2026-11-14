@@ -83,8 +83,8 @@ Open `http://localhost:5173/player/` — Vite proxies `/api` and `/socket.io` to
 
 ### Android development
 
-See [the Android guide](docs/ANDROID.md) for the local APK build/emulator commands
-and [the handoff](docs/android/HANDOFF.md) before continuing the port. The APK is
+See [the Android guide](docs/internal/ANDROID.md) for the local APK build/emulator commands
+and [the handoff](docs/internal/android/HANDOFF.md) before continuing the port. The APK is
 a development client with read-only browsing; no alpha will ship before parity and the offline decision.
 
 ### Reporting bugs & requesting features
@@ -105,7 +105,7 @@ a development client with read-only browsing; no alpha will ship before parity a
    - Frontend: `cd ui_web && npm test`
 4. Run the app locally to verify core flows (launch, play music, basic navigation).
 5. Open a PR against **`main`**, with a clear description of what you changed and why. CI runs on the pull request, so let the checks finish before asking for a review.
-6. Every pull request carries exactly one impact label, which decides the next version number: `impact:major` (upgrading needs manual action), `impact:minor` (new capability), `impact:patch` (a fix) or `impact:none` (nothing a user could observe). CI fails without one. If you cannot set labels on the repository, say in the description which one fits. See [Releasing](docs/RELEASING.md).
+6. Every pull request carries exactly one impact label, which decides the next version number: `impact:major` (upgrading needs manual action), `impact:minor` (new capability), `impact:patch` (a fix) or `impact:none` (nothing a user could observe). CI fails without one. If you cannot set labels on the repository, say in the description which one fits. See [Releasing](docs/internal/RELEASING.md).
 
 ### Code style
 

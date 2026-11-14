@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Read-only Phase 1 setup funnel rollups from local JSONL (see docs/LAYER_CONTRACTS.md §5 #2).
+Read-only Phase 1 setup funnel rollups from local JSONL (see docs/internal/LAYER_CONTRACTS.md §5 #2).
 
 Does not connect to the network. Defaults to ``<data_dir>/telemetry/setup-events.jsonl``.
 Optional ``--since`` / ``--until`` filter on event ``ts`` (Unix seconds).

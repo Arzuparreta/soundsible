@@ -15,7 +15,7 @@ FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'dj'
 @pytest.mark.parametrize('case', ['3_2_plain', '4_2_drift', 'silence', 'structure_8_bars'])
 def test_numpy_dbn_reproduces_madmom_on_beat_this_activations(case):
     # Logits of Beat This! final0 on P12-a signals and madmom 0.16.1's DBN
-    # events for them (docs/dj/detector_comparison/dbn_probe.py: 62/62 equal).
+    # events for them (docs/internal/dj/detector_comparison/dbn_probe.py: 62/62 equal).
     data = np.load(FIXTURES / 'beat_this_final0_dbn.npz')
     beats, firsts = dbn.beats_and_downbeats(data[f'{case}_beat'], data[f'{case}_downbeat'])
     assert len(beats) == len(data[f'{case}_expected_beats'])

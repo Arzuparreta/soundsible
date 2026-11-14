@@ -30,14 +30,14 @@ def run(*args: str, cwd: Path = ROOT, capture: bool = False) -> str:
 def tool(name: str) -> str:
     found = shutil.which(name)
     if not found:
-        raise RuntimeError(f"{name} is missing; see docs/ANDROID.md")
+        raise RuntimeError(f"{name} is missing; see docs/internal/ANDROID.md")
     return found
 
 
 def sdk() -> Path:
     location = os.getenv("ANDROID_HOME") or os.getenv("ANDROID_SDK_ROOT")
     if not location:
-        raise RuntimeError("Set ANDROID_HOME to your Android SDK; see docs/ANDROID.md")
+        raise RuntimeError("Set ANDROID_HOME to your Android SDK; see docs/internal/ANDROID.md")
     return Path(location).expanduser().resolve()
 
 
@@ -49,7 +49,7 @@ def doctor() -> None:
         raise RuntimeError("Use JDK 21 (JAVA_HOME and PATH), not the system's default JDK")
     for relative in ("platform-tools/adb", "platforms/android-37.0/android.jar", "build-tools/36.0.0"):
         if not (sdk() / relative).exists():
-            raise RuntimeError(f"Missing SDK component: {relative}; see docs/ANDROID.md")
+            raise RuntimeError(f"Missing SDK component: {relative}; see docs/internal/ANDROID.md")
     if not (UI / "node_modules/@capacitor/cli").is_dir():
         raise RuntimeError("Run npm ci in ui_web first")
     print(f"SDK: {sdk()}")

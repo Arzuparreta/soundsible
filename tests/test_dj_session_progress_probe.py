@@ -4,7 +4,7 @@ import hashlib
 import json
 import sqlite3
 
-from docs.dj.session_progress_probe import (
+from docs.internal.dj.session_progress_probe import (
     ANALYSER_VERSION, delivery_runs, paired_summary, plan_report, read_timing,
     replay_report, trace_report,
 )

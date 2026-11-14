@@ -138,7 +138,7 @@ def test_repository_manifest_records_alpha_limits():
 )
 def test_incomplete_gates_fail_closed(tmp_path, change):
     capabilities, signing = release.gates()
-    docs = tmp_path / "docs/android"
+    docs = tmp_path / "docs/internal/android"
     docs.mkdir(parents=True)
     (docs / "EVIDENCE.md").write_text("fixture evidence")
     if change == "missing-dj":

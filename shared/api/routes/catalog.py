@@ -306,7 +306,7 @@ def _edit_distance_at_most_one(left: str, right: str) -> bool:
 
 
 # ── Ranking ──────────────────────────────────────────────────────────────────
-# Query-only by contract (docs/ARCHITECTURE.md): nothing below may read
+# Query-only by contract (docs/internal/ARCHITECTURE.md): nothing below may read
 # favourites, listening history, or any other account signal, not even to break
 # a tie. Every term is a function of the query plus the public rows the
 # providers just returned.

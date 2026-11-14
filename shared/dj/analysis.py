@@ -111,7 +111,7 @@ def _compose(
         # Physical magnitudes, comparable between songs: notes per second of
         # sounding music, EBU R128 integrated loudness, and the spectral
         # flatness of the loud frames (0 for a pure tone, about 0.56 for white
-        # noise). docs/dj/HANDOFF.md, P4.
+        # noise). docs/internal/dj/HANDOFF.md, P4.
         "note_rate": round(notes / sounding, 3) if sounding > 0 else 0.0,
         "loudness_lufs": round(float(loudness_lufs), 2) if loudness_lufs is not None else None,
         "spectral_flatness": round(flatness_power / loud_power, 4) if loud_power > 0 else 0.0,

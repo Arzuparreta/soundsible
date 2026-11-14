@@ -212,7 +212,7 @@ Wireframe (superseded for pixels, still valid for IA): `~/.gstack/projects/Arzup
 The earlier chapters scope the **consumer shell**. As of 2026-06-16 the **player UI**
 (`ui_web/`) is being rebuilt on SolidJS, which brings the player into design-system scope
 (superseding the original "full player reskin is out of scope" note). See
-`docs/UI_REBUILD_PLAN.md` for architecture/strategy.
+`docs/internal/UI_REBUILD_PLAN.md` for architecture/strategy.
 
 **Direction (locked):** **Dark · Dense · Pro** — content-forward, cover-rich, efficient
 (Spotify-shaped), with **adaptive density** (comfortable touch targets on mobile, tighter

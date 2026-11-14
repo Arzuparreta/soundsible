@@ -1,5 +1,5 @@
 """
-In-process setup funnel state for Phase 1 setup-events (see docs/LAYER_CONTRACTS.md §3.1).
+In-process setup funnel state for Phase 1 setup-events (see docs/internal/LAYER_CONTRACTS.md §3.1).
 
 Correlates setup_session_started → setup_step_completed → setup_first_play. Sessions are
 process-local; multi-process deployments would need a shared store for strict gate math.

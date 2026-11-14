@@ -11,7 +11,7 @@ Joint Tempo and Meter Tracking", ISMIR 2015; madmom's code is BSD-licensed.
 The port exists so the engine needs neither madmom (a 2018 source-only
 package bundling non-commercial weights) nor SciPy. It reproduces madmom's
 decisions, including its edge cases, so the events equal those measured in
-the P12-a comparison (docs/dj/detector_comparison).
+the P12-a comparison (docs/internal/dj/detector_comparison).
 """
 
 from __future__ import annotations

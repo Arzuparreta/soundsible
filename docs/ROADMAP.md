@@ -22,9 +22,9 @@ commitments to offline listening, cars or watches on its own.
 - Web/PWA and desktop beta. [Native iOS code](IOS.md) includes offline download
   and storage management, but nobody has installed or run the app on a device.
   Its behaviour remains theoretical; producing an IPA does not validate it.
-- [Android development shell](ANDROID.md): shared Solid assets and native build
+- [Android development shell](internal/ANDROID.md): shared Solid assets and native build
   foundation. Connection, playback and device experience are not implemented yet;
-  see the [port handoff](android/HANDOFF.md) for delivery gates.
+  see the [port handoff](internal/android/HANDOFF.md) for delivery gates.
 - [Live](LIVE.md) broadcasts the program to a browser listening room.
 - [OpenSubsonic](OPENSUBSONIC.md) exposes the music library to compatible clients,
   including library search, playlists and streaming with transcoding.
@@ -96,7 +96,7 @@ Evaluate offline listening across our own clients: download music from your
 Soundsible server, listen while disconnected, then synchronise on reconnection.
 The server remains part of the product even when a client is temporarily offline.
 For Android, the scope and UI are still an explicit
-[pending product decision](android/OFFLINE_DECISION.md); no offline implementation
+[pending product decision](internal/android/OFFLINE_DECISION.md); no offline implementation
 is approved yet.
 Treat the existing iOS code as unvalidated and check downloads, storage limits,
 disconnected playback and reconnection on each supported client.
@@ -149,7 +149,7 @@ history for delivered changes. Future commitments above are not release claims.
 ## Internals
 
 Working notes, not commitments. They go stale and are not maintained for
-readers: [Layer Contracts](LAYER_CONTRACTS.md) ·
-[Premium Quality Contract](PREMIUM_QUALITY_CONTRACT.md) ·
-[Appliance Rework Plan](appliance-rework-plan.md) ·
-[UI Rebuild Plan](UI_REBUILD_PLAN.md).
+readers: [Layer Contracts](internal/LAYER_CONTRACTS.md) ·
+[Premium Quality Contract](internal/PREMIUM_QUALITY_CONTRACT.md) ·
+[Appliance Rework Plan](internal/appliance-rework-plan.md) ·
+[UI Rebuild Plan](internal/UI_REBUILD_PLAN.md).

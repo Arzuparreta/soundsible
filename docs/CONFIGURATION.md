@@ -99,7 +99,7 @@ defaults are listed in [section 7](#7-where-soundsible-keeps-its-files).
 | `SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE` | `10M` | yt-dlp HTTP chunk size. |
 | `SOUNDSIBLE_YTDLP_RETRY_SLEEP` | exponential, 1 to 20 s | yt-dlp `--retry-sleep` expression, e.g. `linear=2:10`. |
 | `SOUNDSIBLE_PREVIEW_CACHE_MB` | `2048` | Disk (not RAM) for the preview-audio LRU cache. `0` disables audio caching while URL warming remains available. |
-| `SOUNDSIBLE_ARTWORK_CACHE_MB` | `512` | MiB of retained resized/cropped cover JPEGs per cache directory. Originals are excluded; `0` serves temporary disk variants without retention. Restart after changing it. See [quota details](performance/artwork-variant-quota.md). |
+| `SOUNDSIBLE_ARTWORK_CACHE_MB` | `512` | MiB of retained resized/cropped cover JPEGs per cache directory. Originals are excluded; `0` serves temporary disk variants without retention. Restart after changing it. See [quota details](internal/performance/artwork-variant-quota.md). |
 | `SOUNDSIBLE_FFMPEG` | FFmpeg on `PATH` | Explicit path to the FFmpeg binary. |
 
 ### Features
@@ -168,7 +168,7 @@ they never guess from the current environment after the URL has been resolved.
 
 ## 4. Discover (Deezer metadata)
 
-- **No Deezer API key** is required for the built-in Discover experience. The Station proxies **public** Deezer GET endpoints (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+- **No Deezer API key** is required for the built-in Discover experience. The Station proxies **public** Deezer GET endpoints (see [ARCHITECTURE.md](internal/ARCHITECTURE.md)).
 - The engine must be able to reach **`https://api.deezer.com`** outbound. If that fails, Discover lists and search will be empty or error.
 - Playback still depends on **YouTube / YouTube Music search** and your existing downloader configuration; Discover does not add a separate audio backend.
 

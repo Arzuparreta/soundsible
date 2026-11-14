@@ -4,7 +4,7 @@ The network is Beat This! `final0` (Foscarin, Schlüter and Widmer, ISMIR 2024;
 code and weights MIT, https://github.com/CPJKU/beat_this), exported to ONNX
 and run by ONNX Runtime. Its events are decoded by `dbn`. The P12-a comparison
 measured this path against the upstream PyTorch pipeline: identical events on
-all 62 inputs (docs/dj/detector_comparison/RESULTS.md).
+all 62 inputs (docs/internal/dj/detector_comparison/RESULTS.md).
 
 `session` is anything with ONNX Runtime's `run(None, {"spect": array})`; the
 weights and the runtime are loaded by `weights`, never here.

@@ -98,7 +98,7 @@ This runs `fetch-ffmpeg.sh`, embeds FFmpeg in the sidecar when possible, and pla
 This writes `desktop-shell/src-tauri/binaries/soundsible-engine-<target-triple>`, which Tauri bundles via `externalBin`. The shell prefers the sidecar over repo Python when present.
 
 **Windows RC validation:** [docs/DESKTOP_BETA.md](../docs/DESKTOP_BETA.md)
-**Release CI:** installers ship with the whole product on a `v*` tag — see [docs/RELEASING.md](../docs/RELEASING.md). For a build without a release, run `.github/workflows/desktop-build.yml` manually.
+**Release CI:** installers ship with the whole product on a `v*` tag — see [docs/internal/RELEASING.md](../docs/internal/RELEASING.md). For a build without a release, run `.github/workflows/desktop-build.yml` manually.
 
 Sidecar flags used by the shell:
 

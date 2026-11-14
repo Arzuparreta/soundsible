@@ -2,7 +2,7 @@
 
 Acquisition owns the only cache and worker pool. Musical modules are pure and
 can be imported without loading SQLite, FFmpeg or the HTTP application.
-Private test injection points live in their owning modules (see docs/dj/ARCHITECTURE.md).
+Private test injection points live in their owning modules (see docs/internal/dj/ARCHITECTURE.md).
 """
 
 from shared.dj.contracts import ANALYSER_VERSION as ANALYSER_VERSION

@@ -177,7 +177,7 @@ def test_a_drum_pattern_counts_its_hits(bpm):
 
 
 def test_counterpoint_measures_far_more_notes_than_slow_choral_chords():
-    # The shape of the acceptance case in docs/dj/HANDOFF.md, P4: a fugue in
+    # The shape of the acceptance case in docs/internal/dj/HANDOFF.md, P4: a fugue in
     # sixteenths against an adagio for voices.
     voices = sum(_melody(5, legato=True, hall=True, seed=seed).astype(float) for seed in (11, 12))
     assert note_rate(voices.astype(np.float32)) > 5 * note_rate(_choir(0.5))
