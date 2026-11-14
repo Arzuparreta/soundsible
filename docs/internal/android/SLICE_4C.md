@@ -1,26 +1,26 @@
-# S4c — host Live propiedad del servicio
+# S4c — Live host owned by the service
 
-`NativeLiveHost` pertenece a PlaybackService. Crea una sesión mediante el Core
-firmado, abre WHIP y el socket Community con transportes sin cookies del Core,
-envía programa/pausa/posición desde el player nativo y mantiene un heartbeat
-independiente de Activity/WebView. El controller del mismo UID dispone de
-liveStart/liveStop/liveTitle/liveChat. Clientes externos no acceden a estos comandos.
+`NativeLiveHost` belongs to PlaybackService. It creates a session through the signed
+Core, opens WHIP and the Community socket with the Core's cookie-free transports,
+sends program/pause/position from the native player and keeps a heartbeat
+independent of Activity/WebView. The controller of the same UID has
+liveStart/liveStop/liveTitle/liveChat. External clients do not access these commands.
 
-Las credenciales permanecen en el servicio: la respuesta de inicio y los extras
-MediaSession contienen sólo sesión pública, estado, programa y hasta cien mensajes.
-El socket recoge actualización de sala/presencia/chat y cierra el publisher al
-recibir session_ended. Reset de conexión y destrucción del servicio retiran captura,
-peer/socket y transporte; fin explícito elimina la sala sin parar el programa local.
+The credentials stay in the service: the start response and the MediaSession
+extras contain only the public session, state, program and up to one hundred messages.
+The socket collects room/presence/chat updates and closes the publisher on
+receiving session_ended. Connection reset and service destruction remove capture,
+peer/socket and transport; an explicit end removes the room without stopping the local program.
 
-Aceptación dirigida: LiveHost HTTP/TLS + LiveRelay HTTP/TLS + LiveInput tres casos,
-7/0,42.984s, runner exit0. Normal APK/test APK/JVM54/lint pasan sin CA temporal.
-Log `/tmp/soundsible-live-host-controls-native.log`. Host prueba título y echo de
-chat reales, metadata de canción/pausa, PCM recibido por relay, heartbeat con Activity
-cerrada y fin de sala manteniendo KEY y reproducción local. El primer intento de
-Host falló por comparar el ID de browse con el ID de programa; la aceptación usa
-la identidad de ocurrencia retenida, sin modificar el producto para el selector.
+Targeted acceptance: LiveHost HTTP/TLS + LiveRelay HTTP/TLS + LiveInput three cases,
+7/0,42.984s, runner exit0. Normal APK/test APK/JVM54/lint pass without temporary CA.
+Log `/tmp/soundsible-live-host-controls-native.log`. Host tests real title and chat
+echo, song/pause metadata, PCM received by the relay, heartbeat with the Activity
+closed and room end while keeping KEY and local playback. The first Host attempt
+failed because it compared the browse ID with the program ID; the acceptance uses
+the retained occurrence identity, without modifying the product for the selector.
 
-Pendiente: controles UI, escucha nativa MediaSession, metadata de transición/DJ,
-carátulas públicas, reanudación tras muerte de proceso y recovery de media red.
-No hay prueba dirigida de session_ended/reset durante handshake ni de lease de
-larga duración. Los siete casos no sustituyen la regresión principal ni hardware.
+Pending: UI controls, native MediaSession listening, transition/DJ metadata,
+public covers, resumption after process death and recovery from a mid-way network failure.
+There is no targeted test of session_ended/reset during handshake or of a
+long-duration lease. The seven cases do not replace the main regression or hardware.

@@ -1,66 +1,66 @@
-# S2ag: acceso Subsonic desde Ajustes Android
+# S2ag: Subsonic access from Android Settings
 
-## Contrato
+## Contract
 
-Reutilizar la presentación de Subsonic del cliente web, con transporte de cuenta
-nativo. Mostrar la URL real del motor, nunca el origen localhost del bundle.
-El estado debe venir de GET /api/auth/subsonic; no ofrecer defaults accionables
-si falla. Generar/reemplazar/revocar requiere receipt y lectura confirmada dentro
-del mismo scope de servidor, identidad, ID de cuenta y username.
+Reuse the Subsonic presentation of the web client, with native account
+transport. Show the real engine URL, never the localhost origin of the bundle.
+The state must come from GET /api/auth/subsonic; do not offer actionable defaults
+if it fails. Generate/replace/revoke requires a receipt and a confirmed read within
+the same server scope, identity, account ID and username.
 
-La contraseña sólo se entrega una vez y permanece en memoria del panel. Salir,
-perder conexión, cambiar cuenta o servidor la elimina. No va a preferencias,
-cache offline, programa, logs ni diagnóstico. Un reemplazo o revocación pide
-confirmación; cancelarlo no muta el servidor. Una confirmación pendiente pierde
-validez al cambiar el scope.
+The password is delivered only once and stays in the panel's memory. Leaving,
+losing the connection, switching account or server removes it. It does not go to preferences,
+offline cache, program, logs or diagnostics. A replacement or revocation asks for
+confirmation; cancelling it does not mutate the server. A pending confirmation loses
+validity when the scope changes.
 
-Copiar es una acción explícita al portapapeles Android. El puente valida generación
-y sesión antes de escribir, marca la contraseña como sensible y no lee el
-portapapeles para entregarlo a JavaScript. No usar fallback browser de credenciales.
-[Referencia Android](https://developer.android.com/develop/ui/views/touch-and-input/copy-paste):
-ClipData.newPlainText y ClipDescription.EXTRA_IS_SENSITIVE ocultan el preview del
-contenido sensible del aviso OS.
+Copying is an explicit action to the Android clipboard. The bridge validates generation
+and session before writing, marks the password as sensitive and does not read the
+clipboard to hand it to JavaScript. Do not use a browser credentials fallback.
+[Android reference](https://developer.android.com/develop/ui/views/touch-and-input/copy-paste):
+ClipData.newPlainText and ClipDescription.EXTRA_IS_SENSITIVE hide the preview of the
+sensitive content in the OS notice.
 
-## Aceptación pendiente
+## Pending acceptance
 
-- HTTP y HTTPS contra el motor aislado real: generar, autenticar /rest con form
-  POST, reemplazar y demostrar rechazo de credencial vieja, revocar y demostrar
-  rechazo posterior; comprobar que la cuenta owner permanece independiente.
-- Cancelar confirmación no envía mutación; recrear Activity conserva estado
-  configurado pero jamás contraseña; cambiar cuenta no filtra estado/secret.
-- Copia real de dirección/password, flag sensible y rechazo de generación antigua.
-  No imprimir secretos/cookies en asserts, timeout DOM o logs. Redactar
-  [data-subsonic-secret] en el diagnóstico instrumentado.
-- Programa, keys, pausa y sesión se conservan. Ningún HTML audio ni dueño adicional.
-- Suite UI completa y cuatro perfiles de navegador tras extracción de vista web.
-- APK normal/test APK/JVM/lint sin CA temporal después de instrumentación.
+- HTTP and HTTPS against the real isolated engine: generate, authenticate /rest with form
+  POST, replace and prove rejection of the old credential, revoke and prove
+  later rejection; check that the owner account stays independent.
+- Cancelling confirmation sends no mutation; recreating the Activity keeps the configured
+  state but never the password; switching account does not leak state/secret.
+- Real copy of address/password, sensitive flag and rejection of an old generation.
+  Do not print secrets/cookies in asserts, DOM timeouts or logs. Redact
+  [data-subsonic-secret] in the instrumented diagnostics.
+- Program, keys, pause and session are kept. No HTML audio and no additional owner.
+- Complete UI suite and four browser profiles after extraction of the web view.
+- Normal APK/test APK/JVM/lint without temporary CA after instrumentation.
 
-## Estado de implementación
+## Implementation status
 
-Vista pura compartida extraída, controlador cancelable y ruta Android conectados
-en fuentes posteriores al prepare limpio46a6c3d. El adapter clipboard JS requiere
-el plugin nativo SoundsibleClipboard, ya añadido después de acabar principal73. No atribuir estos
-cambios al artifact principal actual. No marcar paridad ni publicar alpha.
+Shared pure view extracted, cancellable controller and Android route connected
+in sources after the clean prepare 46a6c3d. The JS clipboard adapter requires
+the native SoundsibleClipboard plugin, already added after finishing principal73. Do not attribute these
+changes to the current main artifact. Do not mark parity or publish alpha.
 
-Primer dirigido Native2 pasa HTTP/TLS en /tmp/soundsible-s2ag-native.log,
-APK normal/test APK/JVM20/lint sin CA pasan. Credenciales reales autentican via
-form POST /rest/ping; reemplazo invalida la primera y revoke invalida la segunda,
-owner conserva acceso, Activity no revela secreto, flags del clipboard y rechazo
-de generación antigua verificados. UI1547/195 pasa /tmp/soundsible-s2ag-full-ui.log.
-Ampliación Subsonic + Account4 en curso: primer Subsonic falla al esperar diálogo
-porque el helper eligió Sign out de cabecera en vez de la fila de Cuenta. Scope
-específico del localizador pendiente al finalizar runner. No aceptar todavía
-cambio de cuenta ni atribuir verde al dirigido4 fallido. Browser4 de esta
-extracción todavía pendiente. Congelar inputs Native hasta acabar el runner.
+First targeted Native2 passes HTTP/TLS in /tmp/soundsible-s2ag-native.log,
+normal APK/test APK/JVM20/lint without CA pass. Real credentials authenticate via
+form POST /rest/ping; replacement invalidates the first one and revoke invalidates the second one,
+owner keeps access, the Activity does not reveal the secret, clipboard flags and rejection
+of an old generation verified. UI1547/195 passes /tmp/soundsible-s2ag-full-ui.log.
+Subsonic + Account4 extension in progress: the first Subsonic run fails while waiting for the dialog
+because the helper chose the header Sign out instead of the Account row. Specific
+scope of the locator pending when the runner finishes. Do not accept the account
+switch yet or attribute green to the failed targeted4. Browser4 of this
+extraction still pending. Freeze Native inputs until the runner finishes.
 
-Aceptación dirigida ampliada4/0 en /tmp/soundsible-s2ag-account-fixed-native.log:
-Subsonic2 HTTP/TLS incluye logout confirmado desde fila de Cuenta y nuevo login
-owner; contraseña temporal desaparece y username/estado corresponden a owner,
-credenciales de cada cuenta siguen independientes. Account2 regresión pasa.
-APK normal/test APK/JVM20/lint sin CA pasan, XML propio integration-targeted.
-Runner anterior account4 falló2 sólo por localizador de cabecera; conservado
-como diagnóstico. Principal limpia73+restart2 no sobrescrita. Browser4 en curso.
+Extended targeted acceptance 4/0 in /tmp/soundsible-s2ag-account-fixed-native.log:
+Subsonic2 HTTP/TLS includes confirmed logout from the Account row and a new owner
+login; the temporary password disappears and username/state correspond to owner,
+the credentials of each account stay independent. Account2 regression passes.
+Normal APK/test APK/JVM20/lint without CA pass, own XML integration-targeted.
+Previous runner account4 failed 2 only because of the header locator; kept
+as diagnosis. Clean principal73+restart2 not overwritten. Browser4 in progress.
 
-Browser4 final pasa: Chromium278/66 + WebKit269/75, cero fallos,1worker
-secuencial y WebKit readonly. Logs /tmp/soundsible-s2ag-{chromium,webkit}.log.
-Entrada web congelada durante ambos runs; DSP Native posterior excluido.
+Final Browser4 passes: Chromium278/66 + WebKit269/75, zero failures, 1 worker
+sequential and WebKit readonly. Logs /tmp/soundsible-s2ag-{chromium,webkit}.log.
+Web input frozen during both runs; later Native DSP excluded.

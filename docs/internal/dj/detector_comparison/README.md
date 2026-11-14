@@ -1,123 +1,123 @@
-# Banco experimental de compás y primer tiempo
+# Experimental meter and downbeat bench
 
-Comparación P12-a, fuera de las dependencias y de la caché de producción.
-No importa este paquete el motor ni se elige automáticamente un método.
-La elección y la integración P12-b se completaron en #395; las salidas de los
-demás candidatos conservan su condición experimental.
+P12-a comparison, outside the dependencies and the production cache.
+The engine does not import this package and no method is chosen automatically.
+The choice and the P12-b integration were completed in #395; the outputs of the
+other candidates keep their experimental status.
 
-El informe interpretativo está en [RESULTS](RESULTS.md); las tablas y los
-registros compactos se generan con `export` una vez completada la corrida.
+The interpretive report is in [RESULTS](RESULTS.md); the tables and the
+compact records are generated with `export` once the run is complete.
 
-El banco separa cuatro cosas: observaciones del backend, normalización sin
-inventar evidencia, métricas frente a referencias y prueba del contrato P12.
-Las revisiones de referencia son `main` en
-`8f520a797c3470c1e2a53d86673ef6694dd3105c` y la infraestructura experimental
-de #394 en `2ca8ccf248d4fe38caa664ec7442332a59160353`. La segunda se fusionó
-después como `3f98b485` sin cambios en `shared/`; aquí sigue siendo una
-candidata medida, no la referencia de lo que debe integrarse.
+The bench separates four things: backend observations, normalization without
+inventing evidence, metrics against references and testing of the P12 contract.
+The reference revisions are `main` at
+`8f520a797c3470c1e2a53d86673ef6694dd3105c` and the experimental infrastructure
+of #394 at `2ca8ccf248d4fe38caa664ec7442332a59160353`. The second was later merged
+as `3f98b485` without changes in `shared/`; here it is still a
+measured candidate, not the reference for what must be integrated.
 
-## Entradas y referencias
+## Inputs and references
 
-Se fijan 62 entradas antes de ejecutar los candidatos: 30 fragmentos GTZAN
-(índices 0, 1 y 2 de diez géneros), los doce Ballroom del diagnóstico anterior,
-17 señales de ritmo y tres señales de estructura. GTZAN separa diez casos de
-desarrollo y veinte de test; no se ajustan modelos con esas particiones.
-Ballroom permanece como diagnóstico ya visto y se declara el solapamiento de
-entrenamiento por método. Las señales de estructura solo preparan P13.
+62 inputs are fixed before running the candidates: 30 GTZAN excerpts
+(indexes 0, 1 and 2 of ten genres), the twelve Ballroom excerpts from the previous diagnosis,
+17 rhythm signals and three structure signals. GTZAN separates ten
+development cases and twenty test cases; no models are tuned with those partitions.
+Ballroom remains as an already-seen diagnosis and the training overlap
+is declared per method. The structure signals only prepare P13.
 
-`prepare.py` descarga fuentes, pesos de Beat This! y GTZAN en revisiones
-fijadas. El audio Ballroom procede del archivo del concurso original y no se
-redistribuye. `corpus.py` requiere su manifiesto local con `file`, `genre` y
-`annotation`; su generador sintético está fijado a #394. El manifiesto registra
-los SHA256 de audio y anotaciones. El proceso de referencia usó NumPy 1.26.4
-para sintetizar; otro entorno no debe sobrescribir un manifiesto congelado.
-El hash del manifiesto original identifica también sus rutas absolutas. En
-otra ubicación se comparan los identificadores y hashes de audio/anotación;
-los archivos de referencias exportados normalizan las rutas a nombres locales.
+`prepare.py` downloads sources, Beat This! weights and GTZAN at pinned
+revisions. The Ballroom audio comes from the archive of the original contest and is not
+redistributed. `corpus.py` requires its local manifest with `file`, `genre` and
+`annotation`; its synthetic generator is pinned to #394. The manifest records
+the SHA256 of audio and annotations. The reference process used NumPy 1.26.4
+to synthesize; another environment must not overwrite a frozen manifest.
+The hash of the original manifest also identifies its absolute paths. In
+another location, the identifiers and audio/annotation hashes are compared;
+the exported reference files normalize the paths to local names.
 
-Las tolerancias son 70 ms para referencias musicales reales y 10 ms para
-ataques sintéticos conocidos. El emparejamiento maximiza aciertos uno a uno
-y después minimiza el error temporal. La tolerancia incluye su borde
-matemático, con 1 ns para representación binaria. La ventana anotada conserva
-ese margen en sus extremos. Sin anotación de subdivisión no se puntúa esa
-subdivisión. Ausencia de anotación y ausencia explícita de compás son distintas.
+The tolerances are 70 ms for real musical references and 10 ms for
+known synthetic onsets. Matching maximizes one-to-one hits
+and then minimizes the time error. The tolerance includes its mathematical
+boundary, with 1 ns for binary representation. The annotated window keeps
+that margin at its ends. Without a subdivision annotation, that
+subdivision is not scored. Absence of annotation and explicit absence of meter are different.
 
-## Ejecución
+## Execution
 
-Los entornos son desechables y separados del `.venv` del motor. Los paquetes
-y pesos grandes se preparan antes de medir. El directorio de trabajo de
-Spleeter debe ser el del experimento para que encuentre sus pesos preparados.
+The environments are disposable and separate from the engine's `.venv`. The large
+packages and weights are prepared before measuring. Spleeter's working
+directory must be the experiment's so that it finds its prepared weights.
 
 ```sh
-DJ_LAB=/ruta/al/experimento
+DJ_LAB=/path/to/experiment
 uv venv --python 3.11 "$DJ_LAB/venv"
 uv pip install --python "$DJ_LAB/venv/bin/python" \
   -r docs/internal/dj/detector_comparison/locks/python311.txt \
   --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
-"$DJ_LAB/venv/bin/python" -m docs.dj.detector_comparison.prepare "$DJ_LAB"
+"$DJ_LAB/venv/bin/python" -m docs.internal.dj.detector_comparison.prepare "$DJ_LAB"
 uv pip install --python "$DJ_LAB/venv/bin/python" --no-deps \
   "$DJ_LAB/sources/CPJKU_beat_this" "$DJ_LAB/sources/mjhydri_BeatNet" "$DJ_LAB/sources/mir-aidj_all-in-one"
 NATTEN_N_WORKERS=1 MAX_JOBS=1 uv pip install --python "$DJ_LAB/venv/bin/python" \
   --no-deps --no-build-isolation "$DJ_LAB/sources/CPJKU_madmom" natten==0.15.1
-"$DJ_LAB/venv/bin/python" -m docs.dj.detector_comparison.corpus "$DJ_LAB" --ballroom-manifest /ruta/manifest.json
+"$DJ_LAB/venv/bin/python" -m docs.internal.dj.detector_comparison.corpus "$DJ_LAB" --ballroom-manifest /path/to/manifest.json
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 \
-  "$DJ_LAB/venv/bin/python" -m docs.dj.detector_comparison.run "$DJ_LAB" beatthis-small0-direct
+  "$DJ_LAB/venv/bin/python" -m docs.internal.dj.detector_comparison.run "$DJ_LAB" beatthis-small0-direct
 ```
 
-Los cuatro locks registran los entornos ejecutados; no modifican
-`requirements.txt` del motor. La compilación de madmom/NATTEN necesita un
-compilador y la importación offline de BeatNet requiere PyAudio/PortAudio.
-La preparación de pesos de HTDemucs, All-In-One y Spleeter y sus hashes queda
-en el manifiesto de activos del informe. No iniciar un cronómetro mientras
-se descargan pesos. El fork madmom-modern y las comprobaciones Python 3.14
-usan sus respectivos entornos. Spleeter usa Python 3.8, su lock y el directorio
-`pretrained_models/5stems` preparado antes de medir.
+The four locks record the environments that were run; they do not modify
+the engine's `requirements.txt`. Compiling madmom/NATTEN needs a
+compiler and the offline import of BeatNet requires PyAudio/PortAudio.
+The preparation of the HTDemucs, All-In-One and Spleeter weights and their hashes is recorded
+in the report's asset manifest. Do not start a timer while
+weights are being downloaded. The madmom-modern fork and the Python 3.14 checks
+use their respective environments. Spleeter uses Python 3.8, its lock and the
+`pretrained_models/5stems` directory prepared before measuring.
 
-Después de crear los dos entornos necesarios, `prepare ROOT
---separated-weights` descarga los ocho checkpoints Harmonix en la revisión
-fijada y usa los proveedores originales de HTDemucs y Spleeter para preparar
-sus pesos. Ejecutar antes del cronómetro; contrastar sus archivos con los
-hashes del informe. Beat Transformer y BeatNet+ incluyen sus pesos en las
-fuentes congeladas.
+After creating the two required environments, `prepare ROOT
+--separated-weights` downloads the eight Harmonix checkpoints at the pinned
+revision and uses the original HTDemucs and Spleeter providers to prepare
+their weights. Run this before the timer; check their files against the
+hashes in the report. Beat Transformer and BeatNet+ include their weights in the
+frozen sources.
 
-Ejecutar **un método cada vez**, con CPU y un hilo. `run` hace dos pasadas por
-entrada, guarda predicciones y activaciones comprimidas y registra errores,
-carga, tiempos de CPU/pared, carga del modelo y pico de RSS. Un fallo no se
-convierte en abstención musical. Tres fallos consecutivos interrumpen esa
-configuración y quedan visibles. Los resultados existentes no se sobrescriben
-salvo `--overwrite`; una corrección del evaluador se aplica a la salida retenida.
-El runner rechaza reutilizar una carpeta de resultados con otro manifiesto.
-Un cambio de pesos, configuración o entorno requiere otra carpeta de experimento;
-`--overwrite` sirve para repetir el mismo manifiesto, no para mezclar cohortes.
-Los temporales de Python y de sus hijos van a `ROOT/temporary`; los datos y
-entornos grandes pueden residir en otro disco conservando enlaces simbólicos.
-Se comprueba que quede al menos 1 GiB antes de comenzar una entrada nueva.
+Run **one method at a time**, with CPU and one thread. `run` makes two passes per
+input, saves predictions and compressed activations and records errors,
+load, CPU/wall times, model loading and peak RSS. A failure is not
+turned into a musical abstention. Three consecutive failures interrupt that
+configuration and stay visible. Existing results are not overwritten
+unless `--overwrite` is given; a fix to the evaluator is applied to the retained output.
+The runner refuses to reuse a results folder with a different manifest.
+A change of weights, configuration or environment requires another experiment folder;
+`--overwrite` is for repeating the same manifest, not for mixing cohorts.
+The temporary files of Python and its children go to `ROOT/temporary`; the large data and
+environments can live on another disk, keeping symbolic links.
+At least 1 GiB of free space is checked before starting a new input.
 
-`decode` consume las activaciones originales con un único DBN de agrupaciones
-2/3/4/6. Cambia el posprocesado, no repite ni altera la red. Sus tiempos miden
-solo el decoder; conserva por separado los del pipeline original. No se debe
-presentar ese tiempo pequeño como latencia total de un nuevo detector.
+`decode` consumes the original activations with a single DBN of groupings
+2/3/4/6. It changes the post-processing, it does not repeat or alter the network. Its times measure
+only the decoder; it keeps those of the original pipeline separately. That
+small time must not be presented as the total latency of a new detector.
 
 ```sh
-"$DJ_LAB/venv/bin/python" -m docs.dj.detector_comparison.decode "$DJ_LAB" beatthis-small0-direct
-"$DJ_LAB/venv/bin/python" -m docs.dj.detector_comparison.report "$DJ_LAB" "$DJ_LAB/comparison-results.json"
+"$DJ_LAB/venv/bin/python" -m docs.internal.dj.detector_comparison.decode "$DJ_LAB" beatthis-small0-direct
+"$DJ_LAB/venv/bin/python" -m docs.internal.dj.detector_comparison.report "$DJ_LAB" "$DJ_LAB/comparison-results.json"
 "$DJ_LAB/venv/bin/python" -m pytest -q tests/test_dj_detector_comparison.py
 ```
 
-`report` recalcula métricas desde los eventos guardados y aplica el mismo
-ajuste de ataques de P1 a todos. No cambia octava ni pulso para corregir a un
-backend. Se publican ambas salidas; el percentil temporal de los eventos
-acertados no oculta las omisiones, que siguen en recobrado/F1 y continuidad.
-Los intervalos bootstrap describen esta muestra pequeña; no eliminan su sesgo
-ni prueban generalización a todas las músicas.
+`report` recalculates metrics from the saved events and applies the same
+onset adjustment from P1 to all of them. It does not change octave or pulse to correct a
+backend. Both outputs are published; the time percentile of the
+correct events does not hide the omissions, which remain in recall/F1 and continuity.
+The bootstrap intervals describe this small sample; they do not remove its bias
+or prove generalization to all music.
 
-## Beat This! sin PyTorch
+## Beat This! without PyTorch
 
-`onnx_probe.py` comprueba el runtime propuesto para integrar. `export` corre
-en el entorno del laboratorio con PyTorch y `beat_this`; `--sliced-attention`
-exporta la misma atención por banda y por cabeza para no materializar todas
-las matrices a la vez. `run` usa un entorno limpio con solo NumPy y ONNX
-Runtime y compara contra los `.npz`/`.json` retenidos de `beatthis-*-direct`.
+`onnx_probe.py` checks the runtime proposed for integration. `export` runs
+in the lab environment with PyTorch and `beat_this`; `--sliced-attention`
+exports the same attention per band and per head so that all
+the matrices are not materialized at once. `run` uses a clean environment with only NumPy and ONNX
+Runtime and compares against the retained `.npz`/`.json` of `beatthis-*-direct`.
 
 ```sh
 uv venv --python 3.13 "$DJ_LAB/onnx-runtime-venv"
@@ -131,45 +131,45 @@ uv pip install --python "$DJ_LAB/onnx-runtime-venv/bin/python" numpy onnxruntime
   --derivatives "$DJ_LAB/derivatives" --results "$DJ_LAB/results" --output "$DJ_LAB/onnx-sliced/run.json"
 ```
 
-`export` necesita el paquete `onnx` (1.17.0 en la corrida) junto a PyTorch
-2.5.1. `memory` mide el pico de RSS de un proceso nuevo con una entrada
-(`--onnx` para ONNX Runtime, `--checkpoint` para PyTorch); ejecutar una vez por
-configuración. Los resultados se copian a `results/onnx-*`.
+`export` needs the `onnx` package (1.17.0 in the run) together with PyTorch
+2.5.1. `memory` measures the peak RSS of a new process with one input
+(`--onnx` for ONNX Runtime, `--checkpoint` for PyTorch); run it once per
+configuration. The results are copied to `results/onnx-*`.
 
-## Integración P12-b
+## P12-b integration
 
-`dbn_probe.py` decodifica las activaciones retenidas de `beatthis-*-direct`
-con el DBN NumPy del motor (`shared/dj/dbn.py`) y las compara con los eventos
-que madmom produjo para `beatthis-*-dbn`. `integrated_probe.py` ejecuta el
-analizador de producción completo sobre el corpus fijado: FFmpeg a 22050 Hz,
-Beat This! en ONNX Runtime, DBN y medidas. Puntúa por separado los eventos del
-modelo, la rejilla final y los unos de las regiones confirmadas. Ambos corren
-en el entorno del motor, sin PyTorch ni madmom.
+`dbn_probe.py` decodes the retained activations of `beatthis-*-direct`
+with the engine's NumPy DBN (`shared/dj/dbn.py`) and compares them with the events
+that madmom produced for `beatthis-*-dbn`. `integrated_probe.py` runs the
+full production analyzer on the pinned corpus: FFmpeg at 22050 Hz,
+Beat This! on ONNX Runtime, DBN and measurements. It scores separately the
+model events, the final grid and the downbeats of the confirmed regions. Both run
+in the engine environment, without PyTorch or madmom.
 
 ```sh
 .venv/bin/python -I docs/internal/dj/detector_comparison/dbn_probe.py "$DJ_LAB/results" dbn.json
 .venv/bin/python -I docs/internal/dj/detector_comparison/integrated_probe.py "$DJ_LAB" integrated.json
 ```
 
-## Revalidación del analizador final
+## Revalidation of the final analyzer
 
-El informe actualizado está en [FINAL_RESULTS](FINAL_RESULTS.md). No se
-repiten las redes descartadas ni se mezclan sus cronómetros con una corrida
-nueva: se conservan las 29 configuraciones originales y se vuelve a medir
-el método integrado sobre el mismo corpus. No se cambian corpus, tolerancias,
-pesos, umbrales ni políticas a partir de sus resultados.
+The updated report is in [FINAL_RESULTS](FINAL_RESULTS.md). The
+discarded networks are not rerun and their timings are not mixed with a new
+run: the 29 original configurations are kept and the integrated method is
+measured again on the same corpus. Corpus, tolerances,
+weights, thresholds and policies are not changed based on its results.
 
-`integrated_probe` comprueba todos los hashes de audio/anotaciones y la
-igualdad de referencias antes de inferir, admitiendo solo recolocar rutas.
-Guarda revisión, hashes del código ejecutado, versión del analizador, runtime,
-pesos y FFmpeg, eventos crudos, análisis completo, métricas por caso y tiempos
-de CPU por componente. Requiere pesos preparados y verificados: no descarga
-ni escribe una caché de la estación. Una salida `.gz` conserva JSON completo.
-La comparación con el informe anterior señala expresamente que aquel no
-registró la versión ni la revisión; no se le asigna una versión retrospectiva.
+`integrated_probe` checks all audio/annotation hashes and the
+equality of references before inferring, allowing only relocation of paths.
+It saves revision, hashes of the executed code, analyzer version, runtime,
+weights and FFmpeg, raw events, full analysis, per-case metrics and per-component CPU
+times. It requires prepared and verified weights: it does not download
+or write a station cache. A `.gz` output keeps the full JSON.
+The comparison with the previous report explicitly states that the previous one did not
+record the version or the revision; no retrospective version is assigned to it.
 
 ```sh
-export SOUNDSIBLE_BEAT_MODEL=/ruta/a/beat_this-final0.onnx
+export SOUNDSIBLE_BEAT_MODEL=/path/to/beat_this-final0.onnx
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 DJ_RESULTS=docs/internal/dj/detector_comparison/results
 .venv/bin/python -I docs/internal/dj/detector_comparison/integrated_probe.py "$DJ_LAB" \
@@ -186,50 +186,50 @@ DJ_RESULTS=docs/internal/dj/detector_comparison/results
   "$DJ_RESULTS/integrated-final-aac.json.gz" "$DJ_RESULTS/final-continuity-aac.json" --aac
 ```
 
-Ejecutar en serie, sin otra inferencia durante las medidas de CPU.
-`final_pairs` planifica las 3782 parejas dirigidas sin autorrepetición desde
-los análisis retenidos, verifica admisión/velocidad y contrasta las promesas
-de `bars` en ambos cues contra las referencias. Sus datos no prueban escucha
-ni ejecución física de los reproductores.
+Run in series, with no other inference during the CPU measurements.
+`final_pairs` plans the 3782 directed pairs without self-repetition from
+the retained analyses, verifies admission/speed and checks the `bars`
+promises in both cues against the references. Its data do not prove listening
+or physical execution of the players.
 
-`final_pipeline` usa el analizador real para los cinco AAC y tres WAV
-diagnósticos. Las medidas llegan a una SQLite temporal por `analyse_audio`,
-sin inyección de predicciones. Rechaza medidas de la versión anterior,
-comprueba frío/caliente, cero decodificaciones en caliente y el mismo plan
-en fuentes, peticiones, colocación, reparación, legacy y refinado HTTP.
-También crea una grabación de 600 segundos y verifica las ventanas de
-90/120 segundos y la ausencia de cobertura/alineación en el hueco. Los
-proveedores y la adquisición se sustituyen por fixtures locales; HTTP usa
-el cliente de pruebas, no el servidor personal. La caché y la biblioteca de
-la estación no se abren. No se acredita con ello otra arquitectura o sistema
-operativo, ni se repiten las pruebas físicas web/Android.
+`final_pipeline` uses the real analyzer for the five AAC and three diagnostic
+WAV files. The measurements reach a temporary SQLite through `analyse_audio`,
+without injecting predictions. It rejects measurements from the previous version,
+checks cold/warm, zero decodes when warm and the same plan
+in sources, requests, placement, repair, legacy and HTTP refinement.
+It also creates a 600-second recording and verifies the
+90/120-second windows and the absence of coverage/alignment in the gap. The
+providers and acquisition are replaced by local fixtures; HTTP uses
+the test client, not the personal server. The station's cache and library
+are not opened. This does not certify another architecture or operating
+system, and the physical web/Android tests are not repeated.
 
-`final_continuity` completa las métricas opcionales de `mir_eval` desde los
-eventos retenidos, con el entorno experimental ya fijado. No vuelve a inferir
-ni añade SciPy/`mir_eval` al motor. Comprueba cohorte, hash de referencias e
-igualdad del F1 al recalcular; conserva CMLc/CMLt/AMLc/AMLt por caso y sus
-ausencias explícitas, además de las versiones y hashes de este evaluador.
+`final_continuity` completes the optional `mir_eval` metrics from the
+retained events, with the already pinned experimental environment. It does not infer again
+and does not add SciPy/`mir_eval` to the engine. It checks cohort, reference hash and
+equality of the F1 when recalculating; it keeps CMLc/CMLt/AMLc/AMLt per case and their
+explicit absences, as well as the versions and hashes of this evaluator.
 
-## Frontera P12 y límites de la comparación
+## P12 boundary and limits of the comparison
 
-`normalize` es el único adaptador experimental al contrato de #394. Los
-eventos no proporcionan por sí solos una confianza de compás. Si el backend
-no la define, permanece nula en bruto y pasa como evidencia cero a las guardas
-existentes. No se convierten sigmoides en probabilidad musical calibrada.
-La subdivisión y la unidad notada permanecen desconocidas cuando no se miden.
+`normalize` is the only experimental adapter to the #394 contract. The
+events do not by themselves provide a meter confidence. If the backend
+does not define it, it stays null in the raw data and passes as zero evidence to the existing
+guards. Sigmoids are not converted into a calibrated musical probability.
+The subdivision and the notated unit stay unknown when they are not measured.
 
-`pipeline` usa un runtime temporal y una SQLite por configuración. Inyecta
-las medidas experimentales en la frontera de almacenamiento de #394, tras la
-ejecución real del backend sobre AAC. Comprueba HTTP de fuentes, colocación,
-reparación, legacy y refinado, estado frío/caliente, ausencia de decodificación
-en caliente, respuestas compactas y el mismo plan en todas las entradas. No
-sustituye la adquisición ni instala un detector en producción. Su registro
-distingue adaptación/contrato de certificación musical de una mezcla.
-También pasa al HTTP las salidas WAV del pulso uniforme y de los dos cambios
-de compás, conservadas en la corrida principal. Registra si el plan promete
-alineación de compases pese a no existir un primer tiempo identificable.
+`pipeline` uses a temporary runtime and one SQLite per configuration. It injects
+the experimental measurements at the #394 storage boundary, after the
+real execution of the backend on AAC. It checks HTTP for sources, placement,
+repair, legacy and refinement, cold/warm state, absence of decoding
+when warm, compact responses and the same plan in all inputs. It does not
+replace acquisition or install a detector in production. Its record
+distinguishes adaptation/contract from musical certification of a mix.
+It also passes to HTTP the WAV outputs of the uniform pulse and of the two meter
+changes, kept in the main run. It records whether the plan promises
+bar alignment even though there is no identifiable downbeat.
 
-Los paquetes nativos, la precisión sobre música, el contrato del planificador,
-los ejecutores web/Android y la escucha física son evidencias distintas.
-Una inferencia correcta en Linux x86_64 no acredita ejecución en Windows,
-macOS o ARM64. El informe registra las pruebas realizadas y las ausencias.
+Native packages, accuracy on music, the planner contract,
+the web/Android players and physical listening are different kinds of evidence.
+A correct inference on Linux x86_64 does not certify execution on Windows,
+macOS or ARM64. The report records the tests performed and what is missing.

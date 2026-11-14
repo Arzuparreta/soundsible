@@ -1,25 +1,25 @@
-# S4a: entrada del programa nativo a WebRTC
+# S4a: native programme input to WebRTC
 
-LiveInputTest3/0,12.817s; runner exit0, APK/test APK/JVM54/lint sin CA temporal.
-NORMAL real HTTP y TLS más entrada sintética. [Evidence](evidence/s4a.json).
-Dos tests Python verifican checksum, rechazo de bytes alterados, conservación de
-JNI/otras clases y reconstrucción reproducible desde cache sin red.
+LiveInputTest3/0,12.817s; runner exit0, APK/test APK/JVM54/lint without temporary CA.
+Real NORMAL over HTTP and TLS plus synthetic input. [Evidence](evidence/s4a.json).
+Two Python tests verify checksum, rejection of altered bytes, preservation of
+JNI/other classes and reproducible rebuild from cache without network.
 
-GetStream WebRTC fijado por SHA256. Se sustituye únicamente su recorder Java
-por un adaptador compatible con JNI; nunca crea AudioRecord ni solicita micrófono.
-Los binarios nativos no cambian. Licencias/notas incluidas en assets del AAR
-preparado; APK normal se vuelve a validar después de añadir esos assets.
-[Dependencia y mantenimiento](../../../android/third-party/webrtc/README.md).
+GetStream WebRTC pinned by SHA256. Only its Java recorder is replaced
+by a JNI-compatible adapter; it never creates AudioRecord or requests the microphone.
+The native binaries do not change. Licences/notes included in the assets of the prepared
+AAR; the normal APK is validated again after adding those assets.
+[Dependency and maintenance](../../../android/third-party/webrtc/README.md).
 
-LiveProgramInput consume el tap post-DSP/pre-volumen nativo en un worker, convierte
-canales y resamplea mediante Media3 a estéreo48k. Buffer máximo1s, pause/logout
-no entregan audio encolado. NativeProgrammeOutput recibe estado playing del servicio;
-el recorder envía bloques10ms y ceros durante pausa, sin callbacks PCM a JavaScript.
+LiveProgramInput consumes the native post-DSP/pre-volume tap in a worker, converts
+channels and resamples through Media3 to stereo 48k. Maximum buffer 1s, pause/logout
+do not deliver queued audio. NativeProgrammeOutput receives the playing state from the service;
+the recorder sends 10ms blocks and zeros during pause, without PCM callbacks to JavaScript.
 
-Un peer codifica Opus y otro decodifica con AudioTrackSink. Con música Core real
-mono16k, RMS recibido>500; volumen local0 no silencia emisión. Pause produce RMS<20,
-resume recupera señal. Sin permiso de micrófono concedido.
+One peer encodes Opus and another decodes with AudioTrackSink. With real Core music
+mono 16k, received RMS>500; local volume 0 does not mute the broadcast. Pause produces RMS<20,
+resume recovers the signal. No microphone permission granted.
 
-Todavía no WHIP/WHEP relay, sala/chat/UI, lease/background/reconexión, DJ hacia
-receptor ni aceptación de exclusión de Live recibido. No afirmar Live completo.
-Siguiente: transporte WHIP/WHEP contra relay aislado y luego sala nativa end to end.
+Not yet: WHIP/WHEP relay, room/chat/UI, lease/background/reconnection, DJ to the
+receiver or acceptance of exclusion of received Live. Do not claim complete Live.
+Next: WHIP/WHEP transport against an isolated relay and then native room end to end.

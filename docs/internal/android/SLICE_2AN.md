@@ -1,29 +1,29 @@
-# S2an — Traspaso de salida NORMAL
+# S2an — NORMAL output handoff
 
-El botón «Transferir reproducción» de cada equipo conectado delega al servicio.
-NativeDeviceSession verifica un destino de la misma cuenta con socket activo,
-publica la cola/posición nativas recientes y después llama a Core handoff. La
-operación usa el worker serial del actor, sin bloquear el looper del reproductor.
-El reporte periódico se aplaza mientras hay traspaso. No enviar una sesión
-capturada por JavaScript ni un estado atrasado del refresco periódico.
+The "Transfer playback" button of each connected device delegates to the service.
+NativeDeviceSession verifies a destination of the same account with an active socket,
+publishes the recent native queue/position and then calls Core handoff. The
+operation uses the serial worker of the actor, without blocking the player looper.
+The periodic report is deferred while there is a handoff. Do not send a session
+captured by JavaScript or a stale state from the periodic refresh.
 
-La generación, identidad de cookie, perfil, socket/revisión del actor y futuro
-pendiente acotan cada paso. Un cambio de cola/índice/preferencias/transport entre
-la publicación y el envío cancela la operación. Logout/reset cancela la petición
-y resuelve el futuro desconectado. Core pausa el origen al enviar al destino;
-la pantalla no pausa optimistamente si falla la publicación/preflight.
+The generation, cookie identity, profile, actor socket/revision and pending
+future bound each step. A change of queue/index/preferences/transport between
+the publication and the sending cancels the operation. Logout/reset cancels the request
+and resolves the future as disconnected. Core pauses the origin when sending to the destination;
+the screen does not pause optimistically if the publication/preflight fails.
 
-DJ todavía no ofrece este botón: necesita serialización/restauración de su
-workspace y ruta propios. No degradar una sesión DJ a NORMAL. Tampoco esta
-vertical cierra Radio/pending catalog ni la paridad completa.
+DJ does not offer this button yet: it needs serialization/restoration of its own
+workspace and route. Do not downgrade a DJ session to NORMAL. This
+vertical also does not close Radio/pending catalog or complete parity.
 
-Aceptación: DevicesUi + DeviceSession4/0 HTTP/TLS,31.965s; runner exit0 y
-APK/test APK normales sin CA temporal, JVM56/0 y lint pasan. Log
-`/tmp/soundsible-outgoing-native.log`. UI210 archivos/1614 tests y typecheck pasan
-tras añadir transfer en EN/ES/FR/ZH. Las traducciones FR/ZH se añadieron después
-del runner nativo; no afirmar navegación física ni cuatro idiomas en WebView.
+Acceptance: DevicesUi + DeviceSession4/0 HTTP/TLS,31.965s; runner exit0 and
+normal APK/test APK without temporary CA, JVM56/0 and lint pass. Log
+`/tmp/soundsible-outgoing-native.log`. UI 210 files/1614 tests and typecheck pass
+after adding transfer in EN/ES/FR/ZH. The FR/ZH translations were added after
+the native runner; do not claim physical navigation or four languages in the WebView.
 
-DevicesUiTest valida el botón real, dos apariciones/index/posición54s/shuffle/
-repeat all recibidos por un socket Core remoto y pausa del servicio de origen.
-El peer valida el contrato recibido, no decodifica audio; DeviceSession valida
-por separado restauración/PCM en Android. Guest Live/DJ no se transfieren aquí.
+DevicesUiTest validates the real button, two occurrences/index/position 54s/shuffle/
+repeat all received by a remote Core socket and pause of the origin service.
+The peer validates the received contract, it does not decode audio; DeviceSession validates
+restoration/PCM on Android separately. Guest Live/DJ are not transferred here.

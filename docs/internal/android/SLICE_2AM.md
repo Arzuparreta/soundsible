@@ -1,23 +1,23 @@
-# S2am — Controles de dispositivos desde Android
+# S2am — Device controls from Android
 
-La identidad de reproducción procede de PlaybackService mediante el bridge
-SoundsiblePlayback, acotada a la generación nativa. Settings muestra el teléfono
-como «este» y los equipos de la misma cuenta; pausa/reproducción/anterior/siguiente
-se envían por HTTP autenticado a Core y llegan a sus sockets. No importar el
-store/reproductor web para identificar Android: crearía otro dueño de audio.
+The playback identity comes from PlaybackService through the
+SoundsiblePlayback bridge, bound to the native generation. Settings shows the phone
+as "this" and the devices of the same account; pause/play/previous/next
+are sent over authenticated HTTP to Core and reach their sockets. Do not import the
+web store/player to identify Android: it would create another audio owner.
 
-Las órdenes se serializan por interacción; controles deshabilitados para equipos
-sin socket. Peticiones/listener se cancelan al desmontar. Identidad/generación y
-vida del componente impiden que una respuesta tardía muestre datos de la cuenta
-anterior o lance una orden después del cambio. El listado se refresca en primer
-montaje, por botón y cada10s mientras la pantalla está visible.
+Commands are serialized per interaction; controls are disabled for devices
+without a socket. Requests/listener are cancelled on unmount. Identity/generation and
+the component's lifetime prevent a late response from showing data from the previous
+account or sending a command after the change. The list is refreshed on the first
+mount, by button and every 10s while the screen is visible.
 
-UI completa210 archivos/1613 tests y TypeScript pasan. DevicesUiTest valida los
-botones reales de WebView contra un segundo socket Core autenticado HTTP/TLS;
-aceptación combinada DevicesUi + DeviceSession4/0 HTTP/TLS,31.097s.
-La primera prueba descubrió que `/api/devices` no exponía `socket_active`,
-propiedad esperada por la UI web compartida: Core ahora la deriva de active_sid.
-La reinscripción ya preservaba el socket; no atribuir el fallo a ella.
-Tests Core15/0. Runner exit0; APK/test APK normales sin CA temporal, JVM56/0 y lint pasan.
-Log `/tmp/soundsible-devices-final-native.log`. El traspaso de salida y workspace DJ/Radio siguen
-pendientes: esta pantalla no los sustituye. Desarrollo, no release.
+Full UI 210 files/1613 tests and TypeScript pass. DevicesUiTest validates the
+real WebView buttons against a second Core socket authenticated over HTTP/TLS;
+combined acceptance DevicesUi + DeviceSession4/0 HTTP/TLS, 31.097s.
+The first test discovered that `/api/devices` did not expose `socket_active`,
+a property expected by the shared web UI: Core now derives it from active_sid.
+Re-registration already preserved the socket; do not attribute the failure to it.
+Core tests 15/0. Runner exit0; normal APK/test APK without a temporary CA, JVM56/0 and lint pass.
+Log `/tmp/soundsible-devices-final-native.log`. Output handoff and the DJ/Radio workspace remain
+pending: this screen does not replace them. Development, not a release.

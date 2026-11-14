@@ -1,66 +1,66 @@
-# P12-a: comparar detección conjunta y alternativas abiertas
+# P12-a: compare joint detection and open alternatives
 
-**Plan original del 2026-10-25, ejecutado en #395.** Las mediciones P12-a
-terminaron el 2026-10-26; el usuario eligió Beat This! `final0` y P12-b lo
-integró en la misma PR. P12 está cerrado con los límites registrados en
-[P12](P12.md); P13 se cerró después ([P13](P13.md)). Los resultados originales están en
-[detector_comparison/RESULTS](detector_comparison/RESULTS.md), y la
-revalidación del analizador final en
+**Original plan of 2026-10-25, executed in #395.** The P12-a measurements
+ended on 2026-10-26; the user chose Beat This! `final0` and P12-b
+integrated it in the same PR. P12 is closed with the limits recorded in
+[P12](P12.md); P13 was closed afterwards ([P13](P13.md)). The original results are in
+[detector_comparison/RESULTS](detector_comparison/RESULTS.md), and the
+revalidation of the final analyzer in
 [detector_comparison/FINAL_RESULTS](detector_comparison/FINAL_RESULTS.md).
 
-El resto conserva el protocolo acordado: comparación sobre las mismas
-entradas y decisión explícita antes de integrar. La condición parcial de
-#394 y las paradas de decisión que describe son históricas, no trabajo
-pendiente ni una nueva elección de detector. La abstención protege la mezcla,
-pero no demuestra por sí sola detección musical correcta.
+The rest keeps the agreed protocol: comparison on the same
+inputs and an explicit decision before integrating. The partial condition of
+#394 and the decision stops it describes are historical, not pending
+work or a new detector choice. Abstention protects the mix,
+but on its own it does not demonstrate correct musical detection.
 
-## Orden para desarrollar rápido sin rehacer código
+## Order to develop quickly without redoing code
 
-| Bloque | Entrega concreta | Dependencia / límite |
+| Block | Concrete deliverable | Dependency / limit |
 | --- | --- | --- |
-| P12-a, banco común y comparativa | Un runner, adaptadores aislados, corpus fijado, resultados por método/caso y prueba de su salida a través del planificador y de las fronteras existentes | Autorizado ahora; llegar casi de extremo a extremo sin seleccionar ni sustituir el detector de producción |
-| Decisión del usuario | Tabla de precisión/cobertura, errores, costes y mantenibilidad; opciones y compromisos sin ganador por pesos de gusto | Parada explícita antes de elegir e integrar; tener resultados, no solo planes o cifras de los artículos |
-| P12-b, integración del elegido | Una implementación musical, persistencia, HTTP, rutas y ejecución web/Android; cierre de P12 con evidencia real | Después de la decisión; aprovechar el contrato de #394 y retirar prototipos de producción que no se utilicen |
-| P13, frases y secciones | Consumir la métrica elegida y validar forma musical | Diseñar fixtures y registrar límites durante P12-a; implementar después de estabilizar esa métrica. Se puede entregar junto a P12-b si reduce cambios repetidos y ambas aceptaciones se verifican por separado |
+| P12-a, common bench and comparison | One runner, isolated adapters, frozen corpus, results per method/case and a test of its output through the planner and the existing boundaries | Authorized now; get almost end to end without selecting or replacing the production detector |
+| User decision | Table of accuracy/coverage, errors, costs and maintainability; options and trade-offs without a winner chosen by preference weights | Explicit stop before choosing and integrating; have results, not only plans or figures from the papers |
+| P12-b, integration of the chosen one | One musical implementation, persistence, HTTP, routes and web/Android execution; closing of P12 with real evidence | After the decision; reuse the #394 contract and remove production prototypes that are not used |
+| P13, phrases and sections | Consume the chosen meter and validate musical form | Design fixtures and record limits during P12-a; implement after that meter is stable. It can be delivered together with P12-b if it reduces repeated changes and both acceptances are verified separately |
 
-La regla de un punto por sesión no obliga a microentregas en este encargo:
-el usuario autoriza avanzar por bloques amplios y casi de extremo a extremo.
-No hacer una PR de producción por cada detector. Construir juntos el banco y
-los adaptadores, ejecutar la comparativa completa y presentar resultados.
-Después, integrar la opción elegida en un bloque amplio; evitar reescribir
-`rhythm`, `structure` y los consumidores una vez por candidato.
+The one-point-per-session rule does not force micro-deliveries in this assignment:
+the user authorizes progress in wide, almost end-to-end blocks.
+Do not make a production PR for each detector. Build the bench and
+the adapters together, run the full comparison and present results.
+Then integrate the chosen option in one wide block; avoid rewriting
+`rhythm`, `structure` and the consumers once per candidate.
 
-## Candidatos y controles iniciales
+## Initial candidates and controls
 
-Inventario consultado el 2026-10-25 en repositorios y documentación de sus
-autores. Las fechas y licencias publicadas son evidencia de inventario, no una
-certificación de mantenibilidad ni una medición de Soundsible. Fijar la revisión
-real y el hash de **cada checkpoint** al ejecutar. No confundir variantes,
-postprocesadores y forks con familias de modelos independientes.
+Inventory consulted on 2026-10-25 in repositories and documentation from their
+authors. The published dates and licenses are inventory evidence, not a
+certification of maintainability or a Soundsible measurement. Pin the actual
+revision and the hash of **each checkpoint** when running. Do not confuse variants,
+postprocessors and forks with independent model families.
 
-| Método / familia | Qué contrastar | Admisión y límites conocidos |
+| Method / family | What to compare | Admission and known limits |
 | --- | --- | --- |
-| Soundsible previo a #394 (`8f520a79`) y detector de #394 (`2ca8ccf2`) | Dos baselines: supuesto de cuatro pulsos frente a agrupación/abstención local | Congelar las revisiones; conservar resultados originales sin recalibrarlas sobre el test |
-| Prototipo conjunto propio | Varias hipótesis de pulso, subdivisión, compás y fase durante varios compases; decodificación temporal conjunta con observaciones rítmicas y armónicas | Desarrollar como adaptador experimental; no fijar primero un BPM único ni exigir que el 1 sea el golpe más fuerte. Sin nuevos pesos de gusto |
-| [Beat This!](https://github.com/CPJKU/beat_this) | Modelo principal y pequeño; salida directa y, como variante separada, decodificación temporal común sobre activaciones | Pulsos y unos; CPU y checkpoints disponibles. Código y pesos publicados MIT. El upstream advierte del solapamiento de entrenamiento: sus modelos principales/pequeños excluyen GTZAN, no por ello cualquier otro corpus |
-| [BeatNet](https://github.com/mjhydri/BeatNet) | CRNN con inferencia offline DBN y variante PF procesando el archivo sin esperar al tiempo real | Pulsos/unos y seguimiento métrico; CPU y pesos publicados. Revisar las dependencias de madmom y PyAudio incluso en modo offline. El repositorio declara CC BY; verificar términos del checkpoint concreto |
-| [madmom](https://github.com/CPJKU/madmom) y [madmom-modern](https://github.com/imcmurray/madmom-modern) | RNN de pulsos/unos y DBN; origen como referencia y fork compatible como variante de mantenimiento | El fork declara compatibilidad con Python/NumPy actuales. Código BSD y modelos publicados CC BY-NC-SA: registrar por separado; no asumir que pueden distribuirse como pesos sin restricciones. Verificar instalación, tests y divergencias del fork |
-| [Beat Transformer](https://github.com/zhaojw1998/Beat-Transformer) | Transformer de pulsos/unos con entrada separada en fuentes y su postprocesado | Código MIT y checkpoints en el proyecto. Medir también preparación/separación y dependencias; valorar mantenimiento del código de investigación y términos de pesos, sin convertir una adaptación extensa en requisito de la comparativa |
-| [All-In-One](https://github.com/mir-aidj/all-in-one) | Pulsos/unos y segmentación en una misma familia; variante sin hacer trabajo de estructura que no necesitemos, si el upstream la admite | Interesa también para evitar duplicar P13. Documenta PyTorch, NATTEN, madmom y separación de fuentes; instalación nativa en Windows y coste completo por comprobar. Código MIT; verificar pesos y dependencias separadamente |
-| [Essentia RhythmExtractor2013](https://essentia.upf.edu/reference/std_RhythmExtractor2013.html) | `multifeature` y `degara` como dos baselines de pulso/coste | El algoritmo devuelve tempo y pulsos, no unos; sin puntuación de primer tiempo intrínseca. Entrada a la frecuencia exigida por su API; `degara` no estima confianza. [Repositorio AGPL](https://github.com/MTG/essentia) |
-| [librosa](https://github.com/librosa/librosa) | `beat_track` y pulso local como controles de seguimiento/deriva | Baseline de pulso, no detector completo de compás/1. Código ISC; usar [API oficial](https://github.com/librosa/librosa/blob/main/librosa/beat.py). Un híbrido con nuestro decodificador será otro método explícito, nunca capacidad atribuida a librosa |
+| Soundsible before #394 (`8f520a79`) and the #394 detector (`2ca8ccf2`) | Two baselines: four-beat assumption versus local grouping/abstention | Freeze the revisions; keep the original results without recalibrating them on the test |
+| Own joint prototype | Several hypotheses of pulse, subdivision, meter and phase over several bars; joint temporal decoding with rhythmic and harmonic observations | Develop as an experimental adapter; do not first fix a single BPM or require the 1 to be the strongest beat. No new preference weights |
+| [Beat This!](https://github.com/CPJKU/beat_this) | Main and small model; direct output and, as a separate variant, common temporal decoding over activations | Beats and downbeats; CPU and checkpoints available. Code and weights published under MIT. Upstream warns about training overlap: its main/small models exclude GTZAN, which does not mean they exclude any other corpus |
+| [BeatNet](https://github.com/mjhydri/BeatNet) | CRNN with offline DBN inference and a PF variant processing the file without waiting for real time | Beats/downbeats and metrical tracking; CPU and published weights. Check the madmom and PyAudio dependencies even in offline mode. The repository declares CC BY; verify the terms of the specific checkpoint |
+| [madmom](https://github.com/CPJKU/madmom) and [madmom-modern](https://github.com/imcmurray/madmom-modern) | Beat/downbeat RNN and DBN; the original as a reference and the compatible fork as a maintenance variant | The fork declares compatibility with current Python/NumPy. BSD code and models published under CC BY-NC-SA: record them separately; do not assume they can be distributed as unrestricted weights. Verify installation, tests and the fork's divergences |
+| [Beat Transformer](https://github.com/zhaojw1998/Beat-Transformer) | Beat/downbeat Transformer with source-separated input and its postprocessing | MIT code and checkpoints in the project. Also measure preparation/separation and dependencies; assess maintenance of the research code and the weight terms, without turning an extensive adaptation into a requirement of the comparison |
+| [All-In-One](https://github.com/mir-aidj/all-in-one) | Beats/downbeats and segmentation in the same family; a variant without doing structure work we do not need, if upstream supports it | Also relevant to avoid duplicating P13. Documents PyTorch, NATTEN, madmom and source separation; native installation on Windows and full cost still to be checked. MIT code; verify weights and dependencies separately |
+| [Essentia RhythmExtractor2013](https://essentia.upf.edu/reference/std_RhythmExtractor2013.html) | `multifeature` and `degara` as two beat/cost baselines | The algorithm returns tempo and beats, not downbeats; no intrinsic downbeat score. Input at the sample rate required by its API; `degara` does not estimate confidence. [AGPL repository](https://github.com/MTG/essentia) |
+| [librosa](https://github.com/librosa/librosa) | `beat_track` and local pulse as tracking/drift controls | Beat baseline, not a complete meter/downbeat detector. ISC code; use the [official API](https://github.com/librosa/librosa/blob/main/librosa/beat.py). A hybrid with our decoder will be a separate explicit method, never a capability attributed to librosa |
 
-El modelo conjunto con una red y decodificación temporal tiene antecedentes
-reproducibles en [Böck, Krebs y Widmer, ISMIR 2016](https://archives.ismir.net/ismir2016/paper/000186.pdf).
-No se exige implementar de nuevo todas esas redes: comparar primero los
-paquetes/pesos públicos y el prototipo conjunto acotado. Si aparece otro
-candidato mantenible con código, pesos y ejecución reproducibles, añadirlo al
-inventario antes de congelar la corrida. La lista no pretende enumerar todos
-los artículos existentes.
+The joint model with a network and temporal decoding has reproducible
+precedents in [Böck, Krebs and Widmer, ISMIR 2016](https://archives.ismir.net/ismir2016/paper/000186.pdf).
+Reimplementing all of those networks is not required: first compare the
+public packages/weights and the bounded joint prototype. If another
+maintainable candidate with reproducible code, weights and execution appears, add it to the
+inventory before freezing the run. The list does not attempt to enumerate all
+existing papers.
 
-### Revisiones consultadas
+### Revisions consulted
 
-| Repositorio | Revisión consultada | Fecha del commit consultado |
+| Repository | Revision consulted | Date of the consulted commit |
 | --- | --- | --- |
 | CPJKU/beat_this | [`b95c8ab0c58c`](https://github.com/CPJKU/beat_this/commit/b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c) | 2026-05-28 |
 | mjhydri/BeatNet | [`81cedd4beeb7`](https://github.com/mjhydri/BeatNet/commit/81cedd4beeb7235262db80969a0c9ce9a48a0ed4) | 2026-04-13 |
@@ -71,131 +71,131 @@ los artículos existentes.
 | MTG/essentia | [`33108c709296`](https://github.com/MTG/essentia/commit/33108c70929684ed14091dfb671a30264cf8bb84) | 2026-10-22 |
 | librosa/librosa | [`4ffed287f904`](https://github.com/librosa/librosa/commit/4ffed287f9044654cc4a1a7393f895cd716a0a5d) | 2026-10-22 |
 
-La antigüedad de un commit no decide por sí sola la admisión. Comprobar
-actividad útil, CI/tests, instalación reproducible, plataformas y dependencia
-de parches propios. Todos los candidatos de esta tabla se instalaron y
-midieron; las exclusiones y sus motivos están en el informe de resultados.
+The age of a commit does not decide admission on its own. Check
+useful activity, CI/tests, reproducible installation, platforms and dependence
+on own patches. All candidates in this table were installed and
+measured; the exclusions and their reasons are in the results report.
 
-## Un solo banco y una sola frontera
+## A single bench and a single boundary
 
-- Un responsable del runner, manifiesto, unidades y adaptador hacia el contrato
-  P12. Cada familia vive en su propio módulo de adaptador. Si se reparte el
-  trabajo, asignar archivos distintos; los adaptadores no editan el planificador,
-  `rhythm`, `structure`, las stores o el mezclador nativo.
-- Separar ejecución del backend, normalización y métricas. Un resultado incluye
-  método/revisión/checkpoint/configuración, tiempos de pulso/1 en segundos,
-  agrupación/subdivisión/unidad si existen, cobertura, activaciones o confianza
-  originales disponibles y ausencias explícitas. Conservar salida bruta para
-  recalcular métricas sin repetir inferencias.
-- Un único decodificador de entrada y derivados cacheados por bytes,
-  transformación, frecuencia y configuración. Cada método recibe el formato
-  que necesita; no alimentar a todos con la reducción de frecuencia de P1.
-  Contar el coste de remuestreo/espectrogramas/separación aunque se cacheen.
-- Modelos y dependencias experimentales en entornos aislados o contenedores,
-  fuera de `requirements.txt` y de los paquetes de distribución del motor.
-  Dependencias y pesos fijados; descargas preparadas antes de medir. Un fallo
-  de instalación, falta de pesos o restricción de licencia se registra como
-  resultado de admisión, no se oculta ni obliga a mantener un fork grande.
-- Congelar primero el contrato mínimo del experimento; ampliar solo si falta
-  una medida necesaria. Aprovechar `metric_regions` y el plan compacto de
-  #394. No invalidar la caché de producción para ejecutar el banco aislado.
-- En la comparativa, no entrenar desde cero ni separar fuentes para todos por
-  defecto. Ejecutar el pipeline documentado cuando un candidato lo necesite,
-  identificándolo y contabilizando su coste. Una variante optimizada será una
-  fila aparte, con igualdad de resultados comprobada.
+- One owner for the runner, manifest, units and adapter towards the P12
+  contract. Each family lives in its own adapter module. If the
+  work is split, assign different files; the adapters do not edit the planner,
+  `rhythm`, `structure`, the stores or the native mixer.
+- Separate backend execution, normalization and metrics. A result includes
+  method/revision/checkpoint/configuration, beat/downbeat times in seconds,
+  grouping/subdivision/unit if they exist, coverage, the original activations or confidence
+  if available, and explicit absences. Keep the raw output to
+  recalculate metrics without repeating inferences.
+- A single input decoder and derived data cached by bytes,
+  transformation, sample rate and configuration. Each method receives the format
+  it needs; do not feed all of them with the P1 sample-rate reduction.
+  Count the cost of resampling/spectrograms/separation even if they are cached.
+- Experimental models and dependencies in isolated environments or containers,
+  outside `requirements.txt` and the engine's distribution packages.
+  Pinned dependencies and weights; downloads prepared before measuring. An
+  installation failure, missing weights or a license restriction is recorded as an
+  admission result; it is not hidden and does not force maintaining a large fork.
+- Freeze the minimum experiment contract first; extend it only if
+  a necessary measurement is missing. Reuse `metric_regions` and the compact plan from
+  #394. Do not invalidate the production cache to run the isolated bench.
+- In the comparison, do not train from scratch or separate sources for all methods by
+  default. Run the documented pipeline when a candidate needs it,
+  identifying it and counting its cost. An optimized variant will be a
+  separate row, with equality of results checked.
 
-## Corpus, comparación justa y métricas
+## Corpus, fair comparison and metrics
 
-Fijar manifiesto, referencias, particiones, tolerancias y configuración antes
-de ejecutar. Las doce pistas Ballroom de P12 son **diagnóstico ya visto**,
-no test ciego. Para cada checkpoint declarar si cada grabación fue vista en
-entrenamiento, excluida o de procedencia desconocida. No presentar como
-validación independiente un resultado con solapamiento conocido o no aclarado.
-GTZAN puede servir de test para los checkpoints de Beat This! que lo excluyen;
-comprobarlo para cada otro candidato, sin extrapolar esa exclusión a todos.
+Pin manifest, references, splits, tolerances and configuration before
+running. The twelve Ballroom tracks of P12 are **already-seen diagnostics**,
+not a blind test. For each checkpoint, declare whether each recording was seen in
+training, excluded or of unknown provenance. Do not present as
+independent validation a result with known or unclarified overlap.
+GTZAN can serve as a test for the Beat This! checkpoints that exclude it;
+check this for each other candidate, without extrapolating that exclusion to all of them.
 
-Usar las mismas grabaciones sintéticas y reales para todos los métodos, con
-las ventanas y offsets registrados. Añadir a los casos existentes 3/4, 4/4,
-6/8, subdivisiones coexistentes, cambios de métrica/tempo, anacrusas, 1 débil,
-síncopas, contratiempos, silencio y pulsos sin compás identificable. Para la
-música real, cubrir estilos y condiciones variados con referencias temporales
-auditables. Las referencias son anotaciones musicales, no notas de gusto.
-Conservar regiones ambiguas como tales y no escoger canciones después de ver
-qué método gana.
+Use the same synthetic and real recordings for all methods, with
+the windows and offsets recorded. Add to the existing cases 3/4, 4/4,
+6/8, coexisting subdivisions, meter/tempo changes, anacruses, weak 1,
+syncopation, offbeats, silence and beats without an identifiable meter. For
+real music, cover varied styles and conditions with auditable time
+references. The references are musical annotations, not preference notes.
+Keep ambiguous regions as such and do not choose songs after seeing
+which method wins.
 
-Medir por separado, con resultados por caso, estilo, unidad y cobertura:
+Measure separately, with results per case, style, unit and coverage:
 
-- Error de tempo sin ocultar octavas o relaciones 3:2; documentar además las
-  equivalencias de unidad que preservan realmente la duración del compás.
-- Precisión/recobrado/F1 y continuidad de pulso y de primer tiempo, error
-  temporal mediano/percentiles y desplazamiento de fase del compás.
-- Acierto de agrupación, subdivisión, duración física del compás y cambios;
-  los campos no proporcionados son «no disponible», nunca un 4/4 inferido a
-  escondidas. Un híbrido se evalúa con su nombre y componentes completos.
-- Cobertura, abstenciones y **falsas certezas**: error cuando el método afirma
-  conocer el 1. Abstenerse en todas las canciones no cuenta como solución.
-  Las activaciones de una red tampoco son una confianza musical calibrada
-  por el mero hecho de pasar por una sigmoide; comprobar su relación con el
-  error en la partición de desarrollo y evaluar el resultado en la de test.
-- Salida cruda y salida con el mismo refinamiento temporal de ataques de P1,
-  por separado. Distinguir equivocarse de pulso/compás de colocar tarde un
-  ataque correcto. No dar a cada backend un arreglo distinto ajustado al test.
-- Tiempo de instalación y carga, latencia fría/caliente, segundos de CPU y de
-  pared por minuto de audio, pico de RAM, disco/pesos y tamaño del runtime.
-  CPU es la referencia obligatoria; GPU opcional como otra configuración.
-  Medir un método cada vez, mismo hardware e hilos, con repeticiones y
-  variabilidad. Separar coste del backend y coste total del pipeline.
-- Mantenibilidad: código y pesos con términos identificados, disponibilidad
-  reproducible, tests, compatibilidad con Python/NumPy del proyecto y
-  distribución Linux/ARM64/Windows/macOS; necesidad y tamaño de parches.
+- Tempo error without hiding octaves or 3:2 relations; also document the
+  unit equivalences that actually preserve the bar duration.
+- Precision/recall/F1 and continuity of beat and downbeat, median/percentile
+  timing error and phase offset of the bar.
+- Accuracy of grouping, subdivision, physical bar duration and changes;
+  fields that are not provided are "not available", never a 4/4 inferred
+  silently. A hybrid is evaluated with its full name and components.
+- Coverage, abstentions and **false certainties**: error when the method claims
+  to know the 1. Abstaining on every song does not count as a solution.
+  A network's activations are also not a calibrated musical confidence
+  merely because they pass through a sigmoid; check their relation to the
+  error on the development split and evaluate the result on the test split.
+- Raw output and output with the same P1 onset timing refinement,
+  separately. Distinguish getting the beat/meter wrong from placing a correct
+  onset late. Do not give each backend a different fix tuned to the test.
+- Installation and load time, cold/warm latency, CPU and
+  wall-clock seconds per minute of audio, peak RAM, disk/weights and runtime size.
+  CPU is the mandatory reference; GPU is optional as another configuration.
+  Measure one method at a time, same hardware and threads, with repetitions and
+  variability. Separate backend cost and total pipeline cost.
+- Maintainability: code and weights with identified terms, reproducible
+  availability, tests, compatibility with the project's Python/NumPy and
+  Linux/ARM64/Windows/macOS distribution; need for and size of patches.
 
-Publicar una matriz **método × caso**, resúmenes con incertidumbre y una tabla
-comparativa completa. Incluir todos los métodos admitidos, sus variantes,
-fallos, ausencias y motivos de exclusión. No elegir ganador con una suma de
-pesos escritos a gusto; presentar los compromisos de precisión, cobertura,
-coste y mantenimiento para la decisión del usuario.
+Publish a **method × case** matrix, summaries with uncertainty and a complete
+comparison table. Include all admitted methods, their variants,
+failures, absences and reasons for exclusion. Do not choose a winner with a sum of
+weights written by preference; present the trade-offs of accuracy, coverage,
+cost and maintenance for the user's decision.
 
-## Llegar casi de extremo a extremo antes de decidir
+## Get almost end to end before deciding
 
-El banco no termina en un listado de BPM. Convertir cada salida que disponga
-de evidencia suficiente al contrato P12 mediante **un mismo adaptador**, sin
-inventar campos. Reutilizar el planificador para comprobar pares compatibles,
-3/4 → 4/4, unidades diferentes que conservan compás, cambios dentro del tramo,
-deriva y desconocidos. Medir cuántas mezclas válidas habilita y cuántas falsas
-alineaciones promete cada método. Conservar las guardas de velocidad, fase,
-cobertura y eco de P12.
+The bench does not end in a list of BPM values. Convert each output that has
+sufficient evidence to the P12 contract through **the same adapter**, without
+inventing fields. Reuse the planner to check compatible pairs,
+3/4 → 4/4, different units that keep the meter, changes within the segment,
+drift and unknowns. Measure how many valid mixes each method enables and how many false
+alignments it promises. Keep the P12 guards for speed, phase,
+coverage and echo.
 
-Ejecutar también la ruta AAC/WAV → decodificación → backend → normalización →
-SQLite experimental → planificación/rutas → HTTP de fuentes, peticiones,
-colocación, reparación y refinado. Cubrir frío/caliente, fallo/timeout,
-identidad/configuración de caché y huecos de grabaciones largas. Las salidas
-compactas y los vectores de ejecución existentes permiten contrastar web y
-Android sin crear una interfaz nueva por candidato ni mover lógica musical
-al cliente. Marcar claramente qué parte se ha ejecutado y qué parte solo se
-ha validado como contrato; la escucha física sigue siendo evidencia aparte.
+Also run the path AAC/WAV → decoding → backend → normalization →
+experimental SQLite → planning/routes → HTTP for sources, requests,
+placement, repair and refinement. Cover cold/warm, failure/timeout,
+cache identity/configuration and gaps in long recordings. The compact
+outputs and the existing execution vectors make it possible to compare web and
+Android without creating a new interface per candidate or moving musical logic
+to the client. Mark clearly which part has been executed and which part has only
+been validated as a contract; physical listening remains separate evidence.
 
-P13 se prepara aprovechando ese trabajo: fixtures de frases/secciones y
-registro de la salida estructural de All-In-One si se evalúa. Esa salida se
-puntúa con referencias propias de estructura; compartir modelo con el pulso
-no prueba por sí solo una frase ni un drop. No reescribir ahora el detector de
-secciones sobre una métrica que podría sustituirse tras la comparativa.
+P13 is prepared by reusing that work: phrase/section fixtures and
+recording of the All-In-One structural output if it is evaluated. That output is
+scored against dedicated structure references; sharing a model with the beat
+does not on its own prove a phrase or a drop. Do not rewrite the section
+detector now on top of a meter that could be replaced after the comparison.
 
-## Cierre de P12-a y entrega para decidir
+## Closing of P12-a and delivery for the decision
 
-- Runner reproducible, manifiestos y revisiones/checkpoints fijados; informe
-  por caso y tabla de todos los métodos admitidos y excluidos con su motivo.
-- Separación entre diagnóstico, desarrollo y test independiente; solapamientos
-  de entrenamiento y ausencia de referencias documentados.
-- Resultados musicales y de ejecución casi de extremo a extremo, junto con
-  coste y mantenimiento. Criterios/tolerancias fijados antes del test; los
-  tests verdes de software no sustituyen la evidencia de detección.
-- Presentar al usuario opciones sustentadas por esos resultados y **esperar
-  su decisión**. No cambiar automáticamente el detector de producción, su
-  caché, las políticas musicales ni empezar la reescritura de P13.
+- Reproducible runner, pinned manifests and revisions/checkpoints; report
+  per case and table of all admitted and excluded methods with their reason.
+- Separation between diagnostics, development and independent test; training
+  overlaps and missing references documented.
+- Musical and execution results almost end to end, together with
+  cost and maintenance. Criteria/tolerances fixed before the test; green
+  software tests do not replace the detection evidence.
+- Present to the user options supported by those results and **wait for
+  their decision**. Do not automatically change the production detector, its
+  cache or the musical policies, and do not start the P13 rewrite.
 
-Tras la elección, P12-b integra una sola vía musical y comparte su evidencia
-con P13. Agrupar persistencia, endpoints y ejecutores en una entrega coherente,
-con invalidación de análisis si cambia su significado y las regresiones que
-correspondan. P12 solo se cierra cuando hay evidencia real de utilidad de la
-detección y garantías de ejecución; P13 conserva su propia aceptación de
-frases/secciones aunque ambos se entreguen juntos.
+After the choice, P12-b integrates a single musical path and shares its evidence
+with P13. Group persistence, endpoints and executors in a coherent delivery,
+with analysis invalidation if its meaning changes and the corresponding
+regressions. P12 is only closed when there is real evidence of the usefulness of the
+detection and execution guarantees; P13 keeps its own acceptance of
+phrases/sections even if both are delivered together.

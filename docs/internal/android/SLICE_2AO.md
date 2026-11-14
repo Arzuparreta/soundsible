@@ -1,4 +1,4 @@
-# S2ao — Workspace DJ multidispositivo
+# S2ao — Multi-device DJ workspace
 
 Core handoff now marks start events as handoffs. A transport resume reuses native
 occurrences; a genuine handoff rebuilds the received workspace even if its queue

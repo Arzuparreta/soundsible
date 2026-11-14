@@ -1,23 +1,23 @@
-# S5d: cambios de copias locales en Auto
+# S5d: changes to local copies in Auto
 
-Bloque HTTP/TLS8/0,101.090s: CarOfflineExpiry2 + CarEvents2 + CarLibrary2 +
-OfflineTest2. Extensión dirigida de prueba de completado CarEvents2/0,38.286s.
-Ambos runner exit0, APK/test APK/JVM54/lint sin CA.
-[evidence](evidence/s5d.json) identifica fuentes y alcance de ambos bloques.
+HTTP/TLS block 8/0,101.090s: CarOfflineExpiry2 + CarEvents2 + CarLibrary2 +
+OfflineTest2. Targeted extension of the completion test CarEvents2/0,38.286s.
+Both runners exit0, APK/test APK/JVM54/lint without CA.
+[evidence](evidence/s5d.json) identifies sources and scope of both blocks.
 
-OfflineStore publica señales nativas de completado/error, retirada, invalidación,
-clear y cambios efectivos de etiquetas. No publica bytes/paths ni cada bloque de
-progreso. Metadata idéntica no reescribe DB ni vuelve a notificar. Car subscriptions
-observa sólo mientras hay suscriptores, agrupa refresh y elimina observer al reset/
-close/último unsubscribe. La identidad incluye el perfil offline verificado cuando
-no hay cookie; no abre socket de red sin cookie.
+OfflineStore publishes native signals for completion/error, removal, invalidation,
+clear and effective label changes. It does not publish bytes/paths or each
+progress block. Identical metadata does not rewrite the DB or notify again. Car subscriptions
+observes only while there are subscribers, groups refresh and removes the observer on reset/
+close/last unsubscribe. The identity includes the verified offline profile when
+there is no cookie; it does not open a network socket without a cookie.
 
-Con headers retrasados5s, se cierra Activity antes de completar la copia. Browser
-recibe count1 al completarse y count0 al retirarse; programa NORMAL conserva KEY y
-PCM. Con cookie expirada/backend503, una actualización de metadata del cache y
-retirada también notifican. Esa actualización es el primitivo de cache local,
-no una edición del servidor sin conexión. Al quedar sin copias, root se deniega;
-logout y tests offline previos siguen pasando.
+With headers delayed 5s, the Activity is closed before the copy completes. Browser
+receives count1 when it completes and count0 when it is removed; the NORMAL program keeps KEY and
+PCM. With an expired cookie/backend 503, a cache metadata update and a
+removal also notify. That update is the local cache primitive,
+not an edit of the server without a connection. When no copies remain, root is denied;
+logout and previous offline tests still pass.
 
-Pendientes controles/metadata durante DJ, pérdida/reconexión real y UID externo/
-host. SameUID/AVD no prueba escucha o coche físico. No paridad completa/release.
+Pending: controls/metadata during DJ, real loss/reconnection and external UID/
+host. SameUID/AVD does not prove listening or a physical car. Not complete parity/release.

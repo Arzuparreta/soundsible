@@ -1,16 +1,16 @@
-# S5e: controles del coche durante DJ
+# S5e: car controls during DJ
 
-CarDjTest2/0 HTTP/TLS; runner exit0 y APK/test APK/JVM54/lint sin CA temporal.
-[evidence](evidence/s5e.json) registra revisión, hash y duración.
+CarDjTest2/0 HTTP/TLS; runner exit0 and APK/test APK/JVM54/lint without temporary CA.
+[evidence](evidence/s5e.json) records revision, hash and duration.
 
-Core crea el programa DJ con dos decoders reales. Los browsers moderno y clásico
-observan la canción dominante. Browse conserva token y claves de ocurrencia;
-pausa/seek6000ms desde clásico, resume desde moderno, y la secuencia inversa
-conservan DJ y producen PCM estéreo48k no silencioso.
+Core creates the DJ programme with two real decoders. The modern and classic browsers
+observe the dominant song. Browse keeps the token and occurrence keys;
+pause/seek6000ms from classic, resume from modern, and the reverse sequence
+keep DJ and produce non-silent stereo 48k PCM.
 
-El primer bloque falló por una comprobación incorrecta del test: source indica
-tipo de archivo, no modo DJ. Se corrigió con aserciones independientes de modo,
-token/claves y PCM. No fue un fallo del producto.
+The first block failed because of an incorrect check in the test: source indicates
+the file type, not DJ mode. It was corrected with independent assertions of mode,
+token/keys and PCM. It was not a product failure.
 
-SameUID/AVD no prueba host Google Auto, UID externo, audio físico ni paridad
-completa. Labels del programa activo y pérdida/reconexión siguen pendientes.
+SameUID/AVD does not test the Google Auto host, an external UID, physical audio or full
+parity. Labels of the active programme and loss/reconnection are still pending.

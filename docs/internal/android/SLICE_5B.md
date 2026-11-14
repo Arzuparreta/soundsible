@@ -1,31 +1,31 @@
-# S5b: suscripciones Android Auto en segundo plano
+# S5b: Android Auto subscriptions in the background
 
 **8/0 HTTP/TLS,50.108s**, runner exit0: CarEvents2 + CarLibrary2 + CarLegacy2 +
-TransportReset2. APK/test APK/JVM54/lint pasan sin CA temporal.
-[evidence](evidence/s5b.json) conserva hashes y el diagnóstico de revocación.
+TransportReset2. APK/test APK/JVM54/lint pass without temporary CA.
+[evidence](evidence/s5b.json) keeps hashes and the revocation diagnosis.
 
-ProgramCarSubscriptions abre Socket.IO nativo sólo cuando hay suscriptores de
-car. Connection/cookie y callbacks se atan a generation/identidad. Eventos Core
-library/saved/favourites y conexión inicial agrupan refresh durante250ms; se
-consulta metadata actual del perfil antes de notifyChildrenChanged. Son64 registros
-y16 padres distintos como máximo. Un padre en vuelo se marca dirty y se repite
-sólo ese padre: un fetch lento no crea un bucle de polling de todas las carpetas.
-Desuscripción/desconexión elimina registros; el último cierra socket y cancela
-trabajo. Reset/logout/destroy invalidan callbacks y recursos. Reconexión configurada
-con5 intentos acotados; pérdida real de red/reconnect aún no probada.
+ProgramCarSubscriptions opens native Socket.IO only when there are car
+subscribers. Connection/cookie and callbacks are bound to generation/identity. Core events
+library/saved/favourites and the initial connection group refreshes during250ms; the
+current profile metadata is queried before notifyChildrenChanged. There are at most64 registrations
+and16 distinct parents. A parent in flight is marked dirty and only that parent
+is repeated: a slow fetch does not create a polling loop over all folders.
+Unsubscription/disconnection removes registrations; the last one closes the socket and cancels
+work. Reset/logout/destroy invalidate callbacks and resources. Reconnection configured
+with5 bounded attempts; real network loss/reconnect not yet tested.
 
-CarEventsTest destruye Activity/WebView con música real reproduciéndose. Cambia
-labels y crea/borra playlist mediante API Core; browser recibe eventos/children y
-conteos actualizados. Conserva KEY y PCM. Tras unsubscribe, otra mutación no
-notifica. HTTP y TLS, sin motor/cuentas reales.
+CarEventsTest destroys Activity/WebView with real music playing. It changes
+labels and creates/deletes a playlist through the Core API; the browser receives events/children and
+updated counts. It keeps KEY and PCM. After unsubscribe, another mutation does not
+notify. HTTP and TLS, without real engine/accounts.
 
-Con la nueva suscripción hubo una carrera401: un browse de background podía
-revocar la sesión antes del browse explícito. Ahora todos los futures pendientes
-reciben autenticación expirada cuando401 es la causa; reset por desconexión conserva
-su razón. Guard inicial de identidad tolera generation cambiada sin tirar excepción
-del callback. El bloque moderno/clásico anterior pasa junto con los eventos.
+With the new subscription there was a401 race: a background browse could
+revoke the session before the explicit browse. Now all pending futures
+receive expired authentication when401 is the cause; reset due to disconnection keeps
+its reason. The initial identity guard tolerates a changed generation without throwing an exception
+from the callback. The earlier modern/classic block passes together with the events.
 
-Pendiente: pérdida/reconexión real, eventos del almacenamiento offline local,
-Auto con cookie expirada sin401 observado, controles/metadata durante DJ y UID
-externo/host. Actualizar children no demuestra refresco de etiquetas del programa
-que ya suena. No es paridad completa ni aceptación de coche/escucha física.
+Pending: real loss/reconnection, local offline storage events,
+Auto with expired cookie without observed401, controls/metadata during DJ and external
+UID/host. Updating children does not prove refresh of labels of the program
+that is already playing. It is not full parity or car/physical listening acceptance.

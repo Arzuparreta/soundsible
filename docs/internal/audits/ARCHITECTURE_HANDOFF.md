@@ -1,185 +1,185 @@
-# Traspaso de la revisión de arquitectura (2026-11-05)
+# Architecture review handoff (2026-11-05)
 
-Punto de entrada para continuar sin el historial del chat. Recoge lo que se
-encontró al recorrer el motor, la UI web, los clientes y el CI, qué se arregló y
-qué queda. Actualiza la tabla de estado cuando cierres un punto.
+Entry point for continuing without the chat history. It collects what was
+found while going through the engine, the web UI, the clients and CI, what was fixed and
+what remains. Update the status table when you close an item.
 
-Las comprobaciones se hicieron sobre `main` en `3c7e4af3`. Las marcadas como
-**reproducido** se ejecutaron; las demás salen de leer el código.
+The checks were made on `main` at `3c7e4af3`. Those marked as
+**reproduced** were executed; the others come from reading the code.
 
-## Estado
+## Status
 
-| # | Punto | Estado |
+| # | Item | Status |
 | --- | --- | --- |
-| 1 | El editor de metadatos de la web saca la canción de sus playlists | **Cerrado** en la primera PR |
-| 1b | Etiquetas de una cuenta copiadas al catálogo compartido del pool | **Cerrado** en la primera PR |
-| 1c | Portadas manuales/retiradas compartidas entre cuentas | Corregido en la [entrega de portadas](2026-11-07-artwork-requests.md): overrides por cuenta; referencias históricas ambiguas preservadas |
-| 2 | Detrás de un proxy, cualquiera en internet es administrador sin contraseña | **Cerrado** en la primera PR (ver residuo) |
-| 3 | Socket.IO acepta cualquier origen | Pendiente |
-| 4 | Cola de reproducción del servidor que ningún cliente lee; rutas stub | Pendiente, necesita decisión |
-| 5 | Lógica de negocio en módulos de rutas y en el módulo Flask | Pendiente |
-| 6 | JSON de estado escritos sin protección ante cortes | Pendiente |
-| 7 | Actualización de yt-dlp con el módulo ya importado | Pendiente, no reproducido |
-| 8 | Código muerto y detalles menores | Parcial: eliminado `gui.sh`; resto pendiente |
-| 9 | Identidad musical acoplada a hash/vídeo y reconstruida en cada cliente | Implementado en PR #423; pendiente de CI e integración |
+| 1 | The web metadata editor removes the song from its playlists | **Closed** in the first PR |
+| 1b | Labels of one account copied to the shared pool catalogue | **Closed** in the first PR |
+| 1c | Manual/removed covers shared between accounts | Fixed in the [artwork delivery](2026-11-07-artwork-requests.md): per-account overrides; ambiguous historical references preserved |
+| 2 | Behind a proxy, anyone on the internet is an administrator without a password | **Closed** in the first PR (see residue) |
+| 3 | Socket.IO accepts any origin | Pending |
+| 4 | Server playback queue that no client reads; stub routes | Pending, needs a decision |
+| 5 | Business logic in route modules and in the Flask module | Pending |
+| 6 | State JSON files written without protection against power loss | Pending |
+| 7 | yt-dlp update with the module already imported | Pending, not reproduced |
+| 8 | Dead code and minor details | Partial: `gui.sh` removed; rest pending |
+| 9 | Musical identity coupled to hash/video and rebuilt in each client | Implemented in PR #423; pending CI and integration |
 
-## Cerrado en la primera PR
+## Closed in the first PR
 
-### 1. Editor de metadatos de la web (reproducido)
+### 1. Web metadata editor (reproduced)
 
-`ui_web/src/components/MetadataEditor.tsx` usaba `/api/library/tracks/<id>/metadata`,
-`/cover` y `/cover/none`. Las tres llamaban a `LibraryManager.update_track`, que
-reescribía las etiquetas dentro del archivo: el hash cambiaba, el id también, y
-se guardaba con `_save_metadata()` sin `id_replacements`. Resultado:
+`ui_web/src/components/MetadataEditor.tsx` used `/api/library/tracks/<id>/metadata`,
+`/cover` and `/cover/none`. All three called `LibraryManager.update_track`, which
+rewrote the tags inside the file: the hash changed, the id too, and
+it was saved with `_save_metadata()` without `id_replacements`. Result:
 
-- las playlists seguían apuntando al id viejo, que ya no existía;
-- `track_user_state` (reproducciones, valoración) no pasaba al id nuevo;
-- la ruta marcaba `cover_source` sobre el id viejo, `_mark_track_metadata_updated`
-  devolvía `False` sin avisar y la marca se perdía; «quitar carátula» incrustaba
-  un PNG transparente de 1×1 en el audio;
-- `update_track` subía y bajaba archivos del proveedor remoto con el bloqueo
-  global `coordinated()` tomado.
+- playlists kept pointing to the old id, which no longer existed;
+- `track_user_state` (plays, rating) was not moved to the new id;
+- the route set `cover_source` on the old id, `_mark_track_metadata_updated`
+  returned `False` without warning and the mark was lost; "remove cover" embedded
+  a transparent 1×1 PNG in the audio;
+- `update_track` uploaded and downloaded files from the remote provider while holding the
+  global `coordinated()` lock.
 
-Android ya usaba `/api/library/track-labels/<id>/…` (creadas por esto, ver
-`docs/internal/android/SLICE_2S.md`), que guardan etiquetas en `library.db` y la carátula
-en el sidecar de artwork sin tocar el audio.
+Android already used `/api/library/track-labels/<id>/…` (created for this, see
+`docs/internal/android/SLICE_2S.md`), which store labels in `library.db` and the cover
+in the artwork sidecar without touching the audio.
 
-Arreglo: `ui_web/src/lib/api.ts` usa las rutas `track-labels`. Se borraron las
-rutas antiguas (incluida `/cover/from-track`, sin clientes, y el parámetro
-`cover_url`, que hacía que el servidor descargara cualquier URL sin límite de
-tamaño), `LibraryManager.update_track`, `setup_tool/uploader.py`,
-`shared/track_identity.py` y `AudioProcessor.update_tags`, que solo usaba esa ruta.
-Consecuencia buscada: editar una etiqueta ya no cambia las etiquetas
-incrustadas en el archivo descargado; eran privadas por cuenta igualmente.
+Fix: `ui_web/src/lib/api.ts` uses the `track-labels` routes. The
+old routes were deleted (including `/cover/from-track`, without clients, and the parameter
+`cover_url`, which made the server download any URL without a size
+limit), `LibraryManager.update_track`, `setup_tool/uploader.py`,
+`shared/track_identity.py` and `AudioProcessor.update_tags`, which only that route used.
+Intended consequence: editing a label no longer changes the tags
+embedded in the downloaded file; they were private per account anyway.
 
-### 1b. Copia de etiquetas al catálogo del pool
+### 1b. Copy of labels to the pool catalogue
 
-`_mirror_track_into_pool` (`shared/api/__init__.py`) copiaba al `library.json`
-del pool las etiquetas editadas por cualquier cuenta. Con una cuenta es
-necesario, porque ese archivo es su biblioteca. Con varias es el catálogo de la
-instancia y `run_sync_task` lo vuelve a fusionar en la biblioteca del
-administrador, así que la etiqueta de un miembro podía acabar en otra cuenta.
-Ahora solo copia mientras `instance_has_multiple_users()` es falso.
+`_mirror_track_into_pool` (`shared/api/__init__.py`) copied to the pool's `library.json`
+the labels edited by any account. With one account this is
+necessary, because that file is its library. With several it is the
+instance catalogue and `run_sync_task` merges it again into the
+administrator's library, so a member's label could end up in another account.
+Now it only copies while `instance_has_multiple_users()` is false.
 
-### 2. Confianza por red detrás de un proxy (reproducido)
+### 2. Network trust behind a proxy (reproduced)
 
-Con una sola cuenta sin contraseña y `advanced_mode` (lo activan `--daemon` y
-Docker), `_legacy_trusted_network_allowed()` da el tipo `owner` con todos los
-permisos a quien llegue desde una IP de confianza. Un proxy inverso local o
-`tailscale funnel` hacían que todo llegara como `127.0.0.1`. Además
-`startswith('100.')` confiaba en todo `100.0.0.0/8` en vez de `100.64.0.0/10`.
-Con el cliente de pruebas de Flask, `GET /api/users` daba 200 desde `127.0.0.1`
-con `X-Forwarded-For` público y desde `100.1.2.3`.
+With a single account without a password and `advanced_mode` (enabled by `--daemon` and
+Docker), `_legacy_trusted_network_allowed()` gives the `owner` type with all
+permissions to anyone arriving from a trusted IP. A local reverse proxy or
+`tailscale funnel` made everything arrive as `127.0.0.1`. In addition
+`startswith('100.')` trusted all of `100.0.0.0/8` instead of `100.64.0.0/10`.
+With the Flask test client, `GET /api/users` returned 200 from `127.0.0.1`
+with a public `X-Forwarded-For` and from `100.1.2.3`.
 
-Arreglo en `shared/security.py`:
+Fix in `shared/security.py`:
 
-- `is_trusted_network` usa `100.64.0.0/10` y desenvuelve IPv4 mapeadas en IPv6.
-- `request_client_address()`: si el par es de confianza y trae cabeceras de
-  proxy, decide con la entrada **más a la derecha** de `X-Forwarded-For` (la
-  que escribe el proxy más cercano), si no con el último `for=` de `Forwarded`,
-  si no con `X-Real-IP`. `Tailscale-Funnel-Request` o un proxy que no nombra a
-  nadie (`X-Forwarded-Proto`/`Host` sin dirección) dan `""`, en el que nada
-  confía. Las cabeceras de un par que no es de confianza nunca se creen.
-- La usan `get_request_auth_context`, la conexión Socket.IO, `is_safe_path` en
-  playback y Subsonic, y `/api/downloader/config` (que con confianza mostraba
-  las credenciales de la nube sin enmascarar).
+- `is_trusted_network` uses `100.64.0.0/10` and unwraps IPv4-mapped IPv6 addresses.
+- `request_client_address()`: if the peer is trusted and carries proxy
+  headers, it decides with the **rightmost** entry of `X-Forwarded-For` (the
+  one written by the nearest proxy), otherwise with the last `for=` of `Forwarded`,
+  otherwise with `X-Real-IP`. `Tailscale-Funnel-Request` or a proxy that names
+  nobody (`X-Forwarded-Proto`/`Host` without an address) give `""`, which nothing
+  trusts. Headers from a peer that is not trusted are never believed.
+- It is used by `get_request_auth_context`, the Socket.IO connection, `is_safe_path` in
+  playback and Subsonic, and `/api/downloader/config` (which with trust showed
+  the cloud credentials unmasked).
 
-Comportamiento de Tailscale comprobado en `ipn/ipnlocal/serve.go`: `serve`
-**sustituye** `X-Forwarded-For` por la IP del par de la tailnet (sigue siendo de
-confianza); `funnel` pone la IP externa y añade `Tailscale-Funnel-Request: ?1`.
+Tailscale behaviour checked in `ipn/ipnlocal/serve.go`: `serve`
+**replaces** `X-Forwarded-For` with the IP of the tailnet peer (it remains
+trusted); `funnel` sets the external IP and adds `Tailscale-Funnel-Request: ?1`.
 
-**Residuo:** un proxy que no envía ninguna cabecera (Nginx sin
-`proxy_set_header X-Forwarded-For …`) sigue pareciendo esta máquina. No hay
-forma de distinguirlo; `docs/INSTALL.md` §5 ahora pide la cabecera y una
-contraseña antes de publicar el motor. Quien usaba un proxy público sin
-contraseña pierde por él los permisos de escritura y administración hasta que
-ponga una.
+**Residue:** a proxy that sends no header (Nginx without
+`proxy_set_header X-Forwarded-For …`) still looks like this machine. There is no
+way to distinguish it; `docs/INSTALL.md` §5 now asks for the header and a
+password before publishing the engine. Anyone who used a public proxy without a
+password loses write and administration permissions through it until they
+set one.
 
-## Pendiente
+## Pending
 
-### 3. Socket.IO acepta cualquier origen
+### 3. Socket.IO accepts any origin
 
-`_socket_cors_origins = "*"` (`shared/api/__init__.py`) mientras REST usa
-`_build_cors_origins()`. Sin contraseña y en modo daemon, `on_socket_connect`
-acepta el socket sin mirar la IP, así que una página cualquiera abierta en un
-navegador que llegue al motor recibe `library_updated`, `downloader_*` y los
-eventos de reproducción.
+`_socket_cors_origins = "*"` (`shared/api/__init__.py`) while REST uses
+`_build_cors_origins()`. Without a password and in daemon mode, `on_socket_connect`
+accepts the socket without looking at the IP, so any page open in a
+browser that reaches the engine receives `library_updated`, `downloader_*` and the
+playback events.
 
-Cuidado al arreglarlo: en `python-engineio` 4.13, una **lista** de orígenes
-sustituye a la comprobación de mismo origen (`HTTP_HOST` y
-`X-Forwarded-Host`). Pasar la lista de REST rompería el reproductor servido en
-`https://maquina.tailnet.ts.net` o tras un proxy. Hay que pasar una función
-`(origin, environ)` que acepte el mismo origen (como hace engineio con `None`)
-**o** los patrones de REST. Android nativo (OkHttp) no envía `Origin`, y engineio
-no comprueba nada sin esa cabecera. Probar con los cuatro perfiles de
-Playwright y con `tailscale serve`.
+Be careful when fixing it: in `python-engineio` 4.13, a **list** of origins
+replaces the same-origin check (`HTTP_HOST` and
+`X-Forwarded-Host`). Passing the REST list would break the player served at
+`https://maquina.tailnet.ts.net` or behind a proxy. A function
+`(origin, environ)` must be passed that accepts the same origin (as engineio does with `None`)
+**or** the REST patterns. Native Android (OkHttp) does not send `Origin`, and engineio
+checks nothing without that header. Test with the four
+Playwright profiles and with `tailscale serve`.
 
-### 4. Cola de reproducción del servidor
+### 4. Server playback queue
 
-`player/queue_manager.py` y `/api/playback/queue*`, `/shuffle`, `/repeat`,
-`/next`: ningún cliente (web, Android, iOS) la lee. `docs/AGENT_INTEGRATION.md`
-dice «This is the queue the browser player consumes», y no es así: lo que un
-agente añade no suena. `GET /api/playback/next` modifica estado con un GET.
-`/api/playback/play` responde siempre 404 y `/api/playback/toggle` siempre 500:
-restos del reproductor de servidor eliminado. Decisión del usuario: borrar la
-cola y sus rutas (y la sección de la guía de agentes) o conectarla a los
-reproductores. Los dos stubs se pueden borrar ya.
+`player/queue_manager.py` and `/api/playback/queue*`, `/shuffle`, `/repeat`,
+`/next`: no client (web, Android, iOS) reads it. `docs/AGENT_INTEGRATION.md`
+says "This is the queue the browser player consumes", and that is not true: what an
+agent adds does not play. `GET /api/playback/next` modifies state with a GET.
+`/api/playback/play` always responds 404 and `/api/playback/toggle` always 500:
+leftovers of the removed server player. User decision: delete the
+queue and its routes (and the section of the agents guide) or connect it to the
+players. The two stubs can be deleted now.
 
-### 5. Capas
+### 5. Layers
 
-`_resolve_candidates` es privada de `shared/api/routes/catalog.py` y la importan
-`auto_mode.py`, `library.py` y `shared/migration/service.py`.
-`shared/dj/session.py` importa `_dj_prepare_cohort` de `routes/auto_mode.py`.
-`catalog.py` importa `_get_preview_stream_cached` de `routes/playback.py`. Los
-objetos compartidos (`get_user_core`, `add_tracks_to_user_library`,
-`emit_to_user`, `socketio`) viven en `shared/api/__init__.py`; por eso nueve
-blueprints tienen su `_get_api()` con imports diferidos y
-`shared/loudness/service.py`, `shared/migration/service.py` y
-`shared/artwork_recovery.py` importan el módulo Flask. Mover esas funciones a
-módulos de servicio es mecánico. Los tests sustituyen `_get_api` con
-diccionarios: moverlas obliga a actualizar esos dobles.
+`_resolve_candidates` is private to `shared/api/routes/catalog.py` and is imported by
+`auto_mode.py`, `library.py` and `shared/migration/service.py`.
+`shared/dj/session.py` imports `_dj_prepare_cohort` from `routes/auto_mode.py`.
+`catalog.py` imports `_get_preview_stream_cached` from `routes/playback.py`. The
+shared objects (`get_user_core`, `add_tracks_to_user_library`,
+`emit_to_user`, `socketio`) live in `shared/api/__init__.py`; that is why nine
+blueprints have their own `_get_api()` with deferred imports and
+`shared/loudness/service.py`, `shared/migration/service.py` and
+`shared/artwork_recovery.py` import the Flask module. Moving those functions to
+service modules is mechanical. The tests replace `_get_api` with
+dictionaries: moving them requires updating those doubles.
 
-### 6. Escrituras JSON no atómicas
+### 6. Non-atomic JSON writes
 
 `player/queue_manager.py` (`queue_state.json`), `shared/playback_state.py`
-(en cada `PUT /api/playback/state`) y `shared/discovery_intelligence.py`
-(`discovery_settings.json`) usan `write_text`. Un corte durante la escritura
-deja el archivo truncado. `favourites_manager` usa ahora la colección SQLite (PR #423)
-y existe `shared/atomic_file.py`. Si se borra la cola del punto 4, sobran dos.
+(on each `PUT /api/playback/state`) and `shared/discovery_intelligence.py`
+(`discovery_settings.json`) use `write_text`. A power loss during the write
+leaves the file truncated. `favourites_manager` now uses the SQLite collection (PR #423)
+and `shared/atomic_file.py` exists. If the queue from item 4 is deleted, two are no longer needed.
 
-### 7. Actualización de yt-dlp en caliente (no reproducido)
+### 7. Hot yt-dlp update (not reproduced)
 
-Con `YTDLP_AUTO_UPDATE`, `start_api` lanza `pip install --upgrade yt-dlp` en
-segundo plano cuando `yt_dlp` ya está importado (comprobado: `import shared.api`
-lo carga). La versión instalada trae `lazy_extractors.py`: al importar solo se
-cargan 4 extractores, y el de YouTube se importa en el primer uso, desde los
-archivos nuevos, junto al núcleo viejo en memoria. Arreglo: actualizar antes de
-importar o reiniciar después de actualizar.
+With `YTDLP_AUTO_UPDATE`, `start_api` launches `pip install --upgrade yt-dlp` in
+the background when `yt_dlp` is already imported (checked: `import shared.api`
+loads it). The installed version ships `lazy_extractors.py`: on import only
+4 extractors are loaded, and the YouTube one is imported on first use, from the
+new files, alongside the old core in memory. Fix: update before
+importing or restart after updating.
 
-### 8. Código muerto y menores
+### 8. Dead code and minor items
 
-- **Cerrado:** eliminado `gui.sh`, que solo imprimía que el reproductor GTK se
-  eliminó y recomendaba `python run.py`. No tenía consumidores en el repositorio.
-- 35 iconos en `desktop-shell/src-tauri/icons/ios` e `icons/android` que
-  `tauri.conf.json` no referencia.
-- `stream_local_track` devuelve la ruta absoluta en el 404
-  (`shared/api/routes/playback.py`); `/api/health` oculta rutas a propósito.
-- `docs/internal/ARCHITECTURE.md` §5 todavía lista `<config>/download_queue.json`; la
-  cola de descargas está en `instance.db`.
-- Los límites de `rate_limit` usan `request.remote_addr`: detrás de un proxy
-  todos los clientes comparten cubo. Podrían usar `request_client_address()`,
-  con cuidado de no dejar que un cliente elija su propia clave.
-- `get_request_auth_context` guarda el contexto en `g` sin tener en cuenta
-  `allow_trusted_network`. Hoy no falla porque todos los llamadores pasan `True`,
-  pero el parámetro no tiene efecto real.
+- **Closed:** removed `gui.sh`, which only printed that the GTK player had been
+  removed and recommended `python run.py`. It had no consumers in the repository.
+- 35 icons in `desktop-shell/src-tauri/icons/ios` and `icons/android` that
+  `tauri.conf.json` does not reference.
+- `stream_local_track` returns the absolute path in the 404
+  (`shared/api/routes/playback.py`); `/api/health` hides paths on purpose.
+- `docs/internal/ARCHITECTURE.md` §5 still lists `<config>/download_queue.json`; the
+  download queue is in `instance.db`.
+- The `rate_limit` limits use `request.remote_addr`: behind a proxy
+  all clients share a bucket. They could use `request_client_address()`,
+  taking care not to let a client choose its own key.
+- `get_request_auth_context` stores the context in `g` without taking
+  `allow_trusted_network` into account. Today it does not fail because all callers pass `True`,
+  but the parameter has no real effect.
 
 
-## 9. Identidad de colección (PR #423)
+## 9. Collection identity (PR #423)
 
-El incidente «2 songs» con una fila mezclaba una referencia YouTube y un archivo
-con hash: guardados deduplicaba sus fuentes, pero playlists buscaba sólo por
-`track.id`. La PR sustituye esa arquitectura por elementos musicales estables,
-relaciones de fuente persistidas y una única transacción de incorporación y
-pertenencia. Web/Android/coche/iOS consumen la identidad sin retargetear audio
-preparado u offline. Contrato, migración y aceptación en
-[COLLECTION_IDENTITY](COLLECTION_IDENTITY.md). No cierra los puntos 3–8.
+The "2 songs" incident with one row mixed a YouTube reference and a file
+with a hash: saved items deduplicated their sources, but playlists searched only by
+`track.id`. The PR replaces that architecture with stable musical items,
+persisted source relations and a single transaction for incorporation and
+membership. Web/Android/car/iOS consume the identity without retargeting prepared
+or offline audio. Contract, migration and acceptance in
+[COLLECTION_IDENTITY](COLLECTION_IDENTITY.md). It does not close items 3–8.

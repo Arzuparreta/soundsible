@@ -1,98 +1,98 @@
-# Identidad de colección y fuentes reproducibles
+# Collection identity and playable sources
 
-## Contrato
+## Contract
 
-Un elemento musical de una cuenta tiene `item_id` estable. Un archivo tiene
-`id` y `file_hash`; un vídeo tiene su ID de proveedor. Descargar, reparar o
-retirar un archivo cambia las fuentes del elemento, nunca su identidad ni sus
-pertenencias a playlists. Una aparición en una cola conserva además su propio
-`queueId` y la fuente de audio preparada para esa aparición.
+A musical item of an account has a stable `item_id`. A file has
+`id` and `file_hash`; a video has its provider ID. Downloading, repairing or
+removing a file changes the sources of the item, never its identity or its
+playlist memberships. An occurrence in a queue additionally keeps its own
+`queueId` and the audio source prepared for that occurrence.
 
-La colección canónica vive en `users/<cuenta>/library.db`: `collection_items`
-guarda el elemento y sus propiedades personales, `collection_keys` sus
-identificadores externos, `collection_sources` las fuentes online y
-`collection_files` las asociaciones explícitas con el catálogo de archivos.
-`collection_user_state` conserva valoraciones y reproducciones aunque se retire
-la fuente; `track_user_state` es su proyección para consultas antiguas.
-`playlist_tracks.track_id` conserva el nombre histórico en SQLite, pero su valor
-es la referencia al elemento, no la dirección del audio.
+The canonical collection lives in `users/<cuenta>/library.db`: `collection_items`
+stores the item and its personal properties, `collection_keys` its
+external identifiers, `collection_sources` the online sources and
+`collection_files` the explicit associations with the file catalog.
+`collection_user_state` keeps ratings and plays even if the source
+is removed; `track_user_state` is its projection for old queries.
+`playlist_tracks.track_id` keeps the historical name in SQLite, but its value
+is the reference to the item, not the audio address.
 
-Los identificadores de proveedor no son únicos: no se fusionan automáticamente
-dos archivos/ediciones por compartir vídeo o ISRC. La incorporación resuelve
-evidencia exacta y no ambigua, o crea un elemento. La identidad interna de una
-cuenta nunca se copia desde el catálogo compartido del pool.
+Provider identifiers are not unique: two files/editions are not merged automatically
+because they share a video or ISRC. Incorporation resolves
+exact and unambiguous evidence, or creates an item. The internal identity of an
+account is never copied from the shared catalog of the pool.
 
-`GET /api/library/collection` materializa elementos, fuentes seleccionadas,
-favoritos y playlists desde una misma transacción de lectura. El cliente puede
-seguir usando el catálogo de archivos para edición, bytes y descargas, pero no
-reconstruye la colección emparejando archivos y favoritos. Las referencias de
-colección se indexan por `item_id`; el audio usa su descriptor de fuente.
+`GET /api/library/collection` materializes items, selected sources,
+favourites and playlists from a single read transaction. The client can
+keep using the file catalog for editing, bytes and downloads, but it does not
+rebuild the collection by matching files and favourites. Collection
+references are indexed by `item_id`; audio uses its source descriptor.
 
-Añadir desde búsqueda/DJ envía un descriptor musical a la operación de playlist.
-Admisión, guardado y pertenencia se confirman en una sola transacción. La adquisición construye un
-snapshot separado y sólo lo publica en memoria después de confirmar fuentes e
-identidades; las lecturas de compatibilidad no ven archivos a medio incorporar. No hay una
-segunda petición de guardado que pueda fallar después de añadir la referencia.
+Adding from search/DJ sends a musical descriptor to the playlist operation.
+Admission, saving and membership are confirmed in a single transaction. Acquisition builds a
+separate snapshot and only publishes it in memory after confirming sources and
+identities; compatibility reads do not see half-incorporated files. There is no
+second save request that can fail after the reference is added.
 
-El motor anuncia la capacidad con la cabecera `X-Soundsible-Collection`; no la
-inyecta en ajustes del usuario. El snapshot devuelve un ETag por cuenta y
-revisiones de colección/biblioteca/artwork/loudness; las recargas sin cambios
-responden 304 antes de materializarlo. Una vez negociado, la web actualiza un
-solo recurso. El catálogo añade referencias privadas después de sus cachés de
-proveedor; nunca almacena `item_id` de una cuenta en ellas.
+The engine announces the capability with the `X-Soundsible-Collection` header; it does not
+inject it into user settings. The snapshot returns an ETag per account and
+collection/library/artwork/loudness revisions; reloads without changes
+respond 304 before materializing it. Once negotiated, the web updates a
+single resource. The catalog adds private references after its provider
+caches; it never stores an account's `item_id` in them.
 
-Android conserva `item_id` en programa, planes, resolución de catálogo y
-metadatos offline; las URI y IDs de ocurrencia siguen fijando el audio. iOS y
-coche reciben `id` estable y `track_id` de fuente por separado. La copia offline
-retiene la asociación persistida aunque el servidor seleccione otro archivo.
-Las filas repetidas de playlist se seleccionan por posición, no por canción.
+Android keeps `item_id` in program, plans, catalog resolution and
+offline metadata; the URIs and occurrence IDs still pin the audio. iOS and
+car receive a stable `id` and a source `track_id` separately. The offline copy
+retains the persisted association even if the server selects another file.
+Repeated playlist rows are selected by position, not by song.
 
-## Migración y compatibilidad
+## Migration and compatibility
 
-La primera apertura incorpora los archivos, las canciones guardadas del antiguo
-`favourites.json` y las referencias de playlists. Los IDs ya utilizados por los
-archivos se conservan como valores iniciales de identidad interna; dejan de
-seguir al hash desde ese momento. Las nuevas incorporaciones online reciben un
-ID opaco. Orden, repeticiones, fechas, marcas y selección de carátula se conservan.
+The first open incorporates the files, the saved songs of the old
+`favourites.json` and the playlist references. The IDs already used by the
+files are kept as initial values of the internal identity; they stop
+following the hash from that moment. New online incorporations receive an
+opaque ID. Order, repetitions, dates, marks and cover selection are kept.
 
-El JSON antiguo queda como restauración, sin volver a leerse después de completar
-la migración. Los endpoints antiguos de guardados/favoritos son fachadas sobre
-SQLite. La copia completa y restaurable de la colección es `library.db`
-(incluida por `shared.instance_backup`); `library.json` sigue siendo el manifiesto
-portable de archivos y referencias, no un backup de elementos online y marcas.
-Los nombres técnicos antiguos sólo se interpretan en las fronteras de
-compatibilidad y en la incorporación, no en cada lectura de una playlist.
+The old JSON remains as a restoration source, without being read again after the
+migration completes. The old saved/favourites endpoints are facades over
+SQLite. The complete and restorable copy of the collection is `library.db`
+(included by `shared.instance_backup`); `library.json` is still the portable
+manifest of files and references, not a backup of online items and marks.
+The old technical names are only interpreted at the compatibility
+boundaries and at incorporation, not on every read of a playlist.
 
-Una referencia histórica sin suficiente evidencia permanece visible como elemento
-sin fuente disponible. La falta de audio no elimina un elemento ni su posición.
-La migración debe fallar y revertir ante datos ilegibles; no sustituirlos por una
-colección vacía.
+A historical reference without sufficient evidence stays visible as an item
+without an available source. Missing audio does not remove an item or its position.
+The migration must fail and roll back on unreadable data; do not replace them with an
+empty collection.
 
-## Plan y aceptación
+## Plan and acceptance
 
-1. Sustituir la normalización vídeo → hash por entidades y relaciones persistidas.
-2. Migrar guardados y playlists; unificar sus escrituras y rechazar conflictos.
-3. Adaptar biblioteca web, Android, búsqueda/DJ, carátulas y edición de playlists.
-4. Conservar fuentes fijadas en reproducción, análisis por audio y copias offline.
-5. Validar migración/reinicio, incorporación antes/después de descarga, reparación,
-   retirada de fuente, ambigüedad, aislamiento de cuentas y escritores concurrentes.
-6. Ejecutar Python, UI, cuatro perfiles de navegador y comprobaciones nativas;
-   incorporar el `main` remoto vigente antes de dejar lista la única PR.
+1. Replace the video → hash normalization with persisted entities and relations.
+2. Migrate saves and playlists; unify their writes and reject conflicts.
+3. Adapt web library, Android, search/DJ, covers and playlist editing.
+4. Keep pinned sources in playback, audio-based analysis and offline copies.
+5. Validate migration/restart, incorporation before/after download, repair,
+   source removal, ambiguity, account isolation and concurrent writers.
+6. Run Python, UI, four browser profiles and native checks;
+   incorporate the current remote `main` before leaving the single PR ready.
 
 
-## Decisión y alcance de la PR #423
+## Decision and scope of PR #423
 
-La separación original tenía sentido para las fuentes: el hash identifica bytes
-y permite compartir audio/análisis; el ID de YouTube identifica un recurso
-remoto. El fallo fue utilizarlos además como identidad musical de la cuenta y
-reconstruir esa identidad en cada consumidor. La colección persistida elimina
-esa doble responsabilidad. No se alteran medidas, ordenación ni curvas del DJ:
-siguen dependiendo del audio analizado, no de la identidad de colección.
+The original separation made sense for the sources: the hash identifies bytes
+and allows sharing audio/analysis; the YouTube ID identifies a remote
+resource. The failure was also using them as the musical identity of the account and
+rebuilding that identity in each consumer. The persisted collection removes
+that double responsibility. DJ measurements, ordering and curves are not altered:
+they still depend on the analyzed audio, not on the collection identity.
 
-Las pruebas cubren migración y reapertura, referencias duplicadas y carátula,
-incorporación y pertenencia atómicas con rollback, dos escritores, retirada y
-reparación de fuentes, estado personal durable, ambigüedad, cachés por cuenta,
-ETag/304, playlists del coche y copias offline. El ensayo de datos del incidente
-usa una copia SQLite consistente; no aplica la migración al servicio activo.
-La evidencia de ejecución y sus límites se registra en la PR, no equivale a
-aceptación física ni despliegue.
+The tests cover migration and reopening, duplicate references and cover,
+atomic incorporation and membership with rollback, two writers, source removal and
+repair, durable personal state, ambiguity, per-account caches,
+ETag/304, car playlists and offline copies. The rehearsal with incident data
+uses a consistent SQLite copy; it does not apply the migration to the active service.
+The run evidence and its limits are recorded in the PR; it is not equivalent to
+physical acceptance or deployment.

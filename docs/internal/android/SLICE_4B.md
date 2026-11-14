@@ -1,28 +1,28 @@
-# S4b — relay nativo WHIP/WHEP
+# S4b — native WHIP/WHEP relay
 
-Implementa `LivePeer`, recurso WebRTC de publicación/recepción nativa con transporte
-HTTPS sin cookies del Core, sin redirects y con Location restringida al mismo
-origen. Descubre ICE con OPTIONS, negocia Opus estéreo con captura post-DSP y
-publica la oferta completa después de reunir candidatos. DELETE libera el recurso.
-Una reserva de publisher anterior a crear la captura impide que un segundo intento
-robe el tap del programa activo. No se solicita acceso al micrófono.
+Implements `LivePeer`, a WebRTC resource for native publishing/receiving with an HTTPS
+transport without the Core's cookies, without redirects and with Location restricted to the same
+origin. It discovers ICE with OPTIONS, negotiates stereo Opus with post-DSP capture and
+publishes the complete offer after gathering candidates. DELETE releases the resource.
+A publisher reservation made before creating the capture prevents a second attempt
+from taking the tap of the active program. Microphone access is not requested.
 
-`scripts/android_live_fixture.py` ejecuta Community real y MediaMTX fijado por digest
-en un entorno efímero: base de datos privada, firma Ed25519 del Core, autenticación
-HTTP de MediaMTX y TLS con la CA temporal del runner. No usa servicios públicos.
-El alias 10.0.2.2→loopback afecta sólo al resolver del Core desechable para reproducir
-la dirección del gateway del AVD, conservando hostname y verificación TLS.
+`scripts/android_live_fixture.py` runs real Community and MediaMTX pinned by digest
+in an ephemeral environment: private database, Ed25519 signature from the Core, MediaMTX HTTP
+authentication and TLS with the runner's temporary CA. It does not use public services.
+The alias 10.0.2.2→loopback affects only the resolver of the disposable Core, to reproduce
+the AVD gateway address, keeping hostname and TLS verification.
 
-El runner inicia el relay en la suite principal y cuando el filtro incluye
-`LiveRelayTest`; también puede activarse con `SOUNDSIBLE_ANDROID_LIVE_FIXTURE=1`.
-Requiere Docker. Los recursos se eliminan al finalizar, incluso ante fallo.
+The runner starts the relay in the main suite and when the filter includes
+`LiveRelayTest`; it can also be enabled with `SOUNDSIBLE_ANDROID_LIVE_FIXTURE=1`.
+Requires Docker. The resources are deleted at the end, even on failure.
 
-Validación dirigida: Core HTTP y TLS → sesión firmada → WHIP autenticado → MediaMTX
-→ WHEP → PCM decodificado nativo. Verifica energía, mute local independiente,
-pausa/silencio, reanudación, continuidad al cerrar Activity y rechazo de otro
-publisher sin dañar la captura activa. El relay siempre usa HTTPS.
+Targeted validation: Core HTTP and TLS → signed session → authenticated WHIP → MediaMTX
+→ WHEP → native decoded PCM. Verifies energy, independent local mute,
+pause/silence, resume, continuity when closing the Activity and rejection of another
+publisher without damaging the active capture. The relay always uses HTTPS.
 
-Esto todavía no conecta Live con los controles compartidos: faltan puente UI,
-lease/socket y metadata de host en background, escucha integrada con MediaSession,
-chat, reconexión y validación DJ a través del relay. Tampoco demuestra conectividad
-STUN/TURN por Internet ni escucha acústica en hardware físico. No declara paridad.
+This does not yet connect Live with the shared controls: missing are the UI bridge,
+lease/socket and host metadata in background, listening integrated with MediaSession,
+chat, reconnection and DJ validation through the relay. It also does not demonstrate STUN/TURN
+connectivity over the Internet or acoustic listening on physical hardware. It does not declare parity.

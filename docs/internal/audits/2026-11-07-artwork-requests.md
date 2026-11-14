@@ -1,261 +1,261 @@
-# Portadas, adquisición y presupuestos de trabajo
+# Artwork, acquisition and work budgets
 
-Entrega iniciada desde `main` en `1d904020`, después de revisar el flujo de audio,
-portadas y cachés, y validada con la base combinada de #423/#424 (`adff0c88`).
-Antes de abrir la PR se incorporó también #425 (`9560a121`): solo retira el stub
-`gui.sh` y actualiza el punto 8 de arquitectura, sin cambiar las fuentes ejecutadas
-por las suites anteriores. Esa retirada no forma parte del diff de esta PR.
-El original visual continúa separado del archivo de audio:
-una imagen grande no vuelve a bloquear la primera muestra en su cabecera.
+Delivery started from `main` at `1d904020`, after reviewing the audio,
+artwork and cache flow, and validated with the combined base of #423/#424 (`adff0c88`).
+Before opening the PR, #425 (`9560a121`) was also merged in: it only removes the stub
+`gui.sh` and updates architecture point 8, without changing the sources run
+by the earlier suites. That removal is not part of the diff of this PR.
+The visual original stays separate from the audio file:
+a large image no longer blocks the first sample in its header.
 
-## Diagnóstico y recorrido de las peticiones
+## Diagnosis and path of the requests
 
-La función histórica no había desaparecido. PR #113 redujo la imagen incrustada
-y eliminó vídeo innecesario; PR #171 conservó originales durables, variantes y
-recuperación posterior. El contrato encontrado no era «un GET pide audio y JPEG
-mínimo y siempre los sustituye»: audio, imagen visible y recuperación eran
-operaciones independientes. Esta entrega conserva esa separación.
+The historical feature had not disappeared. PR #113 reduced the embedded image
+and removed unnecessary video; PR #171 kept durable originals, variants and
+later recovery. The contract found was not "a GET requests audio and a minimal
+JPEG and always replaces them": audio, visible image and recovery were
+independent operations. This delivery keeps that separation.
 
-El síntoma tenía dos causas distintas: biblioteca y preview podían elegir
-imágenes de procedencia diferente, y una miniatura 1280×720 solo aporta como
-máximo 720×720 al recortarla cuadrada. Una pantalla a DPR 3 puede necesitar más.
-Los endpoints consultados para las imágenes pequeñas de la muestra no ofrecían
-una mejora confirmada. Ampliarlas o relajar el comparador no crea detalle.
+The symptom had two different causes: library and preview could choose
+images of different provenance, and a 1280×720 thumbnail only provides at
+most 720×720 when cropped to a square. A screen at DPR 3 may need more.
+The endpoints queried for the small images in the sample did not offer
+a confirmed improvement. Upscaling them or relaxing the comparator does not create detail.
 
-| Momento | Peticiones y trabajo finales |
+| Moment | Final requests and work |
 | --- | --- |
-| Cargar biblioteca | `/api/library` entrega metadatos/revisiones/dimensiones/scope, no imágenes. Conserva 304 y deltas. |
-| Escuchar audio adquirido | `/api/static/stream/<id>`, posiblemente varias peticiones Range. No consulta YouTube para obtener la portada. |
-| Mostrar portada adquirida | `/api/static/cover/<id>` sirve original o variante local. Si aún falta el master, puede extraer la imagen local incrustada. No hace GET remoto en esta ruta. |
-| Mostrar escenario NORMAL/DJ | `CoverImage` construye `srcset` según slot, DPR y resolución efectiva. No descarga todos los tamaños; el navegador selecciona uno. Media Session puede pedir su propia variante. |
-| Buscar/escuchar preview | El proveedor/yt-dlp resuelve metadatos y audio; una llamada de extracción puede hacer varias peticiones HTTP. Se aprovechan candidatos ya presentes, sin una nueva extracción visual. Los bytes de la imagen requieren su GET normal. |
-| Preparar preview | Se conservan memo/singleflight, expiración del stream firmado y caché progresiva existentes. Los status ya consultados transportan opcionalmente artwork; no se añaden polls. |
-| Adquirir | yt-dlp CLI obtiene audio y metadatos con thumbnail incrustada; la reparación preserva el original antes de reducir la cabecera. Se mantiene el hash posterior al etiquetado. Una preview existente no se promociona con el contrato actual. |
-| Guardar desde álbum de catálogo | Se revalida el registro Deezer para ligar edición e imagen a un receipt. Es una consulta de autoridad deliberada, no una descarga de imagen en el camino de audio. |
-| Completar adquisición de catálogo | La pertenencia de audio se confirma antes de procesar la imagen. La cola guarda la intención durable antes de cerrarse; el recuperador descarga el candidato aparte. |
-| Recuperar biblioteca antigua | Un recuperador secuencial por instancia conserva/revisa fuentes conocidas. Negativos y backoff evitan repetir el GET en cada play; nueva evidencia o reevaluación pueden habilitarlo. |
+| Load library | `/api/library` delivers metadata/revisions/dimensions/scope, not images. Keeps 304 and deltas. |
+| Listen to acquired audio | `/api/static/stream/<id>`, possibly several Range requests. Does not query YouTube to get the artwork. |
+| Show acquired artwork | `/api/static/cover/<id>` serves the original or a local variant. If the master is still missing, it can extract the local embedded image. It does not make a remote GET on this route. |
+| Show NORMAL/DJ stage | `CoverImage` builds `srcset` according to slot, DPR and effective resolution. It does not download all sizes; the browser selects one. Media Session can request its own variant. |
+| Search/listen to preview | The provider/yt-dlp resolves metadata and audio; one extraction call can make several HTTP requests. Candidates already present are used, without a new visual extraction. The image bytes require their normal GET. |
+| Prepare preview | The existing memo/singleflight, signed stream expiration and progressive cache are kept. The status responses already queried optionally carry artwork; no polls are added. |
+| Acquire | yt-dlp CLI gets audio and metadata with an embedded thumbnail; the repair preserves the original before reducing the header. The hash after tagging is kept. An existing preview is not promoted with the current contract. |
+| Save from catalog album | The Deezer record is revalidated to bind edition and image to a receipt. It is a deliberate authority query, not an image download in the audio path. |
+| Complete catalog acquisition | Audio ownership is confirmed before processing the image. The queue saves the durable intent before closing; the recoverer downloads the candidate separately. |
+| Recover old library | A sequential recoverer per instance keeps/reviews known sources. Negatives and backoff avoid repeating the GET on every play; new evidence or reevaluation can enable it. |
 
-La antigua búsqueda tomaba `thumbnail` e ignoraba `thumbnails`; el resolver
-descartaba las imágenes al conservar solo el stream. El recuperador comparaba
-el lado menor con 1280: una fuente 1280×720 podía provocar otro GET de sí misma.
-Los estados finales impedían reintentar incluso fallos temporales. Además, tres
-variantes cuadradas grandes de una fuente 480×360 podían almacenar el mismo
-JPEG con claves diferentes. Las correcciones siguientes atacan esas pérdidas
-y duplicaciones concretas.
+The old search took `thumbnail` and ignored `thumbnails`; the resolver
+discarded the images by keeping only the stream. The recoverer compared
+the shorter side with 1280: a 1280×720 source could trigger another GET of itself.
+The final states prevented retrying even temporary failures. In addition, three
+large square variants of a 480×360 source could store the same
+JPEG under different keys. The following fixes address those specific losses
+and duplications.
 
-## Qué permite yt-dlp
+## What yt-dlp allows
 
-`extract_info(download=False)` obtiene metadatos/formatos sin descargar el audio;
-no implica una sola petición de red. `thumbnail`/`thumbnails` permiten reutilizar
-referencias, aunque el extractor también construye URLs especulativas. Dimensiones
-declaradas y procedencia se conservan como observaciones sin verificar.
+`extract_info(download=False)` gets metadata/formats without downloading the audio;
+it does not imply a single network request. `thumbnail`/`thumbnails` allow reusing
+references, although the extractor also builds speculative URLs. Declared
+dimensions and provenance are kept as unverified observations.
 
-`--write-thumbnail` guarda una imagen aparte; `--skip-download` evita el audio
-pero no la extracción necesaria. `--list-thumbnails` inspecciona referencias,
-`--embed-thumbnail` las incrusta y `--convert-thumbnails` cambia su formato.
-Ninguna opción crea detalle. Pedir todas las miniaturas o hacer otra extracción
-solo para descubrirlas aumentaría solicitudes. Tampoco existe un GET ordinario
-que entregue a la vez audio y un JPEG independiente. La portada se descubre en
-respuestas ya necesarias y se descarga por su consumidor visual independiente.
+`--write-thumbnail` saves a separate image; `--skip-download` avoids the audio
+but not the necessary extraction. `--list-thumbnails` inspects references,
+`--embed-thumbnail` embeds them and `--convert-thumbnails` changes their format.
+No option creates detail. Requesting all thumbnails or doing another extraction
+only to discover them would increase requests. There is also no ordinary GET
+that delivers audio and an independent JPEG at the same time. The artwork is discovered in
+responses that are already needed and is downloaded by its independent visual consumer.
 
-Referencias: [opciones de miniaturas](https://github.com/yt-dlp/yt-dlp#thumbnail-options)
-y [argumentos del extractor](https://github.com/yt-dlp/yt-dlp#extractor-arguments).
-Los nombres y formatos ofrecidos dependen del extractor/proveedor vigente; el
-fallback de audio continúa siendo necesario.
+References: [thumbnail options](https://github.com/yt-dlp/yt-dlp#thumbnail-options)
+and [extractor arguments](https://github.com/yt-dlp/yt-dlp#extractor-arguments).
+The names and formats offered depend on the current extractor/provider; the
+audio fallback is still necessary.
 
-## Contratos
+## Contracts
 
-- Las búsquedas usan `thumbnails` cuando traen dimensiones, sin otra consulta
-  de descubrimiento. Se excluyen fotogramas alternativos; dimensiones declaradas
-  no equivalen a una descarga verificada. El resolver conserva candidatos
-  públicos seguros en SQLite, independientemente de la caducidad del stream.
-- La preparación/status ya existente transporta esas referencias. La web solo
-  mejora una miniatura principal del mismo vídeo y conserva la anterior si
-  falla. No cambia una portada de catálogo por una imagen de vídeo ni aumenta
-  el prefetch o el número de polls.
-- Al guardar una canción desde un álbum de Deezer, el servidor revalida el
-  registro, artista, título y álbum. Emite un receipt autenticado que liga la
-  URL canónica a la cuenta, vídeo, registro e intención ordenada. Una URL o
-  identidad de edición enviada por el cliente no es autoridad de descarga.
-- El audio se incorpora antes de programar esa selección opcional. La intención
-  durable se procesa por el recuperador existente, con lease por intento,
-  pausas persistidas y lotes acotados. Publicar la portada y completar el intento
-  comparten transacción. Una intención antigua o un resultado tardío no puede
-  sustituir una nueva, manual o retirada. Las selecciones huérfanas se retiran
-  por páginas y los cambios de identidad copian solo las pendientes de la cuenta.
-  El receipt se contrasta con el vídeo actual de la pista entrante. El job sigue
-  siendo reproducible hasta persistir esa intención, también tras el commit de biblioteca.
-- Objetos por hash y portada de fuente son compartidos. Selecciones y overrides
-  pertenecen a una cuenta. `none` es un tombstone. Las referencias globales
-  manuales históricas se conservan: no se inventa a quién pertenecían.
-- Los clientes reciben un scope visual por cuenta. Las variantes versionadas
-  conservan ETag y retención privada; las URLs sin revisión y placeholders
-  revalidan. Saturación, timeout y crash son 503 con `no-store`, no una portada
-  ausente cacheada durante un día. Subsonic respeta la referencia efectiva.
-- La recuperación distingue el techo conocido de fuente del detalle que necesita
-  una pantalla. Una fuente conocida de 1280×720 no provoca otro GET por no llegar
-  a 1280 en su lado menor. Una imagen o candidatos nuevos reabren la evaluación;
-  los negativos y pausas sobreviven reinicios. Se mantienen aspecto y pHash
-  conservadores: no son prueba de identidad de edición.
-- Las descargas visuales solo aceptan HTTPS de hosts/rutas concretos, sin
-  redirects, cookies de usuario, netrc ni proxy ambiental. Reutilizan una única
-  sesión pública en un hijo HTTP perezoso separado del transformador. Solo admite
-  un trabajo; la saturación aplaza sin contacto ni consumir intento. El padre
-  supervisa el plazo completo desde antes de admisión, incluidos arranque, DNS,
-  TLS y cabeceras; parada o timeout matan y recogen el hijo y lector IPC.
-  `Retry-After` pausa el host de forma durable y un 404 conserva un negativo.
-  El cuerpo va por staging con límite de bytes y cuatro millones de píxeles.
-  Al plazo operativo se suma el margen acotado de recogida del proceso; no se
-  promete interrumpir instantáneamente una operación del kernel.
-- En el motor gevent, un hijo perezoso valida originales nuevos y transforma
-  variantes. El padre conserva cuota, publicación atómica y descriptores abiertos.
-  Un hit caliente no espera al hijo ni consulta SQLite si su metadata está
-  reciente. Los buckets equivalentes comparten bytes y clave. Cola y espera
-  comparten deadline, también al esperar la cuota con locks no bloqueantes y
-  pausas cooperativas. No hay fallback de Pillow al hub tras fallar el hijo.
-  El staging está en caché y tiene leases de padre/escritor y reconciliación tras
-  crash. El hijo limpia su último resultado al perder al padre, tiene watchdog
-  por trabajo y se recoge por inactividad/apagado. La comparación perceptual
-  antigua sigue siendo local: no se afirma haber aislado todo cálculo visual.
-  Puede haber dos intérpretes visuales; no se afirma que su RSS sea gratuito.
-  Estos límites son fijos, no proporcionales a los núcleos: un Pi evita
-  multiplicar decodificadores y el desktop conserva el hub disponible. No hay
-  evidencia física de Pi ni ajuste automático que prometa el óptimo de cada host.
-- El visitor de YouTube tiene cooldown, renovación y rechazo sin cola por configuración
-  efectiva de egress. Un rechazo antiguo no invalida un identificador nuevo.
-  Las cachés de streams distinguen relay A y B mediante una huella sin guardar
-  sus credenciales en la clave.
-- Una descarga tiene presupuesto único entre intento nativo, cookies y fallback.
-  Incluye stdout silencioso, salida sin newline, espera, descendientes y
-  FFprobe/remux posteriores, que comparten el primer deadline. La
-  vigencia real del item/attempt y el apagado llegan al runner y a las fases
-  posteriores; cancelar no deja el slot consumiendo red otros diez minutos.
-  POSIX usa grupo de procesos; Windows asigna un proceso suspendido a un Job
-  con KILL_ON_JOB_CLOSE antes de reanudar su hilo principal. El diagnóstico es
-  un ring por bytes y las causas de retry no se pierden por rotación.
-- Android y la API del coche piden una variante cuadrada de 640; iOS usa
-  NSCache con coste de imagen y límite de entradas. NSCache es una política de
-  expulsión, no una garantía física de memoria total del proceso.
+- Searches use `thumbnails` when they include dimensions, without another discovery
+  query. Alternative frames are excluded; declared dimensions
+  are not equivalent to a verified download. The resolver keeps safe public
+  candidates in SQLite, independently of the stream expiration.
+- The existing preparation/status carries those references. The web only
+  upgrades a main thumbnail of the same video and keeps the previous one if
+  it fails. It does not replace a catalog artwork with a video image or increase
+  the prefetch or the number of polls.
+- When saving a song from a Deezer album, the server revalidates the
+  record, artist, title and album. It issues an authenticated receipt that binds the
+  canonical URL to the account, video, record and ordered intent. A URL or
+  edition identity sent by the client is not a download authority.
+- The audio is added before scheduling that optional selection. The durable
+  intent is processed by the existing recoverer, with a lease per attempt,
+  persisted pauses and bounded batches. Publishing the artwork and completing the attempt
+  share a transaction. An old intent or a late result cannot
+  replace a new, manual or removed one. Orphaned selections are removed
+  in pages and identity changes copy only the pending ones of the account.
+  The receipt is checked against the current video of the incoming track. The job stays
+  replayable until that intent is persisted, also after the library commit.
+- Objects by hash and source artwork are shared. Selections and overrides
+  belong to an account. `none` is a tombstone. The historical manual global
+  references are kept: it is not invented whom they belonged to.
+- Clients receive a visual scope per account. Versioned variants
+  keep ETag and private retention; URLs without revision and placeholders
+  revalidate. Saturation, timeout and crash are 503 with `no-store`, not a missing
+  artwork cached for a day. Subsonic respects the effective reference.
+- Recovery distinguishes the known ceiling of a source from the detail a
+  screen needs. A known 1280×720 source does not trigger another GET for not reaching
+  1280 on its shorter side. A new image or new candidates reopen the evaluation;
+  negatives and pauses survive restarts. Aspect ratio and pHash are kept
+  conservative: they are not proof of edition identity.
+- Visual downloads only accept HTTPS from specific hosts/paths, without
+  redirects, user cookies, netrc or environment proxy. They reuse a single
+  public session in a lazy HTTP child separate from the transformer. It only admits
+  one job; saturation defers without contact and without consuming an attempt. The parent
+  supervises the full deadline from before admission, including startup, DNS,
+  TLS and headers; stop or timeout kill and reap the child and IPC reader.
+  `Retry-After` pauses the host durably and a 404 keeps a negative.
+  The body goes through staging with a byte limit and four million pixels.
+  The bounded process reaping margin is added to the operational deadline; an
+  instant interruption of a kernel operation is not promised.
+- In the gevent engine, a lazy child validates new originals and transforms
+  variants. The parent keeps quota, atomic publication and open descriptors.
+  A warm hit does not wait for the child or query SQLite if its metadata is
+  recent. Equivalent buckets share bytes and key. Queue and wait
+  share a deadline, also when waiting for the quota with non-blocking locks and
+  cooperative pauses. There is no Pillow fallback to the hub after the child fails.
+  Staging is in the cache and has parent/writer leases and reconciliation after
+  a crash. The child cleans up its last result when it loses the parent, has a watchdog
+  per job and is reaped on inactivity/shutdown. The old perceptual comparison
+  is still local: it is not claimed that all visual computation has been isolated.
+  There can be two visual interpreters; it is not claimed that their RSS is free.
+  These limits are fixed, not proportional to the cores: a Pi avoids
+  multiplying decoders and the desktop keeps the hub available. There is no
+  physical Pi evidence or automatic tuning that promises the optimum for each host.
+- The YouTube visitor has cooldown, renewal and rejection without a queue per effective
+  egress configuration. An old rejection does not invalidate a new identifier.
+  The stream caches distinguish relay A and B through a fingerprint without storing
+  their credentials in the key.
+- A download has a single budget across the native attempt, cookies and fallback.
+  It includes silent stdout, output without newline, waiting, descendants and
+  later FFprobe/remux, which share the first deadline. The
+  real validity of the item/attempt and the shutdown reach the runner and the later
+  phases; cancelling does not leave the slot consuming network for another ten minutes.
+  POSIX uses a process group; Windows assigns a suspended process to a Job
+  with KILL_ON_JOB_CLOSE before resuming its main thread. The diagnostics are
+  a byte ring and retry causes are not lost by rotation.
+- Android and the car API request a square 640 variant; iOS uses
+  NSCache with image cost and an entry limit. NSCache is an eviction
+  policy, not a physical guarantee of total process memory.
 
-## Decisión de alcance: promoción de audio
+## Scope decision: audio promotion
 
-No se habilita promoción de previews a adquisición. La caché actual no prueba
-la equivalencia con el selector de adquisición ni la completitud para todos sus
-caminos. Se conserva la descarga normal. Activarla requiere un contrato nuevo
-que ate generación, integridad, formato seleccionado y política de calidad,
-además de mediciones completas. Es una decisión de corrección respaldada por
-las dos críticas de sistemas, no un ahorro de red conseguido.
+Promotion of previews to acquisition is not enabled. The current cache does not prove
+equivalence with the acquisition selector or completeness for all its
+paths. The normal download is kept. Enabling it requires a new contract
+that binds generation, integrity, selected format and quality policy,
+plus complete measurements. It is a correctness decision backed by
+the two systems critiques, not an achieved network saving.
 
-Tampoco se introduce Redis, un scheduler global, workers por número de núcleos,
-un barrido de previews ni relajación de la comparación visual. Los límites
-existentes de disco, audio CDN y análisis DJ siguen siendo independientes.
+Redis, a global scheduler, workers by number of cores,
+a preview sweep or relaxation of the visual comparison are not introduced either. The existing
+limits for disk, CDN audio and DJ analysis remain independent.
 
-## Crítica e iteración
+## Critique and iteration
 
-Se solicitaron críticas de sistemas con `gpt-6.1-sol` y esfuerzo `xhigh`.
-La primera bloqueó las selecciones globales y la promoción sin evidencia;
-se incorporaron aislamiento y autoridad de fuente. La segunda encontró:
+Systems critiques were requested with `gpt-6.1-sol` and effort `xhigh`.
+The first blocked global selections and promotion without evidence;
+isolation and source authority were added. The second found:
 
-| Hallazgo | Disposición |
+| Finding | Disposition |
 | --- | --- |
-| Subsonic recuperaba una portada retirada | El extractor consulta primero override/tombstone efectivo; regresión. |
-| Trickle eludía plazo visual | Lecturas parciales y presupuesto desde antes de abrir; servidor lento real. |
-| Cancelación no llegaba al downloader | Contexto explícito item/attempt/parada; hijo y descendientes reales. |
-| Replays concurrentes alteraban éxito | Claim durable y publicación/completado en una transacción. |
-| Huérfanas bloqueaban el lote | Paginación con limpieza y remap de selecciones. |
-| Error temporal cacheaba placeholder | 503 privado no-store con Retry-After. |
-| Deadline empezaba tras un lock | Plazo creado en admisión y propagado al hijo. |
-| Crash retenía staging durable | Staging de caché, lease y reconciliación; EOF/watchdog del hijo. |
-| Doble decode en el hub | Validación de master fuera del hub; límite remoto menor y hits sin decode. |
-| Upgrade fallido quitaba portada | Fallback a la portada anterior y negativo acotado de sesión. |
+| Subsonic recovered a removed artwork | The extractor queries the effective override/tombstone first; regression. |
+| Trickle bypassed the visual deadline | Partial reads and budget from before opening; real slow server. |
+| Cancellation did not reach the downloader | Explicit item/attempt/stop context; real child and descendants. |
+| Concurrent replays altered success | Durable claim and publication/completion in one transaction. |
+| Orphans blocked the batch | Pagination with cleanup and remap of selections. |
+| Temporary error cached a placeholder | Private no-store 503 with Retry-After. |
+| Deadline started after a lock | Deadline created at admission and propagated to the child. |
+| Crash retained durable staging | Cache staging, lease and reconciliation; child EOF/watchdog. |
+| Double decode in the hub | Master validation outside the hub; lower remote limit and hits without decode. |
+| Failed upgrade removed artwork | Fallback to the previous artwork and bounded session negative. |
 
-La tercera crítica reprodujo cierres parciales y carreras adicionales:
+The third critique reproduced partial fixes and additional races:
 
-| Hallazgo | Disposición |
+| Finding | Disposition |
 | --- | --- |
-| Rekey personal copiaba elecciones ajenas | Copia de overrides/receipts limitada a la cuenta activa; regresión Alice/Bob. |
-| Lock de cuota bloqueaba el hub y excedía plazo | Locks de archivo no bloqueantes, espera cooperativa y deadline hasta publicación; sonda gevent real. |
-| Receipt de vídeo anterior sobrevivía al cambio de contenido | Se retira al contrastarlo con el vídeo actual; la adopción recibe esa identidad actual. |
-| FFprobe/remux fuera de cancelación | Runner común con presupuesto heredado entre etapas; cancelación y timeout reales. |
-| Trickle de cabeceras eludía plazo | Cuarta crítica de diseño recomendó hijo HTTP separado, con una admisión, supervisión y kill/reap. DNS/cabeceras/cuerpo/parada cubiertos. |
-| Fallback incompleto en CSS | Las filas pequeñas mantienen el thumbnail; las superficies CSS grandes conservan la imagen previa como capa. Prueba del componente real de fila. |
-| Crash perdía intención después de incorporar audio | Persistencia antes de completar el job y replay tras commit; crash/error SQLite cubiertos sin redescargar ni resucitar una pista eliminada. |
+| Personal rekey copied other users' choices | Copy of overrides/receipts limited to the active account; Alice/Bob regression. |
+| Quota lock blocked the hub and exceeded the deadline | Non-blocking file locks, cooperative wait and deadline until publication; real gevent probe. |
+| Receipt of the previous video survived the content change | It is removed when checked against the current video; the adoption receives that current identity. |
+| FFprobe/remux outside cancellation | Common runner with budget inherited across stages; real cancellation and timeout. |
+| Header trickle bypassed the deadline | Fourth design critique recommended a separate HTTP child, with one admission, supervision and kill/reap. DNS/headers/body/stop covered. |
+| Incomplete fallback in CSS | Small rows keep the thumbnail; large CSS surfaces keep the previous image as a layer. Test of the real row component. |
+| Crash lost the intent after adding audio | Persistence before completing the job and replay after commit; crash/SQLite error covered without redownloading or resurrecting a deleted track. |
 
-La última revisión comprobó el cierre de los siete hallazgos y no encontró
-otros bloqueantes confirmados. Reprodujo además la espera SQLite de `observe`
-en el camino de audio: un escritor externo retrasaba también el hub. El commit
-`f8587f4d`, preparado durante esa revisión, cambia esa observación opcional a
-`timeout=0`; el revisor verificó su salida inmediata. Sus 15 pruebas seleccionadas
-pasaron. Validó estáticamente el proceso HTTP separado, admisión única,
-supervisión, lector IPC y leases. No ejecutó las suites largas ni acreditó
-Windows frozen con tráfico real, bloqueo TLS específico, WebKit o Pi.
+The last review verified that the seven findings were closed and did not find
+other confirmed blockers. It also reproduced the SQLite wait of `observe`
+in the audio path: an external writer also delayed the hub. Commit
+`f8587f4d`, prepared during that review, changes that optional observation to
+`timeout=0`; the reviewer verified its immediate return. Its 15 selected tests
+passed. It statically validated the separate HTTP process, single admission,
+supervision, IPC reader and leases. It did not run the long suites or demonstrate
+Windows frozen with real traffic, specific TLS blocking, WebKit or Pi.
 
-## Evidencia y límites
+## Evidence and limits
 
-Las pruebas y mediciones finales de esta entrega se registran aquí antes de
-abrir la PR. `scripts/benchmark_artwork_pipeline.py` compara peticiones HTTP
-frías/calientes y retraso del hub con una revisión git, sobre el mismo corpus,
-encoder y disco, en runtime temporal. No toca bibliotecas reales.
+The final tests and measurements of this delivery are recorded here before
+opening the PR. `scripts/benchmark_artwork_pipeline.py` compares cold/warm HTTP
+requests and hub delay against a git revision, on the same corpus,
+encoder and disk, in a temporary runtime. It does not touch real libraries.
 
-Una mejora de respuesta del hub no equivale a menor latencia de cada imagen:
-IPC, staging y arranque del hijo añaden costes que se deben informar. Las
-mediciones del desktop no prueban Raspberry Pi, batería, escucha física ni
-aceptación de Windows/macOS. La ejecución del entrypoint del worker en Python
-no equivale por sí sola a probar un binario frozen.
+An improvement in hub response is not equivalent to lower latency for each image:
+IPC, staging and child startup add costs that must be reported. The
+desktop measurements do not prove Raspberry Pi, battery, physical listening or
+Windows/macOS acceptance. Running the worker entrypoint in Python
+does not by itself amount to testing a frozen binary.
 
-### Medición HTTP aislada
+### Isolated HTTP measurement
 
-Ryzen 7 5800X, Linux, mismo disco; cinco repeticiones, doce peticiones
-simultáneas a la ruta real de cover, imágenes sintéticas de 1280×720 y variante
-cuadrada de 960. Cuenta ligada por petición. Solo se sustituyen biblioteca y
-fuente de archivos, sin servicio ni biblioteca reales. El proceso visual está
-arrancado antes del lote frío; no se incluye su primer arranque. Medianas de
-los lotes; la columna de hub es la mediana del máximo observado en cada lote:
+Ryzen 7 5800X, Linux, same disk; five repetitions, twelve simultaneous
+requests to the real cover route, synthetic 1280×720 images and a square
+960 variant. Account bound per request. Only the library and the
+file source are replaced, without a real service or library. The visual process is
+started before the cold batch; its first startup is not included. Medians of
+the batches; the hub column is the median of the maximum observed in each batch:
 
-| Operación | Base | Pipeline |
+| Operation | Base | Pipeline |
 | --- | ---: | ---: |
-| Lote frío completo | 363,56 ms | 207,69 ms |
-| HTTP p95 del lote frío | 362,24 ms | 204,38 ms |
-| Retraso máximo del hub, frío | 300,47 ms | 21,92 ms |
-| CPU del **padre**, lote frío | 189,19 ms | 52,87 ms |
-| Lote caliente completo | 28,58 ms | 29,76 ms |
-| HTTP p95 del lote caliente | 28,43 ms | 29,45 ms |
+| Full cold batch | 363.56 ms | 207.69 ms |
+| HTTP p95 of the cold batch | 362.24 ms | 204.38 ms |
+| Maximum hub delay, cold | 300.47 ms | 21.92 ms |
+| **Parent** CPU, cold batch | 189.19 ms | 52.87 ms |
+| Full warm batch | 28.58 ms | 29.76 ms |
+| HTTP p95 of the warm batch | 28.43 ms | 29.45 ms |
 
-Los cuerpos son idénticos en todos los casos. El aislamiento reduce el trabajo
-CPU dentro del servidor, no demuestra menor CPU total: la CPU del hijo no está
-en esa columna. El lote caliente añade unos 1,2 ms; no se afirma que toda
-petición sea más rápida. La mejora relevante es no monopolizar el hub durante
-el lote frío y conservar la selección por cuenta. Son medidas de este equipo,
-no una garantía para otros discos, Pi o reproducción musical.
+The bodies are identical in all cases. The isolation reduces CPU work
+inside the server; it does not prove lower total CPU: the child's CPU is not
+in that column. The warm batch adds about 1.2 ms; it is not claimed that every
+request is faster. The relevant improvement is not monopolizing the hub during
+the cold batch and keeping the selection per account. These are measurements on this machine,
+not a guarantee for other disks, Pi or music playback.
 
-Datos y reproducción: [JSONL](../performance/artwork-pipeline-results.jsonl),
+Data and reproduction: [JSONL](../performance/artwork-pipeline-results.jsonl),
 `python scripts/benchmark_artwork_pipeline.py --baseline 1d904020 --repeats 5`.
 
-### Validación local y gates pendientes
+### Local validation and pending gates
 
-- Regresión principal inicial: 2645 aprobadas y dos omisiones; una expectativa
-  de payload no incluía el nuevo scope y el worktree no tenía el modelo ONNX
-  incluido. Se corrigió la expectativa y se preparó la copia pública verificada
-  del modelo; los 17 casos de ese radio pasaron. La regresión completa sobre la
-  base combinada terminó con **2674 aprobadas y una omisión**, en 626,55 s.
-- Regresión tras la tercera crítica: 117 aprobadas; radio adicional de identidad/procesos/replay: 66 aprobadas. La segunda ejecución principal completa, con el nuevo transporte, termina con **2688 aprobadas y una omisión**, en 594,08 s. Los cambios pequeños posteriores de observación/visitor/lector tienen sus radios finales aprobados (57, 50 y cuatro casos).
-- Cliente combinado final: TypeScript y **1871 pruebas aprobadas** en 228 archivos.
-- Chromium final completo: **384 aprobadas y 74 omisiones** entre móvil/escritorio, en 3,6 min. Una pasada anterior con el grafo de Vite ya modificado falló en ocho casos de estado/imports; tras reiniciar servidor, pasan los diez casos de ese radio y la suite completa, sin cambiar sus aserciones.
-- Android combinado: preparación, APK debug, JVM y lint aprobados. Device panel no detecta SDK; no se
-  presenta como aceptación de ejecución del emulador ni escucha física.
-- Contratos de procesos/worker: 37 casos aprobados en la suite de pipeline;
-  radio posterior de audio/observación: 57 aprobados y cuatro pruebas de lector/contención aprobadas. La observación opcional usa SQLite sin espera para no retener audio. Los jobs existentes de Windows x64/ARM64 los ejecutan también
-  y usan el sidecar construido para probar el entrypoint visual frozen; sus
-  resultados remotos siguen pendientes.
-- WebKit final completo: **371 aprobadas y 87 omisiones** entre móvil/escritorio, en 7,1 min, Docker con montaje de solo lectura y un worker; ejecutado después de Chromium y de la carga Python. Servidor Vite de pruebas detenido.
-- Ruff y comprobación de manifests aprobados. CI del último head sigue siendo gate de entrega. No se ha fusionado ni publicado esta implementación.
-- Primer CI remoto: shards Android 2/5 fallaron antes de ejecutar la app, al
-  perder ADB durante la preparación Wi-Fi. Se acotó la recuperación de ese único
-  comando y se añadieron cuatro regresiones (ocho pruebas del módulo aprobadas).
-  Diagnóstico y límites en `docs/internal/android/CI_DIAGNOSTICS.md`. No se ocultan ni se
-  reintentan automáticamente pruebas de producto; se exige CI completo del nuevo head.
-- Windows x64 ejecutó los contratos del sidecar, pero la prueba de descendiente
-  no reconoció el handshake: el runner binario conservaba `\r` de CRLF en los
-  callbacks. Se restauró el contrato de líneas sin terminadores y se añadió una
-  regresión de bytes CRLF ejecutable también en Linux, manteniendo la aserción
-  real de cancelación y cierre del descendiente.
+- Initial main regression: 2645 passed and two skipped; a payload
+  expectation did not include the new scope and the worktree did not have the ONNX model
+  included. The expectation was fixed and the verified public copy
+  of the model was prepared; the 17 cases of that radius passed. The full regression on the
+  combined base finished with **2674 passed and one skipped**, in 626.55 s.
+- Regression after the third critique: 117 passed; additional identity/processes/replay radius: 66 passed. The second full main run, with the new transport, finishes with **2688 passed and one skipped**, in 594.08 s. The later small observation/visitor/reader changes have their final radii passed (57, 50 and four cases).
+- Final combined client: TypeScript and **1871 tests passed** in 228 files.
+- Final full Chromium: **384 passed and 74 skipped** across mobile/desktop, in 3.6 min. An earlier pass with the Vite graph already modified failed in eight state/imports cases; after restarting the server, the ten cases of that radius and the full suite pass, without changing their assertions.
+- Combined Android: preparation, debug APK, JVM and lint passed. Device panel does not detect the SDK; it is not
+  presented as acceptance of emulator execution or physical listening.
+- Process/worker contracts: 37 cases passed in the pipeline suite;
+  later audio/observation radius: 57 passed and four reader/contention tests passed. The optional observation uses SQLite without waiting so as not to hold audio. The existing Windows x64/ARM64 jobs also run them
+  and use the built sidecar to test the frozen visual entrypoint; their
+  remote results are still pending.
+- Final full WebKit: **371 passed and 87 skipped** across mobile/desktop, in 7.1 min, Docker with a read-only mount and one worker; run after Chromium and the Python load. Test Vite server stopped.
+- Ruff and manifest check passed. CI of the last head is still a delivery gate. This implementation has not been merged or published.
+- First remote CI: Android shards 2/5 failed before running the app, when
+  losing ADB during the Wi-Fi preparation. Recovery of that single
+  command was bounded and four regressions were added (eight module tests passed).
+  Diagnostics and limits in `docs/internal/android/CI_DIAGNOSTICS.md`. Product tests are not hidden or
+  retried automatically; full CI of the new head is required.
+- Windows x64 ran the sidecar contracts, but the descendant test
+  did not recognize the handshake: the binary runner kept the `\r` of CRLF in the
+  callbacks. The line contract without terminators was restored and a
+  CRLF bytes regression that also runs on Linux was added, keeping the real
+  assertion of cancellation and closing of the descendant.

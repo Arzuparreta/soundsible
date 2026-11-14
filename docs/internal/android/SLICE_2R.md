@@ -1,61 +1,61 @@
-# S2r: primer vertical de metadatos y carátulas
+# S2r: first metadata and cover art vertical
 
-Primer recorrido implementado y validado con audio WAV. No cierra todavía la
-paridad de edición: los formatos con tags pueden cambiar de ID al reescribir el
-archivo. Ese caso requiere un contrato de edición que preserve fuente/identidad
-y aceptación propia antes de considerar esta fila completa.
+First path implemented and validated with WAV audio. It does not yet close
+editing parity: formats with tags can change ID when the
+file is rewritten. That case requires an editing contract that preserves source/identity
+and its own acceptance before this row is considered complete.
 
-Reutilizar formulario/estilos/textos de MetadataEditor mediante una presentación
-sin imports de stores/audio web. Web conserva su adaptador; Android aporta handlers
-REST nativos y scope capturado. Editar title/artist/album/album_artist por POST
-`/api/library/tracks/<id>/metadata`; confirmar status y snapshot tras refresh.
-El motor admite fallback metadata-only: mostrar biblioteca confirmada, sin afirmar
-que el archivo se reescribió si respondió fallback.
+Reuse the MetadataEditor form/styles/texts through a presentation
+without imports of web stores/audio. Web keeps its adapter; Android provides native REST
+handlers and a captured scope. Edit title/artist/album/album_artist via POST
+`/api/library/tracks/<id>/metadata`; confirm status and snapshot after refresh.
+The engine supports a metadata-only fallback: show the confirmed library, without claiming
+that the file was rewritten if it responded with the fallback.
 
-Carátulas: upload FormData file por POST `/api/library/tracks/<id>/cover` y POST
-`/api/library/tracks/<id>/cover/none` para quitar. Respuestas reales, refresh/revisión de artwork, error visible
-sin cerrar y cancelación/cierre del editor al cambiar cuenta. No aceptar URLs de
-proveedor introducidas por el cliente ni una URL de audio. Separar prueba de
-multipart APK de aceptación del selector OS: File sintético no prueba Photo Picker.
+Cover art: upload a FormData file via POST `/api/library/tracks/<id>/cover` and POST
+`/api/library/tracks/<id>/cover/none` to remove it. Real responses, artwork refresh/revision, visible error
+without closing and cancellation/closing of the editor when switching account. Do not accept provider
+URLs entered by the client or an audio URL. Separate the APK multipart
+test from the acceptance of the OS picker: a synthetic File does not test Photo Picker.
 
-El programa debe recibir cambios confirmados de metadata sin reconstruir fuentes,
-perder posición/pausa o cambiar keys/tokens. Usar MediaItem existente con metadata
-nueva, preservando localConfiguration/extras y límites; no aceptar nueva URI desde
-UI. Media3 permite intentar continuación al reemplazar un item compatible sólo
-con metadata diferente; verificar comportamiento con la versión instalada, no
-convertir esa posibilidad documental en garantía:
+The program must receive confirmed metadata changes without rebuilding sources,
+losing position/pause or changing keys/tokens. Use the existing MediaItem with new
+metadata, preserving localConfiguration/extras and limits; do not accept a new URI from
+the UI. Media3 allows attempting continuation when replacing a compatible item that only
+has different metadata; verify the behavior with the installed version, do not
+turn that documented possibility into a guarantee:
 [Player.replaceMediaItem](https://developer.android.com/reference/androidx/media3/common/Player#replaceMediaItem(int,androidx.media3.common.MediaItem)).
 
-Aceptación: HTTP/HTTPS, texto/cover confirmados y carátula privada revisada,
-metadata actual y repeticiones en cola, posición/pausa/ocurrencias conservadas,
-fallo recuperable, scope/account y editor cerrado. No invalidar copias offline
-válidas por un cambio de texto; revisar su metadata local y políticas de cover
-separadamente. Guardar evidencia por capa y pendientes. Las otras acciones de
-biblioteca, DJ/Live/Auto y firma/actualización mantienen sus gates.
+Acceptance: HTTP/HTTPS, confirmed text/cover and revised private cover art,
+current metadata and repetitions in the queue, position/pause/occurrences kept,
+recoverable failure, scope/account and closed editor. Do not invalidate valid offline copies
+because of a text change; review their local metadata and cover policies
+separately. Save evidence per layer and pending items. The other library actions,
+DJ/Live/Auto and signing/update keep their gates.
 
 
-## Evidencia local
+## Local evidence
 
-Typecheck/Vitest: **1.405 tests / 160 archivos**, incluidos tres de presentación
-(error/retry, confirmación y cierre por cuenta). Python: **49 tests** de metadata
-y artwork. Ruff/diff correctos. APK HTTP/HTTPS verificado: **dos tests pasan**,
-edición real, multipart/bitmap verde servido por motor, retirada de cover, dos
-ocurrencias y labels de copia ready conservando bytes/pausa/posición/keys/token.
-El selector de archivo se simula con File: no prueba el selector OS.
+Typecheck/Vitest: **1,405 tests / 160 files**, including three presentation tests
+(error/retry, confirmation and close by account). Python: **49 tests** of metadata
+and artwork. Ruff/diff pass. Verified HTTP/HTTPS APK: **two tests pass**,
+real editing, multipart/green bitmap served by the engine, cover removal, two
+occurrences and ready copy labels keeping bytes/pause/position/keys/token.
+The file picker is simulated with File: it does not test the OS picker.
 
-El motor corregía WAV sin tags como éxito sin guardar cambios ni vincular artwork;
-ahora conserva metadata canonical y sidecar sin alterar audio. Null album_artist
-en fallback limpia el valor explícitamente. Media3 mantiene localConfiguration al
-reemplazar sólo metadata y revision de artwork; extras permiten esperar IPC nuevo.
-Las copias existentes actualizan labels en SQLite sin volver a descargarlas.
+The engine reported WAV without tags as success without saving changes or linking artwork;
+it now keeps canonical metadata and a sidecar without altering the audio. A null album_artist
+in the fallback clears the value explicitly. Media3 keeps localConfiguration when
+replacing only metadata and the artwork revision; extras allow waiting for new IPC.
+Existing copies update labels in SQLite without downloading them again.
 
-Los primeros fallos pertenecían al fixture: ArtworkStore.path devuelve str y el
-selector del título encontraba el input file oculto. Corregidos manteniendo las
-assertions. Última suite APK completa es S2q (31 + dos fases offline); últimas
-browser completas son S2j. Repetir sobre HEAD final antes del PR. Sin CI, proveedor
-vivo, selector OS ni aceptación física. Instrumentación dirty/HEAD previo,
-artifact de desarrollo. [Evidencia](evidence/s2r.json).
+The first failures belonged to the fixture: ArtworkStore.path returns str and the
+title selector found the hidden file input. Fixed while keeping the
+assertions. The last complete APK suite is S2q (31 + two offline phases); the last
+complete browser runs are S2j. Repeat on the final HEAD before the PR. No CI, live
+provider, OS picker or physical acceptance. Instrumentation dirty/previous HEAD,
+development artifact. [Evidence](evidence/s2r.json).
 
-Continuación: edición sin rehash para preservar fuente e identidad en todos los
-formatos, validación de selector/cancelación y resto de biblioteca; después la
-matriz completa DJ/Live/Auto y firma/actualización. No habilitar alpha parcial.
+Continuation: editing without rehash to preserve source and identity in all
+formats, picker/cancellation validation and the rest of the library; then the
+complete DJ/Live/Auto matrix and signing/update. Do not enable a partial alpha.

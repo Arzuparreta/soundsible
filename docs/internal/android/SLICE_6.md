@@ -1,86 +1,86 @@
-# S6: offline y distribución
+# S6: offline and distribution
 
-## S6a: Disponible sin conexión
+## S6a: Available offline
 
-[Decisión aprobada](OFFLINE_DECISION.md), 2026-10-03. Preparar archivos musicales
-adquiridos desde menús de tres puntos de canción/colección. No hay acción de
-preparación en el shell ni adquisición implícita de previews. Colecciones toman
-sus miembros actuales, aunque el buscador local filtre filas visibles.
+[Approved decision](OFFLINE_DECISION.md), 2026-10-03. Prepare acquired music
+files from the three-dot menus of a song/collection. There is no preparation
+action in the shell and no implicit acquisition of previews. Collections take
+their current members, even if the local search filters the visible rows.
 
-## Datos y transporte
+## Data and transport
 
-OfflineStore (singleton de aplicación) usa SQLite en almacenamiento privado,
-con metadata limitada por canción, estado, bytes/total, digest y ticket de intento.
-Identidad ligada al origen y al id de cuenta confirmado en auth nativo; cookie
-permanece en EngineConnection/Keystore, nunca cruza a JS. La UI no puede registrar
-una cuenta offline ni suministrar rutas de archivo. Máximo 1.000 copias por perfil.
-Playlists conservan miembros/duplicados y se filtran a archivos listos al desconectar.
-Álbumes/artistas se derivan de metadata local; carátulas usan placeholder.
+OfflineStore (application singleton) uses SQLite in private storage,
+with limited metadata per song, state, bytes/total, digest and attempt ticket.
+Identity bound to the origin and to the account id confirmed in native auth; the cookie
+stays in EngineConnection/Keystore and never crosses to JS. The UI cannot register
+an offline account or supply file paths. Maximum 1,000 copies per profile.
+Playlists keep members/duplicates and are filtered to ready files when disconnected.
+Albums/artists are derived from local metadata; artwork uses a placeholder.
 
-Un worker secuencial, una transferencia en vuelo, GET autenticado del stream local
-del motor con origen privado/TLS y redirects rechazados. No llama a proveedores.
-Cuerpos con longitud desconocida/incorrecta, sin duración reconocida o truncados
-no se publican. Archivo .part, fsync, verificación multimedia y SHA-256 preceden a
-rename y estado ready. Hash se revisa tras reinicio y cambio de mtime; longitudes
-se comprueban también. Nombres derivan de SHA-256 del id, nunca de rutas de JS.
+One sequential worker, one transfer in flight, authenticated GET of the engine's local
+stream with private origin/TLS and redirects rejected. It does not call providers.
+Bodies with unknown/incorrect length, without a recognized duration or truncated
+are not published. .part file, fsync, media verification and SHA-256 come before
+rename and the ready state. The hash is checked again after a restart and an mtime change; lengths
+are checked too. Names are derived from the SHA-256 of the id, never from paths from JS.
 
-Sin evicción. Límite predeterminado 2 GiB, opciones 512 MiB/2 GiB/8 GiB; reserva
-16 MiB de espacio real. Un fallo de espacio no borra otras canciones. Cancelar o
-retirar invalida el ticket, cancela Call/cuerpo y elimina sólo los archivos propios.
-Duplicados/colecciones solapadas comparten una copia por id. Logout/cambio de
-servidor/cuenta y 401 observado eliminan perfil y cancelan preparación.
+No eviction. Default limit 2 GiB, options 512 MiB/2 GiB/8 GiB; it reserves
+16 MiB of real space. A space failure does not delete other songs. Cancelling or
+removing invalidates the ticket, cancels the Call/body and deletes only its own files.
+Duplicates/overlapping collections share one copy per id. Logout/change of
+server/account and an observed 401 delete the profile and cancel preparation.
 
-OfflineService dataSync sólo arranca por acción explícita con Activity en foreground,
-con notificación localizada. Para al terminar la cola y gestiona timeout del SO.
-No reanuda red automáticamente al arrancar: tras muerte de proceso los intentos
-incompletos quedan interrupted y se limpian parciales/orphans. Retry es explícito.
-SQLite conserva copias completas y metadata; no persiste el programa multimedia.
-Referencia del límite de servicio: [Android](https://developer.android.com/develop/background-work/services/fgs/timeout).
+OfflineService dataSync only starts through an explicit action with the Activity in the foreground,
+with a localized notification. It stops when the queue finishes and handles the OS timeout.
+It does not resume network work automatically at startup: after process death, the incomplete
+attempts remain interrupted and partials/orphans are cleaned up. Retry is explicit.
+SQLite keeps complete copies and metadata; it does not persist the media program.
+Reference for the service limit: [Android](https://developer.android.com/develop/background-work/services/fgs/timeout).
 
-## Programa y UX
+## Program and UX
 
-OfflineDataSource resuelve un archivo completo al abrir el stream local, manteniendo
-id/UUID/cola y el mismo ExoPlayer. El file URI nunca cruza JS. Range/seek los sirve
-FileDataSource. Generación se comprueba también en lecturas; reset cierra el programa.
-Con red, una copia completa explícita también se reutiliza sin transferir audio.
-Sin motor, el arranque restaura el perfil verificado y la biblioteca disponible;
-auth sólo se considera revocado cuando hay respuesta real 401, no por fallo de red.
+OfflineDataSource resolves a complete file when the local stream is opened, keeping
+id/UUID/queue and the same ExoPlayer. The file URI never crosses JS. Range/seek are served by
+FileDataSource. Generation is also checked on reads; reset closes the program.
+With network, an explicit complete copy is also reused without transferring audio.
+Without the engine, startup restores the verified profile and the available library;
+auth is only considered revoked when there is a real 401 response, not on a network failure.
 
-Biblioteca contiene canciones/álbumes/artistas/playlists desde la misma superficie.
-Su menú abre filtro «Sólo en este dispositivo» y gestión de espacio/progreso/fallos.
-Menú de canción/colección ofrece preparación, marca de listo y retirada/cancelación.
-Al desconectar sólo se activa una cola de miembros disponibles, conservando el
-índice elegido y duplicados. Búsqueda remota/DJ/Live no se anuncian como offline.
-No hay mutaciones diferidas ni sincronización inventada al reconectar.
+The library contains songs/albums/artists/playlists from the same surface.
+Its menu opens the "Only on this device" filter and space/progress/failure management.
+The song/collection menu offers preparation, a ready mark and removal/cancellation.
+When disconnected, only a queue of available members is activated, keeping the
+chosen index and duplicates. Remote search/DJ/Live are not advertised as offline.
+There are no deferred mutations and no invented synchronization on reconnect.
 
-## Aceptación
+## Acceptance
 
-Pruebas de conversión/menús/overlay, APK/lint, ruta real de motor HTTP/HTTPS, lote
-deduplicado, motor completamente inaccesible, reproducción/seek/pausa/cierre y
-Activity recreation. Límites, cuerpo parcial/ inválido, cancelación y logout local.
-El helper ejecuta una fase persistente, force-stop real del APK y otra fase offline,
-comprobando hash y corrupción del mismo tamaño. Resultados en HANDOFF/evidencia.
-La fase de reinicio se excluye de la suite principal y el helper la invoca con
-argumentos propios; no ejecutarla suelta sin el protocolo de dos fases.
-Se instalan APK y APK de tests una vez; `am instrument` ejecuta las fases y
-`am force-stop` separa los procesos. Gradle connectedDebugAndroidTest desinstala
-la app después de cada corrida y no debe usarse para ambas fases persistentes.
-`scripts/android.py integration --offline-restart-only` repite únicamente ese
-protocolo, conserva evidencia principal previa y no valida la suite principal.
-La integración normal ejecuta primero toda la suite y después el protocolo.
+Tests for conversion/menus/overlay, APK/lint, real HTTP/HTTPS engine path, deduplicated
+batch, fully unreachable engine, playback/seek/pause/close and
+Activity recreation. Limits, partial/invalid body, cancellation and local logout.
+The helper runs a persistent phase, a real force-stop of the APK and another offline phase,
+checking the hash and same-size corruption. Results in HANDOFF/evidence.
+The restart phase is excluded from the main suite and the helper invokes it with
+its own arguments; do not run it on its own without the two-phase protocol.
+The APK and the test APK are installed once; `am instrument` runs the phases and
+`am force-stop` separates the processes. Gradle connectedDebugAndroidTest uninstalls
+the app after each run and must not be used for both persistent phases.
+`scripts/android.py integration --offline-restart-only` repeats only that
+protocol, keeps the earlier main evidence and does not validate the main suite.
+The normal integration first runs the whole suite and then the protocol.
 
-La validación encontró un fallo previo en el proxy de previews WebM por HTTPS:
-el mtime que contabiliza lecturas/LRU también generaba el ETag de send_file.
-Un If-Range de Media3 dejaba de coincidir después de la primera lectura y recibía
-200 con todo el cuerpo. La revisión de cada commit/remux de caché ahora genera
-un ETag estable entre lecturas; Last-Modified no anuncia recencia como cambio de
-contenido. Cachés antiguas conservan Range sin validator hasta reacquirirse.
-Las pruebas cubren 206/304, reemplazo del mismo tamaño y entradas antiguas;
-Los retries de programa 429/503 conservan presupuesto y cooldown. El transporte
-permite un solo intercambio GET nuevo si un socket reutilizado desaparece antes
-de recibir cabeceras (EOF); no aplica a conexión nueva, TLS/certificado, timeout,
-cancelación, cuerpo parcial ni respuesta HTTP. No reanuda reproducción tras un
-error observado ni añade retries de programa. Política cubierta por tests nativos.
+The validation found an earlier failure in the WebM preview proxy over HTTPS:
+the mtime that counts reads/LRU also generated the send_file ETag.
+A Media3 If-Range stopped matching after the first read and received
+200 with the whole body. The revision of each cache commit/remux now generates
+an ETag that is stable between reads; Last-Modified does not advertise recency as a content
+change. Old caches keep Range without a validator until they are reacquired.
+The tests cover 206/304, same-size replacement and old entries;
+Program retries for 429/503 keep budget and cooldown. The transport
+allows a single new GET exchange if a reused socket disappears before
+receiving headers (EOF); it does not apply to a new connection, TLS/certificate, timeout,
+cancellation, partial body or HTTP response. It does not resume playback after an
+observed error and does not add program retries. Policy covered by native tests.
 
-S6a no habilita release. Mantener [gates](RELEASE_GATES.md) de paridad completa,
-firma permanente y actualización; aceptación física de sonido/coche sigue separada.
+S6a does not enable a release. Keep the [gates](RELEASE_GATES.md) for full parity,
+permanent signature and update; physical acceptance of sound/car remains separate.

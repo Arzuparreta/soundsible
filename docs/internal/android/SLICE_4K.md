@@ -1,19 +1,19 @@
-# S4k — Agotamiento y cancelación del emisor en background
+# S4k — Exhaustion and cancellation of the publisher in background
 
-La prueba adopta una sala existente mediante resume409, reproduce música local
-por el servicio y cierra la Activity. El fixture rechaza exclusivamente la
-credencial de publicación del stream seleccionado y corta su publisher real.
-Android hace tres intentos de reconexión, retira Live al agotarlos y deja intactos
-la reproducción local y la ocurrencia de la cola. No continúa reintentando.
+The test adopts an existing room through resume409, plays local music
+through the service and closes the Activity. The fixture rejects only the
+publishing credential of the selected stream and cuts its real publisher.
+Android makes three reconnection attempts, removes Live when they are exhausted and leaves
+local playback and the queue occurrence intact. It does not keep retrying.
 
-Retirar el rechazo y pulsar Go live vuelve a publicar en la misma sala. Un segundo
-corte alcanza un intento rechazado; cerrar sesión cancela los retries pendientes,
-retira la sesión del host y no deja publisher en MediaMTX. Se observan cinco
-segundos sin nuevas autorizaciones. El test vuelve a autenticarse sólo para
-eliminar su sala aislada con autorización firmada.
+Removing the rejection and pressing Go live publishes again in the same room. A second
+cut reaches one rejected attempt; logging out cancels the pending retries,
+removes the host session and leaves no publisher in MediaMTX. Five
+seconds without new authorizations are observed. The test authenticates again only to
+delete its isolated room with a signed authorization.
 
-La intervención del fixture distingue lectura y publicación. No modifica la
-política de producción ni simula el servicio, el socket o el transporte multimedia.
-La aceptación HTTP/TLS y los checks normales se registran en evidence/s4k.json.
-No demuestra cancelación de un POST inicial de creación de sala, aceptación
-acústica física ni regresión principal/browser completa.
+The fixture intervention distinguishes reading and publishing. It does not modify the
+production policy or simulate the service, the socket or the media transport.
+The HTTP/TLS acceptance and the normal checks are recorded in evidence/s4k.json.
+It does not demonstrate cancellation of an initial room creation POST, physical acoustic
+acceptance or a full main/browser regression.

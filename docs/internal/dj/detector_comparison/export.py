@@ -23,8 +23,8 @@ def number(value, digits=3):
 def runtime(summary):
     value = summary.get('source_plus_decoder_cpu_seconds_per_audio_minute')
     if value is not None:
-        return value, 'suma fuente + decoder; no pipeline nuevo cronometrado'
-    return summary.get('backend_with_separation_cpu_seconds_per_audio_minute'), 'backend, incluida separación si la requiere'
+        return value, 'sum of source + decoder; no new pipeline timed'
+    return summary.get('backend_with_separation_cpu_seconds_per_audio_minute'), 'backend, including separation if the method requires it'
 
 
 def assets(root, method):
@@ -209,10 +209,10 @@ def export(root, destination):
             if deltas:
                 paired[left][right] = dict(cases=len(deltas), mean_f1_difference=average(deltas), bootstrap_95=interval(deltas))
     write_json(destination/'paired-test-differences.json', paired)
-    lines = ['# Tablas medidas', '',
-             'Test: 20 GTZAN; tolerancia 70 ms; media por grabación. F1 no es porcentaje de compases correctos.',
-             'Modelo 2 de BeatNet entrenado con GTZAN: su resultado no es test independiente.', '',
-             '| Método | Test ejecutado | F1 pulso | F1 primer tiempo | IC bootstrap 95 % del 1 | CPU s/min audio, con separación | RAM PSS árbol MiB |',
+    lines = ['# Measured tables', '',
+             'Test: 20 GTZAN; tolerance 70 ms; mean per recording. F1 is not the percentage of correct bars.',
+             'BeatNet model 2 was trained with GTZAN: its result is not an independent test.', '',
+             '| Method | Test executed | Beat F1 | Downbeat F1 | Bootstrap 95 % CI of the downbeat | CPU s/min audio, with separation | Tree PSS RAM MiB |',
              '| --- | ---: | ---: | ---: | --- | ---: | ---: |']
     for method, groups in main['summaries'].items():
         row = groups.get('test', {})
@@ -223,15 +223,15 @@ def export(root, destination):
         if method.endswith('-common'):
             pss = None  # No complete variant memory process was measured.
         lines.append(f"| {method} | {row.get('completed', 0)}/20 | {number(row.get('beat_f1'))} | {number(row.get('downbeat_f1'))} | {bounds} | {number(runtime(row)[0], 2)} | {number(pss/1024 if pss is not None else None, 0)} |")
-    lines += ['', 'Las variantes `-common` usan la suma de CPU de la fuente y del decoder, conservadas por separado en la matriz. No se ha cronometrado un pipeline nuevo completo ni su RAM.',
-              'Las variantes con separación reutilizada añaden el coste de preparación medido previamente a su inferencia; no es otro pase completo con separación fría.',
-              'La RAM se mide en un proceso sin el evaluador, sobre el mismo fragmento de 30 s; no es una garantía de máximo para canciones de cualquier duración.', '',
-              '| Método | Señales ejecutadas | Positivas evaluadas | F1 del 1 en positivas | Cobertura de agrupación correcta | Cobertura de subdivisión correcta | Unos sin referencia en controles |',
+    lines += ['', 'The `-common` variants use the sum of the source CPU and the decoder CPU, kept separately in the matrix. A complete new pipeline and its RAM have not been timed.',
+              'The variants with reused separation add the previously measured preparation cost to their inference; this is not another full pass with cold separation.',
+              'RAM is measured in a process without the evaluator, on the same 30 s fragment; it is not a guaranteed maximum for songs of any duration.', '',
+              '| Method | Signals executed | Positives evaluated | Downbeat F1 on positives | Correct grouping coverage | Correct subdivision coverage | Downbeats without reference in controls |',
               '| --- | ---: | ---: | ---: | ---: | ---: | ---: |']
     for method, groups in main['summaries'].items():
         row = groups.get('known_signal', {})
         lines.append(f"| {method} | {row.get('completed', 0)}/20 | {row.get('positive_downbeat_cases', 0)}/17 | {number(row.get('downbeat_f1_on_annotated_positive_cases'))} | {number(row.get('correct_grouping_coverage'))} | {number(row.get('correct_subdivision_coverage'))} | {row.get('unsupported_downbeat_events', 0)} |")
-    lines += ['', '| Método | Pesos con frontend MiB | Archivos de dependencias MiB |',
+    lines += ['', '| Method | Weights with frontend MiB | Dependency files MiB |',
               '| --- | ---: | ---: |']
     for method in main['summaries']:
         footprint = footprints.get(dependency_key(method), {})
@@ -240,8 +240,8 @@ def export(root, destination):
             worker_size = footprints.get('spleeter232', {}).get('registered_installed_bytes')
             size = size+worker_size if worker_size is not None else None
         lines.append(f"| {method} | {number(weights[method]['external_weight_bytes']/1024**2, 1)} | {number(size/1024**2 if size is not None else None, 1)} |")
-    lines += ['', 'Dependencias: archivos instalados registrados en los entornos medidos, con dependencias importadas explícitas cuando no las declara el paquete; sin intérprete ni cachés. No son el incremento exacto sobre el instalador de Soundsible. Transformer suma los dos entornos necesarios. Algunos pesos ya forman parte de los paquetes, también modelos no usados: las columnas no son conjuntos disjuntos y no deben sumarse como tamaño mínimo de despliegue.']
-    lines += ['', '| Método | Carga de proceso/modelo CPU s | CPU caliente p10/mediana/p90 s/min | Diferencia absoluta entre dos pasadas % |',
+    lines += ['', 'Dependencies: registered installed files in the measured environments, with explicitly imported dependencies when the package does not declare them; without interpreter or caches. They are not the exact increase over the Soundsible installer. Transformer adds the two required environments. Some weights are already part of the packages, as are unused models: the columns are not disjoint sets and must not be added together as a minimum deployment size.']
+    lines += ['', '| Method | Process/model load CPU s | Warm CPU p10/median/p90 s/min | Absolute difference between two passes % |',
               '| --- | ---: | --- | ---: |']
     for method, groups in main['summaries'].items():
         row = groups.get('test', {})
@@ -249,7 +249,7 @@ def export(root, destination):
         spread = row.get('warm_cpu_seconds_per_audio_minute_percentiles_10_50_90')
         rendered = '/'.join(number(v, 2) for v in spread) if spread else '—'
         lines.append(f"| {method} | {number(load, 2)} | {rendered} | {number(row.get('median_repeat_cpu_absolute_difference_percent'), 1)} |")
-    lines += ['', 'La carga no vacía las cachés del sistema operativo. Los percentiles calientes describen diferencias entre grabaciones; la diferencia entre pasadas solo se calcula cuando ambas ejecutan el mismo trabajo de backend, excluyendo los frontends separados cacheados. Son dos repeticiones, no un estudio de variabilidad entre máquinas. En `-common` el tiempo caliente y la variación son del decoder, con el coste de la fuente aparte.']
+    lines += ['', 'Loading does not clear the operating system caches. The warm percentiles describe differences between recordings; the difference between passes is only calculated when both run the same backend work, excluding the cached separated frontends. These are two repetitions, not a study of variability between machines. In `-common` the warm time and the variation come from the decoder, with the source cost kept separate.']
     (destination/'TABLES.md').write_text('\n'.join(lines)+'\n')
     print('Exported', len(main['matrix']), 'main rows,', len(aac['matrix']), 'AAC rows and', len(retained), 'observations')
 

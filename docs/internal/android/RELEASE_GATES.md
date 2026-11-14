@@ -1,119 +1,119 @@
-# Distribución Android y requisitos de publicación
+# Android distribution and publication requirements
 
-## Desarrollo actual
+## Current development
 
-`android-build.yml` sólo produce artifacts debug y evidencia. No crea GitHub
-Releases, tags, APK firmada de distribución, actualizador ni una ficha Google
-Play. No cambiar esto como efecto secundario de completar conexión o audio.
-El package debug `.dev` evita reemplazar la instalación pública.
+`android-build.yml` only produces debug artifacts and evidence. It does not create GitHub
+Releases, tags, a signed distribution APK, an updater or a Google
+Play listing. Do not change this as a side effect of completing connection or audio.
+The `.dev` debug package avoids replacing the public installation.
 
-El público puede acceder a artifacts de un repositorio público; su etiqueta de
-desarrollo y caducidad no equivalen a privacidad. Las pruebas usan fixtures y
-cuentas dedicadas, nunca música, contraseñas ni logs de una instancia personal.
-La firma debug no establece una identidad permanente: no garantizar actualización
-entre runners que generan claves diferentes. Las actualizaciones públicas deben
-comprobarse con una clave permanente.
+The public can access artifacts of a public repository; their development
+label and expiry are not equivalent to privacy. The tests use fixtures and
+dedicated accounts, never music, passwords or logs of a personal instance.
+The debug signature does not establish a permanent identity: do not guarantee updates
+between runners that generate different keys. Public updates must be
+checked with a permanent key.
 
-## Revisión manual antes de publicación
+## Manual review before publication
 
-La entrega de paridad (PR #300) fue revisada e integrada en `main` el
-2026-10-07. Ese día el usuario autorizó preparar la distribución, crear una clave
-permanente y completar merge/publicación cuando todos los gates estén en verde.
-Esta autorización sustituye la espera de revisión manual del 2026-10-05 para
-este trabajo de release; no permite saltar checks ni publicar artifacts debug.
+The parity delivery (PR #300) was reviewed and integrated into `main` on
+2026-10-07. That day the user authorized preparing the distribution, creating a permanent
+key and completing merge/publication when all gates are green.
+This authorization replaces the wait for manual review of 2026-10-05 for
+this release work; it does not allow skipping checks or publishing debug artifacts.
 
-Desde el 2026-10-09 la APK sale en la release de cada versión (`v*`), junto a
-servidor, escritorio e iOS: `release.yml` llama a `android-release.yml` en el tag,
-en el entorno restringido `android-release` (rama `main` y tags `v*`), y adjunta
-lo que ese workflow prepara. Ejecutado a mano sobre `main` es un ensayo que no
-publica. El tooling `scripts/android_release.py` deriva el `versionCode` de la
-versión, valida la APK, exige aceptación de actualización/offline/App Links y
-espera a que el CI del commit etiquetado esté en verde antes de entregarla. La referencia
-pública de firma es [SIGNING.json](SIGNING.json); capacidades y límites:
-[CAPABILITIES.json](CAPABILITIES.json). Instrucciones: [ALPHA](../../ANDROID_ALPHA.md).
+Since 2026-10-09 the APK ships in the release of each version (`v*`), together with
+server, desktop and iOS: `release.yml` calls `android-release.yml` on the tag,
+in the restricted `android-release` environment (`main` branch and `v*` tags), and attaches
+what that workflow prepares. Run manually on `main`, it is a rehearsal that does not
+publish. The `scripts/android_release.py` tooling derives the `versionCode` from the
+version, validates the APK, requires update/offline/App Links acceptance and
+waits for the CI of the tagged commit to be green before delivering it. The public
+signing reference is [SIGNING.json](SIGNING.json); capabilities and limits:
+[CAPABILITIES.json](CAPABILITIES.json). Instructions: [ALPHA](../../ANDROID_ALPHA.md).
 
-## Estado público (2026-10-07)
+## Public state (2026-10-07)
 
-La [primera alpha](https://arzuparreta.github.io/soundsible.github.io/es/start/#android-title)
-está publicada como prerelease independiente. CI completa y aceptación de su APK
-exacta aprobadas; latest global conservado. Instalación y límites: [ALPHA](../../ANDROID_ALPHA.md).
-La aceptación en teléfono, Bluetooth y coche sigue pendiente para beta.
+The [first alpha](https://arzuparreta.github.io/soundsible.github.io/es/start/#android-title)
+is published as an independent prerelease. Full CI and acceptance of its exact
+APK passed; global latest kept. Installation and limits: [ALPHA](../../ANDROID_ALPHA.md).
+Acceptance on phone, Bluetooth and car is still pending for beta.
 
-## Primera alpha
+## First alpha
 
-Antes de habilitar el workflow de publicación deben cumplirse:
+Before enabling the publication workflow, the following must be met:
 
-1. Matriz de paridad completa del teléfono, DJ, Live y Android Auto, con pruebas
-   de acciones reales y evidencia para cada fila, no sólo pantallas/compilación.
-2. [Offline B](OFFLINE_DECISION.md) aprobado por el usuario: copias explícitas de
-   música adquirida, «Disponible sin conexión» dentro de menús. Su implementación
-   y aceptación deben estar completas; aprobación no equivale a validación.
-3. Evidencia funcional automatizada del port completo y límites físicos
-   declarados. No confundir contratos/servicio multimedia probados con escucha
-   real o aceptación de coche; los gates físicos completos corresponden a beta.
-4. Clave de firma permanente con backup, identidad `com.soundsible.android`,
-   secrets restringidos al entorno de publicación y SHA-256 del certificado
-   documentado. Ningún secreto se usa en PRs de forks ni en builds debug.
-5. APK de release instalada y actualización sobre una anterior firmada con la
-   misma clave; conservar cuenta/configuración y datos aprobados, sin migración
-   destructiva. Probar downgrade rechazado y APK corrupta/firma distinta.
-   Desde la segunda alpha, instalar la última APK pública descargada sin
-   recompilarla; sólo la primera publicación admite una base sintética. El
-   recibo de aceptación registra cuál se utilizó.
-   Preparar esa base con su propio `upgrade-seed-androidTest.apk`, conservado
-   con checksum en sus assets, y verificar sus SDK contra su metadata original.
-   Tras actualizar, sustituir el harness por el del candidato para verificarlo.
-6. Versión procedente de `shared/version.py` y `scripts/version_sync.py`;
-   `versionCode` monotónico, derivado de la versión y validado contra el último
-   publicado.
-7. ~~Publicación Android como pre-release independiente.~~ Sustituido el
-   2026-10-09 por decisión del usuario: todos los artefactos de una versión salen
-   juntos en su release `v*`; la APK conserva «alpha» en el nombre, que basta para
-   indicar su madurez. El `versionCode` se deriva de la versión
-   (`MMMmmpp99`, `-rc.N` en lugar de `99`), por encima de los códigos que usó el
-   canal `android-alpha/*`, cuyas prereleases siguen sirviendo de predecesoras
-   para la prueba de actualización.
-8. APK firmada, checksum, metadata de build limpio, permisos documentados,
-   notas de instalación/actualización y límites verificados. El manifest de
-   capacidades requerido y la decisión offline deben ser gates de publicación.
+1. Complete parity matrix for the phone, DJ, Live and Android Auto, with tests
+   of real actions and evidence for each row, not only screens/compilation.
+2. [Offline B](OFFLINE_DECISION.md) approved by the user: explicit copies of
+   acquired music, "Available offline" inside menus. Its implementation
+   and acceptance must be complete; approval is not equivalent to validation.
+3. Automated functional evidence of the full port and declared physical
+   limits. Do not confuse tested contracts/media service with real
+   listening or car acceptance; the full physical gates belong to beta.
+4. Permanent signing key with backup, identity `com.soundsible.android`,
+   secrets restricted to the publication environment and the SHA-256 of the certificate
+   documented. No secret is used in PRs from forks or in debug builds.
+5. Release APK installed and updated over a previous one signed with the
+   same key; keep account/configuration and approved data, without destructive
+   migration. Test rejected downgrade and corrupt APK/different signature.
+   From the second alpha onwards, install the latest downloaded public APK without
+   rebuilding it; only the first publication allows a synthetic base. The
+   acceptance receipt records which one was used.
+   Prepare that base with its own `upgrade-seed-androidTest.apk`, kept
+   with a checksum in its assets, and verify its SDKs against its original metadata.
+   After updating, replace the harness with the candidate's to verify it.
+6. Version coming from `shared/version.py` and `scripts/version_sync.py`;
+   monotonic `versionCode`, derived from the version and validated against the last
+   published one.
+7. ~~Android publication as an independent pre-release.~~ Replaced on
+   2026-10-09 by user decision: all artifacts of a version ship
+   together in its `v*` release; the APK keeps "alpha" in the name, which is enough to
+   indicate its maturity. The `versionCode` is derived from the version
+   (`MMMmmpp99`, `-rc.N` instead of `99`), above the codes used by the
+   `android-alpha/*` channel, whose prereleases still serve as predecessors
+   for the update test.
+8. Signed APK, checksum, clean build metadata, documented permissions,
+   installation/update notes and verified limits. The required capabilities
+   manifest and the offline decision must be publication gates.
 
-9. Enlaces https a la app (App Links): `assetlinks.json` con el SHA-256 de la clave permanente en
-   `https://Arzuparreta.github.io/.well-known/assetlinks.json` (la raíz del dominio, no el subdirectorio del
-   sitio), intent-filter `autoVerify` para la ruta `/soundsible.github.io/open/` y, en el puente, un enlace a la
-   app sólo cuando exista una APK pública. Las invitaciones usan el dominio de cada servidor y siguen por SEND.
+9. https links to the app (App Links): `assetlinks.json` with the SHA-256 of the permanent key at
+   `https://Arzuparreta.github.io/.well-known/assetlinks.json` (the domain root, not the site
+   subdirectory), `autoVerify` intent-filter for the `/soundsible.github.io/open/` path and, in the bridge, a link to the
+   app only when a public APK exists. Invitations use each server's domain and continue through SEND.
 
-No escribir una versión de producto a mano, ni siquiera para un ejemplo de tag
-Android. El nombre de madurez alpha/beta no crea otra versión comercial.
+Do not write a product version by hand, not even for an example of an Android
+tag. The alpha/beta maturity name does not create another commercial version.
 
-## Beta y estable
+## Beta and stable
 
-La comunidad aporta la aceptación física: el mantenedor no dispone de Android.
-La guía y el formato de resultados están en
-[ALPHA](../../ANDROID_ALPHA.md#pruebas-de-la-comunidad--community-testing). Registrar también
-los resultados correctos y los casos no probados; no cerrar un gate por ausencia
-de reportes de fallos.
+The community provides the physical acceptance: the maintainer does not have Android.
+The guide and the results format are in
+[ALPHA](../../ANDROID_ALPHA.md#community-testing). Also record
+the correct results and the untested cases; do not close a gate because of an absence
+of failure reports.
 
-La beta requiere aceptación física repetida de escucha, segundo plano, focus,
-Bluetooth/controles, Android Auto, redes cambiantes y actualización conservando
-perfil. La alpha no promete que todas las combinaciones de fabricante/coche estén
-probadas. Para estable, cerrar regresiones del ciclo beta, compatibilidad publicada
-y recuperación/diagnóstico. Llevar evidence por dispositivo/OS/WebView, no un
-único «Android funciona».
+The beta requires repeated physical acceptance of listening, background, focus,
+Bluetooth/controls, Android Auto, changing networks and updates keeping the
+profile. The alpha does not promise that all manufacturer/car combinations are
+tested. For stable, close the regressions of the beta cycle, published compatibility
+and recovery/diagnostics. Keep evidence per device/OS/WebView, not a
+single "Android works".
 
-## Actualizaciones y fuentes oficiales
+## Updates and official sources
 
-Compartir Solid actualiza el **siguiente build**, no el teléfono instalado.
-Primero distribución manual APK; el diseño de aviso/descarga/verificación e
-instalación de actualizaciones será un slice separado. Android normalmente pide
-consentimiento para instalación externa; no prometer instalación silenciosa.
+Sharing Solid updates the **next build**, not the installed phone.
+Manual APK distribution first; the design of update notice/download/verification and
+installation will be a separate slice. Android normally asks for
+consent for external installation; do not promise silent installation.
 
-- [Firma de APK y continuidad de identidad](https://developer.android.com/studio/publish/app-signing)
+- [APK signing and identity continuity](https://developer.android.com/studio/publish/app-signing)
 - [GitHub pre-releases](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)
 - [Media3 background playback](https://developer.android.com/media/media3/session/background-playback)
 - [Android Auto media](https://developer.android.com/training/cars/media)
-- [DHU: requiere dispositivo Android Auto](https://developer.android.com/training/cars/testing/dhu)
-- [Dispositivos de laboratorio](https://firebase.google.com/docs/test-lab)
+- [DHU: requires an Android Auto device](https://developer.android.com/training/cars/testing/dhu)
+- [Lab devices](https://firebase.google.com/docs/test-lab)
 
-Una granja de teléfonos permite ampliar pruebas, pero no sustituye la escucha en
-el coche/Bluetooth del usuario. Coordinar contribuciones de hardware sin afirmar
-que CI ha cerrado esas pruebas.
+A phone farm allows extending tests, but does not replace listening in
+the user's car/Bluetooth. Coordinate hardware contributions without claiming
+that CI has closed those tests.

@@ -1,34 +1,34 @@
-# S2m: Radio NORMAL propiedad del servicio
+# S2m: NORMAL Radio owned by the service
 
-Radio genera recomendaciones musicales por `/api/discovery/music/plan`; no es
-un catálogo de emisoras. El servicio conserva seed, perfil, historial reciente,
-petición cancelable y temporizadores mientras la WebView no está activa.
+Radio generates music recommendations through `/api/discovery/music/plan`; it is not
+a catalogue of stations. The service keeps seed, profile, recent history,
+cancellable request and timers while the WebView is not active.
 
-Activar sobre la canción actual conserva su ocurrencia, posición e intención de
-pausa. El planner añade candidatos detrás de lo pedido manualmente; append manual
-inserta antes de la primera recomendación futura. Stop Radio retira sólo sus
-ocurrencias futuras, conservando canción actual e inserciones manuales. Cambiar
-perfil cancela y replantea desde la canción actual. Reemplazar programa o cerrar
-cancela la planificación en el mismo looper del servicio.
+Enabling it on the current song keeps its occurrence, position and pause
+intent. The planner adds candidates after what was requested manually; manual append
+inserts before the first future recommendation. Stop Radio removes only its
+future occurrences, keeping the current song and manual insertions. Changing
+profile cancels and replans from the current song. Replacing the programme or closing it
+cancels the planning on the same looper of the service.
 
-Lookahead máximo ocho, refill al quedar cinco o menos; deduplicación sobre cola
-real e historial acotado de ochenta IDs. Respuesta y metadata tienen límites;
-rechazar source desconocido, ID preview inválido, metadata desmesurada o podcasts.
-Reintentos temporales 2/5/15/30/60 segundos con Retry-After acotado; eventos del
-player no eluden la espera. Auth/permisos no son reintentos automáticos.
+Maximum lookahead eight, refill when five or fewer remain; deduplication against the real
+queue and a bounded history of eighty IDs. Response and metadata have limits;
+reject unknown source, invalid preview ID, oversized metadata or podcasts.
+Temporary retries at 2/5/15/30/60 seconds with bounded Retry-After; player
+events do not bypass the wait. Auth/permissions are not automatic retries.
 
-Estado radio y preview comparten session extras sin borrarse mutuamente. El puente
-sólo devuelve estado/metadatos, sin cookies ni direcciones de proveedor. La cola
-sustituida se confirma por IPC, incluido nuevo token de ocurrencias para un replay
-con IDs idénticos; acknowledgment del comando solo no demuestra snapshot actualizado.
+Radio state and preview share session extras without erasing each other. The bridge
+only returns state/metadata, without cookies or provider addresses. The
+replaced queue is confirmed over IPC, including a new occurrence token for a replay
+with identical IDs; the command acknowledgment alone does not demonstrate an updated snapshot.
 
-Pruebas: pool local/planner/final stream reales con archivos sintéticos; fixture
-añade datos sólo al solicitar su endpoint privado y preserva el resto de tests.
-HTTP/HTTPS APK deben confirmar seed estable, pausa/posición, fila manual,
-deduplicación, Activity recreation y Stop Radio. Añadir refill/background real,
-fallos/Retry-After, cancelación/cuenta y paridad UI antes de considerar Radio cerrado.
+Tests: real local pool/planner/final stream with synthetic files; the fixture
+adds data only when its private endpoint is requested and preserves the rest of the tests.
+HTTP/HTTPS APK must confirm stable seed, pause/position, manual row,
+deduplication, Activity recreation and Stop Radio. Add real refill/background,
+failures/Retry-After, cancellation/account and UI parity before considering Radio closed.
 
-Este documento describe implementación en curso, no aceptación completa. Consultar
-HANDOFF para evidencia final. Autoplay, dirección/DJ, Live, Auto, acciones completas,
-firma/actualización y publicación mantienen sus gates independientes. Seguir hasta
-paridad; ningún checkpoint autoriza alpha parcial ni finalizar la tarea del usuario.
+This document describes implementation in progress, not full acceptance. See
+HANDOFF for final evidence. Autoplay, direction/DJ, Live, Auto, complete actions,
+signing/update and publication keep their independent gates. Continue until
+parity; no checkpoint authorizes a partial alpha or finishing the user's task.

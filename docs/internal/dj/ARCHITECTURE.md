@@ -1,224 +1,224 @@
-# Responsabilidades del DJ tras la infraestructura de P12
+# DJ responsibilities after the P12 infrastructure
 
-P11 extrajo `ad59b838` sin cambiar medidas, órdenes ni planes. El punto de
-entrada público sigue siendo `shared/dj_engine.py`: reexporta las funciones,
-sin copias del estado de caché o de los trabajos. P12 añadió medidas métricas
-locales y validación de ejecución ([P12](P12.md)). P12-b sustituye su detector
-de pulso y compás por el elegido en la [comparativa P12-a](DETECTOR_COMPARISON.md):
-Beat This! `final0` en ONNX Runtime con el DBN portado a NumPy. Los
-adaptadores experimentales siguen fuera de estos propietarios de producción.
+P11 extracted `ad59b838` without changing measurements, orders or plans. The public
+entry point is still `shared/dj_engine.py`: it re-exports the functions,
+without copies of the cache or job state. P12 added local metric
+measurements and execution validation ([P12](P12.md)). P12-b replaces its beat
+and metre detector with the one chosen in the [P12-a comparison](DETECTOR_COMPARISON.md):
+Beat This! `final0` on ONNX Runtime with the DBN ported to NumPy. The
+experimental adapters remain outside these production owners.
 
-## Propietarios y dependencias
+## Owners and dependencies
 
-Todos los módulos musicales están en `shared/dj/`. Solo `store` accede a disco,
-SQLite, FFmpeg, runtime y trabajos, y solo `weights` a los pesos del modelo y
-su descarga. Los módulos puros se pueden importar sin cargar el
-almacenamiento ni Flask; una prueba lo comprueba en otro proceso.
+All the musical modules are in `shared/dj/`. Only `store` accesses disk,
+SQLite, FFmpeg, runtime and jobs, and only `weights` accesses the model weights and
+their download. The pure modules can be imported without loading
+storage or Flask; a test checks this in another process.
 
-| Módulo | Responsabilidad y salida | Dependencias DJ |
+| Module | Responsibility and output | DJ dependencies |
 | --- | --- | --- |
-| `contracts` | `Analysis`, `AnalysisSummary`, `WindowFeatures`, `RhythmWindow`, `Structure`, `TransitionPlan`, unidades, versión de análisis y ausencia de evidencia | Ninguna |
-| `beat_model` | Espectrograma log-mel, predicción por bloques de Beat This! con una sesión dada y tiempo de cada pulso entre tramas | `dbn` |
-| `dbn` | Decodificación conjunta de pulsos y unos (3/4 pulsos, 55–215 BPM), igual a madmom | Ninguna |
-| `rhythm` | Rejilla precisa a partir de los pulsos del modelo (recta/curva local y ataques de P1), observaciones armónicas/ataques y subdivisión por región | `contracts`, `metre` |
-| `metre` | Compás y unos estimados por el modelo por región; confirmación independiente con agrupaciones de 2/3/4/6 pulsos; abstenciones | Ninguna |
-| `features` | Ataques de notas, tonalidad, textura y medidas de una ventana | `rhythm`, `contracts` |
-| `structure` | Frases desde cambios medidos del arreglo en las líneas de compás, longitud de frase, secciones con papel y cues candidatos, sobre los compases recibidos de P12 y las bandas de octava de `features` | `contracts`, `timing` (`projected_bar`) |
-| `analysis` | Diezmado a 11025 Hz y composición de las medidas completas; agrega ventanas sin rellenar huecos | `features`, `structure`, `contracts` |
-| `weights` | Pesos ONNX: ruta empaquetada o caché, SHA-256, descarga única y sesión de un hilo | Ninguna (runtime) |
-| `store` | Identidad, sello del contenido, SQLite, decodificación a 22050 Hz con LUFS en la misma pasada, cola acotada; en el motor, cada medición se encarga a `worker` | `analysis`, `beat_model`, `weights`, `contracts`, `worker` |
-| `worker` | Proceso de análisis: mide una canción cada vez fuera del motor; el motor lo arranca, lo cierra tras 5 min sin trabajo y lo sustituye si se cuelga o muere | `store` (en el proceso hijo), `contracts` |
-| `timing` | Periodo y métrica locales, equivalencia de medio/doble pulso, deriva y admisión de beatmatch | `contracts` |
-| `transitions` | Único `plan_transition`: compatibilidad, técnica, cues, velocidad y eco | `timing`, `features` (nombres de notas), `contracts` |
-| `routes` | Continuidad, ruta legacy, llegada a peticiones, elección de hueco y reparación entre anclas | `transitions`, `timing`, `contracts` |
-| `shared/dj_pool.py` | Admisión de puentes dentro del conjunto fijado antes de consultar caché | `transitions`, `timing` |
-| `session` | Demanda HTTP de la sesión: épocas, peticiones cancelables y ruta realmente aceptada | `shared/work`, `store`; adaptación hacia `auto_mode` |
-| `shared/work.py` | Trabajos acotados y compartidos por recurso, intereses, cancelación y caducidad | Runtime y contexto de cuenta |
-| `shared/related_work.py` | Una extracción y escritura de caché de relacionados por semilla para DJ y Discover | `shared/work`, base de datos |
-| `shared/preview_cache.py` | Bytes completos compartidos, adquisición con demanda; al completar, avisa solo a los DJ que todavía los necesitan | `session` → `store`, `shared/work` |
-| `shared/api/routes/auto_mode.py` | Fuentes, referencias, sesión, adquisición, llamadas a políticas puras y adaptación HTTP | Fachada, `routes`, `contracts`, `dj_pool` |
+| `contracts` | `Analysis`, `AnalysisSummary`, `WindowFeatures`, `RhythmWindow`, `Structure`, `TransitionPlan`, units, analysis version and absence of evidence | None |
+| `beat_model` | Log-mel spectrogram, block-wise Beat This! prediction with a given session and time of each beat between frames | `dbn` |
+| `dbn` | Joint decoding of beats and downbeats (3/4 beats, 55–215 BPM), equal to madmom | None |
+| `rhythm` | Precise grid from the model beats (local straight/curved line and P1 onsets), harmonic/onset observations and subdivision per region | `contracts`, `metre` |
+| `metre` | Metre and downbeats estimated by the model per region; independent confirmation with groupings of 2/3/4/6 beats; abstentions | None |
+| `features` | Note onsets, key, texture and measurements of a window | `rhythm`, `contracts` |
+| `structure` | Phrases from measured arrangement changes on the bar lines, phrase length, sections with a role and candidate cues, over the bars received from P12 and the octave bands of `features` | `contracts`, `timing` (`projected_bar`) |
+| `analysis` | Decimation to 11025 Hz and composition of the complete measurements; aggregates windows without filling gaps | `features`, `structure`, `contracts` |
+| `weights` | ONNX weights: packaged or cached path, SHA-256, single download and single-thread session | None (runtime) |
+| `store` | Identity, content stamp, SQLite, decoding to 22050 Hz with LUFS in the same pass, bounded queue; in the engine, each measurement is delegated to `worker` | `analysis`, `beat_model`, `weights`, `contracts`, `worker` |
+| `worker` | Analysis process: measures one song at a time outside the engine; the engine starts it, closes it after 5 min without work and replaces it if it hangs or dies | `store` (in the child process), `contracts` |
+| `timing` | Local period and metre, half/double beat equivalence, drift and beatmatch admission | `contracts` |
+| `transitions` | Single `plan_transition`: compatibility, technique, cues, speed and echo | `timing`, `features` (note names), `contracts` |
+| `routes` | Continuity, legacy route, arrival at requests, gap choice and repair between anchors | `transitions`, `timing`, `contracts` |
+| `shared/dj_pool.py` | Admission of bridges within the fixed set before querying the cache | `transitions`, `timing` |
+| `session` | HTTP demand of the session: epochs, cancellable requests and actually accepted route | `shared/work`, `store`; adaptation towards `auto_mode` |
+| `shared/work.py` | Bounded jobs shared per resource, interests, cancellation and expiry | Runtime and account context |
+| `shared/related_work.py` | One extraction and cache write of related tracks per seed for DJ and Discover | `shared/work`, database |
+| `shared/preview_cache.py` | Shared complete bytes, acquisition with demand; on completion, it notifies only the DJs that still need them | `session` → `store`, `shared/work` |
+| `shared/api/routes/auto_mode.py` | Sources, references, session, acquisition, calls to pure policies and HTTP adaptation | Facade, `routes`, `contracts`, `dj_pool` |
 
-No hay imports de almacenamiento desde los módulos puros ni dependencias de
-vuelta desde el planificador hacia HTTP. Los endpoints ya no contienen la
-búsqueda de hueco, puntuación de peticiones ni reconstrucción musical de la
-reparación. Las fuentes y el recomendador siguen eligiendo el conjunto.
+There are no storage imports from the pure modules and no dependencies going
+back from the planner towards HTTP. The endpoints no longer contain the
+gap search, request scoring or musical reconstruction of the
+repair. The sources and the recommender still choose the set.
 
-Desde P14 no hay análisis automático de
-la biblioteca ni de reproducciones NORMAL. Los clientes publican canción actual
-y próximas ocho de la ruta aceptada. El conjunto de alternativas para ordenar
-sigue fijado antes de leer caché; los descartes fríos no se adquieren. Los
-puentes ya medidos se pueden reutilizar dentro de ese conjunto. La caché no
-posee trabajos: solo los consumidores vigentes los mantienen. Contrato, reservas
-y límites de desconexión en [P14](P14.md).
-El módulo del barrido que ya no se arrancaba se retiró en la
-[limpieza de código heredado](../audits/2026-11-03-unused-code.md).
+Since P14 there is no automatic analysis of
+the library or of NORMAL playback. The clients publish the current song
+and the next eight of the accepted route. The set of alternatives to order
+is still fixed before reading the cache; cold discards are not acquired. The
+bridges already measured can be reused within that set. The cache does not
+own jobs: only the current consumers keep them. Contract, fallbacks
+and disconnection limits in [P14](P14.md).
+The sweep module that was no longer started was removed in the
+[legacy code cleanup](../audits/2026-11-03-unused-code.md).
 
-## Contratos, unidades y cobertura
+## Contracts, units and coverage
 
-Los `TypedDict` describen las fronteras y conservan el JSON actual. Los aliases
-`Seconds`, `BeatsPerMinute` y `PlaybackRatio` hacen explícitas sus unidades sin
-añadir envoltorios al PCM o al formato persistido. `AnalysisInput` admite
-lecturas parciales/antiguas; un tipo completo no da por validada esa entrada.
+The `TypedDict` describe the boundaries and keep the current JSON. The aliases
+`Seconds`, `BeatsPerMinute` and `PlaybackRatio` make their units explicit without
+adding wrappers to the PCM or to the persisted format. `AnalysisInput` accepts
+partial/old reads; a complete type does not mean that input is validated.
 
-- `WindowFeatures` y `RhythmWindow` usan segundos relativos a la ventana. Su
-  cobertura es `[offset, offset + window_seconds]`. `Structure` transforma esos
-  puntos a segundos absolutos, sin prolongar la rejilla entre cabeza y cola.
-- `Analysis` conserva las listas completas de golpes, unos, frases, secciones
-  y `metric_regions`. `AnalysisSummary` las omite para v6; no elimina escalares desconocidos,
-  ceros ni futuras medidas. Los demás endpoints conservan su respuesta previa.
-- `note_rate` y `spectral_flatness`: `None` significa sin medida; cero es válido.
-  `loudness_lufs = None` también puede significar que el medidor no tiene
-  lectura, por ejemplo en silencio. BPM cero expresa pulso desconocido.
-  `outro_cue = None` requiere colocar el fundido con la duración cargada.
-  Lista vacía expresa falta de evidencia de rejilla/estructura.
-- `confidence` sigue combinando tempo y tonalidad. En `metric_regions`,
-  `beats_per_bar`, `bar_seconds` y `downbeats` son la estimación del modelo
-  (P12-b); `metre_confidence` y `downbeat_confidence` solo dejan de ser cero
-  si la agrupación independiente coincide en tamaño y fase. Ninguna es una
-  probabilidad calibrada de acierto musical. `bar_seconds` puede ser `None`:
-  no se rellena lo desconocido con cuatro pulsos. El resumen escalar también
-  distingue cambios o desconocidos.
-- `Phrase` y `Section` (P13, [P13](P13.md)): las frases empiezan en un cambio
-  medido del arreglo o a compases enteros de uno; `evidence` distingue
-  `boundary`, `counted` (longitud medida) y `assumed` (ocho compases, reserva).
-  Las secciones agrupan frases con un papel medido; `label = None` es falta de
-  evidencia, y `low_db`/`upper_db` son los niveles en dB frente a la sección
-  más fuerte de la canción. `analysis_summary` omite `phrases` como las demás
-  listas; el contrato de los clientes no cambia.
-- `TransitionPlan` es la decisión ejecutable del servidor. `score` describe
-  compatibilidad para ordenar; no certifica que se ejecute beatmatch. El eco
-  mantiene su periodo saliente medido. P12 añade vectores métricos compartidos;
-  P12-b cambia `three-to-four` a `beats` por decisión del usuario y añade tres
-  vectores de `beats`. Al cerrar P11-a se regeneran los vectores estructurales
-  y de eco de P7/P8/P9 con análisis que llevan `metric_regions`, como los de
-  producción: mismos cues y técnicas, ahora con `alignment`.
+- `WindowFeatures` and `RhythmWindow` use seconds relative to the window. Their
+  coverage is `[offset, offset + window_seconds]`. `Structure` transforms those
+  points to absolute seconds, without extending the grid between head and tail.
+- `Analysis` keeps the complete lists of beats, downbeats, phrases, sections
+  and `metric_regions`. `AnalysisSummary` omits them for v6; it does not remove unknown scalars,
+  zeros or future measurements. The other endpoints keep their previous response.
+- `note_rate` and `spectral_flatness`: `None` means no measurement; zero is valid.
+  `loudness_lufs = None` can also mean that the meter has no
+  reading, for example in silence. Zero BPM expresses an unknown beat.
+  `outro_cue = None` requires placing the fade with the loaded duration.
+  An empty list expresses lack of grid/structure evidence.
+- `confidence` still combines tempo and key. In `metric_regions`,
+  `beats_per_bar`, `bar_seconds` and `downbeats` are the model estimate
+  (P12-b); `metre_confidence` and `downbeat_confidence` only stop being zero
+  if the independent grouping matches in size and phase. None of them is a
+  calibrated probability of musical correctness. `bar_seconds` can be `None`:
+  the unknown is not filled with four beats. The scalar summary also
+  distinguishes changes or unknowns.
+- `Phrase` and `Section` (P13, [P13](P13.md)): phrases start at a measured
+  arrangement change or at whole bars from a downbeat; `evidence` distinguishes
+  `boundary`, `counted` (measured length) and `assumed` (eight bars, fallback).
+  Sections group phrases with a measured role; `label = None` is lack of
+  evidence, and `low_db`/`upper_db` are the levels in dB relative to the
+  loudest section of the song. `analysis_summary` omits `phrases` like the other
+  lists; the client contract does not change.
+- `TransitionPlan` is the executable decision of the server. `score` describes
+  compatibility for ordering; it does not certify that beatmatch is executed. The echo
+  keeps its measured outgoing period. P12 adds shared metric vectors;
+  P12-b changes `three-to-four` to `beats` by user decision and adds three
+  `beats` vectors. When closing P11-a the structural and echo vectors
+  of P7/P8/P9 are regenerated with analyses that carry `metric_regions`, like the
+  production ones: same cues and techniques, now with `alignment`.
 
-`timing.pulse_relations` da el ciclo común de dos pulsos (m pulsos de la que
-sale = n de la que entra, relaciones 2ᵃ·3ᵇ) y su velocidad; lo comparten
-puntuación, entrada al drop, velocidad final, `metric_sync` y admisión de
-puentes. `tempo_coordinate` conserva la proyección logarítmica de BPM sobre
-la octava de la referencia de ruta: es otra operación y tiene otro objetivo.
-`local_period` conserva el ajuste sobre la rejilla alrededor del cue.
-`rate_fits` usa los periodos y la velocidad redondeados y todo el solapamiento;
-el límite del planificador sigue siendo 5 ms. La admisión de puentes verifica
-además BPM y técnica, y rechaza planes sin `alignment` ejecutable, incompletos
-o con valores inválidos.
-`metric_sync` declara lo que los dos reproductores pueden mantener durante
-todo el tramo: `bars` con unos confirmados en ambas canciones, compases
-ejecutados iguales, fase de ambos cues y rejillas estables; `beats` (P12-b)
-con pulso estable compartido, ambos cues en pulsos medidos y rejillas
-regulares sin huecos, y el compás estimado común solo como guía de
-recolocación; `none` en el resto. El score musical anterior se conserva para
-mezclas ejecutables y pasa a cero con `none`. `beatmatch_fits` es la misma admisión para
-puentes de fuentes, de peticiones, de colocación y de reparación. Un análisis
-sin `metric_regions` se trata como uno sin regiones medidas: no hay contrato
-anterior que conservar (P11-a).
+`timing.pulse_relations` gives the common cycle of two beats (m beats of the outgoing
+song = n of the incoming one, relations 2ᵃ·3ᵇ) and its speed; it is shared by
+scoring, entry at the drop, final speed, `metric_sync` and bridge
+admission. `tempo_coordinate` keeps the logarithmic projection of BPM onto
+the octave of the route reference: it is a different operation and has a different goal.
+`local_period` keeps the fit on the grid around the cue.
+`rate_fits` uses the rounded periods and speed and the whole overlap;
+the planner limit is still 5 ms. Bridge admission also verifies
+BPM and technique, and rejects plans without executable `alignment`, incomplete plans
+or plans with invalid values.
+`metric_sync` declares what the two players can maintain during
+the whole segment: `bars` with confirmed downbeats in both songs, equal
+executed bars, phase of both cues and stable grids; `beats` (P12-b)
+with a shared stable beat, both cues on measured beats and regular grids
+without gaps, and the common estimated metre only as a
+repositioning guide; `none` in the rest. The previous musical score is kept for
+executable mixes and becomes zero with `none`. `beatmatch_fits` is the same admission for
+source bridges, request bridges, placement bridges and repair bridges. An analysis
+without `metric_regions` is treated as one without measured regions: there is no previous
+contract to keep (P11-a).
 
-Las guardas propias de cada reproductor siguen comprobando identidad, duración,
-solapamiento, velocidad y pertenencia del plan; compartir una regla del servidor
-no sustituye esa frontera de ejecución.
+The guards of each player still check identity, duration,
+overlap, speed and ownership of the plan; sharing a server rule
+does not replace that execution boundary.
 
-## Inventario de políticas
+## Policy inventory
 
-| Entrada | Orden/elección | Puentes y restricciones |
+| Input | Order/choice | Bridges and constraints |
 | --- | --- | --- |
-| `dj-plan` con fuentes, v6 | Conjunto/barajado independiente de caché; `order_continuous_route`: déficit de `score` y diferencias de notas/s, LUFS, planitud y BPM, normalizados por dispersión; posiciones frías fijas | `add_measured_bridges`: semilla y conjunto entero medidos, ambos tramos con técnica de beatmatch y deriva ejecutada admisible; conserva todos los destinos |
-| `dj-plan` legacy, relleno v4 | `order_route`: 0,42 transición + 0,38 semántica + 0,20 relevancia; secuencia de fuentes; calidad neutra 0,62 ante análisis ausente | No amplía el conjunto como v6; analiza la ruta aceptada |
-| Peticiones legacy de canción/artista | `choose_request_segment` → `route_to_request`; media de `score`, relevancia del destino y costes de demora ya existentes | Beam de hasta 48 estados, 12 candidatas, hasta cuatro puentes; destino preferido a continuación. Exige `beatmatch_fits` en cada tramo, incluido el final (P12; P11-a cerrado) |
-| `dj-place` automático | `choose_placement`: media de transiciones de entrada y salida, menos 0,009 por hueco; empate favorece el hueco anterior | Hasta dos puentes; con posición fijada no se adquieren ni se admiten puentes |
-| `dj-repair` | `repair_route`: anclas y profundidad conservadas; relleno con `order_route`; bonificación de estabilidad 0,06 a las filas existentes | Llegada al ancla con `route_to_request`, hasta dos puentes; techo de 16; no crece por relleno. Las exclusiones no anulan anclas explícitas |
-| `dj-transition` | Solo `plan_transition` contra las medidas actuales de los dos archivos; sin elegir canciones ni reordenar | Lectura de caché y eventual programación asíncrona; sin decodificación dentro de la petición |
+| `dj-plan` with sources, v6 | Set/shuffle independent of the cache; `order_continuous_route`: `score` deficit and differences in notes/s, LUFS, flatness and BPM, normalized by dispersion; fixed cold positions | `add_measured_bridges`: seed and whole set measured, both segments with beatmatch technique and admissible executed drift; keeps all the destinations |
+| `dj-plan` legacy, v4 fill | `order_route`: 0.42 transition + 0.38 semantic + 0.20 relevance; source sequence; neutral quality 0.62 when analysis is missing | Does not expand the set like v6; analyzes the accepted route |
+| Legacy song/artist requests | `choose_request_segment` → `route_to_request`; mean of `score`, destination relevance and existing delay costs | Beam of up to 48 states, 12 candidates, up to four bridges; destination preferred next. Requires `beatmatch_fits` on every segment, including the final one (P12; P11-a closed) |
+| Automatic `dj-place` | `choose_placement`: mean of incoming and outgoing transitions, minus 0.009 per gap; a tie favours the earlier gap | Up to two bridges; with a fixed position no bridges are acquired or admitted |
+| `dj-repair` | `repair_route`: anchors and depth kept; fill with `order_route`; stability bonus of 0.06 to the existing rows | Arrival at the anchor with `route_to_request`, up to two bridges; ceiling of 16; does not grow by filling. Exclusions do not override explicit anchors |
+| `dj-transition` | Only `plan_transition` against the current measurements of the two files; without choosing songs or reordering | Cache read and possible asynchronous scheduling; no decoding inside the request |
 
-La doble influencia del tempo se conserva explícitamente: el `score` usa el
-desajuste de BPM global para describir compatibilidad del par (junto con armonía
-y confianza); la distancia de continuidad usa BPM para mantener próximas las
-magnitudes de la ruta. La dispersión de cada dimensión determina su escala.
-No son dos confirmaciones independientes del pulso ni dos estimaciones del
-compás. P11 no añade pesos ni recalibra esa influencia. P12 conserva los pesos
-y aplica la validez métrica como requisito binario, no como otro peso de gusto.
-La diferencia entre
-continuidad v6 y semántica/relevancia legacy es deliberada y ya figuraba en P3.
+The double influence of tempo is kept explicitly: the `score` uses the
+global BPM mismatch to describe the compatibility of the pair (together with harmony
+and confidence); the continuity distance uses BPM to keep the
+magnitudes of the route close. The dispersion of each dimension determines its scale.
+They are not two independent confirmations of the beat or two estimates of the
+metre. P11 does not add weights or recalibrate that influence. P12 keeps the weights
+and applies metric validity as a binary requirement, not as another taste weight.
+The difference between
+v6 continuity and legacy semantics/relevance is deliberate and was already present in P3.
 
-### P11-a: cerrado
+### P11-a: closed
 
-Contradicción que la extracción de P11 conservó: `route_to_request` declaraba
-mejorar la seguridad pero comparaba solamente `score`. En la fixture
-100 → 109 → 119 BPM, con tonalidades Do → La → Fa# mayor, devolvía un puente
-con dos `echo_cut` a velocidad 1 que ganaba solo por tonalidad, mientras
-`add_measured_bridges` conservaba el destino directo.
+Contradiction that the P11 extraction kept: `route_to_request` claimed to
+improve safety but compared only `score`. In the fixture
+100 → 109 → 119 BPM, with keys C → A → F# major, it returned a bridge
+with two `echo_cut` at speed 1 that won only by key, while
+`add_measured_bridges` kept the direct destination.
 
-P12 exigió los dos tramos ejecutables cuando un análisis traía
-`metric_regions` y dejó la regla antigua para los que no la traían. En
-producción esa rama no se alcanzaba: la caché solo devuelve filas de la
-versión actual del analizador, toda medida actual lleva `metric_regions` y el
-análisis de reserva la lleva vacía. Solo la usaban fixtures de prueba escritas
-a mano y los vectores estructurales y de eco. Al cerrar P11-a se elimina esa
-rama (también `comparable_ratio` y la lectura de cuatro pulsos por compás en
-la web), las fixtures pasan a llevar regiones métricas y la misma fixture
-queda como `test_request_and_cohort_bridges_refuse_the_same_unexecutable_legs`.
-Android conserva la lectura de planes sin `alignment` porque puede hablar con
-una estación anterior a P12.
+P12 required both segments to be executable when an analysis carried
+`metric_regions` and left the old rule for those that did not carry it. In
+production that branch was not reached: the cache only returns rows of the
+current analyzer version, every current measurement carries `metric_regions` and the
+fallback analysis carries it empty. Only hand-written test fixtures
+and the structural and echo vectors used it. When closing P11-a that
+branch is removed (also `comparable_ratio` and the reading of four beats per bar on
+the web), the fixtures now carry metric regions and the same fixture
+remains as `test_request_and_cohort_bridges_refuse_the_same_unexecutable_legs`.
+Android keeps reading plans without `alignment` because it can talk to
+a station older than P12.
 
-## Evidencia de extracción
+## Extraction evidence
 
-`python -I docs/internal/dj/extraction_probe.py --reference ad59b838`, en `67d086cf`
-(se retiró al cerrar P11-a: desde P12 la versión del analizador ya no coincide
-con la de `ad59b838`), ejecutaba el monolito anterior y los módulos de P11
-con las mismas dependencias y señales, sin datos personales. Exigía igualdad
-completa, no una nueva expectativa generada:
+`python -I docs/internal/dj/extraction_probe.py --reference ad59b838`, in `67d086cf`
+(removed when closing P11-a: since P12 the analyzer version no longer matches
+the one of `ad59b838`), ran the previous monolith and the P11 modules
+with the same dependencies and signals, without personal data. It required complete
+equality, not a newly generated expectation:
 
-- 7 análisis PCM: pulsos a 90/137 BPM, silencio, tono, ruido, regiones de nivel
-  conocido y grabación de 600 s medida por cabeza/cola. Ningún golpe se añade
-  en el hueco entre 90 y 480 s.
-- 784 pares y 168 rutas, incluidos datos fríos, ceros, duración desconocida,
-  medio/doble tempo, confianza baja, archivo corto y mezcla larga.
-- WAV/AAC: una decodificación por archivo y análisis idéntico; cuatro lecturas
-  sin decodificación de filas antiguas/nuevas en ambos sentidos. Misma versión
-  del analizador y esquema de SQLite; no se invalida la caché.
+- 7 PCM analyses: beats at 90/137 BPM, silence, tone, noise, regions of known
+  level and a 600 s recording measured by head/tail. No beat is added
+  in the gap between 90 and 480 s.
+- 784 pairs and 168 routes, including cold data, zeros, unknown duration,
+  half/double tempo, low confidence, short file and long mix.
+- WAV/AAC: one decoding per file and identical analysis; four reads
+  without decoding of old/new rows in both directions. Same analyzer
+  version and SQLite schema; the cache is not invalidated.
 
-Las pruebas existentes conservan sus expectativas musicales y vectores HTTP,
-web y Android. Los puntos privados de inyección migran al propietario:
-`store._cache_path`, `store._analyse_pcm`, `store._decode_measured` y
-`store._compose` para almacenamiento/ejecución fuera del bucle;
-`features._spectral_features` para FFT y `analysis._compose` para PCM puro.
-Los imports públicos de la fachada siguen funcionando con una sola instancia
-del estado. Los probes de tempo y tonalidad y los benchmarks de análisis/cola
-usan esos propietarios; la instrumentación de la cola observa el trabajo real
-de `store`, y las revisiones separadas se cargan en otro namespace.
+The existing tests keep their musical expectations and HTTP,
+web and Android vectors. The private injection points move to the owner:
+`store._cache_path`, `store._analyse_pcm`, `store._decode_measured` and
+`store._compose` for storage/execution outside the loop;
+`features._spectral_features` for FFT and `analysis._compose` for pure PCM.
+The public imports of the facade keep working with a single instance
+of the state. The tempo and key probes and the analysis/queue benchmarks
+use those owners; the queue instrumentation observes the real work
+of `store`, and the separate revisions are loaded in another namespace.
 
-Se mantienen hasta 64 identidades pendientes, deduplicación por identidad,
-conexiones SQLite por hilo y FFT por bloques. No se fusionan las FFT de ritmo,
-tonalidad y ataques de notas ni se afirma una mejora de rendimiento: P11 cambia
-la organización y las fronteras.
+Up to 64 pending identities, deduplication by identity,
+SQLite connections per thread and block-wise FFT are kept. The rhythm,
+key and note-onset FFTs are not merged and no performance improvement is claimed: P11 changes
+the organization and the boundaries.
 
-## Ejecución: el análisis nunca corre dentro del motor
+## Execution: analysis never runs inside the engine
 
-Desde el 2026-10-28 el motor no decodifica, no ejecuta ONNX Runtime ni hace
-DSP con NumPy. `store.start_analysis_process()` (llamado al arrancar la API)
-hace que cada medición vaya a `shared/dj/worker.py`, un proceso hijo sin
-gevent que mide una canción cada vez con OpenBLAS en un hilo. El motor conserva
-SQLite, identidades, cola y prioridades; espera la respuesta sin bloquear su
-bucle. La cola de adquisición tiene un trabajo, porque el proceso mide de uno
-en uno; el barrido de la biblioteca sigue cediendo a las peticiones de sesión.
+Since 2026-10-28 the engine does not decode, does not run ONNX Runtime and does not do
+DSP with NumPy. `store.start_analysis_process()` (called when the API starts)
+makes each measurement go to `shared/dj/worker.py`, a child process without
+gevent that measures one song at a time with OpenBLAS on one thread. The engine keeps
+SQLite, identities, queue and priorities; it waits for the response without blocking its
+loop. The acquisition queue has one job, because the process measures one
+at a time; the library sweep still yields to session requests.
 
-Motivo: el motor sirve todo desde un único bucle de gevent y gevent arranca
-cada subproceso con `fork()`. Con el DSP en hilos nativos del mismo proceso,
-un `fork()` de FFmpeg coincidente con un producto de matrices de OpenBLAS
-multihilo se bloqueaba en el manejador `atfork` de OpenBLAS: el bucle no
-volvía y la estación quedaba inaccesible con un núcleo al 100 % hasta un
-reinicio manual (tres veces entre el 26 y el 28-10). Reglas del proceso del
-motor en `shared/cooperative.py`; pruebas en `tests/test_cooperative_process.py`
-y `tests/test_dj_worker.py`.
+Reason: the engine serves everything from a single gevent loop and gevent starts
+each subprocess with `fork()`. With the DSP in native threads of the same process,
+an FFmpeg `fork()` coinciding with a multithreaded OpenBLAS matrix product
+blocked in the OpenBLAS `atfork` handler: the loop did not
+return and the station became unreachable with one core at 100 % until a
+manual restart (three times between 26 and 28-10). Rules of the engine
+process in `shared/cooperative.py`; tests in `tests/test_cooperative_process.py`
+and `tests/test_dj_worker.py`.
 
-- Un análisis que no responde en 630 s se mata y la siguiente petición arranca
-  otro proceso; el hijo vuelca su pila y sale a los 600 s por su cuenta.
-- Una fuente que el proceso no pudo medir (error, caída o tiempo agotado) no
-  se reintenta hasta que cambia su sello o se reinicia el motor.
-- El resultado es idéntico al análisis en el mismo proceso, que siguen usando
-  pruebas, probes y benchmarks (`store._analyse_pcm`).
-- El ejecutable de escritorio (PyInstaller) es también su propio proceso de
-  análisis: `soundsible-engine --dj-analysis-worker`.
-- El hijo lee la siguiente petición solo entre mediciones, en su hilo
-  principal. Un hilo bloqueado leyendo stdin durante una medición colgaba la
-  versión de Windows al cargar las DLL de NumPy (una lectura síncrona
-  pendiente en un pipe bloquea otras llamadas sobre ese handle).
+- An analysis that does not respond in 630 s is killed and the next request starts
+  another process; the child dumps its stack and exits at 600 s on its own.
+- A source that the process could not measure (error, crash or timeout) is not
+  retried until its stamp changes or the engine restarts.
+- The result is identical to the in-process analysis, which tests,
+  probes and benchmarks still use (`store._analyse_pcm`).
+- The desktop executable (PyInstaller) is also its own analysis
+  process: `soundsible-engine --dj-analysis-worker`.
+- The child reads the next request only between measurements, on its main
+  thread. A thread blocked reading stdin during a measurement hung the
+  Windows version when loading the NumPy DLLs (a pending synchronous read
+  on a pipe blocks other calls on that handle).

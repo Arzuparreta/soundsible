@@ -1,29 +1,29 @@
-# S2l: directorio, seguimiento y adquisición podcast
+# S2l: podcast directory, following and acquisition
 
-El directorio usa la búsqueda del motor y abre RSS sin suscribir ni adquirir.
-Seguir/dejar de seguir requiere confirmación del servidor y vive en el menú de
-tres puntos del programa. Dejar de seguir conserva los archivos adquiridos.
+The directory uses the engine search and opens RSS without subscribing or acquiring.
+Follow/unfollow requires server confirmation and lives in the
+three-dot menu of the show. Unfollowing keeps the acquired files.
 
-El menú de episodio ofrece adquisición explícita, retry de fallo/interrupción y
-cancelación de trabajo. La cola durable del motor es la autoridad. Sus trabajos
-completados desaparecen de queue/status: esa desaparición refresca Library, pero
-«Downloaded» requiere un Track adquirido confirmado, nunca sólo ausencia de job.
-La observación se cancela al desconectar/cambiar cuenta y vuelve al reconectar.
+The episode menu offers explicit acquisition, retry after failure/interruption and
+job cancellation. The durable engine queue is the authority. Its completed
+jobs disappear from queue/status: that disappearance refreshes Library, but
+"Downloaded" requires a confirmed acquired Track, never only the absence of a job.
+Observation is cancelled on disconnect/account change and resumes on reconnect.
 
-Streaming y archivo adquirido mantienen el progreso de S2k. El join fallback
-requiere GUID más feed o RSS reales; dos shows sin feed ID no se pueden unir por
-un GUID homónimo. Offline B sigue cubriendo exclusivamente música adquirida.
+Streaming and the acquired file keep the S2k progress. The join fallback
+requires a real GUID plus feed or RSS; two shows without a feed ID cannot be joined by
+a GUID with the same name. Offline B still covers only acquired music.
 
-El fixture sustituye el borde iTunes/RSS/enclosure con audio sintético. Búsqueda,
-RSS, roles, tokens, cola persistente, finalizador y archivos/ranges son rutas
-reales. El downloader ahora cierra Response upstream también al fallar status,
-tipo o lectura. No se modifican SSRF ni cookies hacia proveedores.
+The fixture replaces the iTunes/RSS/enclosure edge with synthetic audio. Search,
+RSS, roles, tokens, persistent queue, finalizer and files/ranges are real
+paths. The downloader now closes the upstream Response also when status,
+type or read fails. SSRF and cookies toward providers are not modified.
 
-Dos pruebas APK (HTTP y HTTPS verificado) recorren búsqueda, stream sin follow,
-follow, adquisición que falla con 503, retry, archivo local con resume y unfollow
-sin borrado. La prueba Python reproduce la adquisición real y el aislamiento de
-cuenta. Ver HANDOFF para resultados finales de regresión.
+Two APK tests (HTTP and verified HTTPS) walk through search, stream without follow,
+follow, acquisition that fails with 503, retry, local file with resume and unfollow
+without deletion. The Python test reproduces the real acquisition and account
+isolation. See HANDOFF for final regression results.
 
-Carátulas externas, otras acciones de episodios y el resto de la matriz siguen
-pendientes. Esto es desarrollo, no alpha. Continuar con Radio NORMAL nativo y
-los gates de teléfono, DJ, Live, Auto, firma y actualización antes de PR/release.
+External covers, other episode actions and the rest of the matrix are still
+pending. This is development, not alpha. Continue with native Radio NORMAL and
+the phone, DJ, Live, Auto, signing and update gates before PR/release.

@@ -1,4 +1,4 @@
-# S2aq — Reconexión de dispositivo tras agotar Socket.IO
+# S2aq — Device reconnection after Socket.IO exhausts its retries
 
 The service's socket manager retries five times. Once those attempts exhaust,
 NativeDeviceSession retires that manager and its transport, applies30s cooldown

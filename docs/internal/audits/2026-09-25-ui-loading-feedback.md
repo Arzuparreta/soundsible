@@ -1,91 +1,91 @@
-# Navegación y feedback de carga
+# Navigation and loading feedback
 
-Pasada sobre las rutas de `ui_web/src/main.tsx`, navegación móvil/escritorio,
-componentes de carga y paneles de ajustes. Rama `fix/ui-navigation-feedback`.
+Pass over the routes of `ui_web/src/main.tsx`, mobile/desktop navigation,
+loading components and settings panels. Branch `fix/ui-navigation-feedback`.
 
-## Hallazgos y cambios
+## Findings and changes
 
-- El cierre del drawer y la selección se completan juntos al recibir
-  `popstate`: retirarlo antes exponía brevemente la vista anterior antes del
-  skeleton. Los cierres sin selección siguen siendo inmediatos. Se conserva
-  el historial y una prueba retrasa su resolución para cubrir la regresión.
-- Las rutas divididas en módulos usaban `lazy` sin fallback propio. `asyncPage`
-  muestra el destino y su título mientras importa el código, comparte imports
-  en vuelo y conserva únicamente el módulo, no la página ni datos de cuenta.
-  Una respuesta de una página abandonada no vuelve a montarla. Fallos de import
-  y de render tienen reintento y dejan disponible la navegación del shell.
-- Artistas monta una cuadrícula local completa. Se permite pintar el título y
-  skeleton antes del trabajo de montaje mediante dos frames cancelables. No es
-  una virtualización ni una reducción demostrada del tiempo total de montaje.
-- Álbumes consultaba al servidor sin skeleton propio y convertía errores en
-  colecciones vacías. Ahora separa carga, contenido, vacío y fallo con reintento;
-  al refrescar conserva la cuadrícula previa con estado ocupado y texto de carga.
-- Las fichas de artista/álbum condicionaban las canciones locales a la respuesta
-  del perfil externo. Ya pueden mostrarlas sin esa dependencia. Al pasar entre
-  entidades no se presenta el perfil anterior mientras llega el nuevo.
-- Listas y portada de Podcasts ya no presentan un vacío antes de terminar su
-  carga inicial. Descargas distingue petición pendiente, error y cola vacía.
-- Episodios de podcast distinguen error de feed vacío y permiten reintentar.
-- Reproducción, configuración de Descargas y acceso Subsonic no ofrecen valores
-  por defecto editables antes de leer la configuración. Comparten `SettingsLoad`.
-  Usuarios y mejoras lossless también muestran carga inicial y error recuperable.
-- Se reutilizan skeletons y botones del sistema visual, con mensajes en los
-  cuatro idiomas. No se añade una duración mínima de espera. Los skeletons
-  existentes respetan movimiento reducido y anuncian carga a lectores de pantalla.
+- Closing the drawer and the selection now complete together when
+  `popstate` is received: removing it earlier briefly exposed the previous view before the
+  skeleton. Closes without a selection remain immediate. The history
+  is kept and a test delays its resolution to cover the regression.
+- The routes split into modules used `lazy` without their own fallback. `asyncPage`
+  shows the destination and its title while it imports the code, shares in-flight
+  imports and keeps only the module, not the page or account data.
+  A response for an abandoned page does not mount it again. Import
+  and render failures have a retry and leave the shell navigation available.
+- Artists mounts a complete local grid. The title and
+  skeleton can now be painted before the mount work through two cancelable frames. This is not
+  virtualization or a demonstrated reduction of the total mount time.
+- Albums queried the server without its own skeleton and turned errors into
+  empty collections. It now separates loading, content, empty and failure with retry;
+  on refresh it keeps the previous grid with a busy state and loading text.
+- The artist/album pages made the local songs depend on the response
+  of the external profile. They can now show them without that dependency. When moving between
+  entities, the previous profile is not shown while the new one arrives.
+- Playlists and the Podcasts home no longer show an empty state before their
+  initial load finishes. Downloads distinguishes a pending request, an error and an empty queue.
+- Podcast episodes distinguish an error from an empty feed and allow a retry.
+- Playback, Downloads configuration and Subsonic access do not offer editable default
+  values before reading the configuration. They share `SettingsLoad`.
+  Users and lossless upgrades also show initial loading and a recoverable error.
+- Skeletons and buttons from the visual system are reused, with messages in the
+  four languages. No minimum wait duration is added. The existing skeletons
+  respect reduced motion and announce loading to screen readers.
 
-## Mapa de dependencias y cobertura
+## Dependency and coverage map
 
-| Superficie | Dependencia de datos | Feedback |
+| Surface | Data dependency | Feedback |
 | --- | --- | --- |
-| Menú móvil, sidebar, barra inferior | Cliente; historial al cerrar drawer | Cierre sincronizado con la selección; destino con fallback común si falta el módulo |
-| Canciones, Favoritos, detalle de lista | Store de biblioteca sincronizado | `TrackList` ya tenía skeleton; se conserva |
-| Artistas de biblioteca | Catálogo sincronizado; montaje local de grid | Skeleton redondo durante primera carga y antes de montar |
-| Álbumes de biblioteca | API de álbumes por orden/filtro/revisión | Skeleton inicial, refresco ocupado, fallo con reintento |
-| Artista / álbum | Perfil externo y consulta local por ID independientes | Contenido local independiente; skeleton de descubrimiento y reintento |
-| Listas | Store sincronizado | Skeleton inicial de tarjetas |
-| Búsqueda / descubrimiento | API, nodos y caché | Ya había skeletons por dominio y resultados previos inertes durante búsqueda; se conserva |
-| Podcasts | Suscripciones del store, recomendaciones y búsqueda | Skeleton de portada añadido; feedback de búsqueda existente conservado |
-| Episodios | API del feed | Skeleton existente y nuevo error con reintento |
-| Descargas | API de cola, después eventos | Skeleton inicial, errores recuperables, progreso por descarga conservado |
-| Live | Comunidad / conexión de audio | Estados de conexión, recuperación y creación existentes conservados |
-| Importación | Restauración del trabajo y proceso de importación | `StatusCard` y progreso existentes conservados |
-| Ajustes locales / cuenta | Preferencias y sesión del cliente | Se muestran sin esperar datos de biblioteca |
-| Ajustes de servidor / Subsonic | API de configuración | Skeleton antes de controles reales, error y reintento |
-| Usuarios / lossless | API de administración / estado | Skeleton inicial y error recuperable |
-| Dispositivos / emparejamiento | API y proceso de pairing | Skeletons y estados existentes conservados |
-| Reproductor, letras, menús y acciones de colección | Store, audio y peticiones puntuales | Feedback específico existente conservado; no se bloquea el shell por carga de rutas |
-| Login / invitación | Sesión / validación de token | Pantalla de arranque y estados de formulario existentes conservados |
+| Mobile menu, sidebar, bottom bar | Client; history when closing the drawer | Close synchronized with the selection; destination with a common fallback if the module is missing |
+| Songs, Favorites, playlist detail | Synchronized library store | `TrackList` already had a skeleton; it is kept |
+| Library artists | Synchronized catalog; local grid mount | Round skeleton during the first load and before mounting |
+| Library albums | Albums API by order/filter/revision | Initial skeleton, busy refresh, failure with retry |
+| Artist / album | External profile and local query by ID, independent of each other | Independent local content; discovery skeleton and retry |
+| Playlists | Synchronized store | Initial card skeleton |
+| Search / discovery | API, nodes and cache | Per-domain skeletons and inert previous results during search already existed; kept |
+| Podcasts | Store subscriptions, recommendations and search | Home skeleton added; existing search feedback kept |
+| Episodes | Feed API | Existing skeleton and new error with retry |
+| Downloads | Queue API, then events | Initial skeleton, recoverable errors, per-download progress kept |
+| Live | Community / audio connection | Existing connection, recovery and creation states kept |
+| Import | Restoring the job and import process | Existing `StatusCard` and progress kept |
+| Local / account settings | Client preferences and session | Shown without waiting for library data |
+| Server / Subsonic settings | Configuration API | Skeleton before the real controls, error and retry |
+| Users / lossless | Administration / status API | Initial skeleton and recoverable error |
+| Devices / pairing | API and pairing process | Existing skeletons and states kept |
+| Player, lyrics, menus and collection actions | Store, audio and one-off requests | Existing specific feedback kept; the shell is not blocked by route loading |
+| Login / invitation | Session / token validation | Existing startup screen and form states kept |
 
-## Validación y límites
+## Validation and limits
 
-`cd ui_web && npm test`: typecheck y **1.164 pruebas / 122 archivos** correctos.
-`git diff --check` correcto. Las regresiones añadidas
-comprueban navegación con un módulo pendiente, abandono y vuelta a una ruta,
-reintento de import, cancelación de frames, cierre sincronizado con popstate, catálogo
-pendiente, fallo de álbumes, independencia de pistas locales, cambio de entidad,
-cola de descargas y carga de ajustes.
+`cd ui_web && npm test`: typecheck and **1,164 tests / 122 files** passed.
+`git diff --check` passed. The added regression tests
+check navigation with a pending module, leaving and returning to a route,
+import retry, frame cancellation, close synchronized with popstate, pending
+catalog, album failure, independence of local tracks, entity change,
+downloads queue and settings loading.
 
-No se ejecutó build local ni se modificaron servicios o datos reales. La revisión
-es de código y pruebas DOM/router con peticiones controladas: no constituye una
-medición de latencia en móvil ni aceptación visual en un dispositivo físico.
-Para la aceptación física pendiente: menú → Artistas/Álbumes, primera visita a cada
-pestaña con red lenta, volver durante una carga y reintentar tras recuperar red.
+No local build was run and no real services or data were modified. The review
+covers code and DOM/router tests with controlled requests: it is not a
+latency measurement on mobile or visual acceptance on a physical device.
+For the pending physical acceptance: menu → Artists/Albums, first visit to each
+tab with a slow network, going back during a load and retrying after the network recovers.
 
-Las cuadrículas siguen montando todas las tarjetas tras el primer feedback;
-una biblioteca enorme puede requerir un trabajo separado de virtualización.
+The grids still mount all the cards after the first feedback;
+a very large library may require separate virtualization work.
 
-## Correcciones de CI
+## CI fixes
 
-- El contador de reconstrucciones del catálogo queda limitado al archivo SQLite
-  de la prueba; abrir otra base no altera sus aserciones. La simulación de reinicio
-  invalida solo su entrada de esquema. Suite Python: 1.567 pruebas correctas,
-  cobertura 69,65 % (umbral de CI: 55 %).
-- La búsqueda de ajustes espera a que los paneles asíncronos dejen sus skeletons
-  antes de calcular el desplazamiento. El panel lossless anterior al resultado
-  podía crecer después del scroll y sacar la fila de la pantalla. La espera de
-  una carga lenta no se confunde con el timeout de un ancla inexistente.
-- Regresión DOM y de navegador con respuesta lossless retenida más allá del
-  timeout del ancla; pruebas de búsqueda en Chromium y WebKit móvil/escritorio.
-- Navegador en contenedor Playwright: búsqueda de ajustes, navegación móvil y
-  escala de interfaz, 119 pruebas correctas y 33 omitidas por plataforma, sin
-  reintentos, en Chromium y WebKit móvil/escritorio.
+- The catalog rebuild counter is limited to the test's SQLite
+  file; opening another database does not alter its assertions. The restart simulation
+  invalidates only its schema entry. Python suite: 1,567 tests passed,
+  coverage 69.65 % (CI threshold: 55 %).
+- The settings search waits for the asynchronous panels to leave their skeletons
+  before calculating the scroll offset. The lossless panel above the result
+  could grow after the scroll and push the row off the screen. Waiting for
+  a slow load is not confused with the timeout of a nonexistent anchor.
+- DOM and browser regression tests with a lossless response held beyond the
+  anchor timeout; search tests in Chromium and WebKit mobile/desktop.
+- Browser in a Playwright container: settings search, mobile navigation and
+  interface scale, 119 tests passed and 33 skipped by platform, without
+  retries, in Chromium and WebKit mobile/desktop.

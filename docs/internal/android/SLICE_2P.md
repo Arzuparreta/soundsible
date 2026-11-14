@@ -1,20 +1,20 @@
-# S2p: perfiles y refill Radio NORMAL
+# S2p: profiles and NORMAL Radio refill
 
-Continuación activa de S2m. El menú de la canción actual ofrece los perfiles
-existentes Familiar/Equilibrado/Explorar y marca el perfil observado. Seleccionar
-replantea recomendaciones, conserva ocurrencia actual e intención de pausa y
-retira sólo futuras recomendaciones antiguas. Menús capturados no migran de cuenta
-ni de ocurrencia: además de queueToken, el servicio comprueba key cuando se envía.
+Active continuation of S2m. The menu of the current song offers the existing
+profiles Familiar/Balanced/Explore and marks the observed profile. Selecting one
+replans recommendations, keeps the current occurrence and pause intention and
+removes only old future recommendations. Captured menus do not migrate across accounts
+or occurrences: in addition to queueToken, the service checks the key when it is sent.
 
-La aceptación APK amplía el recorrido real HTTP/HTTPS: avanzar hasta el umbral,
-detener Activity, verificar petición planner en servicio y observar crecimiento
-sin nuevas duplicaciones al regresar. Volver al seed y seleccionar Explore desde
-el menú real debe conservar pausa y key. Un comando con key antigua se rechaza.
-Mantener prioridad manual y Stop Radio. HANDOFF registra resultados cuando pasan;
-este contrato por sí solo no constituye evidencia.
+The APK acceptance extends the real HTTP/HTTPS walkthrough: advance up to the threshold,
+stop the Activity, verify the planner request in the service and observe growth
+without new duplications on return. Going back to the seed and selecting Explore from
+the real menu must keep pause and key. A command with an old key is rejected.
+Keep manual priority and Stop Radio. HANDOFF records results when they pass;
+this contract by itself is not evidence.
 
-Autoplay sigue pendiente: leer preferencias discovery reales (default enabled),
-preparar sólo con pocas peticiones manuales futuras, conservar seed de la última
-recomendación/manual disponible, suspender con repeat/podcast/Radio y cancelar
-cuenta/programa. No activar autoplay global usando estado JS no persistido ni
-confundirlo con Radio. DJ/Live/Auto y publicación mantienen sus gates.
+Autoplay is still pending: read the real discovery preferences (default enabled),
+prepare only with few future manual requests, keep the seed from the last
+available recommendation/manual request, suspend with repeat/podcast/Radio and cancel on
+account/program change. Do not enable global autoplay using non-persisted JS state or
+confuse it with Radio. DJ/Live/Auto and publishing keep their gates.

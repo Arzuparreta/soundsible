@@ -1,64 +1,64 @@
-# S2ac: Settings de cuenta compartido con Android
+# S2ac: Account settings shared with Android
 
-Primer vertical de Settings; no sustituye la matriz completa. Extraer la sección
-Account existente a una vista compartida sin stores de audio, con usuario,
-operaciones y preferencias inyectadas. Web mantiene su adaptador actual; Android
-usa transporte nativo, cuenta/generación/epoch y cancelación. Mantener etiquetas,
-confirmaciones y filas originales: nombre visible, username, password, historial
-de búsqueda y logout. No mostrar categorías con acciones todavía inexistentes.
+First Settings vertical; it does not replace the full matrix. Extract the existing
+Account section to a shared view without audio stores, with injected user,
+operations and preferences. Web keeps its current adapter; Android
+uses native transport, account/generation/epoch and cancellation. Keep the original labels,
+confirmations and rows: display name, username, password, search
+history and logout. Do not show categories with actions that do not exist yet.
 
-Confirmar perfil desde respuesta y auth/state; rechazar respuesta vieja/cuenta
-cambiada antes de escribir UI. No perder keys, pausa20s, programa, perfil ni copias
-por cambiar nombre. Cambio de password usa cookie nativa/Keystore, nunca logs ni
-state público; demostrar login real con nueva contraseña y restaurar sólo la
-cuenta de fixture. Logout conserva su política actual de cierre/cancelación.
+Confirm the profile from the response and auth/state; reject an old response/changed account
+before writing UI. Do not lose keys, pause20s, program, profile or copies
+when changing the name. Password change uses the native cookie/Keystore, never logs or
+public state; demonstrate a real login with the new password and restore only the
+fixture account. Logout keeps its current close/cancellation policy.
 
-Historial compartido mediante storage inyectado: namespace origen+cuenta Android,
-misma semántica de web (off elimina recents, máximo8, deduplicación). Discover
-nativo debe usar esa misma preferencia y mostrar recents ejecutables; sin red no
-crea una búsqueda ni recuerda otra cuenta. No reutilizar userKey web global de
-una sesión distinta ni mezclar dos servidores con un mismo ID local.
+Shared history through injected storage: Android origin+account namespace,
+same semantics as web (off removes recents, maximum8, deduplication). Native
+Discover must use that same preference and show executable recents; without a network it does not
+create a search or remember another account. Do not reuse the global web userKey of
+a different session or mix two servers with the same local ID.
 
-Tests: shared view cancel/reject/confirm/stale/unmount y account namespace;
-UI completa; APK HTTP/HTTPS con edición real, aislamiento, conservación de audio/
-offline, Atrás y password/login/logout. Preparar assets antes de instrumentación,
-retirar CA temporal y verificar normal APK/test APK/JVM/lint. Principal53+restart2
-sobre03e3446 en curso; no cambiar sus fuentes nativas ni su artifact.
+Tests: shared view cancel/reject/confirm/stale/unmount and account namespace;
+full UI; HTTP/HTTPS APK with real editing, isolation, preservation of audio/
+offline, Back and password/login/logout. Prepare assets before instrumentation,
+remove the temporary CA and verify normal APK/test APK/JVM/lint. Main53+restart2
+on03e3446 in progress; do not change its native sources or its artifact.
 
-Después Appearance y secciones Settings restantes, Discover/entidades completas,
-DJ/Live/Auto, firma/update, PR/main/release. No publicar alpha parcial ni cerrar
-turno por este slice.
+Then Appearance and remaining Settings sections, complete Discover/entities,
+DJ/Live/Auto, signing/update, PR/main/release. Do not publish a partial alpha or end the
+turn for this slice.
 
-Implementación UI/controller en curso: AccountSettingsView compartida, storage
-historial inyectado por origen/cuenta, guard de mutaciones confirmado por
-receipt + auth/state no-store, SettingsAccount nativo con abort/lifetime y
-confirmación. Discover nativo recuerda sólo respuestas vigentes y permite
-repetir/retirar recientes; off limpia ambos dominios. UI completa1484/176 pasa en
-/tmp/soundsible-s2ac-account-ui.log, incluidos cancel/reject/obsolete/unmount,
-confirmación/password y aislamiento de historial. Recorrido APK aún pendiente.
-No atribuir esta UI al artifact limpio03e3446 de la principal53.
+UI/controller implementation in progress: shared AccountSettingsView, history storage
+injected per origin/account, mutation guard confirmed by
+receipt + no-store auth/state, native SettingsAccount with abort/lifetime and
+confirmation. Native Discover remembers only current responses and allows
+repeating/removing recents; off clears both domains. Full UI1484/176 passes in
+/tmp/soundsible-s2ac-account-ui.log, including cancel/reject/obsolete/unmount,
+confirmation/password and history isolation. APK walkthrough still pending.
+Do not attribute this UI to the clean artifact03e3446 of main53.
 
 
-## Recorrido nativo aceptado
+## Native walkthrough accepted
 
-HTTP/HTTPS2 pasa en /tmp/soundsible-s2ac-bootstrap-native.log; assets06004af
-dirty=true. Cancelar nombre no escribe; nombre/username confirmados por snapshot,
-username duplicado rechaza, password incorrecto conserva cookie y correcto rota
-cookie cifrada. Conexión nueva descifra el valor Keystore; se observan conexiones
-reales de eventos tras las mutaciones. Programa conserva key/programToken/pausa20s
-y copia privada; recrear Activity conserva estado y sesión. Confirmación logout,
-owner con preferencia propia y nuevo login member con username/password nuevos
-prueban aislamiento y persistencia de historial. No cookies en logs/JS y no audio
-HTML. APK/test APK/JVM17/lint sin CA temporal pasa.
+HTTP/HTTPS2 passes in /tmp/soundsible-s2ac-bootstrap-native.log; assets06004af
+dirty=true. Cancelling the name does not write; name/username confirmed by snapshot,
+duplicate username rejects, incorrect password keeps the cookie and the correct one rotates the
+encrypted cookie. A new connection decrypts the Keystore value; real event connections
+are observed after the mutations. The program keeps key/programToken/pause20s
+and the private copy; recreating the Activity keeps state and session. Logout confirmation,
+owner with its own preference and a new member login with new username/password
+prove isolation and persistence of history. No cookies in logs/JS and no HTML
+audio. APK/test APK/JVM17/lint without temporary CA pass.
 
-Fallos corregidos durante aceptación: fila username incluye hint (localizador
-exacto obsoleto); callbacks de test encapsulan const por evaluación WebView. La
-salida Settings ahora respeta busy de revalidación igual que la cabecera, evitando
-ofrecer una acción que leave() iba a ignorar. Test real de confirmación con
-snapshots cambiados y test busy→ready pasan. Browser4 completo aceptado: Chromium278/66 y WebKit269/75, cero fallos;
-logs /tmp/soundsible-s2ac-{chromium,webkit}.log. Principal55+restart2
-posterior pendiente; último artifact limpio03e3446 tiene53+2 y no esta UI.
+Failures fixed during acceptance: the username row includes a hint (exact locator
+obsolete); test callbacks wrap const per WebView evaluation. The
+Settings exit now respects revalidation busy the same as the header, avoiding
+offering an action that leave() was going to ignore. Real confirmation test with
+changed snapshots and busy→ready test pass. Full Browser4 accepted: Chromium278/66 and WebKit269/75, zero failures;
+logs /tmp/soundsible-s2ac-{chromium,webkit}.log. Later Main55+restart2
+pending; the last clean artifact03e3446 has53+2 and not this UI.
 
-Este vertical no completa Settings: Appearance, roles/admin, dispositivos,
-servicios y secciones restantes siguen pendientes, junto a Discover completo,
-DJ/Live/Auto y firma/update. No equivale a una alpha.
+This vertical does not complete Settings: Appearance, roles/admin, devices,
+services and remaining sections are still pending, together with complete Discover,
+DJ/Live/Auto and signing/update. It is not equivalent to an alpha.

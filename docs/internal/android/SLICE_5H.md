@@ -1,13 +1,13 @@
-# S5h: reproducción y revocación desde otro UID
+# S5h: playback and revocation from another UID
 
-CarExternalTest2/0 HTTP/TLS, runner exit0; normal APK/test APK/JVM54/lint sin CA.
-[evidence](evidence/s5h.json) identifica fuente y duración. Sólo cambian tests.
+CarExternalTest2/0 HTTP/TLS, runner exit0; normal APK/test APK/JVM54/lint without CA.
+[evidence](evidence/s5h.json) identifies source and duration. Only tests change.
 
-El listener autorizado usa playFromMediaId desde otro proceso/UID. Su controller
-observa ID canónico member-track y playing; el programa nativo produce PCM local
-no silencioso. La URI opaca permite una segunda apertura antes de logout. Tras
-clearSession/logout, el mismo UID y la misma URI ya no permiten una nueva lectura.
-Se mantienen rechazo sin trust, decode real de PNG y escritura denegada.
+The authorized listener uses playFromMediaId from another process/UID. Its controller
+observes the canonical member-track ID and playing; the native program produces non-silent
+local PCM. The opaque URI allows a second open before logout. After
+clearSession/logout, the same UID and the same URI no longer allow a new read.
+Rejection without trust, real PNG decode and denied write are kept.
 
-Revocación no retira bytes ya recibidos ni descriptores abiertos. No Google Auto
-host, DJ externo, handover/focus externo, escucha física ni paridad completa.
+Revocation does not remove bytes already received or open descriptors. No Google Auto
+host, external DJ, external handover/focus, physical listening or full parity.

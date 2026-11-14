@@ -1,47 +1,47 @@
-# S2x: adquisición de música y promoción de identidad
+# S2x: music acquisition and identity promotion
 
-Library y Search ofrecen Download en menús de previews. No equivale a guardar
-bookmark ni preparar copia offline. La cola reside en el motor, continúa sin la
-Activity y usa endpoints reales de enqueue/status/retry/remove/clear. Downloads
-muestra filas compartidas con web, fases/progreso/fallos y acciones confirmadas.
-Clear queue retira pending/failed/interrupted, conserva downloading según contrato
-actual del motor; trabajos activos tienen cancelación individual.
+Library and Search offer Download in preview menus. It is not equivalent to saving a
+bookmark or preparing an offline copy. The queue lives in the engine, continues without the
+Activity and uses the real enqueue/status/retry/remove/clear endpoints. Downloads
+shows rows shared with the web, phases/progress/failures and confirmed actions.
+Clear queue removes pending/failed/interrupted, keeps downloading according to the engine's current
+contract; active jobs have individual cancellation.
 
-Intake transporta video_id, display metadata e identity_keys exactas. Intentos
-concurrentes se coalescen por cuenta/video; no reencolar archivo adquirido ni job
-activo. Confirmar accepted index/ID y rejected vacío antes de refresh. Respuestas
-de cuenta anterior no refrescan perfil nuevo. Estado de cola se limpia con cuenta,
-se refresca por downloader_update y polling visible mientras tiene jobs activos.
+Intake carries video_id, display metadata and exact identity_keys. Concurrent
+attempts are coalesced per account/video; do not re-enqueue an acquired file or an active
+job. Confirm accepted index/ID and empty rejected before refresh. Responses
+from a previous account do not refresh a new profile. Queue state is cleared with the account,
+refreshed by downloader_update and visible polling while it has active jobs.
 
-Adquirir un preview no reemplaza su ocurrencia/URI, ni inicia audio. Library y
-Search usan claves compartidas (yt/lib/aliases) para conservar indicador activo
-cuando el archivo llega con hash como ID. Sin coincidencia exacta no comparar por
-título/artist. La siguiente selección explícita puede reproducir el archivo nuevo.
+Acquiring a preview does not replace its occurrence/URI, and does not start audio. Library and
+Search use shared keys (yt/lib/aliases) to keep the active indicator
+when the file arrives with a hash as ID. Without an exact match do not compare by
+title/artist. The next explicit selection can play the new file.
 
-Fixture sustituye sólo _download_audio por bytes de MP4/WebM sintético y progreso
-acotado/fallo/delay controlables por endpoint protegido loopback+header. Permanecen
-reales process_video, lectura/tags, hash/store_track, queue checkpoint, pool y
-transacción personal. Cancelar invalida el job: incluso una respuesta posterior
-del proveedor no incorpora la canción. No afirmar que detiene transferencia remota
-ni que se aceptó YouTube vivo. Nunca usar estos fixtures sobre biblioteca personal.
+The fixture replaces only _download_audio with synthetic MP4/WebM bytes and
+bounded progress/failure/delay controllable through a protected loopback+header endpoint. These
+remain real: process_video, reading/tags, hash/store_track, queue checkpoint, pool and
+personal transaction. Cancelling invalidates the job: even a later provider response
+does not incorporate the song. Do not claim that it stops the remote transfer
+or that live YouTube was accepted. Never use these fixtures on a personal library.
 
-Python **un test end to end pasa**, /tmp/soundsible-s2x-backend.log: fallo/retry,
-progreso, archivo adquirido MP4/hash y Range real, cancelación activa sin promoción,
-owner no ve ni elimina job de member, no recibe sus archivos. UI **1.425/167 pasa**,
-/tmp/soundsible-s2x-ui-final.log: coalescing/aliases/receipt/account y filas reales
-con confirmación, más web previo compartido.
+Python **one end to end test passes**, /tmp/soundsible-s2x-backend.log: failure/retry,
+progress, acquired MP4/hash file and real Range, active cancellation without promotion,
+owner does not see or delete a member's job, does not receive their files. UI **1,425/167 passes**,
+/tmp/soundsible-s2x-ui-final.log: coalescing/aliases/receipt/account and real rows
+with confirmation, plus the previous shared web tests.
 
-APK **dos casos HTTP/HTTPS pasan**, cero fallos/omitidos,
-/tmp/soundsible-s2x-native-local.log. APK/test/unit/lint normal sin CA pasa. Fuentes assets preparadas dirty desde b364905. Comprobar
-retry/acquired hash, preview pausado20s/keys/token preservados y marcador de archivo
-adquirido; cancelar Search mientras proveedor activo sin promocionar fuente nueva.
-Teardown elimina archivos adquiridos sólo de este fixture, restaura Saved y sesión.
-También seleccionar explícitamente hash adquirido y comprobar ready/playing con
-source local, sin HTMLAudio; detener programa antes de teardown. Primer intento
-falló al salir de Search antes de resolver/aceptar el intake: el guard canceló la
-acción. El test espera la aceptación real antes de navegar y cancelar proveedor
-activo. Teardown además restablece delay/failNext para casos posteriores.
+APK **two HTTP/HTTPS cases pass**, zero failures/skipped,
+/tmp/soundsible-s2x-native-local.log. Normal APK/test/unit/lint without CA passes. Asset sources prepared dirty from b364905. Check
+retry/acquired hash, paused preview at 20s/keys/token preserved and the acquired file
+marker; cancel Search while the provider is active without promoting the new source.
+Teardown deletes acquired files only from this fixture, restores Saved and session.
+Also explicitly select the acquired hash and check ready/playing with a
+local source, without HTMLAudio; stop the programme before teardown. The first attempt
+failed when leaving Search before the intake was resolved/accepted: the guard cancelled the
+action. The test waits for real acceptance before navigating and cancelling the active
+provider. Teardown also resets delay/failNext for later cases.
 
-Pendientes: entidades externas/descubrimiento avanzado, importación CSV/Settings,
-compartir/multidispositivo, DJ/Live/Auto, firma/update/release. Regresión principal
-ampliada y browser cuatro perfiles antes del PR final; alpha sólo con paridad completa.
+Pending: external entities/advanced discovery, CSV import/Settings,
+sharing/multi-device, DJ/Live/Auto, signing/update/release. Extended principal
+regression and four browser profiles before the final PR; alpha only with full parity.

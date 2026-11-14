@@ -1,24 +1,24 @@
-# S2n: favoritos y pertenencia a playlists
+# S2n: favourites and playlist membership
 
-Favoritos se confirman en servidor, aparecen en la fila compartida y tienen una
-vista de biblioteca. El menú conserva intención y cuenta. PUT favourites recibe
-entry más boolean marked; repetir la petición no invierte el estado. Unmark de un
-entry eliminado por otro cliente no lo vuelve a guardar. El endpoint toggle
-existente conserva su contrato. Se respetan permisos/roles de library write.
+Favourites are confirmed on the server, appear in the shared row and have a
+library view. The menu keeps intent and account. PUT favourites receives
+entry plus boolean marked; repeating the request does not invert the state. Unmark of an
+entry deleted by another client does not save it again. The existing toggle
+endpoint keeps its contract. Library write permissions/roles are respected.
 
-El selector playlist comparte estilos y textos, conserva el archivo o preview
-seleccionado y muestra fallo sin cerrar. Crear, guardar identidad preview y añadir
-pertenencia requieren respuesta real. Un preview se guarda explícitamente, sin
-adquirir audio; el motor admite pertenencia por ID y la identidad queda resoluble.
-Sólo se cierra tras confirmar ID en la playlist y refrescar Library. Cambio de
-cuenta aborta la petición y cierra selector y prompt; callbacks tardíos no migran.
+The playlist selector shares styles and texts, keeps the selected file or preview
+and shows a failure without closing. Creating, saving preview identity and adding
+membership require a real response. A preview is saved explicitly, without
+acquiring audio; the engine accepts membership by ID and the identity stays resolvable.
+It only closes after confirming the ID in the playlist and refreshing Library. An account
+change aborts the request and closes selector and prompt; late callbacks do not migrate.
 
-La UI usa filas/virtualización existentes sin importar stores de audio web.
-Offline no permite mutaciones remotas; conservar límites de Offline B. Gestión
-completa de playlists (rename/delete/order/cover/remove), metadatos, entidades,
-adquisición/importación y demás matriz permanecen pendientes.
+The UI uses existing rows/virtualization without importing web audio stores.
+Offline does not allow remote mutations; keep the Offline B limits. Full
+playlist management (rename/delete/order/cover/remove), metadata, entities,
+acquisition/import and the rest of the matrix remain pending.
 
-Evidencia de unidades y rutas en HANDOFF. El APK debe confirmar HTTP/HTTPS,
-favourite → filtro → unmark conservando archivo, create playlist y pertenencia
-real, ausencia de audio HTML y aislamiento/cancelación. No dar el flujo por
-aceptado por su compilación ni por un mock de UI.
+Unit and route evidence in HANDOFF. The APK must confirm HTTP/HTTPS,
+favourite → filter → unmark keeping the file, create playlist and real
+membership, absence of HTML audio and isolation/cancellation. Do not consider the flow
+accepted because it compiles or because of a UI mock.

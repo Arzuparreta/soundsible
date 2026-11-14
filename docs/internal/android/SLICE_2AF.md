@@ -1,127 +1,127 @@
-# S2af: Settings restantes y efectos reales
+# S2af: Remaining Settings and real effects
 
-Preparar después de aceptar S2ae, sin etiquetar sus recorridos pendientes como
-paridad. Reutilizar SettingsRows y vistas puras; separar dependencias web antes
-de importar una sección. El catálogo de ajustes compartido es la referencia,
-no la lista corta actual de NativeSettings.
+Prepare after accepting S2ae, without labeling its pending walkthroughs as
+parity. Reuse SettingsRows and pure views; separate web dependencies before
+importing a section. The shared settings catalog is the reference,
+not the current short list of NativeSettings.
 
-1. Accesibilidad: haptics persistido y feedback físico vía puente nativo,
-   respetando preferencia; editor de destinos de navegación compartido conectado
-   a rutas Android reales. Nunca presentar un destino que sólo sea un placeholder.
-2. Reproducción: autoplay ya cuenta con contrato nativo confirmado; conectar sus
-   ajustes sin otro propietario de audio. Leveling y DJ mixing requieren un efecto
-   real en el programa nativo, no sólo PUT o switch. Su aceptación se coordina con
-   el DSP de S3 y debe cubrir actual/cued/background, sin doble reproducción.
-3. Learning/reset: endpoints Core reales, confirmación, respuesta confirmada,
-   error recuperable, cuenta/origen cancelables. Diagnostics del motor con estado
-   medido/desconocido; no inventar calidad de red Android a partir de esa lectura.
-4. Library/admin/devices/services/Subsonic/sharing: inventariar contratos y
-   permisos; portar acciones completas, sin imports de stores/audio/session web.
-   Roles, permisos cambiantes y respuestas antiguas deben tener pruebas negativas.
+1. Accessibility: persisted haptics and physical feedback through the native bridge,
+   respecting the preference; shared navigation destination editor connected
+   to real Android routes. Never present a destination that is only a placeholder.
+2. Playback: autoplay already has a confirmed native contract; connect its
+   settings without another audio owner. Leveling and DJ mixing require a real
+   effect in the native program, not only PUT or switch. Their acceptance is coordinated with
+   the S3 DSP and must cover current/cued/background, without double playback.
+3. Learning/reset: real Core endpoints, confirmation, confirmed response,
+   recoverable error, cancelable account/origin. Engine diagnostics with
+   measured/unknown state; do not invent Android network quality from that reading.
+4. Library/admin/devices/services/Subsonic/sharing: inventory contracts and
+   permissions; port complete actions, without imports of web stores/audio/session.
+   Roles, changing permissions and old responses must have negative tests.
 
-Cada bloque debe aportar UI completa, browser4 si extrae vistas web, APK HTTP/TLS
-con Core real, tests de persistencia/cambio de cuenta y evidencia de efecto.
-No publicar alpha por tener Settings completo: DJ/Live/Auto/firma/update siguen
-siendo gates explícitos. Continuar commit/push hacia PR/main/release autorizados.
+Each block must provide full UI, browser4 if it extracts web views, HTTP/TLS APK
+with real Core, persistence/account change tests and evidence of effect.
+Do not publish an alpha for having complete Settings: DJ/Live/Auto/signing/update remain
+explicit gates. Continue commit/push toward authorized PR/main/release.
 
-## Feedback: decisión de plataforma preparada
+## Feedback: platform decision prepared
 
-Usar `View.performHapticFeedback` y constantes Android para feedback táctil de
-acciones, sin permiso VIBRATE ni flags que ignoren preferencias del sistema.
-La preferencia de Soundsible debe cortar la petición antes del puente; Android
-puede rechazar el efecto según hardware/ajustes, lo que no es un error de audio.
-Fuente oficial consultada: [API de haptics](https://developer.android.com/develop/ui/views/haptics/haptics-apis)
-y [feedback de eventos](https://developer.android.com/develop/ui/views/haptics/haptic-feedback).
-El emulador puede probar scope/configuración/peticiones y falta de permiso extra;
-no demuestra la sensación física. No importar stores para leer esa preferencia:
-lib/haptics.ts ya la lee de almacenamiento y admite una adaptación pequeña.
+Use `View.performHapticFeedback` and Android constants for tactile feedback on
+actions, without the VIBRATE permission or flags that ignore system preferences.
+The Soundsible preference must cut the request before the bridge; Android
+can reject the effect depending on hardware/settings, which is not an audio error.
+Official source consulted: [haptics API](https://developer.android.com/develop/ui/views/haptics/haptics-apis)
+and [event feedback](https://developer.android.com/develop/ui/views/haptics/haptic-feedback).
+The emulator can test scope/configuration/requests and the absence of an extra permission;
+it does not demonstrate the physical sensation. Do not import stores to read that preference:
+lib/haptics.ts already reads it from storage and allows a small adaptation.
 
-## Continuación Settings en fuentes
+## Settings continuation in sources
 
-FeedbackPlugin usa performHapticFeedback sin flags ni permiso VIBRATE; main
-instala el transporte exclusivo nativo y la preferencia compartida. Play manual,
-controles de programa y favourite confirmado solicitan feedback; el cambio de
-cuenta no reinicia una preferencia de instalación. FeedbackSettingsTest HTTP/TLS
-está en el run dirigido16 de /tmp/soundsible-s2ae-review-links-native.log; todavía
-no aceptar hasta resultado final. UI1526/189 pasa antes del bloque Learning.
+FeedbackPlugin uses performHapticFeedback without flags or the VIBRATE permission; main
+installs the exclusive native transport and the shared preference. Manual Play,
+program controls and confirmed favourite request feedback; an account
+change does not reset an installation preference. FeedbackSettingsTest HTTP/TLS
+is in the targeted16 run of /tmp/soundsible-s2ae-review-links-native.log; do not
+accept it yet until the final result. UI1526/189 passes before the Learning block.
 
-Después de preparar ese artifact (fuentes Native/assets congeladas), se añadieron
-fuentes UI de Learning: controller sin valores editables inventados, PATCH y GET
-confirmados, reset DELETE después de confirmación cancelable, respuesta vieja
-abortada al cambiar cuenta/desconectar/desmontar, vista compartida y ruta Android.
-Cuatro pruebas de controller y Settings/Rows dirigidas10 pasan. Este Learning
-NO está dentro de la APK de revisión/feedback: requiere nuevo prepare e integración
-Core HTTP/TLS. Falta diagnóstico, autoplay en Settings y el efecto DSP de leveling
-/mixing; admin/services/devices/sharing/navegación y los gates globales continúan.
+After preparing that artifact (Native sources/assets frozen), Learning
+UI sources were added: controller without invented editable values, confirmed PATCH and GET,
+reset DELETE after cancelable confirmation, old response
+aborted on account change/disconnect/unmount, shared view and Android route.
+Four controller tests and targeted10 Settings/Rows pass. This Learning
+is NOT inside the review/feedback APK: it requires a new prepare and Core
+HTTP/TLS integration. Missing: diagnostics, autoplay in Settings and the leveling
+/mixing DSP effect; admin/services/devices/sharing/navigation and the global gates continue.
 
-UI completa posterior1532/191 pasa /tmp/soundsible-s2af-learning-diagnostics-full-ui.log.
-Diagnóstico extraído a LinkStatusView compartido; Android lee /api/playback/link
-al abrir dentro de scope cancelable, sin inventar muestras ni conservar la lectura
-de otra cuenta. Dos pruebas prueban respuesta antigua, desconexión y payload
-inválido. APK nueva preparada sobre f4cf550 dirty=true; dirigido Settings6 en
+Later full UI1532/191 passes /tmp/soundsible-s2af-learning-diagnostics-full-ui.log.
+Diagnostics extracted to a shared LinkStatusView; Android reads /api/playback/link
+on open inside a cancelable scope, without inventing samples or keeping the reading
+of another account. Two tests cover old response, disconnection and invalid
+payload. New APK prepared on f4cf550 dirty=true; targeted Settings6 in
 /tmp/soundsible-s2af-settings-native.log: Learning2, Feedback2, Appearance2.
-Congelar Native/tests/fixtures/assets durante main y build normal. Native Learning
-comprueba efecto real de learning off sobre events, Cancel sin DELETE, reset de
-señales/eventos del miembro sin borrar propietario, persistencia Activity, 503 con
-retry y programa/sesión intactos. No aceptar hasta terminar; después browser4,
-commit/push y principal limpia ampliada con restart2 antes de avanzar DSP/S3.
+Freeze Native/tests/fixtures/assets during main and the normal build. Native Learning
+checks the real effect of learning off on events, Cancel without DELETE, reset of
+member signals/events without deleting the owner, Activity persistence, 503 with
+retry and program/session intact. Do not accept until finished; then browser4,
+commit/push and clean extended main with restart2 before advancing DSP/S3.
 
-Primer Settings6 falla2 únicamente al esperar un alert local ante503: la conexión
-real marca la app offline y el controller descarta su scope antiguo. Ambos casos
-pasan antes learning off, Cancel sin DELETE, reset de member con owner intacto y
-Activity. Feedback2/Appearance2 pasan. No aceptar ese run fallido. Expectativa
-corregida a estado unreachable de Recommendations y Retry general, conservando
-las comprobaciones de preferencia/cookie/programa. Repetición6 en
-/tmp/soundsible-s2af-settings-recovery-native.log con mismos assets; sólo cambió
-la expectativa Native. Mantener congelación hasta normal build/retirada de CA.
+First Settings6 fails2 only when expecting a local alert on503: the real
+connection marks the app offline and the controller discards its old scope. Both cases
+pass learning off, Cancel without DELETE, member reset with owner intact and
+Activity before that. Feedback2/Appearance2 pass. Do not accept that failed run. Expectation
+corrected to the unreachable state of Recommendations and general Retry, keeping
+the preference/cookie/program checks. Repeat6 in
+/tmp/soundsible-s2af-settings-recovery-native.log with the same assets; only
+the Native expectation changed. Keep the freeze until normal build/CA removal.
 
-Settings6 repetido termina0: /tmp/soundsible-s2af-settings-recovery-native.log,
-cero fallos/errores/omisiones. APK normal/test APK/JVM17/lint pasan y CA temporal
-retirada. Confirma recovery global503, preferencia off real/persistente, reset
-cancelado/confirmado y owner intacto. UI completa1534/192 pasa
-/tmp/soundsible-s2af-settings-final-ui.log; incluye vista Autoplay compartida web
-y dos pruebas de futura sección Native aún sin conectar ni dentro de esa APK.
-Browser4 de extracciones nuevas pendiente. No confundir Settings aceptados con
-leveling/mixing/administración/servicios/sharing completos ni con paridad global.
+Repeated Settings6 ends with0: /tmp/soundsible-s2af-settings-recovery-native.log,
+zero failures/errors/skips. Normal APK/test APK/JVM17/lint pass and temporary CA
+removed. It confirms global recovery503, real/persistent off preference, cancelled/confirmed
+reset and owner intact. Full UI1534/192 passes
+/tmp/soundsible-s2af-settings-final-ui.log; it includes the shared web Autoplay view
+and two tests of a future Native section not yet connected and not inside that APK.
+Browser4 of the new extractions pending. Do not confuse accepted Settings with
+complete leveling/mixing/administration/services/sharing or with global parity.
 
-[Preparación S3a](SLICE_3A.md) fija la regla real de loudness, el tap PCM y los
-requisitos de salida única. CompositionPlayer se contrastó con documentación y
-source del tag usado; reconfigurar composición recrea holders. No asumir que eso
-resuelve una ruta DJ editada en marcha ni importar AudioGraph package-private.
-No DSP entregado todavía; Settings Autoplay Native se conecta en continuación.
+[S3a preparation](SLICE_3A.md) fixes the real loudness rule, the PCM tap and the
+single-output requirements. CompositionPlayer was checked against documentation and
+source of the tag used; reconfiguring the composition recreates holders. Do not assume that this
+resolves a DJ route edited while running, and do not import the package-private AudioGraph.
+No DSP delivered yet; Native Settings Autoplay is connected in a continuation.
 
-Chromium completo278/66 pasa sin fallos en /tmp/soundsible-s2af-settings-chromium.log,
-1worker. WebKit siguiente secuencial readonly/1worker en
-/tmp/soundsible-s2af-settings-webkit.log. Entradas web congeladas durante los runs;
-Autoplay Native posterior sólo cambia módulos mobile y su instrumentación.
-Native Settings Playback ya conectado en fuentes a runtime.execute/autoplay state,
-sin otro controlador ni audio. Cuatro UI dirigidos prueban no defaults editables,
-receipts reactivos a través de Settings y espera de confirmación. AutoplayTest
-HTTP/TLS ampliado conserva menú original, desactiva/activa desde Settings, verifica
-refill/retirada real y Activity/programToken; APK dirigida aún pendiente después
-de completar browser4 y UI completa. Principal limpia ampliada pendiente73+2.
+Full Chromium278/66 passes without failures in /tmp/soundsible-s2af-settings-chromium.log,
+1worker. Next WebKit sequential readonly/1worker in
+/tmp/soundsible-s2af-settings-webkit.log. Web entries frozen during the runs;
+the later Native Autoplay only changes mobile modules and their instrumentation.
+Native Settings Playback already connected in sources to runtime.execute/autoplay state,
+without another controller or audio. Four targeted UI tests check no editable defaults,
+reactive receipts through Settings and waiting for confirmation. Extended AutoplayTest
+HTTP/TLS keeps the original menu, disables/enables from Settings, verifies
+real refill/removal and Activity/programToken; targeted APK still pending after
+completing browser4 and full UI. Clean extended main pending73+2.
 
-Browser4 completos aceptados: Chromium278/66 y WebKit269/75, cero fallos, mismo
-server cerrado4173, sequential1worker y WebKit readonly. Logs citados arriba;
-Vite propio detenido. Extracciones compartidas Haptics/Recommendations/Link/
-Autoplay conservan UX web. Cambios de ruta Autoplay Native posteriores aún
-requieren su nueva APK; no estaban dentro de Settings6 anterior.
+Full Browser4 accepted: Chromium278/66 and WebKit269/75, zero failures, same
+closed server4173, sequential1worker and WebKit readonly. Logs cited above;
+own Vite stopped. Shared extractions Haptics/Recommendations/Link/
+Autoplay keep the web UX. Later Native Autoplay route changes still
+require their new APK; they were not inside the previous Settings6.
 
-UI completa Autoplay/gain1536/192 pasa en
-/tmp/soundsible-s2af-autoplay-gain-full-ui.log. Nuevos assets e4700ed dirty=true
-se preparan para dirigido10: Autoplay2/Closure2/Learning2/Feedback2/Appearance2.
-Normal build debe ejecutar20 JVM con los tres vectores/regla nativa S3a nuevos.
-No preparar ni tocar Native/tests/fixtures/assets durante ese runner; sus cambios
-UI/Root están congelados para aceptar el comportamiento exacto de la nueva ruta.
+Full UI Autoplay/gain1536/192 passes in
+/tmp/soundsible-s2af-autoplay-gain-full-ui.log. New assets e4700ed dirty=true
+are prepared for targeted10: Autoplay2/Closure2/Learning2/Feedback2/Appearance2.
+The normal build must run20 JVM with the three new vectors/native S3a rule.
+Do not prepare or touch Native/tests/fixtures/assets during that runner; its
+UI/Root changes are frozen to accept the exact behavior of the new route.
 
-Autoplay10 aceptado: /tmp/soundsible-s2af-autoplay-native.log termina0, cero
-fallos/errores/omisiones. Incluye controles previos+Settings con refill/retirada,
-Repeat/Radio/background/Activity/programToken, Closure2 y Settings6. APK/test APK/
-JVM20/lint normales pasan sin CA temporal. Los tres JVM de ganancia S3a pasan;
-no DSP conectado. UI1536/192 y browser4 278/66+269/75 aceptados. Guardar commits,
-preparar limpio y principal73+restart2 antes de cambiar runtime/DSP nativo.
+Autoplay10 accepted: /tmp/soundsible-s2af-autoplay-native.log ends with0, zero
+failures/errors/skips. It includes previous controls+Settings with refill/removal,
+Repeat/Radio/background/Activity/programToken, Closure2 and Settings6. Normal APK/test APK/
+JVM20/lint pass without temporary CA. The three S3a gain JVM tests pass;
+no DSP connected. UI1536/192 and browser4 278/66+269/75 accepted. Save commits,
+prepare clean and main73+restart2 before changing native runtime/DSP.
 
-Principal limpia ampliada aceptada46a6c3d dirty=false:73/0+restart1/0+offline1/0,
-APK normal/test APK/JVM20/lint sin CA pasan. Runner termina0 en
-/tmp/soundsible-s2af-main-clean.log. Fuentes Native/tests/fixtures/resources/assets
-congelados durante todo el runner; Subsonic UI posterior no incluido.
+Clean extended main accepted46a6c3d dirty=false:73/0+restart1/0+offline1/0,
+normal APK/test APK/JVM20/lint without CA pass. Runner ends with0 in
+/tmp/soundsible-s2af-main-clean.log. Native/tests/fixtures/resources/assets sources
+frozen during the whole runner; later Subsonic UI not included.

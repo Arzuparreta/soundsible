@@ -1,28 +1,28 @@
-# S2s: edición de biblioteca conservando audio e identidad
+# S2s: library editing preserving audio and identity
 
-S2r confirmó la presentación/IPC sobre WAV. Las rutas históricas de edición
-reescriben tags y pueden cambiar el ID basado en hash: Android necesita conservar
-la fuente actual, cola, membresía y copias offline cuando cambia una etiqueta.
+S2r confirmed the presentation/IPC on WAV. The historical editing routes
+rewrite tags and can change the hash-based ID: Android needs to keep
+the current source, queue, membership and offline copies when a tag changes.
 
-Contrato explícito nuevo: POST `/api/library/track-labels/<id>/metadata`, multipart
-POST `/api/library/track-labels/<id>/cover` y POST
-`/api/library/track-labels/<id>/cover/none`. Mismo scope de escritura, rate limit,
-cuenta y writer coordinado. Metadata sólo acepta title/artist/album/album_artist,
-texto limitado y null explícito únicamente para album_artist. Se guarda metadata
-canónica; cover se valida y persiste en sidecar. No acceder ni reescribir audio.
-Las rutas históricas mantienen su comportamiento para otros clientes.
+New explicit contract: POST `/api/library/track-labels/<id>/metadata`, multipart
+POST `/api/library/track-labels/<id>/cover` and POST
+`/api/library/track-labels/<id>/cover/none`. Same write scope, rate limit,
+account and coordinated writer. Metadata only accepts title/artist/album/album_artist,
+limited text and explicit null only for album_artist. Canonical metadata is
+saved; cover is validated and persisted in a sidecar. Do not access or rewrite audio.
+The historical routes keep their behavior for other clients.
 
-Android exige confirmación `status=success`, `storage=library` e ID original antes
-de refrescar y publicar metadata nativa. Motor antiguo responde 404 y el editor
-conserva datos para reintentar; no hay fallback a rehash. Las copias ya preparadas
-actualizan etiquetas, sin cambiar bytes/digest/tickets. Son cambios de biblioteca,
-no exportación de tags nuevos dentro del archivo descargado.
+Android requires confirmation `status=success`, `storage=library` and the original ID before
+refreshing and publishing native metadata. An old engine responds 404 and the editor
+keeps the data to retry; there is no fallback to rehash. Copies already prepared
+update tags, without changing bytes/digest/tickets. These are library changes,
+not export of new tags inside the downloaded file.
 
-Aceptación local: writer/artwork para siete formatos, payload inválido,
-persistencia fallida sin publicar cover, guard de respuesta antigua/rehashed y
-cambio de cuenta pendiente; APK sobre FLAC real con tags y WAV, HTTP/HTTPS,
-SHA-256 de audio antes/después, metadata IPC, pausa/posición/keys y copia ready.
-Fixture opcional reproducible:
+Local acceptance: writer/artwork for seven formats, invalid payload,
+failed persistence without publishing cover, guard against old/rehashed response and
+pending account change; APK on real FLAC with tags and WAV, HTTP/HTTPS,
+audio SHA-256 before/after, IPC metadata, pause/position/keys and ready copy.
+Optional reproducible fixture:
 
 ```sh
 SOUNDSIBLE_ANDROID_FIXTURE_AUDIO_FORMAT=flac \
@@ -30,28 +30,28 @@ SOUNDSIBLE_ANDROID_FIXTURE_AUDIO_FORMAT=flac \
   python scripts/android.py integration
 ```
 
-Preparar assets con `python scripts/android.py prepare` después de cambios UI.
-Valor por defecto del fixture es WAV; sólo admite WAV/FLAC sintéticos y un directorio
-nuevo, nunca audio personal. Selector OS, cancelación APK extendida y demás filas
-siguen pendientes. No llamar a estas pruebas paridad completa ni alpha.
+Prepare assets with `python scripts/android.py prepare` after UI changes.
+The default value of the fixture is WAV; it only accepts synthetic WAV/FLAC and a new
+directory, never personal audio. OS picker, extended APK cancellation and the other rows
+are still pending. Do not call these tests full parity or alpha.
 
 
-Resultados: **1.409 tests / 161 archivos UI**, **66 Python** de writer/metadata/
-artwork y **cuatro fixtures reales** pasan. APK FLAC HTTP/HTTPS: **dos tests pasan**,
-WAV HTTP/HTTPS: **dos tests pasan**, incluyendo SHA-256 de audio antes/después, ID
-y formato conservados, texto/cover/retirada, ocurrencias/pausa/posición y copia ready.
-Logs `/tmp/soundsible-s2s-flac.log` y `/tmp/soundsible-s2s-wav.log`; build normal
-sin CA temporal pasa tras cada recorrido. Ruff y diff correctos.
+Results: **1,409 tests / 161 UI files**, **66 Python** writer/metadata/
+artwork tests and **four real fixtures** pass. APK FLAC HTTP/HTTPS: **two tests pass**,
+WAV HTTP/HTTPS: **two tests pass**, including audio SHA-256 before/after, ID
+and format kept, text/cover/removal, occurrences/pause/position and ready copy.
+Logs `/tmp/soundsible-s2s-flac.log` and `/tmp/soundsible-s2s-wav.log`; normal build
+without temporary CA passes after each run. Ruff and diff correct.
 
-Los payloads de artwork se validan antes del writer; error de almacenamiento no
-se convierte en "imagen inválida". La metadata se confirma antes de publicar el
-nuevo sidecar; fallo previo conserva artwork anterior (un objeto sin referencia
-puede quedar para mantenimiento). Guard de cuenta evita refresh/programa nuevos
-al completar una respuesta de la cuenta anterior. No hay fallback de compatibilidad
-que cambie la fuente. [Evidencia](evidence/s2s.json).
+Artwork payloads are validated before the writer; a storage error is not
+turned into "invalid image". The metadata is confirmed before publishing the
+new sidecar; an earlier failure keeps the previous artwork (an unreferenced object
+may remain for maintenance). An account guard prevents a new refresh/program
+when completing a response of the previous account. There is no compatibility fallback
+that changes the source. [Evidence](evidence/s2s.json).
 
-Instrumentación dirty/HEAD S2r previo, desarrollo. Próxima regresión completa
-debe incluir MetadataTest; últimas browser completas siguen S2j y se repetirán
-antes del PR acumulado. Selector OS no aceptado: el test sigue usando File sintético.
-Continuar acciones de entidades/biblioteca y resto de matriz sin cerrar turno por
-un checkpoint. No PR/main/release hasta paridad completa.
+Instrumentation dirty/HEAD of previous S2r, development. The next full regression
+must include MetadataTest; the last full browser runs are still S2j and will be repeated
+before the cumulative PR. OS picker not accepted: the test still uses a synthetic File.
+Continue entity/library actions and the rest of the matrix without closing the turn because of
+a checkpoint. No PR/main/release until full parity.

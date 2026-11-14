@@ -1,24 +1,24 @@
-# S2o: gestión de playlists con condiciones de escritura
+# S2o: playlist management with write conditions
 
-Menús de tres puntos de listas y colecciones ofrecen renombrar, duplicar,
-eliminar, ordenar y elegir carátula adquirida. Las filas ofrecen mover y quitar
-una ocurrencia: filtrar una lista con IDs repetidos conserva el índice original.
-No se elimina el archivo al quitar pertenencia ni al borrar la playlist.
+Three-dot menus of playlists and collections offer rename, duplicate,
+delete, sort and choose an acquired cover. Rows offer moving and removing
+an occurrence: filtering a playlist with repeated IDs keeps the original index.
+The file is not deleted when removing membership or when deleting the playlist.
 
-Las nuevas rutas `/api/library/playlist-edits` exigen el orden o pertenencia
-capturados. Un cambio concurrente devuelve 409 sin sobrescribirlo; un motor
-antiguo rechaza la ruta sin aplicar una escritura incondicional. La UI confirma
-respuesta real, refresca y mantiene errores visibles. Prompts, confirmaciones y
-carátulas se cierran al cambiar cuenta. Duplicar confirma primero creación y luego
-contenido; si falla el segundo paso puede quedar una lista vacía recuperable.
+The new `/api/library/playlist-edits` routes require the captured order or
+membership. A concurrent change returns 409 without overwriting it; an old
+engine rejects the route without applying an unconditional write. The UI confirms
+the real response, refreshes and keeps errors visible. Prompts, confirmations and
+covers are closed on account change. Duplicate confirms creation first and then
+content; if the second step fails, a recoverable empty playlist can remain.
 
-El orden se persiste en `settings.playlist_order`, independiente del orden de
-claves JSON. Nombres nuevos se incorporan de forma determinista; renombrar conserva
-posición. Validar todo el payload antes de modificar evita renombres parciales
-cuando tracks o cover son inválidos. Los endpoints históricos conservan contrato.
+The order is persisted in `settings.playlist_order`, independent of the order of
+JSON keys. New names are added deterministically; renaming keeps the
+position. Validating the whole payload before modifying avoids partial renames
+when tracks or cover are invalid. The historical endpoints keep their contract.
 
-El recorrido APK debe observar el estado actualizado de la UI antes de capturar
-la siguiente operación, además de comprobar servidor: una respuesta de escritura
-no garantiza que su refresh ya haya llegado. Ver HANDOFF para resultados concretos.
-No cierra la paridad de biblioteca ni habilita alpha: otras acciones, DJ, Live,
-Auto y distribución mantienen sus gates.
+The APK walkthrough must observe the updated UI state before capturing
+the next operation, in addition to checking the server: a write response
+does not guarantee that its refresh has already arrived. See HANDOFF for concrete results.
+It does not close library parity or enable an alpha: other actions, DJ, Live,
+Auto and distribution keep their gates.

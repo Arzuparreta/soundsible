@@ -1,24 +1,24 @@
-# S5c: copias Auto después de expirar la cookie
+# S5c: Auto copies after the cookie expires
 
 **8/0 HTTP/TLS,60.403s**, runner exit0: CarOfflineExpiry2 + CarEvents2 +
-CarLibrary2 + CarLegacy2. APK/test APK/JVM54/lint sin CA temporal pasan.
-[evidence](evidence/s5c.json) conserva los hashes del código validado.
+CarLibrary2 + CarLegacy2. APK/test APK/JVM54/lint without temporary CA pass.
+[evidence](evidence/s5c.json) keeps the hashes of the validated code.
 
-Una cookie expirada no equivale a una revocación observada. Conforme a Offline B,
-el perfil local verificado puede servir únicamente copias completas. Su identidad
-nativa deriva del perfil y no cruza IPC. Cache online anterior queda inválido;
-root comprueba copias en worker y sólo expone «Disponible sin conexión». Carpetas
-Core quedan denegadas y búsqueda sólo filtra copias completas. ProgramQueue comprueba
-archivo/perfil antes de resolver reproducción. No adquisición ni red implícitas.
-Sin cookie, artwork es placeholder, como exige Offline B.
+An expired cookie is not equivalent to an observed revocation. In accordance with Offline B,
+the verified local profile can serve only complete copies. Its native
+identity derives from the profile and does not cross IPC. The previous online cache becomes invalid;
+root checks copies in a worker and only exposes "Available offline". Core
+folders are denied and search only filters complete copies. ProgramQueue checks
+file/profile before resolving playback. No implicit acquisition or network.
+Without a cookie, artwork is a placeholder, as Offline B requires.
 
-La fixture desechable retima Set-Cookie, manteniendo HttpOnly/TLS. Native jar lo
-consume; la Activity se destruye y APIs devuelven503. Tras expiry, browser obtiene
-árbol local, reproduce archivo y busca/reproduce copia con PCM real. Root/acciones
-online quedan denegadas y un título de otra cuenta no aparece. Logout borra copias
-y programa.401 observado se valida en CarLibraryTest del mismo bloque.
+The disposable fixture retimes Set-Cookie, keeping HttpOnly/TLS. The native jar
+consumes it; the Activity is destroyed and APIs return503. After expiry, the browser gets
+the local tree, plays a file and searches/plays a copy with real PCM. Root/online
+actions are denied and a title from another account does not appear. Logout deletes copies
+and program. Observed401 is validated in CarLibraryTest of the same block.
 
-No prueba revocación remota del token ni revalidación al recuperar el backend;
-expira el cookie del cliente de forma controlada. Cambios de copias locales,
-reconexión real, controles/metadata DJ y UID externo/host siguen pendientes.
-No es paridad completa, release ni aceptación acústica/física.
+It does not test remote revocation of the token or revalidation when the backend recovers;
+it expires the client cookie in a controlled way. Changes of local copies,
+real reconnection, DJ controls/metadata and external UID/host are still pending.
+It is not full parity, release or acoustic/physical acceptance.

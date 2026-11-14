@@ -1,70 +1,70 @@
-# Primer slice funcional: conexión, cuenta y biblioteca real
+# First functional slice: connection, account and real library
 
-## Resultado
+## Result
 
-Desde la APK local, elegir una instancia Soundsible, iniciar sesión y navegar la
-biblioteca real con carátulas y eventos de actualización. No implementar todavía
-reproducción, offline, DJ, Live, Android Auto ni publicación. La primera pantalla
-conectada debe reutilizar la interfaz Solid existente, no un catálogo Android nuevo.
+From the local APK, choose a Soundsible instance, log in and browse the
+real library with covers and update events. Do not implement yet
+playback, offline, DJ, Live, Android Auto or publication. The first
+connected screen must reuse the existing Solid interface, not a new Android catalogue.
 
-## Preparación técnica obligatoria
+## Mandatory technical preparation
 
-1. Revisar `apiOrigin`, `http.request`, `session`, `createSocket`, URLs de covers y
-   streams, `/api/auth/*`, cookies, CORS y `on_socket_connect`. Caracterizar con
-   fixture las cuentas single-user passwordless y multi-user member/admin.
-2. Probar la sesión existente en transporte Android: login → `/api/auth/state`
-   → recurso autenticado → socket con la misma cuenta → logout. La cookie es
-   HttpOnly/SameSite=Lax; **no basta cambiar `same-origin` por `include`**.
-3. Resolver el transporte nativo/cookie jar y Socket.IO de forma demostrable,
-   manteniendo roles y scopes. Documentar la decisión técnica y pruebas en
-   ARCHITECTURE antes de conectar todos los stores. Si necesita evolución API,
-   mantener compatibilidad web/iOS y añadir pruebas de aislamiento/regresión.
-4. Dar soporte explícito a HTTP privado/LAN y HTTPS remoto sin abrir tráfico
-   arbitrario o navegación remota con acceso al puente. El emulador accede al
-   host con `10.0.2.2`; su localhost no es el motor. Documentar Tailscale/LAN/DNS.
+1. Review `apiOrigin`, `http.request`, `session`, `createSocket`, cover and
+   stream URLs, `/api/auth/*`, cookies, CORS and `on_socket_connect`. Characterize with a
+   fixture the single-user passwordless and multi-user member/admin accounts.
+2. Test the existing session over the Android transport: login → `/api/auth/state`
+   → authenticated resource → socket with the same account → logout. The cookie is
+   HttpOnly/SameSite=Lax; **changing `same-origin` to `include` is not enough**.
+3. Solve the native transport/cookie jar and Socket.IO in a demonstrable way,
+   keeping roles and scopes. Document the technical decision and tests in
+   ARCHITECTURE before connecting all the stores. If it needs API evolution,
+   keep web/iOS compatibility and add isolation/regression tests.
+4. Give explicit support to private/LAN HTTP and remote HTTPS without opening arbitrary
+   traffic or remote navigation with access to the bridge. The emulator reaches the
+   host with `10.0.2.2`; its localhost is not the engine. Document Tailscale/LAN/DNS.
 
-El login de cuenta es el camino inicial de paridad. El pairing limitado puede
-ofrecerse después, pero no sustituye permisos de todas las acciones con un owner
-token. La prueba de transporte es un gate funcional del slice, no justificación
-para dejar la APK con un bypass de seguridad.
+Account login is the initial path to parity. Limited pairing can be
+offered later, but it does not replace permissions for all actions with an owner
+token. The transport test is a functional gate of the slice, not a justification
+for leaving the APK with a security bypass.
 
-## Implementación
+## Implementation
 
-- Configuración de servidor con validación de URL y errores accionables. Guardar
-  dirección sin credenciales; sesión y cualquier secreto en almacenamiento nativo
-  protegido. Nunca persistir la contraseña de usuario.
-- Adapter único para origen, sesión y recursos. Preservar abort/timeout/status,
-  FormData, 304/ETags y aislamiento. No dispersar lógica Android en pantallas.
-- Montar el cliente autenticado sólo tras resolver identidad. En servidor/cuenta
-  cambiados, desmontar runtime, cancelar trabajos y resetear namespaces/caches
-  antes de la siguiente cuenta; ignorar respuestas tardías.
-- Biblioteca, navegación a colecciones y carátulas reales; eventos de cambios
-  autenticados. Las acciones de audio aún pendientes no deben aparentar funcionar
-  ni crear audio web por accidente. La limitación es de desarrollo, no una alpha.
-- Logout, sesión caducada y red caída con recuperación explícita; volver a mostrar
-  login/configuración según el motivo, sin borrado silencioso de datos válidos.
+- Server configuration with URL validation and actionable errors. Store the
+  address without credentials; session and any secret in protected native
+  storage. Never persist the user's password.
+- A single adapter for origin, session and resources. Preserve abort/timeout/status,
+  FormData, 304/ETags and isolation. Do not scatter Android logic across screens.
+- Mount the authenticated client only after resolving identity. When server/account
+  change, unmount the runtime, cancel jobs and reset namespaces/caches
+  before the next account; ignore late responses.
+- Library, navigation to collections and real covers; authenticated change
+  events. Audio actions still pending must not appear to work
+  or create web audio by accident. The limitation is for development, not an alpha.
+- Logout, expired session and network down with explicit recovery; show again
+  login/configuration according to the reason, without silently deleting valid data.
 
-## Aceptación y entrega
+## Acceptance and delivery
 
-Usar motor de prueba aislado, fixtures y dos cuentas. Probar conexión local HTTP y
-remota HTTPS, passwordless, miembro y administrador, contraseña incorrecta,
-servidor inaccesible, 401/403, expiración/revocación, reinicio, cambio de cuenta y
-servidor con trabajos en vuelo. Verificar que REST, imágenes y eventos no filtran
-datos entre cuentas ni credenciales a terceros. Probar cover relativa/externa,
-lista vacía y reconexión con cambio de biblioteca. No exponer librería de otro
-usuario durante boot ni dar por bueno sólo el happy path.
+Use an isolated test engine, fixtures and two accounts. Test local HTTP and
+remote HTTPS connection, passwordless, member and administrator, wrong password,
+unreachable server, 401/403, expiration/revocation, restart, account switch and
+server switch with jobs in flight. Verify that REST, images and events do not leak
+data between accounts or credentials to third parties. Test relative/external cover,
+empty list and reconnection with a library change. Do not expose another
+user's library during boot and do not accept only the happy path.
 
-Pruebas unitarias/contrato, backend si cambia, cuatro perfiles browser completos
-y APK empaquetada en emulador. Conservar comandos, build-info, logs sin secretos
-y resultado. Actualizar matriz/HANDOFF y cerrar con commit enfocado, sin push,
-PR o publicación salvo instrucción posterior. Si se abre PR: fetch/ancestry de
-base actual y exactamente un impact label según AGENTS.
+Unit/contract tests, backend if it changes, four full browser profiles
+and a packaged APK in the emulator. Keep commands, build-info, logs without secrets
+and the result. Update matrix/HANDOFF and close with a focused commit, without push,
+PR or publication unless instructed later. If a PR is opened: fetch/ancestry of
+the current base and exactly one impact label according to AGENTS.
 
-## Estado tras implementación
+## Status after implementation
 
-Núcleo funcional implementado y probado con APK/API 36 y motores desechables.
-Ver [evidencia](evidence/s1.json) y [traspaso](HANDOFF.md). Sigue pendiente la
-aceptación positiva contra una instancia HTTPS remota con certificado válido y
-DNS/Tailscale reales. La superficie de lectura no afirma paridad de acciones.
-El usuario autorizó push después de S0; PR/merge/publicación siguen sin solicitar.
-Siguiente corte: [audio nativo S2](SLICE_2.md).
+Functional core implemented and tested with APK/API 36 and disposable engines.
+See [evidence](evidence/s1.json) and [handoff](HANDOFF.md). Still pending is
+positive acceptance against a remote HTTPS instance with a valid certificate and
+real DNS/Tailscale. The read-only surface does not claim action parity.
+The user authorized push after S0; PR/merge/publication have still not been requested.
+Next cut: [native audio S2](SLICE_2.md).

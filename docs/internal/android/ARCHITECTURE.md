@@ -1,345 +1,345 @@
-# Arquitectura y contratos del port Android
+# Architecture and contracts of the Android port
 
-## Fuente y alcance
+## Source and scope
 
-Base inspeccionada para preparar el port:
-`26be603c9712f5599507ca1fc7a43255040f1ce2`, 2026-10-02. Revisar los símbolos actuales
-antes de cada slice: el commit es una referencia histórica, no un pin perpetuo.
+Base inspected to prepare the port:
+`26be603c9712f5599507ca1fc7a43255040f1ce2`, 2026-10-02. Review the current symbols
+before each slice: the commit is a historical reference, not a permanent pin.
 
-Capacitor empaqueta assets locales de Solid y proporciona el puente a Android.
-La configuración vive en `ui_web/capacitor.config.json` para resolver dependencias
-desde el único package/lockfile del cliente. El proyecto Gradle se conserva en
-`android/`; `cap sync` genera sus enlaces a plugins. No introducir otro frontend,
-una copia de las pantallas ni un segundo lockfile JavaScript.
+Capacitor packages local Solid assets and provides the bridge to Android.
+The configuration lives in `ui_web/capacitor.config.json` to resolve dependencies
+from the client's single package/lockfile. The Gradle project is kept in
+`android/`; `cap sync` generates its links to plugins. Do not introduce another frontend,
+a copy of the screens or a second JavaScript lockfile.
 
-## Fundación S0 (referencia histórica)
+## S0 foundation (historical reference)
 
-- Entrada `ui_web/src/mobile/main.tsx`: preferencias visuales, locale y arranque
-  compartidos; no importa sesión, stores, socket, audio o Community.
-- `AndroidStart` usa el logo, tokens y diccionarios del cliente. Sin formularios
-  que aparenten conectar ni botones de características inexistentes.
-- `nativeBuildInfo()` exige Android y consulta el plugin nativo `App.getInfo`.
-  Expone plataforma, applicationId, versión y build; un fallo no inventa éxito.
-- `vite.android.config.ts` reutiliza el HTML y plugin de arranque web, cambia la
-  entrada y base relativa, y excluye publicDir/PWA. La salida está aislada.
-- `MainActivity` es una `BridgeActivity` Kotlin. No hay aún servicio multimedia,
-  descargas, transporte de cuentas o permisos de cámara/micrófono.
-- Android exige TLS para tráfico de red en esta entrega y declara `allowBackup=false`. Las reglas de transferencia y
-  almacenamiento de credenciales deben verificarse en S1. HTTP LAN necesita una implementación explícita en el slice de conexión.
+- Entry `ui_web/src/mobile/main.tsx`: shared visual preferences, locale and startup;
+  it does not import session, stores, socket, audio or Community.
+- `AndroidStart` uses the client's logo, tokens and dictionaries. No forms
+  that pretend to connect and no buttons for nonexistent features.
+- `nativeBuildInfo()` requires Android and queries the native plugin `App.getInfo`.
+  It exposes platform, applicationId, version and build; a failure does not invent success.
+- `vite.android.config.ts` reuses the web HTML and startup plugin, changes the
+  entry and relative base, and excludes publicDir/PWA. The output is isolated.
+- `MainActivity` is a Kotlin `BridgeActivity`. There is no media service,
+  downloads, account transport or camera/microphone permissions yet.
+- Android requires TLS for network traffic in this delivery and declares `allowBackup=false`. The transfer and
+  credential storage rules must be verified in S1. LAN HTTP needs an explicit implementation in the connection slice.
 
-Los atributos de metadata en el elemento de montaje existen para probar el
-puente. No transportan credenciales ni constituyen un nuevo protocolo servidor.
+The metadata attributes on the mount element exist to test the
+bridge. They do not carry credentials and do not constitute a new server protocol.
 
-## Conexión y autenticación: diferencias que no deben ocultarse
+## Connection and authentication: differences that must not be hidden
 
-| Contrato actual | Fuente y consecuencia para Android |
+| Current contract | Source and consequence for Android |
 | --- | --- |
-| `apiOrigin()` usa el origen de la página | `ui_web/src/lib/config.ts`; el origen local del paquete no es el motor remoto. |
-| REST lleva cookies `same-origin` | `ui_web/src/lib/http.ts`; cambiar sólo la URL no preserva sesión. |
-| Sesión de usuario, roles y namespaces | `ui_web/src/lib/session.ts`, `shared/api/routes/auth.py`; no montar stores antes de saber la cuenta. |
-| Cookie HttpOnly, SameSite=Lax | Login del servidor; CORS con credenciales por sí solo no resuelve un WebView local. |
-| Socket.IO abre contra `apiOrigin()` | `ui_web/src/lib/socket.ts`, `shared/api/__init__.py`; autenticarlo como la misma cuenta que REST. |
-| Emparejamiento y scopes | `shared/api/routes/pairing.py`, `shared/hardening.py`; no asumir que `library:read` habilita toda la app. |
-| Cliente iOS navega el contrato de coche | `ios/SoundsibleKit/`, `/api/car/*`; no cubre por sí solo descubrimiento, adquisición, edición y Live. |
+| `apiOrigin()` uses the page origin | `ui_web/src/lib/config.ts`; the package's local origin is not the remote engine. |
+| REST carries `same-origin` cookies | `ui_web/src/lib/http.ts`; changing only the URL does not preserve the session. |
+| User session, roles and namespaces | `ui_web/src/lib/session.ts`, `shared/api/routes/auth.py`; do not mount stores before knowing the account. |
+| HttpOnly cookie, SameSite=Lax | Server login; CORS with credentials alone does not solve a local WebView. |
+| Socket.IO opens against `apiOrigin()` | `ui_web/src/lib/socket.ts`, `shared/api/__init__.py`; authenticate it as the same account as REST. |
+| Pairing and scopes | `shared/api/routes/pairing.py`, `shared/hardening.py`; do not assume that `library:read` enables the whole app. |
+| iOS client browses the car contract | `ios/SoundsibleKit/`, `/api/car/*`; on its own it does not cover discovery, acquisition, editing and Live. |
 
-El primer slice mantiene login de cuenta como contrato del cliente completo. El
-transporte nativo debe mantener sesión y recursos autenticados en el contexto de
-la instancia seleccionada. Probar cookie jar, Socket.IO y streaming como un único
-camino antes de generalizar el adaptador. El emparejamiento es complementario;
-no convertir un token limitado en owner/admin ni desactivar autorización para
-hacer funcionar la UI. Nunca poner contraseñas o tokens en query strings, logs,
-metadata, preferencias web en claro ni URLs compartidas.
+The first slice keeps account login as the contract of the full client. The
+native transport must keep the session and authenticated resources in the context of
+the selected instance. Test cookie jar, Socket.IO and streaming as a single
+path before generalizing the adapter. Pairing is complementary;
+do not turn a limited token into owner/admin or disable authorization to
+make the UI work. Never put passwords or tokens in query strings, logs,
+metadata, plaintext web preferences or shared URLs.
 
-Inventariar URL de REST, Socket.IO, cover, preview, podcast stream y audio al
-conectar: rutas relativas deben resolver contra el motor; enlaces externos no
-reciben su credencial. Preservar cancelación, timeouts, multipart, Range, ETags,
-401/403 y aislamiento de cuenta. Tras cambiar servidor/cuenta cancelar trabajos
-anteriores y limpiar caches, playback y socket antes de montar el siguiente.
+Inventory the URLs of REST, Socket.IO, cover, preview, podcast stream and audio when
+connecting: relative routes must resolve against the engine; external links do not
+receive its credential. Preserve cancellation, timeouts, multipart, Range, ETags,
+401/403 and account isolation. After changing server/account, cancel previous
+jobs and clear caches, playback and socket before mounting the next one.
 
-## Decisión de transporte S1
+## S1 transport decision
 
-`EngineConnection`/`EnginePlugin` implementan REST y Socket.IO con OkHttp y el
-cliente Java [Socket.IO](https://github.com/socketio/socket.io-client-java).
-El plugin local usa el [puente Capacitor](https://capacitorjs.com/docs/internal/android/custom-code).
-No cambia CORS, SameSite ni autenticación/scopes del motor. No añade bearer/owner.
-`sb_session` se obtiene del `Set-Cookie` HttpOnly y se conserva en memoria y en
-preferencias privadas cifradas AES-GCM con una clave no exportable de Keystore;
-`allowBackup=false` evita exportar esa sesión. La dirección se guarda sin secreto.
-El puente sólo devuelve status, cuerpo y ETag/Content-Type/Content-Range de REST;
-no devuelve Set-Cookie. Logging Capacitor está desactivado para no registrar login.
+`EngineConnection`/`EnginePlugin` implement REST and Socket.IO with OkHttp and the
+Java [Socket.IO](https://github.com/socketio/socket.io-client-java) client.
+The local plugin uses the [Capacitor bridge](https://capacitorjs.com/docs/internal/android/custom-code).
+It does not change CORS, SameSite or the engine's authentication/scopes. It does not add bearer/owner.
+`sb_session` is obtained from the HttpOnly `Set-Cookie` and is kept in memory and in
+private preferences encrypted with AES-GCM with a non-exportable Keystore key;
+`allowBackup=false` prevents exporting that session. The address is stored without a secret.
+The bridge only returns status, body and ETag/Content-Type/Content-Range from REST;
+it does not return Set-Cookie. Capacitor logging is disabled so login is not recorded.
 
-`http.request` conserva su fetch web y permite instalar un transporte desde la
-entrada nativa. `mobile/engine.ts` serializa JSON/multipart, propaga timeout/abort,
-reconstruye status/ETags y descarta respuestas de generaciones anteriores. Cancelar
-antes de que el executor registre la llamada también queda registrado en Kotlin.
-304 y 401/403 conservan sus significados. No hay cambio de API de producción.
+`http.request` keeps its web fetch and allows installing a transport from the
+native entry. `mobile/engine.ts` serializes JSON/multipart, propagates timeout/abort,
+rebuilds status/ETags and discards responses from previous generations. Cancelling
+before the executor registers the call is also recorded in Kotlin.
+304 and 401/403 keep their meanings. There is no production API change.
 
-Android **bloquea cleartext por defecto**. La única excepción OS es el alias
-reservado `soundsible-private.invalid`; el transporte reescribe internamente HTTP
-hacia ese alias, mantiene el `Host` original y resuelve exclusivamente las IPs
-privadas de la instancia seleccionada. La resolución está capturada por cliente,
-no puede saltar a otro servidor al cambiar la selección. Incluye RFC1918,
-loopback, ULA IPv6 y Tailscale 100.64/10. No se aceptan redirects; para HTTPS no hay
-alias ni excepción de certificados. La WebView carga assets locales, nunca una
-página remota con el puente; imágenes externas se leen sin cookies ni headers de
-cuenta (HTTPS, máximo 8 MiB y timeout). HTTP externo no recibe la excepción LAN.
+Android **blocks cleartext by default**. The only OS exception is the reserved
+alias `soundsible-private.invalid`; the transport internally rewrites HTTP
+to that alias, keeps the original `Host` and resolves exclusively the private IPs
+of the selected instance. The resolution is captured per client;
+it cannot jump to another server when the selection changes. It includes RFC1918,
+loopback, IPv6 ULA and Tailscale 100.64/10. Redirects are not accepted; for HTTPS there is no
+alias or certificate exception. The WebView loads local assets, never a
+remote page with the bridge; external images are read without cookies or account
+headers (HTTPS, maximum 8 MiB and timeout). External HTTP does not receive the LAN exception.
 
-Las carátulas autenticadas se resuelven como
-`https://localhost/__engine/<generación>/api/static/cover/<id>`. MainActivity
-intercepta sólo ese recurso, verifica la generación, usa la misma cookie nativa y
-responde `no-store`. No hay cache de imágenes compartida entre cuentas. El socket
-usa el mismo cliente/cookie y sólo remite nombres de eventos con generación, sin
-payloads personales. Logout/cambio destruyen socket, cancelan llamadas, desmontan
-la biblioteca y limpian metadata; cualquier callback tardío comprueba su época.
-La identidad se revalida antes de cada refresh y al volver a primer plano.
+Authenticated covers are resolved as
+`https://localhost/__engine/<generation>/api/static/cover/<id>`. MainActivity
+intercepts only that resource, verifies the generation, uses the same native cookie and
+responds `no-store`. There is no image cache shared between accounts. The socket
+uses the same client/cookie and only forwards event names with generation, without
+personal payloads. Logout/switch destroy the socket, cancel calls, unmount
+the library and clear metadata; any late callback checks its epoch.
+The identity is revalidated before each refresh and when returning to the foreground.
 
-La UI conectada es una superficie **de lectura de desarrollo**:
-`mobile/LibraryBrowser`, la fila compartida `MusicListRowView`, virtualización,
-carátulas y diccionarios existentes. `musicLibraryRows` comparte la selección y
-orden por recencia de archivos y canciones guardadas con la biblioteca web;
-los helpers de identidad evitan duplicar canciones promovidas. `MusicListRow` sigue siendo el adaptador de
-cuenta/playback web sobre esa misma vista. No se importa `stores/index`, audio o
-Community desde Android. Los botones de canciones anuncian `aria-disabled`;
-las colecciones sí navegan. Esto no representa paridad de acciones: al integrar
-S2 se debe conectar la UI completa al runtime nativo, evitando un fork permanente
-de Library. Búsqueda aquí sólo filtra la biblioteca propia; no es descubrimiento.
+The connected UI is a **development read-only** surface:
+`mobile/LibraryBrowser`, the shared row `MusicListRowView`, virtualization,
+covers and existing dictionaries. `musicLibraryRows` shares the selection and
+recency ordering of files and saved songs with the web library;
+the identity helpers avoid duplicating promoted songs. `MusicListRow` is still the
+web account/playback adapter over that same view. `stores/index`, audio or
+Community are not imported from Android. Song buttons announce `aria-disabled`;
+collections do navigate. This does not represent action parity: when integrating
+S2 the full UI must be connected to the native runtime, avoiding a permanent fork
+of Library. Search here only filters the user's own library; it is not discovery.
 
-La integración instrumentada usa tres instancias reales desechables; cubre HTTP y HTTPS,
-roles, cookie/artwork/socket, persistencia cifrada, revocación, generaciones y
-passwordless. El fixture HTTPS usa una CA generada para esa ejecución y SAN IP
-correcto; Android/OkHttp verifican cadena y hostname con el trust normal más esa
-CA efímera en un override debug generado. Las claves viven en TemporaryDirectory,
-la CA pública/config debug se ignoran en git y se eliminan siempre; al terminar
-se recompila el APK normal sin la CA de prueba. Release jamás la incorpora.
-El rechazo de TLS incorrecto y el happy path están probados en ese motor real.
-La instancia HTTPS pública concreta y DNS/Tailscale/red/dispositivo reales siguen
-como aceptación de despliegue pendiente; no son lo que prueba la CA del fixture.
+The instrumented integration uses three real disposable instances; it covers HTTP and HTTPS,
+roles, cookie/artwork/socket, encrypted persistence, revocation, generations and
+passwordless. The HTTPS fixture uses a CA generated for that run and a correct IP
+SAN; Android/OkHttp verify the chain and hostname with normal trust plus that
+ephemeral CA in a generated debug override. The keys live in TemporaryDirectory,
+the public CA/debug config are ignored in git and always deleted; at the end
+the normal APK is recompiled without the test CA. Release never includes it.
+Rejection of incorrect TLS and the happy path are tested on that real engine.
+The specific public HTTPS instance and real DNS/Tailscale/network/device remain
+as pending deployment acceptance; they are not what the fixture CA tests.
 
 
-## Audio: un programa, un propietario
+## Audio: one programme, one owner
 
-Referencia: `ui_web/src/lib/audio/contracts.ts`, `audio.ts`, `audio/transport.ts`,
-`audio/graph.ts`, `audio/mixer.ts` y stores NORMAL/DJ. No basta con enganchar Play
-al `ExoPlayer` manteniendo el mezclador web activo en paralelo.
+Reference: `ui_web/src/lib/audio/contracts.ts`, `audio.ts`, `audio/transport.ts`,
+`audio/graph.ts`, `audio/mixer.ts` and NORMAL/DJ stores. It is not enough to hook Play
+to `ExoPlayer` while keeping the web mixer active in parallel.
 
-El servicio multimedia nativo será dueño de reproducción y estado autoritativo,
-incluso con UI suspendida. Solid comparte intención, navegación y planificación;
-comandos y eventos del puente reconciliarán snapshots con generaciones para no
-aplicar confirmaciones viejas tras cambiar de canción, seek o pausa.
+The native media service will own playback and authoritative state,
+even with the UI suspended. Solid shares intent, navigation and planning;
+bridge commands and events will reconcile snapshots with generations so as not to
+apply old confirmations after changing song, seek or pause.
 
-La interfaz `AudioService` actual contiene operaciones síncronas, snapshots y
-captura `MediaStream`: un puente asíncrono no puede suplantarla devolviendo éxitos
-falsos. Delimitar/adaptar esos contratos con pruebas antes de sustituir el runtime.
-Los eventos del sistema deben pasar por el mismo estado que los controles Solid.
+The current `AudioService` interface contains synchronous operations, snapshots and
+`MediaStream` capture: an asynchronous bridge cannot impersonate it by returning false
+successes. Delimit/adapt those contracts with tests before replacing the runtime.
+System events must go through the same state as the Solid controls.
 
 [Media3](https://developer.android.com/media/media3/session/background-playback)
-aporta sesión, servicio, decodificación y controles, pero no implementa nuestros
-EQ, filtros, echo, limiter ni todas las técnicas DJ. Antes del slice DJ, probar
-una mezcla real de dos fuentes autenticadas y su captura PCM. Registrar la
-solución elegida y su coste; no prometer que dos ExoPlayers equivalen al grafo.
-Preservar rutas por `queueId`, recuperación bounded y audio saliente durante
-fallos de preparación. El scheduler de transiciones no puede depender de timers
-JavaScript cuando la WebView esté suspendida.
+provides session, service, decoding and controls, but does not implement our
+EQ, filters, echo, limiter or all DJ techniques. Before the DJ slice, test
+a real mix of two authenticated sources and its PCM capture. Record the
+chosen solution and its cost; do not promise that two ExoPlayers are equivalent to the graph.
+Preserve routes by `queueId`, bounded recovery and outgoing audio during
+preparation failures. The transition scheduler cannot depend on JavaScript
+timers when the WebView is suspended.
 
-## Live y coche
+## Live and car
 
-`ui_web/src/lib/community.ts`, `audio/capture.ts` y `docs/LIVE.md` definen que
-Live toma el programa **después de mezcla/efectos/limiter y antes del volumen y
-mute locales**. El programa nativo necesita ese mismo punto de captura y un
-camino probado hacia el relay/WebRTC. Escuchar otra sala no debe reemitirla.
-La UI «On air» no es prueba de audio recibido: validar con un listener separado.
-Declarar y probar las condiciones de primer/segundo plano, sin atribuir a la web
-una continuidad de emisión que hoy no garantiza.
+`ui_web/src/lib/community.ts`, `audio/capture.ts` and `docs/LIVE.md` define that
+Live takes the programme **after mixing/effects/limiter and before local volume and
+mute**. The native programme needs that same capture point and a
+tested path to the relay/WebRTC. Listening to another room must not rebroadcast it.
+The "On air" UI is not proof of received audio: validate with a separate listener.
+Declare and test the foreground/background conditions, without attributing to the web
+a broadcast continuity that it does not guarantee today.
 
-Android Auto requiere `MediaLibraryService`/`MediaSession`, navegación segura del
-árbol `/api/car/*` y controles acordes con la cola. No renderizar el workspace DJ
-libre en el coche. La existencia del servicio o un emulador AAOS no prueba Android
-Auto: [DHU](https://developer.android.com/training/cars/testing/dhu) sigue requiriendo
-un teléfono compatible con Android Auto. Registrar ese gate físico por separado.
-Una aplicación AAOS instalada en el coche es otro paquete/entrega, fuera del port
-móvil inicial; no confundir AAOS con Android Auto.
+Android Auto requires `MediaLibraryService`/`MediaSession`, safe navigation of the
+`/api/car/*` tree and controls consistent with the queue. Do not render the free DJ
+workspace in the car. The existence of the service or an AAOS emulator does not prove Android
+Auto: [DHU](https://developer.android.com/training/cars/testing/dhu) still requires
+a phone compatible with Android Auto. Record that physical gate separately.
+An AAOS application installed in the car is another package/delivery, outside the initial
+mobile port; do not confuse AAOS with Android Auto.
 
-## Mantenimiento compartido
+## Shared maintenance
 
-Un cambio Solid relevante dispara build Android desde las mismas fuentes. Los
-adaptadores específicos reciben pruebas de contrato; evitar condicionales de
-plataforma dispersos por pantallas. Actualizar conjuntamente core/CLI/Android,
-comprobar compatibilidad de plugins, fijar dependencias y mantener Gradle Wrapper
-verificado. La versión comercial viene exclusivamente de `shared/version.py`
-mediante `scripts/version_sync.py --print`; no copiar una versión en Gradle.
-
-
-## Programa nativo S2a
-
-`EngineConnection.shared` comparte el origen/cookie/generación en el proceso.
-La Activity libera su socket y MediaController, conservando el servicio de audio.
-`PlaybackService` contiene ExoPlayer/MediaLibrarySession y un cliente OkHttp por
-época; los listeners de reset cancelan ese cliente y vacían el programa.
-Las fuentes tienen una generación interna en su URI, retirada antes del HTTP;
-una fuente antigua no puede adoptar la nueva cookie aunque se reutilice el origen.
-Range sigue el DataSpec de Media3. No hay cache de audio ni redirects autenticados.
-
-`PlaybackPlugin` construye ids/metadatos/URLs nativos, valida comandos contra la
-generación y expone snapshots; resolver command no afirma audio audible. JS no
-recibe cookie ni URL autenticada. Estado playing procede de ExoPlayer y metadata
-procede de MediaSession. Un callback de estado de otra generación se ignora.
-Los controladores externos deben ser trusted; sólo el UID propio reemplaza cola.
-
-La Activity observa; no contiene el player ni lo detiene al desmontar Solid.
-Al pasar a background se pausa el ticker de JS; foco/noisy/foreground/notificación
-pertenecen a Android. Logout y cambio sí paran el programa. HTTP 401 se expone
-como status para revalidar identidad; otros fallos no afirman reproducción y
-permiten un retry explícito. Fuente/id/posición están sujetos a la cuenta actual.
-No hay persistencia del programa tras process death ni navegación Auto implementada.
-Ver [contrato/continuación](SLICE_2.md) y [evidencia S2a](evidence/s2a.json).
-
-### Contrato asíncrono implementado en S2c
-
-`ui_web/src/lib/program/runtime.ts` separa comandos tipados y snapshots de una
-salida de los contratos síncronos de mezcla. `mobile/playback.ts` aporta el
-adaptador Capacitor y `components/ProgramTransport.tsx` observa el estado para
-renderizar transporte/seek/modos. AndroidStart ya usa este camino. Orden de
-snapshots por generación y secuencia, comandos serializados, limpieza de callbacks
-y pending de aceptación quedan probados sin instanciar audio en JS.
-
-No sustituye todavía stores/actions de NORMAL ni monta AuthenticatedPlayer; esas
-rutas deben adaptarse al contrato antes de retirar LibraryBrowser. No interpretar
-la disponibilidad de un componente en `components/` como migración del navegador:
-la UI web conserva su runtime actual. Véase [S2c](SLICE_2.md#s2c-runtime-asíncrono-y-transporte-solid).
-
-### Cola por ocurrencias de S2d
-
-ProgramQueue observa entradas nativas con UUID por ocurrencia. El puente envía
-select/move/remove con generación, índice, clave y huella del orden; PlaybackService
-valida su cola real al recibir el custom command antes de editarla. Sólo concede
-ese comando al UID de la app; no recibe URI/cookie de JS. Los controles Solid y OS
-continúan observando un único player. Virtualización con clave estable y medición
-real de cada fila evita reconstruir DOM con los ticks o solapar controles en edición.
-El seek sigue la clave actual, conservándose al moverla y limpiándose al sustituirla
-por otra entrada del mismo id e índice.
-
-### Inserciones desde biblioteca de S2e
-
-El mismo custom command añade append/insertAfter. Las fuentes y UUIDs se crean en
-el servicio desde metadatos; el límite total y el lote se validan antes de mutar.
-insertAfter guarda y valida la ocurrencia actual además del orden, para rechazar un
-menú abierto antes de una transición OS. La selección diferida no cruza cuentas.
-No hay reconstrucción del programa ni autoplay al llenar una cola vacía.
-El menú y sus outlets reutilizan la presentación compartida sin stores de mezcla.
-[Contrato y semántica shuffle](SLICE_2.md#s2e-añadir-desde-biblioteca-y-colecciones).
-
-### Recuperación explícita del programa de S2f
-
-playing e intención playWhenReady son estados distintos del player. El error se
-clasifica nativamente; retry usa el custom command restringido al UID y guards de
-época/orden/ocurrencia, validando también el error actual del servicio. prepare
-conserva el programa y respeta la intención actual sin reconstruir fuentes.
-Audio no reintenta de fondo ni se reanuda por una señal genérica de red.
-La UI puede observar el servicio durante fallo de revalidación de identidad sin
-inventar una cuenta autenticada. Un 401 limpia también ese estado; un 403 no se
-convierte en logout. [Contrato S2f](SLICE_2.md#s2f-recuperación-explícita-de-conexión).
+A relevant Solid change triggers an Android build from the same sources. The
+specific adapters receive contract tests; avoid platform conditionals
+scattered across screens. Update core/CLI/Android together,
+check plugin compatibility, pin dependencies and keep the Gradle Wrapper
+verified. The commercial version comes exclusively from `shared/version.py`
+via `scripts/version_sync.py --print`; do not copy a version into Gradle.
 
 
-### Artwork del programa (S2g)
+## Native programme S2a
 
-La metadata nativa lleva una URI interna creada desde id/generación, nunca una URL
-aportada por JS. `ProgramArtwork`, instalado como BitmapLoader de la sesión, descarga
-la miniatura autenticada mediante EngineConnection y entrega el bitmap al proveedor
-estándar de notificación/metadata Android. Concurrencia, bytes, dimensiones y tiempo
-están limitados; el único resultado retenido es el último de la generación activa,
-sin cache de disco. Reset cancela tanto future como Call antes de la cuenta posterior.
-Errores de imagen no se propagan al player ni borran login.
-La UI de programa/cola usa el proxy local privado existente y el gradiente compartido;
-el proxy ahora limita bytes y revalida generación antes de publicar. Ver
-[contrato y límites S2g](SLICE_2.md#s2g-carátulas-privadas-del-programa-y-sesión).
+`EngineConnection.shared` shares the origin/cookie/generation in the process.
+The Activity releases its socket and MediaController, keeping the audio service.
+`PlaybackService` contains ExoPlayer/MediaLibrarySession and one OkHttp client per
+epoch; the reset listeners cancel that client and empty the programme.
+Sources have an internal generation in their URI, removed before HTTP;
+an old source cannot adopt the new cookie even if the origin is reused.
+Range follows the Media3 DataSpec. There is no audio cache and no authenticated redirects.
 
+`PlaybackPlugin` builds native ids/metadata/URLs, validates commands against the
+generation and exposes snapshots; resolving a command does not claim audible audio. JS does not
+receive the cookie or an authenticated URL. The playing state comes from ExoPlayer and metadata
+comes from MediaSession. A state callback from another generation is ignored.
+External controllers must be trusted; only the app's own UID replaces the queue.
 
-### Cierre de programa (S2h)
+The Activity observes; it does not contain the player or stop it when Solid unmounts.
+When moving to background the JS ticker is paused; focus/noisy/foreground/notification
+belong to Android. Logout and switching do stop the programme. HTTP 401 is exposed
+as a status to revalidate identity; other failures do not claim playback and
+allow an explicit retry. Source/id/position are bound to the current account.
+There is no programme persistence after process death and no Auto navigation implemented.
+See [contract/continuation](SLICE_2.md) and [S2a evidence](evidence/s2a.json).
 
-`stop` pasa por el custom command del servicio, con guard de UID/generación y
-programToken; funciona sin REST/cookie. El programa recibe una identidad UUID al
-reemplazar la cola o insertar sobre una vacía; append/inserción/refill/edición de
-metadata y navegación la conservan en los extras de cada ocurrencia. El orden
-tiene su queueToken separado. Así un refill no veta el cierre, pero una orden
-capturada antes de abrir otro programa no lo cierra. Para callers sin
-programToken se mantiene la validación antigua de queueToken; nunca inferir el
-programa actual para una orden atrasada. Las ediciones de filas mantienen token/key.
-Closure y Autoplay HTTP/HTTPS prueban ambas identidades y generación antigua.
-La primera corrección sólo por generación pasó Autoplay pero falló Closure;
-está sustituida por esta identidad estable y no representa el contrato final. El
-servicio vacía fuentes, intención/modos/error y recursos de audio/artwork. El plugin
-espera el estado cerrado recibido por IPC antes de resolver. No cambia identidad;
-una cola nueva no hereda intención/modos ni claves. Media3 retira la notificación
-por timeline vacío, manteniendo el player/session mientras existan controllers.
-[Contrato S2h](SLICE_2.md#s2h-cierre-explícito-del-programa).
+### Asynchronous contract implemented in S2c
 
-### Copias explícitas del teléfono (S6a)
+`ui_web/src/lib/program/runtime.ts` separates typed commands and snapshots of an
+output from the synchronous mixing contracts. `mobile/playback.ts` provides the
+Capacitor adapter and `components/ProgramTransport.tsx` observes the state to
+render transport/seek/modes. AndroidStart already uses this path. Ordering of
+snapshots by generation and sequence, serialized commands, callback cleanup
+and acceptance pending states are tested without instantiating audio in JS.
 
-OfflineStore pertenece a la aplicación, no a la Activity. SQLite y archivos
-privados guardan sólo copias completas de música adquirida y metadata limitada,
-ligadas al origen y cuenta que confirmó el transporte nativo. OfflineService
-ejecuta preparación explícita en foreground; generación/tickets cancelan resultados
-obsoletos. OfflineDataSource entrega el archivo verificado al mismo Media3 y
-preserva Range/seek. No hay un segundo motor ni file URI/cookie en JavaScript.
-La biblioteca local se deriva de esas copias; logout/cambio/401 observado eliminan
-perfil y trabajos. Ver [contrato, límites y aceptación S6a](SLICE_6.md).
+It does not yet replace the NORMAL stores/actions or mount AuthenticatedPlayer; those
+routes must be adapted to the contract before removing LibraryBrowser. Do not interpret
+the availability of a component in `components/` as migration of the browser:
+the web UI keeps its current runtime. See [S2c](SLICE_2.md#s2c-asynchronous-runtime-and-solid-transport).
 
+### Queue by occurrences in S2d
 
-### Importación nativa S2y
+ProgramQueue observes native entries with a UUID per occurrence. The bridge sends
+select/move/remove with generation, index, key and order fingerprint; PlaybackService
+validates its real queue when it receives the custom command, before editing it. It only grants
+that command to the app's UID; it does not receive URI/cookie from JS. The Solid and OS controls
+keep observing a single player. Virtualization with a stable key and real measurement
+of each row avoids rebuilding the DOM on ticks or overlapping controls while editing.
+The seek follows the current key, kept when it is moved and cleared when it is replaced
+by another entry with the same id and index.
 
-MigrateView comparte jobs/guía/controles con web sin stores de audio; el adaptador
-Android usa ACTION_OPEN_DOCUMENT y POST normal /api/migration/jobs. Se transporta
-un token opaco de un solo uso, nunca content URI ni bytes/base64. ImportFiles liga
-grant a generación, perfil y fingerprint de sesión, con TTL y lease cancelable;
-ImportStreamBody limita100MiB y chunks64KiB. Consulta de metadatos fuera de UI,
-workers/cola acotados y CancellationSignal/deadline120s; upload120s. El parser
-valida formato/bytes tras elegir documento de MIME application/* o text/*.
-Scope de vista abortable e irrevocable, poll coalescido y revisión de mutaciones
-protegen cuenta/progreso. La dirección para continuar en ordenador es el origen
-real del motor, nunca localhost del paquete. Ver SLICE_2Y y HANDOFF para evidencia
-local y límites: no afirmar exports reales/cloud ni paridad completa por CSV.
+### Insertions from the library in S2e
 
-### Retirada confirmada y recuperación local (S2aa)
+The same custom command adds append/insertAfter. Sources and UUIDs are created in
+the service from metadata; the total limit and the batch are validated before mutating.
+insertAfter stores and validates the current occurrence in addition to the order, to reject a
+menu opened before an OS transition. Deferred selection does not cross accounts.
+There is no programme rebuild and no autoplay when filling an empty queue.
+The menu and its outlets reuse the shared presentation without mixing stores.
+[Contract and shuffle semantics](SLICE_2.md#s2e-adding-from-library-and-collections).
 
-DELETE + snapshot privado sin archivo preceden `retireSource` y retirada offline.
-El comando global por fuente exige UID/generación; no usa un orden efímero de
-cola. Rangos locales inversos preservan keys/identidad del programa y previews.
-Radio/autoplay cancelan plan pendiente y excluyen IDs locales retirados. El
-bridge resuelve sólo tras observar ausencia; vacío exige cierre del programa.
+### Explicit programme recovery in S2f
 
-Offline invalida ticket y marca error recuperable antes del filesystem. Fallos
-conservan fila/bytes retenidos para quota y muestran retirada fallida, con
-recuperación desde el gestor. Una copia cuyo archivo se retiró desde otro cliente
-no se purga automáticamente: metadata local del mismo perfil permite cleanup
-confirmado por GET incluso si DELETE devuelve 404. Ver SLICE_2AA para evidencia
-y límites; S2ab acepta respuesta real deliberadamente retrasada en Radio y autoplay HTTP/HTTPS.
+playing and the playWhenReady intent are distinct player states. The error is
+classified natively; retry uses the custom command restricted to the UID and guards of
+epoch/order/occurrence, also validating the service's current error. prepare
+keeps the programme and respects the current intent without rebuilding sources.
+Audio does not retry in the background or resume on a generic network signal.
+The UI can observe the service during an identity revalidation failure without
+inventing an authenticated account. A 401 also clears that state; a 403 is not
+turned into logout. [S2f contract](SLICE_2.md#s2f-explicit-connection-recovery).
 
 
-### Cuenta e historial compartidos (S2ac)
+### Programme artwork (S2g)
 
-AccountSettingsView recibe usuario/acciones sin runtime de audio; Android confirma
-receipt y auth/state no-store dentro de la misma identidad y scope abortable.
-Cambios de password conservan cookie en transporte nativo/Keystore. UI no publica
-cookies. Logout respeta busy del bootstrap y confirma antes de cerrar.
+Native metadata carries an internal URI created from id/generation, never a URL
+supplied by JS. `ProgramArtwork`, installed as the session's BitmapLoader, downloads
+the authenticated thumbnail through EngineConnection and delivers the bitmap to the standard
+Android notification/metadata provider. Concurrency, bytes, dimensions and time
+are limited; the only retained result is the last one of the active generation,
+without a disk cache. Reset cancels both the future and the Call before the next account.
+Image errors are not propagated to the player and do not erase login.
+The programme/queue UI uses the existing private local proxy and the shared gradient;
+the proxy now limits bytes and revalidates the generation before publishing. See
+[S2g contract and limits](SLICE_2.md#s2g-private-cover-art-for-the-program-and-session).
 
-SearchHistoryStorage comparte semántica con web e inyecta namespace Android por
-origen/cuenta. Sólo respuestas vigentes recuerdan consultas; desactivar elimina
-ambos dominios del perfil, sin afectar otras cuentas. Recientes se pueden ejecutar
-y retirar. Ver SLICE_2AC para aceptación HTTP/HTTPS y límites.
+
+### Programme closure (S2h)
+
+`stop` goes through the service's custom command, with a UID/generation guard and
+programToken; it works without REST/cookie. The programme receives a UUID identity when
+replacing the queue or inserting into an empty one; append/insertion/refill/metadata
+editing and navigation keep it in the extras of each occurrence. The order
+has its separate queueToken. This way a refill does not veto closure, but a command
+captured before opening another programme does not close it. For callers without
+programToken the old queueToken validation is kept; never infer the
+current programme for a stale command. Row edits keep token/key.
+Closure and Autoplay HTTP/HTTPS test both identities and an old generation.
+The first correction based only on generation passed Autoplay but failed Closure;
+it is replaced by this stable identity and does not represent the final contract. The
+service empties sources, intent/modes/error and audio/artwork resources. The plugin
+waits for the closed state received over IPC before resolving. It does not change identity;
+a new queue does not inherit intent/modes or keys. Media3 removes the notification
+because of the empty timeline, keeping the player/session while controllers exist.
+[S2h contract](SLICE_2.md#s2h-explicit-program-close).
+
+### Explicit phone copies (S6a)
+
+OfflineStore belongs to the application, not to the Activity. SQLite and private
+files store only complete copies of acquired music and limited metadata,
+bound to the origin and account that the native transport confirmed. OfflineService
+executes explicit preparation in foreground; generation/tickets cancel obsolete
+results. OfflineDataSource delivers the verified file to the same Media3 and
+preserves Range/seek. There is no second engine and no file URI/cookie in JavaScript.
+The local library is derived from those copies; logout/switch/observed 401 delete
+profile and jobs. See [S6a contract, limits and acceptance](SLICE_6.md).
 
 
-### Apariencia y preferencias visuales compartidas (S2ad)
+### Native import S2y
 
-AppearanceSettingsView y DisplayPreferencesView reciben valores/acciones, sin
-importar stores de audio. Adaptadores web conservan controladores existentes;
-Android usa createNativeAppearance con tabla de temas boot y persistencia visual
-compartida. Tema/tamaño/contraste pertenecen a la instalación, no al perfil del
-motor. Idioma usa los diccionarios compartidos.
+MigrateView shares jobs/guide/controls with the web without audio stores; the Android
+adapter uses ACTION_OPEN_DOCUMENT and a normal POST /api/migration/jobs. An
+opaque single-use token is transported, never a content URI or bytes/base64. ImportFiles binds the
+grant to generation, profile and session fingerprint, with TTL and a cancellable lease;
+ImportStreamBody limits to 100MiB and chunks of 64KiB. Metadata query off the UI thread,
+bounded workers/queue and CancellationSignal/deadline 120s; upload 120s. The parser
+validates format/bytes after choosing a document with MIME application/* or text/*.
+Abortable and irrevocable view scope, coalesced polling and review of mutations
+protect account/progress. The address for continuing on a computer is the real
+origin of the engine, never the package's localhost. See SLICE_2Y and HANDOFF for local evidence
+and limits: do not claim real/cloud exports or full parity via CSV.
 
-SystemBars integrado conserva estilo de iconos ante configuración del SO.
-SoundsibleAppearance sólo admite colores hex de la paleta para fondo decor/WebView
-y barras legacy; no transporta credenciales ni estado de reproducción. Reaplicar
-ante cambio de media query y foreground conserva incluso una paleta explícita
-cuando Capacitor restaura su ventana. NativeSettings ofrece Cuenta/Apariencia/
-Accesibilidad; Atrás consume primero la sección interna. Haptics/navegación
-configurable y restantes ajustes no forman parte de esta aceptación.
+### Confirmed removal and local recovery (S2aa)
+
+DELETE + private snapshot without the file precede `retireSource` and offline removal.
+The global per-source command requires UID/generation; it does not use an ephemeral queue
+order. Reverse local ranges preserve keys/programme identity and previews.
+Radio/autoplay cancel the pending plan and exclude removed local IDs. The
+bridge resolves only after observing absence; an empty result requires closing the programme.
+
+Offline invalidates the ticket and marks a recoverable error before the filesystem. Failures
+keep the row/retained bytes for quota and show a failed removal, with
+recovery from the manager. A copy whose file was removed from another client
+is not purged automatically: local metadata of the same profile allows cleanup
+confirmed by GET even if DELETE returns 404. See SLICE_2AA for evidence
+and limits; S2ab accepts a deliberately delayed real response in Radio and autoplay HTTP/HTTPS.
+
+
+### Shared account and history (S2ac)
+
+AccountSettingsView receives user/actions without an audio runtime; Android confirms
+receipt and no-store auth/state within the same identity and abortable scope.
+Password changes keep the cookie in the native transport/Keystore. The UI does not publish
+cookies. Logout respects the bootstrap busy state and confirms before closing.
+
+SearchHistoryStorage shares semantics with the web and injects the Android namespace by
+origin/account. Only current responses remember queries; disabling deletes
+both domains of the profile, without affecting other accounts. Recent entries can be executed
+and removed. See SLICE_2AC for HTTP/HTTPS acceptance and limits.
+
+
+### Shared appearance and visual preferences (S2ad)
+
+AppearanceSettingsView and DisplayPreferencesView receive values/actions, without
+importing audio stores. Web adapters keep the existing controllers;
+Android uses createNativeAppearance with the boot theme table and shared visual
+persistence. Theme/size/contrast belong to the installation, not to the
+engine profile. Language uses the shared dictionaries.
+
+The integrated SystemBars keeps the icon style when the OS configuration changes.
+SoundsibleAppearance only accepts hex colours from the palette for the decor/WebView background
+and legacy bars; it does not transport credentials or playback state. Reapplying
+on a media query change and on foreground keeps even an explicit palette
+when Capacitor restores its window. NativeSettings offers Account/Appearance/
+Accessibility; Back first consumes the internal section. Configurable haptics/navigation
+and the remaining settings are not part of this acceptance.

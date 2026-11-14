@@ -1,61 +1,61 @@
-# Offline: decisión aprobada
+# Offline: approved decision
 
-Fecha: 2026-10-03. El usuario elige **incluir B: copias explícitas de música ya
-adquirida en el servidor**, con nombre «Disponible sin conexión». Acciones dentro
-de menús de tres puntos de canciones/colecciones; ningún botón de preparación en
-los shells. La corrección técnica y almacenamiento quedan a criterio de implementación.
-El usuario confirma mantener paridad completa antes de alpha; push de avances y
-continuar hasta paridad, después PR a main y release. No publicar alpha parcial.
+Date: 2026-10-03. The user chooses to **include B: explicit copies of music already
+acquired on the server**, named "Available offline". Actions inside
+the three-dot menus of songs/collections; no preparation button in
+the shells. Technical correctness and storage are left to the implementation's judgment.
+The user confirms keeping full parity before alpha; push progress and
+continue until parity, then a PR to main and a release. Do not publish a partial alpha.
 
-## Contrato de producto
+## Product contract
 
-Adquirir música para el servidor y retener una copia en el teléfono son operaciones
-distintas. Guardado/bookmark y preview no equivalen a archivo adquirido. Sólo
-canciones locales de música son elegibles en este primer offline; no se adquieren
-previews implícitamente. Álbum/playlist prepara sus miembros locales actuales; no
-sincroniza ni adquiere nuevas incorporaciones automáticamente.
+Acquiring music for the server and keeping a copy on the phone are separate
+operations. Saved/bookmark and preview are not equivalent to an acquired file. Only
+local music songs are eligible in this first offline version; previews are not
+acquired implicitly. An album/playlist prepares its current local members; it does not
+synchronize or acquire new additions automatically.
 
-Una biblioteca, con filtro «Sólo en este dispositivo» en su menú. Preparación,
-retirada y cancelación viven en los menús de canciones/colecciones. Gestión de
-progreso, errores y espacio accesible desde el mismo menú de biblioteca. Preparado
-significa archivo completo, longitud comprobada, duración reconocida y checksum;
-una copia parcial o fallida nunca cuenta como disponible. Carátulas offline usan
-placeholder; se conserva metadata para canciones/álbumes/artistas/playlists.
+One library, with the "Only on this device" filter in its menu. Preparation,
+removal and cancellation live in the song/collection menus. Management of
+progress, errors and space is accessible from the same library menu. Prepared
+means a complete file, checked length, recognized duration and checksum;
+a partial or failed copy never counts as available. Offline artwork uses a
+placeholder; metadata is kept for songs/albums/artists/playlists.
 
-Copias explícitas sin expulsión automática. Límite inicial 2 GiB, configurable a
-512 MiB/2 GiB/8 GiB desde gestión; máximo 1.000 canciones por perfil en este corte.
-El límite puede reducirse sin borrar copias: nuevas preparaciones deben caber.
-Espacio real del dispositivo mantiene reserva. Cancelar/retirar libera sólo copias
-del teléfono, nunca archivos del servidor.
+Explicit copies without automatic eviction. Initial limit 2 GiB, configurable to
+512 MiB/2 GiB/8 GiB from management; maximum 1,000 songs per profile in this cut.
+The limit can be reduced without deleting copies: new preparations must fit.
+The device's real space keeps a reserve. Cancel/remove frees only copies
+on the phone, never files on the server.
 
-## Antes, durante y después del vuelo
+## Before, during and after the flight
 
-Antes: abrir menú de canción/colección, elegir «Disponible sin conexión» y consultar
-gestión hasta que todos los miembros deseados estén listos. Mezclas con previews
-preparan únicamente miembros adquiridos. Se muestran número listo/total y fallos.
-Durante: app inicia desde assets locales y metadata del perfil verificado; biblioteca
-filtra copias listas al no alcanzar el motor. NORMAL/cola/seek/shuffle/repeat usan
-el mismo servicio multimedia con archivos privados. No crea servidor autónomo.
-Después: revalidar cuenta, refrescar biblioteca y volver a rutas online. No se
-envían mutaciones de favoritos/playlists/progreso pendientes: este corte no las
-crea. Archivos eliminados del servidor permanecen retirables en el filtro local.
+Before: open the song/collection menu, choose "Available offline" and check
+management until all the desired members are ready. Mixes with previews
+prepare only acquired members. The ready/total count and failures are shown.
+During: the app starts from local assets and the metadata of the verified profile; the library
+filters ready copies when the engine cannot be reached. NORMAL/queue/seek/shuffle/repeat use
+the same media service with private files. It does not create a standalone server.
+After: revalidate the account, refresh the library and return to online routes. No pending
+favorite/playlist/progress mutations are sent: this cut does not
+create them. Files deleted from the server remain removable in the local filter.
 
-## Cuenta y ciclo de vida
+## Account and lifecycle
 
-Perfil ligado a origen y cuenta verificada por auth nativo. Logout, cambio de
-servidor/cuenta o revocación 401 observada eliminan copias y cancelan preparación.
-Sin red no se puede conocer una revocación remota: las copias preparadas siguen
-disponibles hasta reconexión o logout local. Activity recreation no corta la
-preparación. Descarga explícita mediante servicio foreground dataSync; límite del
-SO/interrupción/muerte de proceso deja preparación incompleta recuperable por Retry,
-sin declarar disponibilidad ni reanudar red por sorpresa al arrancar.
+Profile bound to the origin and to the account verified by native auth. Logout, change of
+server/account or an observed 401 revocation delete copies and cancel preparation.
+Without network, a remote revocation cannot be known: prepared copies remain
+available until reconnection or local logout. Activity recreation does not interrupt
+preparation. Explicit download through a dataSync foreground service; an OS
+limit/interruption/process death leaves an incomplete preparation that can be recovered with Retry,
+without declaring availability or unexpectedly resuming network work at startup.
 
-## Aceptación y publicación
+## Acceptance and publishing
 
-Validar ruta real, preparación UI, persistencia, arranque con motor inaccesible,
-reproducción/seek/background, lote/duplicados/cancelación, fallo parcial, espacio,
-integridad, aislamiento y logout. Registrar evidencia en HANDOFF al cerrar.
-La aprobación offline no sustituye la aceptación de teléfono/DJ/Live/Android Auto.
-La paridad se integró mediante PR #300; firma, actualización y publicación se
-cierran con RELEASE_GATES. La aceptación física de coche/sonido corresponde a
-beta. iOS es referencia de código, no aceptación de dispositivo.
+Validate the real path, UI preparation, persistence, startup with an unreachable engine,
+playback/seek/background, batch/duplicates/cancellation, partial failure, space,
+integrity, isolation and logout. Record evidence in HANDOFF when closing.
+Offline approval does not replace phone/DJ/Live/Android Auto acceptance.
+Parity was merged through PR #300; signature, update and publishing are
+closed with RELEASE_GATES. Physical car/sound acceptance belongs to
+beta. iOS is a code reference, not device acceptance.

@@ -1,53 +1,53 @@
-# S5a: Android Auto, biblioteca y selección del programa
+# S5a: Android Auto, library and program selection
 
-Validado en AVD API36: **12/0 HTTP/TLS,94.079s**, runner exit0. Bloque conjunto
+Validated on AVD API36: **12/0 HTTP/TLS,94.079s**, runner exit0. Combined block
 CarLibrary2 + CarLegacy2 + CatalogSearch2 + TransportReset2 + Connection4.
-APK/test APK/JVM54/lint sin CA temporal pasan; Core car/playback11/0.
-[evidence](evidence/s5a.json) registra provenance y límites. Development, no release.
+APK/test APK/JVM54/lint without temporary CA pass; Core car/playback11/0.
+[evidence](evidence/s5a.json) records provenance and limits. Development, not release.
 
-MediaLibraryService sirve `/api/car/home`, `/api/car/items` y búsqueda autenticada
-sobre música/podcasts adquiridos. Los resultados de búsqueda se filtran antes del
-límite200. Las carpetas de feeds publicadas resuelven sólo episodios adquiridos
-del perfil; feed desconocido devuelve404. Radio excluye episodios antes del límite.
-Búsqueda moderna y `playFromSearch` clásico están probados; no hay reconocimiento
-vocal probado ni búsqueda/adquisición implícita en proveedores externos.
+MediaLibraryService serves `/api/car/home`, `/api/car/items` and authenticated search
+over acquired music/podcasts. Search results are filtered before the
+limit200. The published feed folders resolve only acquired episodes
+of the profile; an unknown feed returns404. Radio excludes episodes before the limit.
+Modern search and classic `playFromSearch` are tested; there is no tested voice
+recognition or implicit search/acquisition in external providers.
 
-Selección por ID publicado para generation/identidad activa; title/URI/extras del
-caller no crean fuentes. ProgramQueue construye música/podcast nativos. Controllers
-externos requieren trusted y no reciben append arbitrario ni comando privado de
-cola. Descriptor Auto media y entrada MEDIA_PLAY_FROM_SEARCH empaquetados; sin
-Android Automotive OS ni Car App Library templates.
+Selection by published ID for the active generation/identity; the caller's title/URI/extras
+do not create sources. ProgramQueue builds native music/podcast. External
+controllers require trusted and do not receive arbitrary append or a private queue
+command. Auto media descriptor and MEDIA_PLAY_FROM_SEARCH entry packaged; no
+Android Automotive OS or Car App Library templates.
 
-Browse clásico sin páginas usa sentinel Int.MAX_VALUE: respuesta limitada a1000,
-el máximo offline. Páginas normales1..200, registro1000 IDs y counts500 padres;
-colas de worker16 y bodies256KiB. Hash/integridad offline fuera del looper de audio.
-Suscripción inicial notifica total de hijos; actualización proactiva pendiente.
-Requests/futures terminan al reset/close. Identidad/cookies/URLs del servidor no
-se publican en metadata IPC.
+Classic browse without pages uses the sentinel Int.MAX_VALUE: response limited to1000,
+the offline maximum. Normal pages1..200, registry1000 IDs and counts500 parents;
+worker queues16 and bodies256KiB. Offline hash/integrity outside the audio looper.
+The initial subscription notifies the total of children; proactive update pending.
+Requests/futures finish on reset/close. Server identity/cookies/URLs are not
+published in IPC metadata.
 
-Copias completas explícitas en «Disponible sin conexión». APIs503 permiten árbol
-local y reproducción real.401 observado limpia copias/programa/grants;403 devuelve
-permission denied sin cambiar cuenta. Cookie expirada sin401 y carátulas offline
-tras muerte de proceso aún no aceptadas.
+Explicit complete copies in "Available offline". APIs503 allow the local
+tree and real playback. An observed401 clears copies/program/grants;403 returns
+permission denied without changing account. Expired cookie without401 and offline covers
+after process death are not accepted yet.
 
-CarArtworkProvider no exportado: URI opaca con grant read al browser. Loader nativo
-privado, registro400/cache32 PNG de hasta2MiB. Revoca registros y borra cache al
-cambiar/cerrar cuenta. No revoca bytes o FD que el cliente ya recibió. Pruebas de
-lectura/color/cache y revocación son sameUID; grants a UID externo pendientes.
+CarArtworkProvider not exported: opaque URI with read grant to the browser. Private native
+loader, registry400/cache32 PNG of up to2MiB. It revokes registrations and clears the cache when
+the account changes/closes. It does not revoke bytes or FDs that the client already received. The
+read/color/cache and revocation tests are sameUID; grants to an external UID are pending.
 
-Diagnósticos corregidos: límite/paginación legacy, redondeo JPEG en la prueba,
-GUID JSON null interpretado como texto al seleccionar Radio, falta de browse de
-feed, prueba que encolaba offline sin arrancar OfflineService y requisito lint de
-play-from-search. Async transport obsoleto devolvía excepción unchecked que podía
-matar OkHttp: ahora IOException por callback con guard de generation/origen,
-probado en HTTP/TLS y servidor igual. Fix independiente f2a10c32.
+Diagnoses fixed: legacy limit/pagination, JPEG rounding in the test,
+JSON null GUID interpreted as text when selecting Radio, missing feed
+browse, a test that queued offline without starting OfflineService and the lint requirement for
+play-from-search. Obsolete async transport returned an unchecked exception that could
+kill OkHttp: now IOException through callback with a generation/origin guard,
+tested on HTTP/TLS and same server. Independent fix f2a10c32.
 
-Fuentes oficiales: [Android Auto media](https://developer.android.com/training/cars/media/auto),
+Official sources: [Android Auto media](https://developer.android.com/training/cars/media/auto),
 [MediaLibraryService](https://developer.android.com/media/media3/session/serve-content).
-La compatibilidad legacy/sentinel se verificó además en el bytecode de Media3
-incluido por Gradle; protocolos reales ejecutados con MediaBrowser/MediaController.
-No afirmar que sameUID sea Google Auto ni que AVD pruebe escucha/coche físico.
+The legacy/sentinel compatibility was also verified in the Media3 bytecode
+included by Gradle; real protocols run with MediaBrowser/MediaController.
+Do not claim that sameUID is Google Auto or that AVD proves listening/physical car.
 
-S5b pendiente: cambios proactivos/background, reconexión, controls/metadata durante
-DJ, guard de generación en browse inicial, cookie expirada/offline y cliente de
-UID externo. Host/DHU y aceptación física completa corresponden a beta.
+S5b pending: proactive/background changes, reconnection, controls/metadata during
+DJ, generation guard in initial browse, expired cookie/offline and external UID
+client. Host/DHU and full physical acceptance belong to beta.

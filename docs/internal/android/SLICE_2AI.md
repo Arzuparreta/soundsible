@@ -1,37 +1,37 @@
-# S2ai: recibir canciones compartidas
+# S2ai: receive shared songs
 
-Android recibe `soundsible://open?shared=<cápsula>` mediante ACTION_VIEW y el
-texto de un ACTION_SEND text/plain con un único enlace público compatible.
-El parser compartido limita tamaño, campos, identidad de vídeo y metadata. No
-acepta configuración de servidores, credenciales ni instrucciones de autoplay.
-No se registra como Android App Link HTTPS verificado: abrir automáticamente
-la página pública en la app todavía requiere la integración del puente público.
+Android receives `soundsible://open?shared=<capsule>` through ACTION_VIEW and the
+text of an ACTION_SEND text/plain with a single compatible public link.
+The shared parser limits size, fields, video identity and metadata. It does not
+accept server configuration, credentials or autoplay instructions.
+It is not registered as a verified HTTPS Android App Link: automatically opening
+the public page in the app still requires the integration of the public bridge.
 
-La selección pendiente tiene un token independiente de cuenta y permanece antes
-del login. La interfaz muestra título/artista y permite cerrarla; reproducir o
-abrir acciones requiere una cuenta activa y reproductor preparado. Recibirla no
-cambia cola, posición ni pausa. Reproducir explícitamente busca primero una canción
-canónica de la biblioteca de la cuenta; en su defecto usa la identidad preview
-validada y deja al adaptador nativo construir la fuente, sin URLs recibidas.
+The pending selection has a token independent of the account and persists before
+login. The interface shows title/artist and allows closing it; playing or
+opening actions requires an active account and a prepared player. Receiving it does not
+change the queue, position or pause. Explicitly playing first looks for a canonical
+song in the account's library; otherwise it uses the validated preview identity
+and lets the native adapter build the source, without received URLs.
 
-El último intent prevalece sobre una lectura inicial demorada. Acknowledgements
-por token no descartan un enlace posterior. Tras consumir la selección, recrear
-la Activity no vuelve a ejecutar su intent inicial. La selección pública pendiente
-se conserva en preferencias privadas; no guarda información del servidor.
+The last intent takes precedence over a delayed initial read. Acknowledgements
+per token do not discard a later link. After the selection is consumed, recreating
+the Activity does not run its initial intent again. The pending public selection
+is kept in private preferences; it does not store server information.
 
-Validación sobre `9450752c` dirty: Incoming2 + Share2, **4/0 HTTP/TLS**,
-29.504s instrumentados; APK/test APK/JVM54/lint normal sin CA pasa. UI204/1595
-+ TypeScript. Primer compile falló por nullable del test; el bloque siguiente4/2
-reveló replay del intent inicial al recrear. Capacitor BridgeActivity.load lo
-redespacha; corregido descartando sólo el despacho inicial de instancia restaurada.
-La repetición4/0 conserva los intents posteriores. Ver [evidencia](evidence/s2ai.json).
+Validation on `9450752c` dirty: Incoming2 + Share2, **4/0 HTTP/TLS**,
+29.504s instrumented; APK/test APK/JVM54/lint normal without CA passes. UI204/1595
++ TypeScript. The first compile failed because of a nullable in the test; the next block 4/2
+revealed a replay of the initial intent on recreation. Capacitor BridgeActivity.load
+redispatches it; fixed by discarding only the initial dispatch of a restored instance.
+The repetition 4/0 keeps the later intents. See [evidence](evidence/s2ai.json).
 
-Invitaciones, controles multidispositivo y aceptación real del puente público
-siguen pendientes. AVD no acredita navegador/aplicación destinataria o dispositivo
-físico. El canal continúa development y no es una alpha pública.
+Invitations, multi-device controls and real acceptance of the public bridge
+remain pending. The AVD does not demonstrate the target browser/application or a physical
+device. The channel is still development and is not a public alpha.
 
-Seguimiento offline sobref0e02058 dirty: Incoming2/0 HTTP/TLS,19.214s,
-normal APK/test APK/JVM54/lint sin CA y UI204/1595 + TS pasan. Copias nuevas
-conservan youtube_id público validado; con APIs503 y Activity recreada, Play
-resuelve member-track adquirido, sin preview ni adquisición automática. Copias
-anteriores sin esa identidad necesitan preparación de nuevo para reconocer el enlace.
+Offline follow-up on f0e02058 dirty: Incoming2/0 HTTP/TLS, 19.214s,
+normal APK/test APK/JVM54/lint without CA and UI204/1595 + TS pass. New copies
+keep the validated public youtube_id; with APIs503 and the Activity recreated, Play
+resolves the acquired member-track, without preview or automatic acquisition. Earlier
+copies without that identity need to be prepared again to recognize the link.

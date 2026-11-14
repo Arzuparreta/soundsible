@@ -1,37 +1,37 @@
-# S2v: carátula editada frente a artwork embebido
+# S2v: edited artwork versus embedded artwork
 
-El BitmapLoader de Media3 instalado prioriza artworkData sobre artworkUri.
-Los nuevos endpoints de etiquetas/sidecar mantienen el archivo de audio intacto;
-por tanto un FLAC con su portada original embebida puede ocultar la edición en
-sesión multimedia/notificación aunque la biblioteca muestre el sidecar nuevo.
+The installed Media3 BitmapLoader prioritizes artworkData over artworkUri.
+The new tag/sidecar endpoints keep the audio file intact;
+therefore a FLAC with its original embedded cover can hide the edit in the
+media session/notification even though the library shows the new sidecar.
 
-ProgramArtwork override loadBitmapFromMetadata da prioridad a URI privadas
-soundsible-artwork. Reutiliza transporte autenticado, generation guards y caché
-acotada; una URI privada caducada falla sin recuperar bytes embebidos antiguos.
-Metadata sin URI privada mantiene el comportamiento de imagen embebida y sin
-imagen devuelve null. No se reescribe música para cambiar una portada.
+ProgramArtwork override loadBitmapFromMetadata gives priority to private
+soundsible-artwork URIs. It reuses authenticated transport, generation guards and a bounded
+cache; an expired private URI fails without recovering old embedded bytes.
+Metadata without a private URI keeps the embedded image behavior and without
+an image returns null. Music is not rewritten to change a cover.
 
-Aceptación instrumentada:
-- ArtworkTest: URI privada roja con embedded azul muestra roja; sin URI conserva
-  azul; sin ambas devuelve null; logout invalida URI privada aunque queden bytes.
-- MetadataTest: FLAC real con portada roja embebida, comprobar esos bytes originales con MediaMetadataRetriever
-  sobre una copia temporal acotada del FLAC autenticado; editar a verde por multipart, exigir verde también en
-  sesión multimedia del sistema y mantener SHA-256 de audio/ID/cola/posición/copias.
-- HTTP y HTTPS con CA temporal, luego APK/test/unit/lint normal sin CA.
+Instrumented acceptance:
+- ArtworkTest: red private URI with blue embedded shows red; without URI keeps
+  blue; without both returns null; logout invalidates the private URI even if bytes remain.
+- MetadataTest: real FLAC with an embedded red cover, check those original bytes with MediaMetadataRetriever
+  on a bounded temporary copy of the authenticated FLAC; edit to green through multipart, require green also in the
+  system media session and keep audio SHA-256/ID/queue/position/copies.
+- HTTP and HTTPS with temporary CA, then normal APK/test/unit/lint without CA.
 
-Fixture opcional FLAC ahora lleva artwork embebido mediante AudioProcessor real.
-Radio fixture copia archivos según el formato real, con regresión Python WAV y
-FLAC, para no prometer soporte FLAC dejando rutas .wav hardcodeadas.
+The optional FLAC fixture now carries embedded artwork through a real AudioProcessor.
+The Radio fixture copies files according to the real format, with Python WAV and
+FLAC regression, so as not to promise FLAC support while leaving hardcoded .wav paths.
 
-La metadata fusionada entregada por MediaController puede omitir artworkData
-cuando la app aporta URI. No asumir que refleja todos los tags del archivo;
-comprobar por separado archivo codificado y sesión del sistema. Primer intento
-falló por esa suposición, no se declara aceptado.
+The merged metadata delivered by MediaController can omit artworkData
+when the app provides a URI. Do not assume it reflects all the tags of the file;
+check the encoded file and the system session separately. The first attempt
+failed because of that assumption; it is not declared accepted.
 
-Estado: **cuatro casos HTTP/HTTPS pasan**, cero fallos/omitidos, FLAC con imagen
-embebida y sesión multimedia real en API 36. Log /tmp/soundsible-s2v-embedded-source.log;
-APK/test/unit/lint normal sin CA pasa al terminar el helper. Python Radio WAV/FLAC
-**dos tests pasan**, /tmp/soundsible-s2v-radio-fixture.log. No extrapolar a escucha
-física o todos los formatos/decodificadores. Fuentes
-UI preparadas desde cf01599; instrumentación/servicio cambiados en working tree.
-No cambia gates de alpha: resto de paridad, DJ/Live/Auto y firma/update pendientes.
+Status: **four HTTP/HTTPS cases pass**, zero failures/skipped, FLAC with embedded
+image and real media session on API 36. Log /tmp/soundsible-s2v-embedded-source.log;
+normal APK/test/unit/lint without CA passes when the helper finishes. Python Radio WAV/FLAC
+**two tests pass**, /tmp/soundsible-s2v-radio-fixture.log. Do not extrapolate to physical
+listening or all formats/decoders. UI sources
+prepared from cf01599; instrumentation/service changed in the working tree.
+It does not change the alpha gates: the rest of parity, DJ/Live/Auto and signing/update pending.

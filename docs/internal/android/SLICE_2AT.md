@@ -1,26 +1,26 @@
-# S2at — Invitaciones recibidas del sistema y menú de ocurrencia pendiente
+# S2at — Invitations received from the system and pending occurrence menu
 
-Un enlace de invitación del motor (`<origen>/player/#/invite/<token>`) compartido
-como texto (ACTION_SEND) queda como propuesta: la app muestra el servidor y no
-configura origen, cookie ni cuenta hasta que el usuario pulsa. Sin sesión, Conectar
-abre el formulario nativo de S2aj. Con sesión, la tarjeta avisa de que usarla cierra
-la sesión y detiene la reproducción; Cerrar conserva la cuenta, y sólo «Usar
-invitación» hace logout/olvida servidor y abre el formulario. La web descarta el
-token si hay sesión porque allí cada servidor es otro origen; en Android una app
-equivale a un servidor, así que se ofrece la elección explícita en vez de copiar
-esa limitación. Store nativo único latest-wins compartido con canciones; el lector
-de canciones ignora invitaciones sin consumirlas y viceversa.
+An engine invitation link (`<origen>/player/#/invite/<token>`) shared
+as text (ACTION_SEND) remains a proposal: the app shows the server and does not
+configure origin, cookie or account until the user taps. Without a session, Connect
+opens the native S2aj form. With a session, the card warns that using it ends
+the session and stops playback; Close keeps the account, and only "Use
+invitation" logs out/forgets the server and opens the form. The web discards the
+token if there is a session because there each server is a different origin; on Android one app
+corresponds to one server, so the explicit choice is offered instead of copying
+that limitation. A single latest-wins native store shared with songs; the song
+reader ignores invitations without consuming them and vice versa.
 
-VIEW sólo llega con `soundsible://open`; ningún productor emite invitaciones en ese
-esquema, así que no se añadió formato. VIEW de enlaces https requiere puente
-público/App Links, pendiente.
+VIEW only arrives with `soundsible://open`; no producer emits invitations in that
+scheme, so no format was added. VIEW of https links requires the public
+bridge/App Links, pending.
 
-Una ocurrencia de catálogo pendiente en la cola ya no se reconstruye como canción
-de biblioteca: su menú ofrece sólo «Quitar de la cola». Sin el guard, la prueba
-nativa observó DJ desde canción, borrar de biblioteca, offline, editar, favoritos,
-playlist y compartir sobre la ocurrencia pendiente (fallo verificado y restaurado).
+A pending catalog occurrence in the queue is no longer rebuilt as a library
+song: its menu offers only "Remove from queue". Without the guard, the native test
+observed DJ from song, delete from library, offline, edit, favorites,
+playlist and share on the pending occurrence (failure verified and restored).
 
 IncomingInvite2 + IncomingTrack2 + Invite2 + PendingQueueMenu2: HTTP/TLS8/0,
-66.403s, runner exit0 + APK/test APK/JVM56/lint normales sin CA temporal.
-WholeUI211/1620 + TypeScript pasan. Log `/tmp/soundsible-incoming-invite-native.log`;
-evidence/s2at.json. Sin regresión principal/browser4 en este bloque.
+66.403s, runner exit0 + normal APK/test APK/JVM56/lint without a temporary CA.
+WholeUI211/1620 + TypeScript pass. Log `/tmp/soundsible-incoming-invite-native.log`;
+evidence/s2at.json. No main/browser4 regression run in this block.

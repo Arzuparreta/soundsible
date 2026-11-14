@@ -1,22 +1,22 @@
-# Confirmación de refresh Android tras escrituras
+# Android refresh confirmation after writes
 
-El recorrido principal S2s (33 tests, un fallo) encontró un menú abierto con estado
-Saved antiguo después de confirmar la escritura en el motor. sync podía quedar
-sustituido por otro refresh (eventos/foreground) y devolver antes de observar la
-respuesta más reciente; el caller dejaba de estar pending y abría un menú antiguo.
+The main S2s walkthrough (33 tests, one failure) found a menu opened with an old
+Saved state after the write was confirmed in the engine. sync could be
+replaced by another refresh (events/foreground) and return before observing the
+most recent response; the caller stopped being pending and opened an old menu.
 
-createAccountRefresh coalesce llamadas por epoch, ejecuta el refresh encolado y
-mantiene el mismo Promise hasta observarlo. Un epoch anterior no reencola trabajo
-ni borra el Promise de una cuenta nueva. syncOnce mantiene guards de identidad,
-cancelación, snapshot y 401/403 existentes. No se cambia la intención explícita
-capturada al abrir un menú ni se debilitan las assertions del test de Saved.
+createAccountRefresh coalesces calls per epoch, runs the queued refresh and
+keeps the same Promise until it observes it. A previous epoch does not requeue work
+or delete the Promise of a new account. syncOnce keeps the existing identity,
+cancellation, snapshot and 401/403 guards. The explicit intent
+captured when opening a menu is not changed and the assertions of the Saved test are not weakened.
 
-Dos tests de contrato prueban callers esperando la segunda observación y separación
-entre cuentas concurrentes. Typecheck/Vitest completo con S2t en desarrollo pasa:
-1.416 tests /163 archivos. Recorridos CatalogSearch HTTP y HTTPS verificado pasan
-con la corrección, dentro de la ejecución filtrada `/tmp/soundsible-s2t-native.log`.
-Esa ejecución tuvo dos fallos de EntityBookmarks, que usaba la espera de pantalla
-unconfigured tras recrear una cuenta autenticada; no fue una pasada global verde.
+Two contract tests prove callers waiting for the second observation and separation
+between concurrent accounts. Full Typecheck/Vitest with S2t in development passes:
+1,416 tests /163 files. CatalogSearch walkthroughs over HTTP and verified HTTPS pass
+with the fix, inside the filtered run `/tmp/soundsible-s2t-native.log`.
+That run had two EntityBookmarks failures, which used the wait for the
+unconfigured screen after recreating an authenticated account; it was not a global green pass.
 
-Repetir principal y restart sobre fuentes finales. El cambio es independiente de
-los bookmarks S2t todavía en validación. No representa paridad completa ni alpha.
+Repeat main and restart on the final sources. The change is independent of
+the S2t bookmarks still in validation. It does not represent full parity or an alpha.

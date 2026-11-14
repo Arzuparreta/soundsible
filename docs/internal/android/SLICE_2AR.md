@@ -1,18 +1,18 @@
-# S2ar — Catálogo diferido en el programa nativo
+# S2ar — Deferred catalogue in the native programme
 
-NORMAL conserva referencias pendientes en la cola, incluidos duplicados y contexto
-de álbum. El loader Media3 consulta el matcher Core cuando abre esa ocurrencia,
-valida cuenta/generation/KEY y publica la identidad de preview sin reemplazar la
-ocurrencia ni su source vivo. Cache acotada a identidades del programa; reset
-cancela requests y resultados tardíos. La UI de colecciones resuelve sólo la
-seleccionada inicialmente y conserva el resto para el servicio.
+NORMAL keeps pending references in the queue, including duplicates and album
+context. The Media3 loader queries the Core matcher when it opens that occurrence,
+validates account/generation/KEY and publishes the preview identity without replacing the
+occurrence or its live source. Cache bounded to the programme's identities; reset
+cancels requests and late results. The collections UI resolves only the
+initially selected one and keeps the rest for the service.
 
 DeviceCatalogSession2 + CollectionProfile4 + CatalogSearch2: HTTP/TLS8/0,
-95.019s. Runner exit0, APK/test APK/JVM56/lint normales sin CA temporal.
-WholeUI210/1616 + TypeScript pasan. Ver evidence/s2ar.json y
-`/tmp/soundsible-deferred-native.log`. Reinicio previo eliminó logs temporales
-antiguos; este bloque se ejecutó de nuevo desde el HDD.
+95.019s. Runner exit0, normal APK/test APK/JVM56/lint without temporary CA.
+WholeUI210/1616 + TypeScript pass. See evidence/s2ar.json and
+`/tmp/soundsible-deferred-native.log`. A previous restart deleted old temporary
+logs; this block was run again from the HDD.
 
-No paridad final: siguiente bloque debe aceptar continuación ante matcher404 y
-reintentos temporales. DJ rechaza pendientes antes de mutar workspace; no afirmar
-resolución DJ diferida. No aceptación física ni suites finales completas.
+No final parity: the next block must accept continuation on matcher 404 and
+temporary retries. DJ rejects pending entries before mutating the workspace; do not claim
+deferred DJ resolution. No physical acceptance or complete final suites.

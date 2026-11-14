@@ -1,32 +1,32 @@
-# S2w: letras temporizadas con programa nativo
+# S2w: timed lyrics with the native program
 
-LyricsPanel web pasa a ser adaptador de LyricsPanelView compartido, con current
-track/time, identidad library/saved y seek inyectados. Android usa el mismo panel
-sin importar stores ni audio web. Se abre desde Show lyrics en el menú de tres
-puntos del programa; podcasts no ofrecen letras. Ventana con scroller propio,
-seguimiento de línea y seek mediante IPC; cerrar no altera pausa/cola/posición.
+The web LyricsPanel becomes an adapter of the shared LyricsPanelView, with current
+track/time, library/saved identity and seek injected. Android uses the same panel
+without importing web stores or audio. It opens from Show lyrics in the three-dot
+menu of the program; podcasts do not offer lyrics. Window with its own scroller,
+line following and seek through IPC; closing does not change pause/queue/position.
 
-Consultas existentes /api/library/tracks/<id>/lyrics y /api/lyrics conservan
-contrato; aceptan AbortSignal. Panel cancela consulta/polling al cambiar canción,
-quedarse sin canción o desmontar. Android cierra al cambiar cuenta o cerrar el
-programa. Memo de metadata nativa evita volver a consultar al avanzar posición.
-La línea actual expone aria-current además de su highlight visual.
+The existing queries /api/library/tracks/<id>/lyrics and /api/lyrics keep their
+contract; they accept AbortSignal. The panel cancels query/polling when the song changes,
+when there is no song left or on unmount. Android closes it when switching account or closing the
+program. A memo of native metadata avoids querying again as the position advances.
+The current line exposes aria-current in addition to its visual highlight.
 
-UI completa **1.419 tests/164 archivos pasa**, /tmp/soundsible-s2w-ui-preview.log:
-web previo, posición nativa sin refetch, seek al runtime y cambio de cuenta aborta
-consulta pendiente. Assets Android preparados durante working tree desde 9bc041d;
-no artifact limpio de release. Fixture cachea letras sintéticas por track/usuario
-usando database real; no depende de LRCLIB vivo ni simula respuestas del bridge.
+Complete UI **1,419 tests/164 files passes**, /tmp/soundsible-s2w-ui-preview.log:
+previous web, native position without refetch, seek to the runtime and account switch aborts the
+pending query. Android assets prepared from the working tree since 9bc041d;
+not a clean release artifact. The fixture caches synthetic lyrics per track/user
+using the real database; it does not depend on live LRCLIB and does not simulate bridge responses.
 
-APK **dos casos HTTP/HTTPS pasan**, cero fallos/omitidos,
-/tmp/soundsible-s2w-native-preview.log: buscar letras de track adquirido, pulsar línea20s,
-comprobar posición autoritativa/highlight, pausa/keys/queueToken conservados,
-sin HTMLAudio, cerrar ventana y Sign out sin panel/programa anterior.
-Preview guardado usa metadata (no ID library), respeta sourceKind unverified y
-muestra plain sin líneas temporizadas; ambos protocolos aceptados. Motor cache
-real; proveedor LRCLIB vivo y combinaciones físicas no validadas. Fuentes finales
-preparadas desde 9bc041d con dirty=true. APK/test/unit/lint normal sin CA pasa al terminar el helper.
+APK **two HTTP/HTTPS cases pass**, zero failures/skipped,
+/tmp/soundsible-s2w-native-preview.log: search lyrics of an acquired track, tap the line at 20s,
+check authoritative position/highlight, pause/keys/queueToken kept,
+without HTMLAudio, close the window and Sign out without the previous panel/program.
+A saved preview uses metadata (not the library ID), respects sourceKind unverified and
+shows plain text without timed lines; both protocols accepted. Real engine
+cache; live LRCLIB provider and physical combinations not validated. Final sources
+prepared from 9bc041d with dirty=true. Normal APK/test/unit/lint without CA passes when the helper finishes.
 
-Continúa matriz completa: biblioteca/Discover/adquisición/importación/Settings,
-compartir/deeplinks/multidispositivo, DJ/Live/Auto, firma/update/publicación. Browser
-cuatro perfiles y regresión principal ampliada antes del PR final.
+The complete matrix continues: library/Discover/acquisition/import/Settings,
+sharing/deeplinks/multi-device, DJ/Live/Auto, signing/update/publishing. Browser
+four profiles and extended main regression before the final PR.

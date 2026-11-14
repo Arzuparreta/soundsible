@@ -1,4 +1,4 @@
-# S2ap — Radio y runway de Autoplay en traspasos
+# S2ap — Radio and Autoplay runway in handoffs
 
 NORMAL snapshots preserve imported queue lanes/sources/context metadata, podcast
 fields, musical identity and loudness facts. Radio carries active/seedId in the

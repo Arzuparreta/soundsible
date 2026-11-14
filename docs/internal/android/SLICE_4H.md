@@ -1,28 +1,28 @@
-# S4h — Autorización y lease de sala Live
+# S4h — Live room authorization and lease
 
-Host y guest esperan a que Socket.IO acepte la sala antes de abrir WHIP/WHEP.
-La espera se limita a10s y se puede cancelar al salir/reset; rechazar el socket
-no permite escuchar un stream público usando otra identidad de sala. Los
-callbacks y las respuestas HTTP conservan ownership de generation/peer.
+Host and guest wait for Socket.IO to accept the room before opening WHIP/WHEP.
+The wait is limited to 10s and can be cancelled on leave/reset; rejecting the socket
+does not allow listening to a public stream using another room identity. The
+callbacks and the HTTP responses keep ownership of generation/peer.
 
-Un guest que pierde su socket durante10s termina la reproducción, retira el peer
-y conserva el retry manual. Su estado conectado requiere tanto media como socket.
-El host tiene el mismo límite de pérdida de lease. Los controles de fixture sólo
-desconectan sockets reales de su sala/rol, sin exponer esta acción en producción.
+A guest that loses its socket for 10s ends playback, removes the peer
+and keeps the manual retry. Its connected state requires both media and socket.
+The host has the same lease loss limit. The fixture controls only
+disconnect real sockets of their room/role, without exposing this action in production.
 
-La aceptación ampliada comprueba un guest con sala inexistente pero WHEP válido:
-no debe decodificar PCM. Después escucha la sala correcta y ejecuta los controles
-y la recuperación anteriores. Host y guest pierden sus sockets con Activity
-cerrada; el audio Live termina, el host conserva el programa local y Community
-retira la sala dentro de su gracia. Un test polling-only deja35s de silencio y
-exige cero desconexiones, incluyendo el ping real del servidor a20s.
+The extended acceptance checks a guest with a nonexistent room but a valid WHEP:
+it must not decode PCM. Then it listens to the correct room and runs the earlier controls
+and recovery. Host and guest lose their sockets with the Activity
+closed; the Live audio ends, the host keeps the local program and Community
+removes the room within its grace period. A polling-only test leaves 35s of silence and
+requires zero disconnections, including the real server ping at 20s.
 
-Validación: Host4/Listener2 pasan en el combinado9/2; los fallos fueron una
-carrera del test UI al enviar chat antes de terminar el cambio de título y su
-sala sin limpiar contaminando Polling. Corregidos sólo los tests, UI2/Polling1
-pasan3/0, runner exit0 y normal APK/test APK/JVM56/lint sin CA. Producto
-idéntico entre ambas ejecuciones. Ver evidence/s4h.json; no afirmar9/0 conjunto.
-Todavía no es Live completo. Falta proceso/resume409, reset durante creación y
-agotamiento de recovery. Un proceso muerto puede dejar ocupado el publisher en
-MediaMTX mientras Core resume rota sus tokens: validar esta continuidad antes
-de dar por implementado resume. No publicar ni integrar; revisión manual en PR.
+Validation: Host4/Listener2 pass in the combined 9/2; the failures were a
+race in the UI test when sending chat before the title change finished and its
+room not being cleaned up, contaminating Polling. Only the tests were fixed; UI2/Polling1
+pass 3/0, runner exit0 and normal APK/test APK/JVM56/lint without CA. Product
+identical between both runs. See evidence/s4h.json; do not claim a joint 9/0.
+This is not full Live yet. Missing: process/resume409, reset during creation and
+recovery exhaustion. A dead process can leave the publisher occupied in
+MediaMTX while Core resume rotates its tokens: validate this continuity before
+considering resume implemented. Do not publish or merge; manual review in the PR.

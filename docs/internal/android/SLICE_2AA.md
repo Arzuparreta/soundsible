@@ -1,74 +1,74 @@
-# S2aa: eliminar un archivo adquirido desde Android
+# S2aa: delete an acquired file from Android
 
-Implementación conectada al menú de tres puntos, con confirmación y traducciones
-compartidas. Cancelar no escribe. El controlador coalesce por cuenta/ID y exige
-DELETE seguido de un snapshot privado no-store que pruebe ausencia. Un 404 sólo
-permite recuperar una retirada anterior tras comprobar de nuevo esa ausencia.
-Las respuestas de otra cuenta no modifican UI, programa ni copias.
+Implementation connected to the three-dot menu, with confirmation and shared
+translations. Cancelling does not write. The controller coalesces by account/ID and requires
+DELETE followed by a private no-store snapshot that proves absence. A 404 only
+allows recovering an earlier removal after checking that absence again.
+Responses from another account do not modify UI, programme or copies.
 
-`retireSource` valida UID/generación y retira todas las ocurrencias locales por
-ID, conservando previews, keys de supervivientes e identidad del programa.
-Media3 conserva posición/pausa cuando la actual sobrevive, selecciona sucesor
-cuando se retira la actual y cierra modos/programa cuando queda vacío. El bridge
-espera a observar la retirada efectiva. Radio/autoplay invalidan solicitudes
-pendientes y excluyen fuentes locales retiradas; la aceptación específica de una
-respuesta de planner deliberadamente retrasada sigue pendiente.
+`retireSource` validates UID/generation and removes all local occurrences by
+ID, keeping previews, keys of survivors and programme identity.
+Media3 keeps position/pause when the current one survives, selects a successor
+when the current one is removed and closes modes/programme when it becomes empty. The bridge
+waits to observe the effective removal. Radio/autoplay invalidate pending
+requests and exclude removed local sources; the specific acceptance of a
+deliberately delayed planner response is still pending.
 
-La copia se retira después de confirmar el motor. El store marca el trabajo
-invalidado antes de borrar archivos, limpia todas las referencias de playlists y
-conserva errores de almacenamiento para recuperación. No se anuncia éxito si
-falla el filesystem. El gestor muestra el error de retirada y permite repetir
-«Eliminar de este dispositivo», sin ofrecer preparación sobre un residuo roto.
-Las copias borradas remotamente siguen conservándose y son elegibles para
-retirada desde el filtro local; no se añade eviction automático.
+The copy is removed after the engine confirms. The store marks the work
+invalidated before deleting files, cleans all playlist references and
+keeps storage errors for recovery. Success is not announced if
+the filesystem fails. The manager shows the removal error and allows repeating
+"Remove from this device", without offering preparation over a broken leftover.
+Copies deleted remotely are still kept and are eligible for
+removal from the local filter; no automatic eviction is added.
 
-La adquisición considera activos sólo pending/downloading: un recibo completado
-no bloquea volver a adquirir una canción retirada. Los guards de cuenta y
-confirmación durable siguen vigentes.
+Acquisition considers only pending/downloading as active: a completed receipt
+does not block acquiring a removed song again. The account and
+durable confirmation guards are still in force.
 
-[Registro de evidencia](evidence/s2aa.json).
+[Evidence record](evidence/s2aa.json).
 
-## Evidencia y límites
+## Evidence and limits
 
-UI completa: 1.465 tests / 172 archivos pasan en
-`/tmp/soundsible-s2aa-final-ui.log`. Backend lifecycle: 12 pasan en
-`/tmp/soundsible-s2aa-lifecycle.log`. JVM nativo: 17 pasan en
-`/tmp/soundsible-s2aa-native-unit.log`, incluidos rangos de retirada y filesystem
-real con eliminación fallida/recuperación. El helper integration ahora ejecuta
-`:app:testDebugUnitTest` además de APK/test APK/lint tras retirar la CA temporal;
-ensamblar el APK de instrumentación no sustituye ejecutar los tests JVM.
+Full UI: 1,465 tests / 172 files pass in
+`/tmp/soundsible-s2aa-final-ui.log`. Backend lifecycle: 12 pass in
+`/tmp/soundsible-s2aa-lifecycle.log`. Native JVM: 17 pass in
+`/tmp/soundsible-s2aa-native-unit.log`, including removal ranges and a real filesystem
+with failed deletion/recovery. The integration helper now runs
+`:app:testDebugUnitTest` in addition to APK/test APK/lint after removing the temporary CA;
+assembling the instrumentation APK does not replace running the JVM tests.
 
-Cuatro casos instrumentados HTTP/HTTPS pasan en
-`/tmp/soundsible-s2aa-recovery-native.log`: pipeline real de adquisición, archivo
-compartido entre cuentas, playlist con referencias duplicadas, cancelación,
-preview pausado a 20 s conservado, sucesor, cierre de última canción, copia y
-filesystem fallido/recuperable. Assets preparados desde 5ddc166 con dirty=true.
-APK/test APK/lint normales pasan después de retirar la CA temporal.
+Four instrumented HTTP/HTTPS cases pass in
+`/tmp/soundsible-s2aa-recovery-native.log`: real acquisition pipeline, file
+shared between accounts, playlist with duplicate references, cancellation,
+paused preview at 20 s kept, successor, closing of the last song, copy and
+failed/recoverable filesystem. Assets prepared from 5ddc166 with dirty=true.
+Normal APK/test APK/lint pass after removing the temporary CA.
 
-La extensión de copia borrada por otro cliente pasó HTTP/HTTPS en
-`/tmp/soundsible-s2aa-final-native.log`, pero el conjunto falló dos casos de
-apertura del gestor. El aislamiento posterior identifica TypeError de WebView:
-progress.value=undefined no es un double finito; HTTP falla y HTTPS pasa según
-el momento en que llega el tamaño. Log `/tmp/soundsible-s2aa-manager-diagnostic.log`.
-Ahora el tamaño desconocido renderiza progress sin value/max, y el conocido usa
-números. Una prueba con el setter estricto falla con la fuente anterior y pasa
-con la corrección (`/tmp/soundsible-s2aa-progress-before.log`). La repetición de
-los cuatro casos está en `/tmp/soundsible-s2aa-progress-native.log`, assets desde
-37d1669 dirty=true: cuatro casos pasan, cero fallos/errores/omisiones.
-APK normal, test APK, JVM17 y lint pasan después de retirar la CA temporal. Repetir principal completa
-más dos fases offline desde commit limpio. Ningún resultado acredita escucha
-física ni paridad completa. Después continuar Library/Discover/Settings, DJ,
-Live, Android Auto, firma y actualización; PR/main/alpha sólo al cerrar gates.
+The extension for a copy deleted by another client passed HTTP/HTTPS in
+`/tmp/soundsible-s2aa-final-native.log`, but the set failed two cases of
+opening the manager. The later isolation identifies a WebView TypeError:
+progress.value=undefined is not a finite double; HTTP fails and HTTPS passes depending on
+when the size arrives. Log `/tmp/soundsible-s2aa-manager-diagnostic.log`.
+Now an unknown size renders progress without value/max, and a known one uses
+numbers. A test with the strict setter fails with the previous source and passes
+with the fix (`/tmp/soundsible-s2aa-progress-before.log`). The rerun of
+the four cases is in `/tmp/soundsible-s2aa-progress-native.log`, assets from
+37d1669 dirty=true: four cases pass, zero failures/errors/skips.
+Normal APK, test APK, JVM17 and lint pass after removing the temporary CA. Repeat the full main suite
+plus two offline phases from a clean commit. No result certifies physical
+listening or full parity. Then continue with Library/Discover/Settings, DJ,
+Live, Android Auto, signing and update; PR/main/alpha only when the gates are closed.
 
 
-## Recuperación local conserva la biblioteca online
+## Local recovery keeps the online library
 
-La actualización del error de filesystem relee sólo el estado offline. La
-restauración de usuario/biblioteca local queda reservada al arranque sin red;
-no sustituir snapshot online ni marcar station inaccesible por un error local.
-OfflineRemovalTest exige ausencia del aviso de station inaccesible y presencia
-del preview guardado original tras el error. Dos casos HTTP/HTTPS pasan dentro
-del targeted6 de /tmp/soundsible-s2ab-native.log, assets4e04083 dirty=true;
-APK/test APK/JVM17/lint normales sin CA pasan. UI1465/172 pasa en
-/tmp/soundsible-s2aa-online-recovery-ui.log. No atribuir esta corrección posterior
-a la principal limpia dc29b73.
+The update after the filesystem error rereads only the offline state. The
+restoration of the local user/library is reserved for startup without network;
+do not replace the online snapshot or mark the station as unreachable because of a local error.
+OfflineRemovalTest requires absence of the station-unreachable notice and presence
+of the original saved preview after the error. Two HTTP/HTTPS cases pass within
+targeted6 of /tmp/soundsible-s2ab-native.log, assets4e04083 dirty=true;
+normal APK/test APK/JVM17/lint without CA pass. UI1465/172 passes in
+/tmp/soundsible-s2aa-online-recovery-ui.log. Do not attribute this later fix
+to the clean main suite dc29b73.

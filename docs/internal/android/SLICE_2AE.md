@@ -1,169 +1,169 @@
-# S2ae: Discover y entidades externas
+# S2ae: Discover and external entities
 
-Continuación después de Apariencia. Inventario previo: SearchDiscovery usa
-/api/discovery/music/feed, secciones artistas/álbumes y canciones limitadas,
-revalidación acotada y feedback. CatalogSearch Android sólo busca track y
-library_track; no considerar esa búsqueda Discover completo.
+Continuation after Appearance. Prior inventory: SearchDiscovery uses
+/api/discovery/music/feed, artist/album sections and limited songs,
+bounded revalidation and feedback. Android CatalogSearch only searches track and
+library_track; do not consider that search to be complete Discover.
 
-Portar feed y búsqueda all con vistas reutilizables e identidad/cancelación
-inyectadas, sin stores de audio web. Fichas Artist/Album usan contratos
-ArtistProfile/AlbumProfile y navegación local reversible, incluyendo candidates
-ambiguos, álbumes/singles/related y lista de canciones. Preferir extraer las
-vistas/transformaciones existentes a duplicar etiquetas y reglas del producto.
+Port feed and `all` search with reusable views and injected identity/cancellation,
+without web audio stores. Artist/Album pages use the
+ArtistProfile/AlbumProfile contracts and reversible local navigation, including ambiguous
+candidates, albums/singles/related and song list. Prefer extracting the
+existing views/transformations over duplicating product labels and rules.
 
-Acciones distintas: bookmark de entidad sólo /api/library/saved-entities; guardar
-canciones conserva identidad compartida; adquirir canciones y colecciones usa
-jobs existentes, muestra cancel/retry/progreso y actualiza snapshot confirmado.
-Play/shuffle debe resolver una cola de contexto en transporte nativo, mantener
-ocurrencias y prioridad manual. Álbumes homónimos y artista de compilación no se
-fusionan por texto. Volver recupera consulta/sección/scroll. Menús siguen siendo
-el lugar de Disponible sin conexión para música adquirida.
+Separate actions: entity bookmark only /api/library/saved-entities; saving
+songs keeps shared identity; acquiring songs and collections uses
+existing jobs, shows cancel/retry/progress and updates the confirmed snapshot.
+Play/shuffle must resolve a context queue in native transport, keep
+occurrences and manual priority. Albums with the same name and compilation artist are not
+merged by text. Going back restores query/section/scroll. Menus remain
+the place for Available offline for acquired music.
 
-Aceptar rechazo parcial de proveedor, respuesta pendiente de otra cuenta,
-cancel/unmount, colección vacía y recovery; API y preferencias deben quedar
-acotadas a origen/cuenta. Tests UI + browser4 para extracciones compartidas;
-APK HTTP/HTTPS con contratos Core reales y fixture determinista de proveedor,
-sin atribuir esto a proveedores vivos. Aceptación de proveedor real separada.
-Regresión principal ampliada sólo después de preparar assets correspondientes;
-no cambiar fuentes nativas del artifact que todavía se está verificando.
+Accept partial provider rejection, pending response from another account,
+cancel/unmount, empty collection and recovery; API and preferences must stay
+scoped to origin/account. UI tests + browser4 for shared extractions;
+HTTP/HTTPS APK with real Core contracts and a deterministic provider fixture,
+without attributing this to live providers. Real provider acceptance is separate.
+Main regression extended only after preparing the corresponding assets;
+do not change native sources of the artifact that is still being verified.
 
-Settings restantes, DJ, Live, Android Auto y firma/update siguen pendientes.
-Mantener gates y autorización de continuar hasta PR/main/release, sin alpha
-parcial ni cierre de turno por slice.
-
-
-## Base implementada, conexión de pantallas pendiente
-
-CatalogSearch delega las acciones existentes a createNativeCatalogActions: mismo
-resolve/save/remove/acquire, scope cancelable, identidad confirmada y refresh de
-la cuenta que envió la mutación. Las ocho pruebas existentes pasan sin cambiar
-su contrato de búsqueda. Todavía filtra canciones; no declarar búsqueda all.
-
-SearchDiscoveryView extrae el layout con navegación/status/song renderer
-inyectados, sin stores web. Aún no conectado al adaptador web ni a Android.
-createNativeDiscoveryFeed preserva sección explorada y limita revalidación a12
-reintentos; aborta y descarta otro perfil incluso si el proveedor ignora abort.
-Helpers catalogEntity preservan IDs/Unicode/crédito de compilación; las copias
-no implican bookmark ni viceversa. resolveNativeCatalogProgram conserva orden
-y ocurrencias, max3 resoluciones simultáneas; selección ausente rechaza en vez
-de reproducir otra canción, cancel espera settlement y no publica cola antigua.
-
-Dirigido19/5 pasa en /tmp/soundsible-s2ae-extraction-ui.log. No aceptación Native
-S2ae ni feed/fichas end to end todavía. Pendientes conectar vistas, navegación
-reversible, artistas/álbumes/candidates, acciones/jobs y fixtures/instrumentación
-HTTP/HTTPS. Native57+restart2 de Apariencia sigue pendiente.
+Remaining Settings, DJ, Live, Android Auto and signing/update are still pending.
+Keep gates and the authorization to continue up to PR/main/release, without a partial
+alpha or ending the turn per slice.
 
 
-Base de fichas: nativeEntitySubject sólo acepta rutas locales de artista/álbum,
-conserva provider/local ID y crédito; nativeProfileBookmark usa ID resuelto sin
-reemplazar uno explícito. createNativeEntityProfile cancela edición/cuenta/offline
-y ofrece retry. ArtistDiscoveryView comparte layout discografía con links/rows
-inyectados; aún no conectado al adaptador web ni a Native. Cuatro casos pasan en
-/tmp/soundsible-s2ae-profile-view-ui.log. No equivale a recorridos de ficha reales.
+## Base implemented, screen connection pending
 
-## Pantallas conectadas; validación ampliada en curso
+CatalogSearch delegates the existing actions to createNativeCatalogActions: same
+resolve/save/remove/acquire, cancelable scope, confirmed identity and refresh of
+the account that sent the mutation. The eight existing tests pass without changing
+their search contract. It still filters songs; do not declare `all` search.
 
-Discover comparte SearchDiscoveryView con la web: feed, secciones, artistas y
-álbumes, status discreto y canciones. La búsqueda Android incluye explícitamente
-track/library_track/artist/album; no se ha implementado todo el catálogo externo
-(playlist incluida), por lo que no declarar búsqueda `all` ni paridad completa.
-Artist/Album tienen navegación reversible, candidatos, discografía, cola de
-contexto nativa y menús de canciones compartidos con Library. Las acciones de
-bookmark, guardar canciones, adquisición y copia offline permanecen separadas.
-CollectionDownloadView y collectionState se comparten con web, sin sus stores
-de reproducción. El controlador Android usa jobs Core confirmados, scope
-abortable, revisión/resume y cancel/retry; rechaza otro proveedor/trabajo y
-respuestas viejas de polling. La confirmación pendiente se cierra al perder su
-cuenta; guardar canciones no adquiere archivos ni marca la entidad.
+SearchDiscoveryView extracts the layout with injected navigation/status/song renderer,
+without web stores. Not yet connected to the web adapter or to Android.
+createNativeDiscoveryFeed preserves the explored section and limits revalidation to12
+retries; it aborts and discards another profile even if the provider ignores abort.
+catalogEntity helpers preserve IDs/Unicode/compilation credit; copies
+do not imply bookmark or vice versa. resolveNativeCatalogProgram keeps order
+and occurrences, max3 simultaneous resolutions; a missing selection rejects instead
+of playing another song, cancel waits for settlement and does not publish an old queue.
 
-UI completa:1516/187 pasan (/tmp/soundsible-s2ae-full-ui.log). Seis casos nuevos
-cubren recibos incorrectos, cancel de artista, cambio de cuenta al confirmar,
-poll tardío, resume ajeno y recuperación de error temporal. La fixture Core
-actual valida perfiles/discografía reales contra proveedor sintético: pytest1
-pasa (/tmp/soundsible-s2ae-provider-fixture.log). No demuestra proveedor vivo.
+Targeted19/5 passes in /tmp/soundsible-s2ae-extraction-ui.log. No Native
+S2ae acceptance or end-to-end feed/pages yet. Pending: connect views, reversible
+navigation, artists/albums/candidates, actions/jobs and HTTP/HTTPS
+fixtures/instrumentation. Native57+restart2 of Appearance is still pending.
 
-En ejecución: Chromium completo; después WebKit completo secuencial. APK
-preparada dirty de desarrollo, integración dirigida CollectionProfileTest y
-CatalogSearchTest HTTP/TLS en /tmp/soundsible-s2ae-profile-native.log. No aceptar
-esos recorridos hasta inspeccionar resultados, ni sustituir aún principal57.
-Sigue pendiente adquisición/revisión end to end de colecciones y aceptación
-ampliada; Settings/DJ/Live/Auto/firma/update no están completos. Continuar.
 
-Primera integración dirigida:4 fallos; no aceptación. Dos perfiles fallaron por
-fixture con ID genérico en lugar de deezer_artist_id/deezer_album_id. Dos casos
-CatalogSearch encontraron regresión real: el menú compartido omitía save/remove
-al resolver un preview. Fixture corregida y comprobada por pytest1; menú añade
-intenciones de catálogo a las acciones compartidas, con scope de consulta/ruta.
-Prueba de regresión pasa; dirigido18/2 pasa. UI1516/187 vuelve a pasar antes de
-sumar esa prueba. CollectionDownloadView tiene2 casos de decisiones/busy/cancel.
-Chromium completo278/66 pasa; WebKit en curso. Nueva integración dirigida en
-/tmp/soundsible-s2ae-profile-native-fixed.log; fuentes/assets congeladas durante
-su ejecución. No atribuir la primera fallida al producto como validación.
+Pages base: nativeEntitySubject only accepts local artist/album routes,
+keeps provider/local ID and credit; nativeProfileBookmark uses the resolved ID without
+replacing an explicit one. createNativeEntityProfile cancels on edit/account/offline
+and offers retry. ArtistDiscoveryView shares the discography layout with injected
+links/rows; not yet connected to the web adapter or to Native. Four cases pass in
+/tmp/soundsible-s2ae-profile-view-ui.log. This is not equivalent to real page walkthroughs.
 
-Regresión de adquisición encontrada: el preview cacheado de una resolución no
-consultaba su identidad YouTube contra el nuevo snapshot adquirido. Core sí
-produjo archivo/álbum/posición reales; Play desde la ficha seguía enviando el
-preview. Prueba nueva reproduce el fallo y pasa tras promover por trackKeys,
-sin inferir propiedad por título. Holdings de ficha usan ese mismo resolver y
-no muestran «0 not found» cuando el trabajo no describe faltantes.
-UI completa1520/188 pasa (/tmp/soundsible-s2ae-promotion-full-ui.log).
-APK preparada actualizada y6casos HTTP/TLS en curso en
-/tmp/soundsible-s2ae-promotion-native.log. Las ejecuciones anteriores de6casos
-fallaron; no presentarlas como aceptación. Limpieza de fixture restaura guardados
-nuevos incluso si la adquisición añadió una identidad lib, conservando los
-existentes. Browser4 final compartido: Chromium278/66, WebKit269/75 pasan;
-correcciones posteriores sólo afectan módulos de la entrada Android/tests.
-Pendiente adicional: revisión Core end to end y holdings de adquisición sin
-resolución previa deben tener aceptación propia, no asumir el camino cacheado.
+## Screens connected; extended validation in progress
 
-## Aceptación dirigida de fichas/guardar/adquirir/navegar
+Discover shares SearchDiscoveryView with the web: feed, sections, artists and
+albums, discreet status and songs. Android search explicitly includes
+track/library_track/artist/album; the whole external catalog has not been implemented
+(playlist included), so do not declare `all` search or full parity.
+Artist/Album have reversible navigation, candidates, discography, native context
+queue and song menus shared with Library. The actions of
+bookmark, saving songs, acquisition and offline copy remain separate.
+CollectionDownloadView and collectionState are shared with web, without their
+playback stores. The Android controller uses confirmed Core jobs, abortable
+scope, review/resume and cancel/retry; it rejects another provider/job and
+old polling responses. The pending confirmation is closed when its
+account is lost; saving songs does not acquire files or mark the entity.
 
-Resultado final:6 tests HTTP/TLS pasan,0fallos/errores/omitidos, en
-/tmp/soundsible-s2ae-final-directed-native.log. XML dedicado en
+Full UI:1516/187 pass (/tmp/soundsible-s2ae-full-ui.log). Six new cases
+cover incorrect receipts, artist cancel, account change while confirming,
+late poll, foreign resume and recovery from a temporary error. The current Core
+fixture validates real profiles/discography against a synthetic provider: pytest1
+passes (/tmp/soundsible-s2ae-provider-fixture.log). It does not demonstrate a live provider.
+
+Running: full Chromium; then full WebKit sequentially. Development APK
+prepared dirty, targeted integration CollectionProfileTest and
+CatalogSearchTest HTTP/TLS in /tmp/soundsible-s2ae-profile-native.log. Do not accept
+those walkthroughs until the results are inspected, and do not replace main57 yet.
+End-to-end acquisition/review of collections and extended acceptance are still pending;
+Settings/DJ/Live/Auto/signing/update are not complete. Continue.
+
+First targeted integration:4 failures; not accepted. Two profiles failed because of a
+fixture with a generic ID instead of deezer_artist_id/deezer_album_id. Two
+CatalogSearch cases found a real regression: the shared menu omitted save/remove
+when resolving a preview. Fixture fixed and checked by pytest1; the menu adds
+catalog intents to the shared actions, with query/route scope.
+Regression test passes; targeted18/2 passes. UI1516/187 passes again before
+adding that test. CollectionDownloadView has2 cases for decisions/busy/cancel.
+Full Chromium278/66 passes; WebKit in progress. New targeted integration in
+/tmp/soundsible-s2ae-profile-native-fixed.log; sources/assets frozen during
+its run. Do not attribute the first failed one to the product as validation.
+
+Acquisition regression found: the cached preview of a resolution did not
+check its YouTube identity against the new acquired snapshot. Core did
+produce a real file/album/position; Play from the page kept sending the
+preview. A new test reproduces the failure and passes after promoting by trackKeys,
+without inferring ownership by title. Page holdings use that same resolver and
+do not show "0 not found" when the job does not describe missing items.
+Full UI1520/188 passes (/tmp/soundsible-s2ae-promotion-full-ui.log).
+Prepared APK updated and6 HTTP/TLS cases in progress in
+/tmp/soundsible-s2ae-promotion-native.log. The previous runs of6 cases
+failed; do not present them as acceptance. Fixture cleanup restores new
+saves even if the acquisition added a lib identity, keeping the
+existing ones. Final shared Browser4: Chromium278/66, WebKit269/75 pass;
+later fixes only affect modules of the Android entry/tests.
+Additional pending item: end-to-end Core review and acquisition holdings without
+a prior resolution must have their own acceptance; do not assume the cached path.
+
+## Targeted acceptance of pages/save/acquire/navigate
+
+Final result:6 HTTP/TLS tests pass,0 failures/errors/skipped, in
+/tmp/soundsible-s2ae-final-directed-native.log. Dedicated XML in
 android/build/integration-targeted/com.soundsible.android.CollectionProfileTest_com.soundsible.android.CatalogSearchTest/;
-no reemplaza integración principal57/restart2. APK normal/testAPK, JVM17 y lint
-pasan después de retirar CA temporal. Artifact de desarrollo preparado dirty;
-no release ni aceptación acústica.
+it does not replace main integration57/restart2. Normal APK/testAPK, JVM17 and lint
+pass after removing the temporary CA. Development artifact prepared dirty;
+not a release or acoustic acceptance.
 
-Cuatro recorridos de colección prueban artista → discografía real → álbum,
-play nativo, guardar explícito sin adquirir, adquisición Core/pipeline/archivo
-con álbum y posición correctos, conservación de programa durante adquisición,
-nueva orden Play sobre fuente local, volver por fichas y consulta/scroll del
-contenedor Android. Dos recorridos CatalogSearch prueban save/remove, provider
-failure/retry y cuentas después de esos casos. Menús de resultados resueltos
-conservan intenciones propias junto con acciones compartidas; holdings usan
-identidades confirmadas y caché promovida. Lista sintética larga permite scroll
-real; los tests seleccionan controles visibles, no la búsqueda oculta.
+Four collection walkthroughs test artist → real discography → album,
+native play, explicit save without acquiring, Core/pipeline/file acquisition
+with correct album and position, keeping the program during acquisition,
+new Play order over the local source, going back through pages and query/scroll of the
+Android container. Two CatalogSearch walkthroughs test save/remove, provider
+failure/retry and accounts after those cases. Menus of resolved results
+keep their own intents together with shared actions; holdings use
+confirmed identities and the promoted cache. A long synthetic list allows real
+scrolling; the tests select visible controls, not the hidden search.
 
-UI completa1522/188 pasa; pytest fixture1 pasa. Browser4 compartido pasa278/66 y
-269/75. S2ae continúa pendiente de revisión/cancel/retry Core end to end y
-adquisición sin resolución previa en APK, además del resto del catálogo externo.
-No tratar seis casos dirigidos como matriz completa. Settings siguientes tienen
-plan S2AF; adaptador haptic preparado separado, todavía no conectado al APK.
+Full UI1522/188 passes; pytest fixture1 passes. Shared Browser4 passes278/66 and
+269/75. S2ae is still pending end-to-end Core review/cancel/retry and
+acquisition without a prior resolution in the APK, in addition to the rest of the external catalog.
+Do not treat six targeted cases as a full matrix. The following Settings have
+plan S2AF; haptic adapter prepared separately, not yet connected to the APK.
 
-## Revisión Core en curso
+## Core review in progress
 
-CollectionReviewTest añade ocho casos HTTP/TLS: elección de versión con confianza
-baja, omisión explícita, cancelación durante resolución y fallo real de adquisición
-con reintento. El pytest de fixture recorre Core real hasta needs_review, decision,
-resume y archivo adquirido; pasa1 en /tmp/soundsible-s2ae-review-core-fixture.log.
-El primer run Native /tmp/soundsible-s2ae-review-native.log NO está aceptado:
-encuentra que adquirir sin Save/preview anterior no enlaza el catálogo con el
-archivo. Core sólo amplía identidades de canciones ya guardadas. La corrección
-UI enlaza identity_keys de filas completed/existing de un job confirmado al
-matched_track_id presente en la biblioteca; no crea guardados ni usa títulos.
-Prueba dirigida de navegación, retirada y cambio de cuenta incluida. Reintento
-esperaba incorrectamente failed a nivel de job; Core usa partial para filas failed.
-Corregir esa expectativa y repetir el recorrido antes de aceptar el bloque.
-Fuentes Native/fixtures/assets permanecen congeladas hasta terminar este run.
+CollectionReviewTest adds eight HTTP/TLS cases: version choice with low
+confidence, explicit skip, cancellation during resolution and real acquisition failure
+with retry. The fixture pytest walks real Core up to needs_review, decision,
+resume and acquired file; it passes1 in /tmp/soundsible-s2ae-review-core-fixture.log.
+The first Native run /tmp/soundsible-s2ae-review-native.log is NOT accepted:
+it finds that acquiring without a previous Save/preview does not link the catalog with the
+file. Core only extends identities of songs that are already saved. The UI
+fix links identity_keys of completed/existing rows of a confirmed job to the
+matched_track_id present in the library; it does not create saves or use titles.
+Targeted test of navigation, removal and account change included. Retry
+incorrectly expected failed at job level; Core uses partial for failed rows.
+Fix that expectation and repeat the walkthrough before accepting the block.
+Native sources/fixtures/assets stay frozen until this run finishes.
 
-Repetición aceptada: /tmp/soundsible-s2ae-review-links-native.log termina0;
-16 tests, cero fallos/errores/omisiones (14 de review/fichas/búsqueda y2 feedback).
-XML propio en integration-targeted/com.soundsible.android.CollectionReviewTest_com.soundsible.android.CollectionProfileTest_com.soundsi/.
-APK/test APK/JVM17/lint normales pasan y CA temporal retirada. Review elegido,
-omitido, cancelado y reintentado recorren Core real HTTP/TLS; adquirir sin guardado
-previo termina en Play local. Enlace por identity_keys/matched_track_id confirmado,
-retirada de fuente y cambio de cuenta cubiertos en UI. UI1526/189 antes de Learning;
-Learning/diagnóstico posteriores se validan por separado y no estaban en esa APK.
-El primer run fallido queda diagnóstico, no aceptación. Principal limpia57/restart2
-anterior sigue vigente hasta repetir la ampliada desde commit limpio.
+Accepted repeat: /tmp/soundsible-s2ae-review-links-native.log ends with0;
+16 tests, zero failures/errors/skips (14 for review/pages/search and2 feedback).
+Own XML in integration-targeted/com.soundsible.android.CollectionReviewTest_com.soundsible.android.CollectionProfileTest_com.soundsi/.
+Normal APK/test APK/JVM17/lint pass and temporary CA removed. Review chosen,
+skipped, cancelled and retried walk real Core HTTP/TLS; acquiring without a previous
+save ends in local Play. Link by identity_keys/matched_track_id confirmed,
+source removal and account change covered in UI. UI1526/189 before Learning;
+later Learning/diagnostics are validated separately and were not in that APK.
+The first failed run remains a diagnosis, not acceptance. The previous clean main57/restart2
+remains in force until the extended one is repeated from a clean commit.

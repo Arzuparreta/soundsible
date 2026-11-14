@@ -1,24 +1,24 @@
-# S2ak — Personas y permisos administrativos nativos
+# S2ak — Native people and administrative permissions
 
-Android ofrece Personas sólo a administradores dentro de Settings. Reutiliza
-UsersPanel web con un proveedor explícito de cuenta y ownership, sin activar el
-store de reproducción web. Lista usuarios, crea cuentas y enlaces de invitación,
-fija contraseñas, habilita/deshabilita y elimina con confirmación como la web.
+Android offers People only to administrators within Settings. It reuses the
+web UsersPanel with an explicit account and ownership provider, without enabling the
+web playback store. It lists users, creates accounts and invitation links,
+sets passwords, enables/disables and deletes with confirmation like the web.
 
-Las operaciones comprueban cuenta/ownership y vida del panel antes de iniciarse,
-tras diálogos y antes de publicar respuestas o copiar una invitación. Desmontar
-el panel invalida respuestas; la generación del bridge sigue protegiendo el
-transporte. Si la conexión deja de estar disponible los controles Android quedan
-deshabilitados. El servidor mantiene la autorización administrativa real.
+The operations check account/ownership and panel lifetime before starting,
+after dialogs and before publishing responses or copying an invitation. Unmounting
+the panel invalidates responses; the bridge generation still protects the
+transport. If the connection stops being available the Android controls become
+disabled. The server keeps the real administrative authorization.
 
-UI completa209/1610 y TypeScript pasan. UsersPanel tests prueban proveedor nativo,
-miembro sin solicitudes, confirmación tardía sin DELETE e invite tardío sin copiar.
-UsersTest HTTP/TLS comprueba el panel real sobre cuenta admin persistida, creación
-con PasswordFields, invitación, disabled confirmado por Core y navegación/API403
-para miembro. Native2/0 HTTP/TLS (25.67s), runner exit0 + APK/test APK/JVM56/lint normales.
-Evidencia en evidence/s2ak.json. Reset password/delete conservan acciones
-compartidas y guards unitarios; no todas se accionan en esta aceptación Native.
+Full UI 209/1610 and TypeScript pass. UsersPanel tests check the native provider,
+a member without requests, a late confirmation without DELETE and a late invite without copying.
+UsersTest HTTP/TLS checks the real panel on a persisted admin account, creation
+with PasswordFields, invitation, disabled confirmed by Core and navigation/API 403
+for a member. Native2/0 HTTP/TLS (25.67s), runner exit0 + normal APK/test APK/JVM56/lint.
+Evidence in evidence/s2ak.json. Reset password/delete keep shared actions
+and unit guards; not all of them are triggered in this Native acceptance.
 
-No equivale a controles multimedia entre dispositivos: ese contrato requiere un
-socket y dueño nativo en PlaybackService, además del listado/acciones en Settings.
-Browser4 completo antes de PR cubre también el cambio del panel compartido web.
+It is not equivalent to media controls between devices: that contract requires a
+socket and a native owner in PlaybackService, in addition to the listing/actions in Settings.
+Full Browser4 before the PR also covers the change to the shared web panel.

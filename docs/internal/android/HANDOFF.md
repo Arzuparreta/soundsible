@@ -1,112 +1,112 @@
-# Traspaso del port Android
+# Android port handoff
 
-Estado vigente y forma de trabajar. Lo superado está en
-[HANDOFF_HISTORY](HANDOFF_HISTORY.md); los resultados de cada bloque, en
-[EVIDENCE](EVIDENCE.md). Plan y matriz: [PORT_PLAN](PORT_PLAN.md); publicación:
+Current state and way of working. What has been superseded is in
+[HANDOFF_HISTORY](HANDOFF_HISTORY.md); the results of each block, in
+[EVIDENCE](EVIDENCE.md). Plan and matrix: [PORT_PLAN](PORT_PLAN.md); publication:
 [RELEASE_GATES](RELEASE_GATES.md).
 
-## Decisiones vigentes
+## Current decisions
 
-- Paridad integrada en `main` mediante PR #300, con checks completos aprobados.
-  Distribución integrada mediante PR #304 y alpha publicada. El 2026-10-07 el
-  usuario autorizó clave nueva y merge/publicación tras cerrar todos los gates.
-  No publicar si la APK firmada o la aceptación final fallan.
-- 2026-10-09: la APK sale en la release `v*` de cada versión, con el resto de
-  artefactos, no como prerelease `android-alpha/*` aparte (decisión del usuario;
-  ver RELEASE_GATES punto 7). El nombre del archivo ya dice «alpha».
-- Paridad = paridad de **funciones** con la webapp (alpha). Si la web usa un apaño
-  por una limitación del navegador, Android lo hace de la mejor forma nativa.
-- UI Solid compartida con adaptadores nativos. Las stores web no se importan en
-  Android (poseen el audio web): la lógica pura se extrae a `lib/` o `components/`
-  compartidos y Android aporta un controlador nativo. iOS es Swift aparte; avisos
-  PAL no verificados se mantienen.
-- Offline B: copias explícitas de música adquirida, «Disponible sin conexión» en
-  menús de tres puntos; sin adquisición implícita ni autoevicción.
-- QR de emparejamiento = sesión completa de la cuenta que lo muestra (S2av).
-- El mantenedor no tiene dispositivo Android; no pedirle conectar uno para
-  cerrar la entrega. La comunidad realiza la aceptación física de escucha,
-  Bluetooth y coche siguiendo [ALPHA](../../ANDROID_ALPHA.md#pruebas-de-la-comunidad--community-testing).
-  AVD/CI no sustituyen esa evidencia. Es requisito de beta, no de alpha.
+- Parity integrated into `main` through PR #300, with full checks passed.
+  Distribution integrated through PR #304 and alpha published. On 2026-10-07 the
+  user authorized a new key and merge/publication after all gates were closed.
+  Do not publish if the signed APK or the final acceptance fail.
+- 2026-10-09: the APK ships in the `v*` release of each version, with the other
+  artifacts, not as a separate `android-alpha/*` prerelease (user decision;
+  see RELEASE_GATES point 7). The file name already says "alpha".
+- Parity = **feature** parity with the webapp (alpha). If the web uses a workaround
+  because of a browser limitation, Android does it in the best native way.
+- Shared Solid UI with native adapters. The web stores are not imported in
+  Android (they own the web audio): the pure logic is extracted to shared `lib/` or `components/`
+  and Android provides a native controller. iOS is separate Swift; unverified PAL
+  notices are kept.
+- Offline B: explicit copies of acquired music, "Available offline" in
+  three-dot menus; no implicit acquisition or auto-eviction.
+- Pairing QR code = full session of the account that shows it (S2av).
+- The maintainer does not have an Android device; do not ask them to connect one to
+  close the delivery. The community performs the physical acceptance of listening,
+  Bluetooth and car following [ALPHA](../../ANDROID_ALPHA.md#community-testing).
+  AVD/CI do not replace that evidence. It is a beta requirement, not an alpha requirement.
 
-## Cómo se trabaja (actualizado 2026-10-06 para ir más rápido sin perder calidad)
+## How work is done (updated 2026-10-06 to go faster without losing quality)
 
-1. **Inventario primero, no por descubrimiento.** La lista de huecos de abajo sale
-   de comparar qué textos/acciones alcanza la web y no Android
-   (`python3 scripts/android_parity_inventory.py`: alcanzabilidad de imports desde
-   `main.tsx` frente a `mobile/main.tsx`). Se cierra la lista; no se abren huecos nuevos sin contrastarla.
-2. **Bloques por área, no micro-slices.** Varios huecos de la misma pantalla van en
-   un solo bloque, con un solo commit, una ejecución nativa y una fila en EVIDENCE.
-3. **Pirámide de pruebas.** Lógica y guardas de carrera → Vitest/JVM (rápido). Prueba
-   nativa sólo para lo que cruza la frontera nativa o depende del Core real, y
-   **sólo HTTP** salvo que el bloque toque transporte (EngineConnection, TLS,
-   sockets, WebRTC/relay, streaming/Range). TLS completo se ejecuta en la regresión
-   final, que es la que da la garantía.
-4. **Regresión dirigida por radio de impacto**: las clases nativas que usan el código
-   tocado, en una sola ejecución. Principal completa + browser4 al final, una vez.
-5. **Documentación mínima**: una fila en EVIDENCE por bloque (fecha, commit, pruebas,
-   resultado, log). `SLICE_*.md` sólo si hay una decisión de diseño que explicar.
-   Sin hashes de fuentes ni JSON por bloque: el commit ya fija el estado.
-6. Cada bloque validado termina en commit + push. Gradle sólo `:app:*`; nunca
-   `npm run build` en `ui_web`.
+1. **Inventory first, not by discovery.** The list of gaps below comes
+   from comparing which texts/actions the web reaches and Android does not
+   (`python3 scripts/android_parity_inventory.py`: import reachability from
+   `main.tsx` versus `mobile/main.tsx`). The list is closed; no new gaps are opened without checking against it.
+2. **Blocks per area, not micro-slices.** Several gaps of the same screen go in
+   a single block, with a single commit, one native run and one row in EVIDENCE.
+3. **Test pyramid.** Logic and race guards → Vitest/JVM (fast). Native
+   test only for what crosses the native boundary or depends on the real Core, and
+   **HTTP only** unless the block touches transport (EngineConnection, TLS,
+   sockets, WebRTC/relay, streaming/Range). Full TLS runs in the final
+   regression, which is the one that gives the guarantee.
+4. **Regression targeted by impact radius**: the native classes that use the touched
+   code, in a single run. Full main suite + browser4 at the end, once.
+5. **Minimal documentation**: one row in EVIDENCE per block (date, commit, tests,
+   result, log). `SLICE_*.md` only if there is a design decision to explain.
+   No source hashes or JSON per block: the commit already fixes the state.
+6. Each validated block ends in commit + push. Gradle only `:app:*`; never
+   `npm run build` in `ui_web`.
 
-## Huecos de paridad pendientes (inventario 2026-10-06)
+## Pending parity gaps (inventory 2026-10-06)
 
-- [x] S2aw Menú de canción: ir a artista/álbum, «No me interesa» con motivo, reproducir en otro dispositivo.
-- [x] Podcasts: sección Top/recomendados con suscribir y «No me interesa»; filtro «sólo descargados» en el programa.
-- [x] Biblioteca: ordenar (A–Z, recientes, favoritos primero), filtro descargados, álbumes por género/año.
-- [x] Cola: peticiones tras la canción actual como en la web, vaciar peticiones; aviso de reanudar sesión de otro dispositivo (traspaso vía Core).
-- [x] Búsqueda: descargar del catálogo pasa por la comprobación del motor (`/api/catalog/save`) y pide «Elegir versión» si duda.
-- [x] DJ: «Cambiar sesión» desde una colección (la sesión pasa a ser esa única fuente).
-- [x] Ajustes: buscador de ajustes (índice web filtrado a lo que Android dibuja).
-- [—] Silenciar: no se porta. En Android volumen y silencio son del sistema (teclas, controles); el botón web
-      existe porque el navegador no los tiene.
-- [x] DJ «Pedir todas»: acción de colección → lote Core; grupos en `autoRoute.requestGroup`,
-      retirados sólo al cambiar de sesión, con petición suelta y reproducción conservadas.
-      Perfil/dirección/añadir fuentes conservan los grupos.
-- [x] POST_NOTIFICATIONS: declarado; primera preparación offline pide permiso en Android 13+.
-      Conceder/denegar continúa la copia; no se insiste después de denegar.
-- [→] Puente público/App Links: movido a RELEASE_GATES (punto 9). Necesita clave permanente, `assetlinks.json`
-      en la raíz `Arzuparreta.github.io` y APK pública; el puente público ofrece apertura Android con la cápsula compartida. Las invitaciones
-      viven en el dominio de cada servidor (no verificable): su camino es SEND, ya aceptado (S2at).
-- [x] Negativos DJ: el fallo persistente de los streams (503 en todos, ambos platos) ya está en `DjNetworkTest`:
-      error visible sin cuelgue, misma ocurrencia y recuperación con reintento explícito.
-- [x] Negativos Auto: el socket del coche quedaba muerto al agotar reintentos (fallo real, corregido con
-      enfriamiento de 30 s como S2aq). Etiquetas del programa activo: `CarDjTest`/`CarEventsTest`.
-- [x] Regresión local Core (1792), UI (1660), browser4 completos y restart offline/Live (4 fases).
-- [x] Suite principal final en CI: la ejecución local completa (211 casos) descubrió fallos de fixture
-      y reloj compartido; corregidos y revalidados por radio de impacto (EVIDENCE).
-      CI de la PR #304 y del main publicado (88033c20) aprobada: build/JVM/lint y cuatro shards.
-- [x] [PR #300](https://github.com/Arzuparreta/soundsible/pull/300) integrada con `impact:minor`,
-      base `origin/main` verificada y checks aprobados.
-      Crédito `Co-authored-by` a emrothenberg en el commit de implementación y en la PR.
-- [x] Clave permanente creada fuera de Git, backup en disco independiente probado;
-      secrets en entorno `android-release`, restringido a `main` y, desde el
-      2026-10-09, a los tags `v*`, donde `release.yml` construye la APK de cada versión.
-- [x] Distribución implementada y aceptada localmente: APK release firmada,
-      actualización conservando cuenta/ajustes/offline, negativos de instalación,
-      arranque/PCM offline y App Links fríos/calientes. Evidencia en EVIDENCE.
-- [x] Publicación: [primera alpha pública](https://arzuparreta.github.io/soundsible.github.io/es/start/#android-title).
-      Workflow de release 37623396866 aprobado sobre main `88033c20`; APK exacta
-      instalada y aceptada antes de publicar. Canal `android-alpha/*` independiente,
-      prerelease, latest global conservado. Descarga pública en la web ES/EN.
-      Actualización desde esa APK pública ensayada localmente con candidato privado;
-      cuenta/ajustes/copias offline conservados. Evidencia en EVIDENCE.
-- [x] Asociación de dominio publicada por PR Arzuparreta.github.io #11;
-      comprobada respuesta HTTPS 200/application-json con el certificado correcto.
+- [x] S2aw Song menu: go to artist/album, "Not interested" with reason, play on another device.
+- [x] Podcasts: Top/recommended section with subscribe and "Not interested"; "downloaded only" filter in the show.
+- [x] Library: sort (A–Z, recent, favourites first), downloaded filter, albums by genre/year.
+- [x] Queue: requests after the current song as in the web, clear requests; notice to resume a session from another device (handoff through Core).
+- [x] Search: downloading from the catalog goes through the engine check (`/api/catalog/save`) and asks "Choose version" if unsure.
+- [x] DJ: "Change session" from a collection (the session becomes that single source).
+- [x] Settings: settings search (web index filtered to what Android draws).
+- [—] Mute: not ported. On Android, volume and mute belong to the system (keys, controls); the web button
+      exists because the browser does not have them.
+- [x] DJ "Request all": collection action → Core batch; groups in `autoRoute.requestGroup`,
+      removed only when changing session, with loose request and playback kept.
+      Profile/direction/add sources keep the groups.
+- [x] POST_NOTIFICATIONS: declared; the first offline preparation asks for permission on Android 13+.
+      Granting/denying continues the copy; there is no further prompting after denying.
+- [→] Public bridge/App Links: moved to RELEASE_GATES (point 9). Needs a permanent key, `assetlinks.json`
+      at the root of `Arzuparreta.github.io` and a public APK; the public bridge offers Android opening with the shared capsule. Invitations
+      live on each server's domain (not verifiable): their path is SEND, already accepted (S2at).
+- [x] DJ negatives: the persistent stream failure (503 on all, both decks) is already in `DjNetworkTest`:
+      visible error without hanging, same occurrence and recovery with explicit retry.
+- [x] Auto negatives: the car socket stayed dead after retries were exhausted (real failure, fixed with
+      a 30 s cooldown like S2aq). Labels of the active programme: `CarDjTest`/`CarEventsTest`.
+- [x] Local Core regression (1792), UI (1660), full browser4 and offline/Live restart (4 phases).
+- [x] Final main suite in CI: the full local run (211 cases) found fixture
+      and shared clock failures; fixed and revalidated by impact radius (EVIDENCE).
+      CI of PR #304 and of the published main (88033c20) passed: build/JVM/lint and four shards.
+- [x] [PR #300](https://github.com/Arzuparreta/soundsible/pull/300) integrated with `impact:minor`,
+      `origin/main` base verified and checks passed.
+      `Co-authored-by` credit to emrothenberg in the implementation commit and in the PR.
+- [x] Permanent key created outside Git, backup on an independent disk tested;
+      secrets in the `android-release` environment, restricted to `main` and, since
+      2026-10-09, to the `v*` tags, where `release.yml` builds the APK of each version.
+- [x] Distribution implemented and accepted locally: signed release APK,
+      update keeping account/settings/offline, installation negatives,
+      offline startup/PCM and cold/warm App Links. Evidence in EVIDENCE.
+- [x] Publication: [first public alpha](https://arzuparreta.github.io/soundsible.github.io/es/start/#android-title).
+      Release workflow 37623396866 passed on main `88033c20`; the exact APK
+      was installed and accepted before publishing. Independent `android-alpha/*` channel,
+      prerelease, global latest kept. Public download on the ES/EN website.
+      Update from that public APK rehearsed locally with a private candidate;
+      account/settings/offline copies kept. Evidence in EVIDENCE.
+- [x] Domain association published through PR Arzuparreta.github.io #11;
+      HTTPS 200/application-json response checked with the correct certificate.
 
-## Comandos
+## Commands
 
 - JDK21 `/home/arsu/.cache/soundsible/android-toolchain/jdk`, SDK
-  `/home/arsu/.cache/soundsible/android-toolchain/sdk`: exportar `JAVA_HOME`,
-  `ANDROID_HOME` y sus `bin` en `PATH` para `prepare` e `integration`.
-- AVD local `soundsible-alpha-api36`: `emulator -avd soundsible-alpha-api36 -no-window -no-audio -no-boot-anim -port 5554`.
-- `.venv/bin/python scripts/android.py prepare` y después
+  `/home/arsu/.cache/soundsible/android-toolchain/sdk`: export `JAVA_HOME`,
+  `ANDROID_HOME` and their `bin` in `PATH` for `prepare` and `integration`.
+- Local AVD `soundsible-alpha-api36`: `emulator -avd soundsible-alpha-api36 -no-window -no-audio -no-boot-anim -port 5554`.
+- `.venv/bin/python scripts/android.py prepare` and then
   `env 'ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class=com.soundsible.android.A,com.soundsible.android.B' .venv/bin/python scripts/android.py integration`
-  (zsh no acepta el nombre con puntos sin `env`). El runner levanta los fixtures
-  5097/5098/5099 (y el relay Live si hace falta) y al final compila APK normal,
-  JVM y lint. Resultados JUnit en `android/app/build/outputs/androidTest-results`.
+  (zsh does not accept the name with dots without `env`). The runner starts the fixtures
+  5097/5098/5099 (and the Live relay if needed) and at the end builds the normal APK,
+  JVM and lint. JUnit results in `android/app/build/outputs/androidTest-results`.
 - UI: `cd ui_web && npm test && npm run typecheck`. Core: `PYTHONPATH=. .venv/bin/pytest -q tests/…`.
-- Fixtures desechables: nunca motor ni cuentas reales. Un vaciado real de biblioteca
-  en el fixture retiraría audio compartido: no ejecutarlo.
-- Fallos de shards y silencio Live: artefactos, señales y lectura de trazas en
-  [CI_DIAGNOSTICS](CI_DIAGNOSTICS.md). Un reintento aprobado no identifica la causa.
+- Disposable fixtures: never the real engine or accounts. A real library wipe
+  in the fixture would remove shared audio: do not run it.
+- Shard failures and Live silence: artifacts, signals and trace reading in
+  [CI_DIAGNOSTICS](CI_DIAGNOSTICS.md). A passing retry does not identify the cause.

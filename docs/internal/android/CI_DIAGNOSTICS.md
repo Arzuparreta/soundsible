@@ -1,118 +1,118 @@
-# Diagnóstico del shard Android
+# Android shard diagnostics
 
-El artefacto `soundsible-android-emulator-<shard>-<sha>` contiene JUnit,
-logcat por caso en `app/build/outputs/androidTest-results/`, `build/fixture.log`
-y `build/emulator.log`. Este último se captura continuamente desde antes de
-las pruebas: conserva los casos iniciales aunque el buffer circular del
-emulador se haya sobrescrito al terminar. El código de salida original se
-conserva; no se reintentan ni se omiten casos automáticamente.
+The artifact `soundsible-android-emulator-<shard>-<sha>` contains JUnit,
+per-case logcat in `app/build/outputs/androidTest-results/`, `build/fixture.log`
+and `build/emulator.log`. The latter is captured continuously from before
+the tests: it keeps the initial cases even if the emulator's circular buffer
+has been overwritten at the end. The original exit code is
+kept; cases are not retried or skipped automatically.
 
-## Arranque de ADB y red del fixture
+## ADB startup and fixture network
 
-En la PR #426, run `42362004721`, los shards 2 y 5 terminaron antes de
-instalar o ejecutar la app: tras `boot_completed`, ADB volvió temporalmente
-a `device offline` al ejecutar `svc wifi enable` (salidas 255 y 1).
-`scripts/android.py` fija el serial validado y da a ese comando de preparación
-un presupuesto total de 30 segundos, con cada proceso limitado a cinco.
-Solo los fallos transitorios de transporte/servicio se reintentan; errores
-de permisos fallan de inmediato. Se conserva el último diagnóstico, incluida
-una salida 255 sin texto. No se reintentan casos de instrumentación. Agotar el
-presupuesto sigue siendo un fallo de CI, no una omisión ni un éxito simulado.
+In PR #426, run `42362004721`, shards 2 and 5 ended before
+installing or running the app: after `boot_completed`, ADB temporarily went back
+to `device offline` when running `svc wifi enable` (exit codes 255 and 1).
+`scripts/android.py` pins the validated serial and gives that preparation command
+a total budget of 30 seconds, with each process limited to five.
+Only transient transport/service failures are retried; permission errors
+fail immediately. The last diagnostic is kept, including
+an exit 255 without text. Instrumentation cases are not retried. Exhausting the
+budget is still a CI failure, not a skip or a simulated success.
 
-Las PR #432 y #433 expusieron otro punto anterior al encendido de Wi-Fi: la
-consulta de `ro.kernel.qemu` podía devolver `error: closed` (salida 1) o una
-salida 255 sin texto tras el arranque. No se había instalado la app ni iniciado
-la instrumentación. La verificación del serial seleccionado ahora tiene un
-presupuesto de 30 segundos para esas desconexiones, con cada consulta limitada
-a cinco segundos. Una respuesta correcta que no sea `1`, falta de autorización
-o un error de permisos se rechaza de inmediato. Se usa tanto en integración
-como en la aceptación de la APK de release; ninguna prueba se reintenta.
+PRs #432 and #433 exposed another point before Wi-Fi is enabled: the
+query of `ro.kernel.qemu` could return `error: closed` (exit 1) or an
+exit 255 without text after boot. The app had not been installed and the
+instrumentation had not started. Verification of the selected serial now has a
+budget of 30 seconds for those disconnections, with each query limited
+to five seconds. A successful response that is not `1`, missing authorization
+or a permission error is rejected immediately. It is used both in integration
+and in the release APK acceptance; no test is retried.
 
-## Silencio en Live después de recuperar WHEP
+## Silence in Live after recovering WHEP
 
-Buscar `LiveTestDiagnostics` en el logcat de `LiveListenerTest` o del shard.
-Las observaciones JSON incluyen tiempo monótono, fases, cierre de Activity,
-estado de MediaSession, PCM generado/decodificado/audible y antigüedad del
-último bloque audible. Las muestras periódicas se toman también durante los
-`await`, antes de que el `finally` cierre los peers.
+Search for `LiveTestDiagnostics` in the logcat of `LiveListenerTest` or of the shard.
+The JSON observations include monotonic time, phases, Activity closure,
+MediaSession state, generated/decoded/audible PCM and age of the
+last audible block. The periodic samples are also taken during the
+`await` calls, before the `finally` closes the peers.
 
-- `peer.start`, `peer.state`, `ice.state`, `peer.cancel`, `peer.close`: cada
-  peer tiene un identificador local y `publishing` distingue emisor y receptor.
-- `listener.gain`, `listener.focus`, `track.bound`, `track.volume`: relacionan
-  petición de reproducción, foco, supresión, volumen y ganancia aplicada.
-- `rtc.stats`: paquetes/bytes, pérdidas, jitter, energía de audio, muestras
-  ocultadas por el decodificador y latencia del par ICE seleccionado.
-- `relay.stats`: contadores RTP de entrada/salida por publisher/reader del
-  relay real, limitados a la sala de esta prueba.
+- `peer.start`, `peer.state`, `ice.state`, `peer.cancel`, `peer.close`: each
+  peer has a local identifier and `publishing` distinguishes sender and receiver.
+- `listener.gain`, `listener.focus`, `track.bound`, `track.volume`: relate
+  playback request, focus, ducking, volume and applied gain.
+- `rtc.stats`: packets/bytes, losses, jitter, audio energy, samples
+  concealed by the decoder and latency of the selected ICE pair.
+- `relay.stats`: incoming/outgoing RTP counters per publisher/reader of the
+  real relay, limited to the room of this test.
 
-Comparar **incrementos** entre muestras. Si avanza la fuente sintética pero no
-los paquetes del emisor, investigar la captura/codificación. Si el emisor
-envía pero el relay no recibe, investigar el transporte hacia el relay. Si el
-relay recibe pero no entrega al reader, investigar el relay. Si llegan RTP
-al receptor y crecen `concealedSamples`/`silentConcealedSamples`, investigar
-pérdidas, jitter y decodificación; callbacks de PCM con RMS cero no prueban
-que hayan llegado paquetes de audio. Si los contadores y la energía son
-normales, contrastar la ganancia aplicada y el foco con la fase exacta.
+Compare **increments** between samples. If the synthetic source advances but the
+sender's packets do not, investigate capture/encoding. If the sender
+sends but the relay does not receive, investigate the transport to the relay. If the
+relay receives but does not deliver to the reader, investigate the relay. If RTP arrives
+at the receiver and `concealedSamples`/`silentConcealedSamples` grow, investigate
+losses, jitter and decoding; PCM callbacks with zero RMS do not prove
+that audio packets have arrived. If the counters and the energy are
+normal, compare the applied gain and the focus with the exact phase.
 
-## RTP detenido con ICE conectado
+## RTP stopped with ICE connected
 
-El gate del tag de la PR #433 registró ocho paquetes RTP en el receptor durante
-veinte segundos, con ICE conectado, consultas STUN activas y callbacks de
-concealment/silencio. El relay seguía procesando media; ese contador no prueba
-entrega de datagramas. No se demostró que cerrar la Activity causara la pérdida.
-El timeout del reset del fixture ocurrió en el primer caso, varios minutos antes,
-y queda como incidente separado, sin atribuirle una causa común.
+The tag gate of PR #433 recorded eight RTP packets at the receiver during
+twenty seconds, with ICE connected, active STUN queries and
+concealment/silence callbacks. The relay was still processing media; that counter does not prove
+datagram delivery. It was not demonstrated that closing the Activity caused the loss.
+The fixture reset timeout happened in the first case, several minutes earlier,
+and is kept as a separate incident, without attributing a common cause to it.
 
-El listener ahora observa progreso RTP mientras se solicita reproducción sin
-supresión de foco. Da diez segundos al inicio y recupera cinco segundos sin
-progreso después de recibir media. No usa amplitud PCM: el silencio legítimo
-sigue sano si llegan paquetes. Reutiliza el presupuesto acotado de reconexión;
-ICE conectado ya no lo reinicia hasta observar cinco segundos de progreso
-sostenido. Pausa/supresión rearman la gracia y no hacen consultas de estadísticas.
-Si el mismo transporte se reconecta durante el backoff, se cancela únicamente
-el reinicio pendiente: el presupuesto y su plazo original siguen activos hasta
-confirmar media sostenida. La revisión de Codex detectó este caso y se cubre con
-regresiones de reloj simulado para cancelación, plazo y backoff conservados.
+The listener now observes RTP progress while playback is requested without
+focus ducking. It gives ten seconds at the start and recovers after five seconds without
+progress after receiving media. It does not use PCM amplitude: legitimate silence
+remains healthy if packets arrive. It reuses the bounded reconnection budget;
+a connected ICE no longer resets it until five seconds of sustained progress are
+observed. Pause/ducking rearm the grace period and do not query statistics.
+If the same transport reconnects during the backoff, only the pending restart
+is cancelled: the budget and its original deadline stay active until
+sustained media is confirmed. The Codex review detected this case and it is covered with
+simulated-clock regressions for cancellation, deadline and preserved backoff.
 
-La regresión nativa detiene las codificaciones RTP del emisor sintético, conserva
-ICE y sockets de sala, exige BUFFERING y comprueba recuperación automática de
-RTP/audio conservando volumen, intención de reproducir e identidad de sala.
-También exige paquetes reales después de cerrar la Activity: el concealment por
-sí solo ya no puede satisfacer ese guard. Esto repara la falta de recuperación
-ante media detenida; no identifica la causa original de pérdida de datagramas.
+The native regression stops the RTP encodings of the synthetic sender, keeps
+ICE and room sockets, requires BUFFERING and checks automatic recovery of
+RTP/audio while keeping volume, playback intent and room identity.
+It also requires real packets after closing the Activity: concealment
+alone can no longer satisfy that guard. This repairs the lack of recovery
+from stopped media; it does not identify the original cause of the datagram loss.
 
-La observación se activa sólo cuando la instrumentación instala su observer.
-No exporta PCM, SDP, URLs, tokens, cookies, candidatos ICE ni direcciones IP.
-`sample.failed`/`rtc.stats.unavailable` indican un hueco de diagnóstico, nunca
-un permiso para dar la prueba por aprobada.
+The observation is enabled only when the instrumentation installs its observer.
+It does not export PCM, SDP, URLs, tokens, cookies, ICE candidates or IP addresses.
+`sample.failed`/`rtc.stats.unavailable` indicate a diagnostic gap, never
+permission to consider the test passed.
 
-## Incidente del 2026-11-03
+## Incident of 2026-11-03
 
-Run `41548539741`, intento inicial, main `9986f87b`: sólo falló el shard 6,
-`LiveListenerTest.tlsCoreRelay`, con `Activity close stopped remote programme`.
-Al fallar: READY, reproducción solicitada/activa, volumen 0.4, 2794 callbacks
-PCM, 129 audibles, 3055 lecturas de la fuente sintética y RMS cero. El relay
-conservó publisher y reader hasta la limpieza. Sin RTP, energía ni cronología
-de ganancia no se puede atribuir ese silencio al cierre de Activity ni decidir
-si el origen era aplicación, relay o emulador. Un reintento aprobado demuestra
-intermitencia, no una causa resuelta. No se relajan las aserciones.
+Run `41548539741`, initial attempt, main `9986f87b`: only shard 6 failed,
+`LiveListenerTest.tlsCoreRelay`, with `Activity close stopped remote programme`.
+At the time of failure: READY, playback requested/active, volume 0.4, 2794 PCM
+callbacks, 129 audible, 3055 reads from the synthetic source and zero RMS. The relay
+kept publisher and reader until cleanup. Without RTP, energy or a gain
+timeline, that silence cannot be attributed to the Activity closure and it cannot be decided
+whether the origin was the application, the relay or the emulator. A passing retry demonstrates
+intermittency, not a resolved cause. The assertions are not relaxed.
 
-## Diagnóstico del traspaso remoto
+## Remote handoff diagnostics
 
-En la PR #434, run `42567024132`, el shard 7 ejecutó 33 casos y falló
-`QueueLanesTest.httpQueueLanesAndResume`: el portátil recibió la orden de parar,
-pero el snapshot nativo del teléfono seguía con cola vacía después de aceptar
-Resume. Esto es distinto de los shards 1 y 5, que no llegaron a instrumentación
-porque la descarga de MediaMTX agotó seis intentos HTTP 504.
+In PR #434, run `42567024132`, shard 7 ran 33 cases and failed
+`QueueLanesTest.httpQueueLanesAndResume`: the laptop received the stop command,
+but the phone's native snapshot still had an empty queue after accepting
+Resume. This is different from shards 1 and 5, which did not reach instrumentation
+because the MediaMTX download exhausted six HTTP 504 attempts.
 
-El shard 3 del siguiente head falló en la misma descarga antes de instrumentar.
-Los seis intentos alternan ahora la URL de descarga y la API oficial del mismo
-asset inmutable de GitHub, con `Accept: application/octet-stream`. Ambas vías
-exigen el mismo SHA-256 y límite de tamaño. Se verificó una descarga real por
-la API contra el hash fijado; recibir JSON o bytes distintos sigue fallando.
+Shard 3 of the next head failed in the same download before instrumenting.
+The six attempts now alternate between the download URL and the official API for the same
+immutable GitHub asset, with `Accept: application/octet-stream`. Both paths
+require the same SHA-256 and size limit. A real download through
+the API was verified against the pinned hash; receiving JSON or different bytes still fails.
 
-El HTTP exitoso de handoff no confirma que el teléfono haya aplicado el comando.
-Las trazas deben distinguir registro de socket, entrega al cliente, rechazo de
-propietario/generación y excepción al reconstruir la cola. Se conservan las
-aserciones y los plazos del caso; un reintento verde por sí solo no demuestra
-que se haya reparado la causa.
+A successful handoff HTTP response does not confirm that the phone has applied the command.
+The traces must distinguish socket registration, delivery to the client, rejection by
+owner/generation and an exception when rebuilding the queue. The case's assertions
+and deadlines are kept; a green retry alone does not demonstrate
+that the cause has been repaired.

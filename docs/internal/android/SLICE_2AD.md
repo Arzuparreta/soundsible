@@ -1,103 +1,103 @@
-# S2ad: Appearance y preferencias visuales compartidas
+# S2ad: shared Appearance and visual preferences
 
-Compartir las vistas actuales de Appearance y DisplayPreferences mediante props,
-sin importar stores de audio en el bundle Android. Mantener etiquetas, orden de
-seis temas, idioma, tamaño y contraste. Web conserva sus adaptadores. Android
-aplica preferencias locales de instalación también sin motor, con persistencia
-que no depende de la cuenta ni cambia programa/copia/sesión.
+Share the current Appearance and DisplayPreferences views through props,
+without importing audio stores in the Android bundle. Keep labels, the order of the
+six themes, language, size and contrast. Web keeps its adapters. Android
+applies local installation preferences also without an engine, with persistence
+that does not depend on the account and does not change program/copy/session.
 
-Usar tabla de temas boot compartida; seguir cambios de sistema y recuperar el
-estado tras volver del background. Ajustar documento/theme-color y contraste de
-iconos de barras Android, con puente nativo limitado a apariencia y sin acceso a
-credenciales. Revalidar estado tras recrear Activity y arranque sin motor. El
-selector de idioma debe usar los cuatro diccionarios existentes y actualizar
-lang/etiquetas. No ofrecer haptics como validado sólo por navigator.vibrate: su
-aceptación y la navegación personalizable se documentarán por separado.
+Use the shared boot theme table; follow system changes and restore the
+state after returning from the background. Adjust document/theme-color and contrast of the
+Android bar icons, with a native bridge limited to appearance and without access to
+credentials. Revalidate state after recreating the Activity and starting without an engine. The
+language selector must use the four existing dictionaries and update
+lang/labels. Do not offer haptics as validated only through navigator.vibrate: their
+acceptance and the customizable navigation will be documented separately.
 
-Aceptación: pruebas de almacenamiento inválido/restringido y cambio de sistema,
-vista compartida y reactividad; UI completa y cuatro perfiles de navegador.
-APK HTTP/HTTPS: tema claro/oscuro/extra/system, idioma, tamaño y contraste,
-recreación y offline conservando key/programToken/pausa20s/copia/sesión. Verificar
-barras nativas y ausencia de audio HTML. Preparar fuentes limpias y ampliar la
-principal; mantener separados los resultados de S2ac y S2ad.
+Acceptance: tests of invalid/restricted storage and system change,
+shared view and reactivity; complete UI and four browser profiles.
+HTTP/HTTPS APK: light/dark/extra/system theme, language, size and contrast,
+recreation and offline keeping key/programToken/pausa20s/copy/session. Verify
+native bars and absence of HTML audio. Prepare clean sources and extend the
+main run; keep the results of S2ac and S2ad separate.
 
-Después completar Playback/recomendaciones, dispositivos/servicios/admin y
-Discover, DJ/Live/Auto y firma/update; no equivale a paridad ni a alpha. Continuar
-con autorización vigente hasta PR/main/release tras los gates completos.
-
-
-## Implementación y diagnóstico
-
-AppearanceSettingsView y DisplayPreferencesView comparten la UI con adaptadores
-web originales. NativeSettings ofrece Account/Appearance/Accessibility y Atrás
-vuelve primero a Account. Preferencias por instalación, tabla boot compartida,
-locale común, persistencia restringida tolerada y relectura al volver visible.
-UI1489/179 pasa antes del ajuste final de barras; UI completa se repite.
-
-Primer target6: Appearance2 falla tras cambio real de modo OS; Account2 y
-Offline2 pasan. SystemBars integrado de Capacitor conserva su propio estilo y lo
-reaplica durante configuración, pisando el puente manual. Adaptador ahora usa
-SystemBars.setStyle antes del puente limitado a fondo. Segundo target6 confirma
-barras/fondo/sistema y falla geometría: nav nueva fuera de class library tenía
-botones inferiores44px. Añadida class del shell; target correspondiente pendiente.
-Logs /tmp/soundsible-s2ad-{native,system-bars-native}.log. No tratar estos targets
-como aceptados ni reemplazar principal53 limpia.
-
-Browser: primer Chromium278/66 pasa; WebKit268/75 falla contexto queue inert por
-scroll sintético durante alineación (SLICE_2Z; corrección3cb261f). Segundo
-Chromium277/66 detecta popup sin fixture/visibilidad: una pestaña en background
-puede mantener primer render pendiente. Test ahora aplica fixture al contexto,
-espera boot original, muestra popup y comprueba ficha real antes de teclado.
-Cinco repeticiones Chromium pasan /tmp/soundsible-s2ad-popup-visible.log.
-Regresión cuatro perfiles completa repetida, no sustituir el resultado fallido
-con sólo los casos dirigidos.
-
-Principal55 aad83d4 tuvo54 verdes y fallo OfflineTest TLS al tocar Play tras
-recreación. Replay2 con sources/assets originales pasa más normalAPK/testAPK/
-JVM17/lint. Helper ahora espera botón realmente habilitado/boot y captura
-snapshot/click para diagnosticar; no cambia las comprobaciones de audio offline.
-Repetir principal ampliada limpia después de aceptar y guardar S2ad.
+Afterwards complete Playback/recommendations, devices/services/admin and
+Discover, DJ/Live/Auto and signing/update; this is not equivalent to parity or alpha. Continue
+with current authorization up to PR/main/release after the complete gates.
 
 
-## Recorrido Apariencia aceptado
+## Implementation and diagnosis
 
-HTTP/HTTPS2 pasa /tmp/soundsible-s2ad-geometry-native.log, sources3cb261f
-dirty=true. Seis temas, flips OS reales y modo explícito conservado, iconos nativos
-y fondo de ventana, idioma español, tamaño grande/contraste, botones44px y ancho
-acotado, recreación y motor503 pasan sin perder key/programa/pausa20s/copia/sesión.
-Sin audio HTML. APK/testAPK/JVM17/lint normal sin CA temporal pasa. Account/Offline4
-pasaron en el target previo6 con2 fallos de geometría; no llamar verde ese target6.
+AppearanceSettingsView and DisplayPreferencesView share the UI with the original web
+adapters. NativeSettings offers Account/Appearance/Accessibility and Back
+returns first to Account. Per-installation preferences, shared boot table,
+common locale, tolerated restricted persistence and re-read when becoming visible again.
+UI1489/179 passes before the final bar adjustment; the complete UI is repeated.
 
-UI completa1489/179 pasa de nuevo en /tmp/soundsible-s2ad-ui-serial.log. Dos
-timeouts de importación fría5s con Chromium/Gradle simultáneos se distinguen del
-resultado serial aceptado; no ampliar timeouts del producto ni de los tests.
-Header mobile conserva sus comprobaciones geométricas, ahora en un solo frame
-y mediante polling: leer dos boundingBox independientes podía capturar un
-control sustituido durante resize. Cuatro perfiles completos vuelven a ejecutarse
-secuencialmente antes de commit de la capacidad. Principal57+restart2 después.
+First target6: Appearance2 fails after a real OS mode change; Account2 and
+Offline2 pass. Capacitor's integrated SystemBars keeps its own style and
+reapplies it during configuration, overriding the manual bridge. The adapter now uses
+SystemBars.setStyle before the bridge limited to the background. Second target6 confirms
+bars/background/system and fails geometry: the new nav outside the library class had
+bottom buttons under 44px. Added the shell class; corresponding target pending.
+Logs /tmp/soundsible-s2ad-{native,system-bars-native}.log. Do not treat these targets
+as accepted or replace the clean principal53.
 
+Browser: first Chromium278/66 passes; WebKit268/75 fails the inert queue context because of
+synthetic scroll during alignment (SLICE_2Z; fix 3cb261f). Second
+Chromium277/66 detects popup without fixture/visibility: a background tab
+can keep the first render pending. The test now applies the fixture to the context,
+waits for the original boot, shows the popup and checks the real detail page before the keyboard.
+Five Chromium repetitions pass /tmp/soundsible-s2ad-popup-visible.log.
+Complete four-profile regression repeated; do not replace the failed result
+with only the targeted cases.
 
-La medición atómica amplió el diagnóstico a todos los controles y encontró el
-título pulsable de AppBar inferior44px, antes no medido entre first/last. Corregido
-min-height44px en el componente compartido. Serial previo268/66 con10 fallos no
-aceptado:9 títulos pequeños y1 popup mientras el enlace se movía. Ctrl-click ahora
-espera settledBox, conserva interacción real y comprobación de nueva ficha.
-Dirigido Chromium28/20 sin fallos; repetir suite completa y después WebKit.
-
-
-## Regresión completa S2ad aceptada
-
-Chromium278/66 y WebKit269/75, cero fallos, los cuatro perfiles completos
-secuenciales con1worker como CI. Logs /tmp/soundsible-s2ad-{chromium,webkit}-ci-worker.log.
-Popup real mantiene Ctrl-click/foreground, espera DOMContentLoaded y ficha
-completa; ocho repeticiones con trace pasan. Con8workers un caso queda esperando
-URL incluso tras readiness DOM; no declarar esa ejecución verde. S2ae durante
-los runs sólo cambió Native y añadió vistas compartidas aún sin conectar; las
-entradas web medidas permanecieron iguales. UI completa con bases S2ae se repite
-antes de preparar artifact limpio/principal57+restart2. No paridad ni alpha.
+Principal55 aad83d4 had 54 green and an OfflineTest TLS failure when tapping Play after
+recreation. Replay2 with the original sources/assets passes plus normalAPK/testAPK/
+JVM17/lint. The helper now waits for the button to be actually enabled/boot and captures
+snapshot/click for diagnosis; it does not change the offline audio checks.
+Repeat the extended clean main run after accepting and saving S2ad.
 
 
-Principal limpia8329de5 dirty=false aceptada:57 más restart prepare1/offline1,
-cero fallos/errores/omisiones. APK/testAPK/JVM17/lint normales sin CA pasan.
-/tmp/soundsible-s2ad-main-clean.log y evidence/s2ad.json. Posterior UI S2ae en
-fuentes no afecta a ese artifact congelado. Continuar hasta paridad y PR/release.
+## Accepted Appearance walkthrough
+
+HTTP/HTTPS2 passes /tmp/soundsible-s2ad-geometry-native.log, sources 3cb261f
+dirty=true. Six themes, real OS flips and explicit mode kept, native icons
+and window background, Spanish language, large size/contrast, 44px buttons and bounded
+width, recreation and engine 503 pass without losing key/program/pausa20s/copy/session.
+No HTML audio. Normal APK/testAPK/JVM17/lint without temporary CA passes. Account/Offline4
+passed in the previous target6 with 2 geometry failures; do not call that target6 green.
+
+Complete UI 1489/179 passes again in /tmp/soundsible-s2ad-ui-serial.log. Two
+cold import timeouts of 5s with Chromium/Gradle running simultaneously are distinguished from the
+accepted serial result; do not extend product or test timeouts.
+The mobile header keeps its geometric checks, now in a single frame
+and through polling: reading two independent boundingBox could capture a
+control replaced during resize. The four complete profiles run again
+sequentially before the commit of the capability. Principal57+restart2 afterwards.
+
+
+The atomic measurement extended the diagnosis to all controls and found the
+clickable AppBar title under 44px, not measured before between first/last. Fixed
+min-height 44px in the shared component. Previous serial 268/66 with 10 failures not
+accepted: 9 small titles and 1 popup while the link was moving. Ctrl-click now
+waits for settledBox, keeps real interaction and the new detail page check.
+Targeted Chromium 28/20 without failures; repeat the complete suite and then WebKit.
+
+
+## Complete S2ad regression accepted
+
+Chromium278/66 and WebKit269/75, zero failures, the four complete profiles
+sequential with 1 worker like CI. Logs /tmp/soundsible-s2ad-{chromium,webkit}-ci-worker.log.
+Real popup keeps Ctrl-click/foreground, waits for DOMContentLoaded and the complete
+detail page; eight repetitions with trace pass. With 8 workers one case keeps waiting for the
+URL even after DOM readiness; do not declare that run green. S2ae during
+the runs only changed Native and added shared views not yet connected; the
+measured web inputs stayed the same. Complete UI with S2ae bases is repeated
+before preparing the clean artifact/principal57+restart2. Not parity or alpha.
+
+
+Clean principal 8329de5 dirty=false accepted: 57 plus restart prepare1/offline1,
+zero failures/errors/skips. Normal APK/testAPK/JVM17/lint without CA pass.
+/tmp/soundsible-s2ad-main-clean.log and evidence/s2ad.json. Later S2ae UI in
+sources does not affect that frozen artifact. Continue until parity and PR/release.

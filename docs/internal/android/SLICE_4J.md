@@ -1,23 +1,23 @@
-# S4j — Recovery del receptor, reset y foco del sistema
+# S4j — Receiver recovery, reset and system focus
 
-La aceptación utiliza el Community y MediaMTX reales del runner. Una intervención
-sólo de fixture rechaza la autorización de lectura del stream seleccionado;
-no sustituye el transporte, el socket ni la política de reintentos de Android.
-Se observan exactamente cuatro intentos (inicial y tres reintentos), estado IDLE
-con error y ausencia de más intentos. Retirar el rechazo y preparar/reproducir
-manualmente restablece el receptor, conserva volumen y permite audio focus.
+The acceptance uses the runner's real Community and MediaMTX. A
+fixture-only intervention rejects the read authorization of the selected stream;
+it does not replace the transport, the socket or the Android retry policy.
+Exactly four attempts are observed (initial and three retries), IDLE state
+with an error and no further attempts. Removing the rejection and manually
+preparing/playing restores the receiver, keeps the volume and allows audio focus.
 
-Un segundo propietario solicita foco transitorio mediante AudioManager: Live
-queda suprimido conservando playWhenReady, y recupera reproducción cuando vuelve
-el foco. Un broadcast del UID del sistema AUDIO_BECOMING_NOISY pausa; no deja el
-receptor ni la sala y requiere reanudación explícita.
+A second owner requests transient focus through AudioManager: Live
+is ducked while keeping playWhenReady, and resumes playback when focus
+returns. An AUDIO_BECOMING_NOISY broadcast from the system UID pauses; it does not leave the
+receiver or the room and requires explicit resumption.
 
-Durante OPTIONS TLS real detenido diez segundos, cerrar sesión retira el receptor
-en menos de tres segundos. Ocho segundos después no hay reintentos ni recursos
-WHEP, y preparar/reproducir el propietario de la generación anterior no lo reactiva.
-La cuenta se restaura sólo para limpiar la sala de prueba con autorización firmada.
+During a real TLS OPTIONS request stalled for ten seconds, logging out removes the receiver
+in less than three seconds. Eight seconds later there are no retries or WHEP
+resources, and preparing/playing the owner from the previous generation does not reactivate it.
+The account is restored only to clean up the test room with signed authorization.
 
-LiveRecoveryTest: HTTP y TLS, recovery y reset, cuatro pruebas sin fallos, 56.701s.
-Registrar también salida del runner y checks normales en evidence/s4j.json.
-No prueba acústica física ni regresión principal/browser completa. Agotamiento y
-reset del publisher requieren aceptación separada; no declarar paridad completa.
+LiveRecoveryTest: HTTP and TLS, recovery and reset, four tests without failures, 56.701s.
+Also record the runner output and normal checks in evidence/s4j.json.
+It does not test physical acoustics or the full principal/browser regression. Exhaustion and
+reset of the publisher require separate acceptance; do not declare full parity.

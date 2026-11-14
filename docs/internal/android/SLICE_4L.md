@@ -1,24 +1,24 @@
-# S4l — Programa visible y enlace público de Live
+# S4l — Visible program and public Live link
 
-El panel Android muestra título, artista y thumbnail de la pista dominante y
-la segunda pista durante una mezcla, con técnica y progreso. Expone también la
-pausa del programa y conserva los controles y el chat del servicio nativo.
+The Android panel shows title, artist and thumbnail of the dominant track and
+the second track during a mix, with technique and progress. It also exposes the
+program pause and keeps the controls and the chat of the native service.
 
-Sólo admite imágenes del origen HTTPS de Community y del path de la sala actual,
-sin usuario/password, query ni fragment. El interceptor nativo reutiliza
-LiveArtwork: no cookies/Core headers/redirects, máximo256KiB y dimensiones512.
+It only accepts images from the Community HTTPS origin and from the path of the current room,
+without user/password, query or fragment. The native interceptor reuses
+LiveArtwork: no cookies/Core headers/redirects, maximum 256KiB and dimensions 512.
 
-Compartir abre el selector del sistema con título y enlace al hub público,
-construido por el mismo helper que web. No entrega URLs de media ni credenciales.
-El plugin admite una sola query session válida en /live/, sin fragment ni query
-adicional; conserva el contrato previo de cápsulas de canción y las comprobaciones
-de sesión/generación/foco de ventana. Abrir chooser no confirma envío a alguien.
+Share opens the system picker with a title and a link to the public hub,
+built by the same helper as the web. It does not hand over media URLs or credentials.
+The plugin accepts a single valid query session in /live/, without fragment or additional
+query; it keeps the previous contract of song capsules and the checks
+of session/generation/window focus. Opening the chooser does not confirm sending to anyone.
 
-Validación: suite UI completa206/1602 y TypeScript sin errores. LiveUiTest y
-ShareTest HTTP/TLS verifican imagen renderizada, chooser interceptado, identidad
-pública, rechazo de parámetros extra/duplicados/fragment y regresión de canción.
-Inicial4/1 por test TLS pulsando Pause deshabilitado; corregidos waits y slider.
-Final LiveUi2/0 (24.451s), runner exit0 + APK/test APK/JVM56/lint normales.
-Share2 pasó en inicial y sus fuentes no cambiaron. Ver evidence/s4l.json.
-Browser4 se ejecutará antes de abrir la PR final, junto a la regresión conjunta.
-No afirma aceptación física ni paridad de las filas restantes de la matriz.
+Validation: complete UI suite 206/1602 and TypeScript without errors. LiveUiTest and
+ShareTest HTTP/TLS verify the rendered image, intercepted chooser, public
+identity, rejection of extra/duplicate parameters/fragment and song regression.
+Initial 4/1 because of a TLS test tapping a disabled Pause; waits and slider fixed.
+Final LiveUi2/0 (24.451s), runner exit0 + normal APK/test APK/JVM56/lint.
+Share2 passed in the initial run and its sources did not change. See evidence/s4l.json.
+Browser4 will run before opening the final PR, together with the joint regression.
+It does not claim physical acceptance or parity of the remaining matrix rows.

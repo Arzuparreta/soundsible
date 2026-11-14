@@ -179,10 +179,10 @@ An account without a canonical marker is migrated once using the previous manife
   Section interpretation stays in the server; web and Android execute the
   same bounded cues. It does not use an LLM or silently apply the account's
   global taste profile.
-  El mapa de responsabilidades del DJ, sus contratos y las diferencias entre
-  políticas de ruta están en [DJ architecture](dj/ARCHITECTURE.md). La fachada
-  `shared/dj_engine.py` conserva los imports públicos; `shared/dj/store.py`
-  posee la única caché y los trabajos, y los módulos musicales son puros.
+  The map of DJ responsibilities, their contracts and the differences between
+  route policies are in [DJ architecture](dj/ARCHITECTURE.md). The facade
+  `shared/dj_engine.py` keeps the public imports; `shared/dj/store.py`
+  owns the only cache and the jobs, and the musical modules are pure.
   Autoplay remains an invisible finite-context continuation. Search does not
   use the queue planner and its UI is unchanged.
 - **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (the same `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:

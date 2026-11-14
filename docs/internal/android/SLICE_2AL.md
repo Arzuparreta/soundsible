@@ -1,4 +1,4 @@
-# S2al — Dispositivo nativo y traspaso NORMAL
+# S2al — Native device and NORMAL handoff
 
 PlaybackService owns a Core Socket.IO device session. It verifies the cookie
 against auth/state and the native profile before joining playback_register;

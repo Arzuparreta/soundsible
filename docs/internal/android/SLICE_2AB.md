@@ -1,49 +1,49 @@
-# S2ab: retirada durante una respuesta pendiente de Radio/autoplay
+# S2ab: removal during a pending Radio/autoplay response
 
-Continuación de S2aa implementada y validada en emulador API36. No cambia
-la decisión offline ni cierra paridad completa.
+Continuation of S2aa implemented and validated on emulator API36. It does not change
+the offline decision or close full parity.
 
-Añadir a la fixture aislada un control autorizado sólo por loopback + header
-para retrasar una única respuesta ya calculada por el planner real. No sustituir
-su cuerpo, selección ni lectura del Core. El control expone únicamente IDs locales
-acotados y contadores pending/delivered; delay máximo cinco segundos, reset tras
-cada caso, sin cookies ni metadata personal en logs. Probar que una llamada sin
-autorización no puede controlar el retraso.
+Add to the isolated fixture a control authorized only by loopback + header
+to delay a single response already computed by the real planner. Do not replace
+its body, selection or Core read. The control exposes only bounded local IDs
+and pending/delivered counters; maximum delay five seconds, reset after
+each case, no cookies or personal metadata in logs. Test that a call without
+authorization cannot control the delay.
 
-Con música adquirida sintética de la fixture, pausar programa a20s, activar Radio
-o autoplay y esperar que el planner haya producido candidatos. Retirar por UI
-un candidato local mientras su respuesta está pendiente. Verificar snapshot
-privado sin archivo, retirada efectiva del servicio y ausencia permanente del ID
-cuando llega la respuesta anterior y cuando se completa un refill nuevo.
-Conservar key/identidad/pausa/posición de la actual y perfil/modo; ninguna respuesta
-antigua debe abrir otra cuenta o cerrar un programa nuevo. Repetir HTTP/HTTPS y
-Radio/autoplay; cleanup regenera sólo archivos sintéticos propios y restaura
-preferencias/controles. No borrar una biblioteca personal.
+With synthetic acquired music from the fixture, pause the programme at 20s, enable Radio
+or autoplay and wait until the planner has produced candidates. Remove through the UI
+a local candidate while its response is pending. Verify a private snapshot
+without the file, effective removal from the service and permanent absence of the ID
+when the earlier response arrives and when a new refill completes.
+Keep key/identity/pause/position of the current track and profile/mode; no old
+response may open another account or close a new programme. Repeat HTTP/HTTPS and
+Radio/autoplay; cleanup regenerates only its own synthetic files and restores
+preferences/controls. Do not delete a personal library.
 
-Preparar assets antes de instrumentar. Guardar resultado específico y volver a
-normal APK/test APK/JVM/lint sin CA temporal. Principal clean dc29b73 (49+restart2)
-en ejecución: no modificar el artifact de esa ejecución ni confundir sus sources
-con este slice. Ampliar la regresión después si se añaden casos instrumentados.
+Prepare assets before instrumenting. Save the specific result and go back to
+normal APK/test APK/JVM/lint without the temporary CA. Clean principal run dc29b73 (49+restart2)
+in progress: do not modify the artifact of that run or confuse its sources
+with this slice. Extend the regression afterwards if instrumented cases are added.
 
-Después continuar Library/Discover/Settings, DJ, Live, Android Auto, firma/update;
-PR/main/alpha sólo con los gates completos. No cerrar turno por slice.
+Then continue with Library/Discover/Settings, DJ, Live, Android Auto, signing/update;
+PR/main/alpha only with the full gates. Do not end the turn per slice.
 
-Fixture implementada: delay de una sola respuesta real, autorizado y acotado;
-GET stats expone IDs de candidatos y pending/delivered. Usa sleep cooperativo
-gevent, como el servidor, para que DELETE/GET puedan avanzar mientras la respuesta
-está retenida. Un sleep bloqueante bloqueaba también las consultas de observación;
-la prueba detectó ese error y se corrigió el helper, sin modificar el planner.
-Python WAV/FLAC: dos casos pasan en /tmp/soundsible-s2ab-planner-fixture.log.
-Verifican control no autorizado/valores inválidos, DELETE real, respuesta antigua
-con ID retirado, snapshot sin ID y plan nuevo sin ID. Ruff pasa.
+Fixture implemented: delay of a single real response, authorized and bounded;
+GET stats exposes candidate IDs and pending/delivered. It uses cooperative gevent
+sleep, like the server, so that DELETE/GET can progress while the response
+is held. A blocking sleep also blocked the observation queries;
+the test detected that error and the helper was corrected, without modifying the planner.
+Python WAV/FLAC: two cases pass in /tmp/soundsible-s2ab-planner-fixture.log.
+They verify unauthorized control/invalid values, real DELETE, old response
+with the removed ID, snapshot without the ID and new plan without the ID. Ruff passes.
 
-Instrumentación trasladada a
+Instrumentation moved to
 [PlannerRetirementTest.java](../../../android/app/src/androidTest/java/com/soundsible/android/PlannerRetirementTest.java)
-tras principal clean dc29b73: ejecutar HTTP/HTTPS para ambos modos. Cuatro casos instrumentados HTTP/HTTPS Radio/autoplay pasan, cero fallos/errores/
-omisiones, dentro de targeted6 en /tmp/soundsible-s2ab-native.log. Assets desde
-4e04083 dirty=true. La eliminación se confirma mientras pending>0; plan viejo
-entregado, refill nuevo, ausencia del ID local, key/programToken/pausa20s y modos
-preservados, sin audio HTML. Cleanup restaura preferencia y regenera sólo música
-sintética después de drenar respuesta pendiente. APK/test APK/JVM17/lint normales
-pasan sin CA temporal. No aceptación acústica ni paridad completa. Próxima
-principal ampliada53 + restart2 desde commit limpio todavía pendiente.
+after clean principal run dc29b73: run HTTP/HTTPS for both modes. Four instrumented HTTP/HTTPS Radio/autoplay cases pass, zero failures/errors/
+skips, within targeted6 in /tmp/soundsible-s2ab-native.log. Assets from
+4e04083 dirty=true. Deletion is confirmed while pending>0; old plan
+delivered, new refill, absence of the local ID, key/programToken/pause at 20s and modes
+preserved, without HTML audio. Cleanup restores the preference and regenerates only synthetic
+music after draining the pending response. Normal APK/test APK/JVM17/lint
+pass without the temporary CA. No acoustic acceptance or full parity. Next
+extended principal run 53 + restart2 from a clean commit still pending.
