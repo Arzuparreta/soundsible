@@ -255,8 +255,8 @@ def set_disabled(user_id: str, disabled: bool) -> Optional[dict[str, Any]]:
 def delete_user(user_id: str, *, purge_files: bool = True) -> bool:
     """Delete an account and, by default, its personal directories.
 
-    Never touches the shared track pool — other people's libraries point at the
-    same content-addressed files.
+    Purging schedules the account's audio for cleanup; a file leaves the
+    shared pool only once no remaining library uses it.
     """
     db = instance_db()
     current = db.get_user_row(user_id)
@@ -265,10 +265,20 @@ def delete_user(user_id: str, *, purge_files: bool = True) -> bool:
     if current.get("role") == ROLE_ADMIN and _admin_count(db) <= 1:
         raise UserError("The instance needs at least one admin.")
 
-    db.delete_user_row(user_id)
     if purge_files:
         from shared.user_context import user_config_dir, user_data_dir
 
+        library_db = user_config_dir(user_id, create=False) / "library.db"
+        if library_db.exists():
+            # Files only this account used would otherwise stay in the pool forever.
+            try:
+                from shared.library_lifecycle import retire_library
+
+                retire_library(library_db)
+            except Exception as e:
+                logger.warning("users: could not schedule audio cleanup for deleted account %s: %s", user_id, e)
+    db.delete_user_row(user_id)
+    if purge_files:
         for path in (user_config_dir(user_id, create=False), user_data_dir(user_id, create=False)):
             try:
                 shutil.rmtree(path)
