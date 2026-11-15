@@ -766,9 +766,15 @@ def get_lyrics_by_song_id():
         def settle(found, held=cached):
             if found is not None:
                 settle_upgrade(db, track.id, held, found)
-        status, record = poll_lyrics(track.artist, track.title, track.album, track.duration, on_complete=settle)
+        def needed():
+            return predates_timing_length(db.get_lyrics(track.id))
+        status, record = poll_lyrics(
+            track.artist, track.title, track.album, track.duration, on_complete=settle, needed=needed,
+        )
         if status == "complete" and record is not None:
             cached = settle_upgrade(db, track.id, cached, record)
+        elif status == "settled":
+            cached = db.get_lyrics(track.id) or cached
 
     # The listener's correction is applied here rather than sent as the
     # structured `offset`, whose sign clients have read both ways. Without one,

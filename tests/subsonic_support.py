@@ -157,7 +157,10 @@ def build(
     user = create_user(username, password="account-password")
 
     metadata = LibraryMetadata(version=1, tracks=list(tracks), playlists=dict(playlists or {}), settings={})
-    db = DatabaseManager(str(tmp_path / "library.db"))
+    from shared.user_context import user_config_dir
+
+    # The account's own library.db, the one its saved songs live in too.
+    db = DatabaseManager(str(user_config_dir(user["id"]) / "library.db"))
     db.sync_from_metadata(metadata)
     library = FakeLibrary(metadata, db)
 

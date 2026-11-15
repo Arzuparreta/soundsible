@@ -157,6 +157,8 @@ class FavouritesManager:
                                 if enriched is not None:
                                     enriched.append(dict(match, keys=list(match["keys"])))
                         continue
+                    if not self._describes(entry):
+                        continue
                     entry["added_at"] = self._held_by_library(entry["keys"]) or library_dates.now()
                     _stamp_mark(entry)
                     self._entries.insert(0, entry)
@@ -370,12 +372,25 @@ class FavouritesManager:
         held since — hearting a downloaded song does not make it new. Anything
         else joins now, or when an importer says it was acquired. Always called
         under the lock.
+
+        Raises ValueError when the entry has no title and names no file the
+        library holds: nothing could show it (`shared/collection_repair.py`).
         """
+        if not self._describes(entry):
+            raise ValueError("a saved song needs a title or a file in the library")
         entry["added_at"] = self._held_by_library(entry["keys"]) or proposed or library_dates.now()
         _stamp_mark(entry)
         self._entries.insert(0, entry)
         self._reindex()
         self._persist()
+
+    def _describes(self, entry: Dict[str, Any]) -> bool:
+        from shared.collection_repair import require_description
+        try:
+            require_description(self._transaction, entry)
+        except ValueError:
+            return False
+        return True
 
     def _held_by_library(self, keys: List[str]) -> Optional[str]:
         if self._library_held_since is None:

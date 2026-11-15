@@ -68,6 +68,24 @@ without an available source. Missing audio does not remove an item or its positi
 The migration must fail and roll back on unreadable data; do not replace them with an
 empty collection.
 
+A saved song must say what it is: a new item needs a title, an identity
+beyond library file references (a video saved bare is identified by its
+video), or a file the library holds (`shared/collection_repair.py`, enforced
+in `save_entries` and playlist admission). A bare `lib:<id>` naming a file
+the library does not hold identifies nothing and is rejected. The July 2026 favourites migration broke this. It turned
+every v1 favourite id into a bare `lib:<id>` with no title, including video
+ids of songs hearted before download and ids of tracks already deleted, so 41
+of one account's saved songs were listed under their internal UUIDs. The
+`described-saved-songs` migration recovers identity and description from
+local evidence only, matching on exact file or video ids: the library's files
+and `track_id_aliases`, `library.json.pre-sqlite.bak`, the tags of a managed
+file left on disk after its row was deleted, and the YouTube metadata the
+engine cached. A wrongly read video id becomes a `yt:` key. A song that
+evidence ties to a file item is merged into it. A saved song that nothing
+describes is removed and logged, because it could neither be shown nor
+played. A playlist slot without evidence keeps its place, labelled with the
+id the playlist held, as `reference()` does.
+
 ## Plan and acceptance
 
 1. Replace the video → hash normalization with persisted entities and relations.
