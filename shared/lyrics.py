@@ -477,9 +477,17 @@ class _LyricsLookupCoordinator:
         finally:
             self._slots.release()
 
-    def poll_or_start(self, key: str, fn, *, forget_when_done: bool = False) -> tuple[str, Optional[Dict[str, Any]]]:
+    def poll_or_start(
+        self, key: str, fn, *, forget_when_done: bool = False, needed: Optional[Callable[[], bool]] = None,
+    ) -> tuple[str, Optional[Dict[str, Any]]]:
         """``forget_when_done`` is for a lookup that reports its own result:
-        nobody comes back to collect it, so it must not stay held here."""
+        nobody comes back to collect it, so it must not stay held here.
+
+        ``needed``, asked under the lock before a new lookup starts, lets the
+        caller re-check what that lookup would settle. A forgotten lookup has
+        already reported, so a caller that read its state before the report
+        landed sees the report here instead of starting the lookup again.
+        """
         with self._lock:
             job = self._jobs.get(key)
             if job is not None:
@@ -492,6 +500,8 @@ class _LyricsLookupCoordinator:
                     logger.warning("Lyrics background lookup failed: %s", exc)
                     return "complete", None
 
+            if needed is not None and not needed():
+                return "settled", None
             if not self._slots.acquire(blocking=False):
                 return "busy", None
             try:
@@ -553,13 +563,17 @@ def poll_lyrics(
     album: Optional[str] = None,
     duration: Optional[int] = None,
     on_complete: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = None,
+    needed: Optional[Callable[[], bool]] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
     """Poll/start a bounded background lookup.
 
-    Status is ``complete``, ``pending``, or ``busy``. Busy means both dedicated
-    workers are active; no server-side task was buffered. ``on_complete``, if
-    this call starts the lookup, receives its record on the worker as soon as
-    it lands — for a caller that will not come back to collect it.
+    Status is ``complete``, ``pending``, ``busy`` or ``settled``. Busy means
+    both dedicated workers are active; no server-side task was buffered.
+    ``on_complete``, if this call starts the lookup, receives its record on the
+    worker as soon as it lands — for a caller that will not come back to
+    collect it. ``needed`` is checked before a new lookup starts; when it says
+    no, nothing starts and the status is ``settled``: what the caller read is
+    out of date, and it reads again.
     """
     key = _lookup_key(artist, title, album, duration)
     lookup = partial(fetch_lyrics, artist, title, album, duration)
@@ -572,8 +586,8 @@ def poll_lyrics(
                 logger.warning("Lyrics completion callback failed: %s", exc)
             return record
 
-        return _LOOKUPS.poll_or_start(key, lookup_and_report, forget_when_done=True)
-    return _LOOKUPS.poll_or_start(key, lookup)
+        return _LOOKUPS.poll_or_start(key, lookup_and_report, forget_when_done=True, needed=needed)
+    return _LOOKUPS.poll_or_start(key, lookup, needed=needed)
 
 
 _LRC_TIMESTAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
