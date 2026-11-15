@@ -1,0 +1,47 @@
+{
+  "spicy": {
+    "environment_key_available": false,
+    "probes": [
+      {
+        "tested_at": "2026-11-15T13:50:07.804793+00:00",
+        "provider": "spicy",
+        "artist": "Soen",
+        "title": "The Words",
+        "status": 401,
+        "response_type": "object",
+        "response_status": 401,
+        "credential_supplied": false
+      },
+      {
+        "tested_at": "2026-11-15T13:50:08.048381+00:00",
+        "provider": "spicy",
+        "artist": "The Weeknd",
+        "title": "Blinding Lights",
+        "status": 401,
+        "response_type": "object",
+        "response_status": 401,
+        "credential_supplied": false
+      },
+      {
+        "tested_at": "2026-11-15T13:50:08.288020+00:00",
+        "provider": "spicy",
+        "artist": "Extremoduro",
+        "title": "La vereda de la puerta de atrás",
+        "status": 401,
+        "response_type": "object",
+        "response_status": 401,
+        "credential_supplied": false
+      }
+    ],
+    "coverage": "not_measured_authentication_required"
+  },
+  "bini": {
+    "upstream_source": "https://github.com/binimum/am-lyrics/blob/7562eaba685d8952491fb6b7af9702e13de900bb/src/AmLyrics.ts",
+    "observed_redirect": "https://lyrics-api.binimum.org/ -> https://lrc.red/api/v1",
+    "matrix_provider": "bini_legacy"
+  },
+  "youtube_native_and_captions": {
+    "coverage": "not_measured",
+    "reason": "YouTube Music page/player integrations, not standalone song-lyrics HTTP catalog APIs. Captions can be ASR or descriptions and are not equivalent to supplied karaoke word timing."
+  }
+}

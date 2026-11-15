@@ -1,0 +1,18 @@
+{
+  "sample_sha256": "41c54d9057938b898945e78688b2df9598d8324be62a08aa566c8b8ceb516bd4",
+  "providers": [
+    "lrclib",
+    "lrc_red",
+    "better_ttml",
+    "better_qq",
+    "better_kugou",
+    "unison",
+    "bini_legacy"
+  ],
+  "interval_sec": 0.6,
+  "timeout_sec": 10,
+  "workers": 4,
+  "max_response_bytes": 4194304,
+  "max_generic_attempts": 2,
+  "seed": "soundsible-lyrics-2026-11-15"
+}

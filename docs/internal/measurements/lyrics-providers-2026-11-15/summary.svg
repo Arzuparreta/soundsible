@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 550" role="img" aria-labelledby="title desc">
+<title id="title">Timed lyrics returned for 300 collection items</title>
+<desc id="desc">Outline: timed response. Colored bars: no hard metadata or timing conflict. Purple: actual word or syllable timestamps. An asterisk means candidate identity is unavailable.</desc>
+<rect width="1000" height="550" fill="white"/>
+<style>text{font-family:system-ui,sans-serif;fill:#334155;font-size:15px}.small{font-size:13px}</style>
+<text x="10" y="28" font-size="21" font-weight="600">Timed lyrics · 300 paired music items</text>
+<line x1="270.0" y1="58" x2="270.0" y2="432" stroke="#CBD5E1" stroke-dasharray="3 5"/>
+<text class="small" x="270.0" y="452" text-anchor="middle">0%</text>
+<line x1="378.0" y1="58" x2="378.0" y2="432" stroke="#CBD5E1" stroke-dasharray="3 5"/>
+<text class="small" x="378.0" y="452" text-anchor="middle">20%</text>
+<line x1="486.0" y1="58" x2="486.0" y2="432" stroke="#CBD5E1" stroke-dasharray="3 5"/>
+<text class="small" x="486.0" y="452" text-anchor="middle">40%</text>
+<line x1="594.0" y1="58" x2="594.0" y2="432" stroke="#CBD5E1" stroke-dasharray="3 5"/>
+<text class="small" x="594.0" y="452" text-anchor="middle">60%</text>
+<line x1="702.0" y1="58" x2="702.0" y2="432" stroke="#CBD5E1" stroke-dasharray="3 5"/>
+<text class="small" x="702.0" y="452" text-anchor="middle">80%</text>
+<line x1="810.0" y1="58" x2="810.0" y2="432" stroke="#CBD5E1" stroke-dasharray="3 5"/>
+<text class="small" x="810.0" y="452" text-anchor="middle">100%</text>
+<text x="10" y="96">LRCLIB (current resolver)</text>
+<rect x="270" y="76" width="277.20" height="28" fill="none" stroke="#94A3B8" stroke-width="2"/>
+<rect x="270" y="80" width="243.00" height="20" fill="#0F766E"/>
+<rect x="270" y="80" width="0.00" height="20" fill="#7C3AED"/>
+<text x="835" y="96">135/300 · 45.0%</text>
+<text x="10" y="147">lrc.red (direct)</text>
+<rect x="270" y="127" width="183.60" height="28" fill="none" stroke="#94A3B8" stroke-width="2"/>
+<rect x="270" y="131" width="158.40" height="20" fill="#0F766E"/>
+<rect x="270" y="131" width="57.60" height="20" fill="#7C3AED"/>
+<text x="835" y="147">88/300 · 29.3%</text>
+<text x="10" y="198">Better Lyrics TTML *</text>
+<rect x="270" y="178" width="156.60" height="28" fill="none" stroke="#94A3B8" stroke-width="2"/>
+<rect x="270" y="182" width="156.60" height="20" fill="#0F766E"/>
+<rect x="270" y="182" width="45.00" height="20" fill="#7C3AED"/>
+<text x="835" y="198">87/300 · 29.0%</text>
+<text x="10" y="249">Better Lyrics QQ *</text>
+<rect x="270" y="229" width="86.40" height="28" fill="none" stroke="#94A3B8" stroke-width="2"/>
+<rect x="270" y="233" width="86.40" height="20" fill="#0F766E"/>
+<rect x="270" y="233" width="84.60" height="20" fill="#7C3AED"/>
+<text x="835" y="249">48/300 · 16.0%</text>
+<text x="10" y="300">Better Lyrics Kugou *</text>
+<rect x="270" y="280" width="36.00" height="28" fill="none" stroke="#94A3B8" stroke-width="2"/>
+<rect x="270" y="284" width="36.00" height="20" fill="#0F766E"/>
+<rect x="270" y="284" width="0.00" height="20" fill="#7C3AED"/>
+<text x="835" y="300">20/300 · 6.7%</text>
+<text x="10" y="351">Unison (video first)</text>
+<rect x="270" y="331" width="7.20" height="28" fill="none" stroke="#94A3B8" stroke-width="2"/>
+<rect x="270" y="335" width="5.40" height="20" fill="#0F766E"/>
+<rect x="270" y="335" width="5.40" height="20" fill="#7C3AED"/>
+<text x="835" y="351">3/300 · 1.0%</text>
+<text x="10" y="402">Bini legacy → lrc.red</text>
+<rect x="270" y="382" width="176.40" height="28" fill="none" stroke="#94A3B8" stroke-width="2"/>
+<rect x="270" y="386" width="149.40" height="20" fill="#0F766E"/>
+<rect x="270" y="386" width="50.40" height="20" fill="#7C3AED"/>
+<text x="835" y="402">83/300 · 27.7%</text>
+<rect x="10" y="476" width="18" height="14" fill="none" stroke="#94A3B8"/><text class="small" x="36" y="488">Timed body returned</text>
+<rect x="255" y="476" width="18" height="14" fill="#0F766E"/><text class="small" x="281" y="488">Nonconflicting line timing</text>
+<rect x="565" y="476" width="18" height="14" fill="#7C3AED"/><text class="small" x="591" y="488">Word/syllable timing included</text>
+<text class="small" x="10" y="520">* Candidate identity unavailable. Timed payloads do not establish acoustic alignment.</text>
+<text class="small" x="10" y="540">Spicy: authentication required, coverage not measured. Bini is a shared lrc.red route.</text>
+</svg>
