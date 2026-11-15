@@ -277,7 +277,7 @@ def test_reconciliation_leaves_files_that_may_still_be_committing():
     assert fresh.exists()
 
 
-def test_reconciliation_waits_for_every_account_to_describe_its_saved_songs():
+def test_an_undescribed_account_keeps_only_the_files_its_own_keys_name():
     from shared.collection_repair import MIGRATION
     from shared.library_lifecycle import reconcile
     from shared.users import create_user
@@ -285,22 +285,54 @@ def test_reconciliation_waits_for_every_account_to_describe_its_saved_songs():
     for uid in ('alice', 'bob'):
         create_user(uid, user_id=uid, password='account-password')
     alice = library('alice', provider)
-    library('bob', provider)
+    bob = library('bob', provider)
+    alices = pool_file('own.flac')
+    evidence = pool_file('e' * 64 + '.m4a')
     leftover = pool_file('a' * 64 + '.m4a')
-    with alice.db._get_connection() as conn:
+    with user_context('alice'):
+        alice.metadata.tracks.append(Track(id='own', title='Own', artist='Artist', album='', duration=1,
+                                           file_hash='own', original_filename='own.flac', file_size=4,
+                                           bitrate=100, format='flac'))
+        alice.metadata.version += 1
+        assert alice._save_metadata()
+    # Bob has not opened his library since the migration that reads leftover tags.
+    with bob.db._get_connection() as conn:
         conn.execute('DELETE FROM collection_migrations WHERE name=?', (MIGRATION,))
+        conn.execute("INSERT INTO collection_items(id,snapshot,saved) VALUES ('bare',?,1)",
+                     (f'{{"keys": ["lib:{"e" * 64}"]}}',))
+        conn.execute('INSERT INTO collection_keys VALUES (?,?)', (f'lib:{"e" * 64}', 'bare'))
         conn.commit()
 
-    assert reconcile(now=settled()) is None
-    drain(provider)
-    assert leftover.exists()
-
-    with alice.db._get_connection() as conn:
-        conn.execute('INSERT INTO collection_migrations VALUES (?)', (MIGRATION,))
-        conn.commit()
-    assert reconcile(now=settled()) == 1
+    with user_context('alice'):
+        assert alice.delete_track(alice.metadata.get_track_by_id('own'))
+    assert not alices.exists()
+    assert reconcile(now=settled()) == 2
     drain(provider)
     assert not leftover.exists()
+    assert evidence.exists()
+    with bob.db._get_connection() as conn:
+        conn.execute('INSERT INTO collection_migrations VALUES (?)', (MIGRATION,))
+        conn.commit()
+    drain(provider)
+    assert not evidence.exists()
+
+
+def test_a_library_before_the_collection_keeps_its_saved_and_playlist_files():
+    import json
+    from shared.library_lifecycle import reconcile
+    provider = music_dir_provider()
+    lib = library('alice', provider)
+    saved = pool_file('a' * 64 + '.m4a')
+    listed = pool_file('b' * 64 + '.m4a')
+    with lib.db._get_connection() as conn:
+        conn.execute('DROP TRIGGER IF EXISTS collection_playlist_INSERT')
+        conn.execute('DELETE FROM collection_state')
+        conn.execute("INSERT INTO playlist_tracks(playlist_name,position,track_id) VALUES ('Mix',1,?)", ('b' * 64,))
+        conn.commit()
+    Path(lib.db.db_path).with_name('favourites.json').write_text(json.dumps({'favourites': ['a' * 64]}))
+    assert reconcile(now=settled()) == 0
+    drain(provider)
+    assert saved.exists() and listed.exists()
 
 
 def test_reconciliation_waits_for_unreadable_accounts_and_running_downloads():

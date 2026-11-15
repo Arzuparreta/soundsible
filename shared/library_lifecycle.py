@@ -3,7 +3,8 @@
 A cleanup intent is durable before references change. Failure always retains
 bytes; a later pass rechecks all canonical libraries before deleting anything.
 An account uses a file through a track row or its collection's binding to that
-file (`collection_files`), never through a saved song's `lib:` key.
+file (`collection_files`), never through a saved song's `lib:` key once
+`described-saved-songs` has read the evidence those keys point at.
 """
 from contextlib import contextmanager, closing
 from functools import wraps
@@ -186,12 +187,7 @@ def _has_table(conn, name):
 
 
 def _described(conn):
-    """The account ran the migration that reads leftover files as evidence.
-
-    `described-saved-songs` recovers saved songs from the tags of managed
-    files whose rows were deleted. Until it has run, those files are the only
-    record of what such a song was, so none of them may be removed.
-    """
+    """The account ran the migration that reads leftover files as evidence."""
     from shared.collection_repair import MIGRATION
     return _has_table(conn, 'collection_migrations') and conn.execute(
         'SELECT 1 FROM collection_migrations WHERE name=?', (MIGRATION,)).fetchone() is not None
@@ -211,27 +207,25 @@ def _format(value):
 def _canonical_libraries():
     """Read-only connections to every account library, and ids downloads may still commit.
 
-    Raises `_Retained` when any account, or an acquisition in progress, cannot
-    be read: an unreadable library is never an empty one.
+    Yields `(path, connection)` pairs. Raises `_Retained` when an account, or
+    an acquisition in progress, cannot be read: an unreadable library is never
+    an empty one.
     """
     root = get_config_dir()
     paths = set((root / 'users').glob('*/library.db'))
-    registered = None
     downloads = set()
     instance = root / 'instance.db'
     if instance.exists():
         with closing(sqlite3.connect(f'{instance.resolve().as_uri()}?mode=ro', uri=True)) as conn:
             if _has_table(conn, 'users'):
-                registered = set()
                 # Disabled accounts count as well.
                 for (uid,) in conn.execute('SELECT id FROM users'):
                     directory = root / 'users' / uid
                     db = directory / 'library.db'
                     if db.exists():
-                        registered.add(db)
+                        paths.add(db)
                     elif (directory / 'library.json').exists():
                         raise _Retained(f'account {uid} has no library.db yet')
-                paths |= registered
             # An acquisition can be between publishing audio and committing its
             # personal reference. Conservatively postpone cleanup during jobs.
             if _has_table(conn, 'download_jobs'):
@@ -242,36 +236,69 @@ def _canonical_libraries():
                         raise _Retained('a download has not reported its file yet')
                     if result:
                         downloads.update(value for value in (result.get('id'), result.get('file_hash')) if value)
-    gated = paths if registered is None else registered
     connections = []
     try:
         for path in sorted(paths):
             conn = sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True)
-            connections.append(conn)
-            if path in gated and not _described(conn):
-                raise _Retained(f'{path} has not described its saved songs yet')
+            connections.append((path, conn))
+            try:
+                conn.execute('SELECT 1 FROM sqlite_master').fetchone()
+            except sqlite3.DatabaseError as error:
+                raise _Retained(f'{path} cannot be read: {error}') from error
         yield connections, downloads
     finally:
-        for conn in connections:
+        for _, conn in connections:
             conn.close()
 
 
-def _holds(conn, ids, file_format):
-    """This library uses the file: a track row, or the collection's binding to it.
+def _legacy_saved_ids(db_path):
+    """File ids an account's `favourites.json` names, read only before its collection exists.
 
-    A saved or playlist item that only carries a `lib:` key does not use the
-    file; the key is a description, and the item plays from another source.
+    Until then that file and `playlist_tracks` are the account's live data.
     """
+    path = Path(db_path).with_name('favourites.json')
+    if not path.exists():
+        return set()
+    try:
+        saved = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise _Retained(f'{path} cannot be read: {error}') from error
+    entries = saved.get('saved', saved.get('favourites', [])) if isinstance(saved, dict) else saved
+    ids = set()
+    for entry in entries if isinstance(entries, list) else []:
+        if isinstance(entry, str):
+            ids.add(entry)
+        elif isinstance(entry, dict):
+            ids.update(key[4:] for key in entry.get('keys') or [] if isinstance(key, str) and key.startswith('lib:'))
+    return ids
+
+
+def _file_ids(db_path, conn, evidence=True):
+    """File ids this library uses or, with `evidence`, may still need, whatever their format.
+
+    A migrated collection uses a file only through `collection_files`; a saved
+    song's `lib:` key is a description. Until `described-saved-songs` has run,
+    a `lib:` key is the evidence that migration will read from the file's tags.
+    """
+    ids = set()
+    if _has_table(conn, 'collection_files'):
+        ids.update(row[0] for row in conn.execute('SELECT file_id FROM collection_files'))
+    if not _collection_ready(conn):
+        # Before the collection model a playlist slot held the file id itself.
+        ids.update(row[0] for row in conn.execute('SELECT track_id FROM playlist_tracks'))
+        ids |= _legacy_saved_ids(db_path)
+    elif evidence and not _described(conn):
+        ids.update(row[0][4:] for row in conn.execute("SELECT key FROM collection_keys WHERE key LIKE 'lib:%'"))
+    return ids
+
+
+def _holds(db_path, conn, ids, file_format):
+    """This library uses the file, or may still need it as evidence (`_file_ids`)."""
     # IDs and hashes are both used by the local path resolver.
     if conn.execute('''SELECT 1 FROM tracks WHERE (id IN (?, ?) OR file_hash IN (?, ?))
             AND COALESCE(format, 'mp3')=? LIMIT 1''', (*ids, *ids, file_format)).fetchone():
         return True
-    if _has_table(conn, 'collection_files') and conn.execute(
-            'SELECT 1 FROM collection_files WHERE file_id IN (?, ?) LIMIT 1', ids).fetchone():
-        return True
-    # Before the collection model a playlist slot held the file id itself.
-    return not _collection_ready(conn) and conn.execute(
-        'SELECT 1 FROM playlist_tracks WHERE track_id IN (?, ?) LIMIT 1', ids).fetchone() is not None
+    return not _file_ids(db_path, conn).isdisjoint(ids)
 
 
 def _referenced(payload):
@@ -280,7 +307,7 @@ def _referenced(payload):
         with _canonical_libraries() as (libraries, downloads):
             if downloads.intersection(ids):
                 return True
-            return any(_holds(conn, ids, _format(payload['format'])) for conn in libraries)
+            return any(_holds(path, conn, ids, _format(payload['format'])) for path, conn in libraries)
     except _Retained as reason:
         log.debug('Audio cleanup postponed: %s', reason)
         return True
@@ -361,10 +388,10 @@ def reconcile(now=None):
 
     Deleting a track before intents existed (#221) never removed its file, and
     nothing would ever ask for those files again. This pass runs once per music
-    folder, after every registered library can be read and has described its
-    saved songs; until then it does nothing and is retried. `drain()` checks
-    every reference again before deleting, as for any other intent. Returns the
-    number of intents recorded, or None when the pass has to wait.
+    folder, once every registered library can be read; until then it does
+    nothing and is retried. It applies the same per-library rule as `drain()`,
+    which checks every reference again before deleting. Returns the number of
+    intents recorded, or None when the pass has to wait.
     """
     from shared.app_config import get_output_dir
     root = get_output_dir()
@@ -381,13 +408,12 @@ def reconcile(now=None):
     try:
         with _canonical_libraries() as (libraries, downloads):
             any_format |= downloads
-            for conn in libraries:
+            for path, conn in libraries:
                 for track_id, file_hash, file_format in conn.execute('SELECT id, file_hash, format FROM tracks'):
                     held.update((value, _format(file_format)) for value in (track_id, file_hash) if value)
-                if _has_table(conn, 'collection_files'):
-                    any_format.update(row[0] for row in conn.execute('SELECT file_id FROM collection_files'))
-                if not _collection_ready(conn):
-                    any_format.update(row[0] for row in conn.execute('SELECT track_id FROM playlist_tracks'))
+                # Evidence gets an intent too: `drain()` keeps it until the
+                # account has described its saved songs, then removes it.
+                any_format |= _file_ids(path, conn, evidence=False)
     except _Retained as reason:
         log.info('Unreferenced audio reconciliation postponed: %s', reason)
         return None
