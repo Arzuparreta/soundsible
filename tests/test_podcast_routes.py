@@ -335,6 +335,14 @@ def _jpeg(width, height):
     return out.getvalue()
 
 
+def _size(body):
+    from io import BytesIO
+
+    from PIL import Image
+
+    return Image.open(BytesIO(body)).size
+
+
 SMALL_JPEG = _jpeg(32, 32)
 
 
@@ -344,51 +352,135 @@ def _image_response(status=200, kind="image/jpeg", body=SMALL_JPEG, headers=None
     resp.status_code = status
     resp.is_redirect = status in (301, 302, 303, 307, 308)
     resp.headers = {"Content-Type": kind, **(headers or {})}
-    resp.iter_content.return_value = iter([body])
+    resp.iter_content.side_effect = lambda **_: iter([body])
     return resp
 
 
-def test_artwork_is_fetched_by_the_engine_without_a_referer(client):
+@pytest.fixture()
+def artwork_cache(tmp_path):
+    from shared import podcast_artwork
+    from shared.artwork_variants import VariantCache
+
+    cache = VariantCache(tmp_path / "cache", tmp_path / "data")
+    podcast_artwork._failures.clear()
+    with patch.object(podcast_artwork, "_cache", return_value=cache):
+        yield cache
+    podcast_artwork._failures.clear()
+
+
+def _publisher(*responses):
+    from shared import podcast_artwork
+
+    return patch.object(podcast_artwork.requests, "get", side_effect=list(responses))
+
+
+def test_artwork_is_fetched_by_the_engine_without_a_referer(client, artwork_cache):
     # esRadio's image host answers 403 to a browser that names Soundsible in
     # its Referer, and every cover in the app is a CSS background.
-    with patch.object(podcasts.requests, "get", return_value=_image_response()) as get:
+    with _publisher(_image_response()) as get:
         resp = client.get("/api/podcasts/artwork?url=https://s1.example.com//show.jpg",
                           headers={"Referer": "http://127.0.0.1:5005/player/"})
     assert resp.status_code == 200
-    assert resp.data == SMALL_JPEG
-    assert resp.mimetype == "image/jpeg"
-    assert "max-age" in resp.headers["Cache-Control"]
+    assert resp.mimetype == "image/jpeg" and _size(resp.data) == (32, 32)
+    assert resp.headers["Cache-Control"] == "private, max-age=604800"
     assert get.call_args.args == ("https://s1.example.com//show.jpg",)
     assert "Referer" not in get.call_args.kwargs["headers"]
 
 
-def test_artwork_redirects_are_checked_like_the_first_url(client):
-    redirect = _image_response(302, headers={"Location": "http://127.0.0.1/admin.png"})
-    with patch.object(podcasts.requests, "get", return_value=redirect) as get:
-        resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg")
-    assert resp.status_code == 404
-    get.assert_called_once()
+def test_artwork_goes_by_its_bytes_not_by_the_label_its_host_gives_it(client, artwork_cache):
+    # Anchor's CDN labels its JPEGs `image/jpg`; COPE serves show artwork as
+    # `application/octet-stream`. Both were refused, and neither show had a cover.
+    for n, label in enumerate(("image/jpg", "application/octet-stream", "binary/octet-stream", "")):
+        with _publisher(_image_response(kind=label)):
+            resp = client.get(f"/api/podcasts/artwork?url=https://cdn.example.com/{n}.jpg")
+        assert resp.status_code == 200, label
 
 
-def test_artwork_is_raster_images_only(client):
-    for refused in (_image_response(kind="image/svg+xml"), _image_response(kind="text/html"),
-                    _image_response(404), _image_response(headers={"Content-Length": str(64 * 1024 * 1024)})):
-        with patch.object(podcasts.requests, "get", return_value=refused):
-            assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/a").status_code == 404
-    with patch.object(podcasts.requests, "get") as get:
+def test_artwork_is_raster_images_only(client, artwork_cache):
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    refused = (_image_response(kind="image/svg+xml", body=svg), _image_response(body=b"<html><body>Not found</body></html>"),
+               _image_response(body=b"\xff\xd8\xff" + b"0" * 64), _image_response(404),
+               _image_response(headers={"Content-Length": str(64 * 1024 * 1024)}))
+    for n, answer in enumerate(refused):
+        with _publisher(answer):
+            assert client.get(f"/api/podcasts/artwork?url=https://cdn.example.com/{n}").status_code == 404
+    with _publisher() as get:
         assert client.get("/api/podcasts/artwork?url=http://10.0.0.1/a.jpg").status_code == 400
+        assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg&size=200").status_code == 400
     get.assert_not_called()
 
 
-def test_large_artwork_is_redrawn_at_most_1024_pixels_on_a_side(client):
-    from io import BytesIO
+def test_artwork_redirects_are_checked_like_the_first_url(client, artwork_cache):
+    redirect = _image_response(302, headers={"Location": "http://127.0.0.1/admin.png"})
+    with _publisher(redirect) as get:
+        resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg")
+    assert resp.status_code == 404
+    get.assert_called_once()
+    followed = _image_response(302, headers={"Location": "/real.jpg"})
+    with _publisher(followed, _image_response()) as get:
+        assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/b.jpg").status_code == 200
+    assert get.call_args.args == ("https://cdn.example.com/real.jpg",)
 
-    from PIL import Image
 
-    with patch.object(podcasts.requests, "get", return_value=_image_response(body=_jpeg(3000, 1500))):
-        resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/huge.jpg")
-    assert resp.status_code == 200 and resp.mimetype == "image/jpeg"
-    assert Image.open(BytesIO(resp.data)).size == (1024, 512)
-    # Bytes claiming to be an image are not passed on as one.
-    with patch.object(podcasts.requests, "get", return_value=_image_response(body=b"<html>")):
-        assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg").status_code == 404
+def test_artwork_comes_at_the_size_asked_for(client, artwork_cache):
+    with _publisher(_image_response(body=_jpeg(3000, 1500))):
+        rows = client.get("/api/podcasts/artwork?url=https://cdn.example.com/huge.jpg&size=160")
+        unsized = client.get("/api/podcasts/artwork?url=https://cdn.example.com/huge.jpg")
+        largest = client.get("/api/podcasts/artwork?url=https://cdn.example.com/huge.jpg&size=1280")
+        square = client.get("/api/podcasts/artwork?url=https://cdn.example.com/huge.jpg&size=640&fit=square")
+    assert _size(rows.data) == (160, 80)
+    assert _size(unsized.data) == (640, 320)
+    assert _size(largest.data) == (1280, 640)
+    assert _size(square.data) == (640, 640)
+
+
+def test_artwork_is_fetched_from_its_publisher_once(client, artwork_cache):
+    # Every size is drawn from the one copy the engine fetched; a second
+    # device, or a browser whose cache was cleared, costs the publisher nothing.
+    with _publisher(_image_response(body=_jpeg(1400, 1400))) as get:
+        for size in ("160", "320", "640", "160", "1280", "640"):
+            assert client.get(f"/api/podcasts/artwork?url=https://cdn.example.com/a.jpg&size={size}").status_code == 200
+    get.assert_called_once()
+
+
+def test_artwork_a_publisher_does_not_have_is_not_asked_for_again_at_once(client, artwork_cache):
+    with _publisher(_image_response(404)) as get:
+        for _ in range(3):
+            resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/gone.jpg")
+            assert resp.status_code == 404
+            assert resp.headers["Cache-Control"] == "private, max-age=900"
+    get.assert_called_once()
+
+
+def test_artwork_that_could_not_be_reached_is_tried_again(client, artwork_cache):
+    import requests
+
+    with _publisher(requests.ConnectionError("reset"), _image_response()) as get:
+        first = client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg")
+        assert first.status_code == 503 and first.headers["Cache-Control"] == "private, no-store"
+        assert client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg").status_code == 200
+    assert get.call_count == 2
+
+
+def test_artwork_is_drawn_again_once_it_is_old(client, artwork_cache):
+    import os
+
+    from shared import podcast_artwork
+
+    with _publisher(_image_response(body=_jpeg(40, 40))):
+        client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg&size=160")
+    old = podcast_artwork.time.time() - podcast_artwork.FRESH_SEC - 60
+    for path in artwork_cache.root.glob("*-podcast-v1.jpg"):
+        os.utime(path, (old, old))
+    with _publisher(_image_response(body=_jpeg(80, 80))) as get:
+        resp = client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg&size=160")
+    get.assert_called_once()
+    assert _size(resp.data) == (80, 80)
+
+
+def test_artwork_a_browser_already_has_is_not_sent_again(client, artwork_cache):
+    with _publisher(_image_response()):
+        first = client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg&size=160")
+    again = client.get("/api/podcasts/artwork?url=https://cdn.example.com/a.jpg&size=160",
+                       headers={"If-None-Match": first.headers["ETag"]})
+    assert again.status_code == 304 and not again.data

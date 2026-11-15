@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js';
 import { apiOrigin, mediaOrigin, artworkUrl } from './config';
 import { previewFallbacks, rejectedPreviews } from './artworkHints';
+import { ROW_ARTWORK, podcastArtworkCandidates, sizedPodcastArtwork } from './podcastArtwork';
 export { artworkFallback, rejectPreviewArtwork } from './artworkHints';
 
 interface ArtworkMetadata {
@@ -51,6 +52,8 @@ export function patchArtworkMetadata(tracks: ArtworkMetadata[], removed: string[
 
 export function artworkCandidates(src?: string | null): string | undefined {
   if (!src) return undefined;
+  const podcast = podcastArtworkCandidates(src);
+  if (podcast) return podcast;
   const base = `${mediaOrigin()}/api/static/cover/`;
   if (!src.startsWith(base)) return undefined;
   const [identity, query = ''] = src.slice(base.length).split('?');
@@ -121,11 +124,12 @@ interface TrackCoverIdentity {
  * one rule, one place. `playbackYoutubeId` below is its audio-side twin.
  *
  * Pass `size: 'thumb'` from list/grid rows; full size is for now-playing and
- * edit views. A preview's thumbnail is already small and has no size variants.
+ * edit views. A preview's thumbnail is already small and has no size variants,
+ * except a podcast episode's, which the engine draws at the size asked for.
  */
 export const trackCoverUrl = (track: TrackCoverIdentity, size?: 'thumb'): string | undefined =>
   track.source === 'preview'
-    ? (size === 'thumb' ? artworkUrl(track.cover) : previewCover(track.id, track.cover)) || undefined
+    ? (size === 'thumb' ? artworkUrl(sizedPodcastArtwork(track.cover, ROW_ARTWORK)) : previewCover(track.id, track.cover)) || undefined
     : coverUrl(track.id, size);
 
 /** Whether a track has any artwork to show. Defined in terms of

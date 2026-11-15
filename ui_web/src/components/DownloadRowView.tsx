@@ -1,6 +1,7 @@
 import { createMemo, Show, type JSX } from 'solid-js';
 import { t } from '../lib/i18n';
 import { coverStyle } from '../lib/cover';
+import { ROW_ARTWORK, podcastArtwork } from '../lib/podcastArtwork';
 import type { DownloadQueueItem } from '../types/download';
 import styles from '../routes/Downloads.module.css';
 
@@ -49,7 +50,10 @@ function progressView(i: DownloadQueueItem): ProgressView {
 
 export function DownloadRowView(props: { item: DownloadQueueItem; disabled?: boolean; retry(id: string): void; remove(id: string): void }) {
   const v = createMemo(() => progressView(props.item));
-  const coverBg = (): JSX.CSSProperties => coverStyle(props.item.id, props.item.thumbnail_url);
+  // A podcast episode's artwork is the feed's: fetched by the engine, as
+  // everywhere else, since some feed hosts refuse a page's request for it.
+  const coverBg = (): JSX.CSSProperties => coverStyle(props.item.id, props.item.source_type === 'podcast_enclosure'
+    ? podcastArtwork(props.item.thumbnail_url, ROW_ARTWORK) : props.item.thumbnail_url);
 
   return (
     <div classList={{ [styles.row]: true, [styles.rowFailed]: v().failed }}>

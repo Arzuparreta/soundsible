@@ -85,6 +85,12 @@ class ArtworkStore:
             install_changes(db, (('refs', 'track', 'track_id'), ('overrides', 'track', 'track_id'), ('objects', 'object', 'hash')))
             db.execute('CREATE INDEX IF NOT EXISTS refs_hash ON refs(hash)')
 
+    @property
+    def variants(self):
+        """The disk cache of presentation variants. Podcast artwork keeps its
+        sizes here too, so both share one quota and one eviction order."""
+        return self._variants
+
     def change_state(self):
         from shared.sqlite_changes import cursor
         with self.connect() as db:
