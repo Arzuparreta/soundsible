@@ -55,7 +55,10 @@ def ready(conn):
 
 
 def library_ready(conn):
-    return ready(conn) and conn.execute("SELECT 1 FROM collection_migrations WHERE name='legacy-playlists'").fetchone() is not None
+    from shared.collection_repair import MIGRATION
+    done = {row[0] for row in conn.execute(
+        "SELECT name FROM collection_migrations WHERE name IN ('legacy-playlists',?)", (MIGRATION,))}
+    return ready(conn) and done == {'legacy-playlists', MIGRATION}
 
 
 def bump(conn):
@@ -335,8 +338,13 @@ def sync(conn, metadata, db_path, replacements=None):
             conn.execute('DELETE FROM collection_keys WHERE item_id=?', (old,))
             conn.execute('DELETE FROM collection_sources WHERE item_id=?', (old,))
             conn.execute('DELETE FROM collection_items WHERE id=?', (old,))
+    from shared.collection_repair import MIGRATION, Evidence, describe_legacy, repair
+    evidence = Evidence(conn, db_path)
     if migrating:
-        save_entries(conn, _legacy_saved(Path(db_path).with_name('favourites.json')))
+        save_entries(conn, describe_legacy(conn, _legacy_saved(Path(db_path).with_name('favourites.json')), evidence))
+    if not conn.execute('SELECT 1 FROM collection_migrations WHERE name=?', (MIGRATION,)).fetchone():
+        repair(conn, metadata, evidence)
+        conn.execute('INSERT INTO collection_migrations VALUES (?)', (MIGRATION,))
     for name, ids in metadata.playlists.items():
         metadata.playlists[name] = [reference(conn, value) for value in ids]
     covers = metadata.settings.get('playlist_covers')
@@ -370,8 +378,10 @@ def entries(conn):
 
 def save_entries(conn, values):
     """Persist saved/favourite properties on the SAME entities as playlists."""
+    from shared.collection_repair import require_description
     retained = set()
     for position, entry in enumerate(values):
+        require_description(conn, entry)
         item_id = admit(conn, entry)
         retained.add(item_id)
         entry['item_id'] = item_id
@@ -431,7 +441,9 @@ class Collection:
         with self.transaction() as conn:
             if not ready(conn):
                 conn.execute('INSERT INTO collection_state VALUES (1,0)')
-                save_entries(conn, _legacy_saved(self.db.db_path.with_name('favourites.json')))
+                from shared.collection_repair import Evidence, describe_legacy
+                save_entries(conn, describe_legacy(conn, _legacy_saved(self.db.db_path.with_name('favourites.json')),
+                                                   Evidence(conn, self.db.db_path)))
 
     @serialized
     def write_saved(self, values):

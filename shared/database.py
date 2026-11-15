@@ -1116,6 +1116,8 @@ class DatabaseManager:
                     name, entry = playlist_entry
                     if name not in metadata.playlists:
                         raise ValueError("Playlist not found")
+                    from shared.collection_repair import require_description
+                    require_description(conn, entry)
                     item_id = admit(conn, entry)
                     entry['item_id'] = item_id
                     saved = entries(conn)

@@ -64,25 +64,32 @@ def track_storage_key(track: Any) -> str:
     return f"tracks/{identity}.{track_format}"
 
 
-def resolve_local_track_path(track: Any) -> Optional[str]:
-    """
-    Resolve the managed content-addressed path first, then an approved scanned
-    source path stored only in this machine's SQLite database.
-    Returns the first path that exists, or None.
-    """
+def managed_tracks_dir() -> Optional[Path]:
+    """The folder that holds managed audio as `<content hash>.<format>`."""
     from shared.app_config import get_output_dir
     from shared.constants import DEFAULT_OUTPUT_DIR_FALLBACK
-
-    track_id = getattr(track, "id", None)
-    file_hash = getattr(track, "file_hash", None)
-    track_format = (getattr(track, "format", None) or "mp3").strip(".")
 
     output_dir = get_output_dir()
     if output_dir is None:
         output_dir = os.getenv("OUTPUT_DIR") or DEFAULT_OUTPUT_DIR_FALLBACK
     if not output_dir:
         return None
-    tracks_dir = Path(output_dir).expanduser().resolve() / "tracks"
+    return Path(output_dir).expanduser().resolve() / "tracks"
+
+
+def resolve_local_track_path(track: Any) -> Optional[str]:
+    """
+    Resolve the managed content-addressed path first, then an approved scanned
+    source path stored only in this machine's SQLite database.
+    Returns the first path that exists, or None.
+    """
+    track_id = getattr(track, "id", None)
+    file_hash = getattr(track, "file_hash", None)
+    track_format = (getattr(track, "format", None) or "mp3").strip(".")
+
+    tracks_dir = managed_tracks_dir()
+    if tracks_dir is None:
+        return None
 
     candidates = []
     if track_id:

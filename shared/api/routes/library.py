@@ -695,8 +695,8 @@ def toggle_saved():
 
     try:
         is_saved = api["favourites_manager"].toggle_saved(entry)
-    except ValueError:
-        return jsonify({"error": "entry needs at least one identity key"}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     if is_saved:
         _schedule_favourite_resolve(entry)
 
@@ -752,8 +752,8 @@ def set_favourite():
     api["get_core"]()
     try:
         result = api["favourites_manager"].set_favourite(entry, favourite=marked, save_if_missing=False)
-    except ValueError:
-        return jsonify(error="entry needs at least one identity key"), 400
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
     if result and not any(isinstance(key, str) and key.startswith("lib:") for key in entry.get("keys", [])):
         _schedule_favourite_resolve(entry)
     api["emit_to_user"]("favourites_updated")
@@ -778,15 +778,18 @@ def toggle_favourite():
     if isinstance(favourite, dict):
         try:
             is_fav = manager.set_favourite(favourite)
-        except ValueError:
-            return jsonify({"error": "favourite needs at least one identity key"}), 400
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         if is_fav:
             _schedule_favourite_resolve(favourite)
     else:
         track_id = data.get("track_id")
         if not track_id:
             return jsonify({"error": "No track_id provided"}), 400
-        is_fav = manager.toggle(track_id)
+        try:
+            is_fav = manager.toggle(track_id)
+        except ValueError:
+            return jsonify({"error": "Track not found"}), 404
 
     # Other devices on this account would otherwise not see the change until a
     # full library sync — every other mutating route here already emits.
