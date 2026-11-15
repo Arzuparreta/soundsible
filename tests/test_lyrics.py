@@ -731,6 +731,57 @@ def test_lyrics_cached_by_an_older_resolver_stay_visible_while_they_are_looked_u
     assert fetch.call_count == 1
 
 
+def test_a_read_that_crosses_the_upgrade_landing_does_not_look_up_again(monkeypatch):
+    # The read takes the old row; before it asks for a lookup, the running one
+    # settles the row and is forgotten. Asking then must not start another.
+    monkeypatch.setattr(library_routes, "_get_api", lambda: _fake_api(_music_video_track()))
+    db = instance_db()
+    db.set_lyrics("video-track", synced="[00:01.00] line", plain="line", instrumental=False, source="lrclib:v4")
+    release = threading.Event()
+
+    def slow_fetch(*_args):
+        release.wait(5)
+        return _album_timed_record()
+
+    fetch = MagicMock(side_effect=slow_fetch)
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
+    client = _make_app().test_client()
+    url = "/api/library/tracks/video-track/lyrics"
+    assert client.get(url).get_json()["synced_duration"] is None
+
+    read = db.get_lyrics
+    crossed = threading.Event()
+
+    def read_then_let_the_lookup_land(key):
+        row = read(key)
+        if not crossed.is_set():
+            crossed.set()
+            release.set()
+            deadline = time.monotonic() + 5
+            while lyrics_module._LOOKUPS._jobs and time.monotonic() < deadline:
+                time.sleep(0.001)
+            assert not lyrics_module._LOOKUPS._jobs
+        return row
+
+    monkeypatch.setattr(db, "get_lyrics", read_then_let_the_lookup_land)
+    body = client.get(url).get_json()
+    assert body["cached"] is True and body["synced_duration"] == 236
+    deadline = time.monotonic() + 1
+    while lyrics_module._LOOKUPS._jobs and time.monotonic() < deadline:
+        time.sleep(0.001)
+    assert fetch.call_count == 1
+
+
+def test_a_lookup_no_longer_needed_does_not_start():
+    coordinator = lyrics_module._LyricsLookupCoordinator()
+    fn = MagicMock(return_value={"plain": "x"})
+    assert coordinator.poll_or_start("key", fn, needed=lambda: False) == ("settled", None)
+    fn.assert_not_called()
+    assert coordinator.poll_or_start("key", fn, needed=lambda: True)[0] == "pending"
+    # A lookup in flight is polled as before; `needed` only guards a new start.
+    assert coordinator.poll_or_start("key", fn, needed=lambda: False)[0] in ("pending", "complete")
+
+
 def test_saved_previews_cached_by_an_older_resolver_are_not_served(monkeypatch):
     # A saved preview's cache key names the resolver, so an upgrade looks again.
     current_key = lyrics_module.metadata_cache_key("Artist", "Song", None, 251)

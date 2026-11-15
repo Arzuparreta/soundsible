@@ -427,12 +427,21 @@ def get_track_lyrics(track_id):
     # once more. They are served while that runs, and whenever the provider
     # cannot answer; the player therefore does not come back for the answer,
     # so the lookup settles the row itself when it lands.
-    settle = None
+    settle = needed = None
     if cached:
         def settle(found, held=cached):
             if found is not None:
                 settle_upgrade(db, track_id, held, found)
-    lookup_status, record = poll_lyrics(track.artist, track.title, track.album, track.duration, on_complete=settle)
+
+        # The lookup may have settled the row and been forgotten since it was
+        # read above; then there is nothing left to look up.
+        def needed():
+            return worth_looking_up_again(db.get_lyrics(track_id), track.duration)
+    lookup_status, record = poll_lyrics(
+        track.artist, track.title, track.album, track.duration, on_complete=settle, needed=needed,
+    )
+    if lookup_status == "settled":
+        return payload(db.get_lyrics(track_id) or cached, cached=True)
     if lookup_status != "complete":
         if cached:
             return payload(cached, cached=True)
@@ -697,8 +706,8 @@ def toggle_saved():
 
     try:
         is_saved = api["favourites_manager"].toggle_saved(entry)
-    except ValueError:
-        return jsonify({"error": "entry needs at least one identity key"}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     if is_saved:
         _schedule_favourite_resolve(entry)
 
@@ -754,8 +763,8 @@ def set_favourite():
     api["get_core"]()
     try:
         result = api["favourites_manager"].set_favourite(entry, favourite=marked, save_if_missing=False)
-    except ValueError:
-        return jsonify(error="entry needs at least one identity key"), 400
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
     if result and not any(isinstance(key, str) and key.startswith("lib:") for key in entry.get("keys", [])):
         _schedule_favourite_resolve(entry)
     api["emit_to_user"]("favourites_updated")
@@ -780,15 +789,18 @@ def toggle_favourite():
     if isinstance(favourite, dict):
         try:
             is_fav = manager.set_favourite(favourite)
-        except ValueError:
-            return jsonify({"error": "favourite needs at least one identity key"}), 400
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         if is_fav:
             _schedule_favourite_resolve(favourite)
     else:
         track_id = data.get("track_id")
         if not track_id:
             return jsonify({"error": "No track_id provided"}), 400
-        is_fav = manager.toggle(track_id)
+        try:
+            is_fav = manager.toggle(track_id)
+        except ValueError:
+            return jsonify({"error": "Track not found"}), 404
 
     # Other devices on this account would otherwise not see the change until a
     # full library sync — every other mutating route here already emits.

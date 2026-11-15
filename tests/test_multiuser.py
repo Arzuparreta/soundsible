@@ -185,10 +185,15 @@ def test_two_accounts_get_separate_directories_and_favourites():
     ana = create_user("ana", password="secret123")
     bob = create_user("bob", password="secret123")
 
-    with user_context(ana["id"]):
-        get_user_core(ana["id"]).favourites.add("track-a")
-    with user_context(bob["id"]):
-        get_user_core(bob["id"]).favourites.add("track-b")
+    from shared.models import LibraryMetadata, Track
+
+    for user, track_id in ((ana, "track-a"), (bob, "track-b")):
+        with user_context(user["id"]):
+            core = get_user_core(user["id"])
+            core.library.db.replace_library(LibraryMetadata(version=1, playlists={}, settings={}, tracks=[Track(
+                id=track_id, file_hash=track_id, title=track_id, artist="A", album="", duration=1,
+                original_filename=f"{track_id}.mp3", file_size=1, bitrate=1, format="mp3")]))
+            core.favourites.add(track_id)
 
     with user_context(ana["id"]):
         assert get_user_core(ana["id"]).favourites.get_all() == ["track-a"]

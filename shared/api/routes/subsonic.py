@@ -768,9 +768,15 @@ def get_lyrics_by_song_id():
         def settle(found, held=cached):
             if found is not None:
                 settle_upgrade(db, track.id, held, found)
-        status, record = poll_lyrics(track.artist, track.title, track.album, track.duration, on_complete=settle)
+        def needed():
+            return worth_looking_up_again(db.get_lyrics(track.id), track.duration)
+        status, record = poll_lyrics(
+            track.artist, track.title, track.album, track.duration, on_complete=settle, needed=needed,
+        )
         if status == "complete" and record is not None:
             cached = settle_upgrade(db, track.id, cached, record)
+        elif status == "settled":
+            cached = db.get_lyrics(track.id) or cached
     # lrc.red's terms ask for a credit wherever its lines are shown, and
     # OpenSubsonic's structured lyrics have no field to carry one.
     if provider(cached) == "lrc.red":

@@ -8,11 +8,23 @@ import json
 import pytest
 
 from player.favourites_manager import FavouritesManager
+from shared.database import DatabaseManager
+from shared.models import LibraryMetadata, Track
+
+
+def _hold(tmp_path, *ids):
+    """The files the library holds: a library id only names a song it holds."""
+    tracks = [Track(id=track_id, file_hash=track_id, title=f"Song {track_id}", artist="A", album="",
+                    duration=1, original_filename=f"{track_id}.mp3", file_size=1, bitrate=1, format="mp3")
+              for track_id in ids]
+    DatabaseManager(str(tmp_path / "library.db")).replace_library(
+        LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={}))
 
 
 @pytest.fixture
 def manager(tmp_path, monkeypatch):
     monkeypatch.setattr("player.favourites_manager.user_config_dir", lambda: tmp_path)
+    _hold(tmp_path, "t1", "t2")
     return FavouritesManager()
 
 
@@ -37,11 +49,24 @@ def _write_v2(tmp_path, entries):
 
 def test_v1_id_array_loads_as_library_entries(tmp_path, monkeypatch):
     _write_v1(tmp_path, ["t1", "t2"])
+    _hold(tmp_path, "t1", "t2")
     manager = _reload(tmp_path, monkeypatch)
 
     assert manager.get_all() == ["t1", "t2"]
     assert manager.is_favourite("t1")
-    assert [e["keys"] for e in manager.get_entries()] == [["lib:t1"], ["lib:t2"]]
+    assert [e["title"] for e in manager.get_entries()] == ["Song t1", "Song t2"]
+
+
+def test_v1_ids_of_videos_and_deleted_tracks_do_not_load_as_library_entries(tmp_path, monkeypatch):
+    """v1 held video ids of songs hearted before download, and ids of tracks
+    deleted since: neither names a file the library holds."""
+    _write_v1(tmp_path, ["t1", "7N3rFdE3u3Y", "deleted-long-ago"])
+    _hold(tmp_path, "t1")
+    manager = _reload(tmp_path, monkeypatch)
+
+    assert [[k for k in e["keys"] if not k.startswith("item:")]
+            for e in manager.get_entries()] == [["lib:t1"], ["yt:7N3rFdE3u3Y"]]
+    assert all(e["favourite"] for e in manager.get_entries())
 
 
 def test_pre_split_entries_load_as_favourites(tmp_path, monkeypatch):
@@ -57,6 +82,7 @@ def test_pre_split_entries_load_as_favourites(tmp_path, monkeypatch):
 
 def test_v1_file_is_imported_once_and_kept_as_restoration_data(tmp_path, monkeypatch):
     _write_v1(tmp_path, ["t1"])
+    _hold(tmp_path, "t1", "t2")
     manager = _reload(tmp_path, monkeypatch)
     manager.add("t2")
     assert json.loads((tmp_path / "favourites.json").read_text())["version"] == "1.0"
@@ -172,6 +198,7 @@ def test_get_all_only_reports_marked_library_keys(manager):
 # ── Ordering ──
 
 def test_order_is_newest_first_and_survives_a_reload(tmp_path, monkeypatch):
+    _hold(tmp_path, "t1", "t2")
     manager = _reload(tmp_path, monkeypatch)
     manager.add("t1")
     manager.add("t2")
@@ -179,7 +206,8 @@ def test_order_is_newest_first_and_survives_a_reload(tmp_path, monkeypatch):
 
     assert manager.get_all() == ["t2", "t1"]
     reloaded = _reload(tmp_path, monkeypatch)
-    assert [e["keys"][0] for e in reloaded.get_entries()] == ["yt:vid", "lib:t2", "lib:t1"]
+    assert [[k for k in e["keys"] if not k.startswith("item:")][0]
+            for e in reloaded.get_entries()] == ["yt:vid", "lib:t2", "lib:t1"]
     # A reload of a v3 file keeps saved and marked apart.
     assert not reloaded.is_favourite_keys(["yt:vid"])
     assert reloaded.is_favourite("t2")
@@ -212,6 +240,12 @@ def test_remap_library_id_preserves_the_snapshot(manager):
 
 
 # ── Library-id compatibility layer ──
+
+def test_a_library_id_the_library_does_not_hold_is_not_saved(manager):
+    with pytest.raises(ValueError):
+        manager.add("deleted-long-ago")
+    assert manager.get_entries() == []
+
 
 def test_library_id_api_round_trip(manager):
     manager.add("t1")

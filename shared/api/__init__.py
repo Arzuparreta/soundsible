@@ -20,7 +20,7 @@ from flask_cors import CORS
 logger = logging.getLogger(__name__)
 API_STARTED_AT = time.time()
 
-from shared.library_lifecycle import serialized, drain as drain_audio_cleanup
+from shared.library_lifecycle import serialized, drain as drain_audio_cleanup, reconcile as reconcile_audio_cleanup
 from shared import library_dates, request_scope
 from shared.models import Track, LibraryMetadata
 from shared.constants import STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
@@ -1181,6 +1181,7 @@ def process_queue_background(stop_event: Optional[threading.Event] = None):
                 try:
                     provider = next((core.library.provider for core in list(_user_cores.values())
                                      if core.library.provider), None)
+                    reconcile_audio_cleanup()
                     drain_audio_cleanup(provider)
                 except Exception:
                     logger.warning("Deferred audio cleanup failed", exc_info=True)

@@ -128,15 +128,19 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
     cmd = _engine_command(engine_bin)
     cmd.extend(["--music-dir", str(music)])
 
-    proc = subprocess.Popen(
-        cmd,
-        cwd=REPO_ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        start_new_session=True,
-    )
+    # Nothing drains stdout while the HTTP checks run. A pipe can fill (only
+    # a few KB on Windows), blocking the engine's next log and its response.
+    log_path = tmp_path / "engine.log"
+    with log_path.open("w", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=REPO_ROOT,
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
+        )
 
     try:
         health_url = _wait_for_health(config_dir)
@@ -184,6 +188,9 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
                 asset = requests.get(requests.compat.urljoin(player.url, script), timeout=10)
                 asset.raise_for_status()
                 assert "javascript" in asset.headers.get("Content-Type", ""), asset.headers
+    except Exception:
+        print(f"Engine log tail:\n{log_path.read_text(errors='replace')[-8000:]}")
+        raise
     finally:
         if proc.poll() is None:
             if os.name == "nt":
@@ -282,6 +289,57 @@ def test_desktop_engine_sigterm_exits_cleanly(tmp_path, recipient):
 
 def test_desktop_engine_smoke_python(tmp_path):
     _run_smoke(tmp_path, engine_bin=None)
+
+
+def test_smoke_keeps_serving_when_engine_logs_exceed_pipe_capacity(tmp_path, monkeypatch):
+    """A verbose page request must not block on the smoke harness's stdout."""
+    state_path = tmp_path / "fake-runtime.json"
+    token_path = tmp_path / "owner-token"
+    token_path.write_text("test-owner")
+    script = r'''
+import json
+import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        content_type = "text/html"
+        if self.path == "/api/health":
+            body = json.dumps({"ffmpeg": {"path": "unused", "source": "bundle"}
+                               if self.headers.get("Authorization") else {}}).encode()
+            content_type = "application/json"
+        elif self.path == "/player/":
+            # More than the pipe capacity on either Windows or Linux. This
+            # blocks before the response if the parent never drains stdout.
+            sys.stdout.write("engine diagnostic\n" * 65536)
+            sys.stdout.flush()
+            body = b'<script src="/player/app.js"></script>'
+        elif self.path.endswith(".js"):
+            body = b"console.log('player');"
+            content_type = "application/javascript"
+        else:
+            body = b"desktop"
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.end_headers()
+        self.wfile.write(body)
+
+server = HTTPServer(("127.0.0.1", 0), Handler)
+Path(sys.argv[1]).write_text(json.dumps({
+    "base_url": f"http://127.0.0.1:{server.server_port}",
+    "owner_token_file": sys.argv[2],
+}))
+server.serve_forever()
+'''
+    monkeypatch.setattr(sys.modules[__name__], "_engine_command", lambda _: [
+        sys.executable, "-u", "-c", script, str(state_path), str(token_path),
+    ])
+    monkeypatch.setattr(sys.modules[__name__], "load_runtime_state", lambda _: (
+        json.loads(state_path.read_text()) if state_path.exists() else None
+    ))
+    monkeypatch.delenv("SOUNDSIBLE_REQUIRE_FFMPEG", raising=False)
+    _run_smoke(tmp_path, engine_bin=Path("fake-engine"))
 
 
 def test_desktop_engine_smoke_sidecar(tmp_path):
