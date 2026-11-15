@@ -12,6 +12,11 @@ and in their section; the rest is still diagnosis.
 Direction analysis (2026-11-13): [DIRECTION](DIRECTION.md) compares the DJ with
 other products, measures what real sessions executed and proposes the order
 of the next points. It closes no point of the table below.
+[VERIFICATION](VERIFICATION.md) (2026-11-15) checks its two blocking claims
+without listening: the iPhone's rate fallbacks answered a real loss of media
+progress (1.5–2.9 s at the first rate write, page hidden), and the songs
+without a steady pulse are off a straight grid by an independent measure too,
+with at most 16 % in doubt. It also closes no point of the table.
 
 ## Musical identity and sources (PR #423)
 

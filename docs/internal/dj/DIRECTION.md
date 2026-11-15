@@ -12,6 +12,11 @@ opens both databases read-only and prints no song, session or device
 identity. They describe one library and one listener's sessions between
 2026-10-30 and 2026-11-12. They are not a general benchmark.
 
+Update 2026-11-15: the two measurements that sections 4.2 and 4.3 named as
+their first step were taken without listening; see
+[VERIFICATION](VERIFICATION.md). Sections 2.2, 2.3, 4.2, 4.3 and the open
+decisions are corrected to them.
+
 ## Summary
 
 1. No streaming product does the whole of what Soundsible's DJ does (choose
@@ -25,7 +30,9 @@ identity. They describe one library and one listener's sessions between
 3. In captured sessions, **63 % of transitions between two analysed songs
    were planned as a plain structural fade, 29 % as a beatmatch, and on the
    iPhone none of the 24 planned beatmatches was executed as one.** On the
-   desktop browser 15 of 16 were.
+   desktop browser 15 of 16 were. The iPhone's fallback answered a real loss
+   of 1.5–2.9 s of media progress at the first rate change, not a false
+   alarm ([VERIFICATION](VERIFICATION.md) 1).
 4. Recommendation: before designing controls, (a) make "what was executed"
    a standing per-platform figure, (b) restore beatmatch on the iPhone,
    (c) decide what the DJ does with the half of the library whose pulse is
@@ -130,12 +137,16 @@ and every later beatmatch in that runtime starts as `structural_fade`. On
 beatmatches executed as fades.
 
 What this does and does not establish: it is a fact that on the iPhone no
-captured beatmatch was executed. It is **not** established whether WebKit
-really stalls the media clock when `playbackRate` changes, or whether the
-detector raises a false alarm there. P16 changed the detector on 2026-11-07
-to require two consecutive deficient windows and recorded that a new listen
-on the iPhone was pending; the 2026-11-09 and 2026-11-11 captures are after
-that change, provided the station was already running it.
+captured beatmatch was executed. Measured afterwards
+([VERIFICATION](VERIFICATION.md) 1): the alarms were not false. In each of
+the three, the outgoing deck's media position fell 1.5–2.9 s behind the wall
+clock within seconds of its first quarter-percent rate write and never
+recovered, while the AudioContext ran on time. That is more than five times
+the detector's threshold, so the result does not depend on which version of
+the detector the station ran. Desktop browsers lose less than 0.1 s on 1242
+of 1243 rate writes, and 0.32 s on the other one. Still open: what was heard during the loss, whether it also
+happens with the page visible (all three were hidden), and whether a later
+write or a rate set while paused does the same.
 
 Android has no linked capture, so there is no equivalent figure for it.
 
@@ -159,12 +170,15 @@ locally straight either: over the 16 s after the cue, the beats are within
 deviation is 33 and 27 ms. A fixed playback rate cannot hold two such grids
 together, so the fallback is consistent with the measurement.
 
-Not established: whether those 426 songs really drift (played by people, no
-click) or whether the grid follows attack jitter in music that was produced
-to a constant tempo. `rhythm.py` decides it with three constants (12 ms
-median wander, 0.3 % local tempo, 55 % of beat weight on the line), validated
-in P1 on 53 previews. Nobody has checked this library's split against a
-reference.
+`rhythm.py` decides it with three constants (12 ms median wander, 0.3 %
+local tempo, 55 % of beat weight on the line), validated in P1 on 53
+previews. Checked afterwards against an independent measure without a beat
+tracker ([VERIFICATION](VERIFICATION.md) 2): the analyser keeps a constant
+tempo with 20 ms of per-hit jitter as steady, and in the library the
+"not steady" songs sit a median 46.7 ms from any straight grid against 2.0 ms
+for the steady ones. The two measures agree on 87 % of 662 songs. At most
+59 "not steady" songs (16 %) look straight to the second measure; which of
+the two is right on them is not established.
 
 The `bars` alignment exists in the contract, in both clients and in the
 shared vectors, and did not occur once. In practice bar and phrase alignment
@@ -265,9 +279,13 @@ know which transitions the listener was judging.
 
 ### 4.2 Beatmatch on the iPhone
 
-Step one is a measurement, not a fix: on the device, with a click pair,
-record whether the audible output stalls when `playbackRate` leaves 1, and
-compare with the `clock_starved` alarms. Two outcomes:
+Step one was a measurement, not a fix. It was taken from the captures
+([VERIFICATION](VERIFICATION.md) 1) and excludes the false alarm for the case
+the DJ hits: the outgoing deck ramping with the page hidden. Before the
+architectural decision below, the same measurement is still missing for a
+visible page, for writes after the first and for a rate set while paused.
+VERIFICATION describes a recording page that measures them without
+listening. The two outcomes were:
 
 - **False alarm.** The detector is corrected for WebKit, and the
   `rateControlAvailable` flag stops being permanent for the runtime (retry
@@ -287,14 +305,18 @@ consequence, and it should be taken on the measurement.
 
 ### 4.3 The half of the library without a steady pulse
 
-Also a measurement first: take a sample of the 426 songs, mark by ear or with
-a second detector which have a constant produced tempo, and count how many
-`rhythm.py` classified as drifting.
+Also a measurement first, now taken with a second detector
+([VERIFICATION](VERIFICATION.md) 2): most songs classified as drifting are
+not on a straight grid by an independent measure either. At most 16 % of
+them are candidates for misclassification.
 
-- If many are misclassified, the fix is in the constant/local decision and
-  raises beatmatch coverage directly (a new `ANALYSER_VERSION`).
-- If they really drift, a fixed-rate beatmatch is impossible for them and the
-  product question becomes the quality of the non-beatmatched transition,
+- If many were misclassified, the fix would be in the constant/local
+  decision and would raise beatmatch coverage directly (a new
+  `ANALYSER_VERSION`). The measured upper bound is 59 songs, which would move
+  the steady share from 44 % to 53 %.
+- For the rest, which is most of the library by the measurement: they drift
+  or have no clear pulse, a fixed-rate beatmatch is impossible for them, and
+  the product question becomes the quality of the non-beatmatched transition,
   which is already what is heard most. Today that is one equal-power fade.
   Measured material exists to do more without inventing taste: section roles
   (604 songs have a measured intro, 526 an outro), per-section band levels,
@@ -385,10 +407,13 @@ have data, 4.5 makes a control one implementation instead of three.
 
 1. Is analysing a session's whole source collection "work of the live
    session" (4.4)?
-2. If the iPhone measurement shows a real stall, is a PCM engine in the web
-   player acceptable given the memory rule (4.2)?
-3. If the unsteady half really drifts, is investing in the structural fade
-   the next musical point, ahead of further beatmatch refinement (4.3)?
+2. The captures show a real loss of media progress on the iPhone at the
+   first rate change with the page hidden. If the remaining variants (visible,
+   later writes, rate set while paused) lose time as well, is a PCM engine in
+   the web player acceptable given the memory rule (4.2)?
+3. Most of the unsteady half does not hold a straight grid by two
+   independent measures. Is investing in the structural fade the next
+   musical point, ahead of further beatmatch refinement (4.3)?
 
 ## Sources
 
