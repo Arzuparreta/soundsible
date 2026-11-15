@@ -58,6 +58,16 @@ describe('programme Media Session projection', () => {
     new ProgramMediaSession().sync({ ...track, source: 'preview', cover: 'https://example.com/art.jpg' }, snapshot(true), 'track');
     expect(session.metadata!.artwork[0].src).toBe('https://example.com/art.jpg');
   });
+  it('gives system controls a bounded square of a podcast episode\'s artwork', () => {
+    const session = controls();
+    const cover = '/api/podcasts/artwork?url=https%3A%2F%2Fcdn.example.com%2Fa.jpg';
+    new ProgramMediaSession().sync({ ...track, source: 'preview', cover }, snapshot(true), 'track');
+    const url = new URL(session.metadata!.artwork[0].src, 'http://localhost');
+    expect(url.pathname).toBe('/api/podcasts/artwork');
+    expect(url.searchParams.get('url')).toBe('https://cdn.example.com/a.jpg');
+    expect(url.searchParams.get('size')).toBe('640');
+    expect(url.searchParams.get('fit')).toBe('square');
+  });
   it('records the previous declaration before overwriting it with the expected state', () => {
     const session = controls();
     session.playbackState = 'paused';

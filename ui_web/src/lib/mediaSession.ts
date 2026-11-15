@@ -1,4 +1,5 @@
 import { trackCoverUrl } from './media';
+import { sizedPodcastArtwork } from './podcastArtwork';
 import { recordPlaybackDiagnostic } from './playbackDiagnostics';
 import type { ProgramPlaybackSnapshot } from './audio';
 import type { Track } from '../types/music';
@@ -103,7 +104,7 @@ export class ProgramMediaSession {
       // its responsive variant. Give system controls a bounded square too.
       const artwork = source && track.source !== 'preview'
         ? `${source}${source.includes('?') ? '&' : '?'}size=640&fit=square`
-        : source;
+        : sizedPodcastArtwork(source, 640, true);
       session.metadata = new MediaMetadata({
         title: track.title,
         artist: track.artist,

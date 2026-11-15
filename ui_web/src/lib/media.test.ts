@@ -78,6 +78,12 @@ describe('track artwork comes from wherever that track keeps it', () => {
     }
   });
 
+  it('asks for a podcast episode\'s artwork at the size a row draws', () => {
+    const episode = { id: 'ep', source: 'preview' as const, cover: '/api/podcasts/artwork?url=https%3A%2F%2Fcdn.example.com%2Fa.jpg' };
+    expect(trackCoverUrl(episode, 'thumb')).toBe(`${episode.cover}&size=160`);
+    expect(trackCoverUrl(episode)).toBe(episode.cover);
+  });
+
   it('says a preview with no thumbnail has nothing, rather than inventing a URL', () => {
     expect(trackCoverUrl(savedNoArt)).toBeUndefined();
     expect(trackCoverUrl(savedBlankArt)).toBeUndefined();
