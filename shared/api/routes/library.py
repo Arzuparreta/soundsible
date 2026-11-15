@@ -425,12 +425,21 @@ def get_track_lyrics(track_id):
     # served while that runs, and whenever the provider cannot answer; the
     # player therefore does not come back for the answer, so the lookup
     # settles the row itself when it lands.
-    settle = None
+    settle = needed = None
     if cached:
         def settle(found, held=cached):
             if found is not None:
                 settle_upgrade(db, track_id, held, found)
-    lookup_status, record = poll_lyrics(track.artist, track.title, track.album, track.duration, on_complete=settle)
+
+        # The lookup may have settled the row and been forgotten since it was
+        # read above; then there is nothing left to look up.
+        def needed():
+            return predates_timing_length(db.get_lyrics(track_id))
+    lookup_status, record = poll_lyrics(
+        track.artist, track.title, track.album, track.duration, on_complete=settle, needed=needed,
+    )
+    if lookup_status == "settled":
+        return payload(db.get_lyrics(track_id) or cached, cached=True)
     if lookup_status != "complete":
         if cached:
             return payload(cached, cached=True)
