@@ -48,7 +48,7 @@ def _lyrics_payload(
     flagged, for the listener to line up with a tap. ``offset_ms`` is that
     correction, if one was made.
     """
-    from shared.lyrics import has_text, synced_timing_fits
+    from shared.lyrics import has_text, provider, synced_timing_fits
     from shared.music_identity import synced_lyrics_safe
 
     if status is None:
@@ -66,6 +66,8 @@ def _lyrics_payload(
         "timing_safe": timing_safe,
         "synced_duration": synced_duration,
         "offset_ms": offset_ms,
+        # Who to credit beside the lines; lrc.red's terms ask for a link to it.
+        "provider": provider(record),
     }
 
 
@@ -400,9 +402,9 @@ def purge_missing_library_tracks():
 @rate_limit("library_lyrics", limit=60, window_sec=60)
 def get_track_lyrics(track_id):
     """Lyrics for a library track: served from the local cache when present,
-    otherwise fetched from LRCLIB and cached (including not-found results)."""
+    otherwise fetched (LRCLIB, then lrc.red) and cached, not-found results too."""
     from shared.database import instance_db
-    from shared.lyrics import audio_key, poll_lyrics, predates_timing_length, settle_upgrade, store
+    from shared.lyrics import audio_key, poll_lyrics, settle_upgrade, store, worth_looking_up_again
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -418,13 +420,13 @@ def get_track_lyrics(track_id):
 
     refresh = request.args.get("refresh") in ("1", "true")
     cached = None if refresh else db.get_lyrics(track_id)
-    if cached and not predates_timing_length(cached):
+    if cached and not worth_looking_up_again(cached, track.duration):
         return payload(cached, cached=True)
 
-    # Lines that predate the timing length are looked up once more. They are
-    # served while that runs, and whenever the provider cannot answer; the
-    # player therefore does not come back for the answer, so the lookup
-    # settles the row itself when it lands.
+    # Lyrics an older resolver left without timing that fits are looked up
+    # once more. They are served while that runs, and whenever the provider
+    # cannot answer; the player therefore does not come back for the answer,
+    # so the lookup settles the row itself when it lands.
     settle = needed = None
     if cached:
         def settle(found, held=cached):
@@ -434,7 +436,7 @@ def get_track_lyrics(track_id):
         # The lookup may have settled the row and been forgotten since it was
         # read above; then there is nothing left to look up.
         def needed():
-            return predates_timing_length(db.get_lyrics(track_id))
+            return worth_looking_up_again(db.get_lyrics(track_id), track.duration)
     lookup_status, record = poll_lyrics(
         track.artist, track.title, track.album, track.duration, on_complete=settle, needed=needed,
     )

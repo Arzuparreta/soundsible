@@ -17,6 +17,16 @@ from shared.subsonic.envelope import (
 from tests.subsonic_support import XML_NS, build, track
 
 
+@pytest.fixture(autouse=True)
+def _no_lyrics_provider(monkeypatch):
+    """Rows saved by a test resolver are looked up again in the background;
+    no test reaches a lyrics provider for that. ``None`` is an outage, which
+    settles nothing, so the row a test saved is the row it reads."""
+    import shared.lyrics as lyrics_module
+
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", lambda *args, **kwargs: None)
+
+
 # ---------------------------------------------------------------------------
 # Envelope
 # ---------------------------------------------------------------------------
@@ -217,6 +227,56 @@ def test_lyrics_timed_for_another_cut_come_back_untimed(tmp_path, monkeypatch):
     structured = harness.ok("getLyricsBySongId", id="tr-t1")["lyricsList"]["structuredLyrics"][0]
     assert structured["synced"] is False
     assert [line["value"] for line in structured["line"]] == ["First", "Second"]
+
+
+def test_lyrics_from_lrc_red_are_not_served_without_their_credit(tmp_path, monkeypatch):
+    import shared.lyrics as lyrics_module
+    from shared.database import instance_db
+
+    harness = build(tmp_path, monkeypatch, [track("t1", duration=200)])
+    instance_db().set_lyrics(
+        "t1", synced="[00:01.00]First", plain="First", instrumental=False,
+        source=lyrics_module.LRC_RED_SOURCE, synced_duration=200,
+    )
+    assert harness.ok("getLyricsBySongId", id="tr-t1")["lyricsList"] == {}
+
+
+def test_subsonic_reloads_an_upgrade_that_lands_after_its_cache_read(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+    import shared.lyrics as lyrics_module
+    from shared.database import instance_db
+
+    harness = build(tmp_path, monkeypatch, [track("t1", duration=200)])
+    db = instance_db()
+    db.set_lyrics("t1", synced=None, plain="Old words", instrumental=False, source="lrclib:v5")
+    read = db.get_lyrics
+    crossed = False
+
+    def read_then_settle(key):
+        nonlocal crossed
+        row = read(key)
+        if not crossed:
+            crossed = True
+            db.set_lyrics(key, synced="[00:01.00]New words", plain="New words", instrumental=False,
+                          source=lyrics_module.LRC_RED_SOURCE, synced_duration=200)
+        return row
+
+    fetch = MagicMock()
+    monkeypatch.setattr(db, "get_lyrics", read_then_settle)
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
+    assert harness.ok("getLyricsBySongId", id="tr-t1")["lyricsList"] == {}
+    fetch.assert_not_called()
+
+
+@pytest.mark.parametrize("source, served", [("lrclib:v6", True), ("lrc.red:v6", False)])
+def test_lyrics_by_name_are_served_only_where_no_credit_is_owed(tmp_path, monkeypatch, source, served):
+    import shared.lyrics as lyrics_module
+
+    harness = build(tmp_path, monkeypatch, [track("t1")])
+    record = {"synced": None, "plain": "Just words", "instrumental": False, "source": source}
+    monkeypatch.setattr(lyrics_module, "poll_lyrics", lambda *args, **kwargs: ("complete", record))
+    lyrics = harness.ok("getLyrics", artist="Artist", title="Song")["lyrics"]
+    assert (lyrics.get("value") == "Just words") is served
 
 
 def test_a_listeners_offset_moves_every_timed_line(tmp_path, monkeypatch):

@@ -110,3 +110,19 @@ test('lyrics that follow can be re-aligned and reset', async ({ page }) => {
   expect((saved[0] as { offset_ms: unknown }).offset_ms).toBeNull();
   await expect(notice).toHaveCount(0);
 });
+
+test('lines from lrc.red end with a link to it, as its terms ask', async ({ page }) => {
+  await mockLyrics(page, { provider: 'lrc.red' });
+  const panel = await showLyrics(page);
+
+  const credit = panel.getByRole('link', { name: 'Letra vía lrc.red' });
+  await credit.scrollIntoViewIfNeeded();
+  await expect(credit).toBeInViewport();
+  await expect(credit).toHaveAttribute('href', 'https://lrc.red');
+});
+
+test('lines from LRCLIB carry no credit link', async ({ page }) => {
+  await mockLyrics(page, { provider: 'lrclib' });
+  const panel = await showLyrics(page);
+  await expect(panel.getByRole('link')).toHaveCount(0);
+});

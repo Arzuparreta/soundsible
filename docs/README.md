@@ -53,6 +53,7 @@ player is built with `npm` in `ui_web/`.
 | [Flask](https://flask.palletsprojects.com/) + [Socket.IO](https://socket.io/) | BSD / MIT | Station Engine API and real-time events |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Unlicense (public domain) | YouTube and YouTube Music search and download |
 | [LRCLIB](https://lrclib.net/) | Public API | Synced and plain lyrics |
+| [lrc.red](https://lrc.red/) | Public API | Synced lyrics LRCLIB has no fitting timing for; credited beside them |
 | [Deezer public API](https://developers.deezer.com/) | Public API | Discovery metadata only — no audio comes from Deezer |
 | [MusicBrainz](https://musicbrainz.org/) | Public API | Recording and release identification |
 | [ListenBrainz](https://listenbrainz.org/), [Last.fm](https://www.last.fm/api) and [Maloja](https://github.com/krateng/maloja) | Public APIs | Optional [scrobbling](SCROBBLING.md), per account |

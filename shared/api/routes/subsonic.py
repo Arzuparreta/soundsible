@@ -736,14 +736,16 @@ def _cover_path(track) -> Optional[str]:
 
 @_endpoint("getLyrics")
 def get_lyrics():
-    from shared.lyrics import poll_lyrics
+    from shared.lyrics import poll_lyrics, provider
 
     artist = (_param("artist") or "").strip()
     title = (_param("title") or "").strip()
     if not artist or not title:
         return {"lyrics": {}}
     status, record = poll_lyrics(artist, title, None, None)
-    text = (record or {}).get("plain") if status == "complete" else None
+    # lrc.red's terms ask for a credit wherever its lines are shown, and a
+    # Subsonic client has nowhere to show one.
+    text = (record or {}).get("plain") if status == "complete" and provider(record) != "lrc.red" else None
     if not text:
         return {"lyrics": {}}
     return {"lyrics": {"artist": artist, "title": title, TEXT_KEY: text}}
@@ -752,7 +754,7 @@ def get_lyrics():
 @_endpoint("getLyricsBySongId")
 def get_lyrics_by_song_id():
     from shared.database import instance_db
-    from shared.lyrics import audio_key, poll_lyrics, predates_timing_length, settle_upgrade, synced_timing_fits
+    from shared.lyrics import audio_key, poll_lyrics, provider, settle_upgrade, synced_timing_fits, worth_looking_up_again
 
     track = _track_or_404(_required("id"))
     db = instance_db()
@@ -762,12 +764,12 @@ def get_lyrics_by_song_id():
     # The same once-only upgrade the player's route runs, so a listener who
     # only uses a Subsonic client gets lines whose length is known too. The
     # held lines serve this call; the lookup settles the row when it lands.
-    if predates_timing_length(cached):
+    if worth_looking_up_again(cached, track.duration):
         def settle(found, held=cached):
             if found is not None:
                 settle_upgrade(db, track.id, held, found)
         def needed():
-            return predates_timing_length(db.get_lyrics(track.id))
+            return worth_looking_up_again(db.get_lyrics(track.id), track.duration)
         status, record = poll_lyrics(
             track.artist, track.title, track.album, track.duration, on_complete=settle, needed=needed,
         )
@@ -775,6 +777,10 @@ def get_lyrics_by_song_id():
             cached = settle_upgrade(db, track.id, cached, record)
         elif status == "settled":
             cached = db.get_lyrics(track.id) or cached
+    # lrc.red's terms ask for a credit wherever its lines are shown, and
+    # OpenSubsonic's structured lyrics have no field to carry one.
+    if provider(cached) == "lrc.red":
+        return {"lyricsList": {}}
 
     # The listener's correction is applied here rather than sent as the
     # structured `offset`, whose sign clients have read both ways. Without one,

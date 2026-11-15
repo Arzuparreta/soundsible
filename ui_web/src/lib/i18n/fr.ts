@@ -994,6 +994,7 @@ export const fr: Dict = {
     cancelAdjust: 'Annuler',
     resetTiming: 'Réinitialiser la synchro',
     timingSaveFailed: 'Impossible d’enregistrer la synchro.',
+    source: 'Paroles via {name}',
   },
   discoverNodes: {
     title: 'Recommandations',

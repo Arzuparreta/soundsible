@@ -71,6 +71,39 @@ describe('LyricsPanel', () => {
     expect(actions.seek).toHaveBeenCalledWith(5);
   });
 
+  it('credits lrc.red with a link after the lines it supplied', async () => {
+    api.getTrackLyrics.mockResolvedValue({
+      status: 'ready',
+      synced: '[00:00.00]First line\n[00:05.00]Second line',
+      plain: 'First line\nSecond line',
+      instrumental: false,
+      cached: true,
+      provider: 'lrc.red',
+    });
+    render(() => <LyricsPanel />);
+
+    const credit = await screen.findByRole('link', { name: 'lyricsPanel.source' });
+    expect(credit).toHaveAttribute('href', 'https://lrc.red');
+    expect(credit).toHaveAttribute('target', '_blank');
+  });
+
+  it('credits lrc.red under plain text too, and nobody else', async () => {
+    api.getTrackLyrics.mockResolvedValue({
+      status: 'ready', synced: null, plain: 'Just words', instrumental: false, cached: true, provider: 'lrc.red',
+    });
+    const { unmount } = render(() => <LyricsPanel />);
+    await screen.findByText('Just words');
+    expect(screen.getByRole('link', { name: 'lyricsPanel.source' })).toBeInTheDocument();
+    unmount();
+
+    api.getTrackLyrics.mockResolvedValue({
+      status: 'ready', synced: null, plain: 'Just words', instrumental: false, cached: true, provider: 'lrclib',
+    });
+    render(() => <LyricsPanel />);
+    await screen.findByText('Just words');
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
   it('does not seek when a touch on a lyric line becomes a scroll', async () => {
     render(() => <LyricsPanel />);
 

@@ -1,0 +1,300 @@
+{"sample_id": "m0001", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 337}
+{"sample_id": "m0002", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 135}
+{"sample_id": "m0003", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 209}
+{"sample_id": "m0004", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 112}
+{"sample_id": "m0005", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 355}
+{"sample_id": "m0006", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 161}
+{"sample_id": "m0007", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 243}
+{"sample_id": "m0008", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 173}
+{"sample_id": "m0009", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 323}
+{"sample_id": "m0010", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 178}
+{"sample_id": "m0011", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 184}
+{"sample_id": "m0012", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 178}
+{"sample_id": "m0013", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 161}
+{"sample_id": "m0014", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 169}
+{"sample_id": "m0015", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 2}, "ms": 273}
+{"sample_id": "m0016", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 544}
+{"sample_id": "m0017", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 110}
+{"sample_id": "m0018", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 181}
+{"sample_id": "m0019", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 187}
+{"sample_id": "m0020", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 217}
+{"sample_id": "m0021", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 270}
+{"sample_id": "m0022", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 106}
+{"sample_id": "m0023", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 216}
+{"sample_id": "m0024", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 176}
+{"sample_id": "m0025", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 285}
+{"sample_id": "m0026", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1406}
+{"sample_id": "m0027", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1520}
+{"sample_id": "m0028", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 229}
+{"sample_id": "m0029", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1368}
+{"sample_id": "m0030", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1349}
+{"sample_id": "m0031", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 143}
+{"sample_id": "m0032", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1319}
+{"sample_id": "m0033", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 1}, "ms": 2844}
+{"sample_id": "m0034", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 393}
+{"sample_id": "m0035", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 3}, "ms": 2748}
+{"sample_id": "m0036", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 228}
+{"sample_id": "m0037", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1532}
+{"sample_id": "m0038", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 176}
+{"sample_id": "m0039", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1671}
+{"sample_id": "m0040", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1343}
+{"sample_id": "m0041", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 289}
+{"sample_id": "m0042", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1504}
+{"sample_id": "m0043", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 314}
+{"sample_id": "m0044", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 2}, "ms": 1528}
+{"sample_id": "m0045", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 190}
+{"sample_id": "m0046", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1485}
+{"sample_id": "m0047", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 2}, "ms": 1537}
+{"sample_id": "m0048", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 104}
+{"sample_id": "m0049", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1352}
+{"sample_id": "m0050", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1439}
+{"sample_id": "m0051", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 277}
+{"sample_id": "m0052", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1510}
+{"sample_id": "m0053", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1470}
+{"sample_id": "m0054", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1343}
+{"sample_id": "m0055", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 274}
+{"sample_id": "m0056", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 163}
+{"sample_id": "m0057", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1674}
+{"sample_id": "m0058", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 249}
+{"sample_id": "m0059", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1576}
+{"sample_id": "m0060", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 178}
+{"sample_id": "m0061", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 1}, "ms": 2871}
+{"sample_id": "m0062", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 310}
+{"sample_id": "m0063", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1361}
+{"sample_id": "m0064", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 249}
+{"sample_id": "m0065", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1403}
+{"sample_id": "m0066", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 258}
+{"sample_id": "m0067", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 3}, "ms": 2833}
+{"sample_id": "m0068", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 109}
+{"sample_id": "m0069", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 246}
+{"sample_id": "m0070", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1455}
+{"sample_id": "m0071", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 295}
+{"sample_id": "m0072", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1440}
+{"sample_id": "m0073", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1459}
+{"sample_id": "m0074", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 105}
+{"sample_id": "m0075", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1630}
+{"sample_id": "m0076", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1502}
+{"sample_id": "m0077", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 412}
+{"sample_id": "m0078", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1397}
+{"sample_id": "m0079", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 259}
+{"sample_id": "m0080", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 361}
+{"sample_id": "m0081", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1366}
+{"sample_id": "m0082", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 1}, "ms": 2954}
+{"sample_id": "m0083", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 371}
+{"sample_id": "m0084", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 355}
+{"sample_id": "m0085", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1471}
+{"sample_id": "m0086", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 100}
+{"sample_id": "m0087", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1426}
+{"sample_id": "m0088", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1424}
+{"sample_id": "m0089", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 2}, "ms": 256}
+{"sample_id": "m0090", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1476}
+{"sample_id": "m0091", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 320}
+{"sample_id": "m0092", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1279}
+{"sample_id": "m0093", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 117}
+{"sample_id": "m0094", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1447}
+{"sample_id": "m0095", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1413}
+{"sample_id": "m0096", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1557}
+{"sample_id": "m0097", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 229}
+{"sample_id": "m0098", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 3}, "ms": 2771}
+{"sample_id": "m0099", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 232}
+{"sample_id": "m0100", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 153}
+{"sample_id": "m0101", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1436}
+{"sample_id": "m0102", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 232}
+{"sample_id": "m0103", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1646}
+{"sample_id": "m0104", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1444}
+{"sample_id": "m0105", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 216}
+{"sample_id": "m0106", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1345}
+{"sample_id": "m0107", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1353}
+{"sample_id": "m0108", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 192}
+{"sample_id": "m0109", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1413}
+{"sample_id": "m0110", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1393}
+{"sample_id": "m0111", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 357}
+{"sample_id": "m0112", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1354}
+{"sample_id": "m0113", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 341}
+{"sample_id": "m0114", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1424}
+{"sample_id": "m0115", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 259}
+{"sample_id": "m0116", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 2}, "ms": 1540}
+{"sample_id": "m0117", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1494}
+{"sample_id": "m0118", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 227}
+{"sample_id": "m0119", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1715}
+{"sample_id": "m0120", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1559}
+{"sample_id": "m0121", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 175}
+{"sample_id": "m0122", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1416}
+{"sample_id": "m0123", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 145}
+{"sample_id": "m0124", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 1}, "ms": 2926}
+{"sample_id": "m0125", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 332}
+{"sample_id": "m0126", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 258}
+{"sample_id": "m0127", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 178}
+{"sample_id": "m0128", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 2}, "ms": 2995}
+{"sample_id": "m0129", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 349}
+{"sample_id": "m0130", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 220}
+{"sample_id": "m0131", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 4, "api.deezer.com": 1, "lrc.red": 1}, "ms": 2935}
+{"sample_id": "m0132", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 255}
+{"sample_id": "m0133", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1450}
+{"sample_id": "m0134", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 222}
+{"sample_id": "m0135", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1404}
+{"sample_id": "m0136", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1561}
+{"sample_id": "m0137", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 156}
+{"sample_id": "m0138", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1320}
+{"sample_id": "m0139", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1567}
+{"sample_id": "m0140", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 324}
+{"sample_id": "m0141", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 356}
+{"sample_id": "m0142", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1427}
+{"sample_id": "m0143", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1432}
+{"sample_id": "m0144", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 305}
+{"sample_id": "m0145", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1277}
+{"sample_id": "m0146", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1726}
+{"sample_id": "m0147", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 359}
+{"sample_id": "m0148", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1538}
+{"sample_id": "m0149", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 340}
+{"sample_id": "m0150", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1508}
+{"sample_id": "m0151", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 336}
+{"sample_id": "m0152", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1366}
+{"sample_id": "m0153", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1495}
+{"sample_id": "m0154", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 249}
+{"sample_id": "m0155", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1555}
+{"sample_id": "m0156", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1677}
+{"sample_id": "m0157", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 349}
+{"sample_id": "m0158", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 162}
+{"sample_id": "m0159", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1381}
+{"sample_id": "m0160", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1493}
+{"sample_id": "m0161", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 338}
+{"sample_id": "m0162", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1364}
+{"sample_id": "m0163", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 181}
+{"sample_id": "m0164", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 3, "lrc.red": 1}, "ms": 2785}
+{"sample_id": "m0165", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 414}
+{"sample_id": "m0166", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 2}, "ms": 533}
+{"sample_id": "m0167", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 330}
+{"sample_id": "m0168", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1377}
+{"sample_id": "m0169", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 3, "lrc.red": 2}, "ms": 2869}
+{"sample_id": "m0170", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 293}
+{"sample_id": "m0171", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 254}
+{"sample_id": "m0172", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1356}
+{"sample_id": "m0173", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 232}
+{"sample_id": "m0174", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1576}
+{"sample_id": "m0175", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1670}
+{"sample_id": "m0176", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1401}
+{"sample_id": "m0177", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 294}
+{"sample_id": "m0178", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1511}
+{"sample_id": "m0179", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 146}
+{"sample_id": "m0180", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1422}
+{"sample_id": "m0181", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1530}
+{"sample_id": "m0182", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 2}, "ms": 317}
+{"sample_id": "m0183", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1356}
+{"sample_id": "m0184", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 1}, "ms": 3027}
+{"sample_id": "m0185", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 214}
+{"sample_id": "m0186", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 219}
+{"sample_id": "m0187", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1350}
+{"sample_id": "m0188", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 151}
+{"sample_id": "m0189", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1686}
+{"sample_id": "m0190", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1543}
+{"sample_id": "m0191", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 213}
+{"sample_id": "m0192", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 232}
+{"sample_id": "m0193", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1532}
+{"sample_id": "m0194", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1653}
+{"sample_id": "m0195", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 409}
+{"sample_id": "m0196", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 321}
+{"sample_id": "m0197", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1446}
+{"sample_id": "m0198", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1290}
+{"sample_id": "m0199", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1557}
+{"sample_id": "m0200", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 100}
+{"sample_id": "m0201", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 4, "api.deezer.com": 1}, "ms": 2702}
+{"sample_id": "m0202", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 264}
+{"sample_id": "m0203", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1467}
+{"sample_id": "m0204", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 348}
+{"sample_id": "m0205", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1705}
+{"sample_id": "m0206", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1486}
+{"sample_id": "m0207", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 179}
+{"sample_id": "m0208", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1609}
+{"sample_id": "m0209", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 329}
+{"sample_id": "m0210", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1544}
+{"sample_id": "m0211", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 159}
+{"sample_id": "m0212", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1594}
+{"sample_id": "m0213", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1421}
+{"sample_id": "m0214", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 278}
+{"sample_id": "m0215", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1596}
+{"sample_id": "m0216", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 361}
+{"sample_id": "m0217", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1426}
+{"sample_id": "m0218", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 345}
+{"sample_id": "m0219", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1646}
+{"sample_id": "m0220", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 2}, "ms": 1527}
+{"sample_id": "m0221", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 291}
+{"sample_id": "m0222", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1533}
+{"sample_id": "m0223", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 169}
+{"sample_id": "m0224", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 3}, "ms": 2652}
+{"sample_id": "m0225", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 103}
+{"sample_id": "m0226", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 158}
+{"sample_id": "m0227", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1719}
+{"sample_id": "m0228", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 144}
+{"sample_id": "m0229", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1439}
+{"sample_id": "m0230", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1383}
+{"sample_id": "m0231", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 145}
+{"sample_id": "m0232", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1494}
+{"sample_id": "m0233", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1630}
+{"sample_id": "m0234", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 330}
+{"sample_id": "m0235", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1315}
+{"sample_id": "m0236", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 105}
+{"sample_id": "m0237", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 3}, "ms": 2896}
+{"sample_id": "m0238", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 259}
+{"sample_id": "m0239", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 110}
+{"sample_id": "m0240", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1523}
+{"sample_id": "m0241", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 177}
+{"sample_id": "m0242", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1615}
+{"sample_id": "m0243", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1376}
+{"sample_id": "m0244", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 177}
+{"sample_id": "m0245", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1767}
+{"sample_id": "m0246", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1396}
+{"sample_id": "m0247", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 112}
+{"sample_id": "m0248", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1380}
+{"sample_id": "m0249", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 179}
+{"sample_id": "m0250", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 3}, "ms": 2756}
+{"sample_id": "m0251", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 143}
+{"sample_id": "m0252", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1379}
+{"sample_id": "m0253", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 348}
+{"sample_id": "m0254", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1269}
+{"sample_id": "m0255", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 450}
+{"sample_id": "m0256", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 218}
+{"sample_id": "m0257", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1452}
+{"sample_id": "m0258", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 1}, "ms": 2808}
+{"sample_id": "m0259", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 235}
+{"sample_id": "m0260", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1292}
+{"sample_id": "m0261", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 292}
+{"sample_id": "m0262", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1411}
+{"sample_id": "m0263", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 484}
+{"sample_id": "m0264", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 100}
+{"sample_id": "m0265", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1470}
+{"sample_id": "m0266", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1672}
+{"sample_id": "m0267", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 288}
+{"sample_id": "m0268", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1733}
+{"sample_id": "m0269", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 322}
+{"sample_id": "m0270", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1563}
+{"sample_id": "m0271", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 107}
+{"sample_id": "m0272", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1391}
+{"sample_id": "m0273", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1446}
+{"sample_id": "m0274", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 111}
+{"sample_id": "m0275", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1302}
+{"sample_id": "m0276", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1381}
+{"sample_id": "m0277", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 259}
+{"sample_id": "m0278", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1405}
+{"sample_id": "m0279", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 3, "api.deezer.com": 1, "lrc.red": 1}, "ms": 2708}
+{"sample_id": "m0280", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 270}
+{"sample_id": "m0281", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 177}
+{"sample_id": "m0282", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 2}, "ms": 1756}
+{"sample_id": "m0283", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 299}
+{"sample_id": "m0284", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1665}
+{"sample_id": "m0285", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1737}
+{"sample_id": "m0286", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 182}
+{"sample_id": "m0287", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 1, "lrc.red": 1}, "ms": 155}
+{"sample_id": "m0288", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1775}
+{"sample_id": "m0289", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1662}
+{"sample_id": "m0290", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 232}
+{"sample_id": "m0291", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 217}
+{"sample_id": "m0292", "error": false, "provider": "lrc.red", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 2}, "ms": 1608}
+{"sample_id": "m0293", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1625}
+{"sample_id": "m0294", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 1}, "ms": 220}
+{"sample_id": "m0295", "error": false, "provider": "lrclib", "timed_fits": false, "has_text": true, "calls": {"lrclib.net": 2, "lrc.red": 1}, "ms": 1495}
+{"sample_id": "m0296", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 356}
+{"sample_id": "m0297", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1351}
+{"sample_id": "m0298", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 1, "api.deezer.com": 1, "lrc.red": 1}, "ms": 294}
+{"sample_id": "m0299", "error": false, "provider": "lrclib", "timed_fits": true, "has_text": true, "calls": {"lrclib.net": 2}, "ms": 1519}
+{"sample_id": "m0300", "error": false, "provider": null, "timed_fits": false, "has_text": false, "calls": {"lrclib.net": 2, "api.deezer.com": 1, "lrc.red": 1}, "ms": 1807}

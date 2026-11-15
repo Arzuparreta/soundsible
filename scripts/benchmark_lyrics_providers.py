@@ -422,6 +422,9 @@ def run(args):
     http = HTTP(args.user_agent, args.interval, args.timeout)
     # Only this module's dependency is replaced; requests itself is never patched.
     production.requests = SimpleNamespace(get=http.get, RequestException=requests.RequestException)
+    # The resolver now asks lrc.red after LRCLIB; the "lrclib" route measures
+    # LRCLIB alone, as in the archived run, and lrc.red is its own route.
+    production._lrc_red_lookup = lambda *args, **kwargs: None
     logging.getLogger("shared.lyrics").setLevel(logging.CRITICAL)
     config = {"sample_sha256": digest(Path(args.sample).read_text()), "providers": list(PROVIDERS),
               "interval_sec": args.interval, "timeout_sec": args.timeout, "workers": args.workers,

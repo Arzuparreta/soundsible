@@ -126,6 +126,8 @@ export interface LyricsResponse {
   synced_duration?: number | null;
   /** A listener's correction: the lines sit this much later in this audio. */
   offset_ms?: number | null;
+  /** Who supplied the lines; lrc.red's terms ask for a credit linking to it. */
+  provider?: 'lrclib' | 'lrc.red' | null;
 }
 
 export interface SearchResult {

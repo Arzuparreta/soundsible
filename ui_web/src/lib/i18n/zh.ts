@@ -980,6 +980,7 @@ export const zh: Dict = {
     cancelAdjust: '取消',
     resetTiming: '重置同步',
     timingSaveFailed: '无法保存同步设置。',
+    source: '歌词来源：{name}',
   },
   discoverNodes: {
     title: '推荐',
