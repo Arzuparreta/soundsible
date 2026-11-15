@@ -220,6 +220,44 @@ The longer six-route chain adds only two screened results beyond the 146-item lr
 
 No provider was enabled or changed in Soundsible. A product integration should have separate acceptance for wrong versions, music-video intros, source attribution, caching and actual client rendering. These measurements do not certify voice-level synchronization.
 
+## Follow-up: the shipped LRCLIB → lrc.red resolver
+
+The recommendation shipped as resolver `v6` in `shared/lyrics.py`. LRCLIB
+is asked as before. lrc.red is asked once when LRCLIB's answer has no timed
+lines that fit the recording: nothing found, plain text only, an instrumental
+flag, lines timed against another length (or starting after the audio ends),
+or an LRCLIB error. lrc.red's candidate must pass this report's identity screen
+(title ≥ 0.80, artist ≥ 0.72, same version tokens), sit within three seconds of
+the audio's length, and not be `byModel`. Its enhanced LRC is reduced to line
+LRC, and its lines are credited with a link wherever the player shows them.
+
+The classification above explains why the trigger is "no fitting timing" and
+not "no answer". Of lrc.red's 11 screened additions over LRCLIB, LRCLIB
+answered 10: five with lines timed for another length, four with plain text
+only, one flagged instrumental. Only one was a plain miss.
+
+[`shipped-resolver.jsonl`](lyrics-providers-2026-11-15/shipped-resolver.jsonl)
+is that resolver run live over the same 300 items on 15 November 2026,
+16:10–16:25 UTC, two lookups at a time, recording only the sample id, who
+answered, whether the timed lines fit, and request counts per host:
+
+| | Items |
+| --- | ---: |
+| Timed lines that fit, from LRCLIB | 144 |
+| Timed lines that fit, from lrc.red | 9 |
+| LRCLIB text without fitting timing, lrc.red had nothing usable | 39 |
+| Nothing from either | 108 |
+| Provider errors | 0 |
+
+LRCLIB alone would have served the same 144: lrc.red is asked only after
+LRCLIB's answer did not fit. lrc.red therefore takes timed lines from 144 to
+153 (48.0% → 51.0%) at 0.56 extra requests per lookup (168 in all). Nine of
+the eleven additions above came back. The other two (`m0038`, `m0134`) carry
+LRCLIB lines whose length LRCLIB does not agree on; the production rule treats
+an unknown length as no evidence of a mismatch, so they count as fitting and
+lrc.red is not asked. The 144 differs from the 135 above for the same reason:
+this report's screen read a lone upload's length where production does not.
+
 ## Source contracts checked
 
 - [lrc.red API and attribution / client identification requirements](https://lrc.red/api).

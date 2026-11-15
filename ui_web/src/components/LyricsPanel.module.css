@@ -198,3 +198,13 @@
   margin-top: var(--space-lg);
   color: var(--ink-secondary);
 }
+
+/* The provider's credit, after the last line. */
+.credit {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: var(--space-md);
+  padding: var(--space-2xs);
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+}

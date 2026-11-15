@@ -19,6 +19,8 @@ library_routes = importlib.util.module_from_spec(_SPEC)
 sys.modules["library_routes_under_test"] = library_routes
 _SPEC.loader.exec_module(library_routes)
 library_bp = library_routes.library_bp
+# Every test stubs lrc.red out; the one that checks its requests needs the real call.
+_REAL_LRC_RED_GET = lyrics_module._lrc_red_get
 
 
 def _make_runtime(tmp_path) -> RuntimeConfig:
@@ -79,7 +81,9 @@ def _fake_api(track):
 
 
 @pytest.fixture(autouse=True)
-def _reset(tmp_path):
+def _reset(tmp_path, monkeypatch):
+    # No test reaches the network: lrc.red knows nothing unless a test says so.
+    monkeypatch.setattr(lyrics_module, "_lrc_red_get", lambda path, params, timeout_sec: None)
     reset_runtime()
     lyrics_module._reset_lyrics_jobs_for_tests()
     _make_runtime(tmp_path)
@@ -110,6 +114,7 @@ def test_lyrics_fetch_and_cache(monkeypatch):
         "timing_safe": True,
         "synced_duration": None,
         "offset_ms": None,
+        "provider": "lrclib",
     }
     fetch.assert_called_once_with("Artist", "Song", "Album", 200)
 
@@ -157,6 +162,7 @@ def test_lyrics_provider_error_not_cached(monkeypatch):
         "timing_safe": True,
         "synced_duration": None,
         "offset_ms": None,
+        "provider": None,
     }
 
     _get_until_ready(client, "/api/library/tracks/track-1/lyrics")
@@ -450,8 +456,9 @@ def test_fetch_lyrics_deezer_fallback_is_only_used_after_empty_lrclib(monkeypatc
 
 
 def test_fetch_lyrics_skips_fallback_when_budget_is_spent(monkeypatch):
-    clock = iter([100.0, 108.5, 108.5])
-    monkeypatch.setattr(lyrics_module.time, "monotonic", lambda: next(clock))
+    clock = [100.0]
+    monkeypatch.setattr(lyrics_module.time, "monotonic", lambda: clock.pop(0) if len(clock) > 1 else clock[0])
+    clock.append(108.5)
     monkeypatch.setattr(lyrics_module, "_lrclib_get", lambda path, params, timeout_sec: [])
     deezer = MagicMock()
     monkeypatch.setattr(lyrics_module, "_deezer_search", deezer)
@@ -791,3 +798,204 @@ def test_deezer_fallback_searches_with_a_plain_query(monkeypatch):
     monkeypatch.setattr(lyrics_module.requests, "get", fake_get)
     lyrics_module._deezer_search("Artist", "Song (In The World)", 1.0)
     assert seen["q"] == "Artist Song (In The World)"
+
+
+# ── lrc.red, after LRCLIB ──
+
+_ENHANCED_LRC = (
+    "[ti:Song]\n[ar:Artist]\n[length:03:20]\n\n"
+    "[00:01.00]<00:01.00>First <00:01.40>line <00:02.10>\n"
+    "[00:04.50]<00:04.50>Second  <00:05.00>line <00:06.00>\n"
+    "[00:08.00]\n"
+)
+
+
+class _LrcRedReply:
+    def __init__(self, body):
+        self.body = body
+        self.text = body if isinstance(body, str) else ""
+
+    def json(self):
+        return self.body
+
+
+def _lrc_red(monkeypatch, hits, lrc=_ENHANCED_LRC):
+    """lrc.red answering a search with ``hits`` and every hit's lines with ``lrc``."""
+    calls = []
+
+    def fake_get(path, params, timeout_sec):
+        calls.append(path)
+        if path == "/search.json":
+            return _LrcRedReply({"hits": hits})
+        return _LrcRedReply(lrc) if lrc is not None else None
+
+    monkeypatch.setattr(lyrics_module, "_lrc_red_get", fake_get)
+    return calls
+
+
+def _hit(**overrides):
+    return {"isrc": "USABC1234567", "title": "Song", "artist": "Artist", "album": "Album", "duration": 200.4, **overrides}
+
+
+def _lrclib(monkeypatch, rows):
+    monkeypatch.setattr(lyrics_module, "_lrclib_get", lambda path, params, timeout_sec: rows)
+    monkeypatch.setattr(lyrics_module, "_deezer_search", lambda artist, title, timeout_sec: [])
+
+
+def test_lrc_red_answers_a_song_lrclib_does_not_know(monkeypatch):
+    _lrclib(monkeypatch, [])
+    calls = _lrc_red(monkeypatch, [_hit()])
+
+    record = lyrics_module.fetch_lyrics("Artist", "Song", "Album", 200)
+
+    assert calls == ["/search.json", "/s/USABC1234567.lrc"]
+    # Line LRC: no word stamps, no header tags, the instrumental gap kept.
+    assert record == {
+        "synced": "[00:01.00]First line\n[00:04.50]Second line\n[00:08.00]",
+        "plain": "First line\nSecond line",
+        "instrumental": False,
+        "source": lyrics_module.LRC_RED_SOURCE,
+        "synced_duration": 200,
+    }
+    assert lyrics_module.provider(record) == "lrc.red"
+
+
+def test_lrc_red_times_lyrics_lrclib_only_has_as_text(monkeypatch):
+    _lrclib(monkeypatch, [{"trackName": "Song", "artistName": "Artist", "duration": 200, "plainLyrics": "text"}])
+    _lrc_red(monkeypatch, [_hit()])
+
+    record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+
+    assert record["source"] == lyrics_module.LRC_RED_SOURCE
+    assert record["synced"].startswith("[00:01.00]First line")
+
+
+def test_lrc_red_replaces_lines_lrclib_timed_for_another_cut(monkeypatch):
+    lrc = "[00:01.00] a\n[03:46.00] z"
+    _lrclib(monkeypatch, [{"trackName": "Song", "artistName": "Artist", "duration": 236, "syncedLyrics": lrc}])
+    _lrc_red(monkeypatch, [_hit(duration=251.2)])
+
+    record = lyrics_module.fetch_lyrics("Artist", "Song", None, 251)
+
+    assert record["source"] == lyrics_module.LRC_RED_SOURCE
+    assert record["synced_duration"] == 251
+
+
+def test_lrc_red_is_not_asked_when_lrclib_timing_fits(monkeypatch):
+    _lrclib(monkeypatch, [{"trackName": "Song", "artistName": "Artist", "duration": 200, "syncedLyrics": "[00:01.00] a"}])
+    calls = _lrc_red(monkeypatch, [_hit()])
+
+    record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+
+    assert record["source"] == lyrics_module.RESOLVER_SOURCE
+    assert calls == []
+
+
+@pytest.mark.parametrize("hit", [
+    _hit(byModel=True),
+    _hit(title="Song (Acoustic)"),
+    _hit(title="Another Song Entirely"),
+    _hit(artist="Somebody Else"),
+    _hit(duration=230),
+    _hit(isrc="../../etc/passwd"),
+])
+def test_lrc_red_hits_that_are_not_this_recording_are_passed_over(monkeypatch, hit):
+    plain = {"trackName": "Song", "artistName": "Artist", "duration": 200, "plainLyrics": "text"}
+    _lrclib(monkeypatch, [plain])
+    calls = _lrc_red(monkeypatch, [hit])
+
+    record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+
+    assert record["plain"] == "text" and record["source"] == lyrics_module.RESOLVER_SOURCE
+    assert calls == ["/search.json"]
+
+
+def test_lrc_red_lines_that_outlast_the_recording_are_refused(monkeypatch):
+    _lrclib(monkeypatch, [])
+    _lrc_red(monkeypatch, [_hit(duration=None)], lrc="[00:01.00] a\n[04:30.00] z\n")
+
+    record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+
+    assert record == {"synced": None, "plain": None, "instrumental": False, "source": lyrics_module.RESOLVER_SOURCE}
+
+
+def test_an_lrc_red_track_without_timed_lines_is_a_miss(monkeypatch):
+    _lrclib(monkeypatch, [])
+    _lrc_red(monkeypatch, [_hit()], lrc=None)
+
+    record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+
+    assert record["source"] == lyrics_module.RESOLVER_SOURCE and record["synced"] is None
+
+
+def test_an_lrc_red_failure_keeps_what_lrclib_found(monkeypatch):
+    _lrclib(monkeypatch, [{"trackName": "Song", "artistName": "Artist", "duration": 200, "plainLyrics": "text"}])
+
+    def down(path, params, timeout_sec):
+        raise lyrics_module.requests.ConnectionError("down")
+
+    monkeypatch.setattr(lyrics_module, "_lrc_red_get", down)
+
+    assert lyrics_module.fetch_lyrics("Artist", "Song", None, 200)["plain"] == "text"
+
+
+def test_lrc_red_answers_through_an_lrclib_outage(monkeypatch):
+    def outage(path, params, timeout_sec):
+        raise lyrics_module.requests.HTTPError("503 Server Error")
+
+    monkeypatch.setattr(lyrics_module, "_lrclib_get", outage)
+    _lrc_red(monkeypatch, [_hit()])
+    assert lyrics_module.fetch_lyrics("Artist", "Song", None, 200)["source"] == lyrics_module.LRC_RED_SOURCE
+
+    # Neither answering is still an outage: nothing may be cached as not found.
+    _lrc_red(monkeypatch, [])
+    assert lyrics_module.fetch_lyrics("Artist", "Song", None, 200) is None
+
+
+def test_lrc_red_requests_carry_its_own_client_identification(monkeypatch):
+    seen = []
+
+    def fake_get(url, params, headers, timeout):
+        seen.append((url, headers["User-Agent"]))
+        return MagicMock(status_code=404)
+
+    monkeypatch.setattr(lyrics_module.requests, "get", fake_get)
+    assert _REAL_LRC_RED_GET("/search.json", {"q": "Song Artist"}, 3.0) is None
+    assert seen == [("https://lrc.red/search.json", lyrics_module._LRC_RED_USER_AGENT)]
+    # lrc.red's terms: a link and an address to contact.
+    assert "https://github.com/Arzuparreta/soundsible" in lyrics_module._LRC_RED_USER_AGENT
+    assert "@" in lyrics_module._LRC_RED_CONTACT
+
+
+def test_lyrics_are_looked_up_again_only_where_the_resolver_can_do_better():
+    again = lyrics_module.worth_looking_up_again
+    fitting = {"synced": "[00:01.00] a", "plain": "a", "source": "lrclib:v5", "synced_duration": 200}
+    assert not again(fitting, 200)
+    assert again({**fitting, "synced_duration": 236}, 251)
+    assert again({"synced": None, "plain": "a", "source": "lrclib:v5"}, 200)
+    assert again({"synced": None, "plain": None, "instrumental": True, "source": "lrclib:v5"}, 200)
+    # Lines older than their length are looked up whatever they claim.
+    assert again({**fitting, "source": "lrclib:v4", "synced_duration": None}, 200)
+    for source in (lyrics_module.RESOLVER_SOURCE, lyrics_module.LRC_RED_SOURCE):
+        assert not again({"synced": None, "plain": "a", "source": source}, 200)
+
+
+def test_an_upgrade_that_finds_nothing_keeps_a_known_length():
+    db = instance_db()
+    held = {"synced": "[00:01.00] a", "plain": "a", "instrumental": False, "source": "lrclib:v5", "synced_duration": 236}
+    kept = lyrics_module.settle_upgrade(db, "t1", held, {"synced": None, "plain": None, "instrumental": False})
+    assert kept["synced_duration"] == 236 and kept["source"] == lyrics_module.RESOLVER_SOURCE
+    assert db.get_lyrics("t1")["synced_duration"] == 236
+
+
+def test_library_lyrics_name_lrc_red_for_its_credit(monkeypatch):
+    monkeypatch.setattr(library_routes, "_get_api", lambda: _fake_api(_track()))
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", MagicMock(return_value={
+        "synced": "[00:01.00] a", "plain": "a", "instrumental": False,
+        "source": lyrics_module.LRC_RED_SOURCE, "synced_duration": 200,
+    }))
+    client = _make_app().test_client()
+
+    assert _get_until_ready(client, "/api/library/tracks/track-1/lyrics").get_json()["provider"] == "lrc.red"
+    # And once cached.
+    assert client.get("/api/library/tracks/track-1/lyrics").get_json()["provider"] == "lrc.red"

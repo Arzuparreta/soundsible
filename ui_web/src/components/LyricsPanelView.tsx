@@ -12,8 +12,9 @@ import styles from './LyricsPanel.module.css';
 
 /**
  * Lyrics tab of the Now Playing side panel. Follows whatever is playing:
- * library tracks hit the engine's cached LRCLIB lookup; previews (discover /
- * YouTube) are looked up by metadata. When synced (LRC) lyrics exist the
+ * library tracks hit the engine's cached lookup (LRCLIB, then lrc.red);
+ * previews (discover / YouTube) are looked up by metadata. Lines from lrc.red
+ * end with a link to it, as its terms ask. When synced (LRC) lyrics exist the
  * current line is highlighted and kept centred as the song advances; a tap on
  * any line seeks there. Plain lyrics render as a static scrollable text.
  *
@@ -253,6 +254,14 @@ export function LyricsPanelView(props: {
     });
   });
 
+  const credit = () => (
+    <Show when={lyrics()?.provider === 'lrc.red'}>
+      <a class={styles.credit} href="https://lrc.red" target="_blank" rel="noopener noreferrer">
+        {t('lyricsPanel.source', { name: 'lrc.red' })}
+      </a>
+    </Show>
+  );
+
   const empty = createMemo(() => {
     const res = lyrics();
     return !!res && res.status !== 'unavailable' && !res.synced && !res.plain && !res.instrumental;
@@ -287,7 +296,7 @@ export function LyricsPanelView(props: {
                   <Show when={!empty()} fallback={<p class={styles.hint}>{t('lyricsPanel.notFound')}</p>}>
                     <Show
                       when={parsed().length > 0}
-                      fallback={<pre class={styles.plain}>{lyrics()?.plain ?? ''}</pre>}
+                      fallback={<><pre class={styles.plain}>{lyrics()?.plain ?? ''}</pre>{credit()}</>}
                     >
                       <div class={styles.synced}>
                         <For each={parsed()}>
@@ -324,6 +333,7 @@ export function LyricsPanelView(props: {
                             {t('lyricsPanel.adjust')}
                           </button>
                         </Show>
+                        {credit()}
                       </div>
                     </Show>
                   </Show>

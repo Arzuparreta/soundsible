@@ -988,6 +988,7 @@ export const es: Dict = {
     cancelAdjust: 'Cancelar',
     resetTiming: 'Restablecer sincronía',
     timingSaveFailed: 'No se pudo guardar la sincronía.',
+    source: 'Letra vía {name}',
   },
   discoverNodes: {
     title: 'Recomendaciones',

@@ -2451,7 +2451,6 @@ class DatabaseManager:
     # Note: Lyrics cache
 
     _LYRICS_NEGATIVE_TTL_SEC = 7 * 24 * 3600
-    _LYRICS_RESOLVER_SOURCE = "lrclib:v5"
 
     def get_lyrics(self, track_id: str) -> Optional[Dict[str, Any]]:
         """Return the cached lyrics record for a track, or None if missing.
@@ -2473,7 +2472,9 @@ class DatabaseManager:
                 # A negative result is only valid for the matcher that produced
                 # it. Algorithm upgrades must retry immediately instead of
                 # preserving stale misses for the full TTL.
-                if record.get("source") != self._LYRICS_RESOLVER_SOURCE:
+                from shared.lyrics import RESOLVER_SOURCE
+
+                if record.get("source") != RESOLVER_SOURCE:
                     return None
                 cutoff = int(self._LYRICS_NEGATIVE_TTL_SEC)
                 fresh = conn.execute(

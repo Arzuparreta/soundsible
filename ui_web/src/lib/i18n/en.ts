@@ -987,6 +987,7 @@ export const en = {
     cancelAdjust: 'Cancel',
     resetTiming: 'Reset timing',
     timingSaveFailed: 'The timing could not be saved.',
+    source: 'Lyrics via {name}',
   },
   discoverNodes: {
     title: 'Recommendations',

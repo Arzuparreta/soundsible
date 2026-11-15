@@ -1,10 +1,17 @@
 """
-Fast, confidence-gated LRCLIB lyrics resolution.
+Fast, confidence-gated lyrics resolution: LRCLIB first, lrc.red after it.
 
 YouTube metadata is often a video title plus a channel name rather than a
 track signature.  The resolver normalizes that metadata locally, performs one
 broad LRCLIB search, and scores the returned candidates.  Deezer is only used
 as a short, bounded fallback when LRCLIB returns no candidates.
+
+When LRCLIB has no timed lines that fit the recording — nothing at all, plain
+text only, an "instrumental" flag, or lines timed for a cut of another length —
+lrc.red is asked once.  On 300 songs of a real collection that took timed
+lines that fit from 144 to 153; most of what it adds are songs LRCLIB does
+answer, only without usable timing
+(``docs/internal/measurements/lyrics-provider-comparison-2026-11-15.md``).
 """
 
 from __future__ import annotations
@@ -30,7 +37,12 @@ logger = logging.getLogger(__name__)
 
 _LRCLIB_HOST = "https://lrclib.net"
 _DEEZER_HOST = "https://api.deezer.com"
+_LRC_RED_HOST = "https://lrc.red"
 _USER_AGENT = "Soundsible/1.0 (https://github.com/Arzuparreta/soundsible)"
+# lrc.red's terms ask every client to name itself with a link and a contact
+# address (https://lrc.red/api); the address is the one SECURITY.md publishes.
+_LRC_RED_CONTACT = "rubenpenarubio02@gmail.com"
+_LRC_RED_USER_AGENT = f"Soundsible/1.0 (https://github.com/Arzuparreta/soundsible; {_LRC_RED_CONTACT})"
 
 # The common path makes one LRCLIB request.  Only a genuine no-result response
 # can spend the remaining budget on Deezer + one canonical LRCLIB retry.
@@ -48,7 +60,21 @@ _LRCLIB_RETRY_JITTER_SEC = 0.25
 # What a retry needs left after its wait to be worth sending.
 _LRCLIB_MIN_RETRY_REQUEST_SEC = 1.0
 
-RESOLVER_SOURCE = "lrclib:v5"
+RESOLVER_SOURCE = "lrclib:v6"
+#: Lines lrc.red supplied. Its terms ask for a credit wherever they are shown.
+LRC_RED_SOURCE = "lrc.red:v6"
+_CURRENT_SOURCES = frozenset({RESOLVER_SOURCE, LRC_RED_SOURCE})
+#: Resolvers whose records carry a trustworthy ``synced_duration``.
+_LENGTH_SOURCES = frozenset({"lrclib:v5", RESOLVER_SOURCE, LRC_RED_SOURCE})
+
+# Two requests (a search, then the lines) on a CDN that answers in ~0.1 s.
+_LRC_RED_TIMEOUT_SEC = 3.0
+# The screen the provider comparison applied before counting a candidate as
+# the same song: stricter than LRCLIB's score, because lrc.red's search is a
+# loose full-text match that also returns other songs and other versions.
+_LRC_RED_MIN_TITLE = 0.80
+_LRC_RED_MIN_ARTIST = 0.72
+_ISRC_RE = re.compile(r"^[A-Z0-9]{12}$")
 
 _LOOKUP_WORKERS = 2
 
@@ -211,13 +237,43 @@ def has_text(record: Optional[Dict[str, Any]]) -> bool:
     return bool(record and (record.get("synced") or record.get("plain") or record.get("instrumental")))
 
 
-def predates_timing_length(record: Optional[Dict[str, Any]]) -> bool:
-    """Timed lines cached by a resolver that did not record their length.
+def provider(record: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Who supplied a record's lyrics: ``"lrc.red"``, ``"lrclib"``, or nobody."""
+    if not has_text(record):
+        return None
+    return "lrc.red" if record.get("source") == LRC_RED_SOURCE else "lrclib"
 
-    They are looked up once more, so the length can be checked; until that
-    lookup lands, and if it finds nothing, the lines already held are kept.
+
+def timing_fits(record: Optional[Dict[str, Any]], audio_duration: Any) -> bool:
+    """Whether a record holds timed lines a recording of this length can follow.
+
+    Besides the length the lines were timed against, a line that starts after
+    the recording has ended is proof on its own that they belong to another cut.
     """
-    return bool(record and record.get("synced") and record.get("source") != RESOLVER_SOURCE)
+    synced = record.get("synced") if record else None
+    if not synced or not synced_timing_fits(audio_duration, record.get("synced_duration")):
+        return False
+    try:
+        audio = float(audio_duration or 0)
+    except (TypeError, ValueError):
+        return True
+    stamps = parse_lrc(synced)
+    return not (audio > 0 and stamps and stamps[-1][0] / 1000 > audio + TIMING_TOLERANCE_SEC)
+
+
+def worth_looking_up_again(record: Optional[Dict[str, Any]], audio_duration: Any) -> bool:
+    """Lyrics cached by an older resolver that the current one could improve.
+
+    Timed lines that predate their length are looked up so the length can be
+    checked; anything without timed lines that fit the recording, because
+    lrc.red may have them. Lines that already fit are left alone. Until the
+    lookup lands, and if it finds nothing, what is held keeps being served.
+    """
+    if not record or record.get("source") in _CURRENT_SOURCES:
+        return False
+    if record.get("synced") and record.get("source") not in _LENGTH_SOURCES:
+        return True
+    return not timing_fits(record, audio_duration)
 
 
 def store(db: Any, key: str, record: Dict[str, Any]) -> None:
@@ -242,7 +298,8 @@ def settle_upgrade(db: Any, key: str, held: Dict[str, Any], found: Optional[Dict
     if has_text(found):
         store(db, key, found)
         return found
-    kept = {**held, "source": RESOLVER_SOURCE, "synced_duration": None}
+    length = held.get("synced_duration") if held.get("source") in _LENGTH_SOURCES else None
+    kept = {**held, "source": RESOLVER_SOURCE, "synced_duration": length}
     store(db, key, kept)
     return kept
 
@@ -373,6 +430,148 @@ def _lrclib_search(
     return results if isinstance(results, list) else []
 
 
+def _empty_record() -> Dict[str, Any]:
+    return {"synced": None, "plain": None, "instrumental": False, "source": RESOLVER_SOURCE}
+
+
+def _lrclib_lookup(
+    artist: str,
+    title: str,
+    album: Optional[str],
+    duration: Optional[int],
+    deadline: float,
+) -> Dict[str, Any]:
+    """LRCLIB's answer for canonical metadata; an empty record when it has none."""
+    results = _lrclib_search(artist, title, album, deadline)
+    best = _pick_best(results, artist, title, album, duration)
+    if best:
+        return _result_to_record(best, results)
+
+    # Deezer is deliberately not on the hot path. It only canonicalizes a
+    # real LRCLIB miss and has a small timeout, so lyrics cannot monopolize
+    # request capacity or interfere with downloader workers.
+    if deadline - time.monotonic() < _MIN_FALLBACK_BUDGET_SEC:
+        return _empty_record()
+
+    deezer_rows = _deezer_search(artist, title, _remaining(deadline, _DEEZER_TIMEOUT_SEC))
+    deezer_best = _pick_best(deezer_rows, artist, title, album, duration)
+    if not deezer_best or deadline - time.monotonic() < _MIN_FALLBACK_BUDGET_SEC:
+        return _empty_record()
+
+    canonical_artist = (deezer_best.get("artist") or {}).get("name") or artist
+    canonical_title = deezer_best.get("title_short") or deezer_best.get("title") or title
+    canonical_album = (deezer_best.get("album") or {}).get("title") or album
+    canonical_duration = deezer_best.get("duration") or duration
+
+    # New duration/album evidence may be enough to select an existing
+    # LRCLIB row, without spending another network round trip.
+    rescored = _pick_best(results, canonical_artist, canonical_title, canonical_album, canonical_duration)
+    if rescored:
+        return _result_to_record(rescored, results)
+
+    if _fold(f"{canonical_artist} {canonical_title}") == _fold(f"{artist} {title}"):
+        return _empty_record()
+    retry_results = _lrclib_search(canonical_artist, canonical_title, canonical_album, deadline)
+    retry_best = _pick_best(retry_results, canonical_artist, canonical_title, canonical_album, canonical_duration)
+    if retry_best:
+        return _result_to_record(retry_best, retry_results)
+    return _empty_record()
+
+
+def _lrc_red_get(path: str, params: Optional[Dict[str, Any]], timeout_sec: float) -> Optional[requests.Response]:
+    resp = requests.get(
+        f"{_LRC_RED_HOST}{path}",
+        params=params,
+        headers={"User-Agent": _LRC_RED_USER_AGENT},
+        timeout=_timeout_parts(timeout_sec, 1.0),
+    )
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp
+
+
+def _lrc_red_hit(hits: Any, artist: str, title: str, duration: Optional[int]) -> Optional[Dict[str, Any]]:
+    """The search hit that is this song, recorded at this length, timed by hand.
+
+    Timing lrc.red generated with a model (``byModel``) is passed over: nothing
+    here can check it against the audio. A hit whose recording is longer or
+    shorter than the one playing would bring lines that drift off the singer.
+    """
+    ranked: list[tuple[float, Dict[str, Any]]] = []
+    for hit in hits if isinstance(hits, list) else []:
+        if not isinstance(hit, dict) or hit.get("byModel") or not _ISRC_RE.match(str(hit.get("isrc") or "")):
+            continue
+        title_score = _similarity(title, hit.get("title"))
+        artist_score = _similarity(artist, hit.get("artist"))
+        if (
+            title_score < _LRC_RED_MIN_TITLE
+            or artist_score < _LRC_RED_MIN_ARTIST
+            or _version_tokens(title) != _version_tokens(hit.get("title"))
+            or not synced_timing_fits(duration, hit.get("duration"))
+        ):
+            continue
+        ranked.append((title_score + artist_score, hit))
+    return max(ranked, key=lambda row: row[0])[1] if ranked else None
+
+
+_WORD_STAMP = re.compile(r"<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>")
+
+
+def _line_lrc(text: str) -> list[str]:
+    """Enhanced LRC as plain line LRC: the timed lines, without word stamps.
+
+    lrc.red writes each word's start inside its line (``<00:01.20>word``); the
+    players follow lines, and would show those stamps as lyric text.
+    """
+    lines = []
+    for raw in str(text or "").splitlines():
+        stamps = list(_LRC_TIMESTAMP.finditer(raw))
+        if not stamps or stamps[0].start() != 0:
+            continue
+        head = raw[: stamps[-1].end()]
+        words = _SPACE_RE.sub(" ", _WORD_STAMP.sub("", raw[stamps[-1].end():])).strip()
+        lines.append(f"{head}{words}")
+    return lines
+
+
+def _lrc_red_lookup(
+    artist: str,
+    title: str,
+    duration: Optional[int],
+    deadline: float,
+) -> Optional[Dict[str, Any]]:
+    """lrc.red's timed lines for this recording, or ``None`` when it has none."""
+    found = _lrc_red_get(
+        "/search.json",
+        {"q": f"{title} {artist}"},
+        _remaining(deadline, _LRC_RED_TIMEOUT_SEC),
+    )
+    payload = found.json() if found is not None else None
+    hit = _lrc_red_hit(payload.get("hits") if isinstance(payload, dict) else None, artist, title, duration)
+    if not hit or deadline - time.monotonic() < 0.2:
+        return None
+    # LRC exists only for timed tracks; anything else answers 404.
+    body = _lrc_red_get(f"/s/{hit['isrc']}.lrc", None, _remaining(deadline, _LRC_RED_TIMEOUT_SEC))
+    lines = _line_lrc(body.text) if body is not None else []
+    synced = "\n".join(lines)
+    stamps = parse_lrc(synced)
+    if not stamps:
+        return None
+    try:
+        length = int(round(float(hit.get("duration")))) or None
+    except (TypeError, ValueError):
+        length = None
+    record = {
+        "synced": synced,
+        "plain": "\n".join(text for _, text in stamps if text) or None,
+        "instrumental": False,
+        "source": LRC_RED_SOURCE,
+        "synced_duration": length,
+    }
+    return record if timing_fits(record, duration) else None
+
+
 def fetch_lyrics(
     artist: str,
     title: str,
@@ -390,70 +589,27 @@ def fetch_lyrics(
 
     deadline = time.monotonic() + _TOTAL_BUDGET_SEC
     clean_artist, clean_title = _canonical_metadata(artist, title)
+    record: Optional[Dict[str, Any]]
     try:
-        results = _lrclib_search(clean_artist, clean_title, album, deadline)
-        best = _pick_best(results, clean_artist, clean_title, album, duration)
-        if best:
-            return _result_to_record(best, results)
-
-        # Deezer is deliberately not on the hot path. It only canonicalizes a
-        # real LRCLIB miss and has a small timeout, so lyrics cannot monopolize
-        # request capacity or interfere with downloader workers.
-        if deadline - time.monotonic() < _MIN_FALLBACK_BUDGET_SEC:
-            return {"synced": None, "plain": None, "instrumental": False, "source": RESOLVER_SOURCE}
-
-        deezer_rows = _deezer_search(
-            clean_artist,
-            clean_title,
-            _remaining(deadline, _DEEZER_TIMEOUT_SEC),
-        )
-        deezer_best = _pick_best(deezer_rows, clean_artist, clean_title, album, duration)
-        if not deezer_best or deadline - time.monotonic() < _MIN_FALLBACK_BUDGET_SEC:
-            return {"synced": None, "plain": None, "instrumental": False, "source": RESOLVER_SOURCE}
-
-        canonical_artist = (deezer_best.get("artist") or {}).get("name") or clean_artist
-        canonical_title = deezer_best.get("title_short") or deezer_best.get("title") or clean_title
-        canonical_album = (deezer_best.get("album") or {}).get("title") or album
-        canonical_duration = deezer_best.get("duration") or duration
-
-        # New duration/album evidence may be enough to select an existing
-        # LRCLIB row, without spending another network round trip.
-        rescored = _pick_best(
-            results,
-            canonical_artist,
-            canonical_title,
-            canonical_album,
-            canonical_duration,
-        )
-        if rescored:
-            return _result_to_record(rescored, results)
-
-        old_query = _fold(f"{clean_artist} {clean_title}")
-        canonical_query = _fold(f"{canonical_artist} {canonical_title}")
-        if canonical_query == old_query:
-            return {"synced": None, "plain": None, "instrumental": False, "source": RESOLVER_SOURCE}
-        retry_results = _lrclib_search(
-            canonical_artist,
-            canonical_title,
-            canonical_album,
-            deadline,
-        )
-        retry_best = _pick_best(
-            retry_results,
-            canonical_artist,
-            canonical_title,
-            canonical_album,
-            canonical_duration,
-        )
-        if retry_best:
-            return _result_to_record(retry_best, retry_results)
-        return {"synced": None, "plain": None, "instrumental": False, "source": RESOLVER_SOURCE}
+        record = _lrclib_lookup(clean_artist, clean_title, album, duration, deadline)
     except requests.RequestException as exc:
         logger.warning("Lyrics provider request failed for %s - %s: %s", artist, title, exc)
-        return None
+        record = None
     except (ValueError, KeyError, TypeError) as exc:
         logger.warning("Lyrics response parse error for %s - %s: %s", artist, title, exc)
-        return None
+        record = None
+    if timing_fits(record, duration) or deadline - time.monotonic() < _MIN_FALLBACK_BUDGET_SEC:
+        return record
+
+    # LRCLIB's lines stay the answer unless lrc.red has timed lines that fit;
+    # when LRCLIB could not be reached, lrc.red's are better than an outage.
+    try:
+        return _lrc_red_lookup(clean_artist, clean_title, duration, deadline) or record
+    except requests.RequestException as exc:
+        logger.warning("lrc.red request failed for %s - %s: %s", artist, title, exc)
+    except (ValueError, KeyError, TypeError) as exc:
+        logger.warning("lrc.red response parse error for %s - %s: %s", artist, title, exc)
+    return record
 
 
 class _LyricsLookupCoordinator:

@@ -795,7 +795,7 @@ export const api = {
       timeoutMs: 15000,
     }),
 
-  // ── Lyrics (LRCLIB via the engine; library tracks are cached server-side) ──
+  // ── Lyrics (LRCLIB, then lrc.red, via the engine; library tracks are cached server-side) ──
   getTrackLyrics: (trackId: string, options: { signal?: AbortSignal } = {}) =>
     request<LyricsResponse>(`/api/library/tracks/${encodeURIComponent(trackId)}/lyrics`, {
       signal: options.signal, timeoutMs: 15000,
