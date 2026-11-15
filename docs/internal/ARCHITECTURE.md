@@ -287,7 +287,7 @@ machine, and what belongs to a person.
 | `<config>/output_dir`, `<config>/music_dir.json` | Where the shared music pool lives. |
 | `<config>/cookies.txt` | yt-dlp cookies. |
 | `<config>/download_queue.json` | One queue; each row carries `user_id`. |
-| `<music>/tracks/<hash>.<ext>` | **Shared audio pool.** The track id *is* the content hash, so two people who own the same song point at the same file — nothing is downloaded or stored twice. |
+| `<music>/tracks/<hash>.<ext>` | **Shared audio pool.** The track id *is* the content hash, so two people who own the same song point at the same file — nothing is downloaded or stored twice. A file leaves only through `shared/library_lifecycle.py`: deleting a track, clearing a library or deleting an account records an intent in `audio_cleanup`, and the download pump deletes the file once no account uses it — a `tracks` row or a `collection_files` binding, never a saved song's `lib:` key. A library without the collection model still holds the files its `favourites.json` and playlists name; one that has not run `described-saved-songs` holds the files its `lib:` keys name, which that migration reads as evidence. Files left by deletions from before those intents existed are recorded once per music folder by `reconcile()`. |
 | `<music>/library.json` | Instance catalog of what is physically on disk (written by the download pool, `shared/downloader/`). |
 | `<cache>/previews/`, `<cache>/covers/` | Shared, content-addressed. |
 | `<data>/telemetry/` | `setup-events`, `migration-events`. |
