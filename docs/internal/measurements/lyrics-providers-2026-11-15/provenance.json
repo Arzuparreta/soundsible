@@ -1,0 +1,16 @@
+{
+  "base_commit": "f364bbdc3c89b20bc055ae000b74317bdda1fa41",
+  "sample_sha256": "41c54d9057938b898945e78688b2df9598d8324be62a08aa566c8b8ceb516bd4",
+  "main_rows": 2100,
+  "main_http_requests": 2724,
+  "validation_rows": 346,
+  "validation_http_requests": 346,
+  "spicy_access_probes": 3,
+  "validation_started_at": "2026-11-15T13:59:01.954494+00:00",
+  "validation_finished_at": "2026-11-15T14:02:00.608681+00:00",
+  "qq_identical_body_rechecks": 50,
+  "qq_strict_xml_failures": [
+    "m0265"
+  ],
+  "all_timing_eligibility_recomputed_from_primitives": true
+}
