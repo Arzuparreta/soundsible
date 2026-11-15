@@ -59,6 +59,40 @@ test('a followed show opens from its artwork', async ({ page, isMobile }) => {
   await expect(page.getByText('Episodio de Programa seguido', { exact: true })).toBeVisible();
 });
 
+test('a show asks the engine for its artwork at the size each place draws it', async ({ page }) => {
+  // The engine fetches every feed image itself (some hosts refuse a page's
+  // request for one) and draws it at the size asked for, so the header asks
+  // for a header's worth and each row for a row's, not the publisher's square.
+  await mockPodcasts(page);
+  const showArt = 'https://images.example.com/show.jpg';
+  const episodeArt = 'https://images.example.com/episode.jpg';
+  const subscription = { ...FOLLOWED, image_url: showArt };
+  await page.route((url) => url.pathname === '/api/library', (route) => route.fulfill({ json: {
+    tracks: TRACKS, playlists: {}, settings: {}, podcast_subscriptions: [subscription],
+  } }));
+  await page.route('**/api/podcasts/feeds/**', (route) => route.fulfill({ json: {
+    subscription, changed: false,
+    episodes: [{ ...episode('Con portada propia'), image: episodeArt }, episode('Con la del programa')],
+  } }));
+  const asked: string[] = [];
+  const feedHosts: string[] = [];
+  await page.route('**/api/podcasts/artwork?**', (route) => {
+    const url = new URL(route.request().url());
+    asked.push(`${url.searchParams.get('url')} ${url.searchParams.get('size')}`);
+    return route.fulfill({ status: 404, body: '' });
+  });
+  await page.route('https://images.example.com/**', (route) => {
+    feedHosts.push(route.request().url());
+    return route.abort();
+  });
+  await page.goto('/player/#/podcasts/show-1');
+  await expect(page.getByText('Con la del programa', { exact: true })).toBeVisible();
+  await expect.poll(() => [...new Set(asked)].sort()).toEqual([
+    `${episodeArt} 160`, `${showArt} 160`, `${showArt} 320`,
+  ]);
+  expect(feedHosts).toEqual([]);
+});
+
 test('episode virtualization accounts for a wrapping header at large interface size', async ({ page }) => {
   await mockPodcasts(page);
   await page.setViewportSize({ width: 390, height: 844 });
