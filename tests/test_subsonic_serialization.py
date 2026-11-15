@@ -241,6 +241,33 @@ def test_lyrics_from_lrc_red_are_not_served_without_their_credit(tmp_path, monke
     assert harness.ok("getLyricsBySongId", id="tr-t1")["lyricsList"] == {}
 
 
+def test_subsonic_reloads_an_upgrade_that_lands_after_its_cache_read(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+    import shared.lyrics as lyrics_module
+    from shared.database import instance_db
+
+    harness = build(tmp_path, monkeypatch, [track("t1", duration=200)])
+    db = instance_db()
+    db.set_lyrics("t1", synced=None, plain="Old words", instrumental=False, source="lrclib:v5")
+    read = db.get_lyrics
+    crossed = False
+
+    def read_then_settle(key):
+        nonlocal crossed
+        row = read(key)
+        if not crossed:
+            crossed = True
+            db.set_lyrics(key, synced="[00:01.00]New words", plain="New words", instrumental=False,
+                          source=lyrics_module.LRC_RED_SOURCE, synced_duration=200)
+        return row
+
+    fetch = MagicMock()
+    monkeypatch.setattr(db, "get_lyrics", read_then_settle)
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
+    assert harness.ok("getLyricsBySongId", id="tr-t1")["lyricsList"] == {}
+    fetch.assert_not_called()
+
+
 @pytest.mark.parametrize("source, served", [("lrclib:v6", True), ("lrc.red:v6", False)])
 def test_lyrics_by_name_are_served_only_where_no_credit_is_owed(tmp_path, monkeypatch, source, served):
     import shared.lyrics as lyrics_module

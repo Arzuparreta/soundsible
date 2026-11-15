@@ -93,6 +93,10 @@ means nothing, and this surface can be exposed to the internet.
 Extensions advertised: `apiKeyAuthentication`, `formPost`, `songLyrics`,
 `transcodeOffset`.
 
+Lyrics from LRCLIB are available to Subsonic clients. The Soundsible player's
+lrc.red fallback is excluded here because these lyrics responses cannot carry
+the provider attribution required by lrc.red.
+
 Responses come back as XML (the default), JSON (`f=json`) or JSONP
 (`f=jsonp&callback=`), and both the bare and `.view` spellings of every method
 work. Failures travel with HTTP 200 and the protocol's own error code inside

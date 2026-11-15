@@ -731,12 +731,13 @@ def test_lyrics_cached_by_an_older_resolver_stay_visible_while_they_are_looked_u
     assert fetch.call_count == 1
 
 
-def test_a_read_that_crosses_the_upgrade_landing_does_not_look_up_again(monkeypatch):
+@pytest.mark.parametrize("synced,source", [("[00:01.00] line", "lrclib:v4"), (None, "lrclib:v5")])
+def test_a_read_that_crosses_the_upgrade_landing_does_not_look_up_again(monkeypatch, synced, source):
     # The read takes the old row; before it asks for a lookup, the running one
     # settles the row and is forgotten. Asking then must not start another.
     monkeypatch.setattr(library_routes, "_get_api", lambda: _fake_api(_music_video_track()))
     db = instance_db()
-    db.set_lyrics("video-track", synced="[00:01.00] line", plain="line", instrumental=False, source="lrclib:v4")
+    db.set_lyrics("video-track", synced=synced, plain="line", instrumental=False, source=source)
     release = threading.Event()
 
     def slow_fetch(*_args):

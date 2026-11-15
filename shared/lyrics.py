@@ -42,7 +42,7 @@ _USER_AGENT = "Soundsible/1.0 (https://github.com/Arzuparreta/soundsible)"
 # lrc.red's terms ask every client to name itself with a link and a contact
 # address (https://lrc.red/api); the address is the one SECURITY.md publishes.
 _LRC_RED_CONTACT = "rubenpenarubio02@gmail.com"
-_LRC_RED_USER_AGENT = f"Soundsible/1.0 (https://github.com/Arzuparreta/soundsible; {_LRC_RED_CONTACT})"
+_LRC_RED_USER_AGENT = f"{_USER_AGENT} (contact: {_LRC_RED_CONTACT})"
 
 # The common path makes one LRCLIB request.  Only a genuine no-result response
 # can spend the remaining budget on Deezer + one canonical LRCLIB retry.
