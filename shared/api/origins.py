@@ -41,9 +41,15 @@ def _configured(name: str) -> Optional[list[str]]:
     return [value.strip() for value in raw.split(",") if value.strip()]
 
 
+#: Any origin, as both flask-cors and Engine.IO read a configured ``*``.
+ANY_ORIGIN = "*"
+
+
 def _compile(values: Sequence[str]) -> list[OriginPattern]:
     return [
-        re.compile(value, re.IGNORECASE) if not _REGEX_HINT_CHARS.isdisjoint(value) else value
+        value if value == ANY_ORIGIN
+        else re.compile(value, re.IGNORECASE) if not _REGEX_HINT_CHARS.isdisjoint(value)
+        else value
         for value in values
     ]
 
@@ -76,6 +82,8 @@ def socket_origins() -> list[OriginPattern]:
 
 def _matches(origin: str, patterns: Sequence[OriginPattern]) -> bool:
     for pattern in patterns:
+        if pattern == ANY_ORIGIN:
+            return True
         if isinstance(pattern, str):
             if pattern.casefold() == origin.casefold():
                 return True
@@ -84,35 +92,51 @@ def _matches(origin: str, patterns: Sequence[OriginPattern]) -> bool:
     return False
 
 
-def _first(value: str) -> str:
-    return value.split(",", 1)[0].strip().lower()
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _first(value: object) -> str:
+    return str(value or "").split(",", 1)[0].strip().lower()
+
+
+def _endpoint(scheme: str, netloc: str) -> Optional[tuple[str, str, int]]:
+    """``(scheme, host, port)`` with the scheme's default port filled in."""
+    try:
+        parts = urlsplit(f"{scheme}://{netloc}")
+        port = parts.port
+    except ValueError:
+        return None
+    scheme = parts.scheme.lower()
+    if not parts.hostname or scheme not in _DEFAULT_PORTS:
+        return None
+    return scheme, parts.hostname.lower(), port or _DEFAULT_PORTS[scheme]
 
 
 def _is_same_origin(origin: str, environ: Mapping[str, object]) -> bool:
     """Whether `origin` is the address this request was sent to.
 
-    That is the `Host` header, or the `X-Forwarded-Host` that a proxy on this
-    machine, the LAN or the tailnet wrote (`tailscale serve`, Nginx); the same
-    header from any other peer is not believed. The scheme is not compared: a
-    TLS-terminating proxy that sends no `X-Forwarded-Proto` turns the player's
-    `https://` page into a plain-HTTP request here, and only whoever already
-    serves this host can put a page on its other scheme.
+    Scheme, host and port all count, as they do for the browser. The address is
+    the `Host` header with the request's scheme. A proxy on this machine, the
+    LAN or the tailnet (`tailscale serve`, Nginx) may say what the browser saw
+    with `X-Forwarded-Host` and `X-Forwarded-Proto`; the same headers from any
+    other peer are not believed. A TLS-terminating proxy that sends no
+    `X-Forwarded-Proto` makes the player's `https://` page look like another
+    origin: such a proxy needs that header or its address configured.
     """
     try:
-        netloc = urlsplit(origin).netloc.lower()
+        parts = urlsplit(origin)
     except ValueError:
         return False
-    if not netloc:
+    wanted = _endpoint(parts.scheme, parts.netloc)
+    if wanted is None:
         return False
-    host = _first(str(environ.get("HTTP_HOST") or ""))
-    if netloc == host:
-        return True
-    forwarded_host = str(environ.get("HTTP_X_FORWARDED_HOST") or "")
-    return bool(
-        forwarded_host
-        and is_trusted_network(environ.get("REMOTE_ADDR"))
-        and netloc == _first(forwarded_host)
-    )
+    trusted = is_trusted_network(environ.get("REMOTE_ADDR"))
+    scheme = str(environ.get("wsgi.url_scheme") or "http")
+    hosts = [_first(environ.get("HTTP_HOST"))]
+    if trusted:
+        scheme = _first(environ.get("HTTP_X_FORWARDED_PROTO")) or scheme
+        hosts.append(_first(environ.get("HTTP_X_FORWARDED_HOST")))
+    return any(host and _endpoint(scheme, host) == wanted for host in hosts)
 
 
 def make_socket_origin_check(patterns: Sequence[OriginPattern]):

@@ -345,8 +345,14 @@ def stream_local_track(track_id):
         # it. Swallowing it into a 500 told the player the track was broken
         # rather than that the ask was, and a media element believes that.
         raise
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except FileNotFoundError:
+        # Gone between the check above and opening it: still a missing file.
+        logger.warning("Stream: file for track %s vanished at %s", track_id, path)
+        return jsonify({"error": "File not found"}), 404
+    except Exception:
+        # The message names the file's absolute path; the log keeps it.
+        logger.exception("Stream: could not serve track %s from %s", track_id, path)
+        return jsonify({"error": "Could not read the file"}), 500
 
 
 def _report_stream_response(

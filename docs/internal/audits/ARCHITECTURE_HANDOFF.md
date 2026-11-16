@@ -109,9 +109,10 @@ Fix: `shared/api/origins.py` owns one origin list for both. Engine.IO gets a
 `(origin, environ)` callable, because in `python-engineio` 4.13 a **list**
 replaces its own same-origin check and would refuse the player served at
 `https://maquina.tailnet.ts.net` or behind a proxy. The callable accepts the
-engine's own address (`Host`, or `X-Forwarded-Host` written by a trusted peer;
-the scheme is not compared, see the docstring) **or** the REST patterns, or
-`SOUNDSIBLE_SOCKET_CORS_ORIGINS` when set. Native Android (OkHttp) sends no
+engine's own origin — scheme, host and effective port of `Host`, or of
+`X-Forwarded-Proto`/`X-Forwarded-Host` written by a trusted peer — **or** the REST
+patterns, or `SOUNDSIBLE_SOCKET_CORS_ORIGINS` when set (`*` still allows any
+page). A TLS proxy that sends no `X-Forwarded-Proto` needs its address configured. Native Android (OkHttp) sends no
 `Origin`, and Engine.IO checks nothing without that header.
 
 Checked on an engine on port 5091: polling from another origin answers 400
@@ -169,7 +170,8 @@ importing or restart after updating.
 - 35 icons in `desktop-shell/src-tauri/icons/ios` and `icons/android` that
   `tauri.conf.json` does not reference.
 - **Closed:** `stream_local_track` returned the absolute path in the 404
-  (`shared/api/routes/playback.py`); it now logs it and answers `File not found`.
+  (`shared/api/routes/playback.py`), and its 500 handler returned the exception
+  text, which names it too. Both log the path and answer a generic message.
 - `docs/internal/ARCHITECTURE.md` §5 still lists `<config>/download_queue.json`; the
   download queue is in `instance.db`.
 - **Closed:** the `rate_limit` limits (and the preview-stream limit) used

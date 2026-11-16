@@ -408,9 +408,12 @@ Serve Soundsible behind Nginx, Caddy, or Traefik:
    with `--host 127.0.0.1` so only the proxy can reach it.
 2. Forward a public path (e.g. `https://music.example.com`) to `http://127.0.0.1:5005`.
 3. Allow WebSocket / long-running connections in your proxy config.
-4. Make the proxy send the caller's address in `X-Forwarded-For` (Caddy,
-   Traefik and `tailscale serve` do by default; Nginx needs
-   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`).
+4. Make the proxy send the caller's address in `X-Forwarded-For` and the
+   scheme the browser used in `X-Forwarded-Proto` (Caddy, Traefik and
+   `tailscale serve` do by default; Nginx needs
+   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and
+   `proxy_set_header X-Forwarded-Proto $scheme;`). Without the scheme the
+   player's live updates are refused as coming from another site.
 5. **Give the account a password first** (Settings → Account → People) if the proxy is
    reachable from the internet.
 

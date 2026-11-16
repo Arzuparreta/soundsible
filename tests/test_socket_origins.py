@@ -27,8 +27,20 @@ def _environ(host="192.168.1.10:5005", remote="192.168.1.20", **extra):
     ("https://station.tail1234.ts.net",
      _environ(host="127.0.0.1:5005", remote="127.0.0.1",
               HTTP_X_FORWARDED_HOST="station.tail1234.ts.net", HTTP_X_FORWARDED_PROTO="https"), True),
-    # A proxy that keeps Host but says nothing about TLS.
-    ("https://music.example", _environ(host="music.example", remote="127.0.0.1"), True),
+    # A proxy that keeps Host and says the browser used TLS.
+    ("https://music.example",
+     _environ(host="music.example", remote="127.0.0.1", HTTP_X_FORWARDED_PROTO="https"), True),
+    ("https://music.example:443",
+     _environ(host="music.example", remote="127.0.0.1", HTTP_X_FORWARDED_PROTO="https"), True),
+    # The same host on the other scheme is another origin, even behind a proxy...
+    ("http://music.example",
+     _environ(host="127.0.0.1:5005", remote="127.0.0.1",
+              HTTP_X_FORWARDED_HOST="music.example", HTTP_X_FORWARDED_PROTO="https"), False),
+    # ...and a TLS proxy that does not say so needs its address configured.
+    ("https://music.example", _environ(host="music.example", remote="127.0.0.1"), False),
+    # A forwarded scheme is only believed from a trusted peer.
+    ("https://station.local:5005",
+     _environ(host="station.local:5005", remote="81.2.69.161", HTTP_X_FORWARDED_PROTO="https"), False),
     # A forwarded host is only believed from a peer on this machine, LAN or tailnet.
     ("https://evil.example",
      _environ(host="81.2.69.160:5005", remote="81.2.69.161", HTTP_X_FORWARDED_HOST="evil.example"), False),
@@ -83,3 +95,24 @@ def test_engine_refuses_the_handshake_from_another_origin(isolated_runtime, head
     assert response.status_code == status
     if status == 400:
         assert b"Not an accepted origin" in response.data
+
+
+def test_a_wildcard_allows_every_page(monkeypatch):
+    monkeypatch.setenv("SOUNDSIBLE_SOCKET_CORS_ORIGINS", "*")
+    assert make_socket_origin_check(socket_origins())("https://anything.example", _environ()) is True
+
+
+@pytest.mark.parametrize("variable", ["SOUNDSIBLE_ALLOWED_ORIGINS", "SOUNDSIBLE_SOCKET_CORS_ORIGINS"])
+def test_the_engine_starts_with_a_wildcard_origin(variable, tmp_path):
+    """`*` was a valid setting for both before they shared a parser."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {**os.environ, variable: "*", "SOUNDSIBLE_CONFIG_DIR": str(tmp_path / "config"),
+           "SOUNDSIBLE_DATA_DIR": str(tmp_path / "data"), "SOUNDSIBLE_CACHE_DIR": str(tmp_path / "cache")}
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run([sys.executable, "-c", "import shared.api"], cwd=root, env=env,
+                            capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr[-2000:]
