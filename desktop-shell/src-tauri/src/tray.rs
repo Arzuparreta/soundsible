@@ -49,8 +49,8 @@ pub fn stop_engine(app: &AppHandle) {
         return;
     }
     if let Some(state) = app.try_state::<super::AppState>() {
-        super::desktop::close_player(app);
         let _ = state.engine.stop(Some(app));
+        super::desktop::close_player(app);
         if let Ok(mut skip) = state.skip_autostart_once.lock() {
             *skip = true;
         }
@@ -63,10 +63,10 @@ pub fn quit_app(app: &AppHandle) {
     shutdown(app);
 }
 pub fn shutdown(app: &AppHandle) {
-    super::desktop::close_player(app);
     if let Some(state) = app.try_state::<super::AppState>() {
         let _ = state.engine.stop(Some(app));
     }
+    super::desktop::close_player(app);
     app.exit(0);
 }
 

@@ -79,6 +79,7 @@ def write_runtime_state(runtime: RuntimeConfig, *, version: str, health_path: st
     state = {
         "mode": "desktop-engine",
         "pid": os.getpid(),
+        "launch_id": os.environ.get("SOUNDSIBLE_DESKTOP_LAUNCH_ID", ""),
         "host": runtime.host,
         "port": runtime.port,
         "base_url": f"http://{runtime.host}:{runtime.port}",

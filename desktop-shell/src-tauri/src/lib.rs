@@ -1,8 +1,8 @@
-mod startup;
 mod client;
 mod desktop;
 mod engine;
 mod pairing;
+mod startup;
 mod state;
 mod tray;
 
@@ -108,8 +108,8 @@ fn stop_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String>
     if client::is_server() {
         return Err("The desktop does not manage this server.".into());
     }
-    desktop::close_player(&app);
     state.engine.stop(Some(&app))?;
+    desktop::close_player(&app);
     if let Ok(mut skip) = state.skip_autostart_once.lock() {
         *skip = true;
     }
@@ -373,8 +373,8 @@ async fn connect_server(app: AppHandle, address: String) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())??;
     // Only a child owned by this desktop may be stopped.
-    desktop::close_player(&app);
     app.state::<AppState>().engine.stop(Some(&app))?;
+    desktop::close_player(&app);
     client::save(&client::Preferences {
         mode: client::ConnectionMode::Server,
         server: Some(origin.clone()),
@@ -386,10 +386,10 @@ async fn connect_server(app: AppHandle, address: String) -> Result<(), String> {
 
 #[tauri::command]
 fn change_connection(app: AppHandle) -> Result<(), String> {
-    desktop::close_player(&app);
     if !client::is_server() {
         app.state::<AppState>().engine.stop(Some(&app))?;
     }
+    desktop::close_player(&app);
     return_to_shell(&app)?;
     app.emit("shell-view", "connection")
         .map_err(|e| e.to_string())
@@ -601,10 +601,10 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
-                desktop::close_player(app);
                 if let Some(state) = app.try_state::<AppState>() {
                     let _ = state.engine.stop(None);
                 }
+                desktop::close_player(app);
             }
         });
 }

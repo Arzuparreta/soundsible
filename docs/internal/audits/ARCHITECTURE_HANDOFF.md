@@ -245,10 +245,16 @@ pipe; only the retained child's pipe can pause the shell's readiness budget.
 No marker file must be published to keep the lock safe. Optional wait callbacks
 log storage failures and still wait for the actual read lock. The shell consumes
 both output pipes, resumes the budget after the wait and notices an exited
-child. It accepts persisted readiness only when its PID matches that child,
-never an independently launched engine's healthy state. Startup, output and
+child. Each launch gets a random identifier delivered only to the owned command.
+Python reports it and its PID on that command's stdout, and persists both in
+its state. The shell requires agreement between the owned pipe and the state;
+it never accepts an independent engine's healthy state. The retained Child can
+be PyInstaller's bootloader, whose Python subprocess has a different PID. Startup, output and
 health workers carry their launch generation; readiness rechecks that generation
-and retained PID after HTTP returns, so a replaced child's result is discarded.
+and retained bootloader PID after HTTP returns, so a replaced child's result is
+discarded. Ready UI effects execute on the main thread under the supervisor
+lock; stop/connection transitions invalidate the generation before closing the
+player, so a cancelled dispatch cannot consume a link or reopen that player.
 Output is drained as byte lines with tolerant decoding, and child Python pipes
 are explicitly UTF-8. Non-UTF-8 legacy logging cannot close a startup pipe.
 During boot the existing status panel receives the last six child lines, making

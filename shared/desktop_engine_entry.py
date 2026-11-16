@@ -107,6 +107,7 @@ def desktop_readiness_payload(runtime: RuntimeConfig) -> dict:
         "host": runtime.host,
         "port": runtime.port,
         "pid": os.getpid(),
+        "launch_id": os.environ.get("SOUNDSIBLE_DESKTOP_LAUNCH_ID", ""),
         "version": resolve_version(),
         "health": "/api/health",
         "owner_token_file": str(runtime.owner_token_file) if runtime.owner_token_file else None,

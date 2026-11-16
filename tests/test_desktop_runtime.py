@@ -87,3 +87,16 @@ def test_stop_owned_desktop_engine_cleans_stale_state(tmp_path):
     assert ok is True
     assert "not running" in message.lower()
     assert not state_path.exists()
+
+
+def test_the_owned_launch_id_is_reported_in_both_readiness_channels(tmp_path, monkeypatch):
+    import os
+
+    from shared.desktop_engine_entry import desktop_readiness_payload
+
+    monkeypatch.setenv("SOUNDSIBLE_DESKTOP_LAUNCH_ID", "owned-launch-nonce")
+    runtime = _make_runtime(tmp_path)
+    state = write_runtime_state(runtime, version="test")
+    event = desktop_readiness_payload(runtime)
+    assert state["launch_id"] == event["launch_id"] == "owned-launch-nonce"
+    assert state["pid"] == event["pid"] == os.getpid()

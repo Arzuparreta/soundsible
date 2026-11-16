@@ -1,4 +1,4 @@
-use crate::startup::{output_lines, startup_budget, tools_wait_event};
+use crate::startup::{output_lines, ready_engine_pid, startup_budget, tools_wait_event};
 use crate::state::{
     load_runtime_state, python_executable, repo_root, sidecar_binary, state_file_path,
     EngineRuntimeState,
@@ -50,6 +50,8 @@ struct SupervisorInner {
     health_failures: u32,
     waiting_for_tools: bool,
     generation: u64,
+    launch_id: String,
+    engine_pid: Option<u32>,
 }
 
 impl Default for SupervisorInner {
@@ -64,6 +66,8 @@ impl Default for SupervisorInner {
             health_failures: 0,
             waiting_for_tools: false,
             generation: 0,
+            launch_id: String::new(),
+            engine_pid: None,
         }
     }
 }
@@ -98,6 +102,7 @@ impl EngineSupervisor {
             }
             stop_child(&mut guard);
             self.stop_flag.store(false, Ordering::SeqCst);
+            guard.launch_id = uuid::Uuid::new_v4().to_string();
             guard.music_dir = Some(music_dir.clone());
             guard.phase = EnginePhase::Booting;
             guard.message = "Starting Soundsible…".into();
@@ -222,6 +227,8 @@ fn stop_child(guard: &mut SupervisorInner) {
     guard.runtime = None;
     guard.health_failures = 0;
     guard.waiting_for_tools = false;
+    guard.launch_id.clear();
+    guard.engine_pid = None;
 }
 
 fn owns_launch(guard: &SupervisorInner, generation: u64, pid: u32) -> bool {
@@ -236,7 +243,7 @@ fn accept_ready(
 ) -> bool {
     if guard.phase != EnginePhase::Booting
         || !owns_launch(guard, generation, pid)
-        || !state.belongs_to(pid)
+        || !state.belongs_to(&guard.launch_id, guard.engine_pid)
     {
         return false;
     }
@@ -244,6 +251,23 @@ fn accept_ready(
     guard.phase = EnginePhase::Ready;
     guard.message = "Ready".into();
     push_log(guard, "engine: ready".into());
+    true
+}
+
+fn complete_ready(
+    guard: &mut SupervisorInner,
+    generation: u64,
+    child_pid: u32,
+    state: EngineRuntimeState,
+    effects: impl FnOnce(&mut SupervisorInner, &str),
+) -> bool {
+    let player_url = state.player_url();
+    if !accept_ready(guard, generation, child_pid, state) {
+        return false;
+    }
+    // The caller retains the supervisor lock through every UI effect. Stop
+    // invalidates this generation before its caller closes or changes player.
+    effects(guard, &player_url);
     true
 }
 
@@ -261,7 +285,13 @@ fn read_engine_output<R: Read + Send + 'static>(
             if !owns_launch(&guard, generation, pid) {
                 return false;
             }
-            if let Some(waiting) = startup_events.then(|| tools_wait_event(&line)).flatten() {
+            if let Some(pid) = startup_events
+                .then(|| ready_engine_pid(line, &guard.launch_id))
+                .flatten()
+            {
+                guard.engine_pid = Some(pid);
+            } else if let Some(waiting) = startup_events.then(|| tools_wait_event(&line)).flatten()
+            {
                 guard.waiting_for_tools = waiting;
             } else {
                 push_log(&mut guard, line.chars().take(2000).collect());
@@ -347,6 +377,7 @@ fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Chil
 
     command
         .env("PYTHONIOENCODING", "utf-8")
+        .env("SOUNDSIBLE_DESKTOP_LAUNCH_ID", &guard.launch_id)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     command
@@ -386,16 +417,24 @@ fn wait_for_ready(
     let mut remaining = STARTUP_TIMEOUT;
     let mut last_check = Instant::now();
     while !stop_flag.load(Ordering::SeqCst) {
-        let (child_pid, waiting, exited) = {
+        let (child_pid, launch_id, engine_pid, waiting, exited) = {
             let mut guard = inner.lock().expect("engine lock");
             if guard.generation != generation || guard.phase != EnginePhase::Booting {
                 return;
             }
             let waiting = guard.waiting_for_tools;
+            let launch_id = guard.launch_id.clone();
+            let engine_pid = guard.engine_pid;
             let Some(child) = guard.child.as_mut() else {
                 return;
             };
-            (child.id(), waiting, child.try_wait().ok().flatten())
+            (
+                child.id(),
+                launch_id,
+                engine_pid,
+                waiting,
+                child.try_wait().ok().flatten(),
+            )
         };
         if let Some(status) = exited {
             let mut guard = inner.lock().expect("engine lock");
@@ -422,26 +461,35 @@ fn wait_for_ready(
             break;
         }
         if let Some(state) = load_runtime_state() {
-            if state.belongs_to(child_pid) && health_check(&state.health_url()) {
-                let player_url = state.player_url();
-                {
-                    let mut guard = inner.lock().expect("engine lock");
-                    if stop_flag.load(Ordering::SeqCst)
-                        || !accept_ready(&mut guard, generation, child_pid, state)
-                    {
+            if state.belongs_to(&launch_id, engine_pid) && health_check(&state.health_url()) {
+                let ui_inner = Arc::clone(&inner);
+                let ui_stop = Arc::clone(&stop_flag);
+                let ui_app = app.clone();
+                // On the main thread native window operations cannot be queued
+                // behind a stop/connection command holding this same lock.
+                let result = app.run_on_main_thread(move || {
+                    let mut guard = ui_inner.lock().expect("engine lock");
+                    if ui_stop.load(Ordering::SeqCst) {
                         return;
                     }
+                    complete_ready(
+                        &mut guard,
+                        generation,
+                        child_pid,
+                        state,
+                        |guard, player_url| {
+                            let target = crate::take_pending_player_url(&ui_app, player_url);
+                            let _ = ui_app.emit("engine-ready", target.clone());
+                            if let Err(error) = crate::desktop::open_player(&ui_app, &target) {
+                                eprintln!("Could not open desktop player: {error}");
+                            }
+                            let _ = ui_app.emit("engine-status", status_snapshot(guard));
+                        },
+                    );
+                });
+                if let Err(error) = result {
+                    eprintln!("Could not dispatch engine readiness: {error}");
                 }
-                let target_url = crate::take_pending_player_url(&app, &player_url);
-                let _ = app.emit("engine-ready", target_url.clone());
-                if let Err(error) = crate::desktop::open_player(&app, &target_url) {
-                    eprintln!("Could not open desktop player: {error}");
-                }
-                let supervisor = EngineSupervisor {
-                    inner: Arc::clone(&inner),
-                    stop_flag: Arc::clone(&stop_flag),
-                };
-                supervisor.emit_status(&app);
                 return;
             }
         }
@@ -489,7 +537,7 @@ mod cancellation_tests {
     }
 
     #[test]
-    fn a_completed_probe_cannot_publish_readiness_for_a_replaced_launch() {
+    fn packaged_python_readiness_is_accepted_only_for_its_current_bootloader_launch() {
         let mut child = Command::new(std::env::current_exe().unwrap())
             .arg("--help")
             .stdout(Stdio::null())
@@ -502,8 +550,12 @@ mod cancellation_tests {
         guard.child = Some(child);
         guard.phase = EnginePhase::Booting;
         guard.generation = 2;
+        guard.launch_id = "own-launch".into();
+        let python_pid = pid.wrapping_add(1);
+        guard.engine_pid = Some(python_pid);
         let runtime = || EngineRuntimeState {
-            pid,
+            pid: python_pid,
+            launch_id: "own-launch".into(),
             base_url: "http://127.0.0.1:49152".into(),
             health: "/api/health".into(),
             owner_token_file: None,
@@ -514,8 +566,33 @@ mod cancellation_tests {
         assert!(guard.runtime.is_none());
         assert!(!accept_ready(&mut guard, 2, pid.wrapping_add(1), runtime()));
         assert!(accept_ready(&mut guard, 2, pid, runtime()));
-        assert_eq!(guard.runtime.as_ref().unwrap().pid, pid);
+        assert_eq!(guard.runtime.as_ref().unwrap().pid, python_pid);
         assert_eq!(guard.phase, EnginePhase::Ready);
+    }
+
+    #[test]
+    fn cancelled_ready_dispatch_does_not_consume_a_link_or_open_a_player() {
+        let supervisor = EngineSupervisor::new();
+        {
+            let mut guard = supervisor.inner.lock().unwrap();
+            guard.phase = EnginePhase::Booting;
+            guard.generation = 1;
+        }
+        // The HTTP result was obtained; the UI closure has not executed yet.
+        supervisor.stop(None).unwrap();
+        let mut guard = supervisor.inner.lock().unwrap();
+        let state = EngineRuntimeState {
+            pid: 43,
+            launch_id: "own-launch".into(),
+            base_url: "http://127.0.0.1:49152".into(),
+            health: "/api/health".into(),
+            owner_token_file: None,
+            log_dir: "logs".into(),
+        };
+        let mut opened = false;
+        assert!(!complete_ready(&mut guard, 1, 42, state, |_, _| opened = true));
+        assert!(!opened);
+        assert_eq!(guard.phase, EnginePhase::Idle);
     }
 
     #[test]

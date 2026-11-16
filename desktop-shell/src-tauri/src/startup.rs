@@ -26,6 +26,25 @@ pub(crate) fn tools_wait_event(line: &str) -> Option<bool> {
         .map(|event| event.waiting)
 }
 
+#[derive(Deserialize)]
+struct ReadyEvent {
+    event: String,
+    launch_id: String,
+    pid: u32,
+}
+
+pub(crate) fn ready_engine_pid(line: &str, launch_id: &str) -> Option<u32> {
+    serde_json::from_str::<ReadyEvent>(line)
+        .ok()
+        .filter(|event| {
+            event.event == "ready"
+                && !launch_id.is_empty()
+                && event.launch_id == launch_id
+                && event.pid != 0
+        })
+        .map(|event| event.pid)
+}
+
 pub(crate) fn output_lines<R: std::io::Read>(stream: R, mut receive: impl FnMut(&str) -> bool) {
     use std::io::{BufRead, BufReader};
 
@@ -48,6 +67,18 @@ pub(crate) fn output_lines<R: std::io::Read>(stream: R, mut receive: impl FnMut(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_owned_launch_can_report_its_python_pid() {
+        let line = r#"{"event":"ready","launch_id":"own-launch","pid":43}"#;
+        assert_eq!(ready_engine_pid(line, "own-launch"), Some(43));
+        assert_eq!(ready_engine_pid(line, "another-launch"), None);
+        assert_eq!(ready_engine_pid(line, ""), None);
+        assert_eq!(
+            ready_engine_pid(r#"{"event":"ready","pid":43}"#, "own-launch"),
+            None
+        );
+    }
 
     #[test]
     fn legacy_codepage_logging_does_not_lose_the_following_startup_event() {
