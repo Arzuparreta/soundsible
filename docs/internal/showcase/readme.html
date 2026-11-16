@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Soundsible README device composition</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1600px; height: 1024px; overflow: hidden; }
+  body { position: relative; background: transparent; }
+  .desktop {
+    position: absolute;
+    left: 100px;
+    top: 64px;
+    width: 1440px;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 18px 36px #0004, 0 2px 8px #0003;
+    outline: 1px solid #ffffff26;
+  }
+  picture, img { display: block; width: 100%; }
+  .phone {
+    position: absolute;
+    left: 44px;
+    top: 340px;
+    width: 286px;
+    padding: 7px;
+    border: 2px solid #55565a;
+    border-radius: 44px;
+    background: #08090a;
+    box-shadow: 0 18px 32px #0006, 0 3px 8px #0005, inset 0 0 0 2px #18191b;
+  }
+  .screen { position: relative; overflow: hidden; border-radius: 35px; }
+  .status {
+    position: relative;
+    height: 36px;
+    color: #f5f5f5;
+    background: linear-gradient(90deg, #131215, #191514);
+  }
+  .time {
+    position: absolute;
+    left: 21px;
+    top: 14px;
+    font: 600 10px/1 Arial, sans-serif;
+  }
+  .camera {
+    position: absolute;
+    left: 50%;
+    top: 10px;
+    width: 70px;
+    height: 17px;
+    transform: translateX(-50%);
+    border-radius: 20px;
+    background: #000;
+  }
+  .indicators {
+    position: absolute;
+    right: 19px;
+    top: 15px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .indicators svg { display: block; height: 8px; width: auto; }
+  .home {
+    position: absolute;
+    left: 50%;
+    bottom: 2px;
+    width: 86px;
+    height: 3px;
+    transform: translateX(-50%);
+    border-radius: 3px;
+    background: #f5f5f5;
+  }
+  @media (prefers-color-scheme: light) {
+    .desktop { outline-color: #00000014; }
+    .status { color: #171719; background: linear-gradient(90deg, #fcfbfc, #fcfaf8); }
+    .home { background: #171719; }
+  }
+</style>
+</head>
+<body>
+  <div class="desktop">
+    <picture>
+      <source media="(prefers-color-scheme: light)" srcset="../../images/screenshots/light/desktop-now-playing.webp">
+      <img src="../../images/screenshots/dark/desktop-now-playing.webp" alt="Soundsible desktop now playing, library and queue">
+    </picture>
+  </div>
+  <div class="phone">
+    <div class="screen">
+      <div class="status" aria-hidden="true">
+        <span class="time">9:41</span>
+        <span class="camera"></span>
+        <span class="indicators">
+          <svg viewBox="0 0 14 10" fill="currentColor"><rect x="0" y="7" width="2.5" height="3" rx=".5"/><rect x="3.8" y="5" width="2.5" height="5" rx=".5"/><rect x="7.5" y="2.5" width="2.5" height="7.5" rx=".5"/><rect x="11.3" width="2.5" height="10" rx=".5"/></svg>
+          <svg viewBox="0 0 14 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 2.5a9 9 0 0 1 12 0M3.4 5a5.5 5.5 0 0 1 7.2 0M5.8 7.5a1.9 1.9 0 0 1 2.4 0"/><circle cx="7" cy="9" r=".7" fill="currentColor" stroke="none"/></svg>
+          <svg viewBox="0 0 20 10" fill="currentColor"><rect x=".6" y=".6" width="16.8" height="8.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".6"/><rect x="2.2" y="2.2" width="13.6" height="5.6" rx=".8"/><path d="M18.6 3v4a2 2 0 0 0 0-4" opacity=".6"/></svg>
+        </span>
+      </div>
+      <picture>
+        <source media="(prefers-color-scheme: light)" srcset="../../images/screenshots/light/mobile-library.webp">
+        <img src="../../images/screenshots/dark/mobile-library.webp" alt="Soundsible mobile music library">
+      </picture>
+      <div class="home" aria-hidden="true"></div>
+    </div>
+  </div>
+</body>
+</html>
