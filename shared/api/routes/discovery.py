@@ -35,7 +35,7 @@ from .discovery_bp import discovery_bp
 from .discovery_common import _get_api, _invalidate_personalized_cache
 
 # Re-exported for external consumers that used to import these from discovery.py.
-from .discovery_graph import _discover_executor, _discover_inflight, _discover_request_seeds, warm_discover_top_seeds  # noqa: F401  # imported by shared/api/__init__.py and tests
+from .discovery_graph import _discover_executor, _discover_inflight, warm_discover_top_seeds  # noqa: F401  # imported by shared/api/__init__.py and tests
 from .auto_mode import (  # noqa: F401  # imported by tests
     _build_auto_pools,
     _build_music_plan,

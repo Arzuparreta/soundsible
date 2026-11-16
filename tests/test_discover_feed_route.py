@@ -123,7 +123,7 @@ def _reset(tmp_path, monkeypatch):
     # Reset the discover executor and inflight state between tests.
     _disc_graph._discover_executor = None
     _disc_graph._discover_inflight.clear()
-    _disc_graph._discover_request_seeds.clear()
+    _disc_graph._discover_subscribers.clear()
     yield
     reset_telemetry()
     reset_runtime()
@@ -383,3 +383,44 @@ def test_seed_resolution_records_the_running_time_it_was_made_for(monkeypatch):
     assert _disc_graph._resolve_seed_yt_id(track) == _VID4
     stored = mock_db.set_cached_resolution.call_args.args[2]
     assert stored["id"] == _VID4 and stored["requested_duration"] == 235
+
+
+def test_a_request_joining_a_running_expansion_is_told_when_it_lands(monkeypatch):
+    """Two feeds wanting one seed share an extraction, and both hear back."""
+    import threading
+
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[_track("t1", "Song A", "Artist A", _VID3)],
+        playlists={},
+        settings={},
+    )
+    api, mock_dl, fake_emit = _mock_api(metadata, related_results=[{"id": "rel4444444", "title": "R"}])
+    release = threading.Event()
+    real = mock_dl.downloader.get_related_videos.return_value
+
+    def slow(*_args, **_kwargs):
+        release.wait(5)
+        return real
+
+    mock_dl.downloader.get_related_videos.side_effect = slow
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
+    mock_db = MagicMock()
+    mock_db.get_related_mix.return_value = None
+    mock_db.get_cached_resolution.return_value = None
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
+    from shared import related_work
+    monkeypatch.setattr(related_work, "instance_db", lambda: mock_db)
+
+    client = _make_app().test_client()
+    first = client.get("/api/discover/feed?seeds=t1&limit=10").get_json()
+    second = client.get("/api/discover/feed?seeds=t1&limit=10").get_json()
+    assert first["pending"] == second["pending"] == ["t1"]
+    future = _disc_graph._discover_inflight[_VID3]
+    release.set()
+    future.result(5)
+
+    assert mock_dl.downloader.get_related_videos.call_count == 1
+    told = {call.args[1]["request_id"] for call in fake_emit.call_args_list}
+    assert told == {first["request_id"], second["request_id"]}
+    assert all(call.kwargs["user_id"] == current_user_id() for call in fake_emit.call_args_list)

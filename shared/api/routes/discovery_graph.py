@@ -32,8 +32,12 @@ _discover_executor: ThreadPoolExecutor | None = None
 # Note: video_id → Future, shared between user requests and warming so the same
 # seed is never extracted twice concurrently.
 _discover_inflight: dict[str, "Future[None]"] = {}
-_discover_inflight_lock = threading.Lock()
-_discover_request_seeds: dict[str, set[str]] = {}
+# Reentrant: an executor that runs the expansion inline (tests) re-enters it.
+_discover_inflight_lock = threading.RLock()
+#: video_id → the feed requests waiting on its expansion, as
+#: (account, request_id, seed_track_id). A request that joins an expansion
+#: already running is told when it lands, like the one that started it.
+_discover_subscribers: dict[str, list[tuple[str | None, str, str]]] = {}
 
 
 def _get_discover_executor() -> ThreadPoolExecutor:
@@ -92,72 +96,55 @@ def _resolve_seed_yt_id(track) -> str:
         return ""
 
 
-def _expand_seed(
-    video_id: str,
-    request_id: str | None,
-    seed_track_id: str | None,
-    user_id: str | None,
-) -> None:
-    """Extract related-mix for one seed, persist it, and emit socketio if this
-    was an async (user-requested) expansion. Errors are logged and swallowed —
-    a failed seed just contributes no recs."""
-    try:
-        from shared.user_context import user_context
+def _expand_seed(video_id: str, user_id: str | None) -> None:
+    """Extract one seed's related mix, persist it, and tell every feed request
+    waiting on it. Errors are logged and swallowed — a failed seed just
+    contributes no recs, and its waiters are still told it is done."""
+    from shared.user_context import user_context
 
+    results = None
+    try:
         with user_context(user_id):
-            api = _get_api()
-            dl = api["get_downloader"](open_browser=False)
+            dl = _get_api()["get_downloader"](open_browser=False)
             from shared.related_work import submit
             results = submit(video_id, lambda: dl.downloader.get_related_videos(
                 video_id, max_results=_DISCOVER_RECS_PER_SEED, enrich=False
             )).result()
-            if request_id and seed_track_id:
-                recs = (
-                    rank_recommendation_rows(results, source="discover")
-                    if user_id
-                    else results
-                )
-                # The seed and its mix are this account's, never everyone's.
-                api["emit_to_user"]("discover_seed_ready", {
-                    "request_id": request_id,
-                    "seed_track_id": seed_track_id,
-                    "recs": recs,
-                }, user_id=user_id)
     except Exception as exc:
         logger.debug("discover: expand failed for %s: %s", video_id, exc)
-        # Note: Still emit an empty result so the client can mark this seed as
-        # done rather than waiting forever.
-        if request_id and seed_track_id:
-            _get_api()["emit_to_user"]("discover_seed_ready", {
-                "request_id": request_id,
-                "seed_track_id": seed_track_id,
-                "recs": [],
-            }, user_id=user_id)
+    with _discover_inflight_lock:
+        # Under the same lock `_schedule_expand` registers in: a request
+        # arriving after this sees no expansion in flight and starts its own.
+        _discover_inflight.pop(video_id, None)
+        waiting = _discover_subscribers.pop(video_id, [])
+    emit = _get_api()["emit_to_user"]
+    for subscriber, request_id, seed_track_id in waiting:
+        recs = results or []
+        if recs and subscriber:
+            with user_context(subscriber):
+                recs = rank_recommendation_rows(recs, source="discover")
+        # The seed and its mix are this account's, never everyone's.
+        emit("discover_seed_ready", {
+            "request_id": request_id,
+            "seed_track_id": seed_track_id,
+            "recs": recs,
+        }, user_id=subscriber)
 
 
 def _schedule_expand(video_id: str, request_id: str | None = None, seed_track_id: str | None = None) -> None:
-    """Schedule a seed expansion if one isn't already in flight. Dedup is on
-    video_id so a warming job and a user request for the same seed share one
-    extraction. If an in-flight future exists, the new request_id is registered
-    so the existing expansion's completion emits to it too."""
+    """Expand a seed unless it is already being expanded. Dedup is on video_id,
+    so a warming job and a user request for the same seed share one
+    extraction; a request names itself to be told when it finishes."""
+    from shared.user_context import current_user_id
+
+    user_id = current_user_id()
     with _discover_inflight_lock:
+        if request_id and seed_track_id:
+            _discover_subscribers.setdefault(video_id, []).append((user_id, request_id, seed_track_id))
         existing = _discover_inflight.get(video_id)
         if existing is not None and not existing.done():
-            if request_id and seed_track_id:
-                _discover_request_seeds.setdefault(request_id, set()).add(seed_track_id)
             return
-        from shared.user_context import current_user_id
-
-        fut = _get_discover_executor().submit(
-            _expand_seed,
-            video_id,
-            request_id,
-            seed_track_id,
-            current_user_id(),
-        )
-        _discover_inflight[video_id] = fut
-        if request_id and seed_track_id:
-            _discover_request_seeds.setdefault(request_id, set()).add(seed_track_id)
+        _discover_inflight[video_id] = _get_discover_executor().submit(_expand_seed, video_id, user_id)
 
 
 def _track_by_id(track_id: str):
