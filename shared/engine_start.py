@@ -11,12 +11,11 @@ def start_engine(runtime, *, update_tools: bool = True) -> None:
     a packaged build carries its own copy, and its shell gives the whole
     start 120 s, which a slow pip run alone could spend.
     """
-    if update_tools:
-        from shared.logging_setup import configure_logging
-        from shared.runtime_updates import apply_runtime_updates
+    from shared.logging_setup import configure_logging
+    from shared.runtime_updates import runtime_tool_session
 
-        configure_logging()
-        apply_runtime_updates()
-    from shared.api import start_api
+    configure_logging()
+    with runtime_tool_session(update_tools=update_tools):
+        from shared.api import start_api
 
-    start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+        start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)

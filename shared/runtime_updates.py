@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from pathlib import Path
 
 
 RUNTIME_UPDATE_OPTIONS = (
@@ -49,13 +51,14 @@ _UPDATED_MODULES = {"yt-dlp": "yt_dlp", "curl-cffi": "curl_cffi"}
 UPDATE_TIMEOUT_SEC = 120
 
 
-def apply_runtime_updates(file_env: Mapping[str, str | None] | None = None) -> bool:
+def _apply_runtime_updates(file_env: Mapping[str, str | None] | None, lease_fd: int) -> bool:
     """Upgrade the enabled download tools before anything imports them.
 
-    `run.py --daemon` calls it before `shared.api`, which imports yt-dlp. It
-    runs pip to completion (at most `UPDATE_TIMEOUT_SEC`): a background upgrade ran with yt-dlp already
-    loaded, and the extractor imported later came from the new release while
-    the core in memory was the old one. Returns whether pip ran and succeeded.
+    `run.py --daemon` calls it before `shared.api`, which imports yt-dlp.
+    Downloads wheels under a deadline without touching the environment. The
+    offline installation has no kill deadline: stopping pip halfway through
+    replacing a package can leave it unusable. The caller holds the exclusive
+    environment lease until installation finishes.
     """
     import logging
     import subprocess
@@ -78,18 +81,92 @@ def apply_runtime_updates(file_env: Mapping[str, str | None] | None = None) -> b
     if loaded:
         logger.warning("Runtime auto-update skipped: %s already imported", ", ".join(loaded))
         return False
-    command = pip_upgrade_command(packages)
-    logger.info("Runtime auto-update: %s", " ".join(command))
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=UPDATE_TIMEOUT_SEC)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        logger.warning("Runtime auto-update failed: %s", error)
-        return False
-    if result.returncode != 0:
-        logger.warning("Runtime auto-update failed: %s", (result.stderr or result.stdout or "unknown")[-800:])
-        return False
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="soundsible-tool-update-") as wheel_dir:
+        download = [sys.executable, "-m", "pip", "download", "--only-binary=:all:",
+                    "--dest", wheel_dir, *packages]
+        install = [*pip_upgrade_command(packages), "--no-index", "--find-links", wheel_dir]
+        for stage, command, timeout in (("download", download, UPDATE_TIMEOUT_SEC),
+                                        ("install", install, None)):
+            logger.info("Runtime auto-update %s: %s", stage, ", ".join(packages))
+            try:
+                # Keep the lease in pip too. If the parent exits, another
+                # engine still cannot import files while pip replaces them.
+                result = subprocess.run(command, capture_output=True, text=True,
+                                        timeout=timeout, pass_fds=(lease_fd,))
+            except (OSError, subprocess.TimeoutExpired) as error:
+                logger.warning("Runtime auto-update %s failed: %s", stage, error)
+                return False
+            if result.returncode != 0:
+                logger.warning("Runtime auto-update %s failed: %s", stage,
+                               (result.stderr or result.stdout or "unknown")[-800:])
+                return False
     logger.info("Runtime auto-update completed for %s", ", ".join(packages))
     return True
+
+
+def _tool_lease_path() -> Path:
+    # Different accounts/config directories can run in the same interpreter
+    # environment. The lease belongs to that environment, not an instance.
+    return Path(sys.prefix).resolve() / ".soundsible-runtime-tools.lock"
+
+
+@contextmanager
+def runtime_tool_session(*, update_tools: bool = False,
+                         file_env: Mapping[str, str | None] | None = None) -> Iterator[bool]:
+    """Hold a shared environment lease until this engine stops.
+
+    An updater first tries the exclusive lease without waiting. If another
+    engine is using the environment, it skips the update and joins the readers.
+    A reader waits for an installation already in progress before importing any
+    tools. Unsupported/read-only environments never run an unguarded update.
+    Frozen engines have private bundled tools and need no lease.
+    """
+    import logging
+
+    from shared.bundle_paths import is_frozen
+
+    if is_frozen():
+        yield False
+        return
+    logger = logging.getLogger(__name__)
+    try:
+        import fcntl
+    except ImportError:
+        if update_tools:
+            logger.warning("Runtime auto-update skipped: shared environment leases are unavailable")
+        yield False
+        return
+    try:
+        path = _tool_lease_path()
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+        except PermissionError:
+            # An engine running as another account can read an existing lease.
+            fd = os.open(path, os.O_RDONLY)
+    except OSError as error:
+        if update_tools:
+            logger.warning("Runtime auto-update skipped: cannot lease the environment: %s", error)
+        yield False
+        return
+    with os.fdopen(fd, "rb") as lease:
+        exclusive = False
+        if update_tools:
+            try:
+                fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                exclusive = True
+            except BlockingIOError:
+                logger.info("Runtime auto-update skipped: another engine is using this environment")
+        if exclusive:
+            try:
+                updated = _apply_runtime_updates(file_env, lease.fileno())
+            finally:
+                fcntl.flock(lease, fcntl.LOCK_SH)
+        else:
+            fcntl.flock(lease, fcntl.LOCK_SH)
+            updated = False
+        yield updated
 
 
 def warn_updates_need_a_new_image(file_env: Mapping[str, str | None] | None = None) -> None:

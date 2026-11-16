@@ -33,11 +33,14 @@ error survives all three attempts:
 - **Update yt-dlp.** YouTube changes often, and an old yt-dlp is the most
   common cause. On a native install, turn on **Settings → Downloads →
   Auto-update yt-dlp** (admin only) and restart Soundsible: from then on the
-  station upgrades yt-dlp each time it starts, before it begins serving. A
-  start takes a few seconds longer, and at most two minutes when PyPI does not
-  answer. The desktop app and Docker ignore the setting: the desktop app
-  ships its own yt-dlp with each release, and with Docker you pull the newest
-  image.
+  station upgrades yt-dlp before it begins serving, when no other engine is
+  using the same Python environment. Downloading the update has a two-minute
+  deadline; installation from the downloaded wheels finishes before startup.
+  If another engine is using that environment, the update waits until a later
+  restart with those engines stopped. Auto-update requires POSIX file locking
+  and a writable environment; otherwise it is skipped with a log message.
+  The desktop app and Docker ignore the setting: the desktop app ships its own
+  yt-dlp with each release, and with Docker you pull the newest image.
 - Export a fresh `cookies.txt`; an expired session can fail the same way.
 
 ## "Sign in to confirm you're not a bot", empty searches on a VPS

@@ -211,11 +211,24 @@ loads it). The installed version ships `lazy_extractors.py`: on import only
 new files, alongside the old core in memory. `curl-cffi`, a compiled extension,
 was upgraded the same way.
 
-Fix: `shared.runtime_updates.apply_runtime_updates()` runs `sys.executable -m pip`
-to completion (120 s ceiling), and `run.py --daemon` calls it, through
-`shared/engine_start.py`, before importing `shared.api`. It refuses to run once
-either module is imported. The cost is the pip run on each start while the
-setting is on (a few seconds when up to date).
+Fix: `shared.runtime_updates.runtime_tool_session()` surrounds engine startup
+and execution. Source daemon and desktop engines hold a shared POSIX file lease
+in the interpreter prefix for their lifetime. Only a daemon with the exclusive
+lease can update; another engine skips the update and joins the readers. Readers
+wait for an installation already in progress before importing the API. Frozen
+engines use their own bundled tools. Without file locking or access to the lease,
+updates are skipped. These leases coordinate Soundsible launches, not manual pip
+commands or engines from older releases.
+
+`run.py --daemon` enters this session through `shared/engine_start.py`, before
+importing `shared.api`. It refuses an update once either selected module is
+loaded. Pip uses the engine's own interpreter: download wheels into a temporary
+folder with a 120-second deadline, then install offline without a kill deadline.
+Both subprocesses inherit the exclusive lease, so it survives the parent's exit
+until pip finishes. There is no promise that pip itself is transactional against
+external termination, disk failure or power loss. Tests exercise the real daemon
+dispatch with only dependency bootstrap and external pip/API effects replaced,
+and real process contention for the shared/exclusive leases.
 
 Where it does not run, on purpose: the desktop engine (a packaged build
 bundles its tools, where `sys.executable -m pip` was the engine binary itself;
