@@ -213,6 +213,7 @@ jobs:
           npm ci
           npm test
           npx tauri build ${{ github.event_name == 'pull_request' && format('--config {0}/desktop-shell/src-tauri/tauri.pull-request.conf.json', github.workspace) || '' }}
+          cargo test --release --manifest-path src-tauri/Cargo.toml --lib
 
       - name: Verify native binary architectures
         shell: pwsh

@@ -569,3 +569,38 @@ print('desktop-entry-protected')
         tmp_path,
     )
     assert result == 'desktop-entry-protected'
+
+
+def test_windows_repeated_shared_reads_never_unlock_the_loaded_environment(monkeypatch):
+    # Exercise the real adapter on every platform. The kernel double counts
+    # native calls; actual Windows process contention also runs in Desktop Build.
+    import ctypes
+    import types
+
+    from shared.environment_lock import _WindowsLocks
+
+    events = []
+
+    class Kernel:
+        def LockFileEx(self, *args):
+            events.append("lock")
+            return True
+
+        def UnlockFileEx(self, *args):
+            events.append("unlock")
+            return True
+
+    adapter = _WindowsLocks.__new__(_WindowsLocks)
+    adapter._ctypes = ctypes
+    adapter._overlapped = ctypes.c_int
+    adapter._kernel = Kernel()
+    adapter._locked = {}
+    monkeypatch.setitem(sys.modules, "msvcrt", types.SimpleNamespace(get_osfhandle=lambda fd: fd))
+    file = types.SimpleNamespace(fileno=lambda: 42)
+    adapter.flock(file, adapter.LOCK_SH)
+    adapter.flock(file, adapter.LOCK_SH | adapter.LOCK_NB)
+    adapter.flock(file, adapter.LOCK_SH)
+    assert events == ["lock"]  # No interval in which a writer can enter.
+    adapter.flock(file, adapter.LOCK_EX | adapter.LOCK_NB)
+    assert events == ["lock", "unlock", "lock"]
+    assert adapter._locked[42] == adapter.LOCK_EX

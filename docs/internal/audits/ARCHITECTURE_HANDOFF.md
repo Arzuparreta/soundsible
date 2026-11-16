@@ -246,7 +246,18 @@ No marker file must be published to keep the lock safe. Optional wait callbacks
 log storage failures and still wait for the actual read lock. The shell consumes
 both output pipes, resumes the budget after the wait and notices an exited
 child. It accepts persisted readiness only when its PID matches that child,
-never an independently launched engine's healthy state.
+never an independently launched engine's healthy state. Startup, output and
+health workers carry their launch generation; readiness rechecks that generation
+and retained PID after HTTP returns, so a replaced child's result is discarded.
+Output is drained as byte lines with tolerant decoding, and child Python pipes
+are explicitly UTF-8. Non-UTF-8 legacy logging cannot close a startup pipe.
+During boot the existing status panel receives the last six child lines, making
+failed native starts visible in the CI artifact's UI dump.
+
+The Windows adapter remembers each held mode: repeated shared reads do nothing;
+actual conversions run under the writer gate. A deterministic adapter regression
+checks the native call boundary on every platform, and the source process tests
+run on Windows. Native Rust unit tests also run in Desktop Build.
 
 The native Windows source suite runs in Desktop Build. Rust timing, startup
 event and PID tests also run independently of platform webview dependencies.

@@ -26,9 +26,45 @@ pub(crate) fn tools_wait_event(line: &str) -> Option<bool> {
         .map(|event| event.waiting)
 }
 
+pub(crate) fn output_lines<R: std::io::Read>(stream: R, mut receive: impl FnMut(&str) -> bool) {
+    use std::io::{BufRead, BufReader};
+
+    let mut reader = BufReader::new(stream);
+    let mut bytes = Vec::new();
+    loop {
+        bytes.clear();
+        match reader.read_until(b'\n', &mut bytes) {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {
+                let line = String::from_utf8_lossy(&bytes);
+                if !receive(line.trim_end_matches(['\r', '\n'])) {
+                    return;
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_codepage_logging_does_not_lose_the_following_startup_event() {
+        let mut events = Vec::new();
+        let mut logs = Vec::new();
+        let bytes =
+            b"M\xfasica \x97 starting\r\n{\"event\":\"waiting_for_tools\",\"waiting\":true}\n";
+        output_lines(&bytes[..], |line| {
+            logs.push(line.to_string());
+            if let Some(event) = tools_wait_event(line) {
+                events.push(event);
+            }
+            true
+        });
+        assert_eq!(logs.len(), 2);
+        assert_eq!(events, [true]);
+    }
 
     #[test]
     fn only_the_explicit_tool_wait_event_pauses_readiness() {

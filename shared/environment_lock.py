@@ -35,18 +35,21 @@ class _WindowsLocks:
         self._kernel.UnlockFileEx.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD,
                                              wintypes.DWORD, ctypes.POINTER(Overlapped)]
         self._kernel.UnlockFileEx.restype = wintypes.BOOL
-        self._locked = set()
+        self._locked = {}
 
     def flock(self, file, flags):
         import errno
         import msvcrt
 
         handle = msvcrt.get_osfhandle(file.fileno())
+        mode = self.LOCK_UN if flags == self.LOCK_UN else (self.LOCK_EX if flags & self.LOCK_EX else self.LOCK_SH)
+        if self._locked.get(handle) == mode:
+            return
         overlapped = self._overlapped()
         if handle in self._locked:
             if not self._kernel.UnlockFileEx(handle, 0, 1, 0, self._ctypes.byref(overlapped)):
                 raise self._ctypes.WinError(self._ctypes.get_last_error())
-            self._locked.remove(handle)
+            self._locked.pop(handle)
         if flags == self.LOCK_UN:
             return
         native = (2 if flags & self.LOCK_EX else 0) | (1 if flags & self.LOCK_NB else 0)
@@ -55,7 +58,7 @@ class _WindowsLocks:
             if error == 33:  # ERROR_LOCK_VIOLATION
                 raise BlockingIOError(errno.EAGAIN, "Environment lease is held by another process")
             raise self._ctypes.WinError(error)
-        self._locked.add(handle)
+        self._locked[handle] = mode
 
 
 @contextmanager

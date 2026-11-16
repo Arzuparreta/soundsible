@@ -1,9 +1,9 @@
-use crate::startup::{startup_budget, tools_wait_event};
+use crate::startup::{output_lines, startup_budget, tools_wait_event};
 use crate::state::{
     load_runtime_state, python_executable, repo_root, sidecar_binary, state_file_path,
     EngineRuntimeState,
 };
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -49,6 +49,7 @@ struct SupervisorInner {
     message: String,
     health_failures: u32,
     waiting_for_tools: bool,
+    generation: u64,
 }
 
 impl Default for SupervisorInner {
@@ -62,6 +63,7 @@ impl Default for SupervisorInner {
             message: String::new(),
             health_failures: 0,
             waiting_for_tools: false,
+            generation: 0,
         }
     }
 }
@@ -76,22 +78,26 @@ impl EngineSupervisor {
 
     pub fn status(&self) -> EngineStatus {
         let guard = self.inner.lock().expect("engine lock");
-        EngineStatus {
-            phase: guard.phase.clone(),
-            message: guard.message.clone(),
-            base_url: guard.runtime.as_ref().map(|r| r.base_url.clone()),
-            player_url: guard.runtime.as_ref().map(|r| r.player_url()),
-            log_lines: guard.log_lines.clone(),
-        }
+        status_snapshot(&guard)
     }
 
     pub fn start(&self, app: AppHandle, music_dir: PathBuf) -> Result<(), String> {
-        self.stop_flag.store(false, Ordering::SeqCst);
-        bootstrap_config(&music_dir)?;
-        self.stop_child()?;
+        self.start_if_current(app, music_dir, None)
+    }
 
-        {
+    fn start_if_current(
+        &self,
+        app: AppHandle,
+        music_dir: PathBuf,
+        expected: Option<u64>,
+    ) -> Result<(), String> {
+        let generation = {
             let mut guard = self.inner.lock().expect("engine lock");
+            if expected.is_some_and(|generation| generation != guard.generation) {
+                return Ok(());
+            }
+            stop_child(&mut guard);
+            self.stop_flag.store(false, Ordering::SeqCst);
             guard.music_dir = Some(music_dir.clone());
             guard.phase = EnginePhase::Booting;
             guard.message = "Starting Soundsible…".into();
@@ -100,54 +106,88 @@ impl EngineSupervisor {
                 &mut guard,
                 format!("engine: music_dir={}", music_dir.display()),
             );
-        }
+            guard.generation
+        };
         self.emit_status(&app);
-
-        let mut child = spawn_engine(&music_dir, &mut self.inner.lock().expect("engine lock"))?;
-        let pid = child.id();
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
-        {
+        if let Err(error) = bootstrap_config(&music_dir) {
             let mut guard = self.inner.lock().expect("engine lock");
-            guard.waiting_for_tools = false;
-            guard.child = Some(child);
+            if guard.generation == generation && guard.phase == EnginePhase::Booting {
+                guard.phase = EnginePhase::Error;
+                guard.message = "Couldn't start".into();
+                push_log(&mut guard, error.clone());
+            }
+            return Err(error);
         }
+        let (pid, stdout, stderr) = {
+            let mut guard = self.inner.lock().expect("engine lock");
+            if guard.generation != generation || self.stop_flag.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+            let mut child = match spawn_engine(&music_dir, &mut guard) {
+                Ok(child) => child,
+                Err(error) => {
+                    guard.phase = EnginePhase::Error;
+                    guard.message = "Couldn't start".into();
+                    push_log(&mut guard, error.clone());
+                    return Err(error);
+                }
+            };
+            let pid = child.id();
+            let stdout = child.stdout.take();
+            let stderr = child.stderr.take();
+            guard.child = Some(child);
+            (pid, stdout, stderr)
+        };
+        self.emit_status(&app);
         if let Some(stdout) = stdout {
-            read_engine_output(Arc::clone(&self.inner), pid, stdout, true);
+            read_engine_output(
+                Arc::clone(&self.inner),
+                app.clone(),
+                generation,
+                pid,
+                stdout,
+                true,
+            );
         }
         if let Some(stderr) = stderr {
-            read_engine_output(Arc::clone(&self.inner), pid, stderr, false);
+            read_engine_output(
+                Arc::clone(&self.inner),
+                app.clone(),
+                generation,
+                pid,
+                stderr,
+                false,
+            );
         }
-
         let inner = Arc::clone(&self.inner);
         let stop_flag = Arc::clone(&self.stop_flag);
         let app_handle = app.clone();
-        thread::spawn(move || wait_for_ready(inner, stop_flag, app_handle));
-
+        thread::spawn(move || wait_for_ready(inner, stop_flag, app_handle, generation));
         let inner = Arc::clone(&self.inner);
         let stop_flag = Arc::clone(&self.stop_flag);
-        let app_handle = app.clone();
-        thread::spawn(move || health_watchdog(inner, stop_flag, app_handle));
-
+        thread::spawn(move || health_watchdog(inner, stop_flag, app, generation));
         Ok(())
     }
 
     pub fn restart(&self, app: AppHandle) -> Result<(), String> {
-        let music_dir = {
+        let (generation, music_dir) = {
             let guard = self.inner.lock().expect("engine lock");
-            guard
-                .music_dir
-                .clone()
-                .ok_or_else(|| "Choose a music folder first.".to_string())?
+            (
+                guard.generation,
+                guard
+                    .music_dir
+                    .clone()
+                    .ok_or_else(|| "Choose a music folder first.".to_string())?,
+            )
         };
-        self.start(app, music_dir)
+        self.start_if_current(app, music_dir, Some(generation))
     }
 
     pub fn stop(&self, app: Option<&AppHandle>) -> Result<(), String> {
-        self.stop_flag.store(true, Ordering::SeqCst);
-        self.stop_child()?;
         {
             let mut guard = self.inner.lock().expect("engine lock");
+            self.stop_flag.store(true, Ordering::SeqCst);
+            stop_child(&mut guard);
             guard.phase = EnginePhase::Idle;
             guard.message = "Stopped".into();
             push_log(&mut guard, "engine: stopped".into());
@@ -158,43 +198,81 @@ impl EngineSupervisor {
         Ok(())
     }
 
-    fn stop_child(&self) -> Result<(), String> {
-        let mut guard = self.inner.lock().expect("engine lock");
-        if let Some(mut child) = guard.child.take() {
-            terminate_child_process(&mut child);
-        }
-        // A persisted PID may belong to an independently launched station (or
-        // may have been reused). Only our retained Child establishes ownership.
-        guard.runtime = None;
-        guard.health_failures = 0;
-        guard.waiting_for_tools = false;
-        Ok(())
-    }
-
     fn emit_status(&self, app: &AppHandle) {
         let status = self.status();
         let _ = app.emit("engine-status", status);
     }
 }
 
+fn status_snapshot(guard: &SupervisorInner) -> EngineStatus {
+    EngineStatus {
+        phase: guard.phase.clone(),
+        message: guard.message.clone(),
+        base_url: guard.runtime.as_ref().map(|r| r.base_url.clone()),
+        player_url: guard.runtime.as_ref().map(|r| r.player_url()),
+        log_lines: guard.log_lines.clone(),
+    }
+}
+
+fn stop_child(guard: &mut SupervisorInner) {
+    guard.generation = guard.generation.wrapping_add(1);
+    if let Some(mut child) = guard.child.take() {
+        terminate_child_process(&mut child);
+    }
+    guard.runtime = None;
+    guard.health_failures = 0;
+    guard.waiting_for_tools = false;
+}
+
+fn owns_launch(guard: &SupervisorInner, generation: u64, pid: u32) -> bool {
+    guard.generation == generation && guard.child.as_ref().map(Child::id) == Some(pid)
+}
+
+fn accept_ready(
+    guard: &mut SupervisorInner,
+    generation: u64,
+    pid: u32,
+    state: EngineRuntimeState,
+) -> bool {
+    if guard.phase != EnginePhase::Booting
+        || !owns_launch(guard, generation, pid)
+        || !state.belongs_to(pid)
+    {
+        return false;
+    }
+    guard.runtime = Some(state);
+    guard.phase = EnginePhase::Ready;
+    guard.message = "Ready".into();
+    push_log(guard, "engine: ready".into());
+    true
+}
+
 fn read_engine_output<R: Read + Send + 'static>(
     inner: Arc<Mutex<SupervisorInner>>,
+    app: AppHandle,
+    generation: u64,
     pid: u32,
     stream: R,
     startup_events: bool,
 ) {
     thread::spawn(move || {
-        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+        output_lines(stream, |line| {
             let mut guard = inner.lock().expect("engine lock");
-            if guard.child.as_ref().map(Child::id) != Some(pid) {
-                return;
+            if !owns_launch(&guard, generation, pid) {
+                return false;
             }
             if let Some(waiting) = startup_events.then(|| tools_wait_event(&line)).flatten() {
                 guard.waiting_for_tools = waiting;
             } else {
                 push_log(&mut guard, line.chars().take(2000).collect());
             }
-        }
+            if guard.phase == EnginePhase::Booting {
+                // The existing startup panel and CI's native UI dump retain
+                // the last six lines if a child never publishes its state.
+                let _ = app.emit("engine-status", status_snapshot(&guard));
+            }
+            true
+        });
     });
 }
 
@@ -267,7 +345,10 @@ fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Chil
         cmd
     };
 
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .env("PYTHONIOENCODING", "utf-8")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     command
         .spawn()
         .map_err(|e| format!("Failed to spawn engine: {e}"))
@@ -276,6 +357,8 @@ fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Chil
 fn terminate_child_process(child: &mut Child) {
     let pid = child.id();
     terminate_pid(pid);
+    #[cfg(not(windows))]
+    let _ = child.kill();
     let _ = child.wait();
 }
 
@@ -294,12 +377,20 @@ fn terminate_pid(pid: u32) {
     let _ = std::fs::remove_file(state_file_path());
 }
 
-fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>, app: AppHandle) {
+fn wait_for_ready(
+    inner: Arc<Mutex<SupervisorInner>>,
+    stop_flag: Arc<AtomicBool>,
+    app: AppHandle,
+    generation: u64,
+) {
     let mut remaining = STARTUP_TIMEOUT;
     let mut last_check = Instant::now();
     while !stop_flag.load(Ordering::SeqCst) {
         let (child_pid, waiting, exited) = {
             let mut guard = inner.lock().expect("engine lock");
+            if guard.generation != generation || guard.phase != EnginePhase::Booting {
+                return;
+            }
             let waiting = guard.waiting_for_tools;
             let Some(child) = guard.child.as_mut() else {
                 return;
@@ -308,7 +399,10 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
         };
         if let Some(status) = exited {
             let mut guard = inner.lock().expect("engine lock");
-            if stop_flag.load(Ordering::SeqCst) || guard.phase != EnginePhase::Booting {
+            if stop_flag.load(Ordering::SeqCst)
+                || guard.phase != EnginePhase::Booting
+                || !owns_launch(&guard, generation, child_pid)
+            {
                 return;
             }
             guard.phase = EnginePhase::Error;
@@ -332,13 +426,11 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
                 let player_url = state.player_url();
                 {
                     let mut guard = inner.lock().expect("engine lock");
-                    if stop_flag.load(Ordering::SeqCst) || guard.phase != EnginePhase::Booting {
+                    if stop_flag.load(Ordering::SeqCst)
+                        || !accept_ready(&mut guard, generation, child_pid, state)
+                    {
                         return;
                     }
-                    guard.runtime = Some(state);
-                    guard.phase = EnginePhase::Ready;
-                    guard.message = "Ready".into();
-                    push_log(&mut guard, "engine: ready".into());
                 }
                 let target_url = crate::take_pending_player_url(&app, &player_url);
                 let _ = app.emit("engine-ready", target_url.clone());
@@ -357,7 +449,7 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
     }
 
     let mut guard = inner.lock().expect("engine lock");
-    if !fail_boot(&mut guard, stop_flag.load(Ordering::SeqCst)) {
+    if guard.generation != generation || !fail_boot(&mut guard, stop_flag.load(Ordering::SeqCst)) {
         return;
     }
     drop(guard);
@@ -397,6 +489,36 @@ mod cancellation_tests {
     }
 
     #[test]
+    fn a_completed_probe_cannot_publish_readiness_for_a_replaced_launch() {
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .arg("--help")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        child.wait().unwrap();
+        let mut guard = SupervisorInner::default();
+        guard.child = Some(child);
+        guard.phase = EnginePhase::Booting;
+        guard.generation = 2;
+        let runtime = || EngineRuntimeState {
+            pid,
+            base_url: "http://127.0.0.1:49152".into(),
+            health: "/api/health".into(),
+            owner_token_file: None,
+            log_dir: "logs".into(),
+        };
+        assert!(!accept_ready(&mut guard, 1, pid, runtime()));
+        assert_eq!(guard.phase, EnginePhase::Booting);
+        assert!(guard.runtime.is_none());
+        assert!(!accept_ready(&mut guard, 2, pid.wrapping_add(1), runtime()));
+        assert!(accept_ready(&mut guard, 2, pid, runtime()));
+        assert_eq!(guard.runtime.as_ref().unwrap().pid, pid);
+        assert_eq!(guard.phase, EnginePhase::Ready);
+    }
+
+    #[test]
     fn only_an_active_boot_timeout_becomes_an_error() {
         let mut state = SupervisorInner::default();
         state.phase = EnginePhase::Booting;
@@ -408,7 +530,12 @@ mod cancellation_tests {
     }
 }
 
-fn health_watchdog(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>, app: AppHandle) {
+fn health_watchdog(
+    inner: Arc<Mutex<SupervisorInner>>,
+    stop_flag: Arc<AtomicBool>,
+    app: AppHandle,
+    generation: u64,
+) {
     while !stop_flag.load(Ordering::SeqCst) {
         thread::sleep(HEALTH_INTERVAL);
         if stop_flag.load(Ordering::SeqCst) {
@@ -417,6 +544,9 @@ fn health_watchdog(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool
 
         let health_url = {
             let guard = inner.lock().expect("engine lock");
+            if guard.generation != generation {
+                return;
+            }
             if !matches!(guard.phase, EnginePhase::Ready) {
                 continue;
             }
@@ -431,6 +561,9 @@ fn health_watchdog(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool
         let mut restart_needed = false;
         {
             let mut guard = inner.lock().expect("engine lock");
+            if guard.generation != generation || guard.phase != EnginePhase::Ready {
+                return;
+            }
             if ok {
                 guard.health_failures = 0;
             } else {
@@ -463,9 +596,7 @@ fn health_watchdog(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool
                 guard.music_dir.clone()
             };
             if let Some(dir) = music_dir {
-                let _ = supervisor.stop(None);
-                stop_flag.store(false, Ordering::SeqCst);
-                let _ = supervisor.start(app.clone(), dir);
+                let _ = supervisor.start_if_current(app.clone(), dir, Some(generation));
             }
             break;
         }
