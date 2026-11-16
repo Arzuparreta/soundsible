@@ -1,6 +1,7 @@
+use crate::startup::startup_budget;
 use crate::state::{
-    load_runtime_state, python_executable, repo_root, sidecar_binary, state_file_path,
-    EngineRuntimeState,
+    engine_waiting_for_tools, load_runtime_state, python_executable, repo_root, sidecar_binary,
+    state_file_path, EngineRuntimeState,
 };
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -260,8 +261,40 @@ fn terminate_pid(pid: u32) {
 }
 
 fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>, app: AppHandle) {
-    let deadline = Instant::now() + STARTUP_TIMEOUT;
-    while Instant::now() < deadline && !stop_flag.load(Ordering::SeqCst) {
+    let mut remaining = STARTUP_TIMEOUT;
+    let mut last_check = Instant::now();
+    while !stop_flag.load(Ordering::SeqCst) {
+        let (waiting, exited) = {
+            let mut guard = inner.lock().expect("engine lock");
+            let Some(child) = guard.child.as_mut() else {
+                return;
+            };
+            (
+                engine_waiting_for_tools(child.id()),
+                child.try_wait().ok().flatten(),
+            )
+        };
+        if let Some(status) = exited {
+            let mut guard = inner.lock().expect("engine lock");
+            if stop_flag.load(Ordering::SeqCst) || guard.phase != EnginePhase::Booting {
+                return;
+            }
+            guard.phase = EnginePhase::Error;
+            guard.message = "Couldn't start".into();
+            push_log(
+                &mut guard,
+                format!("error: engine exited during startup ({status})"),
+            );
+            drop(guard);
+            EngineSupervisor { inner, stop_flag }.emit_status(&app);
+            return;
+        }
+        let now = Instant::now();
+        remaining = startup_budget(remaining, now.duration_since(last_check), waiting);
+        last_check = now;
+        if remaining.is_zero() {
+            break;
+        }
         if let Some(state) = load_runtime_state() {
             if health_check(&state.health_url()) {
                 let player_url = state.player_url();

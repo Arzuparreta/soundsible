@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -9,7 +10,7 @@ from shared.runtime_updates import enabled_runtime_packages, pip_upgrade_command
 
 @pytest.fixture(autouse=True)
 def disposable_lease(monkeypatch, tmp_path):
-    monkeypatch.setattr("shared.runtime_updates._tool_lease_path", lambda: tmp_path / "tools.lock")
+    monkeypatch.setattr("shared.runtime_updates._tool_lease_path", lambda prefix=None: tmp_path / "tools.lock")
 
 
 def apply_runtime_updates(settings):
@@ -115,13 +116,29 @@ ROOT = Path(__file__).resolve().parents[1]
 def _fresh(code: str, tmp_path: Path) -> str:
     import os
 
-    env = {**os.environ, "SOUNDSIBLE_CONFIG_DIR": str(tmp_path / "config"),
-           "SOUNDSIBLE_DATA_DIR": str(tmp_path / "data"), "SOUNDSIBLE_CACHE_DIR": str(tmp_path / "cache")}
+    # Isolate legacy migration sources before importing any runtime module.
+    disposable_home = tmp_path / "home"
+    disposable_home.mkdir(exist_ok=True)
+    env = {**os.environ, "HOME": str(disposable_home),
+           "USERPROFILE": str(disposable_home),
+           "APPDATA": str(disposable_home / "appdata"),
+           "LOCALAPPDATA": str(disposable_home / "localappdata"),
+           "XDG_CONFIG_HOME": str(disposable_home / "config"),
+           "XDG_DATA_HOME": str(disposable_home / "data"),
+           "XDG_CACHE_HOME": str(disposable_home / "cache"),
+           "SOUNDSIBLE_CONFIG_DIR": str(tmp_path / "config"),
+           "SOUNDSIBLE_DATA_DIR": str(tmp_path / "data"),
+           "SOUNDSIBLE_CACHE_DIR": str(tmp_path / "cache"),
+           "SOUNDSIBLE_LOG_DIR": str(tmp_path / "logs"),
+           "SOUNDSIBLE_MUSIC_DIR": str(tmp_path / "music"),
+           "PYTHONPATH": __import__("os").pathsep.join([str(ROOT), *filter(None, sys.path)])}
+    for name in ("config", "data", "cache", "logs", "music"):
+        (tmp_path / name).mkdir(exist_ok=True)
     lease = tmp_path / "tools.lock"
     code = ("import shared.runtime_updates as updates\n"
-            f"from pathlib import Path\nupdates._tool_lease_path = lambda: Path({str(lease)!r})\n" + code)
+            f"from pathlib import Path\nupdates._tool_lease_path = lambda prefix=None: Path({str(lease)!r})\n" + code)
     result = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env,
-                            capture_output=True, text=True, timeout=120)
+                            capture_output=True, text=True, timeout=120, start_new_session=True)
     assert result.returncode == 0, result.stderr[-2000:]
     return result.stdout.strip().splitlines()[-1]
 
@@ -215,8 +232,12 @@ def test_only_the_download_has_a_kill_deadline(monkeypatch):
     assert apply_runtime_updates({"YTDLP_AUTO_UPDATE": "true"})
     assert calls[0][1]["timeout"] == 120
     assert calls[1][1]["timeout"] is None
-    assert calls[0][1]["pass_fds"] == calls[1][1]["pass_fds"]
-    assert calls[1][1]["pass_fds"]
+    if os.name == "nt":
+        assert (calls[0][1]["startupinfo"].lpAttributeList["handle_list"]
+                == calls[1][1]["startupinfo"].lpAttributeList["handle_list"])
+    else:
+        assert calls[0][1]["pass_fds"] == calls[1][1]["pass_fds"]
+        assert calls[1][1]["pass_fds"]
     assert "--only-binary=:all:" in calls[0][0]
 
 
@@ -241,7 +262,7 @@ import subprocess, sys
 from shared.runtime_updates import runtime_tool_session
 lease_path = str(updates._tool_lease_path())
 code = ("from pathlib import Path; import shared.runtime_updates as u; "
-        f"u._tool_lease_path = lambda: Path({lease_path!r}); "
+        f"u._tool_lease_path = lambda prefix=None: Path({lease_path!r}); "
         "lease = u.runtime_tool_session(); lease.__enter__(); "
         "print('ready', flush=True); input()")
 reader = subprocess.Popen([sys.executable, '-c', code], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -263,6 +284,7 @@ print('protected')
     assert result == "protected"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX raw-lock contention probe")
 def test_a_reader_waits_until_an_installing_process_releases_its_lease(tmp_path):
     result = _fresh(
         """
@@ -272,7 +294,7 @@ lease_path = updates._tool_lease_path()
 with lease_path.open('w') as writer:
     fcntl.flock(writer, fcntl.LOCK_EX)
     code = ("from pathlib import Path; import shared.runtime_updates as u; "
-            f"u._tool_lease_path = lambda: Path({str(lease_path)!r}); "
+            f"u._tool_lease_path = lambda prefix=None: Path({str(lease_path)!r}); "
             "print('waiting', flush=True); "
             "lease = u.runtime_tool_session(); lease.__enter__(); print('reading', flush=True)")
     reader = subprocess.Popen([sys.executable, '-c', code], stdout=subprocess.PIPE, text=True)
@@ -303,7 +325,8 @@ from shared.cooperative import patch_process
 patch_process()
 events = []
 def pip(command, **kwargs):
-    events.append((command[3], 'yt_dlp' in sys.modules, 'curl_cffi' in sys.modules))
+    if command[2:4] == ['pip', 'install'] or command[2:4] == ['pip', 'download']:
+        events.append((command[3], 'yt_dlp' in sys.modules, 'curl_cffi' in sys.modules))
     return subprocess.CompletedProcess(command, 0, '', '')
 subprocess.run = pip
 class Api(importlib.abc.MetaPathFinder, importlib.abc.Loader):
@@ -323,15 +346,18 @@ config.mkdir(parents=True, exist_ok=True)
 (config / 'config.json').write_text('{}')
 sys.argv = ['run.py', '--daemon', '--host', '127.0.0.1', '--port', '0']
 source = Path('run.py')
-tree = ast.parse(source.read_text(), filename=str(source))
-# Only the dependency installer is stubbed; every launch import and the real
-# --daemon dispatch execute in their normal order.
-for node in tree.body:
-    if isinstance(node, ast.FunctionDef) and node.name == '_ensure_bootstrap_before_gevent':
-        node.body = [ast.Pass()]
-ast.fix_missing_locations(tree)
+launcher_root = config.parent / 'launcher'
+venv = launcher_root / 'venv'
+binary = venv / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+binary.parent.mkdir(parents=True)
+binary.touch()
+(launcher_root / 'requirements.txt').write_text('yt-dlp' + chr(10))
+sys.prefix = str(venv)
+# Only external subprocess and API effects are replaced. Bootstrap and the
+# real --daemon dispatch run, with every path under the disposable home.
 try:
-    exec(compile(tree, str(source), 'exec'), {'__name__': '__main__', '__file__': str(source.resolve())})
+    exec(compile(source.read_text(), str(source), 'exec'),
+         {'__name__': '__main__', '__file__': str(launcher_root / 'run.py')})
 except SystemExit as error:
     assert error.code == 0
 print(json.dumps(events))
@@ -340,5 +366,103 @@ print(json.dumps(events))
     )
     import json
 
-    assert json.loads(result) == [["download", False, False], ["install", False, False],
+    assert json.loads(result) == [["install", False, False], ["install", False, False],
+                                  ["download", False, False], ["install", False, False],
                                   ["api_import"], ["start_api"]]
+
+
+@pytest.mark.parametrize("updates", [False, True])
+def test_an_unsupported_lock_backend_skips_updates_without_stopping_startup(monkeypatch, updates):
+    import errno
+    from shared.environment_lock import backend
+
+    locker = backend()
+
+    def unsupported(*args):
+        raise OSError(errno.ENOTSUP, "locking unsupported")
+
+    monkeypatch.setattr(locker, "flock", unsupported)
+    monkeypatch.setattr("shared.environment_lock.backend", lambda: locker)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("unguarded pip"))
+    with runtime_tool_session(update_tools=updates, file_env={"YTDLP_AUTO_UPDATE": "true"}) as updated:
+        assert updated is False
+
+
+def test_full_temporary_storage_skips_the_update_without_stopping_startup(monkeypatch):
+    import errno
+    import tempfile
+
+    def full(*args, **kwargs):
+        raise OSError(errno.ENOSPC, "temporary storage full")
+
+    monkeypatch.setattr(tempfile, "TemporaryDirectory", full)
+    monkeypatch.delitem(sys.modules, "yt_dlp", raising=False)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("unguarded pip"))
+    assert not apply_runtime_updates({"YTDLP_AUTO_UPDATE": "true"})
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX terminal process-group signals")
+@pytest.mark.parametrize("signum", [2, 15])
+def test_normal_shutdown_waits_for_the_installer_to_finish(tmp_path, signum):
+    result = _fresh(
+        f"""
+import os, signal, subprocess, sys
+from pathlib import Path
+from shared.cooperative import patch_process
+patch_process()
+from shared.runtime_updates import run_install_transaction
+finished = Path(os.environ['SOUNDSIBLE_DATA_DIR']) / 'finished'
+child = ("import os, signal, sys, time; from pathlib import Path; "
+         "os.killpg(int(sys.argv[1]), int(sys.argv[2])); "
+         "time.sleep(0.2); Path(sys.argv[3]).write_text('whole')")
+with updates._tool_lease_path().open('w') as lease:
+    try:
+        run_install_transaction([sys.executable, '-c', child, str(os.getpid()), '{signum}', str(finished)],
+                                lease_fd=lease.fileno(), capture_output=True, text=True)
+        raise AssertionError('shutdown was not honored')
+    except (KeyboardInterrupt, SystemExit):
+        assert finished.read_text() == 'whole'
+print('finished-before-shutdown')
+""",
+        tmp_path,
+    )
+    assert result == 'finished-before-shutdown'
+
+
+def test_bootstrap_cannot_install_while_an_engine_uses_the_environment(tmp_path):
+    result = _fresh(
+        """
+import argparse, ast, hashlib, os, platform, shutil, subprocess, sys
+from pathlib import Path
+from shared.runtime_updates import runtime_tool_session
+root = Path(os.environ['SOUNDSIBLE_DATA_DIR']) / 'launcher'
+venv = root / 'venv'
+binary = venv / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+binary.parent.mkdir(parents=True)
+binary.touch()
+(root / 'requirements.txt').write_text('yt-dlp' + chr(10))
+sys.prefix = str(venv)
+commands = []
+def fake_run(command, **kwargs):
+    commands.append(command)
+    return subprocess.CompletedProcess(command, 0, '', '')
+subprocess.run = fake_run
+source = ast.parse(Path('run.py').read_text())
+names = {'_venv_python_path', '_venv_has_pip', '_venv_can_import', '_running_in_project_venv',
+         '_recreate_venv', '_ensure_venv_with_pip', '_ensure_bootstrap_before_gevent', '_ensure_bootstrap_locked'}
+tree = ast.Module(body=[node for node in source.body if isinstance(node, ast.FunctionDef) and node.name in names], type_ignores=[])
+namespace = dict(globals(), __file__=str(root / 'run.py'))
+exec(compile(tree, 'run.py', 'exec'), namespace)
+with runtime_tool_session():
+    try:
+        namespace['_ensure_bootstrap_before_gevent']()
+        raise AssertionError('bootstrap was allowed to modify a running environment')
+    except RuntimeError as error:
+        assert 'another engine' in str(error)
+assert not any('install' in command for command in commands)
+assert not (venv / '.installed_requirements_hash').exists()
+print('bootstrap-protected')
+""",
+        tmp_path,
+    )
+    assert result == 'bootstrap-protected'

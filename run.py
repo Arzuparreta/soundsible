@@ -110,26 +110,26 @@ def _running_in_project_venv(venv_dir: Path) -> bool:
     return Path(sys.prefix).resolve() == venv_dir.resolve()
 
 
-def _recreate_venv(venv_dir: Path) -> None:
+def _recreate_venv(venv_dir: Path, lease) -> None:
     if venv_dir.exists():
         shutil.rmtree(venv_dir, ignore_errors=True)
     print("Creating virtual environment...", flush=True)
-    subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
+    lease.install([sys.executable, "-m", "venv", str(venv_dir)], check=True)
 
 
-def _ensure_venv_with_pip(venv_dir: Path) -> Path:
+def _ensure_venv_with_pip(venv_dir: Path, lease) -> Path:
     py = _venv_python_path(venv_dir)
     needs_recreate = not venv_dir.exists() or not py.exists()
 
     if needs_recreate:
-        _recreate_venv(venv_dir)
+        _recreate_venv(venv_dir, lease)
         py = _venv_python_path(venv_dir)
 
     if _venv_has_pip(py):
         return py
 
     print("Repairing virtual environment pip bootstrap...", flush=True)
-    ensurepip = subprocess.run(
+    ensurepip = lease.install(
         [str(py), "-m", "ensurepip", "--upgrade"],
         capture_output=True,
         text=True,
@@ -138,10 +138,10 @@ def _ensure_venv_with_pip(venv_dir: Path) -> Path:
         return py
 
     print("Virtual environment pip bootstrap failed; recreating environment...", flush=True)
-    _recreate_venv(venv_dir)
+    _recreate_venv(venv_dir, lease)
     py = _venv_python_path(venv_dir)
 
-    ensurepip_retry = subprocess.run(
+    ensurepip_retry = lease.install(
         [str(py), "-m", "ensurepip", "--upgrade"],
         capture_output=True,
         text=True,
@@ -164,14 +164,28 @@ def _ensure_bootstrap_before_gevent():
     Fresh clones may not have a venv yet; importing gevent before bootstrap would
     fail with ModuleNotFoundError and prevent self-healing.
     """
+    from shared.runtime_updates import bootstrap_tool_session
+
     root_dir = Path(__file__).resolve().parent
+    with bootstrap_tool_session(root_dir / "venv") as lease:
+        _ensure_bootstrap_locked(root_dir, lease)
+
+
+def _ensure_bootstrap_locked(root_dir: Path, lease) -> None:
     venv_dir = root_dir / "venv"
     req_file = root_dir / "requirements.txt"
     marker = venv_dir / ".installed_requirements_hash"
     bootstrap_modules = ["pip", "gevent", "zope.event", "zope.interface", "rich"]
 
+    def require_write():
+        if lease is None:
+            raise RuntimeError("Cannot safely modify dependencies: environment locking is unavailable")
+        lease.require_write()
+
     try:
-        py = _ensure_venv_with_pip(venv_dir)
+        if not _venv_has_pip(_venv_python_path(venv_dir)):
+            require_write()
+        py = _ensure_venv_with_pip(venv_dir, lease)
     except Exception as exc:
         print("Virtual environment setup failed:", exc)
         sys.exit(1)
@@ -180,14 +194,15 @@ def _ensure_bootstrap_before_gevent():
         current_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
         env_ok, env_error = _venv_can_import(py, bootstrap_modules)
         if not marker.exists() or marker.read_text() != current_hash or not env_ok:
+            require_write()
             print("Installing/Updating requirements...", flush=True)
-            result = subprocess.run(
+            result = lease.install(
                 [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
             )
             if result.returncode != 0:
                 print("Bootstrap tool upgrade failed.")
                 sys.exit(1)
-            result = subprocess.run(
+            result = lease.install(
                 [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
             )
             if result.returncode != 0:
@@ -198,18 +213,18 @@ def _ensure_bootstrap_before_gevent():
                 print("Virtual environment verification failed:", env_error)
                 print("Recreating virtual environment and retrying once...", flush=True)
                 try:
-                    _recreate_venv(venv_dir)
-                    py = _ensure_venv_with_pip(venv_dir)
+                    _recreate_venv(venv_dir, lease)
+                    py = _ensure_venv_with_pip(venv_dir, lease)
                 except Exception as exc:
                     print("Virtual environment recreation failed:", exc)
                     sys.exit(1)
-                result = subprocess.run(
+                result = lease.install(
                     [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
                 )
                 if result.returncode != 0:
                     print("Bootstrap tool upgrade failed.")
                     sys.exit(1)
-                result = subprocess.run(
+                result = lease.install(
                     [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
                 )
                 if result.returncode != 0:

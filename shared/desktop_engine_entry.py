@@ -116,8 +116,28 @@ def desktop_readiness_payload(runtime: RuntimeConfig) -> dict:
 def run_desktop_engine(args: argparse.Namespace) -> None:
     from shared.runtime_updates import runtime_tool_session
 
-    with runtime_tool_session():
-        _run_desktop_engine(args)
+    _tool_wait_state(False)
+    try:
+        with runtime_tool_session(on_wait=_tool_wait_state):
+            _run_desktop_engine(args)
+    finally:
+        _tool_wait_state(False)
+
+
+def _tool_wait_state(waiting: bool) -> None:
+    """Tell the shell when a source engine is waiting for a tool installation."""
+    path = get_config_dir() / "desktop-engine-startup.json"
+    if waiting:
+        from shared.atomic_file import publish
+
+        payload = json.dumps({"pid": os.getpid(), "waiting_for_tools": True}).encode("utf-8")
+        publish(path, lambda handle: handle.write(payload))
+    else:
+        try:
+            if json.loads(path.read_text())["pid"] == os.getpid():
+                path.unlink(missing_ok=True)
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
 
 
 def _run_desktop_engine(args: argparse.Namespace) -> None:

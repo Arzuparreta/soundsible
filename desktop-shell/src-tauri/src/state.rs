@@ -45,6 +45,40 @@ pub fn load_runtime_state() -> Option<EngineRuntimeState> {
     serde_json::from_str(&raw).ok()
 }
 
+#[derive(Deserialize)]
+struct EngineStartupState {
+    pid: u32,
+    waiting_for_tools: bool,
+}
+
+fn startup_waiting(raw: Option<&str>, pid: u32) -> bool {
+    raw.and_then(|raw| serde_json::from_str::<EngineStartupState>(raw).ok())
+        .is_some_and(|state| state.pid == pid && state.waiting_for_tools)
+}
+
+pub fn engine_waiting_for_tools(pid: u32) -> bool {
+    let raw = std::fs::read_to_string(config_dir().join("desktop-engine-startup.json")).ok();
+    startup_waiting(raw.as_deref(), pid)
+}
+
+#[cfg(test)]
+mod tool_wait_tests {
+    use super::*;
+
+    #[test]
+    fn only_the_spawned_child_can_pause_startup() {
+        let raw = r#"{"pid":42,"waiting_for_tools":true}"#;
+        assert!(startup_waiting(Some(raw), 42));
+        assert!(!startup_waiting(Some(raw), 43));
+        assert!(!startup_waiting(
+            Some(r#"{"pid":42,"waiting_for_tools":false}"#),
+            42
+        ));
+        assert!(!startup_waiting(None, 42));
+        assert!(!startup_waiting(Some("partial"), 42));
+    }
+}
+
 pub fn read_owner_token() -> Result<String, String> {
     let runtime = load_runtime_state().ok_or_else(|| "Engine is not running.".to_string())?;
     let token_path = runtime

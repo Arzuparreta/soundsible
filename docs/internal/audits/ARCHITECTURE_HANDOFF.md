@@ -212,8 +212,12 @@ new files, alongside the old core in memory. `curl-cffi`, a compiled extension,
 was upgraded the same way.
 
 Fix: `shared.runtime_updates.runtime_tool_session()` surrounds engine startup
-and execution. Source daemon and desktop engines hold a shared POSIX file lease
-in the interpreter prefix for their lifetime. Only a daemon with the exclusive
+and execution. Source daemon and desktop engines hold a shared native file
+lease for their lifetime (flock on POSIX, LockFileEx on Windows). Its file is
+beside the interpreter prefix, so recreating that environment cannot replace
+the lock inode. Bootstrap holds the same read lease and must upgrade it before
+creating, repairing or reinstalling dependencies; a running engine refuses
+that mutation. Only a daemon with the exclusive
 lease can update; another engine skips the update and joins the readers. Readers
 wait for an installation already in progress before importing the API. Frozen
 engines use their own bundled tools. Without file locking or access to the lease,
@@ -224,11 +228,20 @@ commands or engines from older releases.
 importing `shared.api`. It refuses an update once either selected module is
 loaded. Pip uses the engine's own interpreter: download wheels into a temporary
 folder with a 120-second deadline, then install offline without a kill deadline.
-Both subprocesses inherit the exclusive lease, so it survives the parent's exit
-until pip finishes. There is no promise that pip itself is transactional against
+Both subprocesses inherit the lease descriptor/handle; POSIX flock ownership
+survives the parent's exit until pip finishes. Ordinary SIGINT/SIGTERM shutdown
+is deferred through installation, whose subprocess has its own terminal group. There is no promise that pip itself is transactional against
 external termination, disk failure or power loss. Tests exercise the real daemon
-dispatch with only dependency bootstrap and external pip/API effects replaced,
-and real process contention for the shared/exclusive leases.
+dispatch including bootstrap, replacing only external pip/API effects, and real
+process contention for the shared/exclusive leases. Fresh-process tests isolate
+HOME, Windows profile and XDG paths before any runtime import, and precreate
+all runtime destinations. Optional lease/storage failures skip and log updates.
+
+While the source desktop waits for another installation, a PID-scoped startup
+marker pauses its shell's readiness budget; that budget resumes after the lease
+is available. A child that exits during startup becomes an error immediately.
+The native Windows source suite runs in Desktop Build. Rust timing and startup
+marker tests also run independently of the platform webview dependencies.
 
 Where it does not run, on purpose: the desktop engine (a packaged build
 bundles its tools, where `sys.executable -m pip` was the engine binary itself;

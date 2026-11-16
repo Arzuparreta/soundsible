@@ -32,3 +32,18 @@ def test_run_bootstraps_when_music_dir_provided(tmp_path, monkeypatch):
     assert run(["--bootstrap", str(music)]) == 0
     payload = json.loads((get_config_dir() / "config.json").read_text())
     assert payload["provider"] == "local"
+
+
+def test_tool_wait_marker_names_only_the_waiting_process():
+    import os
+
+    from shared.desktop_engine_entry import _tool_wait_state
+
+    path = get_config_dir() / "desktop-engine-startup.json"
+    _tool_wait_state(True)
+    assert json.loads(path.read_text()) == {"pid": os.getpid(), "waiting_for_tools": True}
+    _tool_wait_state(False)
+    assert not path.exists()
+    path.write_text(json.dumps({"pid": os.getpid() + 1, "waiting_for_tools": True}))
+    _tool_wait_state(False)
+    assert path.exists()  # Another process owns its own startup indication.

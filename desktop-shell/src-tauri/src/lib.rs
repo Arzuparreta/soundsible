@@ -1,3 +1,4 @@
+mod startup;
 mod client;
 mod desktop;
 mod engine;

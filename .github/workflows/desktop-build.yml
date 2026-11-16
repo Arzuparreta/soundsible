@@ -167,6 +167,11 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt pywinauto==0.6.9
 
+      - name: Exercise source environment leases and bootstrap ordering
+        env:
+          PYTHONPATH: .
+        run: pytest tests/test_runtime_updates.py -q
+
       - name: Validate ARM64 cryptography runtime
         if: matrix.arch == 'arm64'
         run: python -c "from cryptography.hazmat.bindings._rust import openssl"
