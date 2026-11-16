@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from 'solid-js';
+import { Index, Show, type JSX } from 'solid-js';
 import { artistDestination, albumDestination, navigateMusic, performerNames, type MusicMetadata } from '../lib/musicNavigation';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import styles from './MusicLinks.module.css';
@@ -20,9 +20,11 @@ export function MusicLink(props: { path: string; class?: string; label?: string;
 export function ArtistLinks(props: { music: MusicMetadata; class?: string; fallback?: JSX.Element }) {
   return <span class={props.class}><Show when={props.music.linkable !== false && performerNames(props.music).length}
     fallback={props.fallback ?? props.music.artist}>
-    <For each={performerNames(props.music)}>{(name, index) => <>
-      {index() > 0 ? ', ' : ''}<MusicLink path={artistDestination(props.music, name)}>{name}</MusicLink>
-    </>}</For>
+    {/* By position, not by name: a list row is reused for the next track
+        (CollectionRows), and its links should change text, not be rebuilt. */}
+    <Index each={performerNames(props.music)}>{(name, index) => <>
+      {index > 0 ? ', ' : ''}<MusicLink path={artistDestination(props.music, name())}>{name()}</MusicLink>
+    </>}</Index>
   </Show></span>;
 }
 

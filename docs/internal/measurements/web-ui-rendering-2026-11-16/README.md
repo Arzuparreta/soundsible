@@ -129,3 +129,44 @@ Script time falls by 55–70% on every song list and the longest task at 6×
 goes from 288–341 ms to 125–148 ms. It is not enough on its own: at 6× half
 the frames are still shown without their rows, and layout and paint now take
 a larger share because more rows get mounted in the same time. That is P2.
+
+## Step 5: rows that are reused, not rebuilt (P2, A1)
+
+`step5-collection-rows.json`, against `step4-saved-index.json`. A CPU profile
+of step 4 (`PROFILE=<dir>` on the bench) showed no single hot function: the
+script time was spread over building and tearing down row subtrees
+(`cloneNode`, `insertBefore`, `remove`, Solid's `cleanNode`, listeners,
+memos). `CollectionRows` keeps the row a slot already has and gives it the
+next track.
+
+| Surface | CPU | Complete / expected | Partial / dropped | Display gap p50 / p95 / max, ms | Longest task, ms | Script / layout / paint, ms | Busy: main / compositor / GPU / display, ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| songs (before) | 1× | 199/200 | 1/0 | 16.7 / 17.5 / 23.2 | 8.7 | 321.7 / 276.5 / 349.1 | 1328 / 240.3 / 1455.5 / 69.8 |
+| songs (after) | 1× | 201/208 | 5/2 | 16.7 / 16.9 / 23.1 | 17.1 | 195.9 / 200.6 / 325.2 | 1066.6 / 205.1 / 1148 / 54.2 |
+| songs (before) | 6× | 149/294 | 145/0 | 10.8 / 18.6 / 100 | 124.5 | 1122.2 / 814 / 606.1 | 3471.7 / 101.9 / 539.2 / 52.8 |
+| songs (after) | 6× | 194/311 | 117/0 | 12.7 / 16.7 / 33.2 | 49.4 | 739.9 / 674.3 / 838.6 | 3279.4 / 117 / 869.2 / 46 |
+| favourites (before) | 1× | 200/200 | 0/0 | 16.7 / 19 / 22.2 | 9.8 | 306.8 / 271.6 / 347.8 | 1283.4 / 218.3 / 1527.9 / 64.6 |
+| favourites (after) | 1× | 195/199 | 3/1 | 16.7 / 21.8 / 27.4 | 6.4 | 179.5 / 143 / 282.7 | 881 / 199.7 / 1282.9 / 50 |
+| favourites (before) | 6× | 98/236 | 138/0 | 16 / 28.8 / 151.4 | 147.8 | 1198.8 / 724.1 / 640.7 | 3355.9 / 105.9 / 485.3 / 43.9 |
+| favourites (after) | 6× | 107/198 | 91/0 | 17 / 30.6 / 32.5 | 40.1 | 791.6 / 576.5 / 902.1 | 3189.9 / 117.9 / 864.2 / 32.3 |
+| playlist (before) | 1× | 55/59 | 3/1 | 16.6 / 17.8 / 22.8 | 9.2 | 70.7 / 67.9 / 86.4 | 313.1 / 67.9 / 397.9 / 21.2 |
+| playlist (after) | 1× | 55/57 | 1/1 | 16.4 / 18.7 / 23.4 | 6.6 | 51.2 / 56.1 / 82.2 | 269.7 / 57.3 / 354.7 / 13.7 |
+| playlist (before) | 6× | 55/97 | 42/0 | 15.9 / 17.2 / 42.8 | 126.9 | 292.6 / 209.1 / 213.6 | 995.7 / 42.7 / 193.7 / 19.9 |
+| playlist (after) | 6× | 53/75 | 22/0 | 15.7 / 22.8 / 32.6 | 49.5 | 163.7 / 182.7 / 187.7 | 762.1 / 31.4 / 164 / 11.7 |
+
+At 6× the longest task falls from 125–148 ms to 40–50 ms and the longest gap
+between two shown frames from 100–151 ms to 33 ms: the list no longer stalls.
+Script time falls by a third to a half.
+
+Two things were measured on the way and are worth knowing:
+
+- Reusing a slot but moving its node to keep document order gave no gain
+  (script 969 ms, layout 1,016 ms at 6×): a moved node is restyled and laid
+  out again from scratch. Slots therefore stay where they are in the document
+  while the list moves and are put back in list order when it stops.
+- What remains at 6× is no longer script. Per frame the browser recalculates
+  style for about 6 elements per reused row at roughly 0.25 ms per element
+  under 6× throttling (one pass of 8–14 ms), and records paint for the rows
+  that changed. About a third of the frames are still partial at 6×. The
+  per-element style cost is the next thing to look at: 72 of the bundle's
+  2,161 selectors are tested against every element, which does not explain it.

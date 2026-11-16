@@ -66,6 +66,10 @@ const idle = process.env.INPUT === 'none';
 const repeats = Number(process.env.REPEATS ?? 3);
 const [width, height] = (process.env.SIZE ?? '1366x768').split('x').map(Number);
 const tag = process.env.TAG ?? 'run';
+// PROFILE=<dir> samples the main thread's JavaScript during each burst and
+// builds the bundle unminified, so the functions keep their names. The numbers
+// of a profiled run are not comparable with a normal one.
+const profileDir = process.env.PROFILE;
 for (const name of surfaces) if (!SURFACES[name]) throw new Error(`Unknown surface ${name}; known: ${Object.keys(SURFACES).join(', ')}`);
 
 // A production bundle, built outside the tree: `ui_web/dist` belongs to the
@@ -74,7 +78,7 @@ const work = mkdtempSync(join(tmpdir(), 'soundsible-bench-'));
 const dist = process.env.DIST ?? join(work, 'dist');
 if (!process.env.DIST) {
   console.error('Building the production bundle…');
-  execFileSync('npx', ['vite', 'build', '--outDir', dist, '--emptyOutDir', '--logLevel', 'error'], { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] });
+  execFileSync('npx', ['vite', 'build', '--outDir', dist, '--emptyOutDir', '--logLevel', 'error', ...(profileDir ? ['--minify', 'false'] : [])], { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] });
 }
 const server = await startServer(dist);
 
@@ -98,6 +102,20 @@ async function open() {
   });
   const page = await context.newPage();
   return { context, page };
+}
+
+/** Self time per function of a CPU profile, heaviest first, as text. */
+function selfTime(profile, top = 60) {
+  const byId = new Map(profile.nodes.map((node) => [node.id, node]));
+  const micros = new Map();
+  profile.samples.forEach((id, at) => {
+    const frame = byId.get(id).callFrame;
+    const key = `${frame.functionName || '(anonymous)'}  ${frame.url.split('/').pop()}:${frame.lineNumber + 1}`;
+    micros.set(key, (micros.get(key) ?? 0) + (profile.timeDeltas[at] ?? 0));
+  });
+  const total = [...micros.values()].reduce((sum, value) => sum + value, 0);
+  return [...micros].sort((a, b) => b[1] - a[1]).slice(0, top)
+    .map(([key, value]) => `${(value / 1000).toFixed(1).padStart(8)} ms ${(100 * value / total).toFixed(1).padStart(5)}%  ${key}`).join('\n') + '\n';
 }
 
 async function measure(name, rate) {
@@ -135,6 +153,11 @@ async function measure(name, rate) {
       document.addEventListener('scroll', () => { window.__benchLastScroll = performance.now(); }, { capture: true, passive: true });
     });
     await browser.startTracing(page, { categories: CATEGORIES });
+    if (profileDir) {
+      await session.send('Profiler.enable');
+      await session.send('Profiler.setSamplingInterval', { interval: 200 });
+      await session.send('Profiler.start');
+    }
     // The mark lands in the trace, which ties the page's clock to the trace's.
     const started = await page.evaluate(() => { performance.mark('bench-start'); return performance.now(); });
     const sends = [];
@@ -152,6 +175,13 @@ async function measure(name, rate) {
     const now = await page.evaluate(() => performance.now());
     const SETTLE_MS = 100;
     const ended = idle || !lastScroll ? now : Math.min(now, lastScroll + SETTLE_MS);
+    if (profileDir) {
+      const { profile } = await session.send('Profiler.stop');
+      mkdirSync(profileDir, { recursive: true });
+      const base = join(profileDir, `${tag}-${name}-${rate}x${playing ? '-playing' : ''}`);
+      writeFileSync(`${base}.cpuprofile`, JSON.stringify(profile));
+      writeFileSync(`${base}.self-time.txt`, selfTime(profile));
+    }
     const trace = JSON.parse((await browser.stopTracing()).toString());
     await session.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     await Promise.race([Promise.all(sends), sleep(5000)]);

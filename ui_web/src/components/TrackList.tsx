@@ -1,10 +1,9 @@
-import { createRowHeight } from '../lib/rowHeight';
 import { libraryTrackMusic } from '../lib/musicNavigation';
-import { createEffect, For, Show, on, type JSX } from 'solid-js';
+import { Show, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { createVirtualizer } from '@tanstack/solid-virtual';
 import { actions, isPlayingTrack } from '../stores';
 import SongRow from './SongRow';
+import { CollectionRows } from './CollectionView';
 import { openTrackMenu, type TrackMenuContext } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
@@ -54,21 +53,6 @@ export default function TrackList(props: {
       ev,
     );
 
-  const rowH = createRowHeight();
-
-  const virtualizer = createVirtualizer({
-    get count() {
-      return props.tracks.length;
-    },
-    getScrollElement: () => scrollRef ?? null,
-    estimateSize: () => rowH(),
-    overscan: 10,
-  });
-
-  // `estimateSize` is only consulted when the virtualizer measures, so a new
-  // row height has to ask for a re-measure explicitly.
-  createEffect(on(rowH, () => virtualizer.measure(), { defer: true }));
-
   return (
     <div
       ref={(element) => {
@@ -87,54 +71,26 @@ export default function TrackList(props: {
           when={props.tracks.length > 0}
           fallback={props.empty ?? <EmptyState>{tr('trackList.defaultEmpty')}</EmptyState>}
         >
-          <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
-            <For each={virtualizer.getVirtualItems()}>
-              {(vi) => {
-                // The row's content must be *read* reactively, not captured.
-                // The virtualizer reconciles its items by index, so a slot that
-                // stays on screen keeps the exact same `{index, start, size}` —
-                // and therefore the same row component — when the list behind it
-                // changes. Reading `props.tracks[vi.index]` once froze whatever
-                // was there at creation: a finished download prepended a track
-                // to the library and every visible row kept rendering the old
-                // one until the view was remounted. As an accessor, the row
-                // follows the list instead, and a shrinking list (a deleted
-                // track) empties its slot rather than rendering a hole.
-                const track = () => props.tracks[vi.index] as Track | undefined;
-                return (
-                  <Show when={track()}>
-                    {(t) => (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          height: `${vi.size}px`,
-                          transform: `translateY(${vi.start}px)`,
-                        }}
-                      >
-                        <SongRow
-                          track={t()}
-                          favouritesKnown={props.context?.kind === 'favourites'}
-                          cover={trackCoverUrl(t(), 'thumb')}
-                          favouritable={!isPodcastTrack(t())}
-                          active={isPlayingTrack(t())}
-                          onPlay={() =>
-                            props.onPlay
-                              ? props.onPlay(props.tracks, vi.index)
-                              : actions.playFrom(props.tracks, vi.index, { context: props.context })
-                          }
-                          music={libraryTrackMusic(track()!)}
-                          onMenu={openMenu}
-                        />
-                      </div>
-                    )}
-                  </Show>
-                );
-              }}
-            </For>
-          </div>
+          {/* The slot outlives the track it shows (see CollectionRows), so
+              everything a row needs is read through the accessors. */}
+          <CollectionRows items={props.tracks} scrollElement={() => scrollRef ?? null}>
+            {(track, index) => (
+              <SongRow
+                track={track()}
+                favouritesKnown={props.context?.kind === 'favourites'}
+                cover={trackCoverUrl(track(), 'thumb')}
+                favouritable={!isPodcastTrack(track())}
+                active={isPlayingTrack(track())}
+                onPlay={() =>
+                  props.onPlay
+                    ? props.onPlay(props.tracks, index())
+                    : actions.playFrom(props.tracks, index(), { context: props.context })
+                }
+                music={libraryTrackMusic(track())}
+                onMenu={openMenu}
+              />
+            )}
+          </CollectionRows>
         </Show>
       </Show>
     </div>

@@ -79,7 +79,9 @@ async function rowUnder(page: Page, x: number, y: number): Promise<string | null
 async function openLibrary(page: Page) {
   await mockEngine(page);
   await page.goto('/player/#/library?view=songs');
-  await expect(row(page, 1)).toBeVisible();
+  // The newest song is the first row; the oldest may be below a short window,
+  // where the list does not render it.
+  await expect(row(page, 12)).toBeVisible();
 }
 
 test('an action chosen in the song menu never reaches the list underneath', async ({ page, isMobile }) => {

@@ -5,16 +5,15 @@ import { libraryTrackMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openArtistMenu } from './artistActions';
-import { createEffect, For, on, Show } from 'solid-js';
-import { createRowHeight } from '../lib/rowHeight';
+import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { createVirtualizer } from '@tanstack/solid-virtual';
 import { actions, isPlayingTrack } from '../stores';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import SongRow from './SongRow';
+import { CollectionRows } from './CollectionView';
 import { EmptyState } from './EmptyState';
 import { artistPath } from '../lib/artistRoute';
 import { coverBackground } from '../lib/cover';
@@ -66,7 +65,6 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
 export default function LibrarySearchResults(props: { results: LibrarySearchResult[]; query?: string }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
-  const rowH = createRowHeight();
   const openMenu = (track: Extract<LibrarySearchResult, { kind: 'track' }>['track'], event?: MouseEvent) =>
     openTrackMenu(
       track,
@@ -79,15 +77,18 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       event,
     );
 
-  const virtualizer = createVirtualizer({
-    get count() {
-      return props.results.length;
-    },
-    getScrollElement: () => scrollRef ?? null,
-    estimateSize: () => rowH(),
-    overscan: 10,
+  // The saved albums and artists that match sit above the rows in the same
+  // scrollport; the rows have to know how far down they start.
+  const [margin, setMargin] = createSignal(0);
+  let above: HTMLDivElement | undefined;
+  onMount(() => {
+    const read = () => setMargin(above?.offsetHeight ?? 0);
+    read();
+    if (!above || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(read);
+    observer.observe(above);
+    onCleanup(() => observer.disconnect());
   });
-  createEffect(on(rowH, () => virtualizer.measure(), { defer: true }));
 
   return (
     <div
@@ -99,50 +100,38 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       data-library-scroll
       data-primary-scroll
     >
-      <Show when={props.query}><SavedEntities query={props.query} /></Show>
+      <div ref={above}><Show when={props.query}><SavedEntities query={props.query} /></Show></div>
       <Show when={props.results.length > 0} fallback={<Show when={!props.query || !savedEntities().some(entry => normalizeLibraryQuery(`${entry.name} ${entry.artist ?? ''}`).includes(normalizeLibraryQuery(props.query!)))}><EmptyState>{t('library.noSearchResults')}</EmptyState></Show>}>
-        <div class={styles.canvas} style={{ height: `${virtualizer.getTotalSize()}px` }}>
-          <For each={virtualizer.getVirtualItems()}>
-            {(item) => {
-              const result = () => props.results[item.index];
-              return (
-                <div
-                  class={styles.slot}
-                  style={{ height: `${item.size}px`, transform: `translateY(${item.start}px)` }}
-                >
-                  <Show when={result()?.kind === 'track'}>
-                    <SongRow
-                      track={(result() as Extract<LibrarySearchResult, { kind: 'track' }>).track}
-                      music={libraryTrackMusic((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
-                      // A saved song with no file has no engine-side cover to
-                      // ask for; its thumbnail is the only artwork it has.
-                      cover={trackCoverUrl((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track, 'thumb')}
-                      badge={t('library.resultTrack')}
-                      active={isPlayingTrack((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
-                      // A search result is a song picked on its own, not a
-                      // place in the results: the rest of them do not follow.
-                      onPlay={(track) => actions.playTrack(track)}
-                      onMenu={openMenu}
-                    />
-                  </Show>
-                  <Show when={result()?.kind === 'artist'}>
-                    <ArtistResult
-                      result={result() as Extract<LibrarySearchResult, { kind: 'artist' }>}
-                      onOpen={() =>
-                        navigate(
-                          artistPath(
-                            (result() as Extract<LibrarySearchResult, { kind: 'artist' }>).artist.name,
-                            { view: 'library' },
-                          ),
-                        )
-                      }
-                    />
-                  </Show>
-                </div>
-              );
-            }}
-          </For>
-        </div>
+        <CollectionRows items={props.results} scrollElement={() => scrollRef ?? null} scrollMargin={margin()}>
+          {(result) => {
+            const track = () => (result() as Extract<LibrarySearchResult, { kind: 'track' }>).track;
+            return (
+              <>
+                <Show when={result().kind === 'track'}>
+                  <SongRow
+                    track={track()}
+                    music={libraryTrackMusic(track())}
+                    // A saved song with no file has no engine-side cover to
+                    // ask for; its thumbnail is the only artwork it has.
+                    cover={trackCoverUrl(track(), 'thumb')}
+                    badge={t('library.resultTrack')}
+                    active={isPlayingTrack(track())}
+                    // A search result is a song picked on its own, not a
+                    // place in the results: the rest of them do not follow.
+                    onPlay={(played) => actions.playTrack(played)}
+                    onMenu={openMenu}
+                  />
+                </Show>
+                <Show when={result().kind === 'artist'}>
+                  <ArtistResult
+                    result={result() as Extract<LibrarySearchResult, { kind: 'artist' }>}
+                    onOpen={() => navigate(artistPath((result() as Extract<LibrarySearchResult, { kind: 'artist' }>).artist.name, { view: 'library' }))}
+                  />
+                </Show>
+              </>
+            );
+          }}
+        </CollectionRows>
       </Show>
     </div>
   );
