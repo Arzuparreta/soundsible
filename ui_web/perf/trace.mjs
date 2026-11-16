@@ -55,7 +55,19 @@ export function analyse(events, window) {
   const shown = [...drawn, ...partialFrames].map((event) => event.ts).sort((a, b) => a - b);
   const gaps = shown.slice(1).map((ts, index) => (ts - shown[index]) / 1000).sort((a, b) => a - b);
 
+  // What the whole pipeline spent, not only the page: a compositor animation
+  // costs nothing on the main thread and still keeps three other threads awake.
+  const threadNames = new Map(events.filter((event) => event.name === 'thread_name').map((event) => [`${event.pid}:${event.tid}`, event.args?.name]));
+  const busyBy = (_label, match) => round(union(events.filter((event) => event.name === 'RunTask' && event.ph === 'X' && inWindow(event) && match(event, threadNames.get(`${event.pid}:${event.tid}`)))));
+  const threads_busy_ms = {
+    main: busyBy('main', (event) => `${event.pid}:${event.tid}` === main),
+    compositor: busyBy('compositor', (event, name) => event.pid === pid && name === 'Compositor'),
+    gpu: busyBy('gpu', (_, name) => name === 'CrGpuMain'),
+    display: busyBy('display', (_, name) => name === 'VizCompositorThread'),
+  };
+
   return {
+    threads_busy_ms,
     frames: { presented: all + partial, partial, dropped, expected: all + partial + dropped },
     display_gap_ms: { p50: round(percentile(gaps, 0.5)), p95: round(percentile(gaps, 0.95)), max: round(gaps.at(-1) ?? 0) },
     main_thread_ms: {

@@ -34,7 +34,7 @@ const SURFACES = {
 
 /** The input: one wheel event per 60 Hz frame for 3.2 s, 7,500 px/s. */
 const BURST_MS = 3200, WHEEL_INTERVAL_MS = 16, WHEEL_DELTA = 120;
-const CATEGORIES = ['benchmark', 'cc', 'toplevel', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.frame', '__metadata'];
+const CATEGORIES = ['benchmark', 'cc', 'toplevel', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.frame', 'blink.user_timing', '__metadata'];
 
 const list = (name, fallback) => (process.env[name] ?? fallback).split(',').map((value) => value.trim()).filter(Boolean);
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -42,8 +42,8 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 function table(rows, baseline) {
   const key = (row) => `${row.surface}|${row.playing}|${row.cpu_rate}`;
   const before = new Map((baseline ?? []).map((row) => [key(row), row]));
-  const cell = (row) => `${row.frames.presented - row.frames.partial}/${row.frames.expected} | ${row.frames.partial}/${row.frames.dropped} | ${row.display_gap_ms.p50} / ${row.display_gap_ms.p95} / ${row.display_gap_ms.max} | ${row.main_thread_ms.longest_task} | ${row.main_thread_ms.script} / ${row.main_thread_ms.layout} / ${row.main_thread_ms.paint}`;
-  const lines = ['| Surface | CPU | Complete / expected | Partial / dropped | Display gap p50 / p95 / max, ms | Longest task, ms | Script / layout / paint, ms |', '| --- | --- | ---: | ---: | ---: | ---: | ---: |'];
+  const cell = (row) => `${row.frames.presented - row.frames.partial}/${row.frames.expected} | ${row.frames.partial}/${row.frames.dropped} | ${row.display_gap_ms.p50} / ${row.display_gap_ms.p95} / ${row.display_gap_ms.max} | ${row.main_thread_ms.longest_task} | ${row.main_thread_ms.script} / ${row.main_thread_ms.layout} / ${row.main_thread_ms.paint} | ${row.threads_busy_ms ? `${row.threads_busy_ms.main} / ${row.threads_busy_ms.compositor} / ${row.threads_busy_ms.gpu} / ${row.threads_busy_ms.display}` : '—'}`;
+  const lines = ['| Surface | CPU | Complete / expected | Partial / dropped | Display gap p50 / p95 / max, ms | Longest task, ms | Script / layout / paint, ms | Busy: main / compositor / GPU / display, ms |', '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |'];
   for (const row of rows) {
     const label = `${row.surface}${row.playing ? ', playing' : ''}`;
     const old = before.get(key(row));
@@ -62,6 +62,7 @@ if (process.argv[2] === '--table') {
 const surfaces = list('SURFACES', Object.keys(SURFACES).join(','));
 const rates = list('RATES', '1,6').map(Number);
 const playing = process.env.PLAYING === '1';
+const idle = process.env.INPUT === 'none';
 const repeats = Number(process.env.REPEATS ?? 3);
 const [width, height] = (process.env.SIZE ?? '1366x768').split('x').map(Number);
 const tag = process.env.TAG ?? 'run';
@@ -125,18 +126,32 @@ async function measure(name, rate) {
     await page.mouse.move(x, y);
     const scrollBefore = await page.evaluate(() => [...document.querySelectorAll('*')].reduce((sum, element) => sum + element.scrollTop, 0));
 
+    // When the list last moved. A short list reaches its end inside the burst,
+    // and what follows is the page at rest, not scrolling: with a track playing
+    // the only thing still changing is the progress bar, a few times a second,
+    // and every frame between two of its updates would count as dropped.
+    await page.evaluate(() => {
+      window.__benchLastScroll = 0;
+      document.addEventListener('scroll', () => { window.__benchLastScroll = performance.now(); }, { capture: true, passive: true });
+    });
     await browser.startTracing(page, { categories: CATEGORIES });
-    const started = await page.evaluate(() => performance.now());
+    // The mark lands in the trace, which ties the page's clock to the trace's.
+    const started = await page.evaluate(() => { performance.mark('bench-start'); return performance.now(); });
     const sends = [];
     const began = Date.now();
-    for (let tick = 0; tick * WHEEL_INTERVAL_MS < BURST_MS; tick += 1) {
+    for (let tick = 0; !idle && tick * WHEEL_INTERVAL_MS < BURST_MS; tick += 1) {
       const due = began + tick * WHEEL_INTERVAL_MS;
       if (due > Date.now()) await sleep(due - Date.now());
       sends.push(session.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY: WHEEL_DELTA }).catch(() => {}));
     }
+    // INPUT=none measures what the page costs while nothing is touched.
+    if (idle) await sleep(BURST_MS);
     // The tail: frames the burst caused that are still being produced.
     await sleep(400);
-    const ended = await page.evaluate(() => performance.now());
+    const lastScroll = await page.evaluate(() => window.__benchLastScroll);
+    const now = await page.evaluate(() => performance.now());
+    const SETTLE_MS = 100;
+    const ended = idle || !lastScroll ? now : Math.min(now, lastScroll + SETTLE_MS);
     const trace = JSON.parse((await browser.stopTracing()).toString());
     await session.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     await Promise.race([Promise.all(sends), sleep(5000)]);
@@ -147,16 +162,14 @@ async function measure(name, rate) {
       mkdirSync(process.env.KEEP_TRACE, { recursive: true });
       writeFileSync(join(process.env.KEEP_TRACE, `${tag}-${name}-${rate}x${playing ? '-playing' : ''}.trace.json`), JSON.stringify(trace));
     }
-    // performance.now() and trace timestamps share a clock once the
-    // navigation start is known.
-    const origin = events.find((event) => event.name === 'navigationStart' && event.args?.data?.isOutermostMainFrame !== false && event.args?.data?.documentLoaderURL?.startsWith(server.origin))?.ts;
-    const first = events.filter((event) => event.ts > 0).reduce((min, event) => Math.min(min, event.ts), Infinity);
-    const last = events.reduce((max, event) => Math.max(max, event.ts ?? 0), 0);
-    const window = origin ? { from: origin + started * 1000, to: origin + ended * 1000 } : { from: first, to: last };
+    const mark = events.find((event) => event.name === 'bench-start')?.ts;
+    if (!mark) throw new Error(`${name}: the trace has no bench-start mark, so its window cannot be placed`);
+    const window = { from: mark, to: mark + (ended - started) * 1000 };
     const scrolled = (await page.evaluate(() => [...document.querySelectorAll('*')].reduce((sum, element) => sum + element.scrollTop, 0))) - scrollBefore;
-    if (scrolled < height) throw new Error(`${name}: the burst scrolled only ${scrolled}px — the wheel did not reach the list`);
-    const page_state = await page.evaluate(() => ({ dom_elements: document.querySelectorAll('*').length, playing: navigator.mediaSession?.playbackState === 'playing' }));
-    return { ...analyse(events, window), scrolled_px: Math.round(scrolled), ...page_state };
+    if (!idle && scrolled < height) throw new Error(`${name}: the burst scrolled only ${scrolled}px — the wheel did not reach the list`);
+    const page_state = await page.evaluate(() => ({ dom_elements: document.querySelectorAll('*').length, playing_at_end: navigator.mediaSession?.playbackState === 'playing' }));
+    if (playing && !page_state.playing_at_end) throw new Error(`${name}: playback stopped during the run`);
+    return { ...analyse(events, window), scrolled_px: Math.round(scrolled), moving_ms: Math.round(ended - started), ...page_state };
   } finally {
     await context.close();
   }
@@ -177,7 +190,11 @@ const results = [];
 try {
   for (const name of surfaces) for (const rate of rates) {
     const runs = [];
-    for (let repeat = 0; repeat < repeats; repeat += 1) runs.push(await measure(name, rate));
+    for (let repeat = 0; repeat < repeats; repeat += 1) {
+      // One retry: playback that stalled or a wheel that missed the list is a
+      // run that measured nothing, not a result.
+      runs.push(await measure(name, rate).catch((error) => { console.error(`retrying: ${error.message}`); return measure(name, rate); }));
+    }
     const row = { surface: name, playing, cpu_rate: rate, ...median(runs), runs: runs.map((run) => ({ presented: run.frames.presented, expected: run.frames.expected, dropped: run.frames.dropped, longest_task: run.main_thread_ms.longest_task })) };
     results.push(row);
     console.error(`${name} ${rate}× ${playing ? 'playing' : 'paused'}: ${row.frames.presented - row.frames.partial}/${row.frames.expected} complete frames, ${row.frames.partial} partial, ${row.frames.dropped} dropped, longest task ${row.main_thread_ms.longest_task} ms`);
@@ -190,7 +207,7 @@ try {
 
 const report = {
   tag, date: new Date().toISOString(), revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim(),
-  fixture: SIZES, viewport: { width, height }, input: { burst_ms: BURST_MS, wheel_interval_ms: WHEEL_INTERVAL_MS, wheel_delta_px: WHEEL_DELTA },
+  fixture: SIZES, viewport: { width, height }, input: { kind: idle ? 'none' : 'wheel', burst_ms: BURST_MS, wheel_interval_ms: WHEEL_INTERVAL_MS, wheel_delta_px: WHEEL_DELTA },
   browser: browser.version(), gpu, software, host: { cpu: cpus()[0]?.model, cores: cpus().length, load_1m: loadavg()[0] }, repeats, results,
 };
 const out = join(root, 'perf', 'results');
