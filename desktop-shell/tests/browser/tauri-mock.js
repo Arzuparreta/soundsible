@@ -10,6 +10,12 @@ export async function mockTauri(page, overrides = {}) {
   await page.addInitScript((responses) => {
     let callbackId = 0;
     const callbacks = new Map();
+    const pending = new Map();
+    window.__releaseCommand = (command, value = null, error = null) => {
+      const next = pending.get(command)?.shift();
+      if (!next) throw new Error(`No deferred ${command}`);
+      if (error) next.reject(error); else next.resolve(value);
+    };
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
       unregisterListener: (_event, id) => callbacks.delete(id),
     };
@@ -28,6 +34,13 @@ export async function mockTauri(page, overrides = {}) {
       async invoke(command, args) {
         (window.__commands ??= []).push({ command, args });
         if (command in responses) {
+          if (responses[command]?.defer) {
+            return new Promise((resolve, reject) => {
+              const queue = pending.get(command) ?? [];
+              queue.push({ resolve, reject });
+              pending.set(command, queue);
+            });
+          }
           // `{ reject: message }` makes the command fail the way Tauri does.
           if (responses[command]?.reject) throw responses[command].reject;
           return responses[command];

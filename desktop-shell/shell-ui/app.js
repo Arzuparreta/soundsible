@@ -31,6 +31,8 @@ const serverAddress = document.getElementById('server-address');
 const connectionError = document.getElementById('connection-error');
 const btnConnect = document.getElementById('btn-connect');
 let connectionMode = 'choose';
+const connections = createScanGeneration();
+const startupConnection = connections.next();
 
 const pathDisplay = document.getElementById('path-display');
 const scanPreview = document.getElementById('scan-preview');
@@ -201,12 +203,15 @@ btnChoose.addEventListener('click', async () => {
 
 btnContinue.addEventListener('click', async () => {
   if (!selectedPath) return;
+  const generation = connections.next();
   showView('loading');
   renderLog(logLoading, [t('engineStarting'), `engine: music_dir=${selectedPath}`]);
   try {
     await applyAutostartPreference();
+    if (!connections.isCurrent(generation)) return;
     await invoke('start_engine_with_path', { path: selectedPath });
   } catch (error) {
+    if (!connections.isCurrent(generation)) return;
     showView('error');
     renderLog(logError, [`error: ${errorText(error)}`]);
     await writeShellLog('error', `engine start failed: ${errorText(error)}`);
@@ -214,11 +219,13 @@ btnContinue.addEventListener('click', async () => {
 });
 
 btnRetry.addEventListener('click', async () => {
+  const generation = connections.next();
   showView('loading');
   try {
     if (connectionMode === 'server') await invoke('connect_server', { address: serverAddress.value });
     else await invoke('restart_engine');
   } catch (error) {
+    if (!connections.isCurrent(generation)) return;
     showView('error');
     renderLog(logError, [`error: ${errorText(error)}`]);
   }
@@ -228,14 +235,20 @@ btnLogs.addEventListener('click', () => invoke('open_logs'));
 
 listen('engine-status', (event) => applyStatus(event.payload));
 listen('shell-view', (event) => {
+  if (['connection', 'local'].includes(event.payload)) {
+    connections.cancel();
+    btnConnect.disabled = false;
+  }
   if (event.payload === 'connection') showView('connection');
   if (event.payload === 'local') { connectionMode = 'local'; showView('first-run'); }
   if (event.payload === 'pairing') window.shellPairing?.open();
   if (event.payload === 'pairing-unavailable') window.shellPairing?.open({ unavailable: true });
 });
 
-async function resumeReturningUser() {
+async function resumeReturningUser(generation = startupConnection) {
+  if (!connections.isCurrent(generation)) return;
   const status = await invoke('get_engine_status');
+  if (!connections.isCurrent(generation)) return;
   if (status.phase === 'ready') return;
 
   let profile;
@@ -245,10 +258,11 @@ async function resumeReturningUser() {
     return;
   }
 
+  if (!connections.isCurrent(generation)) return;
   connectionMode = profile.mode ?? 'local';
   if (profile.server) serverAddress.value = profile.server;
   if (connectionMode === 'server') {
-    await connectServer(true);
+    await connectServer(true, generation);
     return;
   }
   if (connectionMode === 'choose') { showView('connection'); return; }
@@ -272,13 +286,16 @@ async function resumeReturningUser() {
   try {
     await invoke('start_configured_engine');
   } catch (error) {
+    if (!connections.isCurrent(generation)) return;
     showView('error');
     renderLog(logError, [`error: ${errorText(error)}`]);
   }
 }
 
-async function connectServer(restoring = false) {
+async function connectServer(restoring = false, inheritedGeneration = null) {
+  if (inheritedGeneration !== null && !connections.isCurrent(inheritedGeneration)) return;
   if (btnConnect.disabled) return;
+  const generation = inheritedGeneration ?? connections.next();
   btnConnect.disabled = true;
   connectionError.classList.add('hidden');
   connectionMode = 'server';
@@ -287,26 +304,38 @@ async function connectServer(restoring = false) {
       try {
         await invoke('set_autostart', { enabled: document.getElementById('chk-client-autostart').checked });
       } catch {
+        if (!connections.isCurrent(generation)) return;
         // As in applyAutostartPreference: a desktop that refuses autostart
         // must not stop the connection. The checkboxes go back to what is
         // really set.
         await syncAutostartCheckbox();
       }
     }
+    if (!connections.isCurrent(generation)) return;
     await invoke('connect_server', { address: serverAddress.value });
   } catch (error) {
+    if (!connections.isCurrent(generation)) return;
     showView('connection');
     connectionError.textContent = errorText(error);
     connectionError.classList.remove('hidden');
-  } finally { btnConnect.disabled = false; }
+  } finally {
+    if (connections.isCurrent(generation)) btnConnect.disabled = false;
+  }
 }
 
 document.getElementById('server-form').addEventListener('submit', event => { event.preventDefault(); void connectServer(); });
-document.getElementById('btn-local').addEventListener('click', () => { connectionMode = 'local'; showView('first-run'); });
+document.getElementById('btn-local').addEventListener('click', () => {
+  connections.cancel();
+  btnConnect.disabled = false;
+  connectionMode = 'local';
+  showView('first-run');
+  void invoke('cancel_server_connection').catch(error =>
+    writeShellLog('error', `server cancellation failed: ${errorText(error)}`));
+});
 document.getElementById('btn-change-error').addEventListener('click', () => invoke('change_connection'));
 
 invoke('get_engine_status')
-  .then(applyStatus)
+  .then(status => { if (connections.isCurrent(startupConnection)) return applyStatus(status); })
   .then(syncAutostartCheckbox)
-  .then(resumeReturningUser)
+  .then(() => resumeReturningUser(startupConnection))
   .catch((error) => writeShellLog('error', `shell initialization failed: ${errorText(error)}`));

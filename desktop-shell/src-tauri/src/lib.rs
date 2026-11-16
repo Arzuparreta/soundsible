@@ -412,6 +412,14 @@ async fn connect_server(app: AppHandle, address: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn cancel_server_connection(app: AppHandle) {
+    client::cancel_pending_connections();
+    // If the probe committed just before this IPC arrived, local setup still
+    // wins: close that remote player without starting a local engine.
+    desktop::close_player(&app);
+}
+
+#[tauri::command]
 fn change_connection(app: AppHandle) -> Result<(), String> {
     client::cancel_pending_connections();
     if !client::is_server() {
@@ -545,6 +553,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             connect_server,
+            cancel_server_connection,
             change_connection,
             quit_desktop,
             desktop::desktop_handshake,

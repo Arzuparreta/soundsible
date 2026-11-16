@@ -24,6 +24,7 @@
     "autostart:allow-is-enabled",
     "deep-link:default",
     "allow-connect-server",
+    "allow-cancel-server-connection",
     "allow-change-connection",
     "allow-quit-desktop",
     "allow-get-startup-profile",

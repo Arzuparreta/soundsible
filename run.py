@@ -111,10 +111,15 @@ def _running_in_project_venv(venv_dir: Path) -> bool:
 
 
 def _recreate_venv(venv_dir: Path, lease) -> None:
+    # Resolve the base interpreter while the active venv still exists. Its own
+    # executable (notably Windows' copied python.exe) disappears with the venv.
+    base_python = Path(getattr(sys, "_base_executable", sys.executable)).resolve(strict=True)
+    if base_python.is_relative_to(venv_dir.resolve()):
+        raise RuntimeError("Cannot recreate the active virtualenv: no external base interpreter")
     if venv_dir.exists():
         shutil.rmtree(venv_dir, ignore_errors=True)
     print("Creating virtual environment...", flush=True)
-    lease.install([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+    lease.install([str(base_python), "-m", "venv", str(venv_dir)], check=True)
 
 
 def _ensure_venv_with_pip(venv_dir: Path, lease) -> Path:

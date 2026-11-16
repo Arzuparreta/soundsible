@@ -263,7 +263,16 @@ also released before native navigation, showing, hiding and construction.
 Server probes have a separate connection generation. Returning to the chooser,
 stopping, starting locally or selecting another server invalidates an older
 probe. A completion checks again after its await and in its main-thread commit,
-before preferences, pending links or windows can be affected.
+before preferences, pending links or windows can be affected. The shell has its
+own intent generation across awaited autostart, startup-profile and connection
+IPCs. Choosing local setup invalidates these continuations and explicitly cancels
+a backend probe before it can replace that choice. Screenshots and recordings:
+[connection cancellation](architecture-delivery-images/README.md).
+
+Bootstrap recreation resolves the external base interpreter before removing
+the old environment. The actual repair is exercised from inside a disposable,
+package-free virtualenv under the exclusive lease; it must recreate the Python
+executable and pip without trying to execute the just-deleted interpreter.
 Output is drained as byte lines with tolerant decoding, and child Python pipes
 are explicitly UTF-8. Non-UTF-8 legacy logging cannot close a startup pipe.
 During boot the existing status panel receives the last six child lines, making

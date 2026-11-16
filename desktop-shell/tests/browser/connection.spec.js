@@ -40,3 +40,41 @@ test('a desktop that refuses autostart still connects, and the box says so', asy
   await expect(autostart).not.toBeChecked();
   await expect(page.locator('#connection-error')).toBeHidden();
 });
+
+test('selecting local cancels a server continuation waiting for autostart', async ({ page }) => {
+  await mockTauri(page, { get_startup_profile: choose, set_autostart: { defer: true } });
+  await page.goto('/');
+  await page.getByLabel('Server address').fill('https://music.example');
+  await page.getByRole('button', { name: 'Connect to server', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__commands.some(c => c.command === 'set_autostart'))).toBe(true);
+  await page.getByRole('button', { name: 'Use this computer as server' }).click();
+  await page.evaluate(() => window.__releaseCommand('set_autostart'));
+  await expect(page.getByRole('button', { name: 'Choose folder…' })).toBeVisible();
+  const calls = await page.evaluate(() => window.__commands);
+  expect(calls.some(c => c.command === 'cancel_server_connection')).toBe(true);
+  expect(calls.some(c => c.command === 'connect_server')).toBe(false);
+});
+
+test('a late remote error cannot replace the selected local setup', async ({ page }) => {
+  await mockTauri(page, { get_startup_profile: choose, connect_server: { defer: true } });
+  await page.goto('/');
+  await page.getByLabel('Server address').fill('https://music.example');
+  await page.getByRole('button', { name: 'Connect to server', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__commands.some(c => c.command === 'connect_server'))).toBe(true);
+  await page.getByRole('button', { name: 'Use this computer as server' }).click();
+  await page.evaluate(() => window.__releaseCommand('connect_server', null, 'Old server failed'));
+  await expect(page.getByRole('button', { name: 'Choose folder…' })).toBeVisible();
+  await expect(page.locator('#connection-error')).toBeHidden();
+});
+
+test('a remembered-server profile arriving after local selection cannot reconnect', async ({ page }) => {
+  await mockTauri(page, { get_startup_profile: { defer: true } });
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => window.__commands.some(c => c.command === 'get_startup_profile'))).toBe(true);
+  await page.getByRole('button', { name: 'Use this computer as server' }).click();
+  await page.evaluate(() => window.__releaseCommand('get_startup_profile', {
+    mode: 'server', server: 'https://music.example', returning_user: true,
+  }));
+  await expect(page.getByRole('button', { name: 'Choose folder…' })).toBeVisible();
+  expect(await page.evaluate(() => window.__commands.some(c => c.command === 'connect_server'))).toBe(false);
+});

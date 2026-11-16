@@ -604,3 +604,37 @@ def test_windows_repeated_shared_reads_never_unlock_the_loaded_environment(monke
     adapter.flock(file, adapter.LOCK_EX | adapter.LOCK_NB)
     assert events == ["lock", "unlock", "lock"]
     assert adapter._locked[42] == adapter.LOCK_EX
+
+
+def test_bootstrap_recreates_its_own_disposable_virtualenv_with_the_base_interpreter(tmp_path):
+    result = _fresh(
+        """
+import ast, os, shutil, subprocess, sys
+from pathlib import Path
+root = Path(os.environ['SOUNDSIBLE_DATA_DIR']) / 'repair'
+subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(root)], check=True)
+python = root / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+code = '''
+import ast, shutil, subprocess, sys
+from pathlib import Path
+from shared.runtime_updates import bootstrap_tool_session
+root = Path(sys.prefix)
+source = ast.parse(Path('run.py').read_text())
+function = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == '_recreate_venv')
+namespace = dict(globals())
+exec(compile(ast.Module(body=[function], type_ignores=[]), 'run.py', 'exec'), namespace)
+with bootstrap_tool_session(root) as lease:
+    lease.require_write()
+    namespace['_recreate_venv'](root, lease)
+assert (root / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')).exists()
+print('recreated')
+'''
+repair = subprocess.run([str(python), '-c', code], capture_output=True, text=True, timeout=90)
+assert repair.returncode == 0, repair.stderr
+assert repair.stdout.strip().endswith('recreated')
+subprocess.run([str(python), '-c', 'import pip'], check=True)
+print('active-environment-repaired')
+""",
+        tmp_path,
+    )
+    assert result == 'active-environment-repaired'
