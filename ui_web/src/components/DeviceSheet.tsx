@@ -8,6 +8,7 @@ import type { Track } from '../types/music';
 import styles from './DeviceSheet.module.css';
 import { EmptyState } from './EmptyState';
 import { SkeletonRows } from './Skeleton';
+import Button from './Button';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { remotePlayRequest } from '../lib/remotePlayback';
 
@@ -29,21 +30,51 @@ function deviceIcon(type?: string): JSX.Element {
   );
 }
 
+/** One read of the device list. A failed read is its own state: an empty list
+ * would say "no other devices" about devices nobody managed to ask for. */
+function createDeviceList(select: (devices: Device[]) => Device[]) {
+  const [devs, setDevs] = createSignal<Device[]>([]);
+  const [loading, setLoading] = createSignal(true);
+  const [failed, setFailed] = createSignal(false);
+  const load = async () => {
+    setLoading(true);
+    setFailed(false);
+    try {
+      const d = await api.listDevices();
+      setDevs(select(d.devices ?? []));
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+  onMount(load);
+  return { devs, loading, failed, load };
+}
+
+function DeviceListState(props: { list: ReturnType<typeof createDeviceList>; empty: string; children: JSX.Element }) {
+  return (
+    <Show when={!props.list.loading()} fallback={<SkeletonRows count={3} compact />}>
+      <Show
+        when={!props.list.failed()}
+        fallback={
+          <EmptyState compact tone="danger">
+            {t('common.loadFailed')} <Button variant="secondary" onClick={() => void props.list.load()}>{t('common.retry')}</Button>
+          </EmptyState>
+        }
+      >
+        <Show when={props.list.devs().length > 0} fallback={<EmptyState compact>{props.empty}</EmptyState>}>
+          {props.children}
+        </Show>
+      </Show>
+    </Show>
+  );
+}
+
 /** Pick a device to resolve and play this element on. */
 export function openPlayOnDevice(track: Track): void {
   openOverlay((close) => {
-    const [devs, setDevs] = createSignal<Device[]>([]);
-    const [loading, setLoading] = createSignal(true);
-    onMount(async () => {
-      try {
-        const d = await api.listDevices();
-        setDevs(others(d.devices ?? []));
-      } catch {
-        /* leave empty */
-      } finally {
-        setLoading(false);
-      }
-    });
+    const list = createDeviceList(others);
     const play = async (d: Device) => {
       close();
       const h = toast.loading(t('deviceSheet.sendingTo', { device: d.device_name ?? t('deviceSheet.fallbackDevice') }));
@@ -59,9 +90,8 @@ export function openPlayOnDevice(track: Track): void {
         <header class={styles.head}>
           <span class={styles.title}>{t('deviceSheet.title')}</span>
         </header>
-        <Show when={!loading()} fallback={<SkeletonRows count={3} compact />}>
-          <Show when={devs().length > 0} fallback={<EmptyState compact>{t('deviceSheet.emptyOthers')}</EmptyState>}>
-            <For each={devs()}>
+        <DeviceListState list={list} empty={t('deviceSheet.emptyOthers')}>
+            <For each={list.devs()}>
               {(d) => {
                 const tap = createResponsiveTap({ onTap: () => void play(d) });
                 return (
@@ -75,8 +105,7 @@ export function openPlayOnDevice(track: Track): void {
                 );
               }}
             </For>
-          </Show>
-        </Show>
+        </DeviceListState>
       </div>
     );
   });
@@ -84,19 +113,7 @@ export function openPlayOnDevice(track: Track): void {
 
 /** Settings panel: list devices with transport controls for each. */
 export function DevicesPanel() {
-  const [devs, setDevs] = createSignal<Device[]>([]);
-  const [loading, setLoading] = createSignal(true);
-  const refresh = async () => {
-    try {
-      const d = await api.listDevices();
-      setDevs(d.devices ?? []);
-    } catch {
-      /* leave */
-    } finally {
-      setLoading(false);
-    }
-  };
-  onMount(refresh);
+  const list = createDeviceList((devices) => devices);
 
   const cmd = async (d: Device, command: RemoteCommand) => {
     try {
@@ -107,9 +124,8 @@ export function DevicesPanel() {
   };
 
   return (
-    <Show when={!loading()} fallback={<SkeletonRows count={3} compact />}>
-      <Show when={devs().length > 0} fallback={<EmptyState compact>{t('deviceSheet.empty')}</EmptyState>}>
-        <For each={devs()}>
+    <DeviceListState list={list} empty={t('deviceSheet.empty')}>
+        <For each={list.devs()}>
           {(d) => (
             <div class={styles.deviceRow}>
               <span class={styles.icon}>{deviceIcon(d.device_type)}</span>
@@ -138,7 +154,6 @@ export function DevicesPanel() {
             </div>
           )}
         </For>
-      </Show>
-    </Show>
+    </DeviceListState>
   );
 }

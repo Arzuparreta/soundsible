@@ -28,7 +28,14 @@
   align-items: flex-start;
   gap: var(--browse-card-gap, var(--space-lg));
   overflow-x: auto;
-  padding: var(--space-sm) 0;
+  /* `overflow-x: auto` makes the other axis `auto` as well, so anything past
+     the padding box becomes a vertical scroll range. The options button and
+     its touch target hang 10px below the card; the padding has to cover that
+     at every interface size or the rail scrolls a pixel or two and shows a
+     vertical scrollbar where scrollbars are classic. */
+  padding: var(--space-sm) 0 max(var(--space-sm), 10px);
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
 }
 .expanded {
   display: grid;

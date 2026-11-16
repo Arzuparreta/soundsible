@@ -119,14 +119,14 @@ IDs: **P** performance, **A** code architecture, **U** UX and design system,
 | A2 | After the full player opens once it stays mounted, and every mobile panel stays mounted while inert; their whole-library sorting and projections keep recomputing while hidden. | Read | Open |
 | A3 | Each accepted collection replaces the whole artwork-metadata dictionary signal ([media.ts:38](../../../ui_web/src/lib/media.ts#L38)), so every `coverUrl` reader becomes eligible to recompute. | Read | Open |
 | A4 | "The catalog projection goes stale after a collection change." | **Refuted.** The reviewer's probe stubbed a snapshot without `library_revision`. The real snapshot carries it ([shared/collection.py:551](../../../shared/collection.py#L551)) and the server keys its catalog on the same revision ([catalog.py:1890](../../../shared/api/routes/catalog.py#L1890)). The catalog (artists, genres, years) derives from files, which bump that revision. | Closed: not a defect |
-| U1 | Row menus: Enter opens the popover at x0,y0 with focus left behind it, because placement depends on the presence of a `MouseEvent` ([contextMenu.tsx:30](../../../ui_web/src/lib/contextMenu.tsx#L30)). A pointer-opened menu is clamped while its entrance transform scales it to 0.96, so at 1366×768 the final box ends 17.6 px below the viewport and "Delete from library" is clipped. An open menu survives browser Back. | Observed and measured | Open: fix first |
+| U1 | Row menus: Enter opens the popover at x0,y0 with focus left behind it, because placement depends on the presence of a `MouseEvent` ([contextMenu.tsx:30](../../../ui_web/src/lib/contextMenu.tsx#L30)). A pointer-opened menu is clamped while its entrance transform scales it to 0.96, so at 1366×768 the final box ends 17.6 px below the viewport and "Delete from library" is clipped. An open menu survives browser Back. | Observed and measured | **Closed (step 1).** `openContextMenu` anchors a keyboard click to its control and moves focus to the first `menuitem`; arrows, Home/End, Tab and Escape work and focus returns to the opener. `placePopover` clamps from `offsetWidth`/`offsetHeight`, and the popover scrolls inside itself when taller than the window. The popover closes on `popstate`; action sheets close on `hashchange` (`closeOnNavigation` in `openOverlay`). Not done: Shift+F10 still opens the centred dialog (it calls `onMenu` without an event), and the sheet and the popover are still two engines — that merge belongs to step 8. |
 | U2 | Density is incomplete. Main lists follow Compact/Normal/Large, but the player browser keeps 36 px artwork and a 40 px search field at all three sizes, player controls stay at 32–36 px, and YouTube result rows are fixed at 60 px. | Measured | Open |
 | U3 | Rows inside the player hide the overflow button and rely on long-press, because `menuOnHold` is tied to `compact` ([SongRow.tsx:117](../../../ui_web/src/components/SongRow.tsx#L117)). | Read and observed | Open |
 | U4 | Opening an owned album from Library highlights Search/Discover in navigation. This is deliberate ([primaryNavigation.tsx:110](../../../ui_web/src/components/primaryNavigation.tsx#L110): "Artist and album pages are Search's, wherever the link that opened them was"). The UX review argues it loses the user's place. | Read and observed | Decision needed: keep or follow origin |
-| U5 | Contrast below the WCAG 4.5:1 normal-text minimum: dark tertiary text `#6a6a72` on `#0c0c0e` is 3.65:1; white on danger `#ff453a` is 3.41:1; some light-theme text uses `--accent` (2.49:1) instead of `--accent-ink`. | Measured | Open |
-| U6 | Loading and failure states: phone skeleton rows order text → artwork → trailing slot while loaded rows order text → overflow → artwork; skeleton cards use different minimum widths and gaps from the real grid; a failed device fetch in `DeviceSheet` renders as "no other devices". | Read and observed | Open |
+| U5 | Contrast below the WCAG 4.5:1 normal-text minimum: dark tertiary text `#6a6a72` on `#0c0c0e` is 3.65:1; white on danger `#ff453a` is 3.41:1; some light-theme text uses `--accent` (2.49:1) instead of `--accent-ink`. | Measured | **Closed (step 1).** Dark `--ink-tertiary` is `#888890` (5.56:1 on `--bg-base`, 4.61:1 on `--bg-hover`). New `--ink-on-danger` replaces the hard-coded white on `--danger` fills (5.7:1 dark; the slate and forest themes had 1.8:1). Light theme `--danger` is `#c9271d` (5.1:1 as text on the base, 5.5:1 under white). The four `color: var(--accent)` text sites use `--accent-ink`. `Live.module.css` `.heroArt` keeps `--accent`: it colours a decorative glyph, not text. |
+| U6 | Loading and failure states: phone skeleton rows order text → artwork → trailing slot while loaded rows order text → overflow → artwork; skeleton cards use different minimum widths and gaps from the real grid; a failed device fetch in `DeviceSheet` renders as "no other devices". | Read and observed | **Partly closed (step 1):** `DeviceSheet` and `DevicesPanel` share `createDeviceList`, which renders a failed read as `common.loadFailed` with a Retry button. Skeleton order and skeleton card metrics remain open for step 8. |
 | U7 | No enforcement against recipe drift: 10 row recipes, 9 card families, the same grid formula declared in 7 files, 348 raw `<button>` sites against 33 uses of `Button`, no Stylelint/ESLint design rule, one `toHaveScreenshot()` assertion in the whole browser suite. | Measured and read | Open |
-| U8 | The saved-albums/artists rails show scrollbars on classic-scrollbar platforms (Windows, including the Tauri app; Linux). `.rail` sets `overflow-x: auto` ([SavedEntities.module.css:26](../../../ui_web/src/components/SavedEntities.module.css#L26), repeated by [app.css:229](../../../ui_web/src/styles/app.css#L229)), which per spec turns `overflow-y` into `auto`. The `…` button and its `::before` touch target overhang the card by 10 px against 8 px (Compact) or 9 px (Normal) of padding, so the rail scrolls 1–2 px vertically. Reproduced in Chromium: `scrollHeight` 220 vs `clientHeight` 218, 10 px scrollbar. CI cannot see it because Playwright launches Chromium with `--hide-scrollbars`. Unlike the other rails, this one does not hide its horizontal scrollbar either. | Measured | Open |
+| U8 | The saved-albums/artists rails show scrollbars on classic-scrollbar platforms (Windows, including the Tauri app; Linux). `.rail` sets `overflow-x: auto` ([SavedEntities.module.css:26](../../../ui_web/src/components/SavedEntities.module.css#L26), repeated by [app.css:229](../../../ui_web/src/styles/app.css#L229)), which per spec turns `overflow-y` into `auto`. The `…` button and its `::before` touch target overhang the card by 10 px against 8 px (Compact) or 9 px (Normal) of padding, so the rail scrolls 1–2 px vertically. Reproduced in Chromium: `scrollHeight` 220 vs `clientHeight` 218, 10 px scrollbar. CI cannot see it because Playwright launches Chromium with `--hide-scrollbars`. Unlike the other rails, this one does not hide its horizontal scrollbar either. | Measured | **Closed (step 1).** `.rail` bottom padding is `max(var(--space-sm), 10px)`, so `scrollHeight` equals `clientHeight` at every interface size (asserted in `saved-entities.spec.ts`), and the rail hides its horizontal scrollbar like the other rails. |
 | X1 | Non-passive `touchmove` listeners on surfaces that contain scrolling lists ([PlayerSurface.tsx:363](../../../ui_web/src/components/PlayerSurface.tsx#L363), [overlay.tsx:280](../../../ui_web/src/lib/overlay.tsx#L280)) make touch scrolling there wait for the main thread. | Read; not measured | Open: trace on touch |
 | X2 | All four Playwright profiles run with `reducedMotion: 'reduce'` ([playwright.config.ts:37](../../../ui_web/playwright.config.ts#L37)), there is no Firefox profile, no rendering-performance gate, and Linux WebKit is not an iPhone. | Read | Open |
 | X3 | Android declares `minSdkVersion = 24` ([variables.gradle:2](../../../android/variables.gradle#L2)) but requires WebView 120 ([capacitor.config.json:7](../../../ui_web/capacitor.config.json#L7)); Chromium 120 dropped Android 7. Without `server.errorPath`, Capacitor still loads the UI on an older WebView. | Read and sourced | Open |
@@ -196,6 +196,44 @@ Revisit the runtime (bundled Chromium on desktop, or a native list for one
 surface) only if a bounded, cheap-row web implementation still misses frame
 deadlines on target hardware with trace-identified costs removed. Compare it
 against a feature-complete prototype, not a text-only demo.
+
+## How to continue
+
+Work goes one migration step per pull request, in the order above. A fresh
+session should:
+
+1. Read the status table. The first step with an `Open` item is the next one.
+2. Branch from `origin/main` as `fix/web-ui-stepN-…` or `perf/web-ui-stepN-…`.
+3. Follow `AGENTS.md` for the browser suite, before/after images
+   (`docs/internal/measurements/web-ui-stepN-<date>/`), the impact label and
+   the CI gate, then update the status table in the same pull request.
+
+Two things that cost time in step 1:
+
+- **Payload budget.** `ui_build` holds the authenticated initial payload to
+  215,316 bytes gzip and `main` was 95 bytes under it. Step 1 moved the Live
+  broadcast bridge, the Live client and WebRTC out of the initial payload
+  (`lib/communityGate.ts`; the shell imports `CommunityBridge` only once Live
+  is in use), which left it at 210,910. Measure before opening a pull request:
+  build an exported copy (`git archive HEAD ui_web shared/version.py branding
+  docs/internal/performance`), symlink `node_modules`, `npm run build` there
+  and run `node scripts/check-payload.mjs`. Never build inside `ui_web/`.
+- **Stale dev server.** Restart the Vite server on 4173 before a full browser
+  run. After edits or a `git stash` under a running server, specs that import
+  app modules by URL (`dj-refinement-audit.spec.ts`) get a second module
+  instance and fail on every profile.
+
+| Step | Pull request | State |
+| --- | --- | --- |
+| 1 Functional fixes (U1, U5, U6 `DeviceSheet`, U8) | `fix/web-ui-step1-functional` | Done |
+| 2 Rendering harness | — | Next |
+| 3 P5 investigation | — | |
+| 4 P1 | — | |
+| 5 P2 + A1 | — | |
+| 6 P3 | — | |
+| 7 P4 + A2 | — | |
+| 8 Design system (U2, U3, U6, U7; U4 decision) | — | |
+| 9 P6, X1–X3 | — | |
 
 ## Evidence kept outside the repository
 

@@ -51,6 +51,9 @@ test('save artist and album, reload, browse, remove and undo without changing so
   const saved = page.getByRole('region', { name: 'Álbumes guardados', exact: true });
   await expect(saved.getByRole('link', { name: 'In Rainbows', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Artistas guardados' }).getByRole('link', { name: 'Radiohead', exact: true })).toBeVisible();
+  // The options button hangs below its card. Past the rail's padding it becomes
+  // a vertical scroll range, and a scrollbar wherever scrollbars are classic.
+  expect(await saved.locator('[data-horizontal-scroll]').evaluate((rail) => rail.scrollHeight - rail.clientHeight)).toBe(0);
   await page.reload();
   await expect(saved.getByRole('link', { name: 'In Rainbows', exact: true })).toBeVisible();
   await saved.getByRole('link', { name: 'Ver todos: Álbumes guardados', exact: true }).click();
@@ -58,7 +61,8 @@ test('save artist and album, reload, browse, remove and undo without changing so
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).include('section[aria-label="Álbumes guardados"]').analyze()).violations).toEqual([]);
   await saved.getByRole('button', { name: 'Opciones: In Rainbows', exact: true }).click();
-  const remove = page.getByRole('button', { name: 'Quitar de guardados', exact: true });
+  // A button in the phone's sheet, a menu item in the desktop popover.
+  const remove = page.locator('button').filter({ hasText: /^Quitar de guardados/ });
   await expect(remove.locator('mask')).toHaveCount(1);
   expect(await remove.evaluate((button) => {
     const probe = button.appendChild(document.createElement('span'));
@@ -90,7 +94,7 @@ test('small viewport keeps the collection usable and can leave it after removing
   const box = await saved.boundingBox();
   expect(box!.y + box!.height).toBeLessThanOrEqual(568);
   await saved.getByRole('button', { name: 'Opciones: Radiohead', exact: true }).click();
-  await page.getByRole('button', { name: 'Quitar de guardados', exact: true }).click();
+  await page.locator('button').filter({ hasText: /^Quitar de guardados/ }).click();
   await expect(saved.getByRole('link')).toHaveCount(0);
   await page.getByRole('link', { name: /Volver a Biblioteca/ }).click();
   await expect(page.getByRole('region', { name: 'Tu biblioteca', exact: true })).toBeVisible();

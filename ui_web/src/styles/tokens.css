@@ -20,7 +20,9 @@
   /* ── Ink ── */
   --ink-primary: #f2f2f5;
   --ink-secondary: #a0a0a8;
-  --ink-tertiary: #6a6a72;
+  /* 4.6:1 on --bg-hover, the lightest surface it sits on, and 5.6:1 on
+     --bg-base. The earlier #6a6a72 was 3.65:1 on the base. */
+  --ink-tertiary: #888890;
   --ink-on-accent: #1a0e02; /* text on orange fills */
 
   /* ── Accent + brand ── */
@@ -48,6 +50,9 @@
   --download-ink: var(--success);
   --warning: #e0a72b;
   --danger: #ff453a;
+  /* Text on a --danger fill. White is 3.4:1 on this red and 1.8:1 on the
+     pale red of the slate and forest themes; near-black is 5.7:1 and 10.7:1. */
+  --ink-on-danger: #1f0503;
 
   /* ── Typography ── */
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -305,6 +310,10 @@
      burnt down until it is readable as text. */
   --accent-ink: #9c4a08;
   --accent-ink-hover: #7f3b05;
+  /* The dark theme's red is 3.2:1 as text on this page. Deepened to 5.1:1 on
+     the base, which also carries white text at 5.5:1. */
+  --danger: #c9271d;
+  --ink-on-danger: #ffffff;
 
   --ambient-accent: rgba(249, 122, 18, 0.045);
   --ambient-highlight: rgba(255, 255, 255, 0.6);

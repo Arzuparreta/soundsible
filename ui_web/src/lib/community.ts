@@ -7,6 +7,7 @@ import {
   replaceCommunityPublisherTrack,
   type CommunityPeerHandle,
 } from './communityWebrtc';
+import { ACTIVE_HOST_KEY, setCommunityInUse } from './communityGate';
 
 export type LiveSessionStatus = 'waiting' | 'live' | 'reconnecting';
 export type LiveTransport = 'playing' | 'paused';
@@ -107,7 +108,8 @@ export interface CommunityConfig {
 
 export { LIVE_HUB_URL, liveRoomLink } from './liveLinks';
 
-const ACTIVE_HOST_KEY = 'community:active-host:v1';
+// Whoever imports this module is using Live; the shell mounts its bridge.
+setCommunityInUse(true);
 const GUEST_ID_KEY = 'community:guest-id:v1';
 
 const [config, setConfig] = createSignal<CommunityConfig | null>(null);

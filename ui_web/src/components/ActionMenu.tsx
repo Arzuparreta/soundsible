@@ -28,7 +28,7 @@ export interface ActionMenuOptions {
   sections?: ActionMenuSection[];
 }
 
-function ActionButton(props: { action: MenuAction; close: (afterClose?: () => void) => void; deferSelection?: boolean }) {
+function ActionButton(props: { action: MenuAction; close: (afterClose?: () => void) => void; deferSelection?: boolean; menu?: boolean }) {
   const tap = createResponsiveTap({
     disabled: () => Boolean(props.action.disabled),
     onTap: () => {
@@ -39,6 +39,8 @@ function ActionButton(props: { action: MenuAction; close: (afterClose?: () => vo
   return (
     <button
       type="button"
+      role={props.menu ? 'menuitem' : undefined}
+      tabindex={props.menu ? -1 : undefined}
       class={styles.item}
       classList={{ [styles.danger]: props.action.danger }}
       disabled={props.action.disabled}
@@ -57,7 +59,9 @@ function ActionButton(props: { action: MenuAction; close: (afterClose?: () => vo
 
 /** The menu body (header + action buttons). Shared by the bottom-sheet
  * (`openActionMenu`) and the cursor-anchored popover (`openContextMenu`). */
-export function ActionMenuList(props: { opts: ActionMenuOptions; close: (afterClose?: () => void) => void; deferSelection?: boolean }) {
+/** `menu` gives the actions menu-item semantics: the popover is a `role="menu"`
+ * that moves focus with the arrow keys, while the sheet is a dialog of buttons. */
+export function ActionMenuList(props: { opts: ActionMenuOptions; close: (afterClose?: () => void) => void; deferSelection?: boolean; menu?: boolean }) {
   return (
     <div class={styles.menu}>
       <Show when={props.opts.title}>
@@ -71,14 +75,14 @@ export function ActionMenuList(props: { opts: ActionMenuOptions; close: (afterCl
       <Show
         when={props.opts.sections}
         fallback={
-          <For each={props.opts.actions}>{(a) => <ActionButton action={a} close={props.close} deferSelection={props.deferSelection} />}</For>
+          <For each={props.opts.actions}>{(a) => <ActionButton action={a} close={props.close} deferSelection={props.deferSelection} menu={props.menu} />}</For>
         }
       >
         <For each={props.opts.sections}>
           {(section) => (
-            <div class={styles.section}>
+            <div class={styles.section} role={props.menu ? 'group' : undefined} aria-label={props.menu ? section.label : undefined}>
               <span class={styles.sectionLabel}>{section.label}</span>
-              <For each={section.actions}>{(a) => <ActionButton action={a} close={props.close} deferSelection={props.deferSelection} />}</For>
+              <For each={section.actions}>{(a) => <ActionButton action={a} close={props.close} deferSelection={props.deferSelection} menu={props.menu} />}</For>
             </div>
           )}
         </For>
@@ -93,5 +97,5 @@ export function ActionMenuList(props: { opts: ActionMenuOptions; close: (afterCl
  * For a cursor-anchored context menu use `openContextMenu` (lib/contextMenu).
  */
 export function openActionMenu(opts: ActionMenuOptions, history = false): void {
-  openOverlay((close) => <ActionMenuList opts={opts} close={close} deferSelection={history} />, { ariaLabel: opts.title, history });
+  openOverlay((close) => <ActionMenuList opts={opts} close={close} deferSelection={history} />, { ariaLabel: opts.title, history, closeOnNavigation: true });
 }

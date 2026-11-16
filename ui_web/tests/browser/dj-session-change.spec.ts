@@ -100,9 +100,11 @@ test('a NORMAL song menu starts DJ from that song: it comes next, and the curren
   await selected.getByRole('button', { name: /Más opciones/ }).click();
   const menu = page.locator('[role="dialog"], [role="menu"]');
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('button', { name: 'Cambiar la sesión', exact: true })).toHaveCount(0);
-  await expect(menu.getByRole('button', { name: 'Empezar DJ desde la canción actual', exact: true })).toHaveCount(0);
-  await menu.getByRole('button', { name: 'Empezar DJ desde esta canción', exact: true }).click();
+  // A button in the phone's sheet, a menu item in the desktop popover.
+  const action = (name: string) => menu.locator('button').filter({ hasText: new RegExp(`^${name}$`) });
+  await expect(action('Cambiar la sesión')).toHaveCount(0);
+  await expect(action('Empezar DJ desde la canción actual')).toHaveCount(0);
+  await action('Empezar DJ desde esta canción').click();
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
   const route = await showRoute(page);
   await expect(route.locator('[data-drag-row]').first()).toContainText(TRACKS[318].title);

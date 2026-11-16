@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, type RouteSectionProps } from '@solidjs/router';
-import { createEffect, onCleanup } from 'solid-js';
+import { createEffect, createSignal, onCleanup, Show, type Component } from 'solid-js';
 import { rememberTabLocation } from './lib/tabMemory';
 import { registerMusicNavigator } from './lib/musicNavigation';
 import { state } from './stores';
@@ -12,7 +12,7 @@ import { PlayerSurface } from './components/PlayerSurface';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
 import { ScrollHistoryManager } from './lib/scrollHistory';
-import { CommunityBridge } from './components/CommunityBridge';
+import { communityInUse } from './lib/communityGate';
 import styles from './app.module.css';
 
 /**
@@ -26,6 +26,13 @@ export default function Shell(props: RouteSectionProps) {
   onCleanup(registerMusicNavigator(useNavigate()));
   const location = useLocation();
   createEffect(() => rememberTabLocation(location.pathname, location.search));
+  // The broadcast bridge, WebRTC and the Live client are fetched only once
+  // Live is in use (lib/communityGate), not with the first library paint.
+  const [bridge, setBridge] = createSignal<Component>();
+  createEffect(() => {
+    if (!communityInUse() || bridge()) return;
+    void import('./components/CommunityBridge').then((module) => setBridge(() => module.CommunityBridge), () => {});
+  });
   return (
     // The mini-player floats over the routes on touch, so the shell has to say
     // when it is up: that is what lets every scroller reserve room for it
@@ -33,7 +40,7 @@ export default function Shell(props: RouteSectionProps) {
     // or there is not.
     <div class={styles.app} data-mini-player={state.playback.currentTrack ? '' : undefined}>
       <ScrollHistoryManager />
-      <CommunityBridge />
+      <Show when={bridge()} keyed>{(Bridge) => <Bridge />}</Show>
       <Sidebar />
       <main class={styles.content}>
         <AppBar />

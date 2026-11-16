@@ -9,6 +9,11 @@
   z-index: var(--z-popover);
   min-width: 224px;
   max-width: min(280px, calc(100vw - 16px));
+  /* Taller than the window: scroll inside, never run off the bottom edge. */
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-2xs);
   background:
     linear-gradient(180deg, var(--ambient-highlight), transparent 120px),
@@ -19,6 +24,7 @@
   animation: ctx-in var(--dur-short) var(--ease-out);
   transform-origin: top left;
 }
+.popover:focus { outline: none; }
 
 @keyframes ctx-in {
   from {

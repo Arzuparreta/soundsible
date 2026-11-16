@@ -335,7 +335,7 @@
 .referenceCover { flex: 0 0 28px; height: 28px; border-radius: 4px; }
 .referenceName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-caption); }
 .referenceRow small { color: var(--ink-secondary); }
-.referenceMore { font-size: var(--text-caption) !important; color: var(--accent) !important; padding: 0; }
+.referenceMore { font-size: var(--text-caption) !important; color: var(--accent-ink) !important; padding: 0; }
 .referenceSheet { padding: 16px; }
 .referenceSheet button { background: none; border: 0; color: var(--ink-primary); min-width: 40px; min-height: 40px; }
 .routePanel, .routeList { min-width: 0; }
