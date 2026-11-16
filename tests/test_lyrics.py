@@ -75,7 +75,7 @@ def _track() -> Track:
 
 def _fake_api(track):
     return {
-        "get_core": MagicMock(return_value=(MagicMock(), None, None)),
+        "get_library": MagicMock(return_value=MagicMock()),
         "get_track_by_id": lambda lib, track_id: track if track and track_id == track.id else None,
     }
 

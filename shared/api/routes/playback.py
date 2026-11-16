@@ -1,5 +1,5 @@
 """
-Streaming, cover, preview, and playback queue/state routes.
+Streaming, cover, preview, and playback state routes.
 """
 
 import json
@@ -52,17 +52,6 @@ _preview_stream_urls: Memo[ResolvedStream | str] = Memo(
     negative_ttl_sec=PREVIEW_STREAM_NEGATIVE_TTL_SEC,
     maxsize=512,
 )
-
-
-def _queue_snapshot(queue):
-    items = [item.to_dict() for item in queue.get_all()]
-    rev = queue.get_revision()
-    return {
-        "items": items,
-        "tracks": items,
-        "repeat_mode": queue.get_repeat_mode(),
-        "queue_revision": rev,
-    }
 
 
 def _preview_stream_rate_limit(ip: str) -> bool:
@@ -189,7 +178,7 @@ def _get_preview_stream_url_cached(api, video_id: str) -> str:
 
 def _get_api():
     from shared.api import (
-        get_core,
+        get_library,
         get_track_by_id,
         socketio,
         get_downloader,
@@ -202,7 +191,7 @@ def _get_api():
     )
     from shared.playback_state import register_device, get_registered_device, list_registered_devices
     return {
-        "get_core": get_core,
+        "get_library": get_library,
         "get_track_by_id": get_track_by_id,
         "socketio": socketio,
         "get_downloader": get_downloader,
@@ -272,7 +261,7 @@ def list_playback_devices():
 def stream_local_track(track_id):
     started = time.perf_counter()
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     track = api["get_track_by_id"](lib, track_id)
     if not track:
         return jsonify({"error": "Track not found"}), 404
@@ -904,7 +893,7 @@ def preview_cover_redirect(video_id):
 @playback_bp.route("/api/static/cover/<track_id>", methods=["GET"])
 def get_track_cover(track_id):
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     # An id this engine has never heard of used to be a 404 with a JSON body,
     # which is a strange answer to give an <img>. A saved-but-not-downloaded
     # song is exactly that id — it lives in the saved snapshot, not in the
@@ -990,159 +979,6 @@ def get_track_cover(track_id):
         response.headers['Cache-Control'] = 'private, max-age=0, no-cache'
         return response
     return jsonify({"error": "Cover not ready"}), 404
-
-
-@playback_bp.route("/api/playback/queue", methods=["GET"])
-def get_playback_queue():
-    api = _get_api()
-    _, _, queue = api["get_core"]()
-    return jsonify(_queue_snapshot(queue))
-
-
-@playback_bp.route("/api/playback/shuffle", methods=["POST"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def shuffle_playback_queue():
-    api = _get_api()
-    _, _, queue = api["get_core"]()
-    queue.shuffle()
-    return jsonify({"status": "success", "queue_revision": queue.get_revision()})
-
-
-@playback_bp.route("/api/playback/repeat", methods=["POST"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def set_playback_repeat():
-    api = _get_api()
-    _, _, queue = api["get_core"]()
-    data = request.json
-    mode = data.get("mode", "off")
-    queue.set_repeat_mode(mode)
-    return jsonify({"status": "success", "mode": mode, "queue_revision": queue.get_revision()})
-
-
-@playback_bp.route("/api/playback/queue", methods=["POST"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def add_to_playback_queue():
-    api = _get_api()
-    lib, _, queue = api["get_core"]()
-    data = request.json or {}
-    if "track_id" in data:
-        track = api["get_track_by_id"](lib, data["track_id"])
-        if track:
-            queue.add_library_track(track)
-            return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
-        return jsonify({"error": "Track not found"}), 404
-    if "preview" in data:
-        preview = data["preview"]
-        # Podcast preview: enclosure_url present and no video_id
-        enclosure_url = preview.get("enclosure_url")
-        video_id = preview.get("video_id") or preview.get("id")
-        if enclosure_url and not video_id:
-            title = preview.get("title") or "Unknown"
-            artist = preview.get("artist") or ""
-            duration = int(preview.get("duration") or preview.get("duration_sec") or 0)
-            thumbnail = preview.get("thumbnail") or None
-            album = preview.get("album") or None
-            episode_id = preview.get("episode_id") or f"pcast_{preview.get('podcast_feed_id') or 'unknown'}_{preview.get('podcast_episode_guid') or 'unknown'}"
-            queue.add_podcast_preview(
-                episode_id=str(episode_id),
-                title=title,
-                artist=artist,
-                duration=max(0, duration),
-                thumbnail=thumbnail,
-                enclosure_url=str(enclosure_url),
-                podcast_feed_id=preview.get("podcast_feed_id") or None,
-                podcast_episode_guid=preview.get("podcast_episode_guid") or None,
-                podcast_rss_url=preview.get("podcast_rss_url") or None,
-                album=album,
-            )
-            return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
-        if not video_id or not validate_youtube_video_id(str(video_id)):
-            return jsonify({"error": "Invalid or missing video_id"}), 400
-        title = preview.get("title") or "Unknown"
-        artist = preview.get("artist") or ""
-        duration = int(preview.get("duration") or preview.get("duration_sec") or 0)
-        thumbnail = preview.get("thumbnail") or None
-        library_track_id = preview.get("library_track_id") or None
-        album = preview.get("album") or None
-        queue.add_preview(
-            video_id=str(video_id),
-            title=title,
-            artist=artist,
-            duration=max(0, duration),
-            thumbnail=thumbnail,
-            library_track_id=library_track_id,
-            album=album,
-        )
-        return jsonify({"status": "success", "size": queue.size(), "queue_revision": queue.get_revision()})
-    return jsonify({"error": "Missing track_id or preview"}), 400
-
-
-@playback_bp.route("/api/playback/queue/<int:index>", methods=["DELETE"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def remove_from_playback_queue(index):
-    api = _get_api()
-    _, _, queue = api["get_core"]()
-    if queue.remove(index):
-        return jsonify({"status": "success", "queue_revision": queue.get_revision()})
-    return jsonify({"error": "Index out of range"}), 400
-
-
-@playback_bp.route("/api/playback/queue/track/<track_id>", methods=["DELETE"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def remove_track_id_from_playback_queue(track_id):
-    api = _get_api()
-    _, _, queue = api["get_core"]()
-    removed_count = queue.remove_by_id(track_id)
-    if removed_count:
-        return jsonify({"status": "success", "removed_count": removed_count, "queue_revision": queue.get_revision()})
-    return jsonify({"error": "Track not in queue"}), 404
-
-
-@playback_bp.route("/api/playback/queue/move", methods=["POST"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def move_in_playback_queue():
-    api = _get_api()
-    _, _, queue = api["get_core"]()
-    data = request.json
-    from_index = data.get("from_index")
-    to_index = data.get("to_index")
-    if from_index is not None and to_index is not None and queue.move(from_index, to_index):
-        return jsonify({"status": "success", "queue_revision": queue.get_revision()})
-    return jsonify({"error": "Invalid indices"}), 400
-
-
-@playback_bp.route("/api/playback/queue", methods=["DELETE"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def clear_playback_queue():
-    api = _get_api()
-    _, _, queue = api["get_core"]()
-    queue.clear()
-    return jsonify({"status": "success", "queue_revision": queue.get_revision()})
-
-
-@playback_bp.route("/api/playback/next", methods=["GET"])
-def get_next_from_queue():
-    api = _get_api()
-    _, _, queue = api["get_core"]()
-    item = queue.get_next()
-    if item:
-        return jsonify(item.to_dict())
-    return jsonify(None)
-
-
-@playback_bp.route("/api/playback/play", methods=["POST"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def play_track():
-    # Preserve the old endpoint's response. Playback runs on registered devices;
-    # get_core has not supplied a server-side player since the browser port.
-    request.get_json()  # Keep Flask's existing malformed-JSON/content-type errors.
-    return jsonify({"error": "Track not found or engine not ready"}), 404
-
-
-@playback_bp.route("/api/playback/toggle", methods=["POST"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def toggle_playback():
-    return jsonify({"error": "Engine not ready"}), 500
 
 
 @playback_bp.route("/api/playback/state", methods=["GET"])
@@ -1333,7 +1169,7 @@ def playback_handoff():
 
     track_payload = None
     try:
-        lib, _, _ = api["get_core"]()
+        lib = api["get_library"]()
         track = api["get_track_by_id"](lib, target_state.get("track_id"))
         if track:
             track_payload = track.to_dict()
@@ -1485,10 +1321,9 @@ def playback_remote_command():
                 "session": None,
             }
         elif track_id:
-            lib, _, queue = api["get_core"]()
+            lib = api["get_library"]()
             track = api["get_track_by_id"](lib, track_id)
             if track:
-                queue.consume_head_if_id(track_id)
                 target_state = {
                     "track_id": track_id,
                     "track": track.to_dict(),

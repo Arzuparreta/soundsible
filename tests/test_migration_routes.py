@@ -144,7 +144,7 @@ def test_migration_preview_happy_path(tmp_path):
         }
     }
 
-    with patch("shared.api.routes.migration._get_core_lib", return_value=mock_lib):
+    with patch("shared.api.routes.migration._loaded_library", return_value=mock_lib):
         res = client.post(
             "/api/migration/preview",
             json={"format": "spotify_json", "text": json.dumps(export)},
@@ -173,7 +173,7 @@ def test_migration_import_playlist_writes_metadata(tmp_path):
     mock_lib.refresh_if_stale = MagicMock()
     mock_lib._save_metadata = MagicMock()
 
-    with patch("shared.api.routes.migration._get_core_lib", return_value=mock_lib):
+    with patch("shared.api.routes.migration._loaded_library", return_value=mock_lib):
         with patch("shared.api.socketio") as sio:
             res = client.post(
                 "/api/migration/import-playlist",
@@ -205,7 +205,7 @@ def test_migration_import_playlist_logs_batch_id(tmp_path):
 
     bid = "batch-test-uuid"
 
-    with patch("shared.api.routes.migration._get_core_lib", return_value=mock_lib):
+    with patch("shared.api.routes.migration._loaded_library", return_value=mock_lib):
         with patch("shared.api.socketio"):
             res = client.post(
                 "/api/migration/import-playlist",

@@ -62,3 +62,39 @@ def test_switching_it_keeps_the_personalized_feed(client, monkeypatch):
 
     assert client.patch("/api/discovery/settings", json={"autoplay_enabled": False}).status_code == 200
     assert invalidated == [True]
+
+
+def test_two_saves_at_once_keep_both_changes(monkeypatch):
+    import threading
+    from shared import discovery_intelligence
+    from shared.user_context import user_context
+    from tests.conftest import TEST_USER_ID
+
+    def save(patch):
+        with user_context(TEST_USER_ID):
+            save_discovery_settings(patch)
+
+    real_read = discovery_intelligence._read_discovery_settings
+    first_read = threading.Event()
+    release = threading.Event()
+
+    def slow_first_read():
+        settings = real_read()
+        if not first_read.is_set():
+            first_read.set()
+            release.wait(2)
+        return settings
+
+    monkeypatch.setattr(discovery_intelligence, "_read_discovery_settings", slow_first_read)
+    first = threading.Thread(target=save, args=({"dj_mixing": False},))
+    first.start()
+    first_read.wait(2)
+    second = threading.Thread(target=save, args=({"volume_leveling": False},))
+    second.start()
+    release.set()
+    first.join(5)
+    second.join(5)
+
+    settings = real_read()
+    assert settings["dj_mixing"] is False
+    assert settings["volume_leveling"] is False

@@ -116,3 +116,25 @@ def test_the_engine_starts_with_a_wildcard_origin(variable, tmp_path):
     result = subprocess.run([sys.executable, "-c", "import shared.api"], cwd=root, env=env,
                             capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_an_ipv6_origin_is_a_literal_not_a_character_class(monkeypatch):
+    monkeypatch.setenv("SOUNDSIBLE_SOCKET_CORS_ORIGINS", "http://[::1]:4173")
+    check = make_socket_origin_check(socket_origins())
+    assert check("http://[::1]:4173", _environ()) is True
+    assert check("http://:", _environ()) is False
+    assert check("http://[::1]:41730", _environ()) is False
+
+
+def test_rest_cors_accepts_a_configured_ipv6_origin(monkeypatch):
+    from flask import Flask
+    from flask_cors import CORS
+
+    monkeypatch.setenv("SOUNDSIBLE_ALLOWED_ORIGINS", "http://[::1]:4173")
+    app = Flask(__name__)
+    CORS(app, origins=rest_origins())
+    app.add_url_rule("/x", "x", lambda: "ok")
+    allowed = app.test_client().get("/x", headers={"Origin": "http://[::1]:4173"})
+    other = app.test_client().get("/x", headers={"Origin": "http://[::2]:4173"})
+    assert allowed.headers.get("Access-Control-Allow-Origin") == "http://[::1]:4173"
+    assert "Access-Control-Allow-Origin" not in other.headers

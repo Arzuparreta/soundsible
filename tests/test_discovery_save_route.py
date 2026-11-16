@@ -154,7 +154,7 @@ def _mock_api(search_results=None, queue_add_return=None, parse_fn=None):
         "queue_manager_dl": mock_qm,
         "start_downloader_pump": MagicMock(),
         "parse_intake_item": parse_fn or _fake_parse_intake,
-        "get_core": MagicMock(),
+        "get_library": MagicMock(),
         "_mod": MagicMock(),
     }
 
@@ -260,7 +260,7 @@ def test_dj_plan_eventually_places_an_exact_request_and_prefers_it_next(tmp_path
         "bar_seconds": 2,
     }
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (_FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None)
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
@@ -330,9 +330,7 @@ def test_dj_plan_keeps_an_artist_request_until_a_playable_track_fulfils_it(tmp_p
         "bar_seconds": 1.9,
     }
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
@@ -421,7 +419,7 @@ def test_music_plan_returns_server_ordered_playable_radio_items(tmp_path):
         for i in range(1, 9)
     ]
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (_FakeLibrary(metadata), None, None)
+    mock_api["get_library"].return_value = _FakeLibrary(metadata)
     mock_api["_mod"].favourite_library_ids.return_value = []
     mock_api["get_downloader"].return_value.downloader.get_related_videos.return_value = related
 
@@ -814,7 +812,7 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
     mod.favourites_manager = fav
     mod.favourite_library_ids.return_value = ["t1"]
     api = {
-        "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
+        "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
         "_mod": mod,
     }
 
@@ -868,7 +866,7 @@ def test_music_feed_uses_cache_when_fresh(tmp_path):
     mod.favourites_manager.get_all.return_value = []
     mod.favourite_library_ids.return_value = []
     api = {
-        "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
+        "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
         "_mod": mod,
     }
 
@@ -900,7 +898,7 @@ def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
     mod = MagicMock()
     mod.favourite_library_ids.return_value = ["t1"]
     api = {
-        "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
+        "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
         "_mod": mod,
     }
 
@@ -952,9 +950,7 @@ def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
         }],
     }
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     queued: list[str] = []
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
@@ -984,9 +980,7 @@ def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
 def test_dj_plan_v6_ignores_legacy_boundaries_and_walks_explicit_sources(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     related = [{
         "id": "related001", "youtube_id": "related001", "title": "Related", "artist": "Elsewhere",
         "source": "preview", "source_pool": "related", "recommendation_identity": "music:youtube:related001",
@@ -1028,9 +1022,7 @@ def test_dj_plan_v6_keeps_hour_long_recordings_out_of_a_route_of_songs(tmp_path)
     # 563 MB to start it.
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     related = [
         {
             "id": f"song{index:07d}", "youtube_id": f"song{index:07d}", "title": f"Song {index}",
@@ -1067,9 +1059,7 @@ def test_dj_plan_v6_keeps_hour_long_recordings_out_of_a_route_of_songs(tmp_path)
 def test_dj_plan_v6_still_opens_a_source_made_only_of_long_recordings(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
@@ -1092,9 +1082,7 @@ def test_dj_plan_v6_still_opens_a_source_made_only_of_long_recordings(tmp_path):
 def test_dj_plan_v6_chooses_an_opening_from_a_source_when_there_is_no_seed(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
@@ -1132,9 +1120,7 @@ def test_dj_plan_v6_analysis_does_not_select_music_or_steer_the_opening(tmp_path
     """
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     tracks = [
         {"id": key, "track_id": key, "title": key.title(), "artist": f"Artist {key}"}
         for key in ("calm", "middle", "busy", "loud")
@@ -1170,9 +1156,7 @@ def test_dj_plan_v6_analysis_does_not_select_music_or_steer_the_opening(tmp_path
 def test_dj_plan_v6_selects_before_analysis_and_preserves_cold_slots(tmp_path, with_seed):
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     def track(key):
         return {"id": key, "track_id": key, "title": key, "artist": "Artist"}
 
@@ -1238,9 +1222,7 @@ def test_dj_plan_v6_reorders_decoded_audio_and_returns_chained_plans(tmp_path):
 
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     tracks = {key: {"id": key, "track_id": key, "title": key, "artist": "Synthetic"}
               for key in ("seed", "a", "b")}
     paths = {key: tmp_path / f"{key}.wav" for key in tracks}
@@ -1293,9 +1275,7 @@ def test_dj_plan_ignores_the_direction_older_clients_still_send(tmp_path):
     features = {"duration": 180, "bpm": 120, "key": "C", "mode": "major", "confidence": 0.9,
                 "outro_cue": 130, "intro_cue": 8, "bar_seconds": 2, "analysed": True}
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
 
     def plan(extra: dict) -> list[str]:
         with (
@@ -1319,9 +1299,7 @@ def test_dj_plan_ignores_the_direction_older_clients_still_send(tmp_path):
 def test_dj_plan_v6_walks_from_sources_and_applies_exact_exclusions(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     related = [{
         "id": "related001",
         "youtube_id": "related001",
@@ -1366,9 +1344,7 @@ def test_dj_plan_v6_walks_from_sources_and_applies_exact_exclusions(tmp_path):
 def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
@@ -1404,9 +1380,7 @@ def test_dj_place_never_bridges_through_the_requested_or_playing_song_under_anot
     # deleted and moved together.
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     measured = {
         "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
         "wanted": {"duration": 220, "bpm": 130, "key": "C", "mode": "major", "confidence": 0.9, "tempo_confidence": 1, "analysed": True},
@@ -1463,9 +1437,7 @@ _REPAIR_SEED = {"id": "seed", "track_id": "seed", "title": "Seed", "artist": "Ar
 
 def _post_repair(body: dict, related=None):
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related or [], False, False)),
@@ -1538,9 +1510,7 @@ def test_dj_repair_never_decodes_audio_on_the_interaction_path(tmp_path):
     _make_runtime(tmp_path)
     queued: list[str] = []
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
@@ -1630,9 +1600,7 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
         "bar_seconds": 2,
     })
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     pair = {
         "dj_profile": "long_blend",
         "from": {"id": "a", "track_id": "a", "title": "A", "artist": "Artist", "duration": 220},
@@ -1683,7 +1651,7 @@ def test_measured_audio_sections_reach_route_and_refinement_without_client_repla
 
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    api["get_library"].return_value = _FakeLibrary(None)
     refs, paths, analyses = {}, {}, {}
     for key in ("outgoing", "incoming"):
         wav, aac = tmp_path / f"{key}.wav", tmp_path / f"{key}.m4a"
@@ -1764,9 +1732,7 @@ def test_dj_transition_prefers_relative_keys_over_parallel_and_mixed_mode_fifths
     """The same measured plan reaches both web and Android via this endpoint."""
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     common = {"duration": 240, "confidence": .9, "tempo_confidence": 1., "outro_cue": 200,
               "intro_cue": 0, "bar_seconds": 2, "analysed": True}
     measured = {
@@ -1800,9 +1766,7 @@ def test_dj_transition_prefers_relative_keys_over_parallel_and_mixed_mode_fifths
 def test_dj_collection_places_every_occurrence_beyond_the_analysis_window(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     requests = [
         {"track": {"id": f"song-{index % 19}", "title": f"Song {index}", "artist": "Listener"},
          "requested_queue_id": f"request-{index}"}
@@ -1837,9 +1801,7 @@ def test_dj_collection_rejects_ambiguous_occurrence_ids(tmp_path):
 def test_dj_collection_keeps_a_selected_seam_beyond_the_analysis_window(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     route = _repair_route(*(["user"] * 24))
     requests = [
         {"track": {"id": f"wanted-{index}", "title": f"Wanted {index}", "artist": "Listener"},
@@ -1877,9 +1839,7 @@ def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path
     """
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     seed = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
     source = {"id": "house", "label": "Oliver Heldens", "tracks": [
         {"id": "oliver", "track_id": "oliver", "title": "Gecko", "artist": "Oliver Heldens"},
@@ -1911,9 +1871,7 @@ def test_explicit_dj_route_continues_from_confirmed_exploration(tmp_path):
     """
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     heard = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
     source = {"id": "house", "label": "Oliver Heldens", "tracks": [
         {"id": "oliver", "track_id": "oliver", "title": "Gecko", "artist": "Oliver Heldens"},
@@ -1969,9 +1927,7 @@ def test_explicit_dj_bridges_use_sources_and_confirmed_exploration(tmp_path):
 def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
-    mock_api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     rock = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
     house = {"id": "house", "track_id": "house", "title": "Gecko", "artist": "Oliver Heldens"}
     with (
@@ -1993,9 +1949,7 @@ def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):
 def test_dj_empty_result_distinguishes_exhaustion_from_provider_failure(tmp_path, failed):
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     track = {"id": "one", "title": "One", "artist": "Artist"}
     with patch.object(_auto_mode, "_get_api", return_value=api), patch.object(
         _auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], failed, False),
@@ -2017,9 +1971,7 @@ def test_dj_explores_even_before_sources_run_out_and_continues_thirty_routes(tmp
     """
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
 
     def track(number):
         return {"id": f"t{number}", "track_id": f"t{number}", "title": f"Track {number}",
@@ -2081,9 +2033,7 @@ def test_partial_graph_failure_is_not_reported_as_exhaustion(tmp_path):
 def test_impend_seed_cannot_be_its_own_route(tmp_path, warming, exclude):
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     seed = {"id": "FgGtOCKWLwI", "title": "Impend", "artist": "Artist", "source": "preview"}
     with (
         patch.object(_auto_mode, "_get_api", return_value=api),
@@ -2160,9 +2110,7 @@ def test_graph_timeout_does_not_cancel_queued_work(tmp_path):
 def test_heard_relaxation_preserves_last_two_tracks(tmp_path):
     _make_runtime(tmp_path)
     api = _mock_api()
-    api['get_core'].return_value = (
-        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
-    )
+    api['get_library'].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     tracks = [{'id': str(n), 'title': str(n), 'artist': 'Artist'} for n in range(4)]
     with (
         patch.object(_auto_mode, '_get_api', return_value=api),
@@ -2203,7 +2151,7 @@ def test_an_artist_deezer_does_not_know_has_no_top_tracks():
 def test_dj_cohort_is_bounded_identical_for_cold_and_warm_pools_and_reports_coverage(tmp_path, caplog):
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    api["get_library"].return_value = _FakeLibrary(None)
     tracks = [{"id": f"video{i:06d}", "youtube_id": f"video{i:06d}", "source": "preview",
                "title": str(i), "artist": "Artist"} for i in range(40)]
     data = {"session_id": "bounded", "seed": {"id": "seed", "track_id": "seed"},
@@ -2239,7 +2187,7 @@ def test_dj_cohort_is_bounded_identical_for_cold_and_warm_pools_and_reports_cove
 def test_dj_plan_v6_inserts_a_bridge_only_when_every_frozen_candidate_is_measured(tmp_path):
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    api["get_library"].return_value = _FakeLibrary(None)
     tracks = [{"id": key, "track_id": key, "title": key, "artist": "Synthetic"} for key in ("a", "b", "c")]
     data = {"session_id": "bridges", "seed": {"id": "seed", "track_id": "seed"},
             "sources": [{"id": "source", "tracks": tracks}], "limit": 1}
@@ -2281,7 +2229,7 @@ def test_committed_preview_is_analysed_before_refinement_and_serving_ranges_keep
 
     runtime = _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    api["get_library"].return_value = _FakeLibrary(None)
     video = "candidate01"
     source = tmp_path / "source.m4a"
     subprocess.run([ffmpeg_executable(), "-v", "error", "-f", "lavfi", "-i",
@@ -2367,7 +2315,7 @@ def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
 
     _make_runtime(tmp_path)
     api = _mock_api()
-    api["get_core"].return_value = (_FakeLibrary(None), None, None)
+    api["get_library"].return_value = _FakeLibrary(None)
     refs, paths = {}, {}
     for key, tempo in (("outgoing", bpm), ("incoming", 120)):
         wav, aac = tmp_path / f"{key}.wav", tmp_path / f"{key}.m4a"
@@ -2423,7 +2371,7 @@ def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, 
     _make_runtime(tmp_path)
     monkeypatch.setattr(store, '_cache_path', lambda: tmp_path / 'metre.sqlite3')
     api = _mock_api()
-    api['get_core'].return_value = (_FakeLibrary(None), None, None)
+    api['get_library'].return_value = _FakeLibrary(None)
     refs, paths = {}, {}
     for key, size in [('outgoing', out_size), ('incoming', in_size)]:
         samples, _, _ = metric_signal(beats_per_bar=size, subdivision=subdivision, seconds=120, rate=rate)

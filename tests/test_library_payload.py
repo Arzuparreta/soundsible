@@ -79,7 +79,7 @@ def test_endpoint_uses_fresh_direct_snapshot_and_annotations(monkeypatch):
     model = metadata()
     expected = legacy_payload(model)
     lib = SimpleNamespace(metadata=model, refresh_if_stale=lambda: None)
-    monkeypatch.setattr(library, "_get_api", lambda: {"get_core": lambda: (lib, None, None)})
+    monkeypatch.setattr(library, "_get_api", lambda: {"get_library": lambda: lib})
     monkeypatch.setattr(LibraryMetadata, "to_json", lambda *_: pytest.fail("intermediate JSON"))
     monkeypatch.setattr(Track, "to_dict", lambda *_: pytest.fail("recursive track serialization"))
 
@@ -118,7 +118,7 @@ def revision_endpoint(monkeypatch):
 
     lib = SimpleNamespace(metadata=metadata(), refresh_if_stale=lambda: None)
     annotations = {"gain": -2}
-    monkeypatch.setattr(library, "_get_api", lambda: {"get_core": lambda: (lib, None, None)})
+    monkeypatch.setattr(library, "_get_api", lambda: {"get_library": lambda: lib})
 
     def annotate(tracks):
         for track in tracks:

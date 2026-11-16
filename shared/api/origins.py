@@ -45,13 +45,25 @@ def _configured(name: str) -> Optional[list[str]]:
 ANY_ORIGIN = "*"
 
 
+#: An origin written out in full. Its brackets, when it has any, enclose an
+#: IPv6 address; they are not a regular-expression character class.
+_LITERAL_ORIGIN = re.compile(r"^https?://(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(:\d{1,5})?$")
+
+
 def _compile(values: Sequence[str]) -> list[OriginPattern]:
-    return [
-        value if value == ANY_ORIGIN
-        else re.compile(value, re.IGNORECASE) if not _REGEX_HINT_CHARS.isdisjoint(value)
-        else value
-        for value in values
-    ]
+    patterns: list[OriginPattern] = []
+    for value in values:
+        if value == ANY_ORIGIN:
+            patterns.append(value)
+        elif _LITERAL_ORIGIN.match(value):
+            # flask-cors would read `[::1]` as a regex too, so a literal with
+            # brackets goes to both as an escaped, anchored pattern.
+            patterns.append(re.compile(re.escape(value) + r"\Z", re.IGNORECASE) if "[" in value else value)
+        elif not _REGEX_HINT_CHARS.isdisjoint(value):
+            patterns.append(re.compile(value, re.IGNORECASE))
+        else:
+            patterns.append(value)
+    return patterns
 
 
 def rest_origins() -> list[OriginPattern]:

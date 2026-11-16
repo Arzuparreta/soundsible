@@ -109,7 +109,7 @@ def _get_api():
     from shared.user_context import current_user_id
 
     return {
-        "get_core": api_mod.get_core,
+        "get_library": api_mod.get_library,
         "user_id": current_user_id(),
         "get_downloader": api_mod.get_downloader,
         "queue_manager_dl": api_mod.queue_manager_dl,

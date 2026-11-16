@@ -136,7 +136,7 @@ def test_job_upload_api_accepts_empty_destination_library():
     mock_lib.refresh_if_stale = MagicMock()
     payload = (FIXTURES / "spotify_account_data.json").read_bytes()
 
-    with patch("shared.api.routes.migration._get_core_lib", return_value=mock_lib):
+    with patch("shared.api.routes.migration._loaded_library", return_value=mock_lib):
         response = client.post(
             "/api/migration/jobs",
             data={"file": (io.BytesIO(payload), "Playlist1.json")},

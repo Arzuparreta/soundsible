@@ -41,11 +41,11 @@ def search_car_items():
 
 
 def _get_api():
-    from shared.api import get_core, get_track_by_id, get_playback_state, get_scope_from_request
+    from shared.api import get_library, get_track_by_id, get_playback_state, get_scope_from_request
     from shared.api import favourite_library_ids, get_favourites_manager
 
     return {
-        "get_core": get_core,
+        "get_library": get_library,
         "get_track_by_id": get_track_by_id,
         "get_playback_state": get_playback_state,
         "get_scope_from_request": get_scope_from_request,
@@ -118,7 +118,7 @@ def _track_item(track) -> dict:
 
 
 def _load_metadata(api):
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     lib.refresh_if_stale()
     if not lib.metadata:
         lib.sync_library()

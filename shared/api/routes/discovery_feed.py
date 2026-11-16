@@ -411,7 +411,7 @@ def _cached_related_feed_candidates(
 
 def _build_discovery_feed_body(limit: int, *, include_external: bool = True) -> dict:
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     try:
         lib.refresh_if_stale()
     except Exception:

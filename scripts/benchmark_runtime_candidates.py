@@ -171,7 +171,7 @@ def artwork(args):
             expected[str(i)] = item.file.read()
             item.file.close()
         lib = SimpleNamespace(get_cover_url=lambda track: store.path(track.id))
-        api = {'get_core': lambda: (lib, None, None),
+        api = {'get_library': lambda: lib,
                'get_track_by_id': lambda lib, identity: SimpleNamespace(id=identity, cover_source='manual')}
         app = Flask(__name__)
         app.register_blueprint(playback.playback_bp)

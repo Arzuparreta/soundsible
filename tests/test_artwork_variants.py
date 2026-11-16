@@ -227,7 +227,7 @@ def endpoint(tmp_path, monkeypatch):
     Image.new('RGB', (640, 500), 'blue').save(output, 'PNG')
     digest = store.put(output.getvalue())
     store.bind('song', digest, 'manual')
-    api = dict(get_core=lambda: (SimpleNamespace(get_cover_url=lambda _: store.path('song')), None, None),
+    api = dict(get_library=lambda: SimpleNamespace(get_cover_url=lambda _: store.path('song')),
                get_track_by_id=lambda *_: SimpleNamespace(id='song', cover_source='manual'),
                is_safe_path=lambda *a, **k: True, is_trusted_network=lambda _: True, WEB_UI_PATH=str(tmp_path))
     monkeypatch.setattr(shared.artwork, 'artwork_store', lambda: store)

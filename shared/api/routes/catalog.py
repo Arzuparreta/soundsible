@@ -157,7 +157,7 @@ def _get_api():
     from shared.user_context import current_user_id
 
     return {
-        "get_core": api_mod.get_core,
+        "get_library": api_mod.get_library,
         "user_id": current_user_id(),
         "get_downloader": api_mod.get_downloader,
         "queue_manager_dl": api_mod.queue_manager_dl,
@@ -1998,7 +1998,7 @@ def _library_tracks() -> list[Any]:
 
 def _load_library_tracks() -> list[Any]:
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     try:
         lib.refresh_if_stale()
     except Exception:
@@ -2220,7 +2220,7 @@ def catalog_album_reconcile():
     except Exception as exc:
         logger.info('Album reconciliation could not read %s: %s', deezer_id, exc)
         return jsonify({'error': 'The album could not be read'}), 502
-    lib, _, _ = _get_api()['get_core']()
+    lib = _get_api()['get_library']()
     db = instance_db()
     try:
         updated = reconcile_album(lib, profile['tracklist'], db)

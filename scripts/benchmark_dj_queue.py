@@ -72,7 +72,7 @@ def child(args):
         app = Flask(__name__)
         app.register_blueprint(discovery_bp)
         lib = SimpleNamespace(metadata=None)
-        api = {'get_core': lambda: (lib, None, None)}
+        api = {'get_library': lambda: lib}
 
         def item(number):
             row = {'id': f'fixture-{number}', 'track_id': f'fixture-{number}',

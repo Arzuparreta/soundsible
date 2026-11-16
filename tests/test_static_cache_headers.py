@@ -42,7 +42,7 @@ def _cover_response(client, cover_path, *, known=True):
     with patch(
         "shared.api.routes.playback._get_api",
         return_value={
-            "get_core": lambda: (_Lib(), None, None),
+            "get_library": lambda: _Lib(),
             "get_track_by_id": lambda lib, track_id: _Track() if known else None,
             "is_trusted_network": lambda addr: True,
             "is_safe_path": lambda path, is_trusted=False: True,

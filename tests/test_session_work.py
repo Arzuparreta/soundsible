@@ -126,7 +126,7 @@ def _app(monkeypatch):
     app = Flask(__name__)
     app.register_blueprint(discovery_bp)
     monkeypatch.setattr(
-        auto_mode, "_get_api", lambda: {"get_core": lambda: (SimpleNamespace(metadata=None), None, None)}
+        auto_mode, "_get_api", lambda: {"get_library": lambda: SimpleNamespace(metadata=None)}
     )
     return app.test_client(), auto_mode
 

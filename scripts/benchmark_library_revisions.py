@@ -53,7 +53,7 @@ def main():
     route = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(route)
     lib = SimpleNamespace(metadata=None, refresh_if_stale=lambda: None)
-    route._get_api = lambda: {"get_core": lambda: (lib, None, None)}
+    route._get_api = lambda: {"get_library": lambda: lib}
     route.annotate_tracks = lambda tracks: True
     app = Flask(__name__)
     app.register_blueprint(route.library_bp)

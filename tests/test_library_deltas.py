@@ -106,7 +106,7 @@ def endpoint(monkeypatch):
     from shared.api.library_revision import validators
     validators.clear()
     lib = SimpleNamespace(metadata=snapshot(), refresh_if_stale=lambda: None)
-    monkeypatch.setattr(library, '_get_api', lambda: {'get_core': lambda: (lib, None, None)})
+    monkeypatch.setattr(library, '_get_api', lambda: {'get_library': lambda: lib})
     app = Flask(__name__)
     app.register_blueprint(library.library_bp)
     return app.test_client(), lib

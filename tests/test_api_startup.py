@@ -3,7 +3,7 @@
 Two failures this file exists for, both of which shipped and neither of which
 announced itself:
 
-- `start_api` warmed the admin core through `get_core()`, which answers with the
+- `start_api` warmed the admin core through `get_core()` (since removed), which answered with the
   legacy ``(library, playback, queue)`` triple. Reading ``.library`` off a tuple
   raised, one broad ``except`` swallowed it, and everything that had not run yet
   — the folder watcher, the download pump, the lossless and loudness workers,

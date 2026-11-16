@@ -19,8 +19,8 @@ In desktop-engine mode, the base URL is not assumed to be `:5005`. Read the read
 3. If a response includes `warning: "Device appears offline (no active socket)"`, the command was emitted but no browser player is currently connected to that device room.
 4. Deezer is metadata only. Soundsible never plays Deezer audio.
 5. For playable search results outside the library, use YouTube / YouTube Music search through the downloader's yt-dlp path.
-6. The playback queue is not the same as the download queue.
-7. Prefer `/api/agent/play` for "play this now". Prefer `/api/playback/queue` for "add this to the player queue".
+6. Each player keeps its own up-next list; the engine has no playback queue an agent can add to. The download queue only downloads.
+7. Use `/api/agent/play` for "play this now" and `/api/agent/command` (`next`, `previous`, `pause`, `play`, `seek`) to move through what the player has queued.
 
 ## Authentication
 
@@ -82,7 +82,7 @@ Soundsible has three independent concepts:
 | Concept | Purpose | Important endpoint |
 |---|---|---|
 | Library | Persistent downloaded/imported tracks and playlists | `GET /api/library` |
-| Playback queue | In-memory queue consumed by the web player | `GET/POST /api/playback/queue` |
+| Player session | What a device is playing, reported by the device; the web player and Android also report what they have up next (`session.queue`), the iOS app does not yet | `GET /api/playback/state` (read only) |
 | Download queue | Background jobs that download tracks into the library | `POST /api/downloader/queue` |
 
 The active player is normally a browser tab or PWA at `/player/` or `/player/desktop/`. The player registers a device and joins a Socket.IO room:
@@ -340,59 +340,9 @@ start during `queued` or `scanning` returns the same `scan_id`. Scans are
 additive: use the separate purge route when missing source files should be
 removed from the catalog.
 
-## Playback Queue
-
-This is the queue the browser player consumes when the user or agent asks for "next".
-
-Read queue:
-
-```bash
-curl http://localhost:5005/api/playback/queue
-```
-
-Add a library track:
-
-```bash
-curl -X POST http://localhost:5005/api/playback/queue \
-  -H 'Content-Type: application/json' \
-  -d '{"track_id":"<library-track-id>"}'
-```
-
-Add a YouTube preview item:
-
-```bash
-curl -X POST http://localhost:5005/api/playback/queue \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "preview": {
-      "video_id": "dQw4w9WgXcQ",
-      "title": "Example",
-      "artist": "Artist",
-      "duration": 213,
-      "thumbnail": "https://..."
-    }
-  }'
-```
-
-Queue operations:
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/playback/queue` | Queue contents |
-| `POST` | `/api/playback/queue` | Add library track or preview |
-| `DELETE` | `/api/playback/queue/<index>` | Remove by queue index |
-| `DELETE` | `/api/playback/queue/track/<track_id>` | Remove all queue entries with ID |
-| `POST` | `/api/playback/queue/move` | Body `{"from_index":0,"to_index":1}` |
-| `DELETE` | `/api/playback/queue` | Clear queue |
-| `GET` | `/api/playback/next` | Pop next item |
-| `POST` | `/api/playback/repeat` | Body `{"mode":"off"|"all"|"one"|"once"}` |
-| `POST` | `/api/playback/shuffle` | Shuffle current queue |
-
-Important: `/api/playback/next` pops an item. Do not call it just to inspect the queue.
-
 ## Download Queue
 
-This queue downloads audio into the persistent library. It is not the same as playback queue.
+This queue downloads audio into the persistent library. It does not play anything.
 
 Use this endpoint only when the user wants to **download/import music into the library**:
 
@@ -412,7 +362,7 @@ The request body is always an object with an `items` array:
 }
 ```
 
-Do not send a bare item object. Do not send a bare `video_id`. Do not use playback queue `preview` objects here.
+Do not send a bare item object. Do not send a bare `video_id`. Do not send `preview` objects here.
 
 Search YouTube / YouTube Music:
 
@@ -599,7 +549,7 @@ When downloads finish, Soundsible emits `library_updated` and the track appears 
 1. If the user says "download this YouTube link", queue `source_type: "youtube_url"` with `song_str` as the full URL.
 2. If the user says "download Song by Artist", first call `/api/downloader/youtube/search?source=ytmusic`, pick the best result, then queue the resolved URL format.
 3. If search is unavailable or inconclusive, queue plain text with only `song_str` and optional `metadata_evidence`; do not add `source_type`.
-4. Never use Deezer IDs, Spotify URLs, playback queue preview objects, or raw `video_id`-only payloads for `/api/downloader/queue`.
+4. Never use Deezer IDs, Spotify URLs, preview objects, or raw `video_id`-only payloads for `/api/downloader/queue`.
 5. After queueing, call `/api/downloader/start`; queueing alone does not begin processing.
 
 ## Deezer Discovery
@@ -631,7 +581,6 @@ Deezer track IDs are not playable Soundsible track IDs. A Deezer row is a metada
 3. Pick the best result.
 4. Either:
    - play now with `/api/agent/play` using the query, or
-   - add a preview item to `/api/playback/queue`, or
    - add it to `/api/downloader/queue` to download it into the library.
 
 Do not call `/api/agent/play` with `track_id: "deezer_123"` or a raw Deezer numeric ID.
@@ -732,12 +681,9 @@ For "play X on my desktop":
 4. Call `POST /api/agent/play` with `{"query":"X","device_id":"Desktop"}`.
 5. If the response has `warning`, report that the device is offline.
 
-For "add X to the queue":
-
-1. Search local library: `GET /api/library/search?q=X`.
-2. If a good library match exists, `POST /api/playback/queue` with `{"track_id":"..."}`.
-3. If not, search YouTube Music with `/api/downloader/youtube/search`.
-4. Add the chosen result as `{"preview": {...}}`.
+For "add X to the queue": the up-next list belongs to the player, and there is
+no endpoint that adds to it. Offer to play X now (`/api/agent/play`) or to
+download it into the library (`/api/downloader/queue`).
 
 For "seek to 1:15" or "jump to 75 seconds":
 
@@ -784,7 +730,6 @@ Common problems:
 | Seek returns `seek requires position_sec` | Agent sent `seek` without an absolute position | Send `{"command":"seek","position_sec":75}` |
 | Seek returns no playback state | Target device has not reported a current track | Start playback first or target the active device from `/api/devices` |
 | Deezer ID fails | Deezer IDs are metadata only | Resolve by title/artist through YouTube Music |
-| `/api/playback/next` changed queue | It pops the next item | Use `GET /api/playback/queue` to inspect |
 | Download queue rejects raw `video_id` | `/api/downloader/queue` requires `items[].song_str` | Send full YouTube URL in `song_str` plus `video_id` |
 | Download queue rejects `ytmusic_search` with plain text | Explicit YouTube source types require resolved YouTube URLs | Search first, then queue the selected result URL; or omit `source_type` for plain text fallback |
 | Downloaded song not visible | Download job not finished or library not synced | Check `/api/downloader/queue/status`, then `/api/library/sync` if needed |
@@ -816,12 +761,6 @@ POST /api/library/favourites/toggle
 POST /api/library/playlists
 POST /api/library/playlists/<name>/tracks
 
-GET    /api/playback/queue
-POST   /api/playback/queue
-DELETE /api/playback/queue/<index>
-DELETE /api/playback/queue/track/<track_id>
-POST   /api/playback/queue/move
-DELETE /api/playback/queue
 GET    /api/playback/state
 PUT    /api/playback/state
 POST   /api/playback/handoff

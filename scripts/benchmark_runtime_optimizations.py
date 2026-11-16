@@ -143,7 +143,7 @@ def run(args, groups, output):
                         configure_runtime(runtime)
                         set_output_dir(runtime.music_dir)
                         reset_connections()
-                        with variant(groups, label), patch.object(route, '_get_api', return_value={'get_core': lambda: (manager, None, None)}):
+                        with variant(groups, label), patch.object(route, '_get_api', return_value={'get_library': lambda: manager}):
                             headers = {}
                             if case in ('revalidate', 'delta'):
                                 first = client.get('/api/library?delta=1' if case == 'delta' else '/api/library')

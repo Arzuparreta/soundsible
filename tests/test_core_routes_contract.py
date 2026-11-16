@@ -45,36 +45,6 @@ class _FakeLibrary:
         return True
 
 
-class _FakeQueueItem:
-    def __init__(self, track_id: str):
-        self._track_id = track_id
-
-    def to_dict(self):
-        return {"track_id": self._track_id, "title": "T"}
-
-
-class _FakeQueue:
-    def __init__(self, items=None):
-        self._items = items or []
-        self._rev = 1
-        self._repeat = "off"
-
-    def get_all(self):
-        return self._items
-
-    def get_revision(self):
-        return self._rev
-
-    def get_repeat_mode(self):
-        return self._repeat
-
-    def set_repeat_mode(self, mode):
-        self._repeat = mode
-
-    def shuffle(self):
-        pass
-
-
 def _make_runtime(tmp_path):
     runtime = RuntimeConfig(
         host="127.0.0.1",
@@ -115,14 +85,11 @@ def _owner_token(db: DatabaseManager) -> str:
 def _patch_library_api(monkeypatch, metadata):
     fake_lib = _FakeLibrary(metadata)
 
-    def fake_get_core():
-        return fake_lib, None, None
-
     def fake_get_track_by_id(lib, track_id):
         return {t.id: t for t in (metadata.tracks or [])}.get(track_id)
 
     monkeypatch.setattr("shared.api.routes.library._get_api", lambda: {
-        "get_core": fake_get_core,
+        "get_library": lambda: fake_lib,
         "get_track_by_id": fake_get_track_by_id,
         "_mark_track_metadata_updated": lambda: None,
         "_ensure_lib_metadata": lambda lib: metadata,
@@ -209,7 +176,7 @@ def _favourites_client(monkeypatch, metadata, fav, library_ids=None):
     fake_lib = _FakeLibrary(metadata)
     emit = MagicMock()
     monkeypatch.setattr("shared.api.routes.library._get_api", lambda: {
-        "get_core": lambda: (fake_lib, None, None),
+        "get_library": lambda: fake_lib,
         "get_track_by_id": lambda lib, tid: {t.id: t for t in metadata.tracks}.get(tid),
         "socketio": MagicMock(),
         "favourites_manager": fav,
@@ -365,13 +332,9 @@ def test_library_saved_toggle_rejects_a_missing_entry(tmp_path, monkeypatch):
 # Playback
 # ---------------------------------------------------------------------------
 
-def _patch_playback_api(monkeypatch, *, queue_items=None, playback_state=None):
+def _patch_playback_api(monkeypatch, *, playback_state=None):
     fake_lib = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
-    fake_queue = _FakeQueue(queue_items or [])
     _devices = {}
-
-    def fake_get_core():
-        return fake_lib, None, fake_queue
 
     def fake_register_device(scope, device_id, device_name, device_type):
         dev = {"device_id": device_id, "device_name": device_name, "device_type": device_type}
@@ -382,7 +345,7 @@ def _patch_playback_api(monkeypatch, *, queue_items=None, playback_state=None):
         return list(_devices.get(scope, {}).values())
 
     monkeypatch.setattr("shared.api.routes.playback._get_api", lambda: {
-        "get_core": fake_get_core,
+        "get_library": lambda: fake_lib,
         "get_playback_state": lambda scope: playback_state or {},
         "get_scope_from_request": lambda: "default",
         "get_track_by_id": lambda lib, tid: None,
@@ -391,23 +354,6 @@ def _patch_playback_api(monkeypatch, *, queue_items=None, playback_state=None):
         "list_registered_devices": fake_list_devices,
         "is_trusted_network": lambda: True,
     })
-
-
-def test_playback_queue_returns_snapshot(tmp_path, monkeypatch):
-    reset_runtime()
-    _make_runtime(tmp_path)
-    _patch_playback_api(monkeypatch, queue_items=[_FakeQueueItem("t1")])
-
-    app = Flask(__name__)
-    app.register_blueprint(playback_bp)
-    client = app.test_client()
-
-    resp = client.get("/api/playback/queue")
-    assert resp.status_code == 200
-    body = resp.get_json()
-    assert "items" in body
-    assert "queue_revision" in body
-    assert body["repeat_mode"] == "off"
 
 
 def test_devices_register_and_list(tmp_path, monkeypatch):
@@ -435,28 +381,6 @@ def test_devices_register_and_list(tmp_path, monkeypatch):
     assert any(d["device_id"] == "d1" for d in devices)
 
 
-def test_playback_repeat_sets_mode(tmp_path, monkeypatch):
-    reset_runtime()
-    _make_runtime(tmp_path)
-    fake_queue = _FakeQueue()
-    fake_lib = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
-    monkeypatch.setattr("shared.api.routes.playback._get_api", lambda: {
-        "get_core": lambda: (fake_lib, None, fake_queue),
-        "socketio": MagicMock(),
-        "is_trusted_network": lambda: True,
-    })
-
-    app = Flask(__name__)
-    app.register_blueprint(playback_bp)
-    client = app.test_client()
-
-    resp = client.post("/api/playback/repeat", json={"mode": "all"})
-    assert resp.status_code == 200
-    body = resp.get_json()
-    assert body["status"] == "success"
-    assert body["mode"] == "all"
-
-
 # ---------------------------------------------------------------------------
 # Downloader
 # ---------------------------------------------------------------------------
@@ -480,7 +404,7 @@ def _patch_downloader_api(monkeypatch):
     fake_svc.list_items.return_value = []
     fake_svc.logs_for.return_value = []
     monkeypatch.setattr("shared.api.routes.downloader._get_api", lambda: {
-        "get_core": lambda: (_FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None),
+        "get_library": lambda: _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})),
         "get_downloader": lambda **kw: fake_dl,
         "user_id": "testuser",
         "queue_manager_dl": fake_svc,

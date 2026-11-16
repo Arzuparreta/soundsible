@@ -110,7 +110,7 @@ def _mock_api(metadata, related_results=None):
     mod_mock.favourite_library_ids.return_value = []
 
     return {
-        "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
+        "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
         "get_downloader": MagicMock(return_value=mock_dl_service),
         "queue_manager_dl": MagicMock(),
         "start_downloader_pump": MagicMock(),

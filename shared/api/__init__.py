@@ -49,7 +49,6 @@ from shared.playback_state import (  # noqa: F401  # aliases re-exported to blue
     unregister_socket,
 )
 from player.library import LibraryManager
-from player.queue_manager import QueueManager
 from player.favourites_manager import FavouritesManager
 from shared.downloader.service import Downloader
 from shared.downloader.settings import read_settings, setting, settings_path
@@ -608,13 +607,12 @@ _startup_degraded_reason: Optional[str] = None
 
 
 class _UserCore:
-    """One person's library, queue, and favourites."""
+    """One person's library and favourites."""
 
-    __slots__ = ("library", "queue", "favourites")
+    __slots__ = ("library", "favourites")
 
-    def __init__(self, library, queue, favourites):
+    def __init__(self, library, favourites):
         self.library = library
-        self.queue = queue
         self.favourites = favourites
 
 
@@ -635,8 +633,7 @@ def _build_user_core(user_id: str) -> _UserCore:
         metadata = library.metadata
         return library_dates.held_since(keys, metadata.tracks if metadata else ())
 
-    # Note: API server runs headless; web player uses browser for playback. skip MPV to avoid blocking on display/audio.
-    return _UserCore(library, QueueManager(), FavouritesManager(library_held_since=library_held_since))
+    return _UserCore(library, FavouritesManager(library_held_since=library_held_since))
 
 
 def get_user_core(user_id: Optional[str] = None) -> _UserCore:
@@ -671,10 +668,9 @@ def reset_user_cores() -> None:
         _user_cores.clear()
 
 
-def get_core():
-    """Blueprint triple: ``(library, None, queue)``; devices own playback."""
-    core = get_user_core()
-    return core.library, None, core.queue
+def get_library(user_id: Optional[str] = None):
+    """This account's library (default: the account bound to this request)."""
+    return get_user_core(user_id).library
 
 
 def get_favourites_manager(user_id: Optional[str] = None):
@@ -728,13 +724,6 @@ def favourite_library_ids(user_id: Optional[str] = None) -> list:
     return ids
 
 
-def get_queue_manager(user_id: Optional[str] = None):
-    return get_user_core(user_id).queue
-
-
-def get_library_manager(user_id: Optional[str] = None):
-    return get_user_core(user_id).library
-
 def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     global downloader_service
 
@@ -772,7 +761,7 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
                 _log(f"⚠️ Step 1 Warning: NAS/Path issue: {e}")
 
             _log("Step 2/3: Loading Soundsible core...")
-            lib_core, _, _ = get_core()
+            lib_core = get_library()
 
             _log("Step 3/3: Starting Engine...")
             env_vars = read_settings()
@@ -981,7 +970,7 @@ def _process_single_queue_item_bound(item):
             enclosure_url = (item.get("enclosure_url") or song_str or "").strip()
             if not enclosure_url:
                 raise Exception("Missing podcast enclosure URL")
-            lib_early, _, _ = get_core()
+            lib_early = get_library()
             fid = (item.get("podcast_feed_id") or "").strip()
             eg = (item.get("episode_guid") or "").strip()
             if lib_early.metadata and fid and eg:
@@ -1345,7 +1334,7 @@ def _ensure_lib_metadata():
 
     Returns (lib, metadata) or (None, None).
     """
-    lib, _, _ = get_core()
+    lib = get_library()
     if not lib.metadata:
         lib.sync_library()
     else:
@@ -1355,7 +1344,7 @@ def _ensure_lib_metadata():
 
 def _loaded_user_library():
     """Current user's library manager with metadata guaranteed to be present."""
-    lib, _, _ = get_core()
+    lib = get_library()
     if not lib.metadata:
         lib.sync_library(silent=True)
     if not lib.metadata:

@@ -184,7 +184,7 @@ def test_endpoint_variants_mime_revision_and_conditional_cache(tmp_path):
     store.bind('song', digest, 'youtube')
     track = SimpleNamespace(id='song', cover_source='youtube')
     lib = SimpleNamespace(get_cover_url=lambda _: store.path('song'))
-    api = dict(get_core=lambda: (lib, None, None), get_track_by_id=lambda *_: track,
+    api = dict(get_library=lambda: lib, get_track_by_id=lambda *_: track,
                is_trusted_network=lambda _: True, is_safe_path=lambda *a, **k: True, WEB_UI_PATH=str(tmp_path))
     with patch('shared.api.routes.playback._get_api', return_value=api):
         client = app.test_client()

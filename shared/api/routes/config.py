@@ -14,8 +14,8 @@ config_bp = Blueprint("config", __name__, url_prefix="")
 
 
 def _get_api():
-    from shared.api import get_core
-    return {"get_core": get_core}
+    from shared.api import get_library
+    return {"get_library": get_library}
 
 
 @config_bp.route("/api/config", methods=["GET"])
@@ -23,7 +23,7 @@ def _get_api():
 @rate_limit("config_get", limit=60, window_sec=60)
 def get_config():
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     if lib.config:
         return jsonify(lib.config.to_dict())
     return jsonify({"error": "Config not found"}), 404

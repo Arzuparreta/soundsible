@@ -83,7 +83,8 @@ def main():
                     ) for i in range(count)], {'List': ['0', '1']}, {}, last_updated='2026-01-01T00:00:00')
                     initial_write = measure(db, root / 'library.db', value)
                     lib = SimpleNamespace(db=db, metadata=value, refresh_if_stale=lambda: None)
-                    route._get_api = lambda: {'get_core': lambda: (lib, None, None)}
+                    # `get_core` for a --reference older than get_library.
+                    route._get_api = lambda: {'get_library': lambda: lib, 'get_core': lambda: (lib, None, None)}
                     app = Flask(__name__)
                     app.register_blueprint(route.library_bp)
                     client = app.test_client()

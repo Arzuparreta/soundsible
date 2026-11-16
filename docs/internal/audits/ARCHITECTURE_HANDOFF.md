@@ -16,11 +16,11 @@ The checks were made on `main` at `3c7e4af3`. Those marked as
 | 1c | Manual/removed covers shared between accounts | Fixed in the [artwork delivery](2026-11-07-artwork-requests.md): per-account overrides; ambiguous historical references preserved |
 | 2 | Behind a proxy, anyone on the internet is an administrator without a password | **Closed** in the first PR (see residue) |
 | 3 | Socket.IO accepts any origin | **Closed**: same origin plus the REST list (`shared/api/origins.py`) |
-| 4 | Server playback queue that no client reads; stub routes | Pending, needs a decision |
+| 4 | Server playback queue that no client reads; stub routes | **Closed**: queue, its routes and both stubs deleted |
 | 5 | Business logic in route modules and in the Flask module | Pending |
-| 6 | State JSON files written without protection against power loss | Pending |
+| 6 | State JSON files written without protection against power loss | **Closed**: whole-file replace, ordered writes |
 | 7 | yt-dlp update with the module already imported | Pending, not reproduced |
-| 8 | Dead code and minor details | Partial: `gui.sh`, 404 path, rate-limit key and auth memo closed; icons and §5 pending |
+| 8 | Dead code and minor details | **Closed** |
 | 9 | Musical identity coupled to hash/video and rebuilt in each client | **Closed** in PR #423 (merged 2026-11-06) |
 
 ## Closed in the first PR
@@ -144,16 +144,23 @@ Checked on an engine on port 5091: polling from another origin answers 400
 frame; same origin, no `Origin`, a LAN page and a `tailscale serve`-shaped
 request (`X-Forwarded-Host`/`-Proto` from 127.0.0.1) connect.
 
-### 4. Server playback queue
+### 4. Server playback queue (closed)
 
 `player/queue_manager.py` and `/api/playback/queue*`, `/shuffle`, `/repeat`,
-`/next`: no client (web, Android, iOS) reads it. `docs/AGENT_INTEGRATION.md`
-says "This is the queue the browser player consumes", and that is not true: what an
-agent adds does not play. `GET /api/playback/next` modifies state with a GET.
-`/api/playback/play` always responds 404 and `/api/playback/toggle` always 500:
-leftovers of the removed server player. User decision: delete the
-queue and its routes (and the section of the agents guide) or connect it to the
-players. The two stubs can be deleted now.
+`/next`: no client (web, Android, iOS) read it. `docs/AGENT_INTEGRATION.md`
+said "This is the queue the browser player consumes", and that was not true:
+what an agent added did not play. `GET /api/playback/next` modified state with
+a GET. `/api/playback/play` always answered 404 and `/api/playback/toggle`
+always 500: leftovers of the removed server player.
+
+Decision: delete rather than connect. Each player already owns its up-next list
+and publishes it in `PUT /api/playback/state` (`session.queue`); a second,
+server-side queue would need a merge protocol on three platforms for a feature
+nobody used. Deleted: the manager, its routes, the two stubs, `QueueItem`, the
+`queue_state.json` migration step and the agent guide's section, which now says
+the up-next list belongs to the player. `get_core()` returned
+`(library, None, queue)`; it is now `get_library()`. An existing
+`queue_state.json` is left on disk and nothing reads it.
 
 ### 5. Layers
 
@@ -169,13 +176,21 @@ blueprints have their own `_get_api()` with deferred imports and
 service modules is mechanical. The tests replace `_get_api` with
 dictionaries: moving them requires updating those doubles.
 
-### 6. Non-atomic JSON writes
+### 6. Non-atomic JSON writes (closed)
 
 `player/queue_manager.py` (`queue_state.json`), `shared/playback_state.py`
 (on each `PUT /api/playback/state`) and `shared/discovery_intelligence.py`
-(`discovery_settings.json`) use `write_text`. A power loss during the write
-leaves the file truncated. `favourites_manager` now uses the SQLite collection (PR #423)
-and `shared/atomic_file.py` exists. If the queue from item 4 is deleted, two are no longer needed.
+(`discovery_settings.json`) used `write_text`. A power loss during the write
+left the file truncated. The queue is gone (item 4). The other two publish
+through `shared/atomic_file.publish` (temporary file, fsync, rename).
+
+Two ordering faults came with them. `put_state` wrote after releasing its lock,
+so two requests finishing out of order could leave the older state on disk; each
+state now takes a number under the lock and only the newest is written.
+`save_discovery_settings` read, changed and wrote without a lock, so two saves at
+once lost one change; it now does the three under `publication_lock`.
+`PUT /api/playback/state` arrives every 15 s per playing device, so one fsync
+per write costs nothing measurable.
 
 ### 7. Hot yt-dlp update (not reproduced)
 
@@ -190,13 +205,15 @@ importing or restart after updating.
 
 - **Closed:** removed `gui.sh`, which only printed that the GTK player had been
   removed and recommended `python run.py`. It had no consumers in the repository.
-- 35 icons in `desktop-shell/src-tauri/icons/ios` and `icons/android` that
-  `tauri.conf.json` does not reference.
+- **Closed:** 35 icons in `desktop-shell/src-tauri/icons/ios` and `icons/android`
+  that `tauri.conf.json` does not reference were deleted, together with the
+  Windows Store logos (`Square*Logo.png`, `StoreLogo.png`) and `64x64.png`, which
+  nothing references either. `icon.png` stays: it is Tauri's fallback window icon.
 - **Closed:** `stream_local_track` returned the absolute path in the 404
   (`shared/api/routes/playback.py`), and its 500 handler returned the exception
   text, which names it too. Both log the path and answer a generic message.
-- `docs/internal/ARCHITECTURE.md` §5 still lists `<config>/download_queue.json`; the
-  download queue is in `instance.db`.
+- **Closed:** `docs/internal/ARCHITECTURE.md` §5 listed `<config>/download_queue.json`;
+  it now names the `download_jobs` table in `instance.db`.
 - **Closed:** the `rate_limit` limits (and the preview-stream limit) used
   `request.remote_addr`: behind a proxy all clients shared a bucket.
   `request_rate_limit_key()` believes the forwarded client only when the peer

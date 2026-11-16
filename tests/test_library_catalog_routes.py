@@ -75,7 +75,7 @@ def _client(tmp_path, monkeypatch, *tracks: Track, with_index: bool = True):
         db = DatabaseManager(str(tmp_path / "library.db"))
         db.sync_from_metadata(metadata)
     library = _FakeLibrary(metadata, db)
-    monkeypatch.setattr("shared.api.get_core", lambda: (library, None, None), raising=False)
+    monkeypatch.setattr("shared.api.get_library", lambda: library, raising=False)
 
     app = Flask(__name__)
     app.register_blueprint(library_catalog_bp)

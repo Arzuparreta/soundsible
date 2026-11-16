@@ -83,7 +83,7 @@ def main():
                         store.bind(str(i), store.put(body), 'youtube')
                     artwork.artwork_store = lambda: store
                     playback._get_api = lambda: {
-                        'get_core': lambda: (types.SimpleNamespace(get_cover_url=lambda t: store.path(t.id)), None, None),
+                        'get_library': lambda: types.SimpleNamespace(get_cover_url=lambda t: store.path(t.id)),
                         'get_track_by_id': lambda _, key: types.SimpleNamespace(id=key, cover_source='youtube'),
                         'WEB_UI_PATH': str(root),
                     }

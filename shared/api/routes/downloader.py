@@ -40,7 +40,7 @@ _search_memo: Memo[list] = Memo(ttl_sec=_SEARCH_CACHE_TTL_SEC, maxsize=256)
 
 def _get_api():
     from shared.api import (
-        get_core,
+        get_library,
         get_downloader,
         queue_manager_dl,
         start_downloader_pump,
@@ -51,7 +51,7 @@ def _get_api():
     from shared.user_context import current_user_id
 
     return {
-        "get_core": get_core,
+        "get_library": get_library,
         "user_id": current_user_id(),
         "get_downloader": get_downloader,
         "queue_manager_dl": queue_manager_dl,

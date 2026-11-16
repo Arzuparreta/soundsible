@@ -844,7 +844,7 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
         return {"error": "limit must be an integer"}, 400
 
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     try:
         lib.refresh_if_stale()
     except Exception:
@@ -1228,7 +1228,7 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         return {"error": "limit and segment_index must be numeric"}, 400
 
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     metadata = getattr(lib, "metadata", None)
     candidates: list[dict] = []
     degraded = False
@@ -1455,7 +1455,7 @@ def discovery_music_dj_plan():
         return jsonify(base), status
 
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     metadata = getattr(lib, "metadata", None)
     seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
     candidates = []
@@ -1677,7 +1677,7 @@ def _dj_place_one(data: dict) -> tuple[dict, int]:
     # Older clients may still send dj_profile; technique selection is automatic.
 
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     metadata = getattr(lib, "metadata", None)
     target = _music_set_item(raw_track, source_id="route", label="Route")
     if not target:
@@ -1818,7 +1818,7 @@ def discovery_music_dj_repair():
         return jsonify({"error": "limit must be an integer"}), 400
 
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     metadata = getattr(lib, "metadata", None)
 
     refs = [raw for raw in raw_route[:_DJ_REPAIR_ROUTE_CAP] if isinstance(raw, dict)]
@@ -1884,7 +1884,7 @@ def discovery_music_dj_transition():
         demand.tracks = interested
 
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     metadata = getattr(lib, "metadata", None)
 
     def measured(item: dict) -> tuple[dict, bool]:
@@ -1927,7 +1927,7 @@ def discovery_music_dj_work():
     if not isinstance(tracks, list) or len(tracks) > 64 or any(not isinstance(item, dict) for item in tracks):
         return jsonify({"error": "invalid runway"}), 400
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     from shared.dj.session import sync
     sync(getattr(lib, "metadata", None), tracks, data.get("revision", 0))
     return jsonify({"active": True})

@@ -139,7 +139,7 @@ def test_measured_aac_pair_is_split_only_for_clients_that_ask(tmp_path):
         paths[key] = aac
         dj_engine.analyse_audio(aac, dj_engine.analysis_identity(refs[key]))
     api = _mock_api()
-    api['get_core'].return_value = (_FakeLibrary(None), None, None)
+    api['get_library'].return_value = _FakeLibrary(None)
     pair = {'from': refs['outgoing'], 'to': refs['incoming']}
     with (patch.object(_auto_mode, '_get_api', return_value=api),
           patch.object(_auto_mode, '_dj_source_path', side_effect=lambda _, item: paths[item['id']])):

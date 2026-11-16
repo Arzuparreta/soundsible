@@ -100,6 +100,27 @@ def sync_file(fd: int) -> None:
     result.get()
 
 
+def sync_directory(directory: Path) -> None:
+    """Make a rename inside `directory` survive a power loss.
+
+    The file's own fsync covers its bytes; the directory entry naming it is
+    the directory's. Windows has no directory handle to flush, and some
+    filesystems refuse the call; the rename stands either way.
+    """
+    if os.name == "nt":
+        return
+    try:
+        fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError:
+        return
+    try:
+        sync_file(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def _fill_and_rename(fd: int, temporary: str, path: Path,
                      fill: Callable[[BinaryIO], None], mode: Optional[int]) -> None:
     try:
@@ -110,6 +131,7 @@ def _fill_and_rename(fd: int, temporary: str, path: Path,
         if mode is not None:
             os.chmod(temporary, mode)
         os.replace(temporary, path)
+        sync_directory(path.parent)
     except BaseException:
         try:
             os.unlink(temporary)
