@@ -486,12 +486,17 @@ Soundsible is designed for trusted **LAN / Tailscale** use. For anything beyond 
    export SOUNDSIBLE_LAUNCHER_BIND_ALL=true
    ```
 
-5. **CORS origins.** By default the API accepts localhost, private-LAN, and Tailscale browser origins. To tighten:
+5. **CORS origins.** The player served by the engine always reaches it. Pages on
+   *other* addresses are accepted by default when they are on localhost, the
+   private LAN or Tailscale, for both the API and the real-time connection. To
+   tighten:
 
    ```bash
    export SOUNDSIBLE_ALLOWED_ORIGINS='http://localhost:5005,http://192.168.1.10:5005'
-   export SOUNDSIBLE_SOCKET_CORS_ORIGINS='http://localhost:5005,http://192.168.1.10:5005'
    ```
+
+   `SOUNDSIBLE_SOCKET_CORS_ORIGINS` gives the real-time connection a different
+   list when it needs one.
 
 ---
 

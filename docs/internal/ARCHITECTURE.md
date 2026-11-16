@@ -54,7 +54,7 @@ flowchart LR
 
 - **Starting the server daemon**: `shared/daemon_launcher.py` (terminal menu and web launcher) spawns `venv` Python with `run.py --daemon`, which calls `shared.api.start_api()` and binds **0.0.0.0:5005**.
 - **Starting the desktop engine**: `soundsible_engine.py` or `run.py --desktop-engine` builds a `RuntimeConfig`, creates a short owner token file plus matching scoped auth token, writes `desktop-engine-state.json` under the config dir, and then starts `shared.api.start_api()` on loopback.
-- **CORS**: REST CORS defaults allow localhost, private LAN, and Tailscale-style ranges unless overridden by `SOUNDSIBLE_ALLOWED_ORIGINS`. Socket.IO CORS can be tightened with `SOUNDSIBLE_SOCKET_CORS_ORIGINS`.
+- **CORS**: `shared/api/origins.py` owns one list. REST CORS defaults allow localhost, private LAN, and Tailscale-style ranges (localhost only on a loopback bind) unless overridden by `SOUNDSIBLE_ALLOWED_ORIGINS`. The Socket.IO handshake accepts the engine's own origin (`Host`, or `X-Forwarded-Host` from a trusted peer) plus that list, or `SOUNDSIBLE_SOCKET_CORS_ORIGINS` when set; a handshake without `Origin` (native clients) is not checked.
 
 ### 4. Station Engine internals
 

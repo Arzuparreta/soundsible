@@ -68,6 +68,7 @@ from shared.telemetry import init_telemetry
 
 from .download_queue import DownloadQueueManager, parse_intake_item  # noqa: F401  # re-export
 from .errors import register_error_handlers
+from .origins import make_socket_origin_check, rest_origins, socket_origins
 from .orchestrator import orchestrator
 
 
@@ -112,33 +113,9 @@ app = Flask(__name__)
 register_error_handlers(app)
 
 
-def _build_cors_origins():
-    raw = (os.getenv("SOUNDSIBLE_ALLOWED_ORIGINS") or "").strip()
-    if raw:
-        return [v.strip() for v in raw.split(",") if v.strip()]
-    runtime = get_runtime_config()
-    if not runtime.lan_enabled or runtime.host in {"127.0.0.1", "localhost"}:
-        return [
-            r"^https?://localhost(:\d+)?$",
-            r"^https?://127\.0\.0\.1(:\d+)?$",
-        ]
-    # Default: allow browser clients coming from localhost, private LAN, and Tailscale.
-    return [
-        r"^https?://localhost(:\d+)?$",
-        r"^https?://127\.0\.0\.1(:\d+)?$",
-        r"^https?://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$",
-        r"^https?://10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$",
-        r"^https?://172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}(:\d+)?$",
-        r"^https?://100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(:\d+)?$",
-    ]
-
-
-_socket_cors = (os.getenv("SOUNDSIBLE_SOCKET_CORS_ORIGINS") or "").strip()
-_socket_cors_origins = [v.strip() for v in _socket_cors.split(",") if v.strip()] if _socket_cors else "*"
-
 CORS(
     app,
-    origins=_build_cors_origins(),
+    origins=rest_origins(),
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
         "Authorization",
@@ -175,7 +152,7 @@ SOCKET_PING_TIMEOUT = _int_env("SOUNDSIBLE_SOCKET_PING_TIMEOUT", 25)
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins=_socket_cors_origins,
+    cors_allowed_origins=make_socket_origin_check(socket_origins()),
     async_mode="gevent",
     ping_interval=SOCKET_PING_INTERVAL,
     ping_timeout=SOCKET_PING_TIMEOUT,

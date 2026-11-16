@@ -63,8 +63,8 @@ Set them where the engine starts, then restart it — they are read at start:
 | `SOUNDSIBLE_HOST` | `0.0.0.0` | Address the engine listens on; same as `--host`. The desktop app uses `127.0.0.1`. |
 | `SOUNDSIBLE_PORT` | `5005` | Port the engine listens on; same as `--port`. The terminal menu always uses 5005. |
 | `SOUNDSIBLE_ADMIN_TOKEN` | unset | When set, admin routes require it as `Authorization: Bearer <token>` or `X-Soundsible-Admin-Token: <token>`. See the [security baseline](INSTALL.md#8-security-baseline). |
-| `SOUNDSIBLE_ALLOWED_ORIGINS` | localhost, private LAN and Tailscale addresses | Comma-separated browser origins allowed to call the API. |
-| `SOUNDSIBLE_SOCKET_CORS_ORIGINS` | any | Comma-separated origins allowed to open the real-time connection. |
+| `SOUNDSIBLE_ALLOWED_ORIGINS` | localhost, private LAN and Tailscale addresses (only localhost when the engine listens on `127.0.0.1`) | Comma-separated browser origins allowed to call the API from another address. |
+| `SOUNDSIBLE_SOCKET_CORS_ORIGINS` | same as `SOUNDSIBLE_ALLOWED_ORIGINS` | Comma-separated origins allowed to open the real-time connection from another address. The player's own address is always allowed, also behind `tailscale serve` or a reverse proxy. |
 | `SOUNDSIBLE_HTTPS_URL` | unset | Your own HTTPS address, so [Live](LIVE.md#5-broadcasting-needs-https) can send a browser there to broadcast. |
 | `SOUNDSIBLE_LAUNCHER_BIND_ALL` | `false` | `true` makes the setup page and launcher answer on the network, not only on `localhost`. |
 | `LAUNCHER_PORT` | `5099` | Port of the setup page and launcher. |

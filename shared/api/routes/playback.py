@@ -16,7 +16,7 @@ from shared import preview_cache, request_scope
 from shared.api.memo import Memo
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
-from shared.security import request_client_address
+from shared.security import request_client_address, request_rate_limit_key
 from shared.stream_resolution import ResolvedStream
 from shared.url_utils import validate_youtube_video_id
 
@@ -281,7 +281,8 @@ def stream_local_track(track_id):
         return jsonify({"error": "No path registered"}), 404
     path = os.path.normpath(os.path.abspath(os.path.expanduser(path)))
     if not os.path.exists(path):
-        return jsonify({"error": f"File not found: {path}"}), 404
+        logger.warning("Stream: file for track %s is missing at %s", track_id, path)
+        return jsonify({"error": "File not found"}), 404
     is_trusted = api["is_trusted_network"](request_client_address())
     if not api["is_safe_path"](path, is_trusted=is_trusted):
         return jsonify({"error": "Unauthorized path access"}), 403
@@ -606,7 +607,7 @@ def preview_stream_proxy(video_id):
     if cached:
         return _serve_cached_preview(video_id, cached)
 
-    if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
+    if not _preview_stream_rate_limit(request_rate_limit_key()):
         return jsonify({"error": "Too many requests"}), 429
 
     retry_after = preview_cache.upstream_backoff_remaining()
@@ -875,7 +876,7 @@ def get_preview_stream_url(video_id):
     api = _get_api()
     if not validate_youtube_video_id(video_id):
         return jsonify({"error": "Invalid video id"}), 400
-    if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
+    if not _preview_stream_rate_limit(request_rate_limit_key()):
         return jsonify({"error": "Too many requests"}), 429
     try:
         url = _get_preview_stream_url_cached(api, video_id)

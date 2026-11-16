@@ -58,26 +58,12 @@ def _last_forwarded_for(header: str) -> str:
     return ""
 
 
-def request_client_address(req=None) -> str:
-    """The address of whoever is calling, as far as it can be known.
+def _forwarded_client(headers) -> str | None:
+    """The client a proxy names, ``""`` when it names none, ``None`` without a proxy.
 
-    A reverse proxy or ``tailscale serve``/``funnel`` on this machine makes
-    every request arrive from 127.0.0.1, so the socket alone would trust the
-    whole internet. When a trusted peer forwards a request, the decision is made
-    on the client it names: the right-most ``X-Forwarded-For`` entry, the one
-    the nearest proxy wrote (earlier entries are whatever the client sent).
-    A request that shows a proxy but names no client gets ``""``, which nothing
-    trusts. Headers from an untrusted peer are never believed.
+    The right-most ``X-Forwarded-For`` entry is the one the nearest proxy
+    wrote; earlier entries are whatever the client sent.
     """
-    if req is None:
-        from flask import request as req
-    peer = (req.remote_addr or "").strip()
-    if not is_trusted_network(peer):
-        return peer
-    headers = req.headers
-    if headers.get("Tailscale-Funnel-Request"):
-        # Funnel is the public internet by definition, whatever it reports.
-        return ""
     forwarded_for = headers.get("X-Forwarded-For")
     if forwarded_for is not None:
         entries = [entry for entry in forwarded_for.split(",") if entry.strip()]
@@ -90,7 +76,59 @@ def request_client_address(req=None) -> str:
         return _strip_port(real_ip)
     if headers.get("X-Forwarded-Host") or headers.get("X-Forwarded-Proto"):
         return ""
-    return peer
+    return None
+
+
+def request_client_address(req=None) -> str:
+    """The address of whoever is calling, as far as it can be known.
+
+    A reverse proxy or ``tailscale serve``/``funnel`` on this machine makes
+    every request arrive from 127.0.0.1, so the socket alone would trust the
+    whole internet. When a trusted peer forwards a request, the decision is made
+    on the client it names (see `_forwarded_client`). A request that shows a
+    proxy but names no client gets ``""``, which nothing trusts. Headers from
+    an untrusted peer are never believed.
+    """
+    if req is None:
+        from flask import request as req
+    peer = (req.remote_addr or "").strip()
+    if not is_trusted_network(peer):
+        return peer
+    if req.headers.get("Tailscale-Funnel-Request"):
+        # Funnel is the public internet by definition, whatever it reports.
+        return ""
+    client = _forwarded_client(req.headers)
+    return peer if client is None else client
+
+
+def _is_loopback(address: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip.is_loopback
+
+
+def request_rate_limit_key(req=None) -> str:
+    """Whose budget a request spends in `rate_limit`.
+
+    Behind a proxy on this machine (Nginx, ``tailscale serve``/``funnel``)
+    every request comes from 127.0.0.1, and one shared budget lets a single
+    caller lock everyone else out. Only that proxy's headers name the client
+    here, funnel's included: the decision is about counting, not trust. A peer
+    anywhere else spends its own budget, because a LAN machine could otherwise
+    pick a fresh key per request by writing its own ``X-Forwarded-For``.
+    """
+    if req is None:
+        from flask import request as req
+    peer = (req.remote_addr or "").strip()
+    if _is_loopback(peer):
+        client = _forwarded_client(req.headers)
+        if client:
+            return client
+    return peer or "unknown"
 
 
 def is_trusted_request(req=None) -> bool:
