@@ -118,7 +118,7 @@ pub fn close_player(app: &AppHandle) {
     }
 }
 
-fn discard_cancelled_window(app: &AppHandle, window: &WebviewWindow) {
+fn discard_unowned_window(app: &AppHandle, window: &WebviewWindow) {
     let state = app.state::<DesktopState>();
     let active = state.session.lock().ok().and_then(|guard| guard.clone());
     // A reentrant open of the same origin may have adopted this window. Never
@@ -130,6 +130,11 @@ fn discard_cancelled_window(app: &AppHandle, window: &WebviewWindow) {
         return;
     }
     let _ = window.destroy();
+}
+
+fn discard_cancelled_window(app: &AppHandle, window: &WebviewWindow) {
+    discard_unowned_window(app, window);
+    let state = app.state::<DesktopState>();
     let no_player = state.session.lock().is_ok_and(|guard| guard.is_none());
     if no_player {
         if let Some(shell) = app.get_webview_window("main") {
@@ -174,21 +179,57 @@ fn reveal_player(app: &AppHandle, generation: u64, window: &WebviewWindow) -> Re
     Ok(())
 }
 
-fn cleanup_failed_open(app: &AppHandle, generation: u64) {
-    let state = app.state::<DesktopState>();
-    let failed = {
+fn recover_failed_open(
+    state: &DesktopState,
+    generation: u64,
+    discard: impl FnOnce(Option<Session>),
+    show: impl FnOnce(),
+    focus: impl FnOnce(),
+) {
+    let (recovery, failed) = {
         let Ok(mut guard) = state.session.lock() else {
             return;
         };
         if !state.intent.is_current(generation) {
             return;
         }
-        state.intent.advance();
-        guard.take()
+        (state.intent.advance(), guard.take())
     };
-    if let Some(window) = failed.and_then(|session| app.get_webview_window(&session.label)) {
-        discard_cancelled_window(app, &window);
+    discard(failed);
+    // A failed builder may never have registered a window. Recovery must still
+    // reveal Retry, without holding a mutex across reentrant native calls.
+    let current = || {
+        state.intent.is_current(recovery) && state.session.lock().is_ok_and(|guard| guard.is_none())
+    };
+    if current() {
+        show();
+        if current() {
+            focus();
+        }
     }
+}
+
+fn cleanup_failed_open(app: &AppHandle, generation: u64) {
+    recover_failed_open(
+        &app.state::<DesktopState>(),
+        generation,
+        |failed| {
+            if let Some(window) = failed.and_then(|session| app.get_webview_window(&session.label))
+            {
+                discard_unowned_window(app, &window);
+            }
+        },
+        || {
+            if let Some(shell) = app.get_webview_window("main") {
+                let _ = shell.show();
+            }
+        },
+        || {
+            if let Some(shell) = app.get_webview_window("main") {
+                let _ = shell.set_focus();
+            }
+        },
+    );
 }
 
 pub fn open_player(app: &AppHandle, value: &str) -> Result<(), String> {
@@ -334,6 +375,94 @@ fn open_player_at(app: &AppHandle, url: url::Url, generation: u64) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn failed_restart() -> (DesktopState, u64) {
+        let state = DesktopState::default();
+        let generation = state.intent.advance();
+        *state.session.lock().unwrap() = Some(Session {
+            label: "replacement-not-created".into(),
+            origin: "http://localhost".into(),
+            generation,
+        });
+        (state, generation)
+    }
+
+    #[test]
+    fn failed_restart_reveals_and_focuses_retry_without_a_player_window() {
+        let (state, generation) = failed_restart();
+        let visible = std::cell::Cell::new(false);
+        let focused = std::cell::Cell::new(false);
+        recover_failed_open(
+            &state,
+            generation,
+            |failed| {
+                assert!(failed.is_some()); // The builder never created its window.
+                assert!(state.session.try_lock().unwrap().is_none());
+            },
+            || visible.set(true),
+            || {
+                assert!(visible.get());
+                assert!(state.session.try_lock().unwrap().is_none());
+                focused.set(true);
+            },
+        );
+        assert!(visible.get());
+        assert!(focused.get());
+    }
+
+    #[test]
+    fn failure_before_session_registration_also_reveals_retry() {
+        let state = DesktopState::default();
+        let generation = state.intent.advance();
+        let focused = std::cell::Cell::new(false);
+        recover_failed_open(
+            &state,
+            generation,
+            |failed| assert!(failed.is_none()),
+            || {},
+            || focused.set(true),
+        );
+        assert!(focused.get());
+    }
+
+    #[test]
+    fn superseded_failure_leaves_the_new_session_and_shell_alone() {
+        let (state, generation) = failed_restart();
+        state.intent.advance();
+        recover_failed_open(
+            &state,
+            generation,
+            |_| panic!("discarded a newer session"),
+            || panic!("showed the obsolete shell"),
+            || panic!("focused the obsolete shell"),
+        );
+        assert!(state.session.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn native_reentry_during_cleanup_or_show_cancels_remaining_recovery() {
+        for cancel_during_cleanup in [true, false] {
+            let (state, generation) = failed_restart();
+            let shown = std::cell::Cell::new(false);
+            recover_failed_open(
+                &state,
+                generation,
+                |_| {
+                    if cancel_during_cleanup {
+                        state.intent.advance();
+                    }
+                },
+                || {
+                    assert!(state.session.try_lock().unwrap().is_none());
+                    shown.set(true);
+                    state.intent.advance();
+                },
+                || panic!("stole focus after a newer intent"),
+            );
+            assert_eq!(shown.get(), !cancel_during_cleanup);
+        }
+    }
+
     #[test]
     fn rejects_stale_or_cross_origin_publishers() {
         let s = Session {

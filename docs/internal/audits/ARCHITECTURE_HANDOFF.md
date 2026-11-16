@@ -246,7 +246,12 @@ can terminate a child waiting for an installation before it writes config.
 Bootstrap config and folder preferences publish atomically, so cancellation
 cannot expose truncated JSON. A player-window failure clears the failed session
 and publishes Error with Retry instead of announcing Ready and leaving loading
-visible. Those error updates revalidate the launch generation.
+visible. Recovery restores and focuses the shell even if a failed replacement
+builder never registered a player window. It releases the session mutex before
+native calls and checks the recovery generation after cleanup and showing the
+shell, so an obsolete failure cannot focus over a newer connection. Regressions
+cover restart failure, failure before session registration, supersession and
+native reentry. Error updates also revalidate the engine launch generation.
 While it waits for an installation, it reports a startup event on its stdout
 pipe; only the retained child's pipe can pause the shell's readiness budget.
 No marker file must be published to keep the lock safe. Optional wait callbacks
@@ -296,10 +301,22 @@ run on Windows. Native Rust unit tests also run in Desktop Build.
 
 The native Windows source suite runs in Desktop Build. Rust timing, startup
 event and PID tests also run independently of platform webview dependencies.
-The isolated Python suite passes with 2,968 tests and 3 intentional skips.
-The packaged readiness build and installed UI smoke passed on `e1e2688a`.
-The later native-reentry/connection-cancellation changes have source regressions;
-the latest native build, all PR checks and independent review remain gates.
+The isolated Python suite passes with 2,973 tests and 3 intentional skips;
+69 focused Python checks also pass. Actual-source Rust checks pass locally:
+21 supervisor/startup/state/lifecycle/client tests with a Tauri facade and
+8 extracted desktop recovery/lifecycle tests, including 3 lifecycle tests shared
+with the first harness. The shell has 9 unit and 16 browser tests passing.
+The native Windows build runs the complete Rust library suite, source bootstrap
+tests, packaged readiness and installed UI smoke. Latest-head GitHub checks and
+current-base verification remain merge gates; physical/audio acceptance is not
+claimed by these checks.
+
+The final independent GPT 6.1 Sol (xhigh) review of `a024ca32` scored quality
+8/10, complexity 7/10, performance 9/10 and maintainability 8/10 (higher is
+better). Its sole confirmed P2 was the hidden shell after a replacement window
+failed to build. The recovery change and four regressions above address it;
+the earlier owned-bootstrap and presentation-error fixes were accepted. This
+small follow-up was checked locally without another delegated review.
 
 Where it does not run, on purpose: the desktop engine (a packaged build
 bundles its tools, where `sys.executable -m pip` was the engine binary itself;
