@@ -83,10 +83,9 @@ def main() -> int:
 
     patch_process()
 
-    # Before `shared.api`, which imports the tools an upgrade replaces.
-    from shared.runtime_updates import apply_runtime_updates
+    from shared.runtime_updates import warn_updates_need_a_new_image
 
-    apply_runtime_updates()
+    warn_updates_need_a_new_image()
 
     from shared.api import start_api
     from shared.runtime import RuntimeConfig

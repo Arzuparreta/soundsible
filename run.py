@@ -352,18 +352,10 @@ def _run_legacy_daemon(args: argparse.Namespace) -> None:
         console.print("[yellow]Shutting down...[/yellow]")
 
 
-def _start_engine(runtime) -> None:
-    """Upgrade the download tools if asked to, then import and start the API.
+def _start_engine(runtime, *, update_tools: bool = True) -> None:
+    from shared.engine_start import start_engine
 
-    The order matters: `shared.api` imports yt-dlp, and an upgrade must not
-    swap its files under a running copy.
-    """
-    from shared.runtime_updates import apply_runtime_updates
-
-    apply_runtime_updates()
-    from shared.api import start_api
-
-    start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+    start_engine(runtime, update_tools=update_tools)
 
 
 def run_desktop_engine_cli(argv: list[str] | None = None) -> int:
@@ -689,7 +681,7 @@ class SoundsibleLauncher:
         if args.desktop_engine:
             runtime = _build_runtime_config(args, desktop_defaults=True)
             console.print(f"[bold green]Soundsible Desktop Engine is running on {runtime.host}:{runtime.port}.[/bold green]")
-            _start_engine(runtime)
+            _start_engine(runtime, update_tools=False)
             return
 
         while True:

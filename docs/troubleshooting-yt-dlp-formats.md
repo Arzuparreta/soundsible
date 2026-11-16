@@ -32,9 +32,12 @@ error survives all three attempts:
 
 - **Update yt-dlp.** YouTube changes often, and an old yt-dlp is the most
   common cause. On a native install, turn on **Settings → Downloads →
-  Auto-update yt-dlp** (admin only) and restart Soundsible: from then on it
-  upgrades yt-dlp each time it starts, before it begins serving, so a start
-  takes a few seconds longer. With Docker, pull the newest image.
+  Auto-update yt-dlp** (admin only) and restart Soundsible: from then on the
+  station upgrades yt-dlp each time it starts, before it begins serving. A
+  start takes a few seconds longer, and at most two minutes when PyPI does not
+  answer. The desktop app and Docker ignore the setting: the desktop app
+  ships its own yt-dlp with each release, and with Docker you pull the newest
+  image.
 - Export a fresh `cookies.txt`; an expired session can fail the same way.
 
 ## "Sign in to confirm you're not a bot", empty searches on a VPS

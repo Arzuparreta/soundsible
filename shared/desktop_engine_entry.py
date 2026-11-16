@@ -121,12 +121,6 @@ def run_desktop_engine(args: argparse.Namespace) -> None:
     runtime, _ = ensure_owner_token(runtime)
     configure_runtime(runtime)
 
-    # Before `shared.api`, which imports the tools an upgrade replaces. A
-    # packaged build skips it; a source checkout run this way does not.
-    from shared.runtime_updates import apply_runtime_updates
-
-    apply_runtime_updates()
-
     from shared.api import start_api
 
     def _on_ready(ready_runtime: RuntimeConfig) -> None:

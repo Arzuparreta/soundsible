@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 
 
 RUNTIME_UPDATE_OPTIONS = (
@@ -31,30 +30,16 @@ def enabled_runtime_packages(
     return packages, flags
 
 
-def pip_upgrade_command(
-    repo_root: Path,
-    packages: Sequence[str],
-    *,
-    python_executable: str | None = None,
-    platform_name: str | None = None,
-) -> list[str]:
-    """Build one upgrade command for all enabled tools in the active repo env."""
+def pip_upgrade_command(packages: Sequence[str], *, python_executable: str | None = None) -> list[str]:
+    """One upgrade of every enabled tool, by the interpreter running the engine.
+
+    Its own pip installs where its imports look. A repository `venv` beside it
+    may be a different environment from the one `SOUNDSIBLE_PYTHON` or the
+    service unit chose.
+    """
     if not packages:
         raise ValueError("at least one package is required")
-    windows = (platform_name if platform_name is not None else os.name) == "nt"
-    relative_pip = Path("Scripts/pip.exe") if windows else Path("bin/pip")
-    for env_name in ("venv", ".venv"):
-        pip_executable = repo_root / env_name / relative_pip
-        if pip_executable.is_file():
-            return [str(pip_executable), "install", "--upgrade", *packages]
-    return [
-        python_executable or sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--upgrade",
-        *packages,
-    ]
+    return [python_executable or sys.executable, "-m", "pip", "install", "--upgrade", *packages]
 
 
 #: Modules an upgrade replaces on disk. Once one is imported, an upgrade would
@@ -67,15 +52,15 @@ UPDATE_TIMEOUT_SEC = 120
 def apply_runtime_updates(file_env: Mapping[str, str | None] | None = None) -> bool:
     """Upgrade the enabled download tools before anything imports them.
 
-    Called by the entry points before `shared.api`, which imports yt-dlp. It
-    runs pip to completion: a background upgrade ran with yt-dlp already
+    `run.py --daemon` calls it before `shared.api`, which imports yt-dlp. It
+    runs pip to completion (at most `UPDATE_TIMEOUT_SEC`): a background upgrade ran with yt-dlp already
     loaded, and the extractor imported later came from the new release while
     the core in memory was the old one. Returns whether pip ran and succeeded.
     """
     import logging
     import subprocess
 
-    from shared.bundle_paths import is_frozen, repo_root
+    from shared.bundle_paths import is_frozen
 
     logger = logging.getLogger(__name__)
     if file_env is None:
@@ -93,7 +78,7 @@ def apply_runtime_updates(file_env: Mapping[str, str | None] | None = None) -> b
     if loaded:
         logger.warning("Runtime auto-update skipped: %s already imported", ", ".join(loaded))
         return False
-    command = pip_upgrade_command(repo_root(), packages)
+    command = pip_upgrade_command(packages)
     logger.info("Runtime auto-update: %s", " ".join(command))
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=UPDATE_TIMEOUT_SEC)
@@ -105,3 +90,25 @@ def apply_runtime_updates(file_env: Mapping[str, str | None] | None = None) -> b
         return False
     logger.info("Runtime auto-update completed for %s", ", ".join(packages))
     return True
+
+
+def warn_updates_need_a_new_image(file_env: Mapping[str, str | None] | None = None) -> None:
+    """In the container, say that the update settings do nothing.
+
+    The image installs its packages as root for the `soundsible` user; a pip
+    run as that user lands in a user site directory that the running
+    interpreter never put on its path, so an upgrade would report success and
+    change nothing. The image is updated by pulling a newer one.
+    """
+    import logging
+
+    if file_env is None:
+        from shared.downloader.settings import read_settings
+
+        file_env = read_settings()
+    packages, _ = enabled_runtime_packages(file_env)
+    if packages:
+        logging.getLogger(__name__).warning(
+            "Auto-update of %s is not applied in the container image; pull a newer image instead",
+            ", ".join(packages),
+        )
