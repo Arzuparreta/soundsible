@@ -1,6 +1,6 @@
 #!/bin/sh
 # Retake the README and site screenshots, in every theme, and the social card
-# built from them (docs/images/screenshots/, docs/images/social-card.png).
+# built from them, plus the README device compositions (docs/images/).
 #
 # Runs in the Playwright image CI uses, so text renders the same whoever runs
 # it and a screen that has not changed comes out byte for byte the same file.
@@ -19,6 +19,6 @@ docker run --rm --ipc host \
   --user "$(id -u):$(id -g)" -e HOME=/tmp -e npm_config_cache=/tmp/npm \
   -v "$root:/work" -w /work/ui_web \
   "mcr.microsoft.com/playwright:v$version-noble" \
-  sh -c '[ -d node_modules ] || npm ci --no-audit --no-fund; npm run showcase'
+  sh -c '[ -d node_modules ] || npm ci --no-audit --no-fund; npm run showcase && node ../scripts/render_readme.mjs'
 
 git -C "$root" status --short -- docs/images
