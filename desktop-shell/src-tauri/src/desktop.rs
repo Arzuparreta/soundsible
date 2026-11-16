@@ -174,14 +174,39 @@ fn reveal_player(app: &AppHandle, generation: u64, window: &WebviewWindow) -> Re
     Ok(())
 }
 
+fn cleanup_failed_open(app: &AppHandle, generation: u64) {
+    let state = app.state::<DesktopState>();
+    let failed = {
+        let Ok(mut guard) = state.session.lock() else {
+            return;
+        };
+        if !state.intent.is_current(generation) {
+            return;
+        }
+        state.intent.advance();
+        guard.take()
+    };
+    if let Some(window) = failed.and_then(|session| app.get_webview_window(&session.label)) {
+        discard_cancelled_window(app, &window);
+    }
+}
+
 pub fn open_player(app: &AppHandle, value: &str) -> Result<(), String> {
     let url = url::Url::parse(value).map_err(|e| e.to_string())?;
-    let origin = url.origin().ascii_serialization();
     if !matches!(url.scheme(), "http" | "https") {
         return Err("Invalid player address.".into());
     }
+    let generation = app.state::<DesktopState>().intent.advance();
+    let result = open_player_at(app, url, generation);
+    if result.is_err() {
+        cleanup_failed_open(app, generation);
+    }
+    result
+}
+
+fn open_player_at(app: &AppHandle, url: url::Url, generation: u64) -> Result<(), String> {
+    let origin = url.origin().ascii_serialization();
     let state = app.state::<DesktopState>();
-    let generation = state.intent.advance();
     // Snapshot under the mutex, then release it before any native operation.
     let previous = state.session.lock().map_err(|e| e.to_string())?.clone();
     if let Some(session) = previous.as_ref().filter(|session| session.origin == origin) {

@@ -115,15 +115,6 @@ impl EngineSupervisor {
             guard.generation
         };
         self.emit_status(&app);
-        if let Err(error) = bootstrap_config(&music_dir) {
-            let mut guard = self.inner.lock().expect("engine lock");
-            if guard.generation == generation && guard.phase == EnginePhase::Booting {
-                guard.phase = EnginePhase::Error;
-                guard.message = "Couldn't start".into();
-                push_log(&mut guard, error.clone());
-            }
-            return Err(error);
-        }
         let (pid, stdout, stderr) = {
             let mut guard = self.inner.lock().expect("engine lock");
             if guard.generation != generation || self.stop_flag.load(Ordering::SeqCst) {
@@ -261,7 +252,7 @@ fn present_ready(
     generation: u64,
     child_pid: u32,
     state: EngineRuntimeState,
-    present: impl FnOnce(&str) -> String,
+    present: impl FnOnce(&str) -> Result<String, String>,
 ) -> Option<String> {
     let player_url = {
         let mut guard = inner.lock().expect("engine lock");
@@ -272,10 +263,23 @@ fn present_ready(
     };
     // WebView2 construction pumps native messages and can synchronously call
     // stop(). Never retain a supervisor/session mutex across this callback.
-    let target = present(&player_url);
-    let guard = inner.lock().expect("engine lock");
-    (owns_launch(&guard, generation, child_pid) && guard.phase == EnginePhase::Ready)
-        .then_some(target)
+    let result = present(&player_url);
+    let mut guard = inner.lock().expect("engine lock");
+    if !owns_launch(&guard, generation, child_pid) || guard.phase != EnginePhase::Ready {
+        return None;
+    }
+    match result {
+        Ok(target) => Some(target),
+        Err(error) => {
+            guard.phase = EnginePhase::Error;
+            guard.message = "Couldn't open player".into();
+            push_log(
+                &mut guard,
+                format!("error: could not open desktop player: {error}"),
+            );
+            None
+        }
+    }
 }
 
 fn read_engine_output<R: Read + Send + 'static>(
@@ -319,41 +323,6 @@ fn push_log(guard: &mut SupervisorInner, line: String) {
         let drain = guard.log_lines.len() - 6;
         guard.log_lines.drain(0..drain);
     }
-}
-
-fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
-    if let Some(sidecar) = sidecar_binary() {
-        let output = Command::new(&sidecar)
-            .args(["--bootstrap", &music_dir.to_string_lossy()])
-            .output()
-            .map_err(|e| format!("Failed to bootstrap via sidecar: {e}"))?;
-        if output.status.success() {
-            return Ok(());
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Sidecar bootstrap failed: {stderr}"));
-    }
-
-    let root = repo_root();
-    let python = python_executable(&root);
-    if !root.join("soundsible_engine.py").exists() {
-        return Err(format!(
-            "Missing soundsible_engine.py under {}",
-            root.display()
-        ));
-    }
-    let output = Command::new(&python)
-        .current_dir(&root)
-        .arg(root.join("soundsible_engine.py"))
-        .arg("--bootstrap")
-        .arg(music_dir)
-        .output()
-        .map_err(|e| format!("Failed to bootstrap config: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Config bootstrap failed: {stderr}"));
-    }
-    Ok(())
 }
 
 fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Child, String> {
@@ -481,16 +450,14 @@ fn wait_for_ready(
                     let target =
                         present_ready(&ui_inner, generation, child_pid, state, |player_url| {
                             let target = crate::take_pending_player_url(&ui_app, player_url);
-                            if let Err(error) = crate::desktop::open_player(&ui_app, &target) {
-                                eprintln!("Could not open desktop player: {error}");
-                            }
-                            target
+                            crate::desktop::open_player(&ui_app, &target)?;
+                            Ok(target)
                         });
                     let guard = ui_inner.lock().expect("engine lock");
-                    if let Some(target) =
-                        target.filter(|_| owns_launch(&guard, generation, child_pid))
-                    {
-                        let _ = ui_app.emit("engine-ready", target);
+                    if owns_launch(&guard, generation, child_pid) {
+                        if let Some(target) = target {
+                            let _ = ui_app.emit("engine-ready", target);
+                        }
                         let _ = ui_app.emit("engine-status", status_snapshot(&guard));
                     }
                 });
@@ -634,10 +601,50 @@ mod cancellation_tests {
         let target = present_ready(&supervisor.inner, 1, pid, state, |url| {
             assert!(supervisor.inner.try_lock().is_ok());
             supervisor.stop(None).unwrap(); // A WM_HOTKEY dispatched inside construction.
-            url.to_string()
+            Ok(url.to_string())
         });
         assert!(target.is_none());
         assert_eq!(supervisor.status().phase, EnginePhase::Idle);
+    }
+
+    #[test]
+    fn native_player_failure_is_reported_as_error_and_cannot_announce_ready() {
+        let supervisor = EngineSupervisor::new();
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .arg("--help")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        child.wait().unwrap();
+        {
+            let mut guard = supervisor.inner.lock().unwrap();
+            guard.child = Some(child);
+            guard.phase = EnginePhase::Booting;
+            guard.generation = 1;
+            guard.launch_id = "own-launch".into();
+            guard.engine_pid = Some(43);
+        }
+        let state = EngineRuntimeState {
+            pid: 43,
+            launch_id: "own-launch".into(),
+            base_url: "http://127.0.0.1:49152".into(),
+            health: "/api/health".into(),
+            owner_token_file: None,
+            log_dir: "logs".into(),
+        };
+        let target = present_ready(&supervisor.inner, 1, pid, state, |_| {
+            Err("WebView unavailable".into())
+        });
+        assert!(target.is_none());
+        let status = supervisor.status();
+        assert_eq!(status.phase, EnginePhase::Error);
+        assert!(status
+            .log_lines
+            .last()
+            .unwrap()
+            .contains("WebView unavailable"));
     }
 
     #[test]

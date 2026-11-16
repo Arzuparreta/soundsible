@@ -78,10 +78,9 @@ def save_persisted_music_dir(config_dir: Path, music_dir: Path) -> None:
     config_dir = config_dir.expanduser().resolve()
     config_dir.mkdir(parents=True, exist_ok=True)
     payload = {"path": str(music_dir.resolve()), "updated_at": int(time.time())}
-    (config_dir / MUSIC_DIR_PREFS_FILENAME).write_text(
-        json.dumps(payload, indent=2),
-        encoding="utf-8",
-    )
+    from shared.atomic_file import publish, text_pieces
+
+    publish(config_dir / MUSIC_DIR_PREFS_FILENAME, text_pieces([json.dumps(payload, indent=2)]))
 
 
 def _reserve_port(host: str) -> int:

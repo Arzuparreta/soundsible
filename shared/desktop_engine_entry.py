@@ -160,7 +160,9 @@ def run(argv: list[str] | None = None) -> int:
     if args.bootstrap:
         return bootstrap_only(args.bootstrap)
 
-    if args.music_dir and not (get_config_dir() / "config.json").exists():
+    if args.music_dir:
+        # The owned child performs configuration after acquiring its lease.
+        # Stop can cancel this entire launch while it waits, before any write.
         bootstrap_only(args.music_dir)
 
     if not (get_config_dir() / "config.json").exists():

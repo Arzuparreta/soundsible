@@ -240,6 +240,13 @@ HOME, Windows profile and XDG paths before any runtime import, and precreate
 all runtime destinations. Optional lease/storage failures skip and log updates.
 
 The standalone desktop entry takes its lease before importing any dependencies.
+Configuration bootstrap runs inside this same owned, cancellable child; the
+shell no longer launches an untracked synchronous `--bootstrap` process. Stop
+can terminate a child waiting for an installation before it writes config.
+Bootstrap config and folder preferences publish atomically, so cancellation
+cannot expose truncated JSON. A player-window failure clears the failed session
+and publishes Error with Retry instead of announcing Ready and leaving loading
+visible. Those error updates revalidate the launch generation.
 While it waits for an installation, it reports a startup event on its stdout
 pipe; only the retained child's pipe can pause the shell's readiness budget.
 No marker file must be published to keep the lock safe. Optional wait callbacks

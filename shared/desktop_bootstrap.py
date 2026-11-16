@@ -11,6 +11,8 @@ import argparse
 import json
 from pathlib import Path
 
+from shared.atomic_file import publish, text_pieces
+from shared.file_revision import publication_lock
 from shared.models import PlayerConfig, StorageProvider
 from shared.runtime import get_config_dir, save_persisted_music_dir
 
@@ -24,23 +26,25 @@ def ensure_consumer_config(music_dir: Path) -> Path:
     config_dir.mkdir(parents=True, exist_ok=True)
     config_path = config_dir / "config.json"
 
-    if not config_path.exists():
-        config = PlayerConfig(
-            provider=StorageProvider.LOCAL,
-            endpoint=str(music_dir),
-            bucket="music",
-            access_key_id="",
-            secret_access_key="",
-            cache_location=str(config_dir.parent / "cache" / "musicplayer"),
-            watch_folders=[str(music_dir)],
-        )
-        config_path.write_text(config.to_json(), encoding="utf-8")
-        try:
-            (config_dir / "output_dir").write_text(str(music_dir), encoding="utf-8")
-        except OSError:
-            pass
+    with publication_lock(config_path):
+        if not config_path.exists():
+            config = PlayerConfig(
+                provider=StorageProvider.LOCAL,
+                endpoint=str(music_dir),
+                bucket="music",
+                access_key_id="",
+                secret_access_key="",
+                cache_location=str(config_dir.parent / "cache" / "musicplayer"),
+                watch_folders=[str(music_dir)],
+            )
+            publish(config_path, text_pieces([config.to_json()]))
+        if not (config_dir / "output_dir").exists():
+            try:
+                publish(config_dir / "output_dir", text_pieces([str(music_dir)]))
+            except OSError:
+                pass
 
-    save_persisted_music_dir(config_dir, music_dir)
+        save_persisted_music_dir(config_dir, music_dir)
     return config_path
 
 

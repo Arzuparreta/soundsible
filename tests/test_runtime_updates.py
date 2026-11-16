@@ -653,3 +653,38 @@ def test_venv_repair_preserves_only_the_selected_active_launcher(tmp_path):
     another = tmp_path / "pythonw.exe"
     builder.symlink_or_copy(replacement, another)
     assert another.read_bytes() == b"replacement"
+
+
+def test_stopping_the_owned_engine_while_it_waits_prevents_late_config_writes(tmp_path):
+    result = _fresh(
+        """
+import json, os, subprocess, sys
+from pathlib import Path
+entry = Path('soundsible_engine.py').resolve()
+config = Path(os.environ['SOUNDSIBLE_CONFIG_DIR']) / 'config.json'
+music = Path(os.environ['SOUNDSIBLE_MUSIC_DIR'])
+code = ("from pathlib import Path; import sys; import shared.runtime_updates as u; "
+        f"u._tool_lease_path = lambda prefix=None: Path({str(updates._tool_lease_path())!r}); "
+        f"sys.argv = [{str(entry)!r}, '--music-dir', {str(music)!r}]; "
+        f"exec(compile(Path({str(entry)!r}).read_text(), {str(entry)!r}, 'exec'), "
+        f"{{'__name__': '__main__', '__file__': {str(entry)!r}}})")
+with updates.bootstrap_tool_session(Path(sys.prefix)) as writer:
+    writer.require_write()
+    child = subprocess.Popen([sys.executable, '-c', code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert json.loads(child.stdout.readline()) == {'event': 'waiting_for_tools', 'waiting': True}
+        assert not config.exists()
+        child.terminate()
+        child.communicate(timeout=10)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate()
+# Releasing the writer must not resurrect a cancelled bootstrap.
+assert child.returncode is not None
+assert not config.exists()
+print('cancelled-before-configuration')
+""",
+        tmp_path,
+    )
+    assert result == 'cancelled-before-configuration'
