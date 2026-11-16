@@ -13,6 +13,10 @@
 - DJ mode review: read `docs/internal/dj/HANDOFF.md` before working on DJ analysis,
   route ordering or transitions, and update its status table when a point closes.
 
+- Web UI architecture review: read `docs/internal/audits/WEB_UI_REVIEW_HANDOFF.md`
+  before working on web UI rendering performance, lists and scrolling, rows,
+  menus or the design system, and update its status table when an item closes.
+
 - Documentation has two audiences, kept in two places. `docs/*.md` (directly in
   `docs/`, no subfolders) are user guides: installing, configuring and using
   Soundsible. The Soundsible website publishes exactly these files, and the
