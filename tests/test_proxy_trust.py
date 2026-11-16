@@ -146,3 +146,29 @@ def test_agent_routes_need_a_token_even_where_the_network_is_trusted(passwordles
     assert passwordless_station.get("/api/users", **local).status_code == 200
     assert passwordless_station.get("/api/agent/verify", **local).status_code == 401
     assert passwordless_station.get("/api/pairing/verify", **local).status_code == 401
+
+
+@pytest.mark.parametrize("headers", [
+    # A proxy that sets X-Real-IP and passes the client's own headers through.
+    {"X-Real-IP": "8.8.8.8", "Forwarded": "for=127.0.0.1"},
+    {"X-Real-IP": "8.8.8.8", "X-Forwarded-For": "127.0.0.1"},
+    {"X-Forwarded-For": "8.8.8.8", "Forwarded": "for=192.168.1.5"},
+])
+def test_proxy_headers_that_disagree_name_nobody(headers):
+    assert _client("127.0.0.1", headers) == ""
+    # ...and the caller cannot mint a budget of its own with them.
+    assert _rate_key("127.0.0.1", headers) == "127.0.0.1"
+
+
+def test_proxy_headers_that_agree_still_name_the_client():
+    headers = {"X-Real-IP": "81.2.69.160", "X-Forwarded-For": "10.0.0.9, 81.2.69.160"}
+    assert _client("127.0.0.1", headers) == "81.2.69.160"
+
+
+def test_a_spoofed_header_beside_the_proxys_own_is_not_trusted(passwordless_station):
+    response = passwordless_station.get(
+        "/api/users",
+        environ_base={"REMOTE_ADDR": "127.0.0.1"},
+        headers={"X-Real-IP": "8.8.8.8", "Forwarded": "for=127.0.0.1"},
+    )
+    assert response.status_code == 403

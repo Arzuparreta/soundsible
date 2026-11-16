@@ -62,18 +62,25 @@ def _forwarded_client(headers) -> str | None:
     """The client a proxy names, ``""`` when it names none, ``None`` without a proxy.
 
     The right-most ``X-Forwarded-For`` entry is the one the nearest proxy
-    wrote; earlier entries are whatever the client sent.
+    wrote; earlier entries are whatever the client sent. A proxy writes one of
+    ``X-Forwarded-For``, ``Forwarded`` and ``X-Real-IP`` and may pass the
+    others through from the client untouched, so when more than one is present
+    they must name the same address: otherwise the client wrote one of them,
+    nobody can tell which, and the answer is ``""``.
     """
+    named = []
     forwarded_for = headers.get("X-Forwarded-For")
     if forwarded_for is not None:
         entries = [entry for entry in forwarded_for.split(",") if entry.strip()]
-        return _strip_port(entries[-1]) if entries else ""
+        named.append(_strip_port(entries[-1]) if entries else "")
     forwarded = headers.get("Forwarded")
     if forwarded is not None:
-        return _last_forwarded_for(forwarded)
+        named.append(_last_forwarded_for(forwarded))
     real_ip = headers.get("X-Real-IP")
     if real_ip is not None:
-        return _strip_port(real_ip)
+        named.append(_strip_port(real_ip))
+    if named:
+        return named[0] if len(set(named)) == 1 else ""
     if headers.get("X-Forwarded-Host") or headers.get("X-Forwarded-Proto"):
         return ""
     return None

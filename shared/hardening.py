@@ -200,10 +200,20 @@ def get_request_auth_context(*, allow_trusted_network: bool = False) -> Optional
     context = getattr(g, "_soundsible_credential_context", _NOT_RESOLVED)
     if context is _NOT_RESOLVED:
         context = _credential_context()
+        if context and context.get("user_id") and _account_is_disabled(context["user_id"]):
+            # Disabling an account revokes its sessions; its agent, paired
+            # device and legacy tokens are refused here instead. Deleting one
+            # revokes every token it had.
+            context = None
         g._soundsible_credential_context = context
     if context is None and allow_trusted_network:
         return _trusted_network_context()
     return context
+
+
+def _account_is_disabled(user_id: str) -> bool:
+    row = _db().get_user_row(user_id)
+    return bool(row and row.get("disabled_at"))
 
 
 def _trusted_network_context() -> Optional[dict]:

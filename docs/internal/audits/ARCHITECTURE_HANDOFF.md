@@ -115,6 +115,23 @@ patterns, or `SOUNDSIBLE_SOCKET_CORS_ORIGINS` when set (`*` still allows any
 page). A TLS proxy that sends no `X-Forwarded-Proto` needs its address configured. Native Android (OkHttp) sends no
 `Origin`, and Engine.IO checks nothing without that header.
 
+Review found three more holes in the same boundary, closed with it:
+
+- `_forwarded_client` took `X-Forwarded-For`, then `Forwarded`, then `X-Real-IP`.
+  A proxy that writes `X-Real-IP` and passes the client's other headers through
+  let the client choose its address (owner on a passwordless daemon, a fresh
+  rate-limit budget per request). When several are present they must agree,
+  or the request names nobody.
+- A token naming a disabled account still authenticated (disabling revokes
+  only sessions; deleting revokes every token). `get_request_auth_context`
+  now refuses it.
+- A socket was checked only at the handshake. `recheck_sockets()` reruns the
+  connect decision on each open socket's own environ every
+  `SOCKET_AUTH_RECHECK_SEC` (30 s) and disconnects the ones it no longer
+  admits — logout, revoked device, disabled account, expired session, or an
+  instance that started requiring login. Between two passes a lapsed socket
+  can still receive events for up to that long.
+
 Checked on an engine on port 5091: polling from another origin answers 400
 `Not an accepted origin`; a WebSocket from another origin gets gevent-websocket's
 101 (the upgrade happens before Engine.IO runs) followed at once by a close
