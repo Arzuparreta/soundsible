@@ -95,7 +95,8 @@ measurements settle what that was:
   request) the gap becomes 266 ms, the position update period, and frames are
   still reported dropped. Nothing is late: nothing changed on screen.
 
-It costs the main thread 48 ms and the compositor 24 ms per 3.6 s at 1×, and
+At rest and playing, the page uses 85 ms of main thread and 43 ms of
+compositor per 3.6 s at 1× (30 ms and 15 ms when paused), and
 the two steps per update are deliberate (the comment on `.progressFill`
 explains the phone case). No change is made.
 
