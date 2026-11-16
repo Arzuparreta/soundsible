@@ -17,7 +17,7 @@ The checks were made on `main` at `3c7e4af3`. Those marked as
 | 2 | Behind a proxy, anyone on the internet is an administrator without a password | **Closed** in the first PR (see residue) |
 | 3 | Socket.IO accepts any origin | **Closed**: same origin plus the REST list (`shared/api/origins.py`) |
 | 4 | Server playback queue that no client reads; stub routes | **Closed**: queue, its routes and both stubs deleted |
-| 5 | Business logic in route modules and in the Flask module | Pending |
+| 5 | Business logic in route modules and in the Flask module | **Closed**: shared services independent of the application and route-private helpers |
 | 6 | State JSON files written without protection against power loss | **Closed**: whole-file replace, ordered writes |
 | 7 | yt-dlp update with the module already imported | **Closed**: the daemon upgrades before importing the API |
 | 8 | Dead code and minor details | **Closed** |
@@ -162,19 +162,29 @@ the up-next list belongs to the player. `get_core()` returned
 `(library, None, queue)`; it is now `get_library()`. An existing
 `queue_state.json` is left on disk and nothing reads it.
 
-### 5. Layers
+### 5. Layers (closed)
 
-`_resolve_candidates` is private to `shared/api/routes/catalog.py` and is imported by
-`auto_mode.py`, `library.py` and `shared/migration/service.py`.
-`shared/dj/session.py` imports `_dj_prepare_cohort` from `routes/auto_mode.py`.
-`catalog.py` imports `_get_preview_stream_cached` from `routes/playback.py`. The
-shared objects (`get_user_core`, `add_tracks_to_user_library`,
-`emit_to_user`, `socketio`) live in `shared/api/__init__.py`; that is why nine
-blueprints have their own `_get_api()` with deferred imports and
-`shared/loudness/service.py`, `shared/migration/service.py` and
-`shared/artwork_recovery.py` import the Flask module. Moving those functions to
-service modules is mechanical. The tests replace `_get_api` with
-dictionaries: moving them requires updating those doubles.
+Shared services now own their collaborators outside the application package:
+`shared/realtime.py` (Socket.IO and user rooms), `user_cores.py`,
+`library_intake.py`, `download_pump.py`, `library_tasks.py`,
+`station_addresses.py`, `memo.py`, `orchestrator.py` and `download_queue.py`.
+Candidate resolution, preview streams and the Deezer catalog no longer belong
+to route modules. The DJ session reports runway acceptance; its route prepares
+the cohort. Services do not import the Flask application or another route's
+private helper. `tests/test_layering.py` checks direct, deferred, relative and
+aliased imports, including dotted attribute access.
+
+The account boundary was checked with the move: Discover sends each waiting
+request its own ranked result in its own account, even if another waiter fails;
+background favourite resolution binds the saving account before creating a
+downloader. Heartbeat checks import the application in fresh processes instead
+of replacing singleton handlers in the test process.
+
+Independent GPT 6.1 Sol (xhigh) review: merge; quality 8/10, complexity 8/10,
+performance 9/10, maintainability 8/10 (higher is better). The four remaining
+minor findings were fixed: waiter failure isolation, favourite account context,
+the moved benchmark fingerprint and aliases in the layering guard. Regression
+tests cover both behaviour fixes.
 
 ### 6. Non-atomic JSON writes (closed)
 

@@ -6,8 +6,7 @@ captures from `docs/images/screenshots/`, in matching light and dark themes.
 screenshots stay intact. A separate status area keeps the phone's rounded
 upper corners clear of the library header, with vector signal, Wi-Fi and
 battery icons. The library capture retains its original aspect ratio below
-that area. A swipe indicator overlays its bottom edge without reserving space
-or resizing the capture.
+that area. No swipe indicator overlays the capture.
 The transparent canvas follows the README background.
 The phone overlaps only the lower part of the desktop's left library pane,
 leaving the player and the entire right queue panel visible.

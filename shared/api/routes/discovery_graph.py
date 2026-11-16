@@ -119,16 +119,25 @@ def _expand_seed(video_id: str, user_id: str | None) -> None:
         waiting = _discover_subscribers.pop(video_id, [])
     emit = _get_api()["emit_to_user"]
     for subscriber, request_id, seed_track_id in waiting:
+        # One account's failure must not leave the others waiting: each is
+        # told on its own, with no recs when its ranking fails.
         recs = results or []
-        if recs and subscriber:
-            with user_context(subscriber):
-                recs = rank_recommendation_rows(recs, source="discover")
-        # The seed and its mix are this account's, never everyone's.
-        emit("discover_seed_ready", {
-            "request_id": request_id,
-            "seed_track_id": seed_track_id,
-            "recs": recs,
-        }, user_id=subscriber)
+        try:
+            if recs and subscriber:
+                with user_context(subscriber):
+                    recs = rank_recommendation_rows(recs, source="discover")
+        except Exception as exc:
+            logger.debug("discover: ranking %s for %s failed: %s", video_id, subscriber, exc)
+            recs = []
+        try:
+            # The seed and its mix are this account's, never everyone's.
+            emit("discover_seed_ready", {
+                "request_id": request_id,
+                "seed_track_id": seed_track_id,
+                "recs": recs,
+            }, user_id=subscriber)
+        except Exception as exc:
+            logger.debug("discover: telling %s about %s failed: %s", subscriber, video_id, exc)
 
 
 def _schedule_expand(video_id: str, request_id: str | None = None, seed_track_id: str | None = None) -> None:

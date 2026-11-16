@@ -46,12 +46,15 @@ def _package_of(rel: str) -> list[str]:
 
 
 def _imports(rel: str, tree: ast.AST):
-    """`(line, module, name)` for every import, relative ones resolved."""
+    """`(line, module, name, bound)` for every import, relative ones resolved.
+
+    `bound` is the local name the import creates (its `as` name if any).
+    """
     package = _package_of(rel)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                yield node.lineno, alias.name, None
+                yield node.lineno, alias.name, None, alias.asname or alias.name.split(".")[0]
         elif isinstance(node, ast.ImportFrom):
             if node.level:
                 base = package[: len(package) - (node.level - 1)]
@@ -59,7 +62,18 @@ def _imports(rel: str, tree: ast.AST):
             else:
                 module = node.module or ""
             for alias in node.names:
-                yield node.lineno, module, alias.name
+                yield node.lineno, module, alias.name, alias.asname or alias.name
+
+
+def _dotted(node: ast.AST) -> str | None:
+    """`a.b.c` for an attribute chain on a plain name, else None."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    return ".".join([node.id, *reversed(parts)])
 
 
 def _is_api_package(module, name):
@@ -74,7 +88,7 @@ def _application_imports(rel: str, source: str) -> list[str]:
     allowed = ENTRY_POINTS.get(rel, set())
     return [
         f"{rel}:{line} imports {module}{'.' + name if name else ''}"
-        for line, module, name in _imports(rel, ast.parse(source))
+        for line, module, name, _ in _imports(rel, ast.parse(source))
         if _is_api_package(module, name) and not (module == "shared.api" and name in allowed)
     ]
 
@@ -91,32 +105,36 @@ def _borrowed_privates(rel: str, source: str) -> list[str]:
     """
     stem = Path(rel).stem
     tree = ast.parse(source)
-    foreign = {}  # local alias -> route module
+    foreign = {}  # local name -> another blueprint's route module
     offenders = []
-    for line, module, name in _imports(rel, tree):
+    for line, module, name, bound in _imports(rel, tree):
         if module == ROUTES and name:
-            target, imported = name, None
+            target, imported = name, None  # from shared.api.routes import catalog [as c]
+        elif module.startswith(ROUTES + ".") and name is None:
+            target, imported = module.split(".")[3], None  # import shared.api.routes.catalog [as c]
         elif module.startswith(ROUTES + "."):
-            target, imported = module.rsplit(".", 1)[1], name
+            target, imported = module.split(".")[3], name  # from shared.api.routes.catalog import x
         else:
             continue
         if _blueprint_of(target) == _blueprint_of(stem):
             continue
         if imported is None:
-            foreign[name] = target
+            # Bare `import shared.api.routes.catalog` binds `shared`; its
+            # dotted uses are checked below instead.
+            if bound != "shared":
+                foreign[bound] = target
         elif imported.startswith("_"):
             offenders.append(f"{rel}:{line} imports {target}.{imported}")
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.startswith(ROUTES + ".") and alias.asname:
-                    target = alias.name.rsplit(".", 1)[1]
-                    if _blueprint_of(target) != _blueprint_of(stem):
-                        foreign[alias.asname] = target
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
-                and node.value.id in foreign and node.attr.startswith("_")):
-            offenders.append(f"{rel}:{node.lineno} uses {foreign[node.value.id]}.{node.attr}")
+        if not isinstance(node, ast.Attribute) or not node.attr.startswith("_"):
+            continue
+        owner = _dotted(node.value)
+        if owner in foreign:
+            offenders.append(f"{rel}:{node.lineno} uses {foreign[owner]}.{node.attr}")
+        elif owner and owner.startswith(ROUTES + ".") and owner.count(".") == 3:
+            target = owner.split(".")[3]
+            if _blueprint_of(target) != _blueprint_of(stem):
+                offenders.append(f"{rel}:{node.lineno} uses {target}.{node.attr}")
     return offenders
 
 
@@ -154,6 +172,9 @@ def test_the_application_guard_sees_every_spelling(rel, source):
     "from . import catalog\ncatalog._helper()",
     "from shared.api.routes import catalog\ncatalog._helper()",
     "import shared.api.routes.catalog as c\nc._helper()",
+    "from . import catalog as c\nc._helper()",
+    "from shared.api.routes import catalog as c\nc._helper()",
+    "import shared.api.routes.catalog\nshared.api.routes.catalog._helper()",
 ])
 def test_the_blueprint_guard_sees_every_spelling(source):
     assert _borrowed_privates("shared/api/routes/library.py", source)
