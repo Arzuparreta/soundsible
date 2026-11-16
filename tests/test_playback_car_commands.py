@@ -13,14 +13,6 @@ class _FakeSocketIO:
         self.events.append({"event": event, "payload": payload, "room": room})
 
 
-class _FakeQueue:
-    def __init__(self):
-        self.consumed = []
-
-    def consume_head_if_id(self, track_id):
-        self.consumed.append(track_id)
-
-
 class _FakeTrack:
     id = "t1"
     title = "Track One"
@@ -58,7 +50,6 @@ def _patch_api(monkeypatch):
     from shared.playback_state import register_device
 
     socketio = _FakeSocketIO()
-    queue = _FakeQueue()
     states = {}
     device = {
         "device_id": "ios-car-client",
@@ -75,7 +66,7 @@ def _patch_api(monkeypatch):
 
     def fake_get_api():
         return {
-            "get_core": lambda: (None, None, queue),
+            "get_library": lambda: None,
             "get_track_by_id": lambda _lib, track_id: _FakeTrack() if track_id == "t1" else None,
             "socketio": socketio,
             "get_downloader": lambda open_browser=False: None,
@@ -91,13 +82,13 @@ def _patch_api(monkeypatch):
         }
 
     monkeypatch.setattr(playback_routes, "_get_api", fake_get_api)
-    return socketio, queue, states
+    return socketio, states
 
 
 def test_remote_previous_command_emits_previous_event(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
-    socketio, _, _ = _patch_api(monkeypatch)
+    socketio, _ = _patch_api(monkeypatch)
 
     response = _make_app().test_client().post(
         "/api/playback/remote-command",
@@ -134,7 +125,7 @@ def test_remote_command_accepts_ios_device_registration(tmp_path, monkeypatch):
 def test_remote_play_command_writes_track_payload_for_native_clients(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
-    socketio, queue, states = _patch_api(monkeypatch)
+    socketio, states = _patch_api(monkeypatch)
 
     response = _make_app().test_client().post(
         "/api/playback/remote-command",
@@ -142,7 +133,6 @@ def test_remote_play_command_writes_track_payload_for_native_clients(tmp_path, m
     )
 
     assert response.status_code == 200
-    assert queue.consumed == ["t1"]
     assert states["ios-car-client"]["track"]["title"] == "Track One"
     assert states["ios-car-client"]["position_sec"] == 12
     assert socketio.events[0]["event"] == "playback_start_requested"
@@ -152,7 +142,7 @@ def test_remote_play_command_writes_track_payload_for_native_clients(tmp_path, m
 def test_remote_pause_then_resume_preserves_track_position_and_session(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
-    socket, _, states = _patch_api(monkeypatch)
+    socket, states = _patch_api(monkeypatch)
     original = {'device_id': 'ios-car-client', 'track_id': 't1', 'track': _FakeTrack().to_dict(),
                 'position_sec': 42, 'is_playing': True, 'session': {'v': 1, 'queue': [{'id': 't1', 'queueId': 'occurrence'}]}}
     states['ios-car-client'] = original
@@ -195,7 +185,7 @@ def test_start_event_distinguishes_handoff_from_transport_resume():
 def test_remote_play_relays_portable_elements_without_library_files(tmp_path, monkeypatch, track):
     reset_runtime()
     _make_runtime(tmp_path)
-    socket, queue, states = _patch_api(monkeypatch)
+    socket, states = _patch_api(monkeypatch)
     # URL DNS safety is tested in the podcast suite; this fixture never accesses the network.
     monkeypatch.setattr("shared.podcast_rss.assert_safe_http_url", lambda url: None)
     states['ios-car-client'] = {'track_id': 't1', 'session': {'v': 1, 'mode': 'auto'}}
@@ -203,7 +193,6 @@ def test_remote_play_relays_portable_elements_without_library_files(tmp_path, mo
         'device_id': 'ios-car-client', 'command': 'play', 'track_id': track['id'], 'track': track,
     })
     assert response.status_code == 200
-    assert queue.consumed == []
     sent = socket.events[0]
     assert sent['room'] == 'playback:default:ios-car-client'
     assert sent['payload']['track'].items() >= track.items()
@@ -221,18 +210,18 @@ def test_remote_play_relays_portable_elements_without_library_files(tmp_path, mo
 def test_remote_play_rejects_invalid_elements_without_changing_state(tmp_path, monkeypatch, track):
     reset_runtime()
     _make_runtime(tmp_path)
-    socket, queue, states = _patch_api(monkeypatch)
+    socket, states = _patch_api(monkeypatch)
     response = _make_app().test_client().post('/api/playback/remote-command', json={
         'device_id': 'ios-car-client', 'command': 'play', 'track': track,
     })
     assert response.status_code == 400
-    assert not socket.events and not states and not queue.consumed
+    assert not socket.events and not states
 
 
 def test_remote_play_uses_canonical_library_metadata_and_drops_device_urls(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
-    socket, _, _ = _patch_api(monkeypatch)
+    socket, _ = _patch_api(monkeypatch)
     client = _make_app().test_client()
     response = client.post('/api/playback/remote-command', json={
         'device_id': 'ios-car-client', 'command': 'play',
@@ -252,7 +241,7 @@ def test_remote_play_uses_canonical_library_metadata_and_drops_device_urls(tmp_p
 def test_remote_play_does_not_relay_to_a_device_outside_the_scope(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
-    socket, _, states = _patch_api(monkeypatch)
+    socket, states = _patch_api(monkeypatch)
     response = _make_app().test_client().post('/api/playback/remote-command', json={
         'device_id': 'someone-elses-device', 'command': 'play',
         'track': {'id': 'dQw4w9WgXcQ', 'source': 'preview'},
@@ -267,7 +256,7 @@ def test_remote_play_does_not_relay_to_a_device_outside_the_scope(tmp_path, monk
 def test_remote_play_rejects_mismatched_identity_or_invalid_position(tmp_path, monkeypatch, extra):
     reset_runtime()
     _make_runtime(tmp_path)
-    socket, _, states = _patch_api(monkeypatch)
+    socket, states = _patch_api(monkeypatch)
     response = _make_app().test_client().post('/api/playback/remote-command', json={
         'device_id': 'ios-car-client', 'command': 'play',
         'track': {'id': 'dQw4w9WgXcQ', 'source': 'preview'}, **extra,
@@ -279,7 +268,7 @@ def test_remote_play_rejects_mismatched_identity_or_invalid_position(tmp_path, m
 def test_remote_podcast_uses_the_existing_enclosure_safety_gate(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
-    socket, _, states = _patch_api(monkeypatch)
+    socket, states = _patch_api(monkeypatch)
     def refuse(url):
         raise ValueError('Unsafe enclosure URL')
     monkeypatch.setattr('shared.podcast_rss.assert_safe_http_url', refuse)

@@ -5,14 +5,19 @@ Persists last playback state and tracks active devices per scope.
 The scope *is* the user id: two people on the same LAN never see each other's
 devices, resume prompts, or handoff targets.
 """
+import itertools
 import json
+import logging
 import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+from shared.atomic_file import publish, text_pieces
 from shared.user_context import current_user_id, user_config_dir
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SCOPE = "default"
 # Note: A published session — queue, transport preferences, Auto Mode workspace —
@@ -27,6 +32,12 @@ _lock = threading.Lock()
 _active_devices: dict[str, dict[str, dict[str, Any]]] = {}  # Note: Scope -> device_id -> state
 _registered_devices: dict[str, dict[str, dict[str, Any]]] = {}  # Note: Scope -> device_id -> metadata
 _socket_devices: dict[str, tuple[str, str]] = {}  # Note: Socket.IO sid -> (scope, device_id)
+# Every state taken under `_lock` gets the next number; only the newest one per
+# scope is written, so two requests finishing out of order cannot leave the
+# older state on disk.
+_state_numbers = itertools.count(1)
+_newest_state: dict[str, int] = {}
+_persist_lock = threading.Lock()
 
 
 def _state_path(scope: str) -> Path:
@@ -370,9 +381,21 @@ def put_state(scope: str, payload: dict[str, Any]) -> None:
             "device_type": registered.get("device_type") if registered else payload.get("device_type"),
             "last_seen_ts": now,
         }
-    path = _state_path(scope)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    except OSError:
-        pass
+        number = next(_state_numbers)
+        _newest_state[scope] = number
+    _persist_state(scope, number, json.dumps(state, indent=2))
+
+
+def _persist_state(scope: str, number: int, body: str) -> None:
+    """Replace the scope's file whole, unless a newer state was taken meanwhile.
+
+    A power loss during an in-place write left a truncated file, and with it no
+    resume after the restart.
+    """
+    with _persist_lock:
+        if _newest_state.get(scope) != number:
+            return  # The newer state's own call writes it.
+        try:
+            publish(_state_path(scope), text_pieces([body]))
+        except OSError as error:
+            logger.warning("playback state: could not save %s: %s", scope, error)

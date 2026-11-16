@@ -62,7 +62,7 @@ The Flask application lives in `shared/api/__init__.py`. It:
 
 - Registers blueprints for **library**, **playback**, **downloader**, **config**, **discovery**, **podcasts**, and **agent** (`shared/api/routes/`).
 - Serves the web player under `/player/`: prefers the `ui_web/dist` build when present, falling back to the `ui_web` source tree (override with `SOUNDSIBLE_WEB_UI_DIST=0/1`).
-- Holds singletons for **LibraryManager**, **QueueManager**, **FavouritesManager**, and the download subsystem.
+- Holds one **LibraryManager** and **FavouritesManager** per account, and the download subsystem. Playback runs on the devices; each player keeps its own up-next list and reports it through `PUT /api/playback/state`.
 - Uses **Socket.IO** for live updates (e.g. library changes, downloader progress, playback coordination).
 
 **Desktop sidecar contract**:
@@ -286,7 +286,7 @@ machine, and what belongs to a person.
 | `<config>/config.json` | Storage backend and credentials (`PlayerConfig`). |
 | `<config>/output_dir`, `<config>/music_dir.json` | Where the shared music pool lives. |
 | `<config>/cookies.txt` | yt-dlp cookies. |
-| `<config>/download_queue.json` | One queue; each row carries `user_id`. |
+| `download_jobs` in `<config>/instance.db` | One download queue; each row carries `user_id`. A legacy `download_queue.json` is imported once and kept as `download_queue.json.sqlite.bak`. |
 | `<music>/tracks/<hash>.<ext>` | **Shared audio pool.** The track id *is* the content hash, so two people who own the same song point at the same file — nothing is downloaded or stored twice. A file leaves only through `shared/library_lifecycle.py`: deleting a track, clearing a library or deleting an account records an intent in `audio_cleanup`, and the download pump deletes the file once no account uses it — a `tracks` row or a `collection_files` binding, never a saved song's `lib:` key. A library without the collection model still holds the files its `favourites.json` and playlists name; one that has not run `described-saved-songs` holds the files its `lib:` keys name, which that migration reads as evidence. Files left by deletions from before those intents existed are recorded once per music folder by `reconcile()`. |
 | `<music>/library.json` | Instance catalog of what is physically on disk (written by the download pool, `shared/downloader/`). |
 | `<cache>/previews/`, `<cache>/covers/` | Shared, content-addressed. |
@@ -300,7 +300,6 @@ machine, and what belongs to a person.
 | `library.json` | Portable export of your canonical library for recovery and cloud interoperability. The first migration also keeps `library.json.pre-sqlite.bak`. |
 | `favourites.json` | Legacy saved-song import, retained once for restoration; SQLite is authoritative. |
 | `playback_state.json`, `discovery_settings.json` | Cross-device resume and discovery opt-in. |
-| `queue_state.json` *(data dir)* | Playback queue. |
 | `telemetry/listening-events.jsonl`, `telemetry/play-timing.jsonl` *(data dir)* | Listening history — the input to *your* recommendations. |
 
 Editing a song's title, artist, album or cover never touches its audio file

@@ -41,9 +41,6 @@ _CONFIG_FILES = (
     ("playback_state_default.json", "playback_state.json"),
 )
 
-# data_dir/<source> -> users/<id>/<target>
-_DATA_FILES = (("queue_state.json", "queue_state.json"),)
-
 # data_dir/telemetry/<name> -> users/<id>/telemetry/<name>, rotations included
 _USER_TELEMETRY_STEMS = ("listening-events.jsonl", "play-timing.jsonl")
 
@@ -128,10 +125,6 @@ def _adopt_files(user_id: str) -> list[str]:
 
     for source_name, target_name in _CONFIG_FILES:
         if _copy_with_backup(config_dir / source_name, target_config / target_name):
-            moved.append(source_name)
-
-    for source_name, target_name in _DATA_FILES:
-        if _copy_with_backup(data_dir / source_name, target_data / target_name):
             moved.append(source_name)
 
     telemetry_source = data_dir / "telemetry"

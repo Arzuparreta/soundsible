@@ -15,7 +15,7 @@ from shared.api import get_user_core, reset_user_cores
 from shared.database import instance_db
 from shared.hardening import _rate_limiter
 from shared.multiuser_migration import BACKUP_SUFFIX, ensure_multiuser_layout
-from shared.runtime import get_config_dir, get_data_dir
+from shared.runtime import get_config_dir
 from shared.database import DatabaseManager, user_db
 from shared.user_context import (
     NoUserBound,
@@ -23,7 +23,6 @@ from shared.user_context import (
     unbind_user,
     user_config_dir,
     user_context,
-    user_data_dir,
 )
 from shared.users import (
     ROLE_ADMIN,
@@ -66,10 +65,8 @@ def _login(client, username, password):
 
 def test_migration_adopts_existing_library_and_keeps_a_backup():
     config_dir = get_config_dir()
-    data_dir = get_data_dir()
     (config_dir / "library.json").write_text('{"version": 1, "tracks": [], "playlists": {}}')
     (config_dir / "favourites.json").write_text('{"version": "1.0", "favourites": ["t1"]}')
-    (data_dir / "queue_state.json").write_text('{"version": 1, "queue": []}')
 
     summary = ensure_multiuser_layout()
 
@@ -79,7 +76,6 @@ def test_migration_adopts_existing_library_and_keeps_a_backup():
 
     assert (user_config_dir(user_id) / "library.json").exists()
     assert (user_config_dir(user_id) / "favourites.json").exists()
-    assert (user_data_dir(user_id) / "queue_state.json").exists()
     # Originals stay put under a backup name so the migration is reversible.
     assert (config_dir / f"library.json{BACKUP_SUFFIX}").exists()
 
@@ -204,7 +200,7 @@ def test_two_accounts_get_separate_directories_and_favourites():
     assert (user_config_dir(ana["id"]) / "library.db").exists()
 
 
-def test_queue_and_library_paths_never_collide():
+def test_library_paths_never_collide():
     ensure_multiuser_layout()
     ana = create_user("ana", password="secret123")
     bob = create_user("bob", password="secret123")
@@ -216,7 +212,6 @@ def test_queue_and_library_paths_never_collide():
 
     assert ana_core.library.manifest_path != bob_core.library.manifest_path
     assert ana_core.library.db.db_path != bob_core.library.db.db_path
-    assert ana_core.queue._persist_path != bob_core.queue._persist_path
 
 
 def test_a_new_account_starts_with_an_empty_manifest_not_an_unloaded_one():

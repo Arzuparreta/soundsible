@@ -164,7 +164,7 @@ def test_other_accounts_do_not_receive_the_repair(lib, cached):
 
 def test_album_route_read_then_authenticated_repair(lib, cached, monkeypatch):
     import shared.api as api
-    monkeypatch.setattr(catalog, '_get_api', lambda: {'get_core': lambda: (lib, None, None)})
+    monkeypatch.setattr(catalog, '_get_api', lambda: {'get_library': lambda: lib})
     monkeypatch.setattr(catalog, '_deezer_album_profile', lambda *args: profile())
     emit = Mock()
     monkeypatch.setattr(api, 'emit_to_user', emit)

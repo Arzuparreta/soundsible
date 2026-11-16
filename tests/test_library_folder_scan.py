@@ -197,7 +197,7 @@ def test_scan_http_contract_starts_and_polls_same_user(tmp_path, monkeypatch):
     music = tmp_path / "music"
     music.mkdir()
     fake_library = SimpleNamespace(config=SimpleNamespace(watch_folders=[str(music)]))
-    monkeypatch.setattr(routes, "_get_api", lambda: {"get_core": lambda: (fake_library, None, None)})
+    monkeypatch.setattr(routes, "_get_api", lambda: {"get_library": lambda: fake_library})
     monkeypatch.setattr(library_scan_service, "resolve_roots", lambda _lib, _path=None: [music])
     monkeypatch.setattr(
         library_scan_service,
@@ -283,7 +283,7 @@ def test_real_wav_scan_survives_sqlite_reload_and_streams_a_range(tmp_path, monk
         playback,
         "_get_api",
         lambda: {
-            "get_core": lambda: (library, None, None),
+            "get_library": lambda: library,
             "get_track_by_id": lambda lib, track_id: next(
                 (track for track in lib.metadata.tracks if track.id == track_id), None
             ),

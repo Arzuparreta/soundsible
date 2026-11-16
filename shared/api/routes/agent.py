@@ -30,7 +30,7 @@ agent_bp = Blueprint("agent", __name__, url_prefix="")
 
 def _get_api():
     from shared.api import (
-        get_core,
+        get_library,
         get_downloader,
         get_track_by_id,
         get_playback_state,
@@ -40,7 +40,7 @@ def _get_api():
     from shared.playback_state import list_registered_devices, resolve_registered_device
 
     return {
-        "get_core": get_core,
+        "get_library": get_library,
         "get_downloader": get_downloader,
         "get_track_by_id": get_track_by_id,
         "get_playback_state": get_playback_state,
@@ -218,7 +218,7 @@ def agent_play():
     if requested_device_id and not target:
         return jsonify({"error": "Target device not found", "device_id": requested_device_id}), 404
 
-    lib, _, queue = api["get_core"]()
+    lib = api["get_library"]()
     track = None
     payload = None
     track_id = (data.get("track_id") or "").strip()
@@ -255,7 +255,6 @@ def agent_play():
         return jsonify({"error": "track_id or query required"}), 400
 
     if target:
-        queue.consume_head_if_id(track_id)
         target_state = {
             "track_id": track_id,
             "track": payload,

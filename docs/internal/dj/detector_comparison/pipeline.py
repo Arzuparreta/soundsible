@@ -66,7 +66,7 @@ def probe(root):
                     paths = {key: Path(cases[case]['file']) for key, case in [('outgoing', out_id), ('incoming', in_id)]}
                     api = fixture._mock_api()
                     metadata = fixture.LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-                    api['get_core'].return_value = (fixture._FakeLibrary(metadata), None, None)
+                    api['get_library'].return_value = fixture._FakeLibrary(metadata)
                     auto = fixture._auto_mode
                     with (patch.object(store, '_cache_path', return_value=database),
                           patch.object(auto, '_get_api', return_value=api),

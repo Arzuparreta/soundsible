@@ -13,6 +13,8 @@ from typing import Any, Iterable
 
 from shared.podcast_regions import valid_podcast_country
 from shared import request_scope
+from shared.atomic_file import publish, text_pieces
+from shared.file_revision import publication_lock
 from shared.models import LibraryMetadata, Track
 from shared.database import user_db
 from shared.telemetry import emit, user_telemetry_dir
@@ -339,7 +341,20 @@ def _read_discovery_settings() -> dict[str, Any]:
 
 
 def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
-    current = load_discovery_settings()
+    path = _settings_path()
+    # Read, change and replace under one lock, or two saves at once each write
+    # their own change over the file the other had not seen yet.
+    with publication_lock(path):
+        current = _apply_settings_patch(_read_discovery_settings(), patch)
+        publish(path, text_pieces([json.dumps(current, indent=2, sort_keys=True)]))
+    # A request that saves settings and then reads them back must see the write,
+    # and `learning_enabled` also gates the rollup.
+    request_scope.invalidate("discovery_settings:")
+    request_scope.invalidate("listening_rollup:")
+    return current
+
+
+def _apply_settings_patch(current: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     if "learning_enabled" in patch:
         current["learning_enabled"] = bool(patch["learning_enabled"])
     if "autoplay_enabled" in patch:
@@ -351,13 +366,6 @@ def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
     if "podcast_country" in patch and valid_podcast_country(patch["podcast_country"]):
         current["podcast_country"] = patch["podcast_country"].strip().lower()
     current["v"] = SETTINGS_VERSION
-    path = _settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(current, indent=2, sort_keys=True), encoding="utf-8")
-    # A request that saves settings and then reads them back must see the write,
-    # and `learning_enabled` also gates the rollup.
-    request_scope.invalidate("discovery_settings:")
-    request_scope.invalidate("listening_rollup:")
     return current
 
 

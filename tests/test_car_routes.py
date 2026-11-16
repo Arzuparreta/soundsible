@@ -74,7 +74,7 @@ def _patch_api(monkeypatch, metadata, *, favourites=None, playback_state=None):
 
     def fake_get_api():
         return {
-            "get_core": lambda: (fake_lib, None, None),
+            "get_library": lambda: fake_lib,
             "get_track_by_id": lambda _lib, track_id: by_id.get(track_id),
             "get_playback_state": lambda _scope: playback_state,
             "get_scope_from_request": lambda: "default",

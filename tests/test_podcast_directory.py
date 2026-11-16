@@ -57,7 +57,7 @@ def test_failed_chart_never_masquerades_as_search_ranking(client):
 
 def test_recommendation_exploration_uses_saved_country(client):
     lib = MagicMock(metadata=LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
-    with patch.object(directory, '_get_api', return_value={'get_core': lambda: (lib, None, None)}), \
+    with patch.object(directory, '_get_api', return_value={'get_library': lambda: lib}), \
             patch.object(directory, '_podcast_top_results', return_value=[]) as top, \
             patch.object(directory, 'build_podcast_recommendations', return_value={'items': []}):
         assert client.get('/api/discovery/podcasts/recommendations?limit=5').status_code == 200

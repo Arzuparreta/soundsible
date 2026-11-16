@@ -61,7 +61,7 @@ def run(lab):
                         for key, case in cases.items()}
                 paths = {key: Path(case['file']) for key, case in cases.items()}
                 api = fixture._mock_api()
-                api['get_core'].return_value = (fixture._FakeLibrary(None), None, None)
+                api['get_library'].return_value = fixture._FakeLibrary(None)
                 auto = fixture._auto_mode
                 database = temp / 'analysis.sqlite3'
                 with (patch.object(store, '_cache_path', return_value=database),

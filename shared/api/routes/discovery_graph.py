@@ -168,7 +168,7 @@ def _schedule_expand(video_id: str, request_id: str | None = None, seed_track_id
 def _track_by_id(track_id: str):
     """Look up a track in the loaded library by id. Returns a Track or None."""
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     try:
         lib.refresh_if_stale()
     except Exception:
@@ -295,7 +295,7 @@ def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:
     tracks (non-podcast). This mirrors the client's recency weighting so the
     warm set covers the client's probable picks."""
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     metadata = getattr(lib, "metadata", None)
     if not metadata or not metadata.tracks:
         return []

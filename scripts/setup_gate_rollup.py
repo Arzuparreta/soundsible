@@ -121,7 +121,7 @@ def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
         "success_rate_vs_started_sessions": round(rate, 4),
         "sessions_first_play_total_logged": len(sessions_first_play),
         "note": "Correlate setup_session_started with client-driven /api/setup/session; "
-        "first play should include matching setup_session_id on POST /api/playback/play.",
+        "first play is POST /api/setup/first-play with the same setup_session_id.",
     }
     median = _median_ms(elapsed_ms)
     if median is not None:

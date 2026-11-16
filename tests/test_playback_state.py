@@ -149,3 +149,42 @@ def test_a_session_that_is_not_an_object_is_not_stored(tmp_path):
     _put(scope, session="resume me")
 
     assert get_state(scope, device_id="dev1").get("session") is None
+
+
+def test_a_state_finishing_after_a_newer_one_does_not_overwrite_it(tmp_path):
+    import json
+    from shared import playback_state
+
+    reset_runtime()
+    _configure_runtime(tmp_path)
+    scope = "out_of_order"
+    _put(scope, position_sec=10)
+    older = playback_state._newest_state[scope]
+    _put(scope, position_sec=20)
+
+    # The request that took the older state reaches the disk last.
+    playback_state._persist_state(scope, older, json.dumps({"position_sec": 10}))
+
+    stored = json.loads(playback_state._state_path(scope).read_text(encoding="utf-8"))
+    assert stored["position_sec"] == 20
+
+
+def test_the_file_is_replaced_whole_never_rewritten_in_place(tmp_path, monkeypatch):
+    from shared import playback_state
+
+    reset_runtime()
+    _configure_runtime(tmp_path)
+    scope = "whole_file"
+    _put(scope, position_sec=10)
+    path = playback_state._state_path(scope)
+    before = path.read_bytes()
+
+    def interrupted(handle):
+        handle.write(b'{"position_sec": 2')
+        raise OSError("power lost")
+
+    monkeypatch.setattr(playback_state, "text_pieces", lambda pieces: interrupted)
+    _put(scope, position_sec=20)  # The failure is logged, not raised.
+
+    assert path.read_bytes() == before
+    assert not [p for p in path.parent.iterdir() if p.name.startswith(f".{path.name}.")]

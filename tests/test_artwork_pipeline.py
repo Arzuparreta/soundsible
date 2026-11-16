@@ -318,7 +318,7 @@ def test_transient_transform_failure_is_not_a_cacheable_placeholder(tmp_path, mo
     track = SimpleNamespace(id='song', cover_source='youtube')
     monkeypatch.setattr(store, 'open_variant', lambda *args: (_ for _ in ()).throw(OSError('busy')))
     monkeypatch.setattr('shared.api.routes.playback._get_api', lambda: {
-        'get_core': lambda: (SimpleNamespace(get_cover_url=lambda _: store.path('song')), None, None),
+        'get_library': lambda: SimpleNamespace(get_cover_url=lambda _: store.path('song')),
         'get_track_by_id': lambda *_: track,
         'WEB_UI_PATH': str(tmp_path),
     })

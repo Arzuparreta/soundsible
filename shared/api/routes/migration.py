@@ -18,10 +18,10 @@ from shared.user_context import require_user_id
 migration_bp = Blueprint("migration", __name__, url_prefix="")
 
 
-def _get_core_lib():
-    from shared.api import get_core
+def _loaded_library():
+    from shared.api import get_library
 
-    lib, _, _ = get_core()
+    lib = get_library()
     lib.refresh_if_stale()
     if not lib.metadata:
         lib.sync_library()
@@ -70,7 +70,7 @@ def migration_job_upload():
     except ParseError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    lib = _get_core_lib()
+    lib = _loaded_library()
     library_tracks = list(lib.metadata.tracks) if lib.metadata else []
     matcher = LibraryMatcher(library_tracks)
     by_id = {track.id: track for track in library_tracks}
@@ -214,7 +214,7 @@ def migration_job_decision(job_id: str):
         track_id = str(data.get("track_id") or "").strip()
         if not track_id:
             return jsonify({"error": "track_id is required"}), 400
-        lib = _get_core_lib()
+        lib = _loaded_library()
         if not lib.metadata or not lib.metadata.get_track_by_id(track_id):
             return jsonify({"error": "Unknown library track"}), 400
         store.update_track(
@@ -264,7 +264,7 @@ def migration_preview():
     except ParseError as e:
         return jsonify({"error": str(e)}), 400
 
-    lib = _get_core_lib()
+    lib = _loaded_library()
     if not lib.metadata or not lib.metadata.tracks:
         return jsonify({"error": "Library has no tracks to match against"}), 409
 
@@ -319,7 +319,7 @@ def migration_import_playlist():
     if not cleaned:
         return jsonify({"error": "No valid track IDs"}), 400
 
-    lib = _get_core_lib()
+    lib = _loaded_library()
     if not lib.metadata:
         return jsonify({"error": "Library not loaded"}), 409
 

@@ -216,7 +216,7 @@ def test_car_playlist_uses_stable_rows_and_separate_audio_sources(tmp_path, monk
     db.replace_library(metadata, playlist_entry=('Mix', entry))
     item_id = entry['item_id']
     lib = SimpleNamespace(db=db, metadata=metadata, refresh_if_stale=lambda: None)
-    monkeypatch.setattr(car, '_get_api', lambda: {'get_core': lambda: (lib, None, None)})
+    monkeypatch.setattr(car, '_get_api', lambda: {'get_library': lambda: lib})
     app = Flask(__name__)
     app.register_blueprint(car.car_bp)
     client = app.test_client()
@@ -271,7 +271,7 @@ def test_car_radio_offers_one_seed_for_an_item_with_several_acquired_sources(tmp
     metadata.add_track(replace(metadata.tracks[0], id='second-source', file_hash='second-source'))
     db.replace_library(metadata)
     lib = SimpleNamespace(db=db, metadata=metadata, refresh_if_stale=lambda: None)
-    monkeypatch.setattr(car, '_get_api', lambda: {'get_core': lambda: (lib, None, None)})
+    monkeypatch.setattr(car, '_get_api', lambda: {'get_library': lambda: lib})
     app = Flask(__name__)
     app.register_blueprint(car.car_bp)
     rows = app.test_client().get('/api/car/items/radio').get_json()['items']

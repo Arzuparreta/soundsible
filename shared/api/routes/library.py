@@ -106,7 +106,7 @@ def _playlist_precondition(metadata, name, data):
 def _get_api():
     """Lazy import from shared.api to avoid circular imports; returns a dict of core helpers and singletons."""
     from shared.api import (
-        get_core,
+        get_library,
         get_track_by_id,
         _mark_track_metadata_updated,
         _ensure_lib_metadata,
@@ -119,7 +119,7 @@ def _get_api():
     )
     from shared.models import LibraryMetadata
     return {
-        "get_core": get_core,
+        "get_library": get_library,
         "get_track_by_id": get_track_by_id,
         "_mark_track_metadata_updated": _mark_track_metadata_updated,
         "_ensure_lib_metadata": _ensure_lib_metadata,
@@ -151,7 +151,7 @@ def _annotation_revisions(artwork):
 @library_bp.route("/api/library", methods=["GET"])
 def get_library():
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     lib.refresh_if_stale()
     if not lib.metadata:
         lib.sync_library()
@@ -267,7 +267,7 @@ def get_library():
 @library_bp.route("/api/library/youtube-ids", methods=["GET"])
 def get_library_youtube_ids():
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     lib.refresh_if_stale()
     if not lib.metadata:
         lib.sync_library()
@@ -288,7 +288,7 @@ def get_library_youtube_ids():
 @rate_limit("library_sync", limit=20, window_sec=60)
 def sync_library():
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     success = lib.sync_library()
     if success:
         api["emit_to_user"]("library_updated")
@@ -311,7 +311,7 @@ def start_library_scan():
     from shared.api.library_scan import library_scan_service
 
     api = _get_api()
-    library, _, _ = api["get_core"]()
+    library = api["get_library"]()
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return jsonify({"error": "request body must be an object", "code": "invalid_scan_path"}), 400
@@ -330,7 +330,7 @@ def start_library_scan():
 @rate_limit("library_delete_track", limit=30, window_sec=60)
 def delete_track_from_library(track_id):
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     track = api["get_track_by_id"](lib, track_id)
     if not track:
         return jsonify({"error": "Track not found"}), 404
@@ -354,7 +354,7 @@ def wipe_library():
     if data.get("confirm") not in ("CONFIRM", "confirm"):
         return jsonify({"error": "Body must include confirm: 'CONFIRM' or 'confirm'"}), 400
     try:
-        lib, _, _ = api["get_core"]()
+        lib = api["get_library"]()
         success = lib.nuke_library()
         if not success:
             return jsonify({"error": "Wipe failed"}), 500
@@ -368,7 +368,7 @@ def wipe_library():
 @library_bp.route("/api/library/search", methods=["GET"])
 def search_library():
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     query = request.args.get("q", "").lower()
     results = lib.search(query)
     tracks = [t.to_dict() for t in results[:50]]
@@ -386,7 +386,7 @@ def purge_missing_library_tracks():
     Restricted to trusted networks (Home/Tailscale).
     """
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     lib.refresh_if_stale()
     if not lib.metadata:
         lib.sync_library()
@@ -407,7 +407,7 @@ def get_track_lyrics(track_id):
     from shared.lyrics import audio_key, poll_lyrics, settle_upgrade, store, worth_looking_up_again
 
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     track = api["get_track_by_id"](lib, track_id)
     if not track:
         return jsonify({"error": "Track not found"}), 404
@@ -535,7 +535,7 @@ def set_lyrics_offset():
     track_id = str(data.get("track_id") or "").strip()
     if track_id:
         api = _get_api()
-        lib, _, _ = api["get_core"]()
+        lib = api["get_library"]()
         track = api["get_track_by_id"](lib, track_id)
         if not track:
             return jsonify({"error": "Track not found"}), 404
@@ -556,7 +556,7 @@ def set_lyrics_offset():
 def update_track_labels(track_id):
     """Edit library labels while keeping audio, storage identity and references."""
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     if not api["get_track_by_id"](lib, track_id):
         return jsonify({"error": "Track not found"}), 404
     data = request.get_json(silent=True)
@@ -581,7 +581,7 @@ def upload_track_label_cover(track_id):
     from shared.artwork import artwork_store, MAX_BYTES
     from PIL import Image, UnidentifiedImageError
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     if not api["get_track_by_id"](lib, track_id):
         return jsonify({"error": "Track not found"}), 404
     file = request.files.get("file")
@@ -607,7 +607,7 @@ def upload_track_label_cover(track_id):
 @serialized
 def clear_track_label_cover(track_id):
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     if not api["get_track_by_id"](lib, track_id):
         return jsonify({"error": "Track not found"}), 404
     if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="none"):
@@ -624,7 +624,7 @@ def get_favourites():
     the moment it lands.
     """
     api = _get_api()
-    api["get_core"]()
+    api["get_library"]()
     return jsonify(api["favourite_library_ids"]())
 
 
@@ -633,7 +633,7 @@ def get_favourite_entries():
     """The favourites list — identity keys plus the snapshot needed to render
     and stream a song that is not downloaded. Newest first."""
     api = _get_api()
-    api["get_core"]()
+    api["get_library"]()
     return jsonify(
         {"version": 2, "favourites": api["favourites_manager"].get_favourite_entries()}
     )
@@ -648,7 +648,7 @@ def get_saved_entries():
     /api/library/collection for items, sources and playlists in one snapshot.
     """
     api = _get_api()
-    api["get_core"]()
+    api["get_library"]()
     return jsonify({"version": 3, "saved": api["favourites_manager"].get_entries()})
 
 
@@ -656,7 +656,7 @@ def get_saved_entries():
 def get_collection():
     """One account snapshot: musical items, sources, marks and memberships."""
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     lib.refresh_if_stale()
     from shared.collection import Collection
     from shared.artwork import artwork_store
@@ -698,7 +698,7 @@ def _collection_payload(lib):
 def toggle_saved():
     """Add or remove a song from the library by identity (`entry`), no file involved."""
     api = _get_api()
-    api["get_core"]()
+    api["get_library"]()
     data = request.json or {}
     entry = data.get("entry") or data.get("saved")
     if not isinstance(entry, dict):
@@ -729,7 +729,7 @@ def set_saved():
     leaves alone.
     """
     api = _get_api()
-    api["get_core"]()
+    api["get_library"]()
     data = request.json or {}
     entries = data.get("entries")
     saved = data.get("saved")
@@ -760,7 +760,7 @@ def set_favourite():
     if not isinstance(entry, dict) or not isinstance(marked, bool):
         return jsonify(error="entry and boolean marked are required"), 400
     api = _get_api()
-    api["get_core"]()
+    api["get_library"]()
     try:
         result = api["favourites_manager"].set_favourite(entry, favourite=marked, save_if_missing=False)
     except ValueError as exc:
@@ -781,7 +781,7 @@ def toggle_favourite():
     cannot single out a song you do not have. Unmarking leaves it saved.
     """
     api = _get_api()
-    api["get_core"]()
+    api["get_library"]()
     data = request.json or {}
     favourite = data.get("favourite")
     manager = api["favourites_manager"]

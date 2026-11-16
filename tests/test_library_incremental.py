@@ -48,7 +48,7 @@ def endpoint(tmp_path, monkeypatch):
     db.replace_library(metadata)
     assert db.public_source()['fingerprint'] == fingerprint(metadata)
     lib = SimpleNamespace(db=db, metadata=metadata, refresh_if_stale=lambda: None)
-    monkeypatch.setattr(library, '_get_api', lambda: {'get_core': lambda: (lib, None, None)})
+    monkeypatch.setattr(library, '_get_api', lambda: {'get_library': lambda: lib})
     app = Flask(__name__)
     app.register_blueprint(library.library_bp)
     yield app.test_client(), lib, library
@@ -335,7 +335,7 @@ artwork.artwork_store=lambda:ArtworkStore(Path(sys.argv[2]),Path(sys.argv[3]))
 loudness.loudness_db_path=lambda:Path(sys.argv[4])
 db=DatabaseManager(sys.argv[5])
 lib=SimpleNamespace(db=db,metadata=db.load_library_metadata(),refresh_if_stale=lambda:None)
-library._get_api=lambda:{'get_core':lambda:(lib,None,None)}
+library._get_api=lambda:{'get_library':lambda:lib}
 LibraryMetadata.to_public_dict=lambda _:(_ for _ in ()).throw(RuntimeError('full snapshot after restart'))
 app=Flask(__name__)
 app.register_blueprint(library.library_bp)

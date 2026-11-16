@@ -78,7 +78,7 @@ def workload(args):
                 output.writeframes(second)
         payload = path.read_bytes()
         track_id = track.id
-        api = {'get_core': lambda: (manager, None, None),
+        api = {'get_library': lambda: manager,
                'get_track_by_id': lambda lib, identity: lib.metadata.get_track_by_id(identity),
                'is_trusted_network': lambda address: True,
                'is_safe_path': lambda value, **kw: Path(value) == path}

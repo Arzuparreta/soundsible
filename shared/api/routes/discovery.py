@@ -355,7 +355,7 @@ def _queue_confirmed(
 def discovery_music_recommendations():
     limit = min(50, max(1, request.args.get("limit", type=int) or 24))
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     try:
         lib.refresh_if_stale()
     except Exception:
@@ -371,7 +371,7 @@ def discovery_music_recommendations():
 def discovery_recently_saved():
     limit = min(24, max(1, request.args.get("limit", type=int) or 12))
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     try:
         lib.refresh_if_stale()
     except Exception:

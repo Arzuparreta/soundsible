@@ -490,7 +490,7 @@ def test_concurrent_indexed_searches_equal_the_reference(library):
 def test_catalog_search_route_serves_the_same_library_rows(library, monkeypatch):
     search = library(_base())
     lib = SimpleNamespace(db=search.db, metadata=search.metadata, refresh_if_stale=lambda: None)
-    monkeypatch.setattr(catalog, "_get_api", lambda: {"get_core": lambda: (lib, None, None)})
+    monkeypatch.setattr(catalog, "_get_api", lambda: {"get_library": lambda: lib})
     for name in ("_deezer_search", "_musicbrainz_search", "_youtube_search"):
         monkeypatch.setattr(catalog, name, lambda query, limit: [])
     app = Flask(__name__)

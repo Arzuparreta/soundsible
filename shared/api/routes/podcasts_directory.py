@@ -46,7 +46,7 @@ _podcast_top_memo: Memo[list] = Memo(ttl_sec=_PODCAST_TOP_TTL_SEC, maxsize=64, n
 def discovery_podcast_recommendations():
     limit = min(50, max(1, request.args.get("limit", type=int) or 24))
     api = _get_api()
-    lib, _, _ = api["get_core"]()
+    lib = api["get_library"]()
     try:
         lib.refresh_if_stale()
     except Exception:

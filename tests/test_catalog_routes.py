@@ -77,7 +77,7 @@ def _fake_api(metadata):
     queue.is_processing = False
     queue.add.return_value = {"id": "q-1"}
     return {
-        "get_core": MagicMock(return_value=(_FakeLibrary(metadata), None, None)),
+        "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
         "get_downloader": MagicMock(),
         "user_id": "testuser",
         "queue_manager_dl": queue,

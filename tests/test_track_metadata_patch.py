@@ -185,7 +185,7 @@ def test_stable_label_routes_never_rewrite_audio_or_membership(manager, tmp_path
     monkeypatch.setattr(api, '_mirror_track_into_pool', lambda *a, **k: None)
     monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
     monkeypatch.setattr(routes, '_get_api', lambda: {
-        'get_core': lambda: (manager, None, None),
+        'get_library': lambda: manager,
         'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
         '_mark_track_metadata_updated': api._mark_track_metadata_updated,
         'emit_to_user': api.emit_to_user,
@@ -218,7 +218,7 @@ def test_stable_label_edit_rejects_invalid_payload_without_mutation(manager, mon
     from shared.api.routes import library as routes
     before = manager.db.load_library_metadata().tracks[0].title
     monkeypatch.setattr(routes, '_get_api', lambda: {
-        'get_core': lambda: (manager, None, None),
+        'get_library': lambda: manager,
         'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
     })
     with Flask(__name__).test_request_context(json=body):
@@ -245,7 +245,7 @@ def test_stable_cover_rejects_bad_image_or_failed_commit_before_publication(mana
     def reject(*args, **kwargs):
         raise LibraryPersistenceError('library_storage_unavailable')
     monkeypatch.setattr(routes, '_get_api', lambda: {
-        'get_core': lambda: (manager, None, None),
+        'get_library': lambda: manager,
         'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
         '_mark_track_metadata_updated': reject,
     })
