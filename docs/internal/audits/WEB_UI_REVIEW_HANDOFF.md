@@ -99,7 +99,9 @@ What the table establishes:
    to a 34–49 ms median interval. Surfaces inside the open full player, which
    hides the shell, drop none, and the same low-work surfaces in the 390 px
    layout drop none. That points at something the desktop shell does during
-   playback. No reviewer investigated it; see P5.
+   playback. No reviewer investigated it; see P5. **Step 3 found this to be
+   a measurement artifact**: the frames are lost after the list stops, not
+   while it scrolls.
 
 ## Status
 
@@ -112,7 +114,7 @@ IDs: **P** performance, **A** code architecture, **U** UX and design system,
 | P2 | The song row is expensive to mount. With a 300-song library, tasks still reach 160–205 ms at 6×; a plain row in the same shell stays at 35 ms. More overscan makes it worse (30 rows: 424 ms task). | Measured | Open |
 | P3 | Surfaces with no virtualization: `AlbumGrid`, `ArtistGrid`, the player's album browser ([NowPlayingBrowser.tsx:919](../../../ui_web/src/components/NowPlayingBrowser.tsx#L919)) and local search (`:1040`), artist and album track lists ([Artist.tsx:397](../../../ui_web/src/routes/Artist.tsx#L397), [Album.tsx:410](../../../ui_web/src/routes/Album.tsx#L410)), podcast subscriptions, DJ route entries. | Measured: player album browser 12,214 DOM elements; album grid 1.28 s and artist page 1.38 s of paint at 6×. | Open |
 | P4 | Player queue and player browser spend most of their time in ordinary layout (1,073 ms at 6× for the queue). Per-row and list containment, layer promotion, removing the query containers and disabling optional measurement each failed to remove it. | Measured; mechanism not isolated | Open: needs a row/scrollport prototype |
-| P5 | Desktop playback drops 8–27 frames per burst on every route surface, independent of the list; not inside the open full player and not in the 390 px layout (see "Measured evidence", point 4). The suspect is the desktop shell's playing UI. | Measured in the per-surface tables; cause not investigated | Open, **scope corrected by the step 2 baseline**: not every surface. Album page, artist page, playlist and artists grid lose 23–35 frames per burst at 1× with 130 ms gaps while playing; Songs, Favourites and Albums do not. The affected ones are those whose scroll needs almost no main-thread work per frame. Next: `KEEP_TRACE` on `album`, paused vs playing, and read the compositor and GPU threads. |
+| P5 | ~~Desktop playback drops 8–27 frames per burst on every route surface.~~ The frames reported as dropped come after a short list has reached its end: the `OmniBar` progress fill (`transition: transform 0.25s steps(2, end)`) changes pixels twice per position update while Chromium expects a frame each vsync for a running animation. | Measured in step 3: 0 dropped frames while the list moves, playing or paused; ablation and at-rest runs in [the baseline](../measurements/web-ui-rendering-2026-11-16/README.md). Cost at rest while playing: 85 ms main thread and 43 ms compositor per 3.6 s (30 and 15 paused). | **Closed: measurement artifact, not a defect.** No application change. |
 | P6 | Without a GPU (SwiftShader) most surfaces spend 2.7–3.2 s of a 3.2 s burst in buffer swap/fence waits. Stripping all effects did not fix it; replacing the whole shell with a bare scene cut it to 375 ms. The cost is the scene, not the list or one blur. | Measured | Open |
 | P7 | Frame counts alone hide late content: at 12,000 px/s on the real GPU the player browser presented 183/183 frames but 162 were partial. | Measured | **Closed (step 2).** `ui_web/perf/bench.mjs` reports complete, partial and dropped frames separately and its headline column is complete frames. |
 | A1 | Five separate virtualizer integrations ([VirtualRows](../../../ui_web/src/components/VirtualRows.tsx), [VirtualBrowseRows](../../../ui_web/src/components/VirtualBrowseRows.tsx), [TrackList](../../../ui_web/src/components/TrackList.tsx), [LibrarySearchResults](../../../ui_web/src/components/LibrarySearchResults.tsx), [ProgramQueue](../../../ui_web/src/components/ProgramQueue.tsx)) with different sizing, measurement, overscan, identity and focus rules. `LibrarySearchResults` and the player browser put content above the list without passing `scrollMargin`; overscan currently hides the mismatch. | Read | Open |
@@ -232,9 +234,9 @@ Two things that cost time in step 1:
 | Step | Pull request | State |
 | --- | --- | --- |
 | 1 Functional fixes (U1, U5, U6 `DeviceSheet`, U8) | #461 | Done |
-| 2 Rendering harness | `perf/web-ui-step2-harness` | Done |
-| 3 P5 investigation | — | Next |
-| 4 P1 | — | |
+| 2 Rendering harness | #462 | Done |
+| 3 P5 investigation | `perf/web-ui-step3-playback-frames` | Done: not a defect |
+| 4 P1 | — | Next |
 | 5 P2 + A1 | — | |
 | 6 P3 | — | |
 | 7 P4 + A2 | — | |

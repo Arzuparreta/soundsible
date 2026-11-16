@@ -28,6 +28,7 @@ only to its own fixture server on a free port, never to an engine.
 | `SIZE` | `1366x768` | Viewport, at device pixel ratio 1 |
 | `SOFTWARE` | off | `1` forces SwiftShader: the no-GPU case |
 | `TAG` | `run` | Result file name: `perf/results/<TAG>.json` (ignored by git) |
+| `INPUT` | `wheel` | `none` sends nothing and measures 3.6s of the page at rest |
 | `KEEP_TRACE` | — | Directory to keep each raw Chrome trace in, for Perfetto |
 | `DIST` | — | Use an existing bundle instead of building one |
 
@@ -45,6 +46,14 @@ of the content area, sent through the DevTools protocol, followed by 400ms for
 the frames it caused. A run that scrolls less than one viewport fails instead
 of reporting a list that never moved.
 
+**The measured window is the time the list was moving**: from the first wheel
+event to 100ms after the last scroll event. A list of 100 rows reaches its end
+0.8s into the burst; what follows is the page at rest. With a track playing
+the only thing changing then is the progress bar, a few times a second, and
+Chromium reports every frame between two of its updates as dropped. Counting
+that as scrolling is how handoff item P5 came to exist. `INPUT=none` measures
+the page at rest on purpose.
+
 ## Reading the table
 
 | Column | Definition |
@@ -55,6 +64,7 @@ of reporting a list that never moved.
 | Display gap | Time between consecutive shown frames. 16.7ms is 60 Hz |
 | Longest task | Longest single task on the page's main thread |
 | Script / layout / paint | Main-thread time in each, as a union of intervals so nested work is not counted twice |
+| Busy | Task time on the page's main thread, its compositor thread, the GPU process and the display compositor. Work that never touches the main thread shows up here |
 
 Frames come from the events the DevTools Performance panel draws its Frames
 track from (`DrawFrame`, `DroppedFrame`, `hasPartialUpdate`). A partial frame
