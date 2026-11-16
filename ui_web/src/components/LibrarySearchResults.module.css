@@ -10,17 +10,6 @@
   padding: 0 var(--gutter) var(--space-xl);
 }
 
-.canvas {
-  position: relative;
-  width: 100%;
-}
-
-.slot {
-  position: absolute;
-  inset: 0 0 auto;
-  width: 100%;
-}
-
 .artistRow {
   display: flex;
   align-items: center;

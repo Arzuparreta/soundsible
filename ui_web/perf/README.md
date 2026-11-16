@@ -31,6 +31,7 @@ only to its own fixture server on a free port, never to an engine.
 | `INPUT` | `wheel` | `none` sends nothing and measures 3.6s of the page at rest |
 | `KEEP_TRACE` | — | Directory to keep each raw Chrome trace in, for Perfetto |
 | `DIST` | — | Use an existing bundle instead of building one |
+| `PROFILE` | — | Directory for a CPU profile of each burst (`.cpuprofile` and a self-time summary). Builds unminified so functions keep their names; the frame numbers of a profiled run are not comparable |
 
 ## Fixture and input
 
