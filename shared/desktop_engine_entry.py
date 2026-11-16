@@ -107,6 +107,7 @@ def desktop_readiness_payload(runtime: RuntimeConfig) -> dict:
         "host": runtime.host,
         "port": runtime.port,
         "pid": os.getpid(),
+        "launch_id": os.environ.get("SOUNDSIBLE_DESKTOP_LAUNCH_ID", ""),
         "version": resolve_version(),
         "health": "/api/health",
         "owner_token_file": str(runtime.owner_token_file) if runtime.owner_token_file else None,
@@ -114,6 +115,13 @@ def desktop_readiness_payload(runtime: RuntimeConfig) -> dict:
 
 
 def run_desktop_engine(args: argparse.Namespace) -> None:
+    from shared.runtime_updates import notify_tool_wait, runtime_tool_session
+
+    with runtime_tool_session(on_wait=notify_tool_wait):
+        _run_desktop_engine(args)
+
+
+def _run_desktop_engine(args: argparse.Namespace) -> None:
     from shared.ffmpeg_runtime import configure_ffmpeg
 
     configure_ffmpeg()
@@ -152,7 +160,9 @@ def run(argv: list[str] | None = None) -> int:
     if args.bootstrap:
         return bootstrap_only(args.bootstrap)
 
-    if args.music_dir and not (get_config_dir() / "config.json").exists():
+    if args.music_dir:
+        # The owned child performs configuration after acquiring its lease.
+        # Stop can cancel this entire launch while it waits, before any write.
         bootstrap_only(args.music_dir)
 
     if not (get_config_dir() / "config.json").exists():

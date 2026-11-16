@@ -19,7 +19,7 @@ The checks were made on `main` at `3c7e4af3`. Those marked as
 | 4 | Server playback queue that no client reads; stub routes | **Closed**: queue, its routes and both stubs deleted |
 | 5 | Business logic in route modules and in the Flask module | **Closed**: shared services independent of the application and route-private helpers |
 | 6 | State JSON files written without protection against power loss | **Closed**: whole-file replace, ordered writes |
-| 7 | yt-dlp update with the module already imported | Pending, not reproduced |
+| 7 | yt-dlp update with the module already imported | **Closed**: the daemon upgrades before importing the API |
 | 8 | Dead code and minor details | **Closed** |
 | 9 | Musical identity coupled to hash/video and rebuilt in each client | **Closed** in PR #423 (merged 2026-11-06) |
 
@@ -202,14 +202,130 @@ once lost one change; it now does the three under `publication_lock`.
 `PUT /api/playback/state` arrives every 15 s per playing device, so one fsync
 per write costs nothing measurable.
 
-### 7. Hot yt-dlp update (not reproduced)
+### 7. Hot yt-dlp update (closed; the mechanism was read, not reproduced)
 
-With `YTDLP_AUTO_UPDATE`, `start_api` launches `pip install --upgrade yt-dlp` in
-the background when `yt_dlp` is already imported (checked: `import shared.api`
+With `YTDLP_AUTO_UPDATE`, `start_api` launched `pip install --upgrade yt-dlp` in
+the background when `yt_dlp` was already imported (checked: `import shared.api`
 loads it). The installed version ships `lazy_extractors.py`: on import only
 4 extractors are loaded, and the YouTube one is imported on first use, from the
-new files, alongside the old core in memory. Fix: update before
-importing or restart after updating.
+new files, alongside the old core in memory. `curl-cffi`, a compiled extension,
+was upgraded the same way.
+
+Fix: `shared.runtime_updates.runtime_tool_session()` surrounds engine startup
+and execution. Source daemon and desktop engines hold a shared native file
+lease for their lifetime (flock on POSIX, LockFileEx on Windows). Its file is
+beside the interpreter prefix, so recreating that environment cannot replace
+the lock inode. Bootstrap holds the same read lease and must upgrade it before
+creating, repairing or reinstalling dependencies; a running engine refuses
+that mutation. The launcher retains this very lease across dependency imports
+and reuses it at engine startup. A separate writer gate protects conversions
+from shared to exclusive access, including failed conversions that release a
+shared native lock. Only a daemon with the exclusive lease can update; another engine skips the update and joins the readers. Readers
+wait for an installation already in progress before importing the API. Frozen
+engines use their own bundled tools. Without file locking or access to the lease,
+updates are skipped. These leases coordinate Soundsible launches, not manual pip
+commands or engines from older releases.
+
+`run.py --daemon` enters this session through `shared/engine_start.py`, before
+importing `shared.api`. It refuses an update once either selected module is
+loaded. Pip uses the engine's own interpreter: download wheels into a temporary
+folder with a 120-second deadline, then install offline without a kill deadline.
+Both subprocesses inherit the lease descriptor/handle; POSIX flock ownership
+survives the parent's exit until pip finishes. Ordinary SIGINT/SIGTERM shutdown
+is deferred through installation, whose subprocess has its own terminal group.
+There is no promise that pip itself is transactional against external termination, disk failure or power loss. Tests exercise the real daemon
+dispatch including bootstrap, replacing only external pip/API effects, and real
+process contention for the shared/exclusive leases. Fresh-process tests isolate
+HOME, Windows profile and XDG paths before any runtime import, and precreate
+all runtime destinations. Optional lease/storage failures skip and log updates.
+
+The standalone desktop entry takes its lease before importing any dependencies.
+Configuration bootstrap runs inside this same owned, cancellable child; the
+shell no longer launches an untracked synchronous `--bootstrap` process. Stop
+can terminate a child waiting for an installation before it writes config.
+Bootstrap config and folder preferences publish atomically, so cancellation
+cannot expose truncated JSON. A player-window failure clears the failed session
+and publishes Error with Retry instead of announcing Ready and leaving loading
+visible. Recovery restores and focuses the shell even if a failed replacement
+builder never registered a player window. It releases the session mutex before
+native calls and checks the recovery generation after cleanup and showing the
+shell, so an obsolete failure cannot focus over a newer connection. Regressions
+cover restart failure, failure before session registration, supersession and
+native reentry. Error updates also revalidate the engine launch generation.
+While it waits for an installation, it reports a startup event on its stdout
+pipe; only the retained child's pipe can pause the shell's readiness budget.
+No marker file must be published to keep the lock safe. Optional wait callbacks
+log storage failures and still wait for the actual read lock. The shell consumes
+both output pipes, resumes the budget after the wait and notices an exited
+child. Each launch gets a random identifier delivered only to the owned command.
+Python reports it and its PID on that command's stdout, and persists both in
+its state. The shell requires agreement between the owned pipe and the state;
+it never accepts an independent engine's healthy state. The retained Child can
+be PyInstaller's bootloader, whose Python subprocess has a different PID. Startup, output and
+health workers carry their launch generation; readiness rechecks that generation
+and retained bootloader PID after HTTP returns, so a replaced child's result is
+discarded. Ready UI work validates on the main thread, releases mutexes before
+native calls and checks the launch again afterwards. WebView2 construction pumps
+messages and can synchronously reenter Stop; the actual readiness/stop regression
+covers it. Windows are constructed hidden with an independent intent generation,
+then validated before reveal; cancellation during creation destroys only the
+obsolete window and leaves a newer connection's window intact. Session locks are
+also released before native navigation, showing, hiding and construction.
+
+Server probes have a separate connection generation. Returning to the chooser,
+stopping, starting locally or selecting another server invalidates an older
+probe. A completion checks again after its await and in its main-thread commit,
+before preferences, pending links or windows can be affected. The shell has its
+own intent generation across awaited autostart, startup-profile and connection
+IPCs. Choosing local setup invalidates these continuations and explicitly cancels
+a backend probe before it can replace that choice. Screenshots and recordings:
+[connection cancellation](architecture-delivery-images/README.md).
+
+Bootstrap recreation resolves the external base interpreter before removing
+the old environment. The actual repair is exercised from inside a disposable,
+package-free virtualenv under the exclusive lease; it must recreate the Python
+executable and pip without trying to execute the just-deleted interpreter.
+Native Windows CI demonstrated that its active redirector cannot be overwritten.
+The external-base repair uses `shared/venv_repair.py`: it retains only that working
+launcher while the rest of the environment and pip are recreated, under the
+same exclusive lease. The active-venv regression remains enabled on Windows.
+Output is drained as byte lines with tolerant decoding, and child Python pipes
+are explicitly UTF-8. Non-UTF-8 legacy logging cannot close a startup pipe.
+During boot the existing status panel receives the last six child lines, making
+failed native starts visible in the CI artifact's UI dump.
+
+The Windows adapter remembers each held mode: repeated shared reads do nothing;
+actual conversions run under the writer gate. A deterministic adapter regression
+checks the native call boundary on every platform, and the source process tests
+run on Windows. Native Rust unit tests also run in Desktop Build.
+
+The native Windows source suite runs in Desktop Build. Rust timing, startup
+event and PID tests also run independently of platform webview dependencies.
+The isolated Python suite passes with 2,973 tests and 3 intentional skips;
+69 focused Python checks also pass. Actual-source Rust checks pass locally:
+21 supervisor/startup/state/lifecycle/client tests with a Tauri facade and
+8 extracted desktop recovery/lifecycle tests, including 3 lifecycle tests shared
+with the first harness. The shell has 9 unit and 16 browser tests passing.
+The native Windows build runs the complete Rust library suite, source bootstrap
+tests, packaged readiness and installed UI smoke. Latest-head GitHub checks and
+current-base verification remain merge gates; physical/audio acceptance is not
+claimed by these checks.
+
+The final independent GPT 6.1 Sol (xhigh) review of `a024ca32` scored quality
+8/10, complexity 7/10, performance 9/10 and maintainability 8/10 (higher is
+better). Its sole confirmed P2 was the hidden shell after a replacement window
+failed to build. The recovery change and four regressions above address it;
+the earlier owned-bootstrap and presentation-error fixes were accepted. This
+small follow-up was checked locally without another delegated review.
+
+Where it does not run, on purpose: the desktop engine (a packaged build
+bundles its tools, where `sys.executable -m pip` was the engine binary itself;
+from source, its shell allows 120 s for the whole start), and the container,
+where pip as the `soundsible` user installs into a user site directory the
+running interpreter never put on its path — an upgrade reported success and
+changed nothing. The container logs a warning when the setting is on.
+Restarting after a background upgrade was the alternative; it was rejected
+because a restart would interrupt downloads and streams already running.
 
 ### 8. Dead code and minor items
 

@@ -9,6 +9,10 @@ pub const STATE_FILENAME: &str = "desktop-engine-state.json";
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct EngineRuntimeState {
+    #[serde(default)]
+    pub pid: u32,
+    #[serde(default)]
+    pub launch_id: String,
     pub base_url: String,
     pub health: String,
     pub owner_token_file: Option<String>,
@@ -16,6 +20,13 @@ pub struct EngineRuntimeState {
 }
 
 impl EngineRuntimeState {
+    pub fn belongs_to(&self, launch_id: &str, engine_pid: Option<u32>) -> bool {
+        !launch_id.is_empty()
+            && self.launch_id == launch_id
+            && self.pid != 0
+            && engine_pid == Some(self.pid)
+    }
+
     pub fn health_url(&self) -> String {
         format!("{}{}", self.base_url.trim_end_matches('/'), self.health)
     }
@@ -43,6 +54,24 @@ pub fn load_runtime_state() -> Option<EngineRuntimeState> {
     let path = state_file_path();
     let raw = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&raw).ok()
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use super::*;
+
+    #[test]
+    fn readiness_requires_the_owned_launch_and_reported_python_pid() {
+        let raw = r#"{"pid":42,"launch_id":"own-launch","base_url":"http://127.0.0.1:49152","health":"/api/health","log_dir":"logs"}"#;
+        let state: EngineRuntimeState = serde_json::from_str(raw).unwrap();
+        assert!(state.belongs_to("own-launch", Some(42)));
+        assert!(!state.belongs_to("own-launch", Some(43)));
+        assert!(!state.belongs_to("another-launch", Some(42)));
+        assert!(!state.belongs_to("own-launch", None));
+        let missing_pid = raw.replace("\"pid\":42,", "");
+        let old: EngineRuntimeState = serde_json::from_str(&missing_pid).unwrap();
+        assert!(!old.belongs_to("own-launch", Some(42)));
+    }
 }
 
 pub fn read_owner_token() -> Result<String, String> {

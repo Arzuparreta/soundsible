@@ -19,7 +19,8 @@ ROUTES = "shared.api.routes"
 
 #: Starting the engine is the one reason to import the application.
 ENTRY_POINTS = {
-    "run.py": {"start_api", "api_observer"},
+    "run.py": {"api_observer"},
+    "shared/engine_start.py": {"start_api"},
     "shared/container_entrypoint.py": {"start_api"},
     "shared/desktop_engine_entry.py": {"start_api"},
 }

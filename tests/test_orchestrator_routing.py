@@ -5,7 +5,6 @@ instead of raw threading.Thread.
 
 Covers:
   - the sync admin task submits via orchestrator.submit_task
-  - runtime dependency auto-update submits via orchestrator.submit_background
 """
 
 import ast
@@ -44,19 +43,3 @@ def test_run_sync_task_submits_to_orchestrator():
         assert submit.called, "run_sync_task did not submit any job"
         task_id = submit.call_args.args[0]
         assert task_id == "sync"
-
-
-def test_runtime_autoupdate_uses_orchestrator_not_thread():
-    """The startup hook must route the shared pip update via submit_background,
-    not a raw daemon Thread — otherwise it competes with playback I/O
-    without being tracked in active_jobs."""
-    src = _source("shared/api/__init__.py")
-    idx = src.find("_defer_runtime_update and _run_runtime_update")
-    assert idx != -1, "runtime dependency deferred-startup block not found"
-    snippet = src[idx : idx + 400]
-    assert "submit_background" in snippet, (
-        "runtime dependency update should go through orchestrator.submit_background"
-    )
-    assert "threading.Thread(target=_run_runtime_update" not in snippet, (
-        "runtime dependency update is still using a raw Thread"
-    )

@@ -2,6 +2,18 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+static CONNECTION: crate::lifecycle::Generation = crate::lifecycle::Generation::new();
+
+pub fn begin_connection() -> u64 {
+    CONNECTION.advance()
+}
+pub fn connection_is_current(attempt: u64) -> bool {
+    CONNECTION.is_current(attempt)
+}
+pub fn cancel_pending_connections() {
+    CONNECTION.advance();
+}
+
 pub const PREFS_FILE: &str = "desktop-client.json";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

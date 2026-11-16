@@ -167,6 +167,11 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt pywinauto==0.6.9
 
+      - name: Exercise source environment leases and bootstrap ordering
+        env:
+          PYTHONPATH: .
+        run: pytest tests/test_runtime_updates.py -q
+
       - name: Validate ARM64 cryptography runtime
         if: matrix.arch == 'arm64'
         run: python -c "from cryptography.hazmat.bindings._rust import openssl"
@@ -208,6 +213,7 @@ jobs:
           npm ci
           npm test
           npx tauri build ${{ github.event_name == 'pull_request' && format('--config {0}/desktop-shell/src-tauri/tauri.pull-request.conf.json', github.workspace) || '' }}
+          cargo test --release --manifest-path src-tauri/Cargo.toml --lib
 
       - name: Verify native binary architectures
         shell: pwsh

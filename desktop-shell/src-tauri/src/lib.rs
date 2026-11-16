@@ -1,7 +1,9 @@
 mod client;
 mod desktop;
 mod engine;
+mod lifecycle;
 mod pairing;
+mod startup;
 mod state;
 mod tray;
 
@@ -104,11 +106,12 @@ fn get_startup_profile(state: State<'_, AppState>) -> state::StartupProfile {
 
 #[tauri::command]
 fn stop_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    client::cancel_pending_connections();
     if client::is_server() {
         return Err("The desktop does not manage this server.".into());
     }
-    desktop::close_player(&app);
     state.engine.stop(Some(&app))?;
+    desktop::close_player(&app);
     if let Ok(mut skip) = state.skip_autostart_once.lock() {
         *skip = true;
     }
@@ -367,28 +370,62 @@ fn navigate_main_window(app: &AppHandle, url: &str) -> Result<(), String> {
 #[tauri::command]
 async fn connect_server(app: AppHandle, address: String) -> Result<(), String> {
     let origin = client::normalize_server(&address)?;
+    let attempt = client::begin_connection();
     let probe = origin.clone();
-    tauri::async_runtime::spawn_blocking(move || client::probe_server(&probe))
+    let result = tauri::async_runtime::spawn_blocking(move || client::probe_server(&probe))
         .await
-        .map_err(|e| e.to_string())??;
-    // Only a child owned by this desktop may be stopped.
+        .map_err(|e| e.to_string())?;
+    if !client::connection_is_current(attempt) {
+        return Ok(());
+    }
+    result?;
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    let ui_app = app.clone();
+    app.run_on_main_thread(move || {
+        let result = (|| {
+            if !client::connection_is_current(attempt) {
+                return Ok(());
+            }
+            ui_app.state::<AppState>().engine.stop(Some(&ui_app))?;
+            desktop::close_player(&ui_app);
+            if !client::connection_is_current(attempt) {
+                return Ok(());
+            }
+            client::save(&client::Preferences {
+                mode: client::ConnectionMode::Server,
+                server: Some(origin.clone()),
+            })?;
+            tray::refresh_mode(&ui_app);
+            if !client::connection_is_current(attempt) {
+                return Ok(());
+            }
+            let target = take_pending_player_url(&ui_app, &format!("{origin}/player/"));
+            desktop::open_player(&ui_app, &target)
+        })();
+        let _ = send.send(result);
+    })
+    .map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || receive.recv())
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn cancel_server_connection(app: AppHandle) {
+    client::cancel_pending_connections();
+    // If the probe committed just before this IPC arrived, local setup still
+    // wins: close that remote player without starting a local engine.
     desktop::close_player(&app);
-    app.state::<AppState>().engine.stop(Some(&app))?;
-    client::save(&client::Preferences {
-        mode: client::ConnectionMode::Server,
-        server: Some(origin.clone()),
-    })?;
-    tray::refresh_mode(&app);
-    let target = take_pending_player_url(&app, &format!("{origin}/player/"));
-    desktop::open_player(&app, &target)
 }
 
 #[tauri::command]
 fn change_connection(app: AppHandle) -> Result<(), String> {
-    desktop::close_player(&app);
+    client::cancel_pending_connections();
     if !client::is_server() {
         app.state::<AppState>().engine.stop(Some(&app))?;
     }
+    desktop::close_player(&app);
     return_to_shell(&app)?;
     app.emit("shell-view", "connection")
         .map_err(|e| e.to_string())
@@ -516,6 +553,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             connect_server,
+            cancel_server_connection,
             change_connection,
             quit_desktop,
             desktop::desktop_handshake,
@@ -600,10 +638,11 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
-                desktop::close_player(app);
+                client::cancel_pending_connections();
                 if let Some(state) = app.try_state::<AppState>() {
                     let _ = state.engine.stop(None);
                 }
+                desktop::close_player(app);
             }
         });
 }

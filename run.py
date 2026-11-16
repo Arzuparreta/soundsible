@@ -110,26 +110,38 @@ def _running_in_project_venv(venv_dir: Path) -> bool:
     return Path(sys.prefix).resolve() == venv_dir.resolve()
 
 
-def _recreate_venv(venv_dir: Path) -> None:
+def _recreate_venv(venv_dir: Path, lease) -> None:
+    # Resolve the base interpreter while the active venv still exists. Its own
+    # executable (notably Windows' copied python.exe) disappears with the venv.
+    base_python = Path(getattr(sys, "_base_executable", sys.executable)).resolve(strict=True)
+    if base_python.is_relative_to(venv_dir.resolve()):
+        raise RuntimeError("Cannot recreate the active virtualenv: no external base interpreter")
+    retained = None
+    if os.name == "nt" and Path(sys.executable).absolute().is_relative_to(venv_dir.resolve()):
+        retained = Path(sys.executable).absolute()
     if venv_dir.exists():
         shutil.rmtree(venv_dir, ignore_errors=True)
     print("Creating virtual environment...", flush=True)
-    subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
+    helper = Path(__file__).resolve().parent / "shared" / "venv_repair.py"
+    command = [str(base_python), str(helper), str(venv_dir)]
+    if retained is not None:
+        command.extend(["--retain-executable", str(retained)])
+    lease.install(command, check=True)
 
 
-def _ensure_venv_with_pip(venv_dir: Path) -> Path:
+def _ensure_venv_with_pip(venv_dir: Path, lease) -> Path:
     py = _venv_python_path(venv_dir)
     needs_recreate = not venv_dir.exists() or not py.exists()
 
     if needs_recreate:
-        _recreate_venv(venv_dir)
+        _recreate_venv(venv_dir, lease)
         py = _venv_python_path(venv_dir)
 
     if _venv_has_pip(py):
         return py
 
     print("Repairing virtual environment pip bootstrap...", flush=True)
-    ensurepip = subprocess.run(
+    ensurepip = lease.install(
         [str(py), "-m", "ensurepip", "--upgrade"],
         capture_output=True,
         text=True,
@@ -138,10 +150,10 @@ def _ensure_venv_with_pip(venv_dir: Path) -> Path:
         return py
 
     print("Virtual environment pip bootstrap failed; recreating environment...", flush=True)
-    _recreate_venv(venv_dir)
+    _recreate_venv(venv_dir, lease)
     py = _venv_python_path(venv_dir)
 
-    ensurepip_retry = subprocess.run(
+    ensurepip_retry = lease.install(
         [str(py), "-m", "ensurepip", "--upgrade"],
         capture_output=True,
         text=True,
@@ -164,14 +176,27 @@ def _ensure_bootstrap_before_gevent():
     Fresh clones may not have a venv yet; importing gevent before bootstrap would
     fail with ModuleNotFoundError and prevent self-healing.
     """
+    from shared.runtime_updates import prepare_launcher_environment
+
     root_dir = Path(__file__).resolve().parent
+    prepare_launcher_environment(root_dir / "venv", lambda lease: _ensure_bootstrap_locked(root_dir, lease))
+
+
+def _ensure_bootstrap_locked(root_dir: Path, lease) -> None:
     venv_dir = root_dir / "venv"
     req_file = root_dir / "requirements.txt"
     marker = venv_dir / ".installed_requirements_hash"
     bootstrap_modules = ["pip", "gevent", "zope.event", "zope.interface", "rich"]
 
+    def require_write():
+        if lease is None:
+            raise RuntimeError("Cannot safely modify dependencies: environment locking is unavailable")
+        lease.require_write()
+
     try:
-        py = _ensure_venv_with_pip(venv_dir)
+        if not _venv_has_pip(_venv_python_path(venv_dir)):
+            require_write()
+        py = _ensure_venv_with_pip(venv_dir, lease)
     except Exception as exc:
         print("Virtual environment setup failed:", exc)
         sys.exit(1)
@@ -180,14 +205,15 @@ def _ensure_bootstrap_before_gevent():
         current_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
         env_ok, env_error = _venv_can_import(py, bootstrap_modules)
         if not marker.exists() or marker.read_text() != current_hash or not env_ok:
+            require_write()
             print("Installing/Updating requirements...", flush=True)
-            result = subprocess.run(
+            result = lease.install(
                 [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
             )
             if result.returncode != 0:
                 print("Bootstrap tool upgrade failed.")
                 sys.exit(1)
-            result = subprocess.run(
+            result = lease.install(
                 [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
             )
             if result.returncode != 0:
@@ -198,18 +224,18 @@ def _ensure_bootstrap_before_gevent():
                 print("Virtual environment verification failed:", env_error)
                 print("Recreating virtual environment and retrying once...", flush=True)
                 try:
-                    _recreate_venv(venv_dir)
-                    py = _ensure_venv_with_pip(venv_dir)
+                    _recreate_venv(venv_dir, lease)
+                    py = _ensure_venv_with_pip(venv_dir, lease)
                 except Exception as exc:
                     print("Virtual environment recreation failed:", exc)
                     sys.exit(1)
-                result = subprocess.run(
+                result = lease.install(
                     [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
                 )
                 if result.returncode != 0:
                     print("Bootstrap tool upgrade failed.")
                     sys.exit(1)
-                result = subprocess.run(
+                result = lease.install(
                     [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
                 )
                 if result.returncode != 0:
@@ -346,12 +372,16 @@ def _is_port_in_use(port: int) -> bool:
 def _run_legacy_daemon(args: argparse.Namespace) -> None:
     runtime = _build_runtime_config(args, desktop_defaults=False)
     console.print("[bold green]Soundsible Daemon is running.[/bold green]")
-    from shared.api import start_api
-
     try:
-        start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+        _start_engine(runtime)
     except (KeyboardInterrupt, SystemExit):
         console.print("[yellow]Shutting down...[/yellow]")
+
+
+def _start_engine(runtime, *, update_tools: bool = True) -> None:
+    from shared.engine_start import start_engine
+
+    start_engine(runtime, update_tools=update_tools)
 
 
 def run_desktop_engine_cli(argv: list[str] | None = None) -> int:
@@ -671,15 +701,13 @@ class SoundsibleLauncher:
         if args.daemon:
             runtime = _build_runtime_config(args, desktop_defaults=False)
             console.print("[bold green]Soundsible Daemon is running.[/bold green]")
-            from shared.api import start_api
-            start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+            _start_engine(runtime)
             return
 
         if args.desktop_engine:
             runtime = _build_runtime_config(args, desktop_defaults=True)
             console.print(f"[bold green]Soundsible Desktop Engine is running on {runtime.host}:{runtime.port}.[/bold green]")
-            from shared.api import start_api
-            start_api(host=runtime.host, port=runtime.port, runtime_config=runtime)
+            _start_engine(runtime, update_tools=False)
             return
 
         while True:

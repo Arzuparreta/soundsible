@@ -83,6 +83,10 @@ def main() -> int:
 
     patch_process()
 
+    from shared.runtime_updates import warn_updates_need_a_new_image
+
+    warn_updates_need_a_new_image()
+
     from shared.api import start_api
     from shared.runtime import RuntimeConfig
 

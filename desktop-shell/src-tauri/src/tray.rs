@@ -10,13 +10,14 @@ pub fn available(app: &AppHandle) -> bool {
 
 pub fn hide_player(app: &AppHandle) {
     let state = app.state::<super::desktop::DesktopState>();
-    if let Ok(guard) = state.session.lock() {
-        if let Some(s) = guard.as_ref() {
-            if let Some(window) = app.get_webview_window(&s.label) {
-                let _ = window.hide();
-            }
-        }
-    };
+    let label = state
+        .session
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|session| session.label.clone()));
+    if let Some(window) = label.and_then(|label| app.get_webview_window(&label)) {
+        let _ = window.hide();
+    }
 }
 
 pub fn focus_main_window(app: &AppHandle) {
@@ -39,18 +40,19 @@ pub fn restart_engine(app: &AppHandle) {
         return;
     }
     if let Some(state) = app.try_state::<super::AppState>() {
-        super::desktop::close_player(app);
         let _ = state.engine.restart(app.clone());
+        super::desktop::close_player(app);
     }
 }
 
 pub fn stop_engine(app: &AppHandle) {
+    super::client::cancel_pending_connections();
     if super::client::is_server() {
         return;
     }
     if let Some(state) = app.try_state::<super::AppState>() {
-        super::desktop::close_player(app);
         let _ = state.engine.stop(Some(app));
+        super::desktop::close_player(app);
         if let Ok(mut skip) = state.skip_autostart_once.lock() {
             *skip = true;
         }
@@ -63,10 +65,11 @@ pub fn quit_app(app: &AppHandle) {
     shutdown(app);
 }
 pub fn shutdown(app: &AppHandle) {
-    super::desktop::close_player(app);
+    super::client::cancel_pending_connections();
     if let Some(state) = app.try_state::<super::AppState>() {
         let _ = state.engine.stop(Some(app));
     }
+    super::desktop::close_player(app);
     app.exit(0);
 }
 
