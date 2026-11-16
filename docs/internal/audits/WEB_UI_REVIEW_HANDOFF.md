@@ -110,7 +110,7 @@ IDs: **P** performance, **A** code architecture, **U** UX and design system,
 
 | # | Item | Evidence | Status |
 | --- | --- | --- | --- |
-| P1 | Every entering row resolves its saved/favourite state by scanning the whole saved array: `savedEntryForKeys` ([identity.ts:254](../../../ui_web/src/stores/identity.ts#L254)) calls `savedEntryForIdentity` ([saved.ts:14](../../../ui_web/src/lib/saved.ts#L14)), which uses `find`/`filter`. The ambiguity-aware `savedIndex` memo already exists at [identity.ts:69](../../../ui_web/src/stores/identity.ts#L69) and is not used for it. | Measured: using the index at 6× cut Favourites' longest task from 260–282 ms to 145–157 ms and script time from 1.92 s to 1.17–1.24 s. Necessary, not sufficient. | Open |
+| P1 | Every entering row resolves its saved/favourite state by scanning the whole saved array: `savedEntryForKeys` ([identity.ts:254](../../../ui_web/src/stores/identity.ts#L254)) calls `savedEntryForIdentity` ([saved.ts:14](../../../ui_web/src/lib/saved.ts#L14)), which uses `find`/`filter`. The ambiguity-aware `savedIndex` memo already exists at [identity.ts:69](../../../ui_web/src/stores/identity.ts#L69) and is not used for it. | Measured: using the index at 6× cut Favourites' longest task from 260–282 ms to 145–157 ms and script time from 1.92 s to 1.17–1.24 s. Necessary, not sufficient. | **Closed (step 4).** `savedEntryForKeys` answers from `buildSavedIdentityIndex` (`lib/saved.ts`), a memo in `stores/identity.ts`; a seeded test checks it against the scan on 10,000 random cases. Songs at 6×: longest task 288 → 125 ms, script 2,635 → 1,122 ms; at 1× script 1,053 → 322 ms ([numbers](../measurements/web-ui-rendering-2026-11-16/README.md)). `mobile/songMarks.ts` and `mobile/AndroidStart.tsx` still call the scanning `savedEntryForIdentity` over their own entries. |
 | P2 | The song row is expensive to mount. With a 300-song library, tasks still reach 160–205 ms at 6×; a plain row in the same shell stays at 35 ms. More overscan makes it worse (30 rows: 424 ms task). | Measured | Open |
 | P3 | Surfaces with no virtualization: `AlbumGrid`, `ArtistGrid`, the player's album browser ([NowPlayingBrowser.tsx:919](../../../ui_web/src/components/NowPlayingBrowser.tsx#L919)) and local search (`:1040`), artist and album track lists ([Artist.tsx:397](../../../ui_web/src/routes/Artist.tsx#L397), [Album.tsx:410](../../../ui_web/src/routes/Album.tsx#L410)), podcast subscriptions, DJ route entries. | Measured: player album browser 12,214 DOM elements; album grid 1.28 s and artist page 1.38 s of paint at 6×. | Open |
 | P4 | Player queue and player browser spend most of their time in ordinary layout (1,073 ms at 6× for the queue). Per-row and list containment, layer promotion, removing the query containers and disabling optional measurement each failed to remove it. | Measured; mechanism not isolated | Open: needs a row/scrollport prototype |
@@ -235,9 +235,9 @@ Two things that cost time in step 1:
 | --- | --- | --- |
 | 1 Functional fixes (U1, U5, U6 `DeviceSheet`, U8) | #461 | Done |
 | 2 Rendering harness | #462 | Done |
-| 3 P5 investigation | `perf/web-ui-step3-playback-frames` | Done: not a defect |
-| 4 P1 | — | Next |
-| 5 P2 + A1 | — | |
+| 3 P5 investigation | #463 | Done: not a defect |
+| 4 P1 | `perf/web-ui-step4-saved-index` | Done |
+| 5 P2 + A1 | — | Next |
 | 6 P3 | — | |
 | 7 P4 + A2 | — | |
 | 8 Design system (U2, U3, U6, U7; U4 decision) | — | |
