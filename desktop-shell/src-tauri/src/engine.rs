@@ -86,6 +86,7 @@ impl EngineSupervisor {
     }
 
     pub fn start(&self, app: AppHandle, music_dir: PathBuf) -> Result<(), String> {
+        crate::client::cancel_pending_connections();
         self.start_if_current(app, music_dir, None)
     }
 
@@ -175,6 +176,7 @@ impl EngineSupervisor {
     }
 
     pub fn restart(&self, app: AppHandle) -> Result<(), String> {
+        crate::client::cancel_pending_connections();
         let (generation, music_dir) = {
             let guard = self.inner.lock().expect("engine lock");
             (
@@ -254,21 +256,26 @@ fn accept_ready(
     true
 }
 
-fn complete_ready(
-    guard: &mut SupervisorInner,
+fn present_ready(
+    inner: &Arc<Mutex<SupervisorInner>>,
     generation: u64,
     child_pid: u32,
     state: EngineRuntimeState,
-    effects: impl FnOnce(&mut SupervisorInner, &str),
-) -> bool {
-    let player_url = state.player_url();
-    if !accept_ready(guard, generation, child_pid, state) {
-        return false;
-    }
-    // The caller retains the supervisor lock through every UI effect. Stop
-    // invalidates this generation before its caller closes or changes player.
-    effects(guard, &player_url);
-    true
+    present: impl FnOnce(&str) -> String,
+) -> Option<String> {
+    let player_url = {
+        let mut guard = inner.lock().expect("engine lock");
+        if !accept_ready(&mut guard, generation, child_pid, state) {
+            return None;
+        }
+        guard.runtime.as_ref().unwrap().player_url()
+    };
+    // WebView2 construction pumps native messages and can synchronously call
+    // stop(). Never retain a supervisor/session mutex across this callback.
+    let target = present(&player_url);
+    let guard = inner.lock().expect("engine lock");
+    (owns_launch(&guard, generation, child_pid) && guard.phase == EnginePhase::Ready)
+        .then_some(target)
 }
 
 fn read_engine_output<R: Read + Send + 'static>(
@@ -465,27 +472,27 @@ fn wait_for_ready(
                 let ui_inner = Arc::clone(&inner);
                 let ui_stop = Arc::clone(&stop_flag);
                 let ui_app = app.clone();
-                // On the main thread native window operations cannot be queued
-                // behind a stop/connection command holding this same lock.
+                // Validate on the UI thread, but release locks across native
+                // calls: WebView2 construction can reenter shortcut handlers.
                 let result = app.run_on_main_thread(move || {
-                    let mut guard = ui_inner.lock().expect("engine lock");
                     if ui_stop.load(Ordering::SeqCst) {
                         return;
                     }
-                    complete_ready(
-                        &mut guard,
-                        generation,
-                        child_pid,
-                        state,
-                        |guard, player_url| {
+                    let target =
+                        present_ready(&ui_inner, generation, child_pid, state, |player_url| {
                             let target = crate::take_pending_player_url(&ui_app, player_url);
-                            let _ = ui_app.emit("engine-ready", target.clone());
                             if let Err(error) = crate::desktop::open_player(&ui_app, &target) {
                                 eprintln!("Could not open desktop player: {error}");
                             }
-                            let _ = ui_app.emit("engine-status", status_snapshot(guard));
-                        },
-                    );
+                            target
+                        });
+                    let guard = ui_inner.lock().expect("engine lock");
+                    if let Some(target) =
+                        target.filter(|_| owns_launch(&guard, generation, child_pid))
+                    {
+                        let _ = ui_app.emit("engine-ready", target);
+                        let _ = ui_app.emit("engine-status", status_snapshot(&guard));
+                    }
                 });
                 if let Err(error) = result {
                     eprintln!("Could not dispatch engine readiness: {error}");
@@ -590,9 +597,47 @@ mod cancellation_tests {
             log_dir: "logs".into(),
         };
         let mut opened = false;
-        assert!(!complete_ready(&mut guard, 1, 42, state, |_, _| opened = true));
+        if accept_ready(&mut guard, 1, 42, state) {
+            opened = true;
+        }
         assert!(!opened);
         assert_eq!(guard.phase, EnginePhase::Idle);
+    }
+
+    #[test]
+    fn native_window_creation_can_reenter_stop_without_a_supervisor_deadlock() {
+        let supervisor = EngineSupervisor::new();
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .arg("--help")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        child.wait().unwrap();
+        {
+            let mut guard = supervisor.inner.lock().unwrap();
+            guard.child = Some(child);
+            guard.phase = EnginePhase::Booting;
+            guard.generation = 1;
+            guard.launch_id = "own-launch".into();
+            guard.engine_pid = Some(43);
+        }
+        let state = EngineRuntimeState {
+            pid: 43,
+            launch_id: "own-launch".into(),
+            base_url: "http://127.0.0.1:49152".into(),
+            health: "/api/health".into(),
+            owner_token_file: None,
+            log_dir: "logs".into(),
+        };
+        let target = present_ready(&supervisor.inner, 1, pid, state, |url| {
+            assert!(supervisor.inner.try_lock().is_ok());
+            supervisor.stop(None).unwrap(); // A WM_HOTKEY dispatched inside construction.
+            url.to_string()
+        });
+        assert!(target.is_none());
+        assert_eq!(supervisor.status().phase, EnginePhase::Idle);
     }
 
     #[test]

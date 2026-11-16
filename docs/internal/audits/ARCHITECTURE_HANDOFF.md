@@ -252,9 +252,18 @@ it never accepts an independent engine's healthy state. The retained Child can
 be PyInstaller's bootloader, whose Python subprocess has a different PID. Startup, output and
 health workers carry their launch generation; readiness rechecks that generation
 and retained bootloader PID after HTTP returns, so a replaced child's result is
-discarded. Ready UI effects execute on the main thread under the supervisor
-lock; stop/connection transitions invalidate the generation before closing the
-player, so a cancelled dispatch cannot consume a link or reopen that player.
+discarded. Ready UI work validates on the main thread, releases mutexes before
+native calls and checks the launch again afterwards. WebView2 construction pumps
+messages and can synchronously reenter Stop; the actual readiness/stop regression
+covers it. Windows are constructed hidden with an independent intent generation,
+then validated before reveal; cancellation during creation destroys only the
+obsolete window and leaves a newer connection's window intact. Session locks are
+also released before native navigation, showing, hiding and construction.
+
+Server probes have a separate connection generation. Returning to the chooser,
+stopping, starting locally or selecting another server invalidates an older
+probe. A completion checks again after its await and in its main-thread commit,
+before preferences, pending links or windows can be affected.
 Output is drained as byte lines with tolerant decoding, and child Python pipes
 are explicitly UTF-8. Non-UTF-8 legacy logging cannot close a startup pipe.
 During boot the existing status panel receives the last six child lines, making
@@ -267,9 +276,10 @@ run on Windows. Native Rust unit tests also run in Desktop Build.
 
 The native Windows source suite runs in Desktop Build. Rust timing, startup
 event and PID tests also run independently of platform webview dependencies.
-The isolated Python suite before the latest continuity/PID regressions passed:
-2,964 tests, 3 intentional skips. These additional changes have targeted
-regressions; the final full suite and independent re-review remain gates.
+The isolated Python suite passes with 2,968 tests and 3 intentional skips.
+The packaged readiness build and installed UI smoke passed on `e1e2688a`.
+The later native-reentry/connection-cancellation changes have source regressions;
+the latest native build, all PR checks and independent review remain gates.
 
 Where it does not run, on purpose: the desktop engine (a packaged build
 bundles its tools, where `sys.executable -m pip` was the engine binary itself;
