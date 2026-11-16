@@ -12,8 +12,7 @@ import time
 from flask import Blueprint, request, jsonify, send_file, Response, redirect
 from werkzeug.exceptions import HTTPException
 
-from shared import preview_cache, request_scope
-from shared.api.memo import Memo
+from shared import preview_cache, preview_streams, request_scope
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
 from shared.security import request_client_address, request_rate_limit_key
@@ -40,20 +39,6 @@ COVER_CACHE_SEC = 604800  # 7 days
 PREVIEW_STREAM_LIMIT = 90
 PREVIEW_STREAM_WINDOW_SEC = 60
 
-# Preview stream URLs, single-flighted: resolution is a multi-second yt-dlp
-# extraction, and repeated taps on the same row (or a prefetch racing the click
-# it was meant to make instant) all collapse onto one call. Unresolvable ids
-# get a short negative TTL so a dead video is not re-extracted on every retry
-# but is also not written off for the full five minutes.
-PREVIEW_STREAM_CACHE_TTL_SEC = 300  # 5 minutes
-PREVIEW_STREAM_NEGATIVE_TTL_SEC = 20
-_preview_stream_urls: Memo[ResolvedStream | str] = Memo(
-    ttl_sec=PREVIEW_STREAM_CACHE_TTL_SEC,
-    negative_ttl_sec=PREVIEW_STREAM_NEGATIVE_TTL_SEC,
-    maxsize=512,
-)
-
-
 def _preview_stream_rate_limit(ip: str) -> bool:
     """Per-client ceiling on preview stream starts.
 
@@ -66,129 +51,11 @@ def _preview_stream_rate_limit(ip: str) -> bool:
     )
 
 
-def _current_egress() -> str:
-    from hashlib import sha256
-    proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-    return "relay:" + sha256(proxy.encode()).hexdigest() if proxy else "direct"
-
-
-def _stream_memo_key(video_id):
-    return video_id if _current_egress() == 'direct' else video_id + ':' + _current_egress()
-
-
-def _durable_stream_cache_get(video_id: str) -> ResolvedStream | None:
-    """A stream URL this station already resolved, still inside its own expiry.
-
-    The signed URL lives about six hours; the in-process memo lives five minutes
-    and dies with the process. Without this step a station pays the extraction
-    again after every restart, and on a relayed station that extraction is the
-    most expensive thing it does.
-    """
-    try:
-        from shared.database import instance_db
-
-        row = instance_db().get_cached_stream_url(video_id, _current_egress())
-    except Exception as exc:  # pragma: no cover — cache must never break playback
-        logger.debug("API: [Preview] durable stream cache read failed for %s: %s", video_id, exc)
-        return None
-    if not row:
-        return None
-    proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-    return ResolvedStream(
-        url=row["url"],
-        egress="relay" if row["egress"].startswith("relay:") else "direct",
-        resolved_at=float(row["resolved_at"]),
-        expires_at=float(row["expires_at"]),
-        proxy_url=proxy or None if row["egress"].startswith("relay:") else None,
-    )
-
-
-def _durable_stream_cache_put(video_id: str, stream: ResolvedStream) -> None:
-    if stream.expires_at is None:
-        # No expiry in the URL means no idea how long it is good for; the
-        # in-process memo's short TTL is the safe ceiling for that case.
-        return
-    try:
-        from shared.database import instance_db
-
-        instance_db().set_cached_stream_url(
-            video_id,
-            stream.url,
-            ("relay:" + __import__('hashlib').sha256((stream.proxy_url or '').encode()).hexdigest()
-             if stream.egress == 'relay' else 'direct'),
-            stream.resolved_at,
-            stream.expires_at,
-        )
-    except Exception as exc:  # pragma: no cover — cache must never break playback
-        logger.debug("API: [Preview] durable stream cache write failed for %s: %s", video_id, exc)
-
-
-def _invalidate_stream(video_id: str) -> None:
-    """Forget a URL the CDN rejected, in both cache layers."""
-    _preview_stream_urls.invalidate(_stream_memo_key(video_id))
-    try:
-        from shared.database import instance_db
-
-        instance_db().invalidate_cached_stream_url(video_id)
-    except Exception as exc:  # pragma: no cover
-        logger.debug("API: [Preview] durable stream cache invalidate failed for %s: %s", video_id, exc)
-
-
-def _get_preview_stream_cached(
-    api, video_id: str, *, skip_fast_path: bool = False
-) -> ResolvedStream | None:
-    """Resolve a preview stream URL, at most once per video id at a time.
-
-    Three layers, cheapest first: the in-process memo, the durable SQLite cache
-    (good for the URL's full six hours, across restarts and every listener on
-    the station), then the yt-dlp extraction. Concurrent callers for the same id
-    — repeated taps, a range request landing while the first fetch is still
-    resolving, a prefetch racing a click — share one extraction rather than each
-    paying for their own.
-
-    `skip_fast_path` is for a retry right after the CDN rejected a URL the
-    fast path just produced — see `get_resolved_stream`. The caller is
-    expected to have already invalidated the rejected URL from both cache
-    layers, so `durable` below will not just hand the same dead URL back.
-    """
-
-    def resolve() -> ResolvedStream | str:
-        durable = _durable_stream_cache_get(video_id)
-        if durable is not None:
-            return durable
-        dl = api["get_downloader"](open_browser=False)
-        stream = dl.downloader.get_resolved_stream(video_id, skip_fast_path=skip_fast_path) or ""
-        if isinstance(stream, ResolvedStream):
-            _durable_stream_cache_put(video_id, stream)
-        return stream
-
-    try:
-        value = _preview_stream_urls.resolve(_stream_memo_key(video_id), resolve)
-        return value if isinstance(value, ResolvedStream) else None
-    except TimeoutError:
-        logger.warning("API: [Preview] Timed out waiting on in-flight resolution for %s", video_id)
-        return None
-
-
-def _get_preview_stream_url_cached(api, video_id: str) -> str:
-    """Compatibility helper for catalog and older tests."""
-    resolved = _get_preview_stream_cached(api, video_id)
-    return resolved.url if resolved else ""
-
-
 def _get_api():
-    from shared.api import (
-        get_library,
-        get_track_by_id,
-        socketio,
-        get_downloader,
-        is_trusted_network,
-        is_safe_path,
-        WEB_UI_PATH,
-        get_playback_state,
-        put_playback_state,
-        get_scope_from_request,
-    )
+    from shared.api import is_trusted_network, is_safe_path, WEB_UI_PATH, get_playback_state, put_playback_state, get_scope_from_request
+    from shared.user_cores import get_library, get_track_by_id
+    from shared.realtime import socketio
+    from shared.download_pump import get_downloader
     from shared.playback_state import register_device, get_registered_device, list_registered_devices
     return {
         "get_library": get_library,
@@ -438,11 +305,11 @@ def _emit_stream_timing(
 
 def _preview_upstream(api, video_id: str, headers: dict[str, str]):
     """Open a direct fallback stream when persistent caching is disabled."""
-    cache_was_warm = isinstance(_preview_stream_urls.get(_stream_memo_key(video_id)), ResolvedStream)
+    cache_was_warm = preview_streams.is_warm(video_id)
     skip_fast_path = False
     for attempt in range(2):
         resolve_started = time.monotonic()
-        stream = _get_preview_stream_cached(api, video_id, skip_fast_path=skip_fast_path)
+        stream = preview_streams.resolve(api["get_downloader"], video_id, skip_fast_path=skip_fast_path)
         resolve_ms = round((time.monotonic() - resolve_started) * 1000)
         if not stream:
             return None, None, "unavailable", resolve_ms, 0
@@ -472,7 +339,7 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
                 ttfb_ms,
             )
         response.close()
-        _invalidate_stream(video_id)
+        preview_streams.invalidate(video_id)
         cache_was_warm = False
         # Retry through the independent fallback resolver. In the captured
         # incident that produced an audio-only format where the fast resolver
@@ -617,13 +484,13 @@ def preview_stream_proxy(video_id):
     # read from that same growing file. Browser ranges never reach the CDN.
     if preview_cache.cache_limit_bytes() > 0:
         try:
-            stream = _get_preview_stream_cached(api, video_id)
+            stream = preview_streams.resolve(api["get_downloader"], video_id)
             if stream is None:
                 return jsonify({"error": "Preview unavailable"}), 502
 
             def refresh(vid: str):
-                _invalidate_stream(vid)
-                return _get_preview_stream_cached(api, vid, skip_fast_path=True)
+                preview_streams.invalidate(vid)
+                return preview_streams.resolve(api["get_downloader"], vid, skip_fast_path=True)
 
             handle = preview_cache.start_progressive(
                 video_id,
@@ -771,11 +638,11 @@ def preview_prefetch():
     download = bool(data.get("download"))
 
     def resolver(vid: str) -> ResolvedStream | None:
-        return _get_preview_stream_cached(api, vid)
+        return preview_streams.resolve(api["get_downloader"], vid)
 
     def refresh_resolver(vid: str) -> ResolvedStream | None:
-        _invalidate_stream(vid)
-        return _get_preview_stream_cached(api, vid, skip_fast_path=True)
+        preview_streams.invalidate(vid)
+        return preview_streams.resolve(api["get_downloader"], vid, skip_fast_path=True)
 
     from shared.dj.session import scoped
     def enqueue():
@@ -874,7 +741,7 @@ def get_preview_stream_url(video_id):
     if not _preview_stream_rate_limit(request_rate_limit_key()):
         return jsonify({"error": "Too many requests"}), 429
     try:
-        url = _get_preview_stream_url_cached(api, video_id)
+        url = preview_streams.resolved_url(api["get_downloader"], video_id)
         if not url:
             return jsonify({"error": "Stream URL unavailable"}), 404
         return jsonify({"url": url})

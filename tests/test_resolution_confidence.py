@@ -208,7 +208,7 @@ def test_rerank_leaves_a_winner_that_was_chosen_outside_the_candidates_alone():
 
 
 def test_cached_resolution_writes_the_correction_back():
-    from shared.api.routes.catalog import cached_resolution
+    from shared.catalog_resolution import cached_resolution
 
     db = _make_db()
     cached = _video_and_audio_cache()
@@ -222,7 +222,7 @@ def test_cached_resolution_writes_the_correction_back():
 
 
 def test_a_resolution_made_for_a_running_time_is_not_rewritten_by_another():
-    from shared.api.routes.catalog import cached_resolution
+    from shared.catalog_resolution import cached_resolution
 
     db = _make_db()
     # Resolved for the 251 s cut: the video is the right answer for that.

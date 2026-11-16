@@ -9,7 +9,7 @@ def install(app, root, accounts):
 
     from flask import jsonify, request
     from gevent import sleep
-    from shared.api import get_user_core
+    from shared.user_cores import get_user_core
     from shared.user_context import user_context
 
     control = {"fail_next": 0, "calls": 0, "delay_next": 0.0, "pending": 0, "delivered": 0, "delayed_ids": []}

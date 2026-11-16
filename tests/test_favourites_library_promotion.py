@@ -12,13 +12,14 @@ import pytest
 from player.favourites_manager import library_key
 from shared.models import Track
 from tests.conftest import TEST_USER_ID
+from shared import library_intake, user_cores
 
 
 @pytest.fixture
 def api(monkeypatch):
     import shared.api as api_mod
 
-    monkeypatch.setattr(api_mod, "emit_to_user", lambda *a, **k: None)
+    monkeypatch.setattr("shared.realtime.emit_to_user", lambda *a, **k: None)
     return api_mod
 
 
@@ -39,12 +40,12 @@ def _track(track_id: str, video_id: str | None = None) -> Track:
 
 
 def test_downloading_a_hearted_song_gives_its_entry_the_library_key(api):
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
     manager.set_favourite({"keys": ["yt:K3JGxj2rvAs"], "title": "I Follow Rivers"})
 
     assert manager.get_all() == [], "a song with no file yet owns no library id"
 
-    assert api.add_tracks_to_user_library([_track("hash-1", "K3JGxj2rvAs")]) == 1
+    assert library_intake.add_tracks_to_user_library([_track("hash-1", "K3JGxj2rvAs")]) == 1
 
     assert manager.get_all() == ["hash-1"], "the favourites view lists lib: keys"
     entries = [e for e in manager.get_entries() if "yt:K3JGxj2rvAs" in e["keys"]]
@@ -62,32 +63,32 @@ def test_downloading_a_saved_song_keeps_the_day_it_was_saved(api):
     The track arrives exactly as a finished download hands it over: already
     stamped by the shared pool the moment the file landed there. That stamp is
     what used to win."""
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
     manager.toggle_saved(
         {"keys": ["yt:K3JGxj2rvAs"], "title": "I Follow Rivers"}, added_at="2026-07-02T10:00:00"
     )
     downloaded = _track("hash-6", "K3JGxj2rvAs")
     downloaded.added_at = "2026-09-28T11:00:00"
 
-    api.add_tracks_to_user_library([downloaded])
+    library_intake.add_tracks_to_user_library([downloaded])
 
-    library = api.get_user_core(TEST_USER_ID).library
+    library = user_cores.get_user_core(TEST_USER_ID).library
     stored = library.metadata.get_track_by_id("hash-6")
     assert stored.added_at == "2026-07-02T10:00:00"
 
 
 def test_a_song_downloaded_without_ever_being_saved_is_dated_now(api):
-    api.add_tracks_to_user_library([_track("hash-7", "K3JGxj2rvAs")])
+    library_intake.add_tracks_to_user_library([_track("hash-7", "K3JGxj2rvAs")])
 
-    library = api.get_user_core(TEST_USER_ID).library
+    library = user_cores.get_user_core(TEST_USER_ID).library
     assert library.metadata.get_track_by_id("hash-7").added_at
 
 
 def test_promotion_leaves_unrelated_favourites_alone(api):
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
     manager.set_favourite({"keys": ["yt:other-video"], "title": "Something else"})
 
-    api.add_tracks_to_user_library([_track("hash-2", "K3JGxj2rvAs")])
+    library_intake.add_tracks_to_user_library([_track("hash-2", "K3JGxj2rvAs")])
 
     entry = [e for e in manager.get_entries() if "yt:other-video" in e["keys"]][0]
     assert entry["keys"] == ["yt:other-video"]
@@ -95,30 +96,30 @@ def test_promotion_leaves_unrelated_favourites_alone(api):
 
 
 def test_a_track_without_a_video_id_promotes_nothing(api):
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
     manager.set_favourite({"keys": ["yt:K3JGxj2rvAs"]})
 
-    api.add_tracks_to_user_library([_track("hash-3", None)])
+    library_intake.add_tracks_to_user_library([_track("hash-3", None)])
 
     assert manager.get_all() == []
 
 
 def test_a_song_downloaded_before_it_was_hearted_still_works(api):
     """The other order: the file arrives first, the heart later."""
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
 
-    api.add_tracks_to_user_library([_track("hash-4", "K3JGxj2rvAs")])
+    library_intake.add_tracks_to_user_library([_track("hash-4", "K3JGxj2rvAs")])
     manager.add("hash-4")
 
     assert manager.get_all() == ["hash-4"]
 
 
 def test_re_adding_an_already_owned_track_does_not_duplicate_keys(api):
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
     manager.set_favourite({"keys": ["yt:K3JGxj2rvAs"]})
 
-    api.add_tracks_to_user_library([_track("hash-5", "K3JGxj2rvAs")])
-    api.add_tracks_to_user_library([_track("hash-5", "K3JGxj2rvAs")])
+    library_intake.add_tracks_to_user_library([_track("hash-5", "K3JGxj2rvAs")])
+    library_intake.add_tracks_to_user_library([_track("hash-5", "K3JGxj2rvAs")])
 
     entry = [e for e in manager.get_entries() if "yt:K3JGxj2rvAs" in e["keys"]][0]
     assert entry["keys"].count(library_key("hash-5")) == 1

@@ -30,7 +30,7 @@ def client():
 @pytest.fixture
 def downloaded_track(tmp_path, monkeypatch):
     """One real file on disk, registered in the bound user's library."""
-    from shared.api import get_user_core
+    from shared.user_cores import get_user_core
     from shared.models import Track
     from shared.user_context import user_context
 

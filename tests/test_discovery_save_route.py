@@ -23,7 +23,7 @@ def _load_module(name: str, rel_path: str):
     spec.loader.exec_module(mod)
     return mod
 
-_dq = _load_module("download_queue_under_test", "shared/api/download_queue.py")
+_dq = _load_module("download_queue_under_test", "shared/download_queue.py")
 parse_intake_item = _dq.parse_intake_item
 
 # Imported normally: the route modules no longer drag `shared.api` in at import
@@ -155,7 +155,8 @@ def _mock_api(search_results=None, queue_add_return=None, parse_fn=None):
         "start_downloader_pump": MagicMock(),
         "parse_intake_item": parse_fn or _fake_parse_intake,
         "get_library": MagicMock(),
-        "_mod": MagicMock(),
+        "favourite_library_ids": MagicMock(return_value=[]),
+        "emit_to_user": MagicMock(),
     }
 
 
@@ -420,7 +421,7 @@ def test_music_plan_returns_server_ordered_playable_radio_items(tmp_path):
     ]
     mock_api = _mock_api()
     mock_api["get_library"].return_value = _FakeLibrary(metadata)
-    mock_api["_mod"].favourite_library_ids.return_value = []
+    mock_api["favourite_library_ids"].return_value = []
     mock_api["get_downloader"].return_value.downloader.get_related_videos.return_value = related
 
     with (
@@ -813,7 +814,7 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
     mod.favourite_library_ids.return_value = ["t1"]
     api = {
         "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
-        "_mod": mod,
+        "favourite_library_ids": mod.favourite_library_ids,
     }
 
     def fake_get(url, params=None, timeout=None, headers=None):
@@ -867,7 +868,7 @@ def test_music_feed_uses_cache_when_fresh(tmp_path):
     mod.favourite_library_ids.return_value = []
     api = {
         "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
-        "_mod": mod,
+        "favourite_library_ids": mod.favourite_library_ids,
     }
 
     with patch.object(_disc_feed, "_get_api", return_value=api), \
@@ -899,7 +900,7 @@ def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
     mod.favourite_library_ids.return_value = ["t1"]
     api = {
         "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
-        "_mod": mod,
+        "favourite_library_ids": mod.favourite_library_ids,
     }
 
     with patch.object(_disc_feed, "_get_api", return_value=api), \
@@ -2271,8 +2272,8 @@ def test_dj_preparation_queues_only_the_frozen_previews_and_keeps_refresh_contra
     with (patch.object(_auto_mode, "_get_api", return_value=api),
           patch.object(_auto_mode, "_dj_item_analysis") as analyse,
           patch.object(preview_cache, "request_prefetch") as prefetch,
-          patch.object(playback, "_get_preview_stream_cached", return_value="resolved") as resolve,
-          patch.object(playback, "_invalidate_stream") as invalidate):
+          patch.object(playback.preview_streams, "resolve", return_value="resolved") as resolve,
+          patch.object(playback.preview_streams, "invalidate") as invalidate):
         _auto_mode._dj_prepare_cohort(None, rows)
         assert [call.args[1] for call in analyse.call_args_list] == rows
         assert all(call.kwargs == {"schedule": True} for call in analyse.call_args_list)
@@ -2281,7 +2282,7 @@ def test_dj_preparation_queues_only_the_frozen_previews_and_keeps_refresh_contra
         assert prefetch.call_args.kwargs["resolver"]("candidate01") == "resolved"
         prefetch.call_args.kwargs["refresh_resolver"]("candidate01")
         invalidate.assert_called_once_with("candidate01")
-        resolve.assert_called_with(api, "candidate01", skip_fast_path=True)
+        resolve.assert_called_with(api["get_downloader"], "candidate01", skip_fast_path=True)
         prefetch.reset_mock()
         with patch.object(preview_cache, "cache_limit_bytes", return_value=0):
             _auto_mode._dj_prepare_cohort(None, rows)

@@ -166,9 +166,9 @@ def build(
 
     from player.favourites_manager import FavouritesManager
 
-    monkeypatch.setattr("shared.api.get_library", lambda: library, raising=False)
-    monkeypatch.setattr("shared.api.get_favourites_manager", lambda *a, **k: FavouritesManager(), raising=False)
-    monkeypatch.setattr("shared.api.emit_to_user", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr("shared.user_cores.get_library", lambda: library, raising=False)
+    monkeypatch.setattr("shared.user_cores.get_favourites_manager", lambda *a, **k: FavouritesManager(), raising=False)
+    monkeypatch.setattr("shared.realtime.emit_to_user", lambda *a, **k: None, raising=False)
     monkeypatch.setattr("shared.api.is_trusted_network", lambda *a, **k: True, raising=False)
 
     app = Flask(__name__)

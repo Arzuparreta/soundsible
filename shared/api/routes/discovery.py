@@ -172,7 +172,7 @@ def discovery_save():
       {status: "needs_review", confidence, confidence_level, candidates: [...]}
       {status: "failed",       reason, candidates: [...]}
     """
-    from shared.api.routes.catalog import cached_resolution
+    from shared.catalog_resolution import cached_resolution
     from shared.resolution_confidence import best_candidate, classify_confidence
     from shared.database import instance_db
 
@@ -361,8 +361,7 @@ def discovery_music_recommendations():
     except Exception:
         pass
     metadata = getattr(lib, "metadata", None)
-    mod = api["_mod"]
-    fav_ids = mod.favourite_library_ids()
+    fav_ids = api["favourite_library_ids"]()
     return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
 
 

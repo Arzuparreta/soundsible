@@ -55,7 +55,7 @@ def _resolve_seed_yt_id(track) -> str:
     title = (getattr(track, "title", "") or "").strip()
     if not artist or not title:
         return ""
-    from shared.api.routes.catalog import cached_resolution
+    from shared.catalog_resolution import cached_resolution
 
     db = instance_db()
     duration = getattr(track, "duration", None) or None
@@ -112,32 +112,27 @@ def _expand_seed(
                 video_id, max_results=_DISCOVER_RECS_PER_SEED, enrich=False
             )).result()
             if request_id and seed_track_id:
-                mod = api["_mod"]
-                sio = getattr(mod, "socketio", None)
-                if sio is not None:
-                    recs = (
-                        rank_recommendation_rows(results, source="discover")
-                        if user_id
-                        else results
-                    )
-                    sio.emit("discover_seed_ready", {
-                        "request_id": request_id,
-                        "seed_track_id": seed_track_id,
-                        "recs": recs,
-                    })
+                recs = (
+                    rank_recommendation_rows(results, source="discover")
+                    if user_id
+                    else results
+                )
+                # The seed and its mix are this account's, never everyone's.
+                api["emit_to_user"]("discover_seed_ready", {
+                    "request_id": request_id,
+                    "seed_track_id": seed_track_id,
+                    "recs": recs,
+                }, user_id=user_id)
     except Exception as exc:
         logger.debug("discover: expand failed for %s: %s", video_id, exc)
         # Note: Still emit an empty result so the client can mark this seed as
         # done rather than waiting forever.
         if request_id and seed_track_id:
-            api = _get_api()
-            sio = getattr(api["_mod"], "socketio", None)
-            if sio is not None:
-                sio.emit("discover_seed_ready", {
-                    "request_id": request_id,
-                    "seed_track_id": seed_track_id,
-                    "recs": [],
-                })
+            _get_api()["emit_to_user"]("discover_seed_ready", {
+                "request_id": request_id,
+                "seed_track_id": seed_track_id,
+                "recs": [],
+            }, user_id=user_id)
 
 
 def _schedule_expand(video_id: str, request_id: str | None = None, seed_track_id: str | None = None) -> None:
@@ -302,8 +297,7 @@ def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:
     tracks = list(metadata.tracks)
     # Note: Filter out podcasts (no artist/title or marked as podcast).
     tracks = [t for t in tracks if t.artist and t.title]
-    mod = api["_mod"]
-    fav_ids = set(mod.favourite_library_ids())
+    fav_ids = set(api["favourite_library_ids"]())
     # Note: Favourites first, then newest additions. Favourites are the strongest
     # taste signal; recent additions are the most likely current picks.
     fav_tracks = [t for t in tracks if t.id in fav_ids]

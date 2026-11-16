@@ -202,7 +202,8 @@ def test_a_client_browsing_correctly_is_never_rated(tmp_path, monkeypatch):
 @pytest.fixture
 def account_client():
     """The real app, logged in as an account that owns nothing yet."""
-    from shared.api import app as api_app, reset_user_cores
+    from shared.api import app as api_app
+    from shared.user_cores import reset_user_cores
     from shared.hardening import _reset_rate_limits_for_tests
 
     credentials.reset_key_cache()
@@ -238,7 +239,8 @@ def test_revoking_leaves_nothing_configured(account_client):
 
 
 def test_managing_access_requires_being_signed_in():
-    from shared.api import app as api_app, reset_user_cores
+    from shared.api import app as api_app
+    from shared.user_cores import reset_user_cores
     from shared.users import set_password
 
     reset_user_cores()

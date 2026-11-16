@@ -15,6 +15,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 
+from shared.download_pump import get_downloader, queue_manager_dl, start_downloader_pump
+from shared.download_queue import parse_intake_item
+from shared.realtime import emit_to_user
+from shared.user_context import current_user_id
+from shared.user_cores import favourite_library_ids, get_library
+
 logger = logging.getLogger(__name__)
 
 _ITUNES_SEARCH = "https://itunes.apple.com/search"
@@ -105,15 +111,13 @@ def _podcast_row_from_itunes_search(r: dict) -> dict | None:
 
 
 def _get_api():
-    import shared.api as api_mod
-    from shared.user_context import current_user_id
-
     return {
-        "get_library": api_mod.get_library,
+        "get_library": get_library,
         "user_id": current_user_id(),
-        "get_downloader": api_mod.get_downloader,
-        "queue_manager_dl": api_mod.queue_manager_dl,
-        "start_downloader_pump": api_mod.start_downloader_pump,
-        "parse_intake_item": api_mod.parse_intake_item,
-        "_mod": api_mod,
+        "get_downloader": get_downloader,
+        "queue_manager_dl": queue_manager_dl,
+        "start_downloader_pump": start_downloader_pump,
+        "parse_intake_item": parse_intake_item,
+        "favourite_library_ids": favourite_library_ids,
+        "emit_to_user": emit_to_user,
     }

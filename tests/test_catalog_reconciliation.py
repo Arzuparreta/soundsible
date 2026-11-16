@@ -25,7 +25,7 @@ def song(**changes):
 
 def profile():
     return {'title': 'Lo Que Aletea en Nuestras Cabezas', 'artist': 'Robe', 'cover': 'cover', 'genre': 'Rock',
-            'year': 2015, 'tracklist': [catalog._catalog_item(
+            'year': 2015, 'tracklist': [catalog.catalog_item(
                 item_id='deezer:track:3240262871', item_type='track', source='deezer',
                 title='Contra Todos', artist='Robe', duration=427,
                 album='Lo Que Aletea en Nuestras Cabezas', external_ids={'isrc': 'ES71G1502918'},
@@ -80,7 +80,7 @@ def test_name_and_duration_alone_do_not_certify_a_recording():
 
 
 def test_deezer_short_title_does_not_erase_a_live_version(cached):
-    item = catalog._deezer_track_to_catalog_item({
+    item = catalog.deezer_catalog.track_to_catalog_item({
         'id': 1, 'title': 'Contra Todos (Directo Mérida, Teatro Romano)', 'title_short': 'Contra Todos',
         'duration': 427, 'artist': {'name': 'Robe'}, 'album': {'title': 'Live'},
     })
@@ -167,7 +167,7 @@ def test_album_route_read_then_authenticated_repair(lib, cached, monkeypatch):
     monkeypatch.setattr(catalog, '_get_api', lambda: {'get_library': lambda: lib})
     monkeypatch.setattr(catalog, '_deezer_album_profile', lambda *args: profile())
     emit = Mock()
-    monkeypatch.setattr(api, 'emit_to_user', emit)
+    monkeypatch.setattr("shared.realtime.emit_to_user", emit)
     catalog._album_memo.clear()
     app = Flask(__name__)
     app.register_blueprint(catalog.catalog_bp)

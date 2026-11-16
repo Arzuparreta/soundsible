@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from shared.api import run_sync_task
+from shared.library_tasks import run_sync_task
 from shared.models import LibraryMetadata, Track
 
 
@@ -40,9 +40,9 @@ def test_run_sync_task_persists_synced_library():
     fake_orchestrator = MagicMock()
     fake_orchestrator.submit_task.side_effect = lambda _name, fn: fn()
 
-    with patch("shared.api.get_downloader", return_value=fake_dl):
-        with patch("shared.api._sync_pool_to_main_core") as sync_core:
-            with patch("shared.api.orchestrator", fake_orchestrator):
+    with patch("shared.download_pump.get_downloader", return_value=fake_dl):
+        with patch("shared.library_tasks._sync_pool_to_main_core") as sync_core:
+            with patch("shared.library_tasks.orchestrator", fake_orchestrator):
                 run_sync_task()
 
     fake_cloud.sync_library.assert_called_once()

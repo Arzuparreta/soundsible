@@ -8,6 +8,7 @@ import logging
 from urllib.parse import unquote
 
 from flask import Blueprint, request, jsonify
+from shared import catalog_resolution
 from shared.hardening import SCOPE_ADMIN_DANGEROUS, SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.user_context import require_user_id
 
@@ -105,24 +106,17 @@ def _playlist_precondition(metadata, name, data):
 
 def _get_api():
     """Lazy import from shared.api to avoid circular imports; returns a dict of core helpers and singletons."""
-    from shared.api import (
-        get_library,
-        get_track_by_id,
-        _mark_track_metadata_updated,
-        _ensure_lib_metadata,
-        socketio,
-        get_downloader,
-        get_favourites_manager,
-        favourite_library_ids,
-        emit_to_user,
-        is_trusted_network,
-    )
+    from shared.api import is_trusted_network
+    from shared.user_cores import get_library, get_track_by_id, ensure_library_metadata, get_favourites_manager, favourite_library_ids
+    from shared.library_tasks import mark_track_metadata_updated
+    from shared.realtime import socketio, emit_to_user
+    from shared.download_pump import get_downloader
     from shared.models import LibraryMetadata
     return {
         "get_library": get_library,
         "get_track_by_id": get_track_by_id,
-        "_mark_track_metadata_updated": _mark_track_metadata_updated,
-        "_ensure_lib_metadata": _ensure_lib_metadata,
+        "mark_track_metadata_updated": mark_track_metadata_updated,
+        "ensure_library_metadata": ensure_library_metadata,
         "socketio": socketio,
         "emit_to_user": emit_to_user,
         "get_downloader": get_downloader,
@@ -567,7 +561,7 @@ def update_track_labels(track_id):
            and not (key == "album_artist" and value is None)
            for key, value in data.items()):
         return jsonify({"error": "Invalid metadata value"}), 400
-    if not api["_mark_track_metadata_updated"](lib, track_id, changes=data):
+    if not api["mark_track_metadata_updated"](lib, track_id, changes=data):
         return jsonify({"error": "Track not found"}), 404
     return jsonify({"status": "success", "storage": "library", "id": track_id})
 
@@ -594,7 +588,7 @@ def upload_track_label_cover(track_id):
     except (ValueError, UnidentifiedImageError, OSError, Image.DecompressionBombError):
         return jsonify({"error": "Invalid artwork"}), 400
     # Commit account metadata first; a failed save never publishes the new cover.
-    if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="manual"):
+    if not api["mark_track_metadata_updated"](lib, track_id, cover_source="manual"):
         return jsonify({"error": "Track not found"}), 404
     store.bind_override(track_id, digest, "manual")
     api["emit_to_user"]("library_updated", payload={"cover_changed": True})
@@ -610,7 +604,7 @@ def clear_track_label_cover(track_id):
     lib = api["get_library"]()
     if not api["get_track_by_id"](lib, track_id):
         return jsonify({"error": "Track not found"}), 404
-    if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="none"):
+    if not api["mark_track_metadata_updated"](lib, track_id, cover_source="none"):
         return jsonify({"error": "Track not found"}), 404
     return jsonify({"status": "success", "storage": "library", "id": track_id})
 
@@ -831,13 +825,15 @@ def _schedule_favourite_resolve(favourite: dict) -> None:
     duration = favourite.get("duration")
     duration_s = int(duration) if isinstance(duration, (int, float)) and duration > 0 else None
 
+    get_downloader = _get_api()["get_downloader"]
+
     def _resolve():
-        from shared.api import emit_to_user, get_favourites_manager
-        from shared.api.routes.catalog import _resolve_candidates
+        from shared.realtime import emit_to_user
+        from shared.user_cores import get_favourites_manager
         from shared.user_context import user_context
 
         try:
-            best, _ = _resolve_candidates(artist, title, duration_s)
+            best, _ = catalog_resolution.resolve_candidates(get_downloader, artist, title, duration_s)
             video_id = (best or {}).get("id")
             if not video_id:
                 return
@@ -849,7 +845,7 @@ def _schedule_favourite_resolve(favourite: dict) -> None:
             logger.debug("Favourite resolve failed for %s — %s: %s", artist, title, exc)
 
     try:
-        from shared.api.orchestrator import orchestrator
+        from shared.orchestrator import orchestrator
 
         orchestrator.submit_background(f"fav_resolve_{keys[0]}", _resolve)
     except Exception as exc:  # pragma: no cover — never block the toggle
@@ -862,7 +858,7 @@ def _schedule_favourite_resolve(favourite: dict) -> None:
 @serialized
 def create_playlist():
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     data = request.json or {}
@@ -882,7 +878,7 @@ def create_playlist():
 @serialized
 def reorder_playlists():
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     data = request.json or {}
@@ -911,7 +907,7 @@ def reorder_playlists():
 def add_track_to_playlist(name):
     name = unquote(name)
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     if name not in metadata.playlists:
@@ -948,7 +944,7 @@ def add_track_to_playlist(name):
 def remove_track_from_playlist(name, track_id):
     name = unquote(name)
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     if name not in metadata.playlists:
@@ -966,7 +962,7 @@ def remove_track_from_playlist(name, track_id):
 def update_playlist(name):
     name = unquote(name)
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     if name not in metadata.playlists:
@@ -1019,7 +1015,7 @@ def update_playlist(name):
 def delete_playlist(name):
     name = unquote(name)
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     data = request.get_json(silent=True) or {}
@@ -1045,7 +1041,7 @@ def repair_library_files():
     and both of those are worth reading a report about first. Progress goes to
     the downloader log, which is where the other maintenance passes report.
     """
-    from shared.api import run_library_repair_task
+    from shared.library_tasks import run_library_repair_task
 
     data = request.json or {}
     dry_run = data.get("dry_run", True)
@@ -1068,7 +1064,7 @@ def get_saved_entities():
 @rate_limit('library_saved_entities', limit=120, window_sec=60)
 def update_saved_entity():
     from player.saved_entities import set_saved
-    from shared.api import emit_to_user
+    from shared.realtime import emit_to_user
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({'error': 'Expected an object'}), 400

@@ -37,7 +37,7 @@ class _CatalogUnavailable(RuntimeError):
 
 def _library():
     """The bound account's library, refreshed if the manifest moved under us."""
-    from shared.api import get_library
+    from shared.user_cores import get_library
 
     lib = get_library()
     lib.refresh_if_stale()

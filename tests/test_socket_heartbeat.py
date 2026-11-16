@@ -12,6 +12,7 @@ import importlib
 import sys
 
 import pytest
+from shared import realtime
 
 
 @pytest.fixture(autouse=True)
@@ -52,8 +53,8 @@ def _reload_api(monkeypatch, **env):
         else:
             monkeypatch.setenv(k, v)
     # Drop the orchestrator singleton so the re-imported module starts clean.
-    if "shared.api.orchestrator" in sys.modules:
-        sys.modules["shared.api.orchestrator"].JobOrchestrator._reset_instance_for_tests()
+    if "shared.orchestrator" in sys.modules:
+        sys.modules["shared.orchestrator"].JobOrchestrator._reset_instance_for_tests()
     for mod in [m for m in list(sys.modules) if m.startswith("shared.api")]:
         del sys.modules[mod]
     return importlib.import_module("shared.api")
@@ -68,7 +69,7 @@ def test_default_heartbeat_spec(monkeypatch):
     assert api.SOCKET_PING_INTERVAL == 20
     assert api.SOCKET_PING_TIMEOUT == 25
     # Flask-SocketIO exposes config via the underlying Engine.IO server.
-    eio = api.socketio.server.eio
+    eio = realtime.socketio.server.eio
     assert eio.ping_interval == 20
     assert eio.ping_timeout == 25
 
@@ -81,8 +82,8 @@ def test_heartbeat_env_overrides(monkeypatch):
     )
     assert api.SOCKET_PING_INTERVAL == 10
     assert api.SOCKET_PING_TIMEOUT == 40
-    assert api.socketio.server.eio.ping_interval == 10
-    assert api.socketio.server.eio.ping_timeout == 40
+    assert realtime.socketio.server.eio.ping_interval == 10
+    assert realtime.socketio.server.eio.ping_timeout == 40
 
 
 def test_invalid_env_falls_back_to_defaults(monkeypatch):

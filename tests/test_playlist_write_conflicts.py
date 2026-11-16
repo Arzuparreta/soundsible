@@ -15,7 +15,7 @@ import pytest
 
 from player.library import LibraryManager
 from shared.api import app as api_app
-from shared.api import get_user_core, reset_user_cores
+from shared.user_cores import get_user_core, reset_user_cores
 from shared.hardening import _rate_limiter
 from shared.models import LibraryMetadata, Track
 from shared.multiuser_migration import ensure_multiuser_layout
@@ -274,7 +274,7 @@ def test_legacy_preview_addition_uses_the_same_item_after_its_file_is_removed(cl
 
 
 def test_acquisition_publishes_only_after_source_and_item_identity_commit(client, monkeypatch):
-    from shared.api import add_tracks_to_user_library
+    from shared.library_intake import add_tracks_to_user_library
     user_id = ensure_multiuser_layout()['user_id']
     _seed_library(user_id)
     with user_context(user_id):

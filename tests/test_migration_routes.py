@@ -174,7 +174,7 @@ def test_migration_import_playlist_writes_metadata(tmp_path):
     mock_lib._save_metadata = MagicMock()
 
     with patch("shared.api.routes.migration._loaded_library", return_value=mock_lib):
-        with patch("shared.api.socketio") as sio:
+        with patch("shared.realtime.socketio") as sio:
             res = client.post(
                 "/api/migration/import-playlist",
                 json={"playlist_name": "Imported", "track_ids": [a.id, b.id]},
@@ -206,7 +206,7 @@ def test_migration_import_playlist_logs_batch_id(tmp_path):
     bid = "batch-test-uuid"
 
     with patch("shared.api.routes.migration._loaded_library", return_value=mock_lib):
-        with patch("shared.api.socketio"):
+        with patch("shared.realtime.socketio"):
             res = client.post(
                 "/api/migration/import-playlist",
                 json={"playlist_name": "Imported", "track_ids": [a.id], "batch_id": bid},

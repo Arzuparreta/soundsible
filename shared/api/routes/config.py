@@ -14,7 +14,7 @@ config_bp = Blueprint("config", __name__, url_prefix="")
 
 
 def _get_api():
-    from shared.api import get_library
+    from shared.user_cores import get_library
     return {"get_library": get_library}
 
 
@@ -54,8 +54,8 @@ def update_config():
         return jsonify({"error": str(e)}), 400
     # Storage backend changed: every account's library manager holds a provider
     # built from this config, so drop them all and let them rebuild on demand.
-    import shared.api as api_mod
-    api_mod.reset_user_cores()
+    from shared.user_cores import reset_user_cores
+    reset_user_cores()
     return jsonify({"status": "updated"})
 
 

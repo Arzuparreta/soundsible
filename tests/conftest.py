@@ -69,7 +69,7 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
         # a backup test read its SQLite journal mid-write and failed the
         # v0.16.0 tag — and, between tests, the real one under $HOME.
         try:
-            from shared.api.orchestrator import orchestrator
+            from shared.orchestrator import orchestrator
 
             orchestrator.stop_downloader_pump(wait=True)
         except Exception:
@@ -91,12 +91,9 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
         except Exception:
             pass
         unbind_user(token)
-        try:
-            import shared.api as api_mod
+        from shared.user_cores import reset_user_cores
 
-            api_mod.reset_user_cores()
-        except Exception:
-            pass
+        reset_user_cores()
         try:
             from shared.telemetry import reset_telemetry
 

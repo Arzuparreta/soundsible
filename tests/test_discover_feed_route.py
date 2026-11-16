@@ -35,6 +35,7 @@ from flask import Flask
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.telemetry import init_telemetry, reset_telemetry
+from shared.user_context import current_user_id
 
 
 def _make_runtime(tmp_path) -> RuntimeConfig:
@@ -101,13 +102,7 @@ def _mock_api(metadata, related_results=None):
     mock_dl_service.downloader.get_related_videos.return_value = related_results or []
     mock_dl_service.downloader.search_youtube.return_value = []
 
-    fake_socketio = MagicMock()
-
-    mod_mock = MagicMock()
-    mod_mock.socketio = fake_socketio
-    mod_mock.favourites_manager = MagicMock()
-    mod_mock.favourites_manager.get_all.return_value = []
-    mod_mock.favourite_library_ids.return_value = []
+    fake_emit = MagicMock()
 
     return {
         "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
@@ -115,8 +110,9 @@ def _mock_api(metadata, related_results=None):
         "queue_manager_dl": MagicMock(),
         "start_downloader_pump": MagicMock(),
         "parse_intake_item": MagicMock(),
-        "_mod": mod_mock,
-    }, mock_dl_service, fake_socketio
+        "favourite_library_ids": MagicMock(return_value=[]),
+        "emit_to_user": fake_emit,
+    }, mock_dl_service, fake_emit
 
 
 @pytest.fixture(autouse=True)
@@ -165,7 +161,7 @@ def test_feed_returns_cache_hits_immediately(monkeypatch):
     assert body["pending"] == []
     # No expansion scheduled, no socketio emit.
     mock_dl.downloader.get_related_videos.assert_not_called()
-    fake_sio.emit.assert_not_called()
+    fake_sio.assert_not_called()
 
 
 def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
@@ -216,11 +212,13 @@ def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
     # The expansion ran inline → yt-dlp was called, result persisted, socketio emitted.
     mock_dl.downloader.get_related_videos.assert_called_once()
     mock_db.set_related_mix.assert_called_once_with(_VID2, [{"id": "rel1111111", "title": "Related", "channel": "Other"}])
-    fake_sio.emit.assert_called_once()
-    emit_args = fake_sio.emit.call_args
+    fake_sio.assert_called_once()
+    emit_args = fake_sio.call_args
     assert emit_args.args[0] == "discover_seed_ready"
     assert emit_args.args[1]["seed_track_id"] == "t1"
     assert emit_args.args[1]["recs"][0]["id"] == "rel1111111"
+    # The mix belongs to the account that asked for it, not to every socket.
+    assert emit_args.kwargs["user_id"] == current_user_id()
 
 
 def test_feed_inflight_dedup_does_not_double_extract(monkeypatch):

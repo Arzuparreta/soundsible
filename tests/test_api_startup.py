@@ -17,6 +17,7 @@ import pytest
 
 import shared.api as api
 from shared.api import app as api_app
+from shared import realtime
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def started_api(monkeypatch, isolated_runtime):
         )
         monkeypatch.setattr(api, "_initialize_admin_core", initializer)
         monkeypatch.setattr(
-            api.socketio,
+            realtime.socketio,
             "run",
             lambda *_args, **_kwargs: record["served"].append(True),
         )

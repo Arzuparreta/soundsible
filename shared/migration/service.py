@@ -135,7 +135,7 @@ class MigrationRunner:
         self._sync_playlists()
 
     def _library(self):
-        from shared.api import get_user_core
+        from shared.user_cores import get_user_core
 
         core = get_user_core(self.user_id)
         lib = core.library
@@ -182,7 +182,7 @@ class MigrationRunner:
         else:
             shared_track = self._match_shared_pool(source)
             if shared_track is not None:
-                from shared.api import add_tracks_to_user_library
+                from shared.library_intake import add_tracks_to_user_library
 
                 add_tracks_to_user_library(
                     [shared_track], user_id=self.user_id, song_keys=source.identity_keys,
@@ -238,7 +238,7 @@ class MigrationRunner:
 
     def _match_shared_pool(self, source: SourceTrack):
         try:
-            from shared.api import get_downloader
+            from shared.download_pump import get_downloader
 
             pool = get_downloader(open_browser=False).library.tracks
             result = LibraryMatcher(pool).match(source)
@@ -250,9 +250,11 @@ class MigrationRunner:
 
     @staticmethod
     def _resolve(source: SourceTrack) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-        from shared.api.routes.catalog import _resolve_candidates
+        from shared import catalog_resolution, download_pump
 
-        best, raw_alternatives = _resolve_candidates(source.artist, source.title, source.duration or None)
+        best, raw_alternatives = catalog_resolution.resolve_candidates(
+            download_pump.get_downloader, source.artist, source.title, source.duration or None
+        )
         alternatives = [_candidate_payload(value) for value in raw_alternatives if value.get("id") or value.get("video_id")]
         candidate = _candidate_payload(best) if best and (best.get("id") or best.get("video_id")) else None
         if candidate and not any(row["video_id"] == candidate["video_id"] for row in alternatives):
@@ -260,7 +262,8 @@ class MigrationRunner:
         return candidate, alternatives[:5]
 
     def _download(self, candidate: dict[str, Any], source: SourceTrack) -> tuple[str | None, str | None]:
-        import shared.api as api
+        from shared import download_pump
+        from shared.download_queue import parse_intake_item
 
         video_id = str(candidate.get("video_id") or "").strip()
         raw = {
@@ -283,16 +286,16 @@ class MigrationRunner:
             # The row's identities, so the file joins the song saved from it.
             "identity_keys": list(source.identity_keys),
         }
-        item, error = api.parse_intake_item(raw)
+        item, error = parse_intake_item(raw)
         if error or not item:
             return None, error or "Invalid download candidate"
         from shared.library_lifecycle import coordinated
         with coordinated():
-            item = api.queue_manager_dl.add(item, user_id=self.user_id)
-            item = api.queue_manager_dl.claim(item['id'])
+            item = download_pump.queue_manager_dl.add(item, user_id=self.user_id)
+            item = download_pump.queue_manager_dl.claim(item['id'])
         if item is None:
             return None, 'Download could not be started'
-        api._process_single_queue_item(item)
+        download_pump.process_queue_item(item)
 
         lib = self._library()
         if lib.metadata:
@@ -306,7 +309,7 @@ class MigrationRunner:
             if match.matched_track_id and match.confidence >= AUTO_ACCEPT_THRESHOLD:
                 return match.matched_track_id, None
         failed = next(
-            (row for row in api.queue_manager_dl.list_items(self.user_id) if row.get("id") == item["id"]),
+            (row for row in download_pump.queue_manager_dl.list_items(self.user_id) if row.get("id") == item["id"]),
             {},
         )
         return None, failed.get("error_message") or failed.get("error") or "The downloaded track was not added"
@@ -319,14 +322,14 @@ class MigrationRunner:
             # the album around it, say the song is here.
             try:
                 from player.favourites_manager import library_key
-                from shared.api import get_favourites_manager
+                from shared.user_cores import get_favourites_manager
 
                 get_favourites_manager(self.user_id).update_keys(source.identity_keys, [library_key(track_id)])
             except Exception as exc:
                 logger.warning("Could not link saved song to track %s: %s", track_id, exc)
         if source_key in set(self.manifest.favourite_keys):
             try:
-                from shared.api import get_favourites_manager
+                from shared.user_cores import get_favourites_manager
 
                 get_favourites_manager(self.user_id).add(track_id)
             except Exception as exc:
@@ -359,7 +362,7 @@ class MigrationRunner:
 
     def _emit_library_updated(self) -> None:
         try:
-            from shared.api import emit_to_user
+            from shared.realtime import emit_to_user
 
             emit_to_user("library_updated", user_id=self.user_id)
         except Exception:

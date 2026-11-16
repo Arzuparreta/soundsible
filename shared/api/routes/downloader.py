@@ -11,7 +11,7 @@ from pathlib import Path
 
 from flask import Blueprint, request, jsonify
 
-from shared.api.memo import Memo
+from shared.memo import Memo
 from shared.music_identity import adapt_youtube_rows
 from shared.text_utils import sanitize_cli_message
 from shared.hardening import (
@@ -39,15 +39,10 @@ _search_memo: Memo[list] = Memo(ttl_sec=_SEARCH_CACHE_TTL_SEC, maxsize=256)
 
 
 def _get_api():
-    from shared.api import (
-        get_library,
-        get_downloader,
-        queue_manager_dl,
-        start_downloader_pump,
-        parse_intake_item,
-        is_trusted_network,
-        downloader_service,
-    )
+    from shared.api import is_trusted_network
+    from shared.user_cores import get_library
+    from shared.download_pump import get_downloader, queue_manager_dl, start_downloader_pump, downloader_service
+    from shared.download_queue import parse_intake_item
     from shared.user_context import current_user_id
 
     return {
@@ -357,7 +352,7 @@ def trigger_downloader():
 @require_instance_admin()
 @rate_limit("downloader_sync", limit=10, window_sec=300)
 def trigger_downloader_sync():
-    from shared.api import run_sync_task
+    from shared.library_tasks import run_sync_task
     run_sync_task()
     return jsonify({"status": "started"})
 
@@ -449,6 +444,6 @@ def update_downloader_config():
                     (cfg / "output_dir").write_text(str(val).strip())
                 except Exception:
                     pass
-    import shared.api as api_mod
-    api_mod.downloader_service = None
+    from shared import download_pump
+    download_pump.downloader_service = None
     return jsonify({"status": "updated"})

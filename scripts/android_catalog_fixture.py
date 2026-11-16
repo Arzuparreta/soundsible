@@ -19,7 +19,7 @@ def install(app):
         if "fixture" not in query.lower():
             return []
         return [
-            catalog._catalog_item(
+            catalog.catalog_item(
                 item_id="youtube:track:A1111111111",
                 item_type="track",
                 source="youtube",
@@ -40,23 +40,23 @@ def install(app):
         review = next((name for name in review_albums if f"fixture review {name}" in query.lower()), None)
         if review:
             album_id = review_albums[review]
-            return [catalog._catalog_item(item_id=f"deezer:album:{album_id}", item_type="album", source="deezer",
+            return [catalog.catalog_item(item_id=f"deezer:album:{album_id}", item_type="album", source="deezer",
                 title=f"fixture review album {review}", artist="fixture collection artist",
                 external_ids={"deezer_album_id": album_id})]
         if "collection" in query.lower():
             return [
-                catalog._catalog_item(item_id="deezer:artist:910001", item_type="artist", source="deezer",
+                catalog.catalog_item(item_id="deezer:artist:910001", item_type="artist", source="deezer",
                     title="fixture collection artist", artist="fixture collection artist",
                     external_ids={"deezer_artist_id": "910001"}),
-                catalog._catalog_item(item_id="deezer:album:920001", item_type="album", source="deezer",
+                catalog.catalog_item(item_id="deezer:album:920001", item_type="album", source="deezer",
                     title="fixture collection album", artist="fixture collection artist",
                     external_ids={"deezer_album_id": "920001"}),
-                *[catalog._catalog_item(item_id=f"deezer:track:{900100 + index}", item_type="track", source="deezer",
+                *[catalog.catalog_item(item_id=f"deezer:track:{900100 + index}", item_type="track", source="deezer",
                     title=f"fixture navigation song {index}", artist="fixture collection artist",
                     external_ids={"deezer_id": str(900100 + index)}) for index in range(15)],
             ]
         return [
-            catalog._catalog_item(
+            catalog.catalog_item(
                 item_id="deezer:track:900001",
                 item_type="track",
                 source="deezer",
@@ -86,7 +86,7 @@ def install(app):
 
     # Only the external provider is synthetic: profile/discography routes,
     # identity normalization, saved mutations and durable job ownership stay real.
-    real_deezer_get = catalog._deezer_get
+    real_deezer_get = catalog.deezer_catalog.deezer_get
 
     def provider(path, params=None, timeout=8):
         review = next((name for name, identity in review_albums.items() if path.startswith(f"album/{identity}")), None)
@@ -123,7 +123,7 @@ def install(app):
             return {"data": [track], "total": 1}
         raise RuntimeError("Unexpected synthetic provider path")
 
-    catalog._deezer_get = provider
+    catalog.deezer_catalog.deezer_get = provider
     catalog._youtube_search = direct
     catalog._deezer_search = recording
     catalog._musicbrainz_search = musicbrainz

@@ -41,8 +41,9 @@ def search_car_items():
 
 
 def _get_api():
-    from shared.api import get_library, get_track_by_id, get_playback_state, get_scope_from_request
-    from shared.api import favourite_library_ids, get_favourites_manager
+    from shared.api import get_playback_state, get_scope_from_request
+    from shared.user_cores import get_library, get_track_by_id
+    from shared.user_cores import favourite_library_ids, get_favourites_manager
 
     return {
         "get_library": get_library,

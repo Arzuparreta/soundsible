@@ -66,6 +66,24 @@ def _read_admin_token() -> str:
     return (os.getenv("SOUNDSIBLE_ADMIN_TOKEN") or "").strip()
 
 
+def set_session_cookie(response, token: str):
+    """Give the browser its session, for as long as the session itself lasts."""
+    from shared.users import SESSION_COOKIE_NAME, SESSION_TTL_DAYS
+
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        token,
+        max_age=SESSION_TTL_DAYS * 24 * 3600,
+        httponly=True,
+        samesite="Lax",
+        # Only pin to HTTPS when the request actually arrived over it — most
+        # instances are plain HTTP on a LAN or Tailscale address.
+        secure=bool(request.is_secure),
+        path="/",
+    )
+    return response
+
+
 def _request_supplied_admin_token() -> str:
     auth = (request.headers.get("Authorization") or "").strip()
     if auth.lower().startswith("bearer "):

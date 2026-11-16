@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, g, jsonify, make_response, request
 
+from shared import station_addresses
 from shared.database import DatabaseManager, instance_db
 from shared.hardening import (
     SCOPE_ADMIN_CONFIG,
@@ -21,6 +22,7 @@ from shared.hardening import (
     get_request_auth_context,
     rate_limit,
     require_scope,
+    set_session_cookie,
 )
 
 
@@ -106,26 +108,8 @@ def _generate_pairing_code(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-def _base_urls() -> dict:
-    from shared.api import get_active_endpoints
-    from shared.runtime import get_runtime_config
-
-    runtime = get_runtime_config()
-    loopback_base_url = f"http://127.0.0.1:{runtime.port}"
-    lan_base_urls: list[str] = []
-    if runtime.lan_enabled or runtime.host not in {"127.0.0.1", "localhost"}:
-        lan_base_urls = [f"http://{host}:{runtime.port}" for host in get_active_endpoints()]
-    suggested_base_url = lan_base_urls[0] if lan_base_urls else None
-    return {
-        "loopback_base_url": loopback_base_url,
-        "lan_base_urls": lan_base_urls,
-        "suggested_base_url": suggested_base_url,
-        "lan_enabled": runtime.lan_enabled,
-    }
-
-
 def _pairing_connect_payload(record: dict) -> dict:
-    base_urls = _base_urls()
+    base_urls = station_addresses.base_urls()
     suggested_base_url = base_urls["suggested_base_url"]
     claim_url = f"{suggested_base_url}/api/pairing/sessions/claim" if suggested_base_url else None
     player_url = f"{suggested_base_url}/player/" if suggested_base_url else None
@@ -276,7 +260,6 @@ def _claim_signed_in_session(session: dict, *, device_name: str, device_type: st
     confirms later, and it is an ordinary session of that account, revocable from
     its paired devices.
     """
-    from shared.api.routes.auth import _set_session_cookie
     from shared.users import UserError, create_session, get_user
 
     if not (session.get("auto_confirm") and session.get("display_active")):
@@ -300,7 +283,7 @@ def _claim_signed_in_session(session: dict, *, device_name: str, device_type: st
         _db().revoke_auth_token(record["id"])
         return jsonify({"error": "Pairing session could not be completed"}), 409
     body = {"user": get_user(user_id), "session": _session_response(completed), "auto_confirmed": True}
-    return _set_session_cookie(make_response(jsonify(body)), token), 201
+    return set_session_cookie(make_response(jsonify(body)), token), 201
 
 
 @pairing_bp.route("/api/pairing/sessions/claim", methods=["POST"])

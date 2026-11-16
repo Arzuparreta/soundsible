@@ -20,15 +20,26 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_GEVENT = False
 
-from shared import request_scope
-from shared.api.memo import Memo
+from shared import catalog_resolution, deezer_catalog, request_scope
+from shared.deezer_catalog import (
+    catalog_item,
+    deezer_track_raw,
+    duration_seconds,
+    extract_year,
+    positive_int,
+)
+from shared.memo import Memo
+from shared.download_pump import get_downloader, queue_manager_dl, start_downloader_pump
+from shared.download_queue import parse_intake_item
+from shared.user_context import current_user_id
+from shared.user_cores import get_library
 from shared.database import DatabaseManager, instance_db
 from shared.library_search import search_text, search_title
 from shared.musicbrainz import normalize_recording_mbid
 from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
-from shared.resolution_confidence import best_candidate, classify_confidence, rerank_cached_resolution
+from shared.resolution_confidence import classify_confidence
 from shared.text_utils import (
     collapse_text,
     fold_text,
@@ -38,7 +49,6 @@ from shared.text_utils import (
     sanitize_cli_message,
     strip_release_junk,
 )
-from shared.url_utils import validate_youtube_video_id
 
 
 logger = logging.getLogger(__name__)
@@ -88,17 +98,6 @@ _album_memo: Memo[dict[str, Any]] = Memo(
     ttl_sec=_ALBUM_CACHE_TTL_SEC, maxsize=_CACHE_MAX_ENTRIES, wait_timeout_sec=_CACHE_WAIT_TIMEOUT_SEC
 )
 _DEEZER_FANOUT_TIMEOUT_SEC = 12
-# Deezer/MusicBrainz rows carry no video id, so playing or saving one costs a
-# yt-dlp search. Two callers routinely want the same row at the same moment: the
-# speculative prefetch for the top results, and the click that follows. This
-# collapses them onto one search. The durable cache is SQLite
-# (`get_cached_resolution`); the short TTL here only covers the in-flight window
-# and the seconds right after it.
-_RESOLVE_MEMO_TTL_SEC = 30
-_resolve_memo: Memo[tuple[dict[str, Any], list[dict[str, Any]]]] = Memo(
-    ttl_sec=_RESOLVE_MEMO_TTL_SEC,
-    maxsize=128,
-)
 _MUSICBRAINZ_HEADERS = {
     "User-Agent": "Soundsible/1.0 (https://github.com/Arzuparreta/soundsible)",
     "Accept": "application/json",
@@ -152,17 +151,13 @@ def _memo_resolve(
 
 
 def _get_api():
-    import shared.api as api_mod
-
-    from shared.user_context import current_user_id
-
     return {
-        "get_library": api_mod.get_library,
+        "get_library": get_library,
         "user_id": current_user_id(),
-        "get_downloader": api_mod.get_downloader,
-        "queue_manager_dl": api_mod.queue_manager_dl,
-        "start_downloader_pump": api_mod.start_downloader_pump,
-        "parse_intake_item": api_mod.parse_intake_item,
+        "get_downloader": get_downloader,
+        "queue_manager_dl": queue_manager_dl,
+        "start_downloader_pump": start_downloader_pump,
+        "parse_intake_item": parse_intake_item,
     }
 
 
@@ -174,23 +169,8 @@ _norm = normalize_text
 _key = identity_key
 
 
-def _duration(value: object) -> int | None:
-    try:
-        num = int(float(value))
-    except (TypeError, ValueError):
-        return None
-    return num if num > 0 else None
 
 
-def _positive_int(value: object, upper: int) -> int | None:
-    """A whole number in ``1..upper``, or None for anything else."""
-    if isinstance(value, bool):
-        return None
-    try:
-        num = int(value)
-    except (TypeError, ValueError):
-        return None
-    return num if 0 < num <= upper else None
 
 
 def _track_dict(track) -> dict[str, Any]:
@@ -202,48 +182,6 @@ def _cover_from_track(track) -> str:
     return f"/api/static/cover/{quote(str(track.id), safe='')}"
 
 
-def _catalog_item(
-    *,
-    item_id: str,
-    item_type: str,
-    source: str,
-    title: str,
-    subtitle: str = "",
-    artist: str = "",
-    album: str = "",
-    duration: int | None = None,
-    cover: str = "",
-    popularity: float = 0.0,
-    track_id: str | None = None,
-    external_ids: dict[str, Any] | None = None,
-    attribution_url: str = "",
-    in_library: bool = False,
-    playable: bool = False,
-    downloadable: bool = True,
-    raw: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return {
-        "id": item_id,
-        "type": item_type,
-        "source": source,
-        "title": title,
-        "subtitle": subtitle,
-        "artist": artist,
-        "album": album,
-        "duration": duration,
-        "cover": cover,
-        "popularity": round(float(popularity or 0), 4),
-        "track_id": track_id,
-        "external_ids": external_ids or {},
-        "attribution_url": attribution_url,
-        "action_state": {
-            "in_library": bool(in_library),
-            "playable": bool(playable),
-            "downloadable": bool(downloadable),
-            "needs_resolution": not bool(track_id),
-        },
-        "raw": raw or {},
-    }
 
 
 def _intent_creator(results: list[dict[str, Any]], query: str) -> str:
@@ -744,7 +682,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     top-k selection retains only the winning track candidates. Entity maps
     still retain one representative per matching artist/album for deduplication.
     Only the winners are materialised: each
-    `_catalog_item` embeds a full `track.to_dict()`, so building one per match
+    `catalog_item` embeds a full `track.to_dict()`, so building one per match
     would mean tens of thousands of them per keystroke on a big library.
 
     `limit` is accepted so this reads like the other providers, and ignored: the
@@ -841,7 +779,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     for *_, track in best_tracks:
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         out.append(
-            _catalog_item(
+            catalog_item(
                 item_id=f"library:track:{track.id}",
                 item_type="library_track",
                 source="library",
@@ -849,7 +787,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
                 subtitle=artist,
                 artist=artist,
                 album=getattr(track, "album", "") or "",
-                duration=_duration(getattr(track, "duration", None)),
+                duration=duration_seconds(getattr(track, "duration", None)),
                 cover=_cover_from_track(track),
                 track_id=track.id,
                 external_ids={
@@ -866,7 +804,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
 
     for key, (_, name, track) in nsmallest(_LOCAL_ENTITY_BUDGET, artists.items(), key=lambda kv: (-kv[1][0], kv[0])):
         out.append(
-            _catalog_item(
+            catalog_item(
                 item_id=f"library:artist:{key}",
                 item_type="artist",
                 source="library",
@@ -885,7 +823,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     for key, (_, name, track) in nsmallest(_LOCAL_ENTITY_BUDGET, albums.items(), key=lambda kv: (-kv[1][0], kv[0])):
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         out.append(
-            _catalog_item(
+            catalog_item(
                 item_id=f"library:album:{key}",
                 item_type="album",
                 source="library",
@@ -906,19 +844,6 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     return out
 
 
-def _deezer_track_raw(deezer_id: str, artist_row: dict, album_row: dict) -> dict[str, Any]:
-    """The song's own id plus the artist and album pages it belongs to.
-
-    The artist and album ids go here rather than in ``external_ids``: those are
-    identity keys, and every song by one artist sharing one would collapse them
-    into a single search row. Playback carries these through to the artist and
-    album links, so nothing has to look the artist up by name again.
-    """
-    raw: dict[str, Any] = {"deezer_id": deezer_id}
-    for key, row in (("deezer_artist_id", artist_row), ("deezer_album_id", album_row)):
-        if row.get("id"):
-            raw[key] = str(row["id"])
-    return raw
 
 
 def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
@@ -937,7 +862,7 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
         if title and artist:
             deezer_id = str(row.get("id") or "")
             out.append(
-                _catalog_item(
+                catalog_item(
                     item_id=f"deezer:track:{deezer_id}",
                     item_type="track",
                     source="deezer",
@@ -945,19 +870,19 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
                     subtitle=artist,
                     artist=artist,
                     album=album,
-                    duration=_duration(row.get("duration")),
+                    duration=duration_seconds(row.get("duration")),
                     cover=deezer.image(album_row, "cover"),
                     popularity=float(row.get("rank") or 0),
                     external_ids={"deezer_id": deezer_id},
                     attribution_url=row.get("link") or "",
-                    raw=_deezer_track_raw(deezer_id, artist_row, album_row),
+                    raw=deezer_track_raw(deezer_id, artist_row, album_row),
                 )
             )
         artist_id = str(artist_row.get("id") or "")
         if artist and artist_id and artist_id not in seen_artists:
             seen_artists.add(artist_id)
             out.append(
-                _catalog_item(
+                catalog_item(
                     item_id=f"deezer:artist:{artist_id}",
                     item_type="artist",
                     source="deezer",
@@ -975,7 +900,7 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
         if album and album_id and album_id not in seen_albums:
             seen_albums.add(album_id)
             out.append(
-                _catalog_item(
+                catalog_item(
                     item_id=f"deezer:album:{album_id}",
                     item_type="album",
                     source="deezer",
@@ -1026,14 +951,14 @@ def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
         artist = _clean(credit.get("name") or artist_row.get("name"))
         artist_id = _clean(artist_row.get("id"), 80)
         if mbid and title:
-            out.append(_catalog_item(
+            out.append(catalog_item(
                 item_id=f"musicbrainz:track:{mbid}",
                 item_type="track",
                 source="musicbrainz",
                 title=title,
                 subtitle=artist,
                 artist=artist,
-                duration=_duration((row.get("length") or 0) / 1000 if row.get("length") else None),
+                duration=duration_seconds((row.get("length") or 0) / 1000 if row.get("length") else None),
                 popularity=float(row.get("score") or 0),
                 external_ids={"musicbrainz_id": mbid},
                 attribution_url=f"https://musicbrainz.org/recording/{mbid}",
@@ -1041,7 +966,7 @@ def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
             ))
         if artist and artist_id and artist_id not in seen_artists:
             seen_artists.add(artist_id)
-            out.append(_catalog_item(
+            out.append(catalog_item(
                 item_id=f"musicbrainz:artist:{artist_id}",
                 item_type="artist",
                 source="musicbrainz",
@@ -1060,7 +985,7 @@ def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
         album_id = _clean(release.get("id"), 80)
         if album and album_id and album_id not in seen_albums:
             seen_albums.add(album_id)
-            out.append(_catalog_item(
+            out.append(catalog_item(
                 item_id=f"musicbrainz:album:{album_id}",
                 item_type="album",
                 source="musicbrainz",
@@ -1098,14 +1023,14 @@ def _youtube_search(query: str, limit: int) -> list[dict[str, Any]]:
             continue
         thumbnail = _clean(row.get("thumbnail"), 500)
         out.append(
-            _catalog_item(
+            catalog_item(
                 item_id=f"youtube:track:{video_id}",
                 item_type="track",
                 source="youtube",
                 title=title,
                 subtitle=artist,
                 artist=artist,
-                duration=_duration(row.get("duration")),
+                duration=duration_seconds(row.get("duration")),
                 cover=thumbnail or f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
                 popularity=max(0.0, float(row.get("view_count") or 0)),
                 external_ids={"youtube_id": video_id},
@@ -1116,7 +1041,7 @@ def _youtube_search(query: str, limit: int) -> list[dict[str, Any]]:
                     **music,
                     "title": title,
                     "artist": artist,
-                    "duration": _duration(row.get("duration")),
+                    "duration": duration_seconds(row.get("duration")),
                     "youtube_id": video_id,
                 },
             )
@@ -1269,111 +1194,17 @@ def catalog_search():
     return jsonify(body)
 
 
-def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Map a catalog row (artist + title) to the best YouTube match.
-
-    Cheap on a repeat: SQLite remembers every resolution forever, and concurrent
-    callers for the same row share one yt-dlp search rather than each running
-    their own.
-    """
-    db = instance_db()
-    cached = cached_resolution(db, artist, title, duration_s)
-    if cached and cached.get("id"):
-        return cached, cached.get("candidates") or [cached]
-
-    key = f"{_norm(artist)}|{_norm(title)}|{duration_s or ''}"
-    return _resolve_memo.resolve(key, lambda: _resolve_candidates_uncached(artist, title, duration_s))
-
-
-def cached_resolution(db: DatabaseManager, artist: str, title: str, duration_s: int | None) -> dict[str, Any] | None:
-    """The stored resolution for a song, re-ranked for this caller's running time.
-
-    See `rerank_cached_resolution`. A row resolved without a running time is
-    corrected for everyone, so callers that know none stop getting the answer
-    that ignored one. A row resolved for a running time keeps it: another time
-    is another cut of the same title — a radio edit, a stale client — and gets
-    its own answer without overwriting the one stored.
-    """
-    cached = db.get_cached_resolution(artist, title)
-    if not cached:
-        return None
-    reranked = rerank_cached_resolution(artist, title, duration_s, cached)
-    if not reranked:
-        return cached
-    if cached.get("requested_duration"):
-        return {**cached, **reranked}
-    db.set_cached_resolution(artist, title, {**reranked, "requested_duration": duration_s})
-    return db.get_cached_resolution(artist, title) or cached
-
-
-def _resolve_candidates_uncached(
-    artist: str, title: str, duration_s: int | None
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    db = instance_db()
-    api = _get_api()
-    dl = api["get_downloader"](open_browser=False)
-    raw_results = dl.downloader.search_match_candidates(artist, title, max_results=8)
-    if not raw_results:
-        db.set_cached_resolution(artist, title, {"id": "", "failure_state": "not_found", "confidence": 0.0})
-        return {}, []
-
-    best, score, reason, ranked = best_candidate(artist, title, duration_s, raw_results)
-    db.set_cached_resolution(
-        artist,
-        title,
-        {
-            "id": best.get("id", ""),
-            "duration": best.get("duration"),
-            "thumbnail": best.get("thumbnail") or f"https://img.youtube.com/vi/{best.get('id', '')}/mqdefault.jpg",
-            "webpage_url": best.get("webpage_url") or f"https://www.youtube.com/watch?v={best.get('id', '')}",
-            "channel": best.get("channel") or best.get("uploader") or "",
-            "confidence": score,
-            "confidence_reason": reason,
-            "candidates": ranked,
-            "requested_duration": duration_s,
-        },
-    )
-
-    # Kick off stream-URL resolution for the winner in the background. The click
-    # that follows this resolve almost always plays exactly this id, and the
-    # playback route single-flights on the same key — so its request either
-    # finds the URL already warm or joins the extraction already running,
-    # instead of starting a second one. Deliberately *not* awaited: blocking the
-    # resolve response on it only moves the same wait earlier in the sequence.
-    best_id = best.get("id")
-    if best_id and validate_youtube_video_id(str(best_id)):
-        _warm_preview_stream_url(str(best_id))
-
-    return {**best, "confidence": score, "confidence_reason": reason}, ranked
-
-
-def _warm_preview_stream_url(video_id: str) -> None:
-    """Queue background resolution of `video_id`'s googlevideo URL."""
-    from shared import preview_cache
-    from shared.api.routes.playback import _get_preview_stream_cached
-
-    api = _get_api()
-    try:
-        preview_cache.request_prefetch(
-            [video_id],
-            download=False,
-            resolver=lambda vid: _get_preview_stream_cached(api, vid),
-        )
-    except Exception as exc:  # pragma: no cover — best-effort warm-up
-        logger.debug("Catalog resolve: could not queue stream-URL warm for %s: %s", video_id, exc)
-
-
 @catalog_bp.route("/api/catalog/resolve", methods=["POST"])
 @rate_limit("catalog_resolve", limit=80, window_sec=60)
 def catalog_resolve():
     data = request.get_json(silent=True) or {}
     artist = _clean(data.get("artist"))
     title = _clean(data.get("title"))
-    duration_s = _duration(data.get("duration"))
+    duration_s = duration_seconds(data.get("duration"))
     if not artist or not title:
         return jsonify({"error": "artist and title are required"}), 400
     try:
-        best, candidates = _resolve_candidates(artist, title, duration_s)
+        best, candidates = catalog_resolution.resolve_candidates(_get_api()["get_downloader"], artist, title, duration_s)
     except Exception as exc:
         logger.warning("Catalog resolve failed: %s", exc)
         return jsonify({"status": "failed", "reason": "search_error", "candidates": []}), 502
@@ -1409,10 +1240,10 @@ def _album_evidence(data: dict[str, Any]) -> dict[str, Any]:
     if album_artist:
         evidence["album_artist"] = album_artist
     for key, upper in (("track_number", 999), ("disc_number", 99)):
-        value = _positive_int(data.get(key), upper)
+        value = positive_int(data.get(key), upper)
         if value:
             evidence[key] = value
-    year = _positive_int(data.get("year"), 9999)
+    year = positive_int(data.get("year"), 9999)
     if year and year >= 1000:
         evidence["year"] = year
     return evidence
@@ -1426,7 +1257,7 @@ def catalog_save():
     title = _clean(data.get("title"))
     if not artist or not title:
         return jsonify({"error": "artist and title are required"}), 400
-    duration_s = _duration(data.get("duration"))
+    duration_s = duration_seconds(data.get("duration"))
     confirm_video_id = _clean(data.get("confirm_video_id"), 32) or None
     video_id = confirm_video_id
     candidates: list[dict[str, Any]] = []
@@ -1435,7 +1266,7 @@ def catalog_save():
 
     if not video_id:
         try:
-            best, candidates = _resolve_candidates(artist, title, duration_s)
+            best, candidates = catalog_resolution.resolve_candidates(_get_api()["get_downloader"], artist, title, duration_s)
         except Exception as exc:
             logger.warning("Catalog save resolve failed: %s", exc)
             return jsonify({"status": "failed", "reason": "search_error", "candidates": []}), 502
@@ -1478,7 +1309,7 @@ def catalog_save():
     # the actual provider record and bind its image to this account/video.
     if re.fullmatch(r'deezer:track:[0-9]+', str(data.get('catalog_item_id') or '')) and data.get('album'):
         try:
-            record = _deezer_get('track/' + data['catalog_item_id'].rsplit(':', 1)[-1])
+            record = deezer_catalog.deezer_get('track/' + data['catalog_item_id'].rsplit(':', 1)[-1])
             album = record.get('album') or {}
             if (fold_text(record.get('title') or '') == fold_text(title)
                     and fold_text((record.get('artist') or {}).get('name') or '') == fold_text(artist)
@@ -1532,57 +1363,14 @@ def catalog_save():
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _deezer_get(path: str, params: dict[str, Any] | None = None, timeout: int = 8) -> dict[str, Any]:
-    """One artist page used to fire five of these, each uncached and on its own
-    connection. `shared.providers.deezer` pools and caches them."""
-    return deezer.get(path, params, timeout=timeout)
 
 
-def _deezer_artist_search(name: str, limit: int = 10) -> list[dict[str, Any]]:
-    data = _deezer_get("search/artist", {"q": name, "limit": min(limit, 25)})
-    rows = data.get("data") if isinstance(data.get("data"), list) else []
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        artist_id = str(row.get("id") or "")
-        artist_name = (row.get("name") or "").strip()
-        if not artist_id or not artist_name:
-            continue
-        out.append({
-            "deezer_id": artist_id,
-            "name": artist_name,
-            "picture": deezer.image(row, "picture"),
-            "nb_fans": int(row.get("nb_fan") or 0),
-            "nb_album": int(row.get("nb_album") or 0),
-        })
-    return out
 
 
-def _resolve_artist_id(name: str, deezer_id: str | None = None) -> tuple[str | None, list[dict[str, Any]]]:
-    """Resolve an artist name to a Deezer artist id, returning candidates for disambiguation."""
-    if deezer_id:
-        return deezer_id, []
-
-    candidates = _deezer_artist_search(name, limit=10)
-    if not candidates:
-        return None, []
-
-    # Tags drop diacritics as often as they keep them: "Blue Oyster Cult" is
-    # Deezer's "Blue Öyster Cult", while an undecorated namesake with no fans
-    # and no picture also exists. Match folded, then let popularity decide.
-    name_folded = fold_text(name)
-    exact = [c for c in candidates if fold_text(c["name"]) == name_folded]
-    if exact:
-        exact.sort(key=lambda c: c["nb_fans"], reverse=True)
-        return exact[0]["deezer_id"], exact[1:]
-    # No exact match — pick most popular, return all others as candidates
-    candidates.sort(key=lambda c: c["nb_fans"], reverse=True)
-    return candidates[0]["deezer_id"], candidates[1:4]
 
 
 def _deezer_artist_profile(artist_id: str) -> dict[str, Any]:
-    data = _deezer_get(f"artist/{artist_id}")
+    data = deezer_catalog.deezer_get(f"artist/{artist_id}")
     return {
         "name": (data.get("name") or "").strip(),
         "picture": deezer.image(data, "picture"),
@@ -1590,71 +1378,8 @@ def _deezer_artist_profile(artist_id: str) -> dict[str, Any]:
     }
 
 
-def _deezer_artist_top_tracks(artist_id: str, limit: int = 50, library_keys: set[str] | None = None) -> list[dict[str, Any]]:
-    data = _deezer_get(f"artist/{artist_id}/top", {"limit": min(limit, 100)})
-    rows = data.get("data") if isinstance(data.get("data"), list) else []
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        item = _deezer_track_to_catalog_item(row, library_keys)
-        if item:
-            out.append(item)
-    return out
 
 
-def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | None = None) -> dict[str, Any] | None:
-    artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
-    album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
-    # title_short drops recording versions such as "(Directo Mérida, Teatro
-    # Romano)". Keep those when resolving audio and reconciling owned files.
-    title = _clean(row.get("title") or row.get("title_short"))
-    artist = _clean(artist_row.get("name"))
-    if not title or not artist:
-        return None
-    deezer_id = str(row.get("id") or "")
-    in_library = False
-    if library_keys is not None:
-        in_library = _key(title, artist) in library_keys
-    raw = _deezer_track_raw(deezer_id, artist_row, album_row)
-    isrc = re.sub(r"[\s-]", "", str(row.get("isrc") or "")).upper()[:15]
-    # Only `album/{id}/tracks` rows carry these: where the song sits on the
-    # record, which a download needs to file it there.
-    for key, field in (("track_number", "track_position"), ("disc_number", "disk_number")):
-        position = _positive_int(row.get(field), 999)
-        if position:
-            raw[key] = position
-    # And when the record came out and whose record it is, where the row was
-    # listed from one (an album page or a discography). A search row's album
-    # names neither, and a download keeps none rather than the upload's.
-    year = _extract_year(album_row.get("release_date"))
-    if year and 1000 <= year <= 9999:
-        raw["year"] = year
-    album_artist_row = album_row.get("artist") if isinstance(album_row.get("artist"), dict) else {}
-    album_artist = _clean(album_artist_row.get("name"))
-    if album_artist:
-        raw["album_artist"] = album_artist
-    return _catalog_item(
-        item_id=f"deezer:track:{deezer_id}",
-        item_type="track",
-        source="deezer",
-        title=title,
-        subtitle=artist,
-        artist=artist,
-        album=_clean(album_row.get("title")),
-        duration=_duration(row.get("duration")),
-        cover=deezer.image(album_row, "cover"),
-        popularity=float(row.get("rank") or 0),
-        # The recording code rides along where Deezer gives it (album listings
-        # do): it is the key that bridges catalogs, and one recording released
-        # twice shares it.
-        external_ids={"deezer_id": deezer_id, **({"isrc": isrc} if isrc else {})},
-        attribution_url=row.get("link") or "",
-        in_library=in_library,
-        playable=False,
-        downloadable=not in_library,
-        raw=raw,
-    )
 
 
 def _deezer_artist_releases(artist_id: str, limit: int = 100) -> dict[str, list[dict[str, Any]]]:
@@ -1665,7 +1390,7 @@ def _deezer_artist_releases(artist_id: str, limit: int = 100) -> dict[str, list[
     fetched the identical list twice and rendered both rails identically.
     `record_type` on each row is what actually distinguishes them.
     """
-    data = _deezer_get(f"artist/{artist_id}/albums", {"limit": min(limit, 100)})
+    data = deezer_catalog.deezer_get(f"artist/{artist_id}/albums", {"limit": min(limit, 100)})
     rows = data.get("data") if isinstance(data.get("data"), list) else []
     albums: list[dict[str, Any]] = []
     singles_eps: list[dict[str, Any]] = []
@@ -1681,7 +1406,7 @@ def _deezer_artist_releases(artist_id: str, limit: int = 100) -> dict[str, list[
             "deezer_id": album_id,
             "title": title,
             "cover": deezer.image(row, "cover"),
-            "year": _extract_year(row.get("release_date")),
+            "year": extract_year(row.get("release_date")),
             "record_type": record_type or "album",
         }
         # Anything Deezer does not label as a single/EP is treated as an album so
@@ -1728,33 +1453,15 @@ def _gather(
     return results
 
 
-def _deezer_related_artists(artist_id: str, limit: int = 20) -> list[dict[str, Any]]:
-    data = _deezer_get(f"artist/{artist_id}/related", {"limit": min(limit, 50)})
-    rows = data.get("data") if isinstance(data.get("data"), list) else []
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        aid = str(row.get("id") or "")
-        aname = (row.get("name") or "").strip()
-        if not aid or not aname:
-            continue
-        out.append({
-            "deezer_id": aid,
-            "name": aname,
-            "picture": deezer.image(row, "picture"),
-            "nb_fans": int(row.get("nb_fan") or 0),
-        })
-    return out
 
 
 def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -> dict[str, Any]:
-    data = _deezer_get(f"album/{album_id}")
+    data = deezer_catalog.deezer_get(f"album/{album_id}")
     artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
     title = _clean(data.get("title"))
     artist = _clean(artist_row.get("name"))
     cover = deezer.image(data, "cover")
-    year = _extract_year(data.get("release_date"))
+    year = extract_year(data.get("release_date"))
     genre_names: list[str] = []
     genres = data.get("genres") if isinstance(data.get("genres"), dict) else {}
     gen_data = genres.get("data") if isinstance(genres.get("data"), list) else []
@@ -1782,7 +1489,7 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
         # including the release date its listing never carries.
         own = row.get("album") if isinstance(row.get("album"), dict) else {}
         row = {**row, "album": {**this_album, **{k: v for k, v in own.items() if v not in (None, "")}}}
-        item = _deezer_track_to_catalog_item(row, library_keys)
+        item = deezer_catalog.track_to_catalog_item(row, library_keys)
         if item:
             tracklist.append(item)
 
@@ -1812,7 +1519,7 @@ def _deezer_album_tracks(album_id: str, embedded: list[dict[str, Any]]) -> list[
     rows: list[dict[str, Any]] = []
     try:
         while len(rows) < _ALBUM_TRACKS_MAX:
-            page = _deezer_get(f"album/{album_id}/tracks", {"limit": _ALBUM_TRACKS_PAGE, "index": len(rows)})
+            page = deezer_catalog.deezer_get(f"album/{album_id}/tracks", {"limit": _ALBUM_TRACKS_PAGE, "index": len(rows)})
             listed = page.get("data") if isinstance(page.get("data"), list) else []
             listed = [row for row in listed if isinstance(row, dict)]
             rows.extend(listed)
@@ -1841,7 +1548,7 @@ def _deezer_artist_discography(artist_id: str) -> dict[str, Any]:
     release whose listing cannot be read is named in `partial_failures` rather
     than silently missing.
     """
-    artist = _deezer_get(f"artist/{artist_id}")
+    artist = deezer_catalog.deezer_get(f"artist/{artist_id}")
     name = _clean(artist.get("name"))
     releases = _deezer_artist_releases(artist_id)
     ordered = [
@@ -1873,7 +1580,7 @@ def _deezer_artist_discography(artist_id: str) -> dict[str, Any]:
         }
         songs: list[dict[str, Any]] = []
         for row in rows:
-            item = _deezer_track_to_catalog_item({**row, "album": this_release})
+            item = deezer_catalog.track_to_catalog_item({**row, "album": this_release})
             if not item:
                 continue
             isrc = item["external_ids"].get("isrc")
@@ -1963,17 +1670,6 @@ def catalog_artist_download_status():
     return jsonify({"job": collection_job(artist_provider(deezer_id))})
 
 
-def _extract_year(release_date: Any) -> int | None:
-    if not release_date:
-        return None
-    text = str(release_date).strip()
-    m = re.match(r"(\d{4})", text)
-    if m:
-        try:
-            return int(m.group(1))
-        except ValueError:
-            return None
-    return None
 
 
 class _LibraryTracks(list):
@@ -2073,7 +1769,7 @@ def _resolve_album_deezer_id(name: str, artist: str) -> str | None:
     stopped answering in October 2026 and returned nothing, so every album
     looked up by name came back unresolved.
     """
-    data = _deezer_get("search/album", {"q": f"{name} {artist}".strip(), "limit": 10})
+    data = deezer_catalog.deezer_get("search/album", {"q": f"{name} {artist}".strip(), "limit": 10})
     rows = [row for row in (data.get("data") if isinstance(data.get("data"), list) else []) if isinstance(row, dict)]
     name_folded, artist_folded = fold_text(name), fold_text(artist)
 
@@ -2138,7 +1834,7 @@ def _artist_profile_uncached(name: str, deezer_id: str | None) -> dict[str, Any]
     failures: list[dict[str, str]] = []
 
     try:
-        resolved_id, candidates = _resolve_artist_id(name, deezer_id)
+        resolved_id, candidates = deezer_catalog.resolve_artist_id(name, deezer_id)
     except Exception as exc:
         logger.info("Artist resolve failed for %r: %s", name, exc)
         failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
@@ -2149,9 +1845,9 @@ def _artist_profile_uncached(name: str, deezer_id: str | None) -> dict[str, Any]
         results = _gather(
             (
                 ("profile", lambda: _deezer_artist_profile(artist_id)),
-                ("top", lambda: _deezer_artist_top_tracks(artist_id, 50, library_keys)),
+                ("top", lambda: deezer_catalog.artist_top_tracks(artist_id, 50, library_keys)),
                 ("releases", lambda: _deezer_artist_releases(artist_id, 100)),
-                ("related", lambda: _deezer_related_artists(artist_id, 20)),
+                ("related", lambda: deezer_catalog.related_artists(artist_id, 20)),
             ),
             failures,
         )
@@ -2208,7 +1904,7 @@ def catalog_album_reconcile():
     from shared.catalog_reconciliation import annotate_owned_recordings, reconcile_album
     from shared.library_lifecycle import LibraryPersistenceError
     from shared.migration.collections import valid_deezer_id
-    from shared.api import emit_to_user
+    from shared.realtime import emit_to_user
 
     data = request.get_json(silent=True) or {}
     deezer_id = valid_deezer_id(data.get('deezer_id'))

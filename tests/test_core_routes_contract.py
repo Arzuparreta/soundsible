@@ -91,8 +91,8 @@ def _patch_library_api(monkeypatch, metadata):
     monkeypatch.setattr("shared.api.routes.library._get_api", lambda: {
         "get_library": lambda: fake_lib,
         "get_track_by_id": fake_get_track_by_id,
-        "_mark_track_metadata_updated": lambda: None,
-        "_ensure_lib_metadata": lambda lib: metadata,
+        "mark_track_metadata_updated": lambda: None,
+        "ensure_library_metadata": lambda lib: metadata,
         "socketio": MagicMock(),
         "get_downloader": lambda **kw: MagicMock(),
         "favourites_manager": MagicMock(),

@@ -30,7 +30,7 @@ def client():
 
 @pytest.fixture
 def track(tmp_path, monkeypatch):
-    from shared.api import get_user_core
+    from shared.user_cores import get_user_core
     from shared.models import Track
     from shared.user_context import user_context
 

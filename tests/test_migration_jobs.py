@@ -19,6 +19,7 @@ from shared.migration.store import MigrationStore
 from shared.models import LibraryMetadata, Track
 from shared.user_context import user_context
 from tests.conftest import TEST_USER_ID
+from shared import user_cores
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "migration"
@@ -154,7 +155,7 @@ def test_runner_preserves_playlist_order_and_maps_liked_songs(tmp_path):
 
     first = _track(1)
     second = _track(2)
-    core = api.get_user_core(TEST_USER_ID)
+    core = user_cores.get_user_core(TEST_USER_ID)
     core.library.metadata.tracks = [first, second]
     core.library._save_metadata()
     manifest = MigrationManifest(

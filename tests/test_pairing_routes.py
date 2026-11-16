@@ -187,7 +187,7 @@ def test_pairing_connect_payload_and_auto_confirm_while_display_is_open(tmp_path
     db = instance_db()
     owner_token = _owner_token(db)
 
-    monkeypatch.setattr("shared.api.get_active_endpoints", lambda: ["192.168.1.50"])
+    monkeypatch.setattr("shared.station_addresses.active_endpoints", lambda: ["192.168.1.50"])
 
     created = client.post(
         "/api/pairing/sessions",
@@ -236,7 +236,7 @@ def test_display_close_disables_auto_confirm(tmp_path, monkeypatch):
     db = instance_db()
     owner_token = _owner_token(db)
 
-    monkeypatch.setattr("shared.api.get_active_endpoints", lambda: ["192.168.1.50"])
+    monkeypatch.setattr("shared.station_addresses.active_endpoints", lambda: ["192.168.1.50"])
 
     created = client.post(
         "/api/pairing/sessions",

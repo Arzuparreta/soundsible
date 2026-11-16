@@ -11,7 +11,7 @@ from pathlib import Path
 def install(app, root: Path, accounts):
     from flask import jsonify, request
     import requests
-    from shared.api import get_user_core
+    from shared.user_cores import get_user_core
     from shared.user_context import user_context, require_user_id
     from shared.models import Track
 

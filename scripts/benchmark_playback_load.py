@@ -53,7 +53,7 @@ def workload(args):
         from shared.user_context import user_context
         from player.library import LibraryManager
         from scripts.benchmark_library_export import library
-        from shared.api.orchestrator import JobOrchestrator
+        from shared.orchestrator import JobOrchestrator
         from shared.api.routes import playback
         from shared import dj_engine, atomic_file
         if args.blocking_fsync:

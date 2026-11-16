@@ -218,8 +218,7 @@ def test_cold_preview_is_acquired_once_then_served_from_disk(tmp_path, monkeypat
     data = b"proxied-bytes" * 512
     seen = {}
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
 
@@ -250,8 +249,7 @@ def test_cold_preview_is_acquired_once_then_served_from_disk(tmp_path, monkeypat
 
     # …so the next request is served from disk, never touching the resolver.
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_url_cached",
+        playback_routes.preview_streams, "resolved_url",
         lambda api, vid: (_ for _ in ()).throw(AssertionError("must not resolve")),
     )
     replay = client.get(f"/api/preview/stream/{VID}")
@@ -265,8 +263,7 @@ def test_cold_preview_client_range_is_served_from_complete_local_file(tmp_path, 
     _patch_api(monkeypatch)
     data = bytes(range(256)) * 8
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
     _patch_upstream(monkeypatch, lambda url, **kwargs: _FakeUpstream(data, "audio/webm"))
@@ -290,8 +287,7 @@ def test_long_preview_streams_from_one_growing_local_spool(tmp_path, monkeypatch
     calls = []
     url = f"http://upstream.invalid/audio?clen={len(data)}&dur=120&mime=audio%2Fmp4"
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream(url, egress="direct"),
     )
     monkeypatch.setattr(preview_cache, "_PROGRESSIVE_FAST_COMPLETE_SEC", 0.0)
@@ -353,8 +349,7 @@ def test_a_cold_mp4_the_listener_waited_for_is_served_flat(tmp_path, monkeypatch
     data = source.read_bytes()
     assert data.count(b"moof") > 1
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
     _patch_upstream(
@@ -384,8 +379,7 @@ def test_a_request_arriving_during_the_commit_gets_the_committed_file(tmp_path, 
     _fragmented_mp4(source)
     data = source.read_bytes()
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
     _patch_upstream(
@@ -455,8 +449,7 @@ def test_progressive_future_range_waits_locally_without_second_upstream_get(tmp_
     calls = []
     url = f"http://upstream.invalid/audio?clen={len(data)}&dur=120&mime=audio%2Fmp4"
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream(url, egress="direct"),
     )
     monkeypatch.setattr(preview_cache, "_PROGRESSIVE_FAST_COMPLETE_SEC", 0.0)
@@ -487,8 +480,7 @@ def test_abandoned_progressive_response_cancels_its_fill(tmp_path, monkeypatch):
     release = threading.Event()
     url = f"http://upstream.invalid/audio?clen={len(data)}&dur=120&mime=audio%2Fmp4"
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream(url, egress="direct"),
     )
     monkeypatch.setattr(preview_cache, "_PROGRESSIVE_FAST_COMPLETE_SEC", 0.0)
@@ -523,7 +515,8 @@ def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
             resolved_stream("http://upstream.invalid/fresh", egress="direct"),
         ]
     )
-    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", lambda api, vid, **_kw: next(resolutions))
+    monkeypatch.setattr(
+        playback_routes.preview_streams, "resolve", lambda api, vid, **_kw: next(resolutions))
     calls = []
 
     def fake_get(url, **kwargs):
@@ -554,7 +547,8 @@ def test_fallback_url_rejection_opens_bounded_backoff(tmp_path, monkeypatch):
             resolved_stream("http://upstream.invalid/fresh", egress="direct"),
         ]
     )
-    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", lambda api, vid, **_kw: next(resolutions))
+    monkeypatch.setattr(
+        playback_routes.preview_streams, "resolve", lambda api, vid, **_kw: next(resolutions))
     calls = []
 
     def fake_get(url, **kwargs):
@@ -597,7 +591,8 @@ def test_rejection_retry_skips_the_fast_path(tmp_path, monkeypatch):
         seen_skip_fast_path.append(skip_fast_path)
         return next(resolutions)
 
-    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", fake_resolver)
+    monkeypatch.setattr(
+        playback_routes.preview_streams, "resolve", fake_resolver)
 
     def fake_get(url, **kwargs):
         if url.endswith("/rejected"):
@@ -618,8 +613,7 @@ def test_preview_open_range_rejects_a_truncated_prefix(tmp_path, monkeypatch):
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/audio", egress="direct"),
     )
     seen_headers = []
@@ -650,8 +644,7 @@ def test_followup_browser_range_never_returns_to_upstream(tmp_path, monkeypatch)
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
     monkeypatch.setattr(
-        playback_routes,
-        "_get_preview_stream_cached",
+        playback_routes.preview_streams, "resolve",
         lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
     data = b"a" * (1024 * 1024)
@@ -800,7 +793,7 @@ def test_preview_stream_url_resolution_is_single_flight(monkeypatch):
     The resolution is seconds long, so the window where a naive TTL cache still
     reads as a miss is exactly the window a user drums their finger in.
     """
-    playback_routes._preview_stream_urls.clear()
+    playback_routes.preview_streams._stream_urls.clear()
     started = threading.Event()
     release = threading.Event()
     calls = []
@@ -812,12 +805,12 @@ def test_preview_stream_url_resolution_is_single_flight(monkeypatch):
         return resolved_stream("https://rr.googlevideo.com/one", egress="direct")
 
     downloader = SimpleNamespace(downloader=SimpleNamespace(get_resolved_stream=slow_resolve))
-    api = {"get_downloader": lambda open_browser=False: downloader}
+    get_downloader = lambda open_browser=False: downloader  # noqa: E731
 
     results: list[str] = []
 
     def call():
-        results.append(playback_routes._get_preview_stream_url_cached(api, VID))
+        results.append(playback_routes.preview_streams.resolved_url(get_downloader, VID))
 
     threads = [threading.Thread(target=call) for _ in range(10)]
     threads[0].start()
@@ -834,13 +827,13 @@ def test_preview_stream_url_resolution_is_single_flight(monkeypatch):
         assert calls == [VID]
         assert results == ["https://rr.googlevideo.com/one"] * 10
     finally:
-        playback_routes._preview_stream_urls.clear()
+        playback_routes.preview_streams._stream_urls.clear()
 
 
 def test_preview_stream_url_failure_is_negatively_cached(monkeypatch):
     """An unresolvable id is remembered briefly so a retry storm cannot turn
     into a yt-dlp storm — but not for as long as a success."""
-    playback_routes._preview_stream_urls.clear()
+    playback_routes.preview_streams._stream_urls.clear()
     calls = []
 
     def failing(video_id, *, skip_fast_path=False):
@@ -848,12 +841,12 @@ def test_preview_stream_url_failure_is_negatively_cached(monkeypatch):
         return None
 
     downloader = SimpleNamespace(downloader=SimpleNamespace(get_resolved_stream=failing))
-    api = {"get_downloader": lambda open_browser=False: downloader}
+    get_downloader = lambda open_browser=False: downloader  # noqa: E731
 
     try:
-        assert playback_routes._get_preview_stream_url_cached(api, VID) == ""
-        assert playback_routes._get_preview_stream_url_cached(api, VID) == ""
+        assert playback_routes.preview_streams.resolved_url(get_downloader, VID) == ""
+        assert playback_routes.preview_streams.resolved_url(get_downloader, VID) == ""
         assert calls == [VID]
-        assert playback_routes.PREVIEW_STREAM_NEGATIVE_TTL_SEC < playback_routes.PREVIEW_STREAM_CACHE_TTL_SEC
+        assert playback_routes.preview_streams.STREAM_NEGATIVE_TTL_SEC < playback_routes.preview_streams.STREAM_CACHE_TTL_SEC
     finally:
-        playback_routes._preview_stream_urls.clear()
+        playback_routes.preview_streams._stream_urls.clear()
