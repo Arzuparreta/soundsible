@@ -833,11 +833,13 @@ def _schedule_favourite_resolve(favourite: dict) -> None:
         from shared.user_context import user_context
 
         try:
-            best, _ = catalog_resolution.resolve_candidates(get_downloader, artist, title, duration_s)
-            video_id = (best or {}).get("id")
-            if not video_id:
-                return
+            # The whole resolution runs as the account: a downloader built on
+            # first use reads the bound account's library settings.
             with user_context(user_id):
+                best, _ = catalog_resolution.resolve_candidates(get_downloader, artist, title, duration_s)
+                video_id = (best or {}).get("id")
+                if not video_id:
+                    return
                 manager = get_favourites_manager(user_id)
                 if manager.update_keys(keys, [f"yt:{video_id}"]):
                     emit_to_user("favourites_updated", user_id=user_id)

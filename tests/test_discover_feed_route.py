@@ -424,3 +424,25 @@ def test_a_request_joining_a_running_expansion_is_told_when_it_lands(monkeypatch
     told = {call.args[1]["request_id"] for call in fake_emit.call_args_list}
     assert told == {first["request_id"], second["request_id"]}
     assert all(call.kwargs["user_id"] == current_user_id() for call in fake_emit.call_args_list)
+
+
+def test_one_waiters_failed_ranking_does_not_silence_the_others(monkeypatch):
+    calls = []
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: {
+        "get_downloader": lambda open_browser=False: MagicMock(),
+        "emit_to_user": lambda event, payload, user_id=None: calls.append((user_id, payload["recs"])),
+    })
+    from shared import related_work
+    monkeypatch.setattr(related_work, "submit", lambda key, fn: type("F", (), {"result": lambda self: [{"id": "rel"}]})())
+
+    def rank(rows, source):
+        from shared.user_context import current_user_id
+        if current_user_id() == "broken":
+            raise TimeoutError("ranking store busy")
+        return rows
+
+    monkeypatch.setattr(_disc_graph, "rank_recommendation_rows", rank)
+    _disc_graph._discover_subscribers[_VID3] = [("broken", "r1", "t1"), (current_user_id(), "r2", "t1")]
+    _disc_graph._expand_seed(_VID3, current_user_id())
+
+    assert calls == [("broken", []), (current_user_id(), [{"id": "rel"}])]
