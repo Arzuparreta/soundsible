@@ -112,9 +112,9 @@ IDs: **P** performance, **A** code architecture, **U** UX and design system,
 | P2 | The song row is expensive to mount. With a 300-song library, tasks still reach 160–205 ms at 6×; a plain row in the same shell stays at 35 ms. More overscan makes it worse (30 rows: 424 ms task). | Measured | Open |
 | P3 | Surfaces with no virtualization: `AlbumGrid`, `ArtistGrid`, the player's album browser ([NowPlayingBrowser.tsx:919](../../../ui_web/src/components/NowPlayingBrowser.tsx#L919)) and local search (`:1040`), artist and album track lists ([Artist.tsx:397](../../../ui_web/src/routes/Artist.tsx#L397), [Album.tsx:410](../../../ui_web/src/routes/Album.tsx#L410)), podcast subscriptions, DJ route entries. | Measured: player album browser 12,214 DOM elements; album grid 1.28 s and artist page 1.38 s of paint at 6×. | Open |
 | P4 | Player queue and player browser spend most of their time in ordinary layout (1,073 ms at 6× for the queue). Per-row and list containment, layer promotion, removing the query containers and disabling optional measurement each failed to remove it. | Measured; mechanism not isolated | Open: needs a row/scrollport prototype |
-| P5 | Desktop playback drops 8–27 frames per burst on every route surface, independent of the list; not inside the open full player and not in the 390 px layout (see "Measured evidence", point 4). The suspect is the desktop shell's playing UI. | Measured in the per-surface tables; cause not investigated | Open: trace paused vs playing on a static surface first |
+| P5 | Desktop playback drops 8–27 frames per burst on every route surface, independent of the list; not inside the open full player and not in the 390 px layout (see "Measured evidence", point 4). The suspect is the desktop shell's playing UI. | Measured in the per-surface tables; cause not investigated | Open, **scope corrected by the step 2 baseline**: not every surface. Album page, artist page, playlist and artists grid lose 23–35 frames per burst at 1× with 130 ms gaps while playing; Songs, Favourites and Albums do not. The affected ones are those whose scroll needs almost no main-thread work per frame. Next: `KEEP_TRACE` on `album`, paused vs playing, and read the compositor and GPU threads. |
 | P6 | Without a GPU (SwiftShader) most surfaces spend 2.7–3.2 s of a 3.2 s burst in buffer swap/fence waits. Stripping all effects did not fix it; replacing the whole shell with a bare scene cut it to 375 ms. The cost is the scene, not the list or one blur. | Measured | Open |
-| P7 | Frame counts alone hide late content: at 12,000 px/s on the real GPU the player browser presented 183/183 frames but 162 were partial. | Measured | Open: acceptance must count partial frames |
+| P7 | Frame counts alone hide late content: at 12,000 px/s on the real GPU the player browser presented 183/183 frames but 162 were partial. | Measured | **Closed (step 2).** `ui_web/perf/bench.mjs` reports complete, partial and dropped frames separately and its headline column is complete frames. |
 | A1 | Five separate virtualizer integrations ([VirtualRows](../../../ui_web/src/components/VirtualRows.tsx), [VirtualBrowseRows](../../../ui_web/src/components/VirtualBrowseRows.tsx), [TrackList](../../../ui_web/src/components/TrackList.tsx), [LibrarySearchResults](../../../ui_web/src/components/LibrarySearchResults.tsx), [ProgramQueue](../../../ui_web/src/components/ProgramQueue.tsx)) with different sizing, measurement, overscan, identity and focus rules. `LibrarySearchResults` and the player browser put content above the list without passing `scrollMargin`; overscan currently hides the mismatch. | Read | Open |
 | A2 | After the full player opens once it stays mounted, and every mobile panel stays mounted while inert; their whole-library sorting and projections keep recomputing while hidden. | Read | Open |
 | A3 | Each accepted collection replaces the whole artwork-metadata dictionary signal ([media.ts:38](../../../ui_web/src/lib/media.ts#L38)), so every `coverUrl` reader becomes eligible to recompute. | Read | Open |
@@ -208,6 +208,12 @@ session should:
    (`docs/internal/measurements/web-ui-stepN-<date>/`), the impact label and
    the CI gate, then update the status table in the same pull request.
 
+Every performance step is measured with the rendering bench
+([ui_web/perf/README.md](../../../ui_web/perf/README.md)) against
+[the 2026-11-16 baseline](../measurements/web-ui-rendering-2026-11-16/README.md):
+run the affected surfaces before and after on an idle machine and put the
+`--table` comparison in the pull request.
+
 Two things that cost time in step 1:
 
 - **Payload budget.** `ui_build` holds the authenticated initial payload to
@@ -225,9 +231,9 @@ Two things that cost time in step 1:
 
 | Step | Pull request | State |
 | --- | --- | --- |
-| 1 Functional fixes (U1, U5, U6 `DeviceSheet`, U8) | `fix/web-ui-step1-functional` | Done |
-| 2 Rendering harness | — | Next |
-| 3 P5 investigation | — | |
+| 1 Functional fixes (U1, U5, U6 `DeviceSheet`, U8) | #461 | Done |
+| 2 Rendering harness | `perf/web-ui-step2-harness` | Done |
+| 3 P5 investigation | — | Next |
 | 4 P1 | — | |
 | 5 P2 + A1 | — | |
 | 6 P3 | — | |

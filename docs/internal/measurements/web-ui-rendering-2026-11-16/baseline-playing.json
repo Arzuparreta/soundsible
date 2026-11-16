@@ -1,0 +1,664 @@
+{
+  "tag": "baseline-playing",
+  "date": "2026-11-16T19:01:15.318Z",
+  "revision": "f5ac54e934013e5d1da97f764c8b235f84723479",
+  "fixture": {
+    "tracks": 6000,
+    "albums": 600,
+    "artists": 200,
+    "saved": 1800,
+    "favourites": 900,
+    "previews": 600,
+    "stressAlbumTracks": 100
+  },
+  "viewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "input": {
+    "burst_ms": 3200,
+    "wheel_interval_ms": 16,
+    "wheel_delta_px": 120
+  },
+  "browser": "156.0.8078.4",
+  "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL ES 3.2)",
+  "software": false,
+  "host": {
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "cores": 16,
+    "load_1m": 0.7
+  },
+  "repeats": 3,
+  "results": [
+    {
+      "surface": "songs",
+      "playing": true,
+      "cpu_rate": 1,
+      "frames": {
+        "presented": 213,
+        "partial": 2,
+        "dropped": 4,
+        "expected": 217
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 18.2,
+        "max": 25.2
+      },
+      "main_thread_ms": {
+        "longest_task": 13.2,
+        "tasks_over_50": 0,
+        "script": 977.5,
+        "layout": 189.5,
+        "paint": 259.5
+      },
+      "scrolled_px": 24000,
+      "dom_elements": 835,
+      "runs": [
+        {
+          "presented": 210,
+          "expected": 212,
+          "dropped": 2,
+          "longest_task": 15
+        },
+        {
+          "presented": 212,
+          "expected": 215,
+          "dropped": 3,
+          "longest_task": 13.2
+        },
+        {
+          "presented": 213,
+          "expected": 217,
+          "dropped": 4,
+          "longest_task": 13.2
+        }
+      ]
+    },
+    {
+      "surface": "songs",
+      "playing": true,
+      "cpu_rate": 6,
+      "frames": {
+        "presented": 266,
+        "partial": 171,
+        "dropped": 2,
+        "expected": 268
+      },
+      "display_gap_ms": {
+        "p50": 16.3,
+        "p95": 16.7,
+        "max": 339.8
+      },
+      "main_thread_ms": {
+        "longest_task": 306.1,
+        "tasks_over_50": 16,
+        "script": 2756.3,
+        "layout": 356,
+        "paint": 232.1
+      },
+      "scrolled_px": 24000,
+      "dom_elements": 835,
+      "runs": [
+        {
+          "presented": 273,
+          "expected": 275,
+          "dropped": 2,
+          "longest_task": 313.5
+        },
+        {
+          "presented": 273,
+          "expected": 275,
+          "dropped": 2,
+          "longest_task": 297.1
+        },
+        {
+          "presented": 266,
+          "expected": 268,
+          "dropped": 2,
+          "longest_task": 306.1
+        }
+      ]
+    },
+    {
+      "surface": "favourites",
+      "playing": true,
+      "cpu_rate": 1,
+      "frames": {
+        "presented": 208,
+        "partial": 6,
+        "dropped": 2,
+        "expected": 210
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 18.6,
+        "max": 28.5
+      },
+      "main_thread_ms": {
+        "longest_task": 14.5,
+        "tasks_over_50": 0,
+        "script": 635.7,
+        "layout": 182.2,
+        "paint": 261.1
+      },
+      "scrolled_px": 24000,
+      "dom_elements": 863,
+      "runs": [
+        {
+          "presented": 206,
+          "expected": 209,
+          "dropped": 3,
+          "longest_task": 14
+        },
+        {
+          "presented": 208,
+          "expected": 210,
+          "dropped": 2,
+          "longest_task": 14.5
+        },
+        {
+          "presented": 208,
+          "expected": 210,
+          "dropped": 2,
+          "longest_task": 15.2
+        }
+      ]
+    },
+    {
+      "surface": "favourites",
+      "playing": true,
+      "cpu_rate": 6,
+      "frames": {
+        "presented": 234,
+        "partial": 154,
+        "dropped": 6,
+        "expected": 240
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 30.2,
+        "max": 210.5
+      },
+      "main_thread_ms": {
+        "longest_task": 301,
+        "tasks_over_50": 19,
+        "script": 2394,
+        "layout": 452.1,
+        "paint": 397.5
+      },
+      "scrolled_px": 24000,
+      "dom_elements": 863,
+      "runs": [
+        {
+          "presented": 219,
+          "expected": 224,
+          "dropped": 5,
+          "longest_task": 299.8
+        },
+        {
+          "presented": 234,
+          "expected": 240,
+          "dropped": 6,
+          "longest_task": 301
+        },
+        {
+          "presented": 226,
+          "expected": 228,
+          "dropped": 2,
+          "longest_task": 327.7
+        }
+      ]
+    },
+    {
+      "surface": "albums",
+      "playing": true,
+      "cpu_rate": 1,
+      "frames": {
+        "presented": 199,
+        "partial": 9,
+        "dropped": 0,
+        "expected": 199
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 24.3,
+        "max": 99.6
+      },
+      "main_thread_ms": {
+        "longest_task": 9.6,
+        "tasks_over_50": 0,
+        "script": 36.9,
+        "layout": 241.1,
+        "paint": 431.1
+      },
+      "scrolled_px": 24000,
+      "dom_elements": 5651,
+      "runs": [
+        {
+          "presented": 200,
+          "expected": 202,
+          "dropped": 2,
+          "longest_task": 9.1
+        },
+        {
+          "presented": 201,
+          "expected": 201,
+          "dropped": 0,
+          "longest_task": 10.4
+        },
+        {
+          "presented": 199,
+          "expected": 199,
+          "dropped": 0,
+          "longest_task": 9.6
+        }
+      ]
+    },
+    {
+      "surface": "albums",
+      "playing": true,
+      "cpu_rate": 6,
+      "frames": {
+        "presented": 187,
+        "partial": 123,
+        "dropped": 1,
+        "expected": 188
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 39.7,
+        "max": 100
+      },
+      "main_thread_ms": {
+        "longest_task": 49.9,
+        "tasks_over_50": 0,
+        "script": 95.9,
+        "layout": 407.8,
+        "paint": 832.2
+      },
+      "scrolled_px": 24000,
+      "dom_elements": 5651,
+      "runs": [
+        {
+          "presented": 187,
+          "expected": 188,
+          "dropped": 1,
+          "longest_task": 49.9
+        },
+        {
+          "presented": 193,
+          "expected": 195,
+          "dropped": 2,
+          "longest_task": 49.5
+        },
+        {
+          "presented": 191,
+          "expected": 191,
+          "dropped": 0,
+          "longest_task": 57.4
+        }
+      ]
+    },
+    {
+      "surface": "artists",
+      "playing": true,
+      "cpu_rate": 1,
+      "frames": {
+        "presented": 116,
+        "partial": 1,
+        "dropped": 23,
+        "expected": 139
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 130.8,
+        "max": 133
+      },
+      "main_thread_ms": {
+        "longest_task": 5.1,
+        "tasks_over_50": 0,
+        "script": 21.1,
+        "layout": 67.8,
+        "paint": 172.6
+      },
+      "scrolled_px": 9889,
+      "dom_elements": 1246,
+      "runs": [
+        {
+          "presented": 115,
+          "expected": 136,
+          "dropped": 21,
+          "longest_task": 5
+        },
+        {
+          "presented": 116,
+          "expected": 139,
+          "dropped": 23,
+          "longest_task": 5.1
+        },
+        {
+          "presented": 115,
+          "expected": 138,
+          "dropped": 23,
+          "longest_task": 5.7
+        }
+      ]
+    },
+    {
+      "surface": "artists",
+      "playing": true,
+      "cpu_rate": 6,
+      "frames": {
+        "presented": 112,
+        "partial": 32,
+        "dropped": 25,
+        "expected": 137
+      },
+      "display_gap_ms": {
+        "p50": 18.7,
+        "p95": 128.4,
+        "max": 133.2
+      },
+      "main_thread_ms": {
+        "longest_task": 26.2,
+        "tasks_over_50": 0,
+        "script": 87.5,
+        "layout": 236,
+        "paint": 620.4
+      },
+      "scrolled_px": 9889,
+      "dom_elements": 1246,
+      "runs": [
+        {
+          "presented": 117,
+          "expected": 140,
+          "dropped": 23,
+          "longest_task": 25.5
+        },
+        {
+          "presented": 112,
+          "expected": 137,
+          "dropped": 25,
+          "longest_task": 26.2
+        },
+        {
+          "presented": 116,
+          "expected": 145,
+          "dropped": 29,
+          "longest_task": 26.2
+        }
+      ]
+    },
+    {
+      "surface": "album",
+      "playing": true,
+      "cpu_rate": 1,
+      "frames": {
+        "presented": 86,
+        "partial": 2,
+        "dropped": 30,
+        "expected": 116
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 132.6,
+        "max": 133.1
+      },
+      "main_thread_ms": {
+        "longest_task": 4.1,
+        "tasks_over_50": 0,
+        "script": 11.1,
+        "layout": 13.5,
+        "paint": 76
+      },
+      "scrolled_px": 4775,
+      "dom_elements": 1567,
+      "runs": [
+        {
+          "presented": 86,
+          "expected": 116,
+          "dropped": 30,
+          "longest_task": 4.1
+        },
+        {
+          "presented": 90,
+          "expected": 119,
+          "dropped": 29,
+          "longest_task": 4.1
+        },
+        {
+          "presented": 87,
+          "expected": 114,
+          "dropped": 27,
+          "longest_task": 3.8
+        }
+      ]
+    },
+    {
+      "surface": "album",
+      "playing": true,
+      "cpu_rate": 6,
+      "frames": {
+        "presented": 86,
+        "partial": 1,
+        "dropped": 31,
+        "expected": 117
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 130.7,
+        "max": 132.2
+      },
+      "main_thread_ms": {
+        "longest_task": 20.3,
+        "tasks_over_50": 0,
+        "script": 43.6,
+        "layout": 52.5,
+        "paint": 353.8
+      },
+      "scrolled_px": 4775,
+      "dom_elements": 1567,
+      "runs": [
+        {
+          "presented": 87,
+          "expected": 120,
+          "dropped": 33,
+          "longest_task": 19.4
+        },
+        {
+          "presented": 92,
+          "expected": 123,
+          "dropped": 31,
+          "longest_task": 21.8
+        },
+        {
+          "presented": 86,
+          "expected": 117,
+          "dropped": 31,
+          "longest_task": 20.3
+        }
+      ]
+    },
+    {
+      "surface": "artist",
+      "playing": true,
+      "cpu_rate": 1,
+      "frames": {
+        "presented": 93,
+        "partial": 1,
+        "dropped": 31,
+        "expected": 124
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 132.5,
+        "max": 132.8
+      },
+      "main_thread_ms": {
+        "longest_task": 4.2,
+        "tasks_over_50": 0,
+        "script": 11.6,
+        "layout": 15.1,
+        "paint": 90.7
+      },
+      "scrolled_px": 5685,
+      "dom_elements": 1796,
+      "runs": [
+        {
+          "presented": 98,
+          "expected": 132,
+          "dropped": 34,
+          "longest_task": 4.1
+        },
+        {
+          "presented": 95,
+          "expected": 127,
+          "dropped": 32,
+          "longest_task": 4.4
+        },
+        {
+          "presented": 93,
+          "expected": 124,
+          "dropped": 31,
+          "longest_task": 4.2
+        }
+      ]
+    },
+    {
+      "surface": "artist",
+      "playing": true,
+      "cpu_rate": 6,
+      "frames": {
+        "presented": 93,
+        "partial": 1,
+        "dropped": 35,
+        "expected": 128
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 129.4,
+        "max": 131.7
+      },
+      "main_thread_ms": {
+        "longest_task": 22,
+        "tasks_over_50": 0,
+        "script": 49.9,
+        "layout": 49.1,
+        "paint": 407.8
+      },
+      "scrolled_px": 5685,
+      "dom_elements": 1796,
+      "runs": [
+        {
+          "presented": 93,
+          "expected": 126,
+          "dropped": 33,
+          "longest_task": 21.6
+        },
+        {
+          "presented": 93,
+          "expected": 128,
+          "dropped": 35,
+          "longest_task": 23.2
+        },
+        {
+          "presented": 93,
+          "expected": 128,
+          "dropped": 35,
+          "longest_task": 22
+        }
+      ]
+    },
+    {
+      "surface": "playlist",
+      "playing": true,
+      "cpu_rate": 1,
+      "frames": {
+        "presented": 94,
+        "partial": 4,
+        "dropped": 29,
+        "expected": 123
+      },
+      "display_gap_ms": {
+        "p50": 16.8,
+        "p95": 132.7,
+        "max": 133.1
+      },
+      "main_thread_ms": {
+        "longest_task": 12.8,
+        "tasks_over_50": 0,
+        "script": 232.5,
+        "layout": 52.3,
+        "paint": 80.7
+      },
+      "scrolled_px": 5765,
+      "dom_elements": 609,
+      "runs": [
+        {
+          "presented": 94,
+          "expected": 123,
+          "dropped": 29,
+          "longest_task": 12.8
+        },
+        {
+          "presented": 92,
+          "expected": 120,
+          "dropped": 28,
+          "longest_task": 18.2
+        },
+        {
+          "presented": 91,
+          "expected": 120,
+          "dropped": 29,
+          "longest_task": 11.4
+        }
+      ]
+    },
+    {
+      "surface": "playlist",
+      "playing": true,
+      "cpu_rate": 6,
+      "frames": {
+        "presented": 152,
+        "partial": 56,
+        "dropped": 26,
+        "expected": 178
+      },
+      "display_gap_ms": {
+        "p50": 15.8,
+        "p95": 119.3,
+        "max": 136.7
+      },
+      "main_thread_ms": {
+        "longest_task": 281.8,
+        "tasks_over_50": 5,
+        "script": 719.3,
+        "layout": 106,
+        "paint": 137.2
+      },
+      "scrolled_px": 5765,
+      "dom_elements": 609,
+      "runs": [
+        {
+          "presented": 152,
+          "expected": 178,
+          "dropped": 26,
+          "longest_task": 281.8
+        },
+        {
+          "presented": 170,
+          "expected": 194,
+          "dropped": 24,
+          "longest_task": 284.7
+        },
+        {
+          "presented": 164,
+          "expected": 188,
+          "dropped": 24,
+          "longest_task": 279.1
+        }
+      ]
+    }
+  ]
+}
