@@ -208,6 +208,21 @@ session should:
    (`docs/internal/measurements/web-ui-stepN-<date>/`), the impact label and
    the CI gate, then update the status table in the same pull request.
 
+Two things that cost time in step 1:
+
+- **Payload budget.** `ui_build` holds the authenticated initial payload to
+  215,316 bytes gzip and `main` was 95 bytes under it. Step 1 moved the Live
+  broadcast bridge, the Live client and WebRTC out of the initial payload
+  (`lib/communityGate.ts`; the shell imports `CommunityBridge` only once Live
+  is in use), which left it at 210,910. Measure before opening a pull request:
+  build an exported copy (`git archive HEAD ui_web shared/version.py branding
+  docs/internal/performance`), symlink `node_modules`, `npm run build` there
+  and run `node scripts/check-payload.mjs`. Never build inside `ui_web/`.
+- **Stale dev server.** Restart the Vite server on 4173 before a full browser
+  run. After edits or a `git stash` under a running server, specs that import
+  app modules by URL (`dj-refinement-audit.spec.ts`) get a second module
+  instance and fail on every profile.
+
 | Step | Pull request | State |
 | --- | --- | --- |
 | 1 Functional fixes (U1, U5, U6 `DeviceSheet`, U8) | `fix/web-ui-step1-functional` | Done |
