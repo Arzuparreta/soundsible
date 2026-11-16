@@ -528,9 +528,10 @@ async function loadStore(
    * would — a remote control command, a handoff from another device. */
   const socketHandlers = new Map<string, (data?: unknown) => void>();
   const disconnect = vi.fn();
+  const connect = vi.fn();
   const createSocket = vi.fn(() => ({
     on: (event: string, handler: (data?: unknown) => void) => socketHandlers.set(event, handler),
-    emit: vi.fn(), disconnect, connect: vi.fn(), connected: false,
+    emit: vi.fn(), disconnect, connect, connected: false,
   }));
   vi.doMock('../lib/socket', () => ({
     createSocket,
@@ -556,6 +557,7 @@ async function loadStore(
     api,
     audioService,
     createSocket,
+    connect,
     disconnect,
     deck,
     fireDeckEvent,
@@ -4696,4 +4698,18 @@ describe('external music selections in DJ', () => {
     expect(state.playback.currentTime).toBe(0);
     actions.exitAutoMode();
   });
+});
+
+it('reconnects once when the station drops the socket, and leaves transport losses to the client', async () => {
+  const store = await loadStore();
+  store.initStore();
+  store.connect.mockClear();
+  // A lost network: Socket.IO's own backoff brings it back.
+  store.fireSocketEvent('disconnect', 'transport close');
+  expect(store.connect).not.toHaveBeenCalled();
+  // The station dropped it — a lapsed credential, or the one a password
+  // change replaced — and the client would never retry that by itself.
+  store.fireSocketEvent('disconnect', 'io server disconnect');
+  expect(store.connect).toHaveBeenCalledTimes(1);
+  store.disposeStore();
 });

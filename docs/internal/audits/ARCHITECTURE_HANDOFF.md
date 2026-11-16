@@ -15,13 +15,13 @@ The checks were made on `main` at `3c7e4af3`. Those marked as
 | 1b | Labels of one account copied to the shared pool catalogue | **Closed** in the first PR |
 | 1c | Manual/removed covers shared between accounts | Fixed in the [artwork delivery](2026-11-07-artwork-requests.md): per-account overrides; ambiguous historical references preserved |
 | 2 | Behind a proxy, anyone on the internet is an administrator without a password | **Closed** in the first PR (see residue) |
-| 3 | Socket.IO accepts any origin | Pending |
+| 3 | Socket.IO accepts any origin | **Closed**: same origin plus the REST list (`shared/api/origins.py`) |
 | 4 | Server playback queue that no client reads; stub routes | Pending, needs a decision |
 | 5 | Business logic in route modules and in the Flask module | Pending |
 | 6 | State JSON files written without protection against power loss | Pending |
 | 7 | yt-dlp update with the module already imported | Pending, not reproduced |
-| 8 | Dead code and minor details | Partial: `gui.sh` removed; rest pending |
-| 9 | Musical identity coupled to hash/video and rebuilt in each client | Implemented in PR #423; pending CI and integration |
+| 8 | Dead code and minor details | Partial: `gui.sh`, 404 path, rate-limit key and auth memo closed; icons and §5 pending |
+| 9 | Musical identity coupled to hash/video and rebuilt in each client | **Closed** in PR #423 (merged 2026-11-06) |
 
 ## Closed in the first PR
 
@@ -97,22 +97,52 @@ set one.
 
 ## Pending
 
-### 3. Socket.IO accepts any origin
+### 3. Socket.IO accepts any origin (closed)
 
-`_socket_cors_origins = "*"` (`shared/api/__init__.py`) while REST uses
+`_socket_cors_origins = "*"` (`shared/api/__init__.py`) while REST used
 `_build_cors_origins()`. Without a password and in daemon mode, `on_socket_connect`
 accepts the socket without looking at the IP, so any page open in a
-browser that reaches the engine receives `library_updated`, `downloader_*` and the
+browser that reached the engine received `library_updated`, `downloader_*` and the
 playback events.
 
-Be careful when fixing it: in `python-engineio` 4.13, a **list** of origins
-replaces the same-origin check (`HTTP_HOST` and
-`X-Forwarded-Host`). Passing the REST list would break the player served at
-`https://maquina.tailnet.ts.net` or behind a proxy. A function
-`(origin, environ)` must be passed that accepts the same origin (as engineio does with `None`)
-**or** the REST patterns. Native Android (OkHttp) does not send `Origin`, and engineio
-checks nothing without that header. Test with the four
-Playwright profiles and with `tailscale serve`.
+Fix: `shared/api/origins.py` owns one origin list for both. Engine.IO gets a
+`(origin, environ)` callable, because in `python-engineio` 4.13 a **list**
+replaces its own same-origin check and would refuse the player served at
+`https://maquina.tailnet.ts.net` or behind a proxy. The callable accepts the
+engine's own origin — scheme, host and effective port of `Host`, or of
+`X-Forwarded-Proto`/`X-Forwarded-Host` written by a trusted peer — **or** the REST
+patterns, or `SOUNDSIBLE_SOCKET_CORS_ORIGINS` when set (`*` still allows any
+page). A TLS proxy that sends no `X-Forwarded-Proto` needs its address configured. Native Android (OkHttp) sends no
+`Origin`, and Engine.IO checks nothing without that header.
+
+Review found three more holes in the same boundary, closed with it:
+
+- `_forwarded_client` took `X-Forwarded-For`, then `Forwarded`, then `X-Real-IP`.
+  A proxy that writes `X-Real-IP` and passes the client's other headers through
+  let the client choose its address (owner on a passwordless daemon, a fresh
+  rate-limit budget per request). When several are present they must agree,
+  or the request names nobody. Each is read as a chain from the nearest hop
+  back, looking through hops on this machine, the LAN or the tailnet: with a
+  public proxy at `10.0.0.2` in front of a local one, `X-Forwarded-For:
+  81.2.69.160, 10.0.0.2` used to name the LAN proxy and grant the owner.
+- A server-side disconnect is never retried by the Socket.IO client, so the
+  socket a password change had just invalidated stayed down until a reload.
+  `ui_web/src/stores/runtime.ts` reconnects once on `io server disconnect`.
+- A token naming a disabled account still authenticated (disabling revokes
+  only sessions; deleting revokes every token). `get_request_auth_context`
+  now refuses it.
+- A socket was checked only at the handshake. `recheck_sockets()` reruns the
+  connect decision on each open socket's own environ every
+  `SOCKET_AUTH_RECHECK_SEC` (30 s) and disconnects the ones it no longer
+  admits — logout, revoked device, disabled account, expired session, or an
+  instance that started requiring login. Between two passes a lapsed socket
+  can still receive events for up to that long.
+
+Checked on an engine on port 5091: polling from another origin answers 400
+`Not an accepted origin`; a WebSocket from another origin gets gevent-websocket's
+101 (the upgrade happens before Engine.IO runs) followed at once by a close
+frame; same origin, no `Origin`, a LAN page and a `tailscale serve`-shaped
+request (`X-Forwarded-Host`/`-Proto` from 127.0.0.1) connect.
 
 ### 4. Server playback queue
 
@@ -162,16 +192,25 @@ importing or restart after updating.
   removed and recommended `python run.py`. It had no consumers in the repository.
 - 35 icons in `desktop-shell/src-tauri/icons/ios` and `icons/android` that
   `tauri.conf.json` does not reference.
-- `stream_local_track` returns the absolute path in the 404
-  (`shared/api/routes/playback.py`); `/api/health` hides paths on purpose.
+- **Closed:** `stream_local_track` returned the absolute path in the 404
+  (`shared/api/routes/playback.py`), and its 500 handler returned the exception
+  text, which names it too. Both log the path and answer a generic message.
 - `docs/internal/ARCHITECTURE.md` §5 still lists `<config>/download_queue.json`; the
   download queue is in `instance.db`.
-- The `rate_limit` limits use `request.remote_addr`: behind a proxy
-  all clients share a bucket. They could use `request_client_address()`,
-  taking care not to let a client choose its own key.
-- `get_request_auth_context` stores the context in `g` without taking
-  `allow_trusted_network` into account. Today it does not fail because all callers pass `True`,
-  but the parameter has no real effect.
+- **Closed:** the `rate_limit` limits (and the preview-stream limit) used
+  `request.remote_addr`: behind a proxy all clients shared a bucket.
+  `request_rate_limit_key()` believes the forwarded client only when the peer
+  is loopback (a proxy on this machine, funnel included); any other peer keeps
+  its own address, so a LAN machine cannot pick a fresh key per request with
+  its own `X-Forwarded-For`. A proxy on another machine still shares one bucket.
+- **Closed (it did fail):** `get_request_auth_context` stored the context in `g`
+  without taking `allow_trusted_network` into account. Not every caller passes
+  `True`: `require_agent_scope` and `require_pairing_scope` pass `False`, but
+  `before_request` had already resolved the trusted-network owner, so on a
+  passwordless daemon any LAN machine used `/api/agent/*` and `/api/pairing/verify`
+  without the token `docs/AGENT_INTEGRATION.md` requires. The credential is now
+  memoised apart from the trusted-network owner, which only callers passing
+  `True` get. The unused `g.auth_token` went with it.
 
 
 ## 9. Collection identity (PR #423)

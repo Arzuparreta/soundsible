@@ -14,8 +14,11 @@ def test_on_socket_connect_returns_its_pool_connection():
     # Room-joining needs a real Socket.IO dispatch context (request.sid);
     # this test is only about the DB connection the handler acquires while
     # resolving auth, so the room join itself is stubbed out.
-    with patch("shared.api._join_user_room_for_socket"):
+    from flask import request
+
+    with patch("shared.api.join_room"):
         with app.test_request_context("/socket.io/"):
+            request.sid = "pool-socket"
             on_socket_connect()
 
     stats = instance_db().pool_stats()

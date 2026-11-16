@@ -68,6 +68,7 @@ from shared.telemetry import init_telemetry
 
 from .download_queue import DownloadQueueManager, parse_intake_item  # noqa: F401  # re-export
 from .errors import register_error_handlers
+from .origins import make_socket_origin_check, rest_origins, socket_origins
 from .orchestrator import orchestrator
 
 
@@ -112,33 +113,9 @@ app = Flask(__name__)
 register_error_handlers(app)
 
 
-def _build_cors_origins():
-    raw = (os.getenv("SOUNDSIBLE_ALLOWED_ORIGINS") or "").strip()
-    if raw:
-        return [v.strip() for v in raw.split(",") if v.strip()]
-    runtime = get_runtime_config()
-    if not runtime.lan_enabled or runtime.host in {"127.0.0.1", "localhost"}:
-        return [
-            r"^https?://localhost(:\d+)?$",
-            r"^https?://127\.0\.0\.1(:\d+)?$",
-        ]
-    # Default: allow browser clients coming from localhost, private LAN, and Tailscale.
-    return [
-        r"^https?://localhost(:\d+)?$",
-        r"^https?://127\.0\.0\.1(:\d+)?$",
-        r"^https?://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$",
-        r"^https?://10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$",
-        r"^https?://172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}(:\d+)?$",
-        r"^https?://100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(:\d+)?$",
-    ]
-
-
-_socket_cors = (os.getenv("SOUNDSIBLE_SOCKET_CORS_ORIGINS") or "").strip()
-_socket_cors_origins = [v.strip() for v in _socket_cors.split(",") if v.strip()] if _socket_cors else "*"
-
 CORS(
     app,
-    origins=_build_cors_origins(),
+    origins=rest_origins(),
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
         "Authorization",
@@ -175,7 +152,7 @@ SOCKET_PING_TIMEOUT = _int_env("SOUNDSIBLE_SOCKET_PING_TIMEOUT", 25)
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins=_socket_cors_origins,
+    cors_allowed_origins=make_socket_origin_check(socket_origins()),
     async_mode="gevent",
     ping_interval=SOCKET_PING_INTERVAL,
     ping_timeout=SOCKET_PING_TIMEOUT,
@@ -372,46 +349,92 @@ def on_playback_register(data):
             mark_device_socket_active(scope, device_id, request.sid)
 
 
-def _join_user_room_for_socket() -> None:
-    """Subscribe this socket to its owner's personal event room."""
-    user_id = _resolve_request_user_id()
-    if user_id:
-        join_room(user_room(user_id), sid=request.sid)
+#: How often an open socket's credential is checked again. A socket is
+#: admitted once, at connect; without this, logging out, revoking a paired
+#: device, disabling an account or the session expiring left it subscribed to
+#: that account's private events until it happened to reconnect.
+SOCKET_AUTH_RECHECK_SEC = 30
+
+#: Admitted sockets and the account each was admitted for (None: no account).
+_admitted_sockets: dict[str, Optional[str]] = {}
+
+
+def _socket_admission() -> tuple[bool, Optional[str]]:
+    """Whether the socket in this request context may stay, and for whom.
+
+    Run at connect and again by `recheck_sockets` on the environ the socket
+    connected with, so both apply the same rule.
+    """
+    from shared.users import instance_requires_login
+
+    runtime = get_runtime_config()
+    context = get_request_auth_context(allow_trusted_network=True)
+    if context and (context.get("kind") == "owner" or SCOPE_PLAYBACK_CONTROL in set(context.get("scopes") or [])):
+        return True, _resolve_request_user_id()
+    # Once the instance has accounts, a local or LAN address proves nothing
+    # about who is connecting — the socket carries library events.
+    if not instance_requires_login():
+        if runtime.advanced_mode:
+            return True, _resolve_request_user_id()
+        if request_client_address() in {"127.0.0.1", "::1"} and not runtime.lan_enabled:
+            return True, _resolve_request_user_id()
+    return False, None
 
 
 @socketio.on("connect")
 def on_socket_connect(auth=None):
-    from shared.users import instance_requires_login
-
     # Socket.IO events never pass through Flask's before_request/teardown_request,
     # so give auth resolution its own memo lifetime. SQLite loans end with
     # their database blocks independently of this scope.
     with request_scope.request_scope():
-        runtime = get_runtime_config()
-        remote_addr = request_client_address()
-        context = get_request_auth_context(allow_trusted_network=True)
-
-        if context and (context.get("kind") == "owner" or SCOPE_PLAYBACK_CONTROL in set(context.get("scopes") or [])):
-            _join_user_room_for_socket()
-            return True
-
-        # Once the instance has accounts, a local or LAN address proves nothing
-        # about who is connecting — the socket carries library events.
-        if not instance_requires_login():
-            if runtime.advanced_mode:
-                _join_user_room_for_socket()
-                return True
-            if remote_addr in {"127.0.0.1", "::1"} and not runtime.lan_enabled:
-                _join_user_room_for_socket()
-                return True
-
-        logger.warning("Socket.IO connect denied for remote=%s origin=%s", remote_addr, request.headers.get("Origin"))
+        admitted, user_id = _socket_admission()
+    if not admitted:
+        logger.warning("Socket.IO connect denied for remote=%s origin=%s",
+                       request_client_address(), request.headers.get("Origin"))
         return False
+    if user_id:
+        join_room(user_room(user_id), sid=request.sid)
+    _admitted_sockets[request.sid] = user_id
+    return True
 
 
 @socketio.on("disconnect")
 def on_socket_disconnect():
+    _admitted_sockets.pop(request.sid, None)
     unregister_socket(request.sid)
+
+
+def recheck_sockets() -> int:
+    """Disconnect every socket whose credential no longer admits it, or admits
+    it for another account. Returns how many were disconnected."""
+    dropped = 0
+    for sid, user_id in list(_admitted_sockets.items()):
+        try:
+            environ = socketio.server.get_environ(sid)
+        except KeyError:
+            environ = None
+        if environ is None:
+            _admitted_sockets.pop(sid, None)
+            continue
+        with app.request_context(environ), request_scope.request_scope():
+            admitted, current = _socket_admission()
+        if admitted and current == user_id:
+            continue
+        _admitted_sockets.pop(sid, None)
+        socketio.server.disconnect(sid)
+        dropped += 1
+    return dropped
+
+
+def _recheck_sockets_forever() -> None:
+    while True:
+        socketio.sleep(SOCKET_AUTH_RECHECK_SEC)
+        try:
+            dropped = recheck_sockets()
+            if dropped:
+                logger.info("Socket.IO: disconnected %d socket(s) whose credential lapsed", dropped)
+        except Exception:
+            logger.warning("Socket.IO: credential recheck failed", exc_info=True)
 
 
 # Note: Path to the new web UI and repo branding
@@ -2164,6 +2187,7 @@ def start_api(
     # manager restarts a station that would otherwise stay unreachable.
     from shared.cooperative import start_loop_watchdog
     start_loop_watchdog()
+    socketio.start_background_task(_recheck_sockets_forever)
     try:
         socketio.run(app, host=runtime.host, port=runtime.port, debug=debug)
     finally:

@@ -17,6 +17,7 @@ from shared.hardening import (
     rate_limit,
     require_instance_admin,
 )
+from shared.security import request_rate_limit_key
 from shared.users import (
     ROLE_ADMIN,
     ROLE_MEMBER,
@@ -120,7 +121,7 @@ def auth_login():
 
     user = authenticate(username, password)
     if not user:
-        logger.info("auth: failed login for %r from %s", username, request.remote_addr)
+        logger.info("auth: failed login for %r from %s", username, request_rate_limit_key())
         return jsonify({"error": "Wrong username or password"}), 401
 
     token, _ = create_session(user["id"], device_name=data.get("device_name"))

@@ -462,9 +462,14 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       // this is the moment that ends the silence.
       ports.resumeFromStarved();
     }));
-    socket.on('disconnect', lifetime.guard(() => {
+    socket.on('disconnect', lifetime.guard((reason?: string) => {
       recordPlaybackDiagnostic('connection.state', { state: 'offline', reason: 'socket_disconnected' });
       setState('online', false);
+      // The station drops a socket whose credential lapsed — including the one
+      // a password change just replaced — and Socket.IO never retries a
+      // server-side disconnect on its own. One attempt with the current cookie:
+      // a credential that really is gone is refused, not looped on.
+      if (reason === 'io server disconnect') reconnect();
     }));
     // A sweep measured more of the library. Nothing re-levels mid-song; the new
     // numbers ride the refreshed library and apply from the next track on.

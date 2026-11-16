@@ -16,7 +16,7 @@ from flask import g, jsonify, request
 
 from shared.database import instance_db
 from shared.runtime import get_runtime_config
-from shared.security import is_trusted_request
+from shared.security import is_trusted_request, request_rate_limit_key
 
 logger = logging.getLogger(__name__)
 
@@ -186,11 +186,53 @@ def _touch_auth_token(record: dict) -> None:
     _db().touch_auth_token(record["id"])
 
 
-def get_request_auth_context(*, allow_trusted_network: bool = False) -> Optional[dict]:
-    cached = getattr(g, "_soundsible_auth_context", None)
-    if cached is not None:
-        return cached
+_NOT_RESOLVED = object()
 
+
+def get_request_auth_context(*, allow_trusted_network: bool = False) -> Optional[dict]:
+    """Who this request authenticates as, or ``None``.
+
+    The credential it carries is looked up once per request. The trusted-network
+    owner, which needs no credential, is only ever added for callers that pass
+    ``allow_trusted_network``: the agent and pairing routes ask without it and
+    must not inherit it from an earlier caller in the same request.
+    """
+    context = getattr(g, "_soundsible_credential_context", _NOT_RESOLVED)
+    if context is _NOT_RESOLVED:
+        context = _credential_context()
+        if context and context.get("user_id") and _account_is_disabled(context["user_id"]):
+            # Disabling an account revokes its sessions; its agent, paired
+            # device and legacy tokens are refused here instead. Deleting one
+            # revokes every token it had.
+            context = None
+        g._soundsible_credential_context = context
+    if context is None and allow_trusted_network:
+        return _trusted_network_context()
+    return context
+
+
+def _account_is_disabled(user_id: str) -> bool:
+    row = _db().get_user_row(user_id)
+    return bool(row and row.get("disabled_at"))
+
+
+def _trusted_network_context() -> Optional[dict]:
+    context = getattr(g, "_soundsible_trusted_network_context", _NOT_RESOLVED)
+    if context is _NOT_RESOLVED:
+        context = None
+        if _legacy_trusted_network_allowed() and not _read_admin_token() and is_trusted_request():
+            context = {
+                "source": "legacy_trusted_network",
+                "kind": "owner",
+                "scopes": set(ALL_SCOPES),
+                "record": {"name": "trusted-network-compat"},
+                "user_id": _resolve_owner_user_id(),
+            }
+        g._soundsible_trusted_network_context = context
+    return context
+
+
+def _credential_context() -> Optional[dict]:
     context = None
 
     session_token = _request_session_token()
@@ -240,20 +282,6 @@ def get_request_auth_context(*, allow_trusted_network: bool = False) -> Optional
                     context = _legacy_agent_context(legacy_agent)
                     context["user_id"] = _resolve_owner_user_id()
 
-    if context is None and allow_trusted_network and _legacy_trusted_network_allowed():
-        configured = _read_admin_token()
-        if not configured and is_trusted_request():
-            context = {
-                "source": "legacy_trusted_network",
-                "kind": "owner",
-                "scopes": set(ALL_SCOPES),
-                "record": {"name": "trusted-network-compat"},
-                "user_id": _resolve_owner_user_id(),
-            }
-
-    g._soundsible_auth_context = context
-    if context:
-        g.auth_token = context.get("record")
     return context
 
 
@@ -419,17 +447,14 @@ def rate_limit_allows(action: str, *, limit: int, window_sec: int) -> bool:
     with their own error document — the Subsonic one — ask this instead and
     write the refusal themselves.
     """
-    ip = request.remote_addr or "unknown"
-    return _rate_limiter.allow(f"{action}:{ip}", limit, window_sec)
+    return _rate_limiter.allow(f"{action}:{request_rate_limit_key()}", limit, window_sec)
 
 
 def rate_limit(action: str, *, limit: int, window_sec: int):
     def decorator(fn):
         @wraps(fn)
         def wrapped(*args, **kwargs):
-            ip = request.remote_addr or "unknown"
-            key = f"{action}:{ip}"
-            if _rate_limiter.allow(key, limit, window_sec):
+            if rate_limit_allows(action, limit=limit, window_sec=window_sec):
                 return fn(*args, **kwargs)
             return jsonify({"error": "Too many requests"}), 429
 

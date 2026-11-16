@@ -147,3 +147,22 @@ def test_stream_telemetry_does_not_wrap_or_claim_delivery(client, track, monkeyp
     assert "delivered_bytes" not in segments
     assert "write_ms" not in segments
     assert "complete" not in segments
+
+
+@pytest.mark.parametrize("error, status", [
+    (FileNotFoundError(2, "No such file or directory"), 404),
+    (PermissionError(13, "Permission denied"), 500),
+])
+def test_a_file_that_fails_to_open_never_names_its_path(client, track, monkeypatch, error, status):
+    track_id, _ = track
+    from shared.api.routes import playback
+
+    def failing(path):
+        error.filename = path
+        raise error
+
+    monkeypatch.setattr(playback.os.path, "getsize", failing)
+    response = client.get(f"/api/static/stream/{track_id}")
+
+    assert response.status_code == status
+    assert "/" not in response.get_json()["error"]

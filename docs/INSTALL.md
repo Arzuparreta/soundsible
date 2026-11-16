@@ -408,9 +408,12 @@ Serve Soundsible behind Nginx, Caddy, or Traefik:
    with `--host 127.0.0.1` so only the proxy can reach it.
 2. Forward a public path (e.g. `https://music.example.com`) to `http://127.0.0.1:5005`.
 3. Allow WebSocket / long-running connections in your proxy config.
-4. Make the proxy send the caller's address in `X-Forwarded-For` (Caddy,
-   Traefik and `tailscale serve` do by default; Nginx needs
-   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`).
+4. Make the proxy send the caller's address in `X-Forwarded-For` and the
+   scheme the browser used in `X-Forwarded-Proto` (Caddy, Traefik and
+   `tailscale serve` do by default; Nginx needs
+   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and
+   `proxy_set_header X-Forwarded-Proto $scheme;`). Without the scheme the
+   player's live updates are refused as coming from another site.
 5. **Give the account a password first** (Settings → Account → People) if the proxy is
    reachable from the internet.
 
@@ -486,12 +489,17 @@ Soundsible is designed for trusted **LAN / Tailscale** use. For anything beyond 
    export SOUNDSIBLE_LAUNCHER_BIND_ALL=true
    ```
 
-5. **CORS origins.** By default the API accepts localhost, private-LAN, and Tailscale browser origins. To tighten:
+5. **CORS origins.** The player served by the engine always reaches it. Pages on
+   *other* addresses are accepted by default when they are on localhost, the
+   private LAN or Tailscale, for both the API and the real-time connection. To
+   tighten:
 
    ```bash
    export SOUNDSIBLE_ALLOWED_ORIGINS='http://localhost:5005,http://192.168.1.10:5005'
-   export SOUNDSIBLE_SOCKET_CORS_ORIGINS='http://localhost:5005,http://192.168.1.10:5005'
    ```
+
+   `SOUNDSIBLE_SOCKET_CORS_ORIGINS` gives the real-time connection a different
+   list when it needs one.
 
 ---
 
