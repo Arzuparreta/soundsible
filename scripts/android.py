@@ -163,6 +163,23 @@ def enable_fixture_network(serial: str, *, timeout: float = 30) -> None:
     raise RuntimeError(f'Fixture Wi-Fi setup deadline exceeded on {serial}: {last}')
 
 
+#: A freshly booted emulator drops its adb transport for a moment — CI has seen
+#: it listed `offline` seconds after `sys.boot_completed` — so one reading of
+#: `adb devices` can find no device at all.
+DEVICE_SETTLE_SEC = 60
+
+
+def _settled_devices(adb: str) -> list[str]:
+    """The connected devices once none is `offline` or still connecting."""
+    deadline = time.monotonic() + DEVICE_SETTLE_SEC
+    while True:
+        rows = [line.split() for line in run(adb, "devices", capture=True).splitlines()[1:] if line.strip()]
+        settled = all(len(row) == 2 and row[1] == "device" for row in rows)
+        if rows and settled or time.monotonic() >= deadline:
+            return [row[0] for row in rows if len(row) == 2 and row[1] == "device"]
+        time.sleep(1)
+
+
 def integration(*, restart_only: bool = False, live_restart_only: bool = False, shard: tuple[int, int] | None = None) -> None:
     """Own three disposable engines and run real native account integration on an AVD.
 
@@ -176,11 +193,7 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
     if (restart_only or live_restart_only) and test_filter:
         raise RuntimeError("Restart protocol cannot be combined with a single-class instrumentation filter")
     binary = str(sdk() / "platform-tools/adb")
-    devices = [
-        line.split()[0]
-        for line in run(binary, "devices", capture=True).splitlines()[1:]
-        if len(line.split()) == 2 and line.split()[1] == "device"
-    ]
+    devices = _settled_devices(binary)
     if len(devices) != 1:
         raise RuntimeError("Integration requires exactly one connected emulator and no other devices")
     require_emulator(devices[0])
