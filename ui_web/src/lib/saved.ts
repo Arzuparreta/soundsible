@@ -23,6 +23,56 @@ export function savedEntryForIdentity(entries: readonly SavedEntry[], keys: stri
   return matches.length === 1 ? matches[0] : null;
 }
 
+/**
+ * The saved collection, indexed for `savedEntryForIdentity`'s question.
+ *
+ * A row asks which saved entry it is every time it mounts. Scanning the array
+ * for that made each row cost the size of the collection; the index is built
+ * once per change to the collection and answered from two lookups.
+ */
+export interface SavedIdentityIndex {
+  /** `item:` id → the first entry holding it, as `Array.find` would return. */
+  byItem: ReadonlyMap<string, SavedEntry>;
+  /** Any other key → its only entry, or `null` when several entries share it. */
+  byKey: ReadonlyMap<string, SavedEntry | null>;
+}
+
+export function buildSavedIdentityIndex(entries: readonly SavedEntry[]): SavedIdentityIndex {
+  const byItem = new Map<string, SavedEntry>();
+  const byKey = new Map<string, SavedEntry | null>();
+  for (const entry of entries) {
+    if (entry.item_id && !byItem.has(entry.item_id)) byItem.set(entry.item_id, entry);
+    for (const key of entry.keys) {
+      if (key.startsWith('item:') && !byItem.has(key.slice(5))) byItem.set(key.slice(5), entry);
+      const held = byKey.get(key);
+      if (held === undefined) byKey.set(key, entry);
+      else if (held !== entry) byKey.set(key, null);
+    }
+  }
+  return { byItem, byKey };
+}
+
+/** `savedEntryForIdentity`, answered from the index: same rules, same result. */
+export function savedEntryInIndex(index: SavedIdentityIndex, keys: string[]): SavedEntry | null {
+  const item = keys.find(key => key.startsWith('item:'));
+  if (item) return index.byItem.get(item.slice(5)) ?? null;
+  for (const key of keys) {
+    if (!key.startsWith('lib:')) continue;
+    const only = index.byKey.get(key);
+    if (only) return only;
+  }
+  let match: SavedEntry | null = null;
+  for (const key of keys) {
+    const held = index.byKey.get(key);
+    if (held === undefined) continue;
+    // A key several entries share, or a second entry: evidence that cannot
+    // choose between saved songs chooses none.
+    if (held === null || (match && match !== held)) return null;
+    match = held;
+  }
+  return match;
+}
+
 /** The YouTube video id an entry can be streamed with, if it has one yet. */
 export function savedVideoId(entry: SavedEntry): string | null {
   const key = entry.keys.find((k) => k.startsWith('yt:'));

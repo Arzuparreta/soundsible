@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildSavedIdentityIndex,
   savedEntryForIdentity,
+  savedEntryInIndex,
   savedIdentityKeys,
   savedFromCatalogItem,
   savedFromSearchResult,
@@ -208,4 +210,36 @@ it('keeps stable saved entities separate when their provider evidence overlaps',
   expect(savedEntryForIdentity([one, two], ['item:missing', `yt:${VIDEO_ID}`])).toBeNull();
   expect(savedEntryForIdentity([one, two], [`yt:${VIDEO_ID}`])).toBeNull();
   expect(savedEntryForIdentity([one, two], ['lib:second', `yt:${VIDEO_ID}`])).toBe(two);
+});
+
+it('answers from the index exactly as the scan does', () => {
+  // A small key space on purpose: shared provider keys, repeated item ids and
+  // entries that list another entry's `item:` key all have to come up.
+  let seed = 20261116;
+  const random = (bound: number) => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed % bound;
+  };
+  const key = () => `${['lib', 'yt', 'isrc', 'item', 'cat'][random(5)]}:${random(6)}`;
+  for (let round = 0; round < 400; round += 1) {
+    const entries: SavedEntry[] = Array.from({ length: random(7) }, () => ({
+      ...(random(3) ? { item_id: String(random(6)) } : {}),
+      keys: Array.from({ length: random(4) }, key),
+    }));
+    const index = buildSavedIdentityIndex(entries);
+    for (let probe = 0; probe < 25; probe += 1) {
+      const keys = Array.from({ length: random(4) }, key);
+      expect(savedEntryInIndex(index, keys), JSON.stringify({ entries, keys })).toBe(savedEntryForIdentity(entries, keys));
+    }
+  }
+});
+
+it('answers the documented identity cases from the index', () => {
+  const one: SavedEntry = { item_id: 'one', keys: ['lib:first', `yt:${VIDEO_ID}`], favourite: true };
+  const two: SavedEntry = { item_id: 'two', keys: ['lib:second', `yt:${VIDEO_ID}`] };
+  const index = buildSavedIdentityIndex([one, two]);
+  expect(savedEntryInIndex(index, savedIdentityKeys(two))).toBe(two);
+  expect(savedEntryInIndex(index, ['item:missing', `yt:${VIDEO_ID}`])).toBeNull();
+  expect(savedEntryInIndex(index, [`yt:${VIDEO_ID}`])).toBeNull();
+  expect(savedEntryInIndex(index, ['lib:second', `yt:${VIDEO_ID}`])).toBe(two);
 });

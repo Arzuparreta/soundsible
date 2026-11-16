@@ -17,7 +17,7 @@ import {
   withLinkedKeys,
 } from '../lib/playbackIdentity';
 import { libraryNow } from '../lib/libraryOrder';
-import { savedEntryForIdentity, savedToTrack } from '../lib/saved';
+import { buildSavedIdentityIndex, savedEntryInIndex, savedToTrack } from '../lib/saved';
 import { musicLibraryRows } from '../lib/musicLibrary';
 import { futureEntries } from '../lib/playbackQueue';
 import type { CatalogItem, SavedEntry, SearchResult, Track } from '../types/music';
@@ -75,6 +75,9 @@ export const identity = createRoot(() => {
     }
     return index as ReadonlyMap<string, SavedEntry>;
   });
+  // What every row asks on mount: which saved entry am I. Built once per
+  // change to the collection instead of scanned once per row.
+  const savedIdentityIndex = createMemo(() => buildSavedIdentityIndex(state.saved));
   // The mark is a strict subset — a property of a saved song, never a way of
   // holding one.
   const favouriteKeys = createMemo(
@@ -139,6 +142,7 @@ export const identity = createRoot(() => {
     queuedKeys,
     savedKeys,
     savedIndex,
+    savedIdentityIndex,
     savedRows,
     favouriteKeys,
     favouriteRows,
@@ -252,7 +256,7 @@ export const favouriteTracks = (): Track[] => identity.favouriteRows().map((row)
 /** The saved entry behind these identities, if the library holds one. Used by
  * the surfaces that need to know *how* a song is held, not just whether. */
 export function savedEntryForKeys(keys: string[]): SavedEntry | null {
-  return savedEntryForIdentity(state.saved, withLinkedKeys(keys, catalogLinks()));
+  return savedEntryInIndex(identity.savedIdentityIndex(), withLinkedKeys(keys, catalogLinks()));
 }
 
 /** Is a download for this song in flight? Keyed off the video id, which is what
