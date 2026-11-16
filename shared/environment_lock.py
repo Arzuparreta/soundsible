@@ -14,7 +14,7 @@ def backend():
 
 
 class _WindowsLocks:
-    LOCK_SH, LOCK_EX, LOCK_NB = 1, 2, 4
+    LOCK_SH, LOCK_EX, LOCK_NB, LOCK_UN = 1, 2, 4, 8
 
     def __init__(self):
         import ctypes
@@ -47,6 +47,8 @@ class _WindowsLocks:
             if not self._kernel.UnlockFileEx(handle, 0, 1, 0, self._ctypes.byref(overlapped)):
                 raise self._ctypes.WinError(self._ctypes.get_last_error())
             self._locked.remove(handle)
+        if flags == self.LOCK_UN:
+            return
         native = (2 if flags & self.LOCK_EX else 0) | (1 if flags & self.LOCK_NB else 0)
         if not self._kernel.LockFileEx(handle, native, 0, 1, 0, self._ctypes.byref(overlapped)):
             error = self._ctypes.get_last_error()

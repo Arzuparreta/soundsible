@@ -466,3 +466,106 @@ print('bootstrap-protected')
         tmp_path,
     )
     assert result == 'bootstrap-protected'
+
+
+def test_launcher_retains_its_lease_across_dependency_imports(tmp_path):
+    result = _fresh(
+        """
+import subprocess, sys
+from pathlib import Path
+from shared.runtime_updates import prepare_launcher_environment
+prepare_launcher_environment(Path(sys.prefix), lambda lease: None)
+# This dependency remains loaded between bootstrap and engine startup.
+import gevent
+code = ("from pathlib import Path; import shared.runtime_updates as u; "
+        f"u._tool_lease_path = lambda prefix=None: Path({str(updates._tool_lease_path())!r}); "
+        "session = u.bootstrap_tool_session(Path(__import__('sys').prefix)); "
+        "lease = session.__enter__(); lease.require_write()")
+probe = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
+assert probe.returncode != 0
+assert 'another engine' in probe.stderr
+assert 'gevent' in sys.modules
+# The same descriptor, not a second reader, is used for the engine session.
+assert updates._launcher_lease is not None
+with updates._runtime_lease() as lease:
+    assert lease is updates._launcher_lease
+print('continuously-protected')
+""",
+        tmp_path,
+    )
+    assert result == 'continuously-protected'
+
+
+def test_a_failed_wait_notification_never_bypasses_the_installer(tmp_path):
+    result = _fresh(
+        """
+import os, subprocess, sys, threading
+from pathlib import Path
+from shared.runtime_updates import runtime_tool_session
+ready = threading.Event()
+marker = Path(os.environ['SOUNDSIBLE_DATA_DIR']) / 'finished'
+code = ("from pathlib import Path; import shared.runtime_updates as u; "
+        f"u._tool_lease_path = lambda prefix=None: Path({str(updates._tool_lease_path())!r}); "
+        "session = u.bootstrap_tool_session(Path(__import__('sys').prefix)); "
+        "lease = session.__enter__(); lease.require_write(); "
+        "print('ready', flush=True); input(); "
+        f"Path({str(marker)!r}).write_text('whole')")
+writer = subprocess.Popen([sys.executable, '-c', code], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+assert writer.stdout.readline().strip() == 'ready'
+def release():
+    assert ready.wait(5)
+    writer.communicate('release' + chr(10), timeout=10)
+worker = threading.Thread(target=release)
+worker.start()
+def broken_marker(waiting):
+    ready.set()
+    raise IsADirectoryError('marker destination is a directory')
+try:
+    with runtime_tool_session(on_wait=broken_marker):
+        assert marker.read_text() == 'whole'
+finally:
+    ready.set()
+    worker.join(10)
+    if writer.poll() is None:
+        writer.kill()
+        writer.wait()
+assert not worker.is_alive()
+print('waited-despite-marker-error')
+""",
+        tmp_path,
+    )
+    assert result == 'waited-despite-marker-error'
+
+
+def test_desktop_entry_waits_before_dependency_imports_and_reports_on_its_pipe(tmp_path):
+    result = _fresh(
+        """
+import json, os, subprocess, sys
+from pathlib import Path
+entry = Path('soundsible_engine.py').resolve()
+music = Path(os.environ['SOUNDSIBLE_MUSIC_DIR'])
+config = Path(os.environ['SOUNDSIBLE_CONFIG_DIR']) / 'config.json'
+code = ("from pathlib import Path; import sys; import shared.runtime_updates as u; "
+        f"u._tool_lease_path = lambda prefix=None: Path({str(updates._tool_lease_path())!r}); "
+        f"sys.argv = [{str(entry)!r}, '--bootstrap', {str(music)!r}]; "
+        f"exec(compile(Path({str(entry)!r}).read_text(), {str(entry)!r}, 'exec'), "
+        f"{{'__name__': '__main__', '__file__': {str(entry)!r}}})")
+with updates.bootstrap_tool_session(Path(sys.prefix)) as writer:
+    writer.require_write()
+    reader = subprocess.Popen([sys.executable, '-c', code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert json.loads(reader.stdout.readline()) == {'event': 'waiting_for_tools', 'waiting': True}
+        assert not config.exists()
+    except BaseException:
+        reader.kill()
+        reader.communicate()
+        raise
+output, error = reader.communicate(timeout=20)
+assert reader.returncode == 0, error
+assert json.loads(output.splitlines()[0]) == {'event': 'waiting_for_tools', 'waiting': False}
+assert config.exists()
+print('desktop-entry-protected')
+""",
+        tmp_path,
+    )
+    assert result == 'desktop-entry-protected'

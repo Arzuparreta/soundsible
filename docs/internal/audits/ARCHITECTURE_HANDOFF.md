@@ -217,8 +217,10 @@ lease for their lifetime (flock on POSIX, LockFileEx on Windows). Its file is
 beside the interpreter prefix, so recreating that environment cannot replace
 the lock inode. Bootstrap holds the same read lease and must upgrade it before
 creating, repairing or reinstalling dependencies; a running engine refuses
-that mutation. Only a daemon with the exclusive
-lease can update; another engine skips the update and joins the readers. Readers
+that mutation. The launcher retains this very lease across dependency imports
+and reuses it at engine startup. A separate writer gate protects conversions
+from shared to exclusive access, including failed conversions that release a
+shared native lock. Only a daemon with the exclusive lease can update; another engine skips the update and joins the readers. Readers
 wait for an installation already in progress before importing the API. Frozen
 engines use their own bundled tools. Without file locking or access to the lease,
 updates are skipped. These leases coordinate Soundsible launches, not manual pip
@@ -230,18 +232,27 @@ loaded. Pip uses the engine's own interpreter: download wheels into a temporary
 folder with a 120-second deadline, then install offline without a kill deadline.
 Both subprocesses inherit the lease descriptor/handle; POSIX flock ownership
 survives the parent's exit until pip finishes. Ordinary SIGINT/SIGTERM shutdown
-is deferred through installation, whose subprocess has its own terminal group. There is no promise that pip itself is transactional against
-external termination, disk failure or power loss. Tests exercise the real daemon
+is deferred through installation, whose subprocess has its own terminal group.
+There is no promise that pip itself is transactional against external termination, disk failure or power loss. Tests exercise the real daemon
 dispatch including bootstrap, replacing only external pip/API effects, and real
 process contention for the shared/exclusive leases. Fresh-process tests isolate
 HOME, Windows profile and XDG paths before any runtime import, and precreate
 all runtime destinations. Optional lease/storage failures skip and log updates.
 
-While the source desktop waits for another installation, a PID-scoped startup
-marker pauses its shell's readiness budget; that budget resumes after the lease
-is available. A child that exits during startup becomes an error immediately.
-The native Windows source suite runs in Desktop Build. Rust timing and startup
-marker tests also run independently of the platform webview dependencies.
+The standalone desktop entry takes its lease before importing any dependencies.
+While it waits for an installation, it reports a startup event on its stdout
+pipe; only the retained child's pipe can pause the shell's readiness budget.
+No marker file must be published to keep the lock safe. Optional wait callbacks
+log storage failures and still wait for the actual read lock. The shell consumes
+both output pipes, resumes the budget after the wait and notices an exited
+child. It accepts persisted readiness only when its PID matches that child,
+never an independently launched engine's healthy state.
+
+The native Windows source suite runs in Desktop Build. Rust timing, startup
+event and PID tests also run independently of platform webview dependencies.
+The isolated Python suite before the latest continuity/PID regressions passed:
+2,964 tests, 3 intentional skips. These additional changes have targeted
+regressions; the final full suite and independent re-review remain gates.
 
 Where it does not run, on purpose: the desktop engine (a packaged build
 bundles its tools, where `sys.executable -m pip` was the engine binary itself;

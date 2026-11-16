@@ -136,6 +136,13 @@ def _apply_runtime_updates(file_env: Mapping[str, str | None] | None, lease_fd: 
     return True
 
 
+def notify_tool_wait(waiting: bool) -> None:
+    """A startup event on the owned child's pipe, before importing dependencies."""
+    import json
+
+    print(json.dumps({"event": "waiting_for_tools", "waiting": waiting}), flush=True)
+
+
 def _tool_lease_path(prefix: Path | None = None) -> Path:
     # A sibling survives bootstrap recreating the environment itself. Different
     # account/config directories using the same interpreter share this lease.
@@ -144,31 +151,67 @@ def _tool_lease_path(prefix: Path | None = None) -> Path:
 
 
 class EnvironmentLease:
-    """One file descriptor, shared by engine readers and bootstrap writers."""
+    """A lifetime reader and a writer gate that makes lock conversion safe."""
 
-    def __init__(self, handle, locker):
+    def __init__(self, handle, writer, locker):
         self.handle = handle
+        self.writer = writer
         self.locker = locker
+        self.writing = False
+
+    def try_write(self) -> bool:
+        if self.writing:
+            return True
+        # flock and LockFileEx conversions may release the shared lock before
+        # failing. A separate writer gate prevents another writer exploiting
+        # that interval while this process restores its reader protection.
+        try:
+            self.locker.flock(self.writer, self.locker.LOCK_EX | self.locker.LOCK_NB)
+        except BlockingIOError:
+            return False
+        try:
+            self.locker.flock(self.handle, self.locker.LOCK_EX | self.locker.LOCK_NB)
+        except BaseException:
+            try:
+                self.locker.flock(self.handle, self.locker.LOCK_SH)
+            finally:
+                self.locker.flock(self.writer, self.locker.LOCK_UN)
+            raise
+        self.writing = True
+        return True
 
     def require_write(self) -> None:
         """Refuse mutation when an engine is already using the environment."""
         try:
-            self.locker.flock(self.handle, self.locker.LOCK_EX | self.locker.LOCK_NB)
+            if self.try_write():
+                return
         except OSError as error:
             raise RuntimeError("Cannot modify the Python environment while another engine is using it; "
                                "stop those engines before updating dependencies") from error
+        raise RuntimeError("Cannot modify the Python environment while another engine is using it; "
+                           "stop those engines before updating dependencies")
+
+    def _notify_wait(self, callback, waiting):
+        if callback:
+            try:
+                callback(waiting)
+            except OSError as error:
+                import logging
+
+                logging.getLogger(__name__).warning("Cannot publish environment wait status: %s", error)
 
     def read(self, on_wait=None) -> None:
         try:
             self.locker.flock(self.handle, self.locker.LOCK_SH | self.locker.LOCK_NB)
         except BlockingIOError:
-            if on_wait:
-                on_wait(True)
+            self._notify_wait(on_wait, True)
             try:
                 self.locker.flock(self.handle, self.locker.LOCK_SH)
             finally:
-                if on_wait:
-                    on_wait(False)
+                self._notify_wait(on_wait, False)
+        if self.writing:
+            self.locker.flock(self.writer, self.locker.LOCK_UN)
+            self.writing = False
 
     def install(self, command, **kwargs):
         return run_install_transaction(command, lease_fd=self.handle.fileno(), **kwargs)
@@ -178,25 +221,59 @@ class EnvironmentLease:
 def _environment_lease(prefix: Path | None = None) -> Iterator[EnvironmentLease | None]:
     import logging
 
-    handle = None
+    handles = []
     try:
         from shared.environment_lock import backend
 
         locker = backend()
         path = _tool_lease_path(prefix)
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
-        except PermissionError:
-            fd = os.open(path, os.O_RDONLY)
-        handle = os.fdopen(fd, "rb")
+        for target in (path, path.with_name(path.name + ".writer")):
+            try:
+                fd = os.open(target, os.O_CREAT | os.O_RDWR, 0o644)
+            except PermissionError:
+                fd = os.open(target, os.O_RDONLY)
+            handles.append(os.fdopen(fd, "rb"))
     except (ImportError, OSError) as error:
+        for handle in handles:
+            handle.close()
         logging.getLogger(__name__).warning("Runtime auto-update skipped: cannot lease the environment: %s", error)
         yield None
         return
     try:
-        yield EnvironmentLease(handle, locker)
+        yield EnvironmentLease(*handles, locker)
     finally:
-        handle.close()
+        for handle in reversed(handles):
+            handle.close()
+
+
+_launcher_session = None
+_launcher_lease = None
+_launcher_prepared = False
+
+
+def prepare_launcher_environment(prefix: Path, prepare) -> None:
+    """Bootstrap once and retain the same read lease through all later imports.
+
+    exec closes these descriptors before the new interpreter acquires its own
+    lease. No dependency code runs in between. An imported/menu launcher keeps
+    its reader too, since its gevent dependencies remain loaded.
+    """
+    import atexit
+
+    global _launcher_session, _launcher_lease, _launcher_prepared
+    if _launcher_prepared:
+        return
+    session = bootstrap_tool_session(prefix)
+    lease = session.__enter__()
+    try:
+        prepare(lease)
+        if lease:
+            lease.read()
+    except BaseException:
+        session.__exit__(*sys.exc_info())
+        raise
+    _launcher_session, _launcher_lease, _launcher_prepared = session, lease, True
+    atexit.register(session.__exit__, None, None, None)
 
 
 @contextmanager
@@ -231,16 +308,17 @@ def runtime_tool_session(*, update_tools: bool = False,
         yield False
         return
     logger = logging.getLogger(__name__)
-    with _environment_lease() as lease:
+    with _runtime_lease() as lease:
         updated = False
         if lease:
-            exclusive = False
             try:
+                exclusive = False
                 if update_tools:
                     try:
-                        lease.locker.flock(lease.handle, lease.locker.LOCK_EX | lease.locker.LOCK_NB)
-                        exclusive = True
+                        exclusive = lease.try_write()
                     except BlockingIOError:
+                        pass
+                    if not exclusive:
                         logger.info("Runtime auto-update skipped: another engine is using this environment")
                 if exclusive:
                     try:
@@ -251,8 +329,16 @@ def runtime_tool_session(*, update_tools: bool = False,
                     lease.read(on_wait)
             except OSError as error:
                 logger.warning("Runtime auto-update skipped: environment lease unavailable: %s", error)
-                lease.handle.close()
         yield updated
+
+
+@contextmanager
+def _runtime_lease():
+    if _launcher_prepared:
+        yield _launcher_lease
+    else:
+        with _environment_lease() as lease:
+            yield lease
 
 
 def warn_updates_need_a_new_image(file_env: Mapping[str, str | None] | None = None) -> None:

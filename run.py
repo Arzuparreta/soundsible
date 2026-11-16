@@ -164,11 +164,10 @@ def _ensure_bootstrap_before_gevent():
     Fresh clones may not have a venv yet; importing gevent before bootstrap would
     fail with ModuleNotFoundError and prevent self-healing.
     """
-    from shared.runtime_updates import bootstrap_tool_session
+    from shared.runtime_updates import prepare_launcher_environment
 
     root_dir = Path(__file__).resolve().parent
-    with bootstrap_tool_session(root_dir / "venv") as lease:
-        _ensure_bootstrap_locked(root_dir, lease)
+    prepare_launcher_environment(root_dir / "venv", lambda lease: _ensure_bootstrap_locked(root_dir, lease))
 
 
 def _ensure_bootstrap_locked(root_dir: Path, lease) -> None:

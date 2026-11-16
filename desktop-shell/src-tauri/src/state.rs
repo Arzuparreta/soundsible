@@ -9,6 +9,8 @@ pub const STATE_FILENAME: &str = "desktop-engine-state.json";
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct EngineRuntimeState {
+    #[serde(default)]
+    pub pid: u32,
     pub base_url: String,
     pub health: String,
     pub owner_token_file: Option<String>,
@@ -16,6 +18,10 @@ pub struct EngineRuntimeState {
 }
 
 impl EngineRuntimeState {
+    pub fn belongs_to(&self, pid: u32) -> bool {
+        self.pid != 0 && self.pid == pid
+    }
+
     pub fn health_url(&self) -> String {
         format!("{}{}", self.base_url.trim_end_matches('/'), self.health)
     }
@@ -45,37 +51,19 @@ pub fn load_runtime_state() -> Option<EngineRuntimeState> {
     serde_json::from_str(&raw).ok()
 }
 
-#[derive(Deserialize)]
-struct EngineStartupState {
-    pid: u32,
-    waiting_for_tools: bool,
-}
-
-fn startup_waiting(raw: Option<&str>, pid: u32) -> bool {
-    raw.and_then(|raw| serde_json::from_str::<EngineStartupState>(raw).ok())
-        .is_some_and(|state| state.pid == pid && state.waiting_for_tools)
-}
-
-pub fn engine_waiting_for_tools(pid: u32) -> bool {
-    let raw = std::fs::read_to_string(config_dir().join("desktop-engine-startup.json")).ok();
-    startup_waiting(raw.as_deref(), pid)
-}
-
 #[cfg(test)]
-mod tool_wait_tests {
+mod readiness_tests {
     use super::*;
 
     #[test]
-    fn only_the_spawned_child_can_pause_startup() {
-        let raw = r#"{"pid":42,"waiting_for_tools":true}"#;
-        assert!(startup_waiting(Some(raw), 42));
-        assert!(!startup_waiting(Some(raw), 43));
-        assert!(!startup_waiting(
-            Some(r#"{"pid":42,"waiting_for_tools":false}"#),
-            42
-        ));
-        assert!(!startup_waiting(None, 42));
-        assert!(!startup_waiting(Some("partial"), 42));
+    fn readiness_requires_the_retained_childs_pid() {
+        let raw = r#"{"pid":42,"base_url":"http://127.0.0.1:49152","health":"/api/health","log_dir":"logs"}"#;
+        let state: EngineRuntimeState = serde_json::from_str(raw).unwrap();
+        assert!(state.belongs_to(42));
+        assert!(!state.belongs_to(43));
+        let missing_pid = raw.replace("\"pid\":42,", "");
+        let old: EngineRuntimeState = serde_json::from_str(&missing_pid).unwrap();
+        assert!(!old.belongs_to(42));
     }
 }
 

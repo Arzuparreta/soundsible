@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use std::time::Duration;
 
 pub(crate) fn startup_budget(
@@ -12,9 +13,39 @@ pub(crate) fn startup_budget(
     }
 }
 
+#[derive(Deserialize)]
+struct StartupEvent {
+    event: String,
+    waiting: bool,
+}
+
+pub(crate) fn tools_wait_event(line: &str) -> Option<bool> {
+    serde_json::from_str::<StartupEvent>(line)
+        .ok()
+        .filter(|event| event.event == "waiting_for_tools")
+        .map(|event| event.waiting)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_explicit_tool_wait_event_pauses_readiness() {
+        assert_eq!(
+            tools_wait_event(r#"{"event":"waiting_for_tools","waiting":true}"#),
+            Some(true)
+        );
+        assert_eq!(
+            tools_wait_event(r#"{"event":"waiting_for_tools","waiting":false}"#),
+            Some(false)
+        );
+        assert_eq!(
+            tools_wait_event(r#"{"event":"ready","waiting":true}"#),
+            None
+        );
+        assert_eq!(tools_wait_event("log message"), None);
+    }
 
     #[test]
     fn an_installation_wait_does_not_consume_the_engine_startup_budget() {

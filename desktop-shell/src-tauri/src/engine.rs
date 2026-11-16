@@ -1,8 +1,9 @@
-use crate::startup::startup_budget;
+use crate::startup::{startup_budget, tools_wait_event};
 use crate::state::{
-    engine_waiting_for_tools, load_runtime_state, python_executable, repo_root, sidecar_binary,
-    state_file_path, EngineRuntimeState,
+    load_runtime_state, python_executable, repo_root, sidecar_binary, state_file_path,
+    EngineRuntimeState,
 };
+use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -47,6 +48,7 @@ struct SupervisorInner {
     phase: EnginePhase,
     message: String,
     health_failures: u32,
+    waiting_for_tools: bool,
 }
 
 impl Default for SupervisorInner {
@@ -59,6 +61,7 @@ impl Default for SupervisorInner {
             phase: EnginePhase::Idle,
             message: String::new(),
             health_failures: 0,
+            waiting_for_tools: false,
         }
     }
 }
@@ -100,10 +103,20 @@ impl EngineSupervisor {
         }
         self.emit_status(&app);
 
-        let child = spawn_engine(&music_dir, &mut self.inner.lock().expect("engine lock"))?;
+        let mut child = spawn_engine(&music_dir, &mut self.inner.lock().expect("engine lock"))?;
+        let pid = child.id();
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
         {
             let mut guard = self.inner.lock().expect("engine lock");
+            guard.waiting_for_tools = false;
             guard.child = Some(child);
+        }
+        if let Some(stdout) = stdout {
+            read_engine_output(Arc::clone(&self.inner), pid, stdout, true);
+        }
+        if let Some(stderr) = stderr {
+            read_engine_output(Arc::clone(&self.inner), pid, stderr, false);
         }
 
         let inner = Arc::clone(&self.inner);
@@ -154,6 +167,7 @@ impl EngineSupervisor {
         // may have been reused). Only our retained Child establishes ownership.
         guard.runtime = None;
         guard.health_failures = 0;
+        guard.waiting_for_tools = false;
         Ok(())
     }
 
@@ -161,6 +175,27 @@ impl EngineSupervisor {
         let status = self.status();
         let _ = app.emit("engine-status", status);
     }
+}
+
+fn read_engine_output<R: Read + Send + 'static>(
+    inner: Arc<Mutex<SupervisorInner>>,
+    pid: u32,
+    stream: R,
+    startup_events: bool,
+) {
+    thread::spawn(move || {
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+            let mut guard = inner.lock().expect("engine lock");
+            if guard.child.as_ref().map(Child::id) != Some(pid) {
+                return;
+            }
+            if let Some(waiting) = startup_events.then(|| tools_wait_event(&line)).flatten() {
+                guard.waiting_for_tools = waiting;
+            } else {
+                push_log(&mut guard, line.chars().take(2000).collect());
+            }
+        }
+    });
 }
 
 fn push_log(guard: &mut SupervisorInner, line: String) {
@@ -186,17 +221,16 @@ fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
 
     let root = repo_root();
     let python = python_executable(&root);
-    if !root.join("shared/desktop_bootstrap.py").exists()
-        && !root.join("shared").join("desktop_bootstrap.py").exists()
-    {
+    if !root.join("soundsible_engine.py").exists() {
         return Err(format!(
-            "Missing shared/desktop_bootstrap.py under {}",
+            "Missing soundsible_engine.py under {}",
             root.display()
         ));
     }
     let output = Command::new(&python)
         .current_dir(&root)
-        .args(["-m", "shared.desktop_bootstrap"])
+        .arg(root.join("soundsible_engine.py"))
+        .arg("--bootstrap")
         .arg(music_dir)
         .output()
         .map_err(|e| format!("Failed to bootstrap config: {e}"))?;
@@ -264,15 +298,13 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
     let mut remaining = STARTUP_TIMEOUT;
     let mut last_check = Instant::now();
     while !stop_flag.load(Ordering::SeqCst) {
-        let (waiting, exited) = {
+        let (child_pid, waiting, exited) = {
             let mut guard = inner.lock().expect("engine lock");
+            let waiting = guard.waiting_for_tools;
             let Some(child) = guard.child.as_mut() else {
                 return;
             };
-            (
-                engine_waiting_for_tools(child.id()),
-                child.try_wait().ok().flatten(),
-            )
+            (child.id(), waiting, child.try_wait().ok().flatten())
         };
         if let Some(status) = exited {
             let mut guard = inner.lock().expect("engine lock");
@@ -296,7 +328,7 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
             break;
         }
         if let Some(state) = load_runtime_state() {
-            if health_check(&state.health_url()) {
+            if state.belongs_to(child_pid) && health_check(&state.health_url()) {
                 let player_url = state.player_url();
                 {
                     let mut guard = inner.lock().expect("engine lock");
