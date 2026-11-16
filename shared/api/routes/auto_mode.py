@@ -19,7 +19,7 @@ from typing import NamedTuple
 
 from flask import has_request_context, jsonify, request
 
-from shared import request_scope
+from shared import catalog_resolution, deezer_catalog, preview_streams, request_scope
 from shared.database import instance_db
 from shared.discovery_intelligence import (
     build_music_recommendations,
@@ -304,7 +304,6 @@ def _planner_video_id(metadata, item: dict) -> str:
 
 def _resolve_generated_playback(item: dict, user_id: str | None) -> dict:
     """Prefer a canonical upload while retaining the discovery graph identity."""
-    from shared.api.routes.catalog import _resolve_candidates
     from shared.resolution_confidence import CONFIDENCE_HIGH
     from shared.user_context import user_context
 
@@ -316,7 +315,8 @@ def _resolve_generated_playback(item: dict, user_id: str | None) -> dict:
         source_title=item.get("source_title"),
     )
     with user_context(user_id):
-        best, candidates = _resolve_candidates(
+        best, candidates = catalog_resolution.resolve_candidates(
+            _get_api()["get_downloader"],
             current.artist,
             current.title,
             int(item.get("duration") or 0) or None,
@@ -537,23 +537,17 @@ def _planner_related_artist_pool(
     if not seed_artist:
         return [], []
     try:
-        from shared.api.routes.catalog import (
-            _deezer_artist_top_tracks,
-            _deezer_related_artists,
-            _resolve_artist_id,
-        )
-
-        artist_id, _ = _resolve_artist_id(seed_artist)
+        artist_id, _ = deezer_catalog.resolve_artist_id(seed_artist)
         if not artist_id:
             return [], []
-        related_rows = _deezer_related_artists(artist_id, max(6, limit))[:limit]
+        related_rows = deezer_catalog.related_artists(artist_id, max(6, limit))[:limit]
     except Exception as exc:
         logger.info("Auto related artists unavailable for %s: %s", seed_artist, exc)
         return [], []
 
     names = [str(row.get("name") or "").strip() for row in related_rows if str(row.get("name") or "").strip()]
     futures = {
-        _submit_resolution(_deezer_artist_top_tracks, str(row["deezer_id"]), 1): index
+        _submit_resolution(deezer_catalog.artist_top_tracks, str(row["deezer_id"]), 1): index
         for index, row in enumerate(related_rows)
         if row.get("deezer_id")
     }
@@ -710,11 +704,11 @@ def _build_auto_pools(
 
 
 def _planner_resolve_artist_candidate(item: dict, user_id: str | None) -> dict | None:
-    from shared.api.routes.catalog import _resolve_candidates
     from shared.user_context import user_context
 
     with user_context(user_id):
-        best, _ = _resolve_candidates(
+        best, _ = catalog_resolution.resolve_candidates(
+            _get_api()["get_downloader"],
             str(item.get("artist") or ""),
             str(item.get("title") or ""),
             int(item.get("duration") or 0) or None,
@@ -867,9 +861,9 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
         seed_youtube_id = _resolve_seed_yt_id(library_seed)
     if not validate_youtube_video_id(seed_youtube_id) and seed_title and seed_artist:
         try:
-            from shared.api.routes.catalog import _resolve_candidates
-
-            best, _ = _resolve_candidates(seed_artist, seed_title, int(seed.get("duration") or 0) or None)
+            best, _ = catalog_resolution.resolve_candidates(
+                _get_api()["get_downloader"], seed_artist, seed_title, int(seed.get("duration") or 0) or None
+            )
             seed_youtube_id = str(best.get("id") or "")
         except Exception:
             seed_youtube_id = ""
@@ -880,7 +874,7 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
     ):
         return {"error": "seed needs a track id, video id, or title and artist"}, 400
 
-    fav_ids = api["_mod"].favourite_library_ids()
+    fav_ids = api["favourite_library_ids"]()
     if intent == "auto_mode":
         session_id = str(data.get("session_id") or "").strip()[:80]
         try:
@@ -1070,7 +1064,6 @@ def _dj_item_analysis(metadata, item: dict, *, schedule: bool = False) -> dict:
 def _dj_prepare_cohort(metadata, items: list[dict]) -> None:
     """Queue a bounded, already chosen cohort; never rank by cache state."""
     from shared import preview_cache
-    from .playback import _get_preview_stream_cached, _invalidate_stream
 
     video_ids = []
     demand = work.current()
@@ -1095,12 +1088,12 @@ def _dj_prepare_cohort(metadata, items: list[dict]) -> None:
     api = _get_api()
 
     def refresh(video_id):
-        _invalidate_stream(video_id)
-        return _get_preview_stream_cached(api, video_id, skip_fast_path=True)
+        preview_streams.invalidate(video_id)
+        return preview_streams.resolve(api["get_downloader"], video_id, skip_fast_path=True)
 
     preview_cache.request_prefetch(
         video_ids, download=True,
-        resolver=lambda video_id: _get_preview_stream_cached(api, video_id),
+        resolver=lambda video_id: preview_streams.resolve(api["get_downloader"], video_id),
         refresh_resolver=refresh,
     )
 
@@ -1929,5 +1922,6 @@ def discovery_music_dj_work():
     api = _get_api()
     lib = api["get_library"]()
     from shared.dj.session import sync
-    sync(getattr(lib, "metadata", None), tracks, data.get("revision", 0))
+    if sync(tracks, data.get("revision", 0)):
+        _dj_prepare_cohort(getattr(lib, "metadata", None), tracks)
     return jsonify({"active": True})

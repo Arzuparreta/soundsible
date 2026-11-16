@@ -1,4 +1,4 @@
-"""Unit coverage for shared.api.download_queue.classify_download_error.
+"""Unit coverage for shared.download_queue.classify_download_error.
 
 The downloader surfaces ``error_message`` directly in the Downloads panel
 (see ui_web/js/downloader_state.js), so the user-facing string each yt-dlp /
@@ -9,7 +9,7 @@ substrings (age-vs-auth, geo-vs-unavailable).
 
 import pytest
 
-from shared.api.download_queue import classify_download_error
+from shared.download_queue import classify_download_error
 
 
 @pytest.mark.parametrize(

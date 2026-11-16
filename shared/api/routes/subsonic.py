@@ -180,7 +180,7 @@ def _endpoint(name: str, methods: tuple[str, ...] = ("GET", "POST")) -> Callable
 
 def _library():
     """The bound account's library, refreshed if the manifest moved under us."""
-    from shared.api import get_library
+    from shared.user_cores import get_library
 
     lib = get_library()
     lib.refresh_if_stale()
@@ -197,7 +197,7 @@ def _db():
 
 
 def _favourites():
-    from shared.api import get_favourites_manager
+    from shared.user_cores import get_favourites_manager
 
     return get_favourites_manager()
 
@@ -269,7 +269,7 @@ def _songs(tracks: list, *, starred: Optional[dict[str, str]] = None) -> list[di
 
 
 def _track_or_404(raw_id: str):
-    from shared.api import get_track_by_id
+    from shared.user_cores import get_track_by_id
 
     kind, identifier = serialize.parse_id(raw_id)
     if kind not in (None, "track"):
@@ -709,7 +709,7 @@ def get_cover_art():
         tracks = db.get_tracks_by_artist_id(identifier)
         track = tracks[0] if tracks else None
     else:
-        from shared.api import get_track_by_id
+        from shared.user_cores import get_track_by_id
 
         track = get_track_by_id(_library(), identifier)
 
@@ -845,7 +845,7 @@ def _annotated_track_ids() -> list[str]:
 
 def _set_starred(starred: bool):
     """A star is the same mark the player calls a favourite — not a second list."""
-    from shared.api import emit_to_user
+    from shared.realtime import emit_to_user
 
     track_ids = _annotated_track_ids()
     if not track_ids:
@@ -965,7 +965,7 @@ def get_playlist():
 
 
 def _save_playlists(lib):
-    from shared.api import emit_to_user
+    from shared.realtime import emit_to_user
 
     lib._save_metadata()
     emit_to_user("library_updated")

@@ -35,7 +35,7 @@ from .discovery_bp import discovery_bp
 from .discovery_common import _get_api, _invalidate_personalized_cache
 
 # Re-exported for external consumers that used to import these from discovery.py.
-from .discovery_graph import _discover_executor, _discover_inflight, _discover_request_seeds, warm_discover_top_seeds  # noqa: F401  # imported by shared/api/__init__.py and tests
+from .discovery_graph import _discover_executor, _discover_inflight, warm_discover_top_seeds  # noqa: F401  # imported by shared/api/__init__.py and tests
 from .auto_mode import (  # noqa: F401  # imported by tests
     _build_auto_pools,
     _build_music_plan,
@@ -172,7 +172,7 @@ def discovery_save():
       {status: "needs_review", confidence, confidence_level, candidates: [...]}
       {status: "failed",       reason, candidates: [...]}
     """
-    from shared.api.routes.catalog import cached_resolution
+    from shared.catalog_resolution import cached_resolution
     from shared.resolution_confidence import best_candidate, classify_confidence
     from shared.database import instance_db
 
@@ -361,8 +361,7 @@ def discovery_music_recommendations():
     except Exception:
         pass
     metadata = getattr(lib, "metadata", None)
-    mod = api["_mod"]
-    fav_ids = mod.favourite_library_ids()
+    fav_ids = api["favourite_library_ids"]()
     return jsonify(build_music_recommendations(metadata, fav_ids, limit=limit))
 
 

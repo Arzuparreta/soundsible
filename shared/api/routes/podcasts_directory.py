@@ -14,7 +14,7 @@ import requests
 from flask import jsonify, request
 
 from shared.podcast_regions import PODCAST_COUNTRIES
-from shared.api.memo import Memo
+from shared.memo import Memo
 from shared.hardening import rate_limit
 from shared.discovery_intelligence import (
     build_podcast_recommendations,

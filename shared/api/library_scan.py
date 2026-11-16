@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 from setup_tool.scanner import LibraryScanner, ScanResult
 from shared import library_dates
-from shared.api.orchestrator import orchestrator
+from shared.orchestrator import orchestrator
 from shared.models import LibraryMetadata, Track
 from shared.path_resolver import configured_scan_roots, path_within_roots, register_scan_roots
 from shared.user_context import user_context
@@ -123,7 +123,8 @@ class LibraryScanService:
         self._update(user_id, scan_id, state="scanning", started_at=_now())
         try:
             with user_context(user_id):
-                from shared.api import emit_to_user, get_user_core
+                from shared.realtime import emit_to_user
+                from shared.user_cores import get_user_core
 
                 core = get_user_core(user_id)
                 library = core.library

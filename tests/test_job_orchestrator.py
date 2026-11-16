@@ -7,9 +7,9 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 import sys
-import shared.api.orchestrator  # noqa: F401  (ensure module registered)
-orch_mod = sys.modules["shared.api.orchestrator"]
-from shared.api.orchestrator import (
+import shared.orchestrator  # noqa: F401  (ensure module registered)
+orch_mod = sys.modules["shared.orchestrator"]
+from shared.orchestrator import (
     JobOrchestrator,
     PROFILE_HDD,
     PROFILE_SSD,

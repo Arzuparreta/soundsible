@@ -16,7 +16,7 @@ import json
 import pytest
 
 from shared.api import app as api_app
-from shared.api import reset_user_cores
+from shared.user_cores import reset_user_cores
 from shared.api.routes.config import APPEARANCE_FILENAME
 from shared.hardening import _rate_limiter
 from shared.runtime import get_config_dir

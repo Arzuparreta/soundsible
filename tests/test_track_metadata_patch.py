@@ -8,6 +8,7 @@ from player.library import LibraryManager
 from shared.library_fingerprint import fingerprint
 from shared.library_lifecycle import LibraryPersistenceError
 from scripts.benchmark_library_export import library
+from shared import download_pump, library_tasks, realtime
 
 
 @pytest.fixture
@@ -182,13 +183,13 @@ def test_stable_label_routes_never_rewrite_audio_or_membership(manager, tmp_path
     membership = deepcopy(manager.metadata.playlists)
     artwork = ArtworkStore(tmp_path / 'artwork', tmp_path / 'variants')
     monkeypatch.setattr('shared.artwork.artwork_store', lambda: artwork)
-    monkeypatch.setattr(api, '_mirror_track_into_pool', lambda *a, **k: None)
-    monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
+    monkeypatch.setattr("shared.download_pump.mirror_track_into_pool", lambda *a, **k: None)
+    monkeypatch.setattr("shared.realtime.emit_to_user", lambda *a, **k: None)
     monkeypatch.setattr(routes, '_get_api', lambda: {
         'get_library': lambda: manager,
         'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
-        '_mark_track_metadata_updated': api._mark_track_metadata_updated,
-        'emit_to_user': api.emit_to_user,
+        'mark_track_metadata_updated': library_tasks.mark_track_metadata_updated,
+        'emit_to_user': realtime.emit_to_user,
     })
     app = Flask(__name__)
     with app.test_request_context(json={'title': 'Stable title', 'album_artist': None}):
@@ -247,7 +248,7 @@ def test_stable_cover_rejects_bad_image_or_failed_commit_before_publication(mana
     monkeypatch.setattr(routes, '_get_api', lambda: {
         'get_library': lambda: manager,
         'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
-        '_mark_track_metadata_updated': reject,
+        'mark_track_metadata_updated': reject,
     })
     if fail_save:
         image = io.BytesIO()
@@ -275,8 +276,8 @@ def test_labels_reach_the_pool_catalog_only_while_one_account_owns_it(monkeypatc
     edited = deepcopy(pool.tracks[0])
     edited.title = 'A member label'
     monkeypatch.setattr('shared.users.instance_has_multiple_users', lambda: shared_pool)
-    monkeypatch.setattr(api, 'get_downloader', lambda **_: SimpleNamespace(library=LibraryMetadata(1, pool.tracks, {}, {})))
+    monkeypatch.setattr("shared.download_pump.get_downloader", lambda **_: SimpleNamespace(library=LibraryMetadata(1, pool.tracks, {}, {})))
 
-    api._mirror_track_into_pool(edited)
+    download_pump.mirror_track_into_pool(edited)
 
     assert (pool.tracks[0].title == 'A member label') is not shared_pool

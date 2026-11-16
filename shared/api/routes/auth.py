@@ -11,18 +11,19 @@ import logging
 
 from flask import Blueprint, jsonify, make_response, request
 
+from shared import station_addresses
 from shared.hardening import (
     current_user,
     current_user_id_from_request,
     rate_limit,
     require_instance_admin,
+    set_session_cookie,
 )
 from shared.security import request_rate_limit_key
 from shared.users import (
     ROLE_ADMIN,
     ROLE_MEMBER,
     SESSION_COOKIE_NAME,
-    SESSION_TTL_DAYS,
     UserError,
     authenticate,
     create_invite,
@@ -50,21 +51,6 @@ logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__, url_prefix="")
 
 
-def _set_session_cookie(response, token: str):
-    response.set_cookie(
-        SESSION_COOKIE_NAME,
-        token,
-        max_age=SESSION_TTL_DAYS * 24 * 3600,
-        httponly=True,
-        samesite="Lax",
-        # Only pin to HTTPS when the request actually arrived over it — most
-        # instances are plain HTTP on a LAN or Tailscale address.
-        secure=bool(request.is_secure),
-        path="/",
-    )
-    return response
-
-
 def _invite_url(token: str) -> str:
     """Shareable link for an invitation.
 
@@ -74,9 +60,7 @@ def _invite_url(token: str) -> str:
     """
     origin = (request.host_url or "").rstrip("/")
     if not origin:
-        from shared.api.routes.pairing import _base_urls
-
-        base = _base_urls()
+        base = station_addresses.base_urls()
         origin = (base.get("suggested_base_url") or base.get("loopback_base_url") or "").rstrip("/")
     return f"{origin}/player/#/invite/{token}"
 
@@ -116,7 +100,7 @@ def auth_login():
         sole = sole_passwordless_user()
         if sole:
             token, _ = create_session(sole["id"], device_name=data.get("device_name"))
-            return _set_session_cookie(make_response(jsonify({"user": sole})), token)
+            return set_session_cookie(make_response(jsonify({"user": sole})), token)
         return jsonify({"error": "Username is required"}), 400
 
     user = authenticate(username, password)
@@ -125,7 +109,7 @@ def auth_login():
         return jsonify({"error": "Wrong username or password"}), 401
 
     token, _ = create_session(user["id"], device_name=data.get("device_name"))
-    return _set_session_cookie(make_response(jsonify({"user": user})), token)
+    return set_session_cookie(make_response(jsonify({"user": user})), token)
 
 
 @auth_bp.route("/api/auth/logout", methods=["POST"])
@@ -187,7 +171,7 @@ def auth_change_password():
     # The password just changed; hand this browser a fresh session and drop the rest.
     revoke_user_sessions(user_id)
     token, _ = create_session(user_id, device_name="Soundsible session")
-    return _set_session_cookie(make_response(jsonify({"status": "ok", "user": get_user(user_id)})), token)
+    return set_session_cookie(make_response(jsonify({"status": "ok", "user": get_user(user_id)})), token)
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +400,7 @@ def invites_accept(token: str):
 
     session_token, _ = create_session(user["id"], device_name=data.get("device_name"))
     logger.info("auth: invitation redeemed by %r", user["username"])
-    return _set_session_cookie(make_response(jsonify({"user": user})), session_token), 201
+    return set_session_cookie(make_response(jsonify({"user": user})), session_token), 201
 
 
 @auth_bp.route("/api/users/<user_id>", methods=["DELETE"])

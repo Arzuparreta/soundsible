@@ -29,14 +29,10 @@ agent_bp = Blueprint("agent", __name__, url_prefix="")
 
 
 def _get_api():
-    from shared.api import (
-        get_library,
-        get_downloader,
-        get_track_by_id,
-        get_playback_state,
-        put_playback_state,
-        socketio,
-    )
+    from shared.api import get_playback_state, put_playback_state
+    from shared.user_cores import get_library, get_track_by_id
+    from shared.download_pump import get_downloader
+    from shared.realtime import socketio
     from shared.playback_state import list_registered_devices, resolve_registered_device
 
     return {

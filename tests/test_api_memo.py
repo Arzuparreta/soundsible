@@ -1,4 +1,4 @@
-"""Coverage for shared.api.memo — the bounded TTL cache + single-flight used by
+"""Coverage for shared.memo — the bounded TTL cache + single-flight used by
 every expensive yt-dlp path in the API."""
 
 import threading
@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from shared.api.memo import Memo
+from shared.memo import Memo
 
 
 def test_get_returns_none_after_ttl_expires():
@@ -218,7 +218,7 @@ def test_independent_keys_do_not_wait_for_another_computation():
 
 
 def test_expired_entry_is_recomputed_under_coordination(monkeypatch):
-    import shared.api.memo as module
+    import shared.memo as module
 
     now = [100.0]
     monkeypatch.setattr(module.time, 'time', lambda: now[0])

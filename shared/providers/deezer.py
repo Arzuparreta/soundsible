@@ -23,7 +23,7 @@ from typing import Any, Optional
 import requests
 from requests.adapters import HTTPAdapter
 
-from shared.api.memo import Memo
+from shared.memo import Memo
 
 logger = logging.getLogger(__name__)
 

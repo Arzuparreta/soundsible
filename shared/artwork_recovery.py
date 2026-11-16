@@ -177,7 +177,8 @@ class ArtworkRecovery:
         # the two-task ceiling and avoids competing disk scans across accounts.
         while not self.stop_event.wait(30):
             try:
-                from shared.api import get_user_core, emit_to_user
+                from shared.user_cores import get_user_core
+                from shared.realtime import emit_to_user
                 from shared.users import list_users
                 cores = []
                 for account in list_users():

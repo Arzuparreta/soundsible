@@ -417,7 +417,7 @@ def _build_discovery_feed_body(limit: int, *, include_external: bool = True) -> 
     except Exception:
         pass
     metadata = getattr(lib, "metadata", None)
-    fav_ids = api["_mod"].favourite_library_ids()
+    fav_ids = api["favourite_library_ids"]()
     if include_external:
         feed = _build_music_feed(metadata, fav_ids, max(36, limit * 4))
     else:

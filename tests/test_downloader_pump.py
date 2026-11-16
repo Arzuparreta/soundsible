@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from shared.api.orchestrator import JobOrchestrator, PROFILE_SSD
+from shared.orchestrator import JobOrchestrator, PROFILE_SSD
 
 
 @pytest.fixture

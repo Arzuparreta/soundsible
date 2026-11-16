@@ -68,7 +68,7 @@ def test_official_video_still_upgrades_to_the_artists_audio():
     })
     best = {'id': 'audio000001', 'title': 'KREAM - Arrival (Audio)', 'channel': 'KREAM',
             'duration': 180, 'confidence': 0.95}
-    with patch('shared.api.routes.catalog._resolve_candidates', return_value=(best, [best])):
+    with patch('shared.catalog_resolution.resolve_candidates', return_value=(best, [best])):
         resolved = auto_mode._resolve_generated_playback(item, None)
     assert resolved['youtube_id'] == 'audio000001'
     assert resolved['playback_source_kind'] == 'artist_audio'
@@ -84,7 +84,7 @@ def _deezer_row(track_id, title):
 def test_deezer_track_keeps_navigation_ids_without_a_lookup(monkeypatch):
     get = Mock(side_effect=AssertionError('No network needed'))
     monkeypatch.setattr(catalog.deezer, 'get', get)
-    item = catalog._deezer_track_to_catalog_item(_deezer_row(707777, TITLE))
+    item = catalog.deezer_catalog.track_to_catalog_item(_deezer_row(707777, TITLE))
     assert item['raw'] == {'deezer_id': '707777', 'deezer_artist_id': '4163', 'deezer_album_id': '89128'}
     get.assert_not_called()
 
@@ -92,7 +92,7 @@ def test_deezer_track_keeps_navigation_ids_without_a_lookup(monkeypatch):
 def test_search_keeps_every_song_by_one_deezer_artist():
     """Artist and album ids are shared by a whole discography, so they must
     never become a song's identity keys."""
-    items = [catalog._deezer_track_to_catalog_item(_deezer_row(707777 + n, f'Song {n}')) for n in range(3)]
+    items = [catalog.deezer_catalog.track_to_catalog_item(_deezer_row(707777 + n, f'Song {n}')) for n in range(3)]
     for rank, item in enumerate(items):
         item['_rank'] = rank
     assert len(catalog._collapse_duplicates(items)) == 3
@@ -103,7 +103,7 @@ def test_deezer_seed_keeps_catalog_metadata_through_audio_resolution():
             'duration': 258, 'external_ids': {'deezer_id': '707777'}, 'artist_is_channel': False,
             'deezer_artist_id': '997', 'deezer_album_id': '6575789'}
     best = {'id': 'bowie000001', 'title': 'David Bowie – Starman (Official Video)', 'channel': 'David Bowie'}
-    with patch('shared.api.routes.catalog._resolve_candidates', return_value=(best, [best])):
+    with patch('shared.catalog_resolution.resolve_candidates', return_value=(best, [best])):
         item = auto_mode._planner_resolve_artist_candidate(seed, None)
     assert (item['artist'], item['title']) == ('David Bowie', 'Starman - 2012 Remaster')
     assert (item['deezer_artist_id'], item['deezer_album_id']) == ('997', '6575789')

@@ -37,10 +37,11 @@ _checked: Dict[str, float] = {}
 
 
 def _get_api():
-    from shared.api import _ensure_lib_metadata, emit_to_user, socketio
+    from shared.user_cores import ensure_library_metadata
+    from shared.realtime import emit_to_user, socketio
 
     return {
-        "_ensure_lib_metadata": _ensure_lib_metadata,
+        "ensure_library_metadata": ensure_library_metadata,
         "socketio": socketio,
         "emit_to_user": emit_to_user,
     }
@@ -98,7 +99,7 @@ def _subscription_by_id(metadata: LibraryMetadata, feed_id: str) -> Optional[Dic
 @rate_limit("podcasts_list", limit=60, window_sec=60)
 def list_subscriptions():
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"subscriptions": []})
     return jsonify({"subscriptions": list(metadata.podcast_subscriptions)})
@@ -109,7 +110,7 @@ def list_subscriptions():
 @rate_limit("podcasts_subscribe", limit=40, window_sec=60)
 def subscribe():
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     data = request.get_json(silent=True) or {}
@@ -161,7 +162,7 @@ def subscribe():
 @rate_limit("podcasts_unsub", limit=40, window_sec=60)
 def unsubscribe(feed_id: str):
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     before = len(metadata.podcast_subscriptions)
@@ -181,7 +182,7 @@ def unsubscribe(feed_id: str):
 @rate_limit("podcasts_episodes", limit=120, window_sec=60)
 def feed_episodes(feed_id: str):
     api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
+    lib, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     sub = _subscription_by_id(metadata, feed_id)

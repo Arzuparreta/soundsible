@@ -27,7 +27,7 @@ def test_restore_after_failed_upgrade(isolated_runtime, tmp_path):
         favourites = FavouritesManager()
         favourites.set_favourite({'keys': ['lib:song'], 'title': 'Original'})
         saved_entries = favourites.get_entries()
-    from shared.api.download_queue import DownloadQueueManager
+    from shared.download_queue import DownloadQueueManager
     queue = DownloadQueueManager()
     queue.add({'id': 'pending-song', 'url': 'https://youtu.be/abcdefghijk'}, user_id=user['id'])
     job_id = queue.list_items(user_id='owner')[0]['id']

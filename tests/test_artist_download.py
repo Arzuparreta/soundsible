@@ -54,7 +54,7 @@ def deezer(monkeypatch):
         start = int(params["index"])
         return {"data": rows[start:start + int(params["limit"])], "total": len(rows)}
 
-    monkeypatch.setattr(catalog, "_deezer_get", fake_get)
+    monkeypatch.setattr(catalog.deezer_catalog, "deezer_get", fake_get)
     catalog._discography_memo.clear()
     return unreadable
 

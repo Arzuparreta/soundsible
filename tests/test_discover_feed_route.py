@@ -35,6 +35,7 @@ from flask import Flask
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.telemetry import init_telemetry, reset_telemetry
+from shared.user_context import current_user_id
 
 
 def _make_runtime(tmp_path) -> RuntimeConfig:
@@ -101,13 +102,7 @@ def _mock_api(metadata, related_results=None):
     mock_dl_service.downloader.get_related_videos.return_value = related_results or []
     mock_dl_service.downloader.search_youtube.return_value = []
 
-    fake_socketio = MagicMock()
-
-    mod_mock = MagicMock()
-    mod_mock.socketio = fake_socketio
-    mod_mock.favourites_manager = MagicMock()
-    mod_mock.favourites_manager.get_all.return_value = []
-    mod_mock.favourite_library_ids.return_value = []
+    fake_emit = MagicMock()
 
     return {
         "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
@@ -115,8 +110,9 @@ def _mock_api(metadata, related_results=None):
         "queue_manager_dl": MagicMock(),
         "start_downloader_pump": MagicMock(),
         "parse_intake_item": MagicMock(),
-        "_mod": mod_mock,
-    }, mock_dl_service, fake_socketio
+        "favourite_library_ids": MagicMock(return_value=[]),
+        "emit_to_user": fake_emit,
+    }, mock_dl_service, fake_emit
 
 
 @pytest.fixture(autouse=True)
@@ -127,7 +123,7 @@ def _reset(tmp_path, monkeypatch):
     # Reset the discover executor and inflight state between tests.
     _disc_graph._discover_executor = None
     _disc_graph._discover_inflight.clear()
-    _disc_graph._discover_request_seeds.clear()
+    _disc_graph._discover_subscribers.clear()
     yield
     reset_telemetry()
     reset_runtime()
@@ -165,7 +161,7 @@ def test_feed_returns_cache_hits_immediately(monkeypatch):
     assert body["pending"] == []
     # No expansion scheduled, no socketio emit.
     mock_dl.downloader.get_related_videos.assert_not_called()
-    fake_sio.emit.assert_not_called()
+    fake_sio.assert_not_called()
 
 
 def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
@@ -216,11 +212,13 @@ def test_feed_schedules_async_expansion_for_cache_miss(monkeypatch):
     # The expansion ran inline → yt-dlp was called, result persisted, socketio emitted.
     mock_dl.downloader.get_related_videos.assert_called_once()
     mock_db.set_related_mix.assert_called_once_with(_VID2, [{"id": "rel1111111", "title": "Related", "channel": "Other"}])
-    fake_sio.emit.assert_called_once()
-    emit_args = fake_sio.emit.call_args
+    fake_sio.assert_called_once()
+    emit_args = fake_sio.call_args
     assert emit_args.args[0] == "discover_seed_ready"
     assert emit_args.args[1]["seed_track_id"] == "t1"
     assert emit_args.args[1]["recs"][0]["id"] == "rel1111111"
+    # The mix belongs to the account that asked for it, not to every socket.
+    assert emit_args.kwargs["user_id"] == current_user_id()
 
 
 def test_feed_inflight_dedup_does_not_double_extract(monkeypatch):
@@ -385,3 +383,66 @@ def test_seed_resolution_records_the_running_time_it_was_made_for(monkeypatch):
     assert _disc_graph._resolve_seed_yt_id(track) == _VID4
     stored = mock_db.set_cached_resolution.call_args.args[2]
     assert stored["id"] == _VID4 and stored["requested_duration"] == 235
+
+
+def test_a_request_joining_a_running_expansion_is_told_when_it_lands(monkeypatch):
+    """Two feeds wanting one seed share an extraction, and both hear back."""
+    import threading
+
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[_track("t1", "Song A", "Artist A", _VID3)],
+        playlists={},
+        settings={},
+    )
+    api, mock_dl, fake_emit = _mock_api(metadata, related_results=[{"id": "rel4444444", "title": "R"}])
+    release = threading.Event()
+    real = mock_dl.downloader.get_related_videos.return_value
+
+    def slow(*_args, **_kwargs):
+        release.wait(5)
+        return real
+
+    mock_dl.downloader.get_related_videos.side_effect = slow
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
+    mock_db = MagicMock()
+    mock_db.get_related_mix.return_value = None
+    mock_db.get_cached_resolution.return_value = None
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
+    from shared import related_work
+    monkeypatch.setattr(related_work, "instance_db", lambda: mock_db)
+
+    client = _make_app().test_client()
+    first = client.get("/api/discover/feed?seeds=t1&limit=10").get_json()
+    second = client.get("/api/discover/feed?seeds=t1&limit=10").get_json()
+    assert first["pending"] == second["pending"] == ["t1"]
+    future = _disc_graph._discover_inflight[_VID3]
+    release.set()
+    future.result(5)
+
+    assert mock_dl.downloader.get_related_videos.call_count == 1
+    told = {call.args[1]["request_id"] for call in fake_emit.call_args_list}
+    assert told == {first["request_id"], second["request_id"]}
+    assert all(call.kwargs["user_id"] == current_user_id() for call in fake_emit.call_args_list)
+
+
+def test_one_waiters_failed_ranking_does_not_silence_the_others(monkeypatch):
+    calls = []
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: {
+        "get_downloader": lambda open_browser=False: MagicMock(),
+        "emit_to_user": lambda event, payload, user_id=None: calls.append((user_id, payload["recs"])),
+    })
+    from shared import related_work
+    monkeypatch.setattr(related_work, "submit", lambda key, fn: type("F", (), {"result": lambda self: [{"id": "rel"}]})())
+
+    def rank(rows, source):
+        from shared.user_context import current_user_id
+        if current_user_id() == "broken":
+            raise TimeoutError("ranking store busy")
+        return rows
+
+    monkeypatch.setattr(_disc_graph, "rank_recommendation_rows", rank)
+    _disc_graph._discover_subscribers[_VID3] = [("broken", "r1", "t1"), (current_user_id(), "r2", "t1")]
+    _disc_graph._expand_seed(_VID3, current_user_id())
+
+    assert calls == [("broken", []), (current_user_id(), [{"id": "rel"}])]

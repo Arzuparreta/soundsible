@@ -14,6 +14,7 @@ from shared.migration.service import MigrationRunner
 from shared.migration.store import MigrationStore
 from shared.models import LibraryMetadata, Track
 from tests.conftest import TEST_USER_ID
+from shared import user_cores
 
 
 def _row(track_id: int, title: str, position: int) -> dict:
@@ -180,14 +181,14 @@ def test_the_runner_files_the_download_on_the_record_and_joins_the_saved_song(tm
     runner = MigrationRunner(store, job["id"], TEST_USER_ID)
 
     captured = {}
-    monkeypatch.setattr(api, "parse_intake_item", lambda raw: (captured.update(raw), (None, "stop here"))[1])
+    monkeypatch.setattr("shared.download_queue.parse_intake_item", lambda raw: (captured.update(raw), (None, "stop here"))[1])
     runner._download({"video_id": "abcdefghijk"}, source)
     assert captured["identity_keys"] == ["cat:deezer:track:3", "deezer:3"]
     assert {key: captured["metadata_evidence"][key] for key in ("album", "album_artist", "track_number", "disc_number", "year")} == {
         "album": "Discovery", "album_artist": "Daft Punk", "track_number": 3, "disc_number": 1, "year": 2001,
     }
 
-    favourites = api.get_favourites_manager(TEST_USER_ID)
+    favourites = user_cores.get_favourites_manager(TEST_USER_ID)
     favourites.toggle_saved({"keys": ["cat:deezer:track:3", "deezer:3"], "title": "Digital Love", "artist": "Daft Punk"})
     runner._apply_track("album:302127:deezer:3", "track-3")
     assert favourites.is_saved_keys(["lib:track-3"])

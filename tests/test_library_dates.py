@@ -16,6 +16,7 @@ from player.favourites_manager import FavouritesManager, library_key
 from shared import library_dates
 from shared.models import Track
 from tests.conftest import TEST_USER_ID
+from shared import download_pump, library_intake, user_cores
 
 SAVED_ON = "2026-07-02T10:00:00"
 POOL_STAMP = "2026-09-28T11:00:00"
@@ -43,12 +44,12 @@ def _track(track_id: str, video_id: str | None = None, **overrides) -> Track:
 def api(monkeypatch):
     import shared.api as api_mod
 
-    monkeypatch.setattr(api_mod, "emit_to_user", lambda *a, **k: None)
+    monkeypatch.setattr("shared.realtime.emit_to_user", lambda *a, **k: None)
     return api_mod
 
 
 def _stored(api, track_id: str) -> Track:
-    return api.get_user_core(TEST_USER_ID).library.metadata.get_track_by_id(track_id)
+    return user_cores.get_user_core(TEST_USER_ID).library.metadata.get_track_by_id(track_id)
 
 
 def _entry(manager, key: str) -> dict:
@@ -113,7 +114,7 @@ def test_the_pool_date_of_a_download_never_becomes_a_library_date(api):
     when this account took hold of the song."""
     pooled = _track("hash-pool", "vid-pool", added_at="2025-01-01T00:00:00")
 
-    api.add_tracks_to_user_library([pooled])
+    library_intake.add_tracks_to_user_library([pooled])
 
     assert _stored(api, "hash-pool").added_at != "2025-01-01T00:00:00"
 
@@ -123,7 +124,7 @@ def test_a_whole_catalog_merge_keeps_the_catalog_dates(api):
     account's own catalog, and it says so."""
     pooled = _track("hash-sync", "vid-sync", added_at="2025-01-01T00:00:00")
 
-    api.add_tracks_to_user_library([pooled], keep_source_dates=True)
+    library_intake.add_tracks_to_user_library([pooled], keep_source_dates=True)
 
     assert _stored(api, "hash-sync").added_at == "2025-01-01T00:00:00"
 
@@ -132,12 +133,12 @@ def test_downloading_a_saved_catalog_row_lands_as_that_saved_song(api):
     """A song saved from a Deezer row has no video id until the background
     resolve finds one, and may never get one. The download carries the entry's
     keys, so the file is dated from the save and the entry becomes the file."""
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
     manager.toggle_saved({"keys": ["cat:deezer:track:42", "deezer:42"], "title": "I Follow Rivers"},
                          added_at=SAVED_ON)
     downloaded = _track("hash-dz", "vid-dz", added_at=POOL_STAMP)
 
-    api.add_tracks_to_user_library([downloaded], song_keys=["cat:deezer:track:42", "deezer:42"])
+    library_intake.add_tracks_to_user_library([downloaded], song_keys=["cat:deezer:track:42", "deezer:42"])
 
     assert _stored(api, "hash-dz").added_at == SAVED_ON
     entry = _entry(manager, "deezer:42")
@@ -151,13 +152,13 @@ def test_a_download_through_the_queue_keeps_the_day_the_song_was_saved(isolated_
     sends its identity, the pool stamps the new file, and the file joins the
     account's library as the song it already had."""
     import shared.api as api
-    from shared.api.download_queue import DownloadQueueManager, parse_intake_item
+    from shared.download_queue import DownloadQueueManager, parse_intake_item
     from shared.multiuser_migration import ensure_multiuser_layout
     from shared.user_context import user_context
 
     uid = ensure_multiuser_layout()["user_id"]
     with user_context(uid):
-        api.get_favourites_manager(uid).toggle_saved(
+        user_cores.get_favourites_manager(uid).toggle_saved(
             {"keys": ["deezer:42"], "title": "I Follow Rivers", "artist": "Lykke Li"}, added_at=SAVED_ON
         )
 
@@ -176,9 +177,9 @@ def test_a_download_through_the_queue_keeps_the_day_the_song_was_saved(isolated_
         downloader=SimpleNamespace(process_video=lambda *a, **k: downloaded),
     )
     queue = DownloadQueueManager(isolated_runtime.config_dir / "dates.json")
-    monkeypatch.setattr(api, "queue_manager_dl", queue)
-    monkeypatch.setattr(api, "get_downloader", lambda *a, **k: fake)
-    monkeypatch.setattr(api, "emit_to_user", lambda *a, **k: None)
+    monkeypatch.setattr("shared.download_pump.queue_manager_dl", queue)
+    monkeypatch.setattr("shared.download_pump.get_downloader", lambda *a, **k: fake)
+    monkeypatch.setattr("shared.realtime.emit_to_user", lambda *a, **k: None)
     monkeypatch.setattr("shared.loudness.get_loudness_service", lambda: SimpleNamespace(measure_now=lambda _: None))
     monkeypatch.setattr("shared.audio_files.AudioProcessor.extract_cover_art", lambda _: None)
 
@@ -191,15 +192,15 @@ def test_a_download_through_the_queue_keeps_the_day_the_song_was_saved(isolated_
     })
     assert error is None
     item = queue.add(parsed, user_id=uid)
-    api._process_single_queue_item(item)
+    download_pump.process_queue_item(item)
 
     with user_context(uid):
-        assert api.get_user_core(uid).library.metadata.get_track_by_id("hash-q").added_at == SAVED_ON
-        assert library_key("hash-q") in _entry(api.get_favourites_manager(uid), "deezer:42")["keys"]
+        assert user_cores.get_user_core(uid).library.metadata.get_track_by_id("hash-q").added_at == SAVED_ON
+        assert library_key("hash-q") in _entry(user_cores.get_favourites_manager(uid), "deezer:42")["keys"]
 
 
 def test_intake_keeps_only_what_can_be_an_identity():
-    from shared.api.download_queue import parse_intake_item
+    from shared.download_queue import parse_intake_item
 
     parsed, _ = parse_intake_item({
         "source_type": "youtube_url",
@@ -226,9 +227,9 @@ def test_hearting_a_downloaded_song_does_not_date_it_again(api):
     """The entry a heart creates for a file is the same song, held since the
     file arrived. If the file is later deleted, that entry is what the song
     falls back to — and it must not reappear at the top of the library."""
-    api.add_tracks_to_user_library([_track("hash-h", "vid-h")], keep_source_dates=True)
+    library_intake.add_tracks_to_user_library([_track("hash-h", "vid-h")], keep_source_dates=True)
     library_track = _stored(api, "hash-h")
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
 
     manager.set_favourite({"keys": ["lib:hash-h", "yt:vid-h"], "title": "I Follow Rivers"})
 
@@ -240,8 +241,8 @@ def test_hearting_a_downloaded_song_does_not_date_it_again(api):
 
 def test_the_legacy_library_id_heart_adopts_the_file_date_too(api):
     downloaded = _track("hash-l", "vid-l", added_at="2026-01-01T00:00:00")
-    api.add_tracks_to_user_library([downloaded], keep_source_dates=True)
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    library_intake.add_tracks_to_user_library([downloaded], keep_source_dates=True)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
 
     manager.add("hash-l")
 
@@ -283,9 +284,9 @@ def test_a_client_cannot_date_a_new_entry(tmp_path, monkeypatch):
 def test_learning_a_video_already_downloaded_dates_the_entry_from_the_file(api):
     """A Deezer row saved today that resolves to a video downloaded in spring is
     a song this account has held since spring."""
-    api.add_tracks_to_user_library([_track("hash-s", "vid-s", added_at="2026-04-01T00:00:00")],
+    library_intake.add_tracks_to_user_library([_track("hash-s", "vid-s", added_at="2026-04-01T00:00:00")],
                                    keep_source_dates=True)
-    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager = user_cores.get_favourites_manager(TEST_USER_ID)
     manager.toggle_saved({"keys": ["deezer:7"], "title": "I Follow Rivers"})
 
     assert manager.update_keys(["deezer:7"], ["yt:vid-s"]) is True

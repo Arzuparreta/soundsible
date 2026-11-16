@@ -11,7 +11,7 @@ import json
 import pytest
 
 from shared.api import app as api_app
-from shared.api import get_user_core, reset_user_cores
+from shared.user_cores import get_user_core, reset_user_cores
 from shared.database import instance_db
 from shared.hardening import _rate_limiter
 from shared.multiuser_migration import BACKUP_SUFFIX, ensure_multiuser_layout
@@ -217,7 +217,7 @@ def test_library_paths_never_collide():
 def test_a_new_account_starts_with_an_empty_manifest_not_an_unloaded_one():
     """A fresh account has no library.json yet.
 
-    Without a manifest written up front, `_ensure_lib_metadata` reports "library
+    Without a manifest written up front, `ensure_library_metadata` reports "library
     not loaded" and the first playlist or favourite comes back 404.
     """
     ensure_multiuser_layout()
@@ -237,7 +237,7 @@ def test_a_new_account_starts_with_an_empty_manifest_not_an_unloaded_one():
 
 
 def test_download_queue_rows_are_only_visible_to_their_owner():
-    from shared.api import queue_manager_dl
+    from shared.download_pump import queue_manager_dl
 
     ensure_multiuser_layout()
     ana = create_user("ana", password="secret123")
@@ -440,7 +440,7 @@ def test_paired_devices_and_pairing_sessions_are_per_account(client):
 
 
 def test_download_logs_are_not_shared_between_accounts():
-    from shared.api import queue_manager_dl
+    from shared.download_pump import queue_manager_dl
 
     ensure_multiuser_layout()
     ana = create_user("ana", password="secret123")

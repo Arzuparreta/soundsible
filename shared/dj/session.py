@@ -100,23 +100,26 @@ def scoped(fn):
     return wrapped
 
 
-def sync(metadata, tracks, revision):
-    from shared.api.routes.auto_mode import _dj_prepare_cohort
+def sync(tracks, revision) -> bool:
+    """Make `tracks` this session's runway. False when the revision is stale.
+
+    The caller prepares the cohort (analysis and prefetch) when this accepts it.
+    """
     from shared.dj.store import analysis_identity
 
     demand = work.current()
     if demand is None:
-        return
+        return False
     previous = getattr(demand, "route_revision", -1)
     if type(revision) is not int or revision < previous:
-        return
+        return False
     demand.route_revision = revision
     demand.tracks = {analysis_identity(item): dict(item) for item in tracks}
     demand.retain("dj-analysis", set(demand.tracks))
     videos = {str(item.get("youtube_id") or item.get("id") or "") for item in tracks if not item.get("track_id")}
     demand.retain("preview-download", videos)
     demand.retain("preview-resolve", videos)
-    _dj_prepare_cohort(metadata, tracks)
+    return True
 
 
 def preview_ready(video_id, path):

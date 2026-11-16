@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from shared.api.download_queue import DownloadQueueManager
+from shared.download_queue import DownloadQueueManager
 
 
 def test_download_queue_no_unlink_preserves_pending(tmp_path):
@@ -242,7 +242,7 @@ def test_process_exit_recovers_checkpoint(tmp_path):
     path = tmp_path / 'queue.json'
     code = '''
 import importlib.util, os, sys
-spec = importlib.util.spec_from_file_location('queue_module', 'shared/api/download_queue.py')
+spec = importlib.util.spec_from_file_location('queue_module', 'shared/download_queue.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 queue = module.DownloadQueueManager(sys.argv[1])

@@ -89,7 +89,7 @@ def test_api_persists_before_notifying_and_rejects_invalid_data(isolated_runtime
     from flask import Flask
     from shared.api.routes.library import library_bp
     from shared.api.errors import register_error_handlers
-    import shared.api
+    import shared.realtime
     import shared.hardening
 
     app = Flask(__name__)
@@ -97,7 +97,7 @@ def test_api_persists_before_notifying_and_rejects_invalid_data(isolated_runtime
     register_error_handlers(app)
     monkeypatch.setattr(shared.hardening, 'get_request_auth_context', lambda **kw: {'kind': 'owner'})
     events = []
-    monkeypatch.setattr(shared.api, 'emit_to_user', lambda event: events.append((event, store.get_entries())))
+    monkeypatch.setattr(shared.realtime, 'emit_to_user', lambda event: events.append((event, store.get_entries())))
     client = app.test_client()
     endpoint = '/api/library/saved-entities'
     assert client.get(endpoint).json == {'entities': []}

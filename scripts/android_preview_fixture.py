@@ -111,7 +111,7 @@ def install(app, root: Path):
             egress="direct",
         )
 
-    playback._get_preview_stream_cached = resolve
+    playback.preview_streams.resolve = resolve
     requests = []
 
     @app.before_request

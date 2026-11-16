@@ -28,6 +28,7 @@ from shared.library_repair import (
     shrink_cover,
 )
 from shared.models import LibraryMetadata, Track
+from shared import library_tasks, user_cores
 
 
 @pytest.fixture(autouse=True)
@@ -238,7 +239,7 @@ def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_pat
     from contextlib import contextmanager
     from types import SimpleNamespace
 
-    from shared.api import remap_track_ids_for_all_users
+    from shared.library_intake import remap_track_ids_for_all_users
 
     path = tmp_path / "new.flac"
     path.write_bytes(b"audio")
@@ -274,13 +275,13 @@ def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_pat
     monkeypatch.setattr("shared.users.list_users", lambda: [{"id": "user"}])
     monkeypatch.setattr("shared.user_context.user_context", bound_user)
     monkeypatch.setattr(
-        "shared.api.get_user_core",
+        "shared.user_cores.get_user_core",
         lambda _user_id: SimpleNamespace(
             library=Library(),
             favourites=SimpleNamespace(remap_library_id=lambda *_args: False),
         ),
     )
-    monkeypatch.setattr("shared.api.emit_to_user", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("shared.realtime.emit_to_user", lambda *_args, **_kwargs: None)
 
     assert remap_track_ids_for_all_users({"old": "new"}) == {"user": 1}
     assert metadata.playlists == {"Mix": ["old"]}
@@ -342,10 +343,10 @@ def test_a_failed_repair_commit_discards_its_unreferenced_copies(tmp_path, pool_
     pool.mkdir(parents=True)
     path = _music_video(pool, name="hash-1.mp4")
     monkeypatch.setattr("shared.app_config.get_output_dir", lambda: pool.parent)
-    monkeypatch.setattr(api, "get_output_dir_for_repair", lambda: pool)
+    monkeypatch.setattr("shared.library_tasks.get_output_dir_for_repair", lambda: pool)
     monkeypatch.setattr(api.orchestrator, "submit_task", lambda _name, task: task())
-    monkeypatch.setattr(api, "emit_to_user", lambda *_args, **_kwargs: None)
-    library = api.get_user_core("alice").library
+    monkeypatch.setattr("shared.realtime.emit_to_user", lambda *_args, **_kwargs: None)
+    library = user_cores.get_user_core("alice").library
     library.metadata = LibraryMetadata(1, [_track("hash-1", path)], {}, {})
     assert library._save_metadata()
 
@@ -353,7 +354,7 @@ def test_a_failed_repair_commit_discards_its_unreferenced_copies(tmp_path, pool_
         raise OSError("disk full")
     monkeypatch.setattr(library.db, "replace_library", fail)
     with user_context("alice"):
-        api.run_library_repair_task(dry_run=False)
+        library_tasks.run_library_repair_task(dry_run=False)
 
     # The original is still referenced, so it stays; the copy nobody adopted goes.
     assert sorted(p.name for p in pool.iterdir() if p.suffix != ".png") == ["hash-1.mp4"]

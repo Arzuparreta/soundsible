@@ -415,7 +415,7 @@ class LoudnessService:
         into a seek storm, which is the one thing that would be felt.
         """
         try:
-            from shared.api import orchestrator
+            from shared.orchestrator import orchestrator
 
             if orchestrator.background_workers <= 1:
                 return 1
@@ -445,7 +445,8 @@ class LoudnessService:
     @staticmethod
     def _default_foreground_busy() -> bool:
         try:
-            from shared.api import orchestrator, queue_manager_dl
+            from shared.orchestrator import orchestrator
+            from shared.download_pump import queue_manager_dl
 
             active = [
                 task_id for task_id in orchestrator.active_jobs
@@ -469,7 +470,7 @@ class LoudnessService:
 
     @staticmethod
     def _default_inventory() -> Iterable[tuple[Any, str]]:
-        from shared.api import get_user_core
+        from shared.user_cores import get_user_core
         from shared.user_context import user_context
         from shared.users import list_users
 
@@ -489,7 +490,7 @@ class LoudnessService:
 
     @staticmethod
     def _favourite_ids() -> list[str]:
-        from shared.api import favourite_library_ids
+        from shared.user_cores import favourite_library_ids
         from shared.user_context import user_context
         from shared.users import list_users
 
@@ -501,7 +502,7 @@ class LoudnessService:
 
     @staticmethod
     def _default_notify() -> None:
-        from shared.api import socketio
+        from shared.realtime import socketio
 
         socketio.emit("loudness_updated")
 

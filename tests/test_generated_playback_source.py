@@ -27,7 +27,7 @@ def test_generated_song_keeps_its_graph_node_but_plays_official_audio():
     }
 
     with patch(
-        "shared.api.routes.catalog._resolve_candidates",
+        "shared.catalog_resolution.resolve_candidates",
         return_value=(best, [best]),
     ):
         resolved = _resolve_generated_playback(item, None)
@@ -50,7 +50,7 @@ def test_generated_song_never_substitutes_a_different_version():
     }
 
     with patch(
-        "shared.api.routes.catalog._resolve_candidates",
+        "shared.catalog_resolution.resolve_candidates",
         return_value=(remix, [remix]),
     ):
         resolved = _resolve_generated_playback(item, None)

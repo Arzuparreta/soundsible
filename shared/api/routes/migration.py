@@ -19,7 +19,7 @@ migration_bp = Blueprint("migration", __name__, url_prefix="")
 
 
 def _loaded_library():
-    from shared.api import get_library
+    from shared.user_cores import get_library
 
     lib = get_library()
     lib.refresh_if_stale()
@@ -335,7 +335,7 @@ def migration_import_playlist():
         lib.metadata.add_to_playlist(name, tid)
     lib._save_metadata()
 
-    from shared.api import emit_to_user
+    from shared.realtime import emit_to_user
 
     emit_to_user("library_updated")
 

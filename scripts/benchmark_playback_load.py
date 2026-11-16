@@ -53,7 +53,7 @@ def workload(args):
         from shared.user_context import user_context
         from player.library import LibraryManager
         from scripts.benchmark_library_export import library
-        from shared.api.orchestrator import JobOrchestrator
+        from shared.orchestrator import JobOrchestrator
         from shared.api.routes import playback
         from shared import dj_engine, atomic_file
         if args.blocking_fsync:
@@ -175,7 +175,7 @@ def workload(args):
                   'max_background_queued': max((s['background']['queued'] for s in snapshots), default=0),
                   'final_queues': orchestrator.resource_snapshot(), 'work': counts, 'errors': failures}
         result['source_sha256'] = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-                                   for name in ('shared/atomic_file.py', 'shared/api/orchestrator.py',
+                                   for name in ('shared/atomic_file.py', 'shared/orchestrator.py',
                                                 'player/library.py', 'shared/database.py',
                                                 'scripts/benchmark_playback_load.py', 'shared/library_fingerprint.py',
                                                 'shared/library_changes.py', 'shared/models.py')}

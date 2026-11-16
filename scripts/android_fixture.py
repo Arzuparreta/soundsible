@@ -58,7 +58,9 @@ def main() -> None:
     configure_runtime(RuntimeConfig.default())
     from shared.multiuser_migration import ensure_multiuser_layout
     from shared.users import create_user, set_password, revoke_user_sessions
-    from shared.api import app, socketio, get_user_core, emit_to_user
+    from shared.api import app
+    from shared.realtime import socketio, emit_to_user
+    from shared.user_cores import get_user_core
     from shared.models import Track
     from shared.user_context import user_context
 

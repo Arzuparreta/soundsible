@@ -18,7 +18,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     boundaries.
 
     Scoring runs on the raw strings and only the winners are materialised: each
-    `_catalog_item` embeds a full `track.to_dict()`, so building one per match
+    `catalog_item` embeds a full `track.to_dict()`, so building one per match
     would mean tens of thousands of them per keystroke on a big library.
 
     `limit` is accepted so this reads like the other providers, and ignored: the
@@ -62,7 +62,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     for _, _, track in best_tracks:
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         out.append(
-            _catalog_item(
+            catalog_item(
                 item_id=f"library:track:{track.id}",
                 item_type="library_track",
                 source="library",
@@ -70,7 +70,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
                 subtitle=artist,
                 artist=artist,
                 album=getattr(track, "album", "") or "",
-                duration=_duration(getattr(track, "duration", None)),
+                duration=duration_seconds(getattr(track, "duration", None)),
                 cover=_cover_from_track(track),
                 track_id=track.id,
                 external_ids={
@@ -87,7 +87,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
 
     for key, (_, name, track) in sorted(artists.items(), key=lambda kv: (-kv[1][0], kv[0]))[:_LOCAL_ENTITY_BUDGET]:
         out.append(
-            _catalog_item(
+            catalog_item(
                 item_id=f"library:artist:{key}",
                 item_type="artist",
                 source="library",
@@ -106,7 +106,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     for key, (_, name, track) in sorted(albums.items(), key=lambda kv: (-kv[1][0], kv[0]))[:_LOCAL_ENTITY_BUDGET]:
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         out.append(
-            _catalog_item(
+            catalog_item(
                 item_id=f"library:album:{key}",
                 item_type="album",
                 source="library",
