@@ -48,21 +48,42 @@ def _strip_port(value: str) -> str:
     return value
 
 
-def _last_forwarded_for(header: str) -> str:
-    """The ``for=`` of the last element of an RFC 7239 ``Forwarded`` header."""
-    last = header.split(",")[-1]
-    for pair in last.split(";"):
-        name, _, value = pair.partition("=")
-        if name.strip().lower() == "for":
-            return _strip_port(value)
-    return ""
+def _forwarded_fors(header: str) -> list[str]:
+    """The ``for=`` of each element of an RFC 7239 ``Forwarded`` header."""
+    out = []
+    for element in header.split(","):
+        value = ""
+        for pair in element.split(";"):
+            name, _, raw = pair.partition("=")
+            if name.strip().lower() == "for":
+                value = _strip_port(raw)
+        out.append(value)
+    return out
+
+
+def _client_in_chain(hops: list[str]) -> str:
+    """The client a chain of proxies names, read from the nearest hop back.
+
+    Each proxy appends the address it received from, so the right end is the
+    nearest one. Hops on this machine, the LAN or the tailnet are proxies to
+    look through; the first address from anywhere else is the client — what
+    sits left of it is whatever that client chose to send. A chain that is
+    trusted all the way names its nearest hop.
+    """
+    hops = [hop.strip() for hop in hops]
+    if not hops or not all(hops):
+        return ""
+    for hop in reversed(hops):
+        if not is_trusted_network(hop):
+            return hop
+    return hops[-1]
 
 
 def _forwarded_client(headers) -> str | None:
     """The client a proxy names, ``""`` when it names none, ``None`` without a proxy.
 
-    The right-most ``X-Forwarded-For`` entry is the one the nearest proxy
-    wrote; earlier entries are whatever the client sent. A proxy writes one of
+    ``X-Forwarded-For`` and ``Forwarded`` are read as chains (see
+    `_client_in_chain`). A proxy writes one of
     ``X-Forwarded-For``, ``Forwarded`` and ``X-Real-IP`` and may pass the
     others through from the client untouched, so when more than one is present
     they must name the same address: otherwise the client wrote one of them,
@@ -71,11 +92,10 @@ def _forwarded_client(headers) -> str | None:
     named = []
     forwarded_for = headers.get("X-Forwarded-For")
     if forwarded_for is not None:
-        entries = [entry for entry in forwarded_for.split(",") if entry.strip()]
-        named.append(_strip_port(entries[-1]) if entries else "")
+        named.append(_client_in_chain([_strip_port(entry) for entry in forwarded_for.split(",") if entry.strip()]))
     forwarded = headers.get("Forwarded")
     if forwarded is not None:
-        named.append(_last_forwarded_for(forwarded))
+        named.append(_client_in_chain(_forwarded_fors(forwarded)))
     real_ip = headers.get("X-Real-IP")
     if real_ip is not None:
         named.append(_strip_port(real_ip))

@@ -121,7 +121,13 @@ Review found three more holes in the same boundary, closed with it:
   A proxy that writes `X-Real-IP` and passes the client's other headers through
   let the client choose its address (owner on a passwordless daemon, a fresh
   rate-limit budget per request). When several are present they must agree,
-  or the request names nobody.
+  or the request names nobody. Each is read as a chain from the nearest hop
+  back, looking through hops on this machine, the LAN or the tailnet: with a
+  public proxy at `10.0.0.2` in front of a local one, `X-Forwarded-For:
+  81.2.69.160, 10.0.0.2` used to name the LAN proxy and grant the owner.
+- A server-side disconnect is never retried by the Socket.IO client, so the
+  socket a password change had just invalidated stayed down until a reload.
+  `ui_web/src/stores/runtime.ts` reconnects once on `io server disconnect`.
 - A token naming a disabled account still authenticated (disabling revokes
   only sessions; deleting revokes every token). `get_request_auth_context`
   now refuses it.

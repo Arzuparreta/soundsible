@@ -172,3 +172,28 @@ def test_a_spoofed_header_beside_the_proxys_own_is_not_trusted(passwordless_stat
         headers={"X-Real-IP": "8.8.8.8", "Forwarded": "for=127.0.0.1"},
     )
     assert response.status_code == 403
+
+
+@pytest.mark.parametrize("headers, client", [
+    # A public proxy on the LAN forwarding through one on this machine.
+    ({"X-Forwarded-For": "81.2.69.160, 10.0.0.2"}, "81.2.69.160"),
+    ({"Forwarded": "for=81.2.69.160, for=10.0.0.2"}, "81.2.69.160"),
+    # What the internet caller wrote left of itself is ignored.
+    ({"X-Forwarded-For": "127.0.0.1, 81.2.69.160, 10.0.0.2"}, "81.2.69.160"),
+    # Trusted all the way: the nearest hop, not what a LAN machine prepended.
+    ({"X-Forwarded-For": "10.9.9.9, 192.168.1.5"}, "192.168.1.5"),
+    # Empty list entries are not hops; a Forwarded element naming nobody is.
+    ({"X-Forwarded-For": "81.2.69.160, , 10.0.0.2"}, "81.2.69.160"),
+    ({"Forwarded": "for=81.2.69.160, proto=https"}, ""),
+])
+def test_a_chain_of_proxies_names_the_first_caller_outside(headers, client):
+    assert _client("127.0.0.1", headers) == client
+
+
+def test_a_public_caller_behind_two_proxies_is_not_the_owner(passwordless_station):
+    response = passwordless_station.get(
+        "/api/users",
+        environ_base={"REMOTE_ADDR": "127.0.0.1"},
+        headers={"X-Forwarded-For": "81.2.69.160, 10.0.0.2"},
+    )
+    assert response.status_code == 403
