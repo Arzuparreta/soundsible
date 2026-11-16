@@ -82,7 +82,7 @@ Soundsible has three independent concepts:
 | Concept | Purpose | Important endpoint |
 |---|---|---|
 | Library | Persistent downloaded/imported tracks and playlists | `GET /api/library` |
-| Player session | What a device is playing and has up next; the device owns it and reports it | `GET /api/playback/state` (read only) |
+| Player session | What a device is playing, reported by the device; the web player and Android also report what they have up next (`session.queue`), the iOS app does not yet | `GET /api/playback/state` (read only) |
 | Download queue | Background jobs that download tracks into the library | `POST /api/downloader/queue` |
 
 The active player is normally a browser tab or PWA at `/player/` or `/player/desktop/`. The player registers a device and joins a Socket.IO room:

@@ -125,3 +125,20 @@ assert ticks > 5, ticks
                             cwd=Path(__file__).resolve().parents[1],
                             env={**os.environ, 'PYTHONPATH': '.'}, capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_publishing_flushes_the_directory_entry_too(tmp_path, monkeypatch):
+    """The file's fsync covers its bytes, not the rename that names it."""
+    import os
+
+    from shared import atomic_file
+
+    synced = []
+    monkeypatch.setattr(atomic_file, "sync_directory", lambda directory: synced.append(directory))
+    target = tmp_path / "state.json"
+    atomic_file.publish(target, atomic_file.text_pieces(["{}"]))
+
+    assert target.read_text() == "{}"
+    assert synced == [tmp_path]
+    if os.name != "nt":
+        atomic_file.sync_directory(tmp_path)  # a real directory flush does not raise
