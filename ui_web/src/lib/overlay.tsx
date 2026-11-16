@@ -95,7 +95,16 @@ export function dismissTopOverlay(): boolean {
  */
 export function openOverlay(
   render: OverlayRender,
-  opts: { dismissable?: boolean; ariaLabel?: OverlayLabel; variant?: OverlayVariant; history?: boolean } = {},
+  opts: {
+    dismissable?: boolean;
+    ariaLabel?: OverlayLabel;
+    variant?: OverlayVariant;
+    history?: boolean;
+    /** The surface is about the page under it, so it leaves when the route
+     * does. Without `history`, browser Back changes the page and nothing
+     * else would close a menu that was opened for the old one. */
+    closeOnNavigation?: boolean;
+  } = {},
 ): () => void {
   const id = nextId++;
   setOverlays((list) => [
@@ -151,6 +160,13 @@ export function openOverlay(
       }
       else onPop();
     };
+  }
+  else if (opts.closeOnNavigation) {
+    // HashRouter: a route change through browser history is a hash change.
+    const onRoute = () => remove(id);
+    window.addEventListener('hashchange', onRoute);
+    const entry = overlays().find((item) => item.id === id)!;
+    entry.cleanup = () => window.removeEventListener('hashchange', onRoute);
   }
   return () => remove(id);
 }

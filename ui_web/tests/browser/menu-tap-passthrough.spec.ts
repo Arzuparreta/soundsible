@@ -122,7 +122,7 @@ test('the same choice on a pointer leaves the row under the popover alone', asyn
   const menu = page.getByRole('menu');
   await expect(menu).toBeVisible();
 
-  const addFavourite = menu.getByRole('button', { name: 'Add to favourites' });
+  const addFavourite = menu.getByRole('menuitem', { name: 'Add to favourites' });
   const box = (await addFavourite.boundingBox())!;
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
@@ -162,4 +162,76 @@ test('swiping the song menu away closes it without playing what it covered', asy
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('[data-now-playing]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: covered! })).not.toHaveAttribute('data-now-playing');
+});
+
+const moreOptions = (page: Page, n: number) =>
+  page.locator('[data-music-list-row], [data-song-row]').filter({ has: row(page, n) })
+    .getByRole('button', { name: /^More options/ });
+
+test('Enter on the options button opens the menu on that button with focus inside', async ({ page, isMobile }) => {
+  test.skip(!!isMobile, 'the cursor-anchored popover is a fine-pointer surface');
+  // Tall enough for the song menu to fit under the topmost row.
+  await page.setViewportSize({ width: 1366, height: 1000 });
+  await openLibrary(page);
+
+  const trigger = moreOptions(page, 12);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+
+  // A keyboard click carries no coordinates. The menu used to open at 0,0.
+  const anchor = (await trigger.boundingBox())!;
+  const box = (await menu.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(anchor.y + anchor.height);
+  expect(box.y).toBeLessThan(anchor.y + anchor.height + 16);
+  // `offsetWidth` is whole pixels; WebKit lays the menu out a fraction wider.
+  expect(box.x + box.width).toBeLessThan(1366 - 8 + 1);
+
+  const items = menu.getByRole('menuitem');
+  await expect(items.first()).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(items.nth(1)).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(items.last()).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(items.first()).toBeFocused();
+
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
+test('a menu taller than the window stays inside it and scrolls to its last action', async ({ page, isMobile }) => {
+  test.skip(!!isMobile, 'the cursor-anchored popover is a fine-pointer surface');
+  await page.setViewportSize({ width: 1366, height: 420 });
+  await openLibrary(page);
+
+  await moreOptions(page, 12).click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  const box = (await menu.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(8);
+  expect(box.y + box.height).toBeLessThanOrEqual(420 - 8);
+
+  // Scrolling inside the menu is not the page scroll that dismisses it.
+  const last = menu.getByRole('menuitem').last();
+  await last.scrollIntoViewIfNeeded();
+  await expect(menu).toBeVisible();
+  const lastBox = (await last.boundingBox())!;
+  expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(420 - 8);
+});
+
+test('browser Back closes a menu opened for the page being left', async ({ page, isMobile }) => {
+  await openLibrary(page);
+  await page.evaluate(() => { window.location.hash = '#/library?view=songs&back=1'; });
+  await expect(row(page, 1)).toBeVisible();
+
+  if (isMobile) await moreOptions(page, 12).tap();
+  else await moreOptions(page, 12).click();
+  const surface = isMobile ? page.getByRole('dialog') : page.getByRole('menu');
+  await expect(surface).toBeVisible();
+
+  await page.goBack();
+  await expect(surface).toHaveCount(0);
 });

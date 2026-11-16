@@ -63,5 +63,5 @@
 
 .confirm.danger {
   background: var(--danger);
-  color: #fff;
+  color: var(--ink-on-danger);
 }

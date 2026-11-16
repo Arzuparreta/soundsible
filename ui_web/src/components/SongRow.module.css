@@ -226,7 +226,7 @@
 .row[data-compact] { padding-inline: 4px; gap: 10px; }
 .row[data-compact] .cover { width: 36px; height: 36px; flex-basis: 36px; }
 .row[data-compact] .actionStripe { gap: 2px; }
-.primaryAction { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: var(--text-caption); padding: 0 8px; min-height: 40px; cursor: pointer; }
+.primaryAction { border: 0; background: transparent; color: var(--accent-ink); font: inherit; font-size: var(--text-caption); padding: 0 8px; min-height: 40px; cursor: pointer; }
 .primaryAction:disabled { opacity: 0.5; }
 
 .titleButton { min-height: min(25px, calc(var(--row-h) - 28px)); display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
