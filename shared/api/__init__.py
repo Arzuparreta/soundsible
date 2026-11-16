@@ -44,7 +44,7 @@ from shared.playback_state import (  # noqa: F401  # aliases re-exported to blue
     mark_device_socket_active,
     unregister_socket,
 )
-from shared.downloader.settings import read_settings, setting, settings_path
+from shared.downloader.settings import setting
 
 from typing import Optional, Any
 
@@ -948,8 +948,6 @@ def start_api(
         except Exception:
             pass
 
-    _defer_runtime_update = False
-    _run_runtime_update = None
 
     try:
         # Warm the admin's core so the first request is not the one that pays
@@ -958,50 +956,6 @@ def start_api(
         logger.info("API: Core services initialized successfully.")
         from shared.artwork_recovery import recovery
         recovery.start()
-
-        # Keep the network-facing download tools current when their respective
-        # admin settings are enabled. They share one pip transaction so startup
-        # can never launch two package installers against the same environment.
-        try:
-            from shared.runtime_updates import enabled_runtime_packages, pip_upgrade_command
-
-            _runtime_packages, _runtime_flags = enabled_runtime_packages(read_settings())
-            logger.info(
-                "API: runtime auto-update config resolved (settings=%s, flags=%s)",
-                settings_path(),
-                _runtime_flags,
-            )
-            if _runtime_packages:
-                logger.info(
-                    "API: runtime auto-update requested for %s. Will run in background after startup banner.",
-                    ", ".join(_runtime_packages),
-                )
-
-                def _run_runtime_update():
-                    import subprocess
-                    pip_cmd = pip_upgrade_command(Path(_REPO_ROOT), _runtime_packages)
-                    try:
-                        logger.info("API: Starting runtime auto-update via pip: %s", " ".join(pip_cmd))
-                        result = subprocess.run(
-                            pip_cmd,
-                            capture_output=True,
-                            text=True,
-                            timeout=120,
-                        )
-                        if result.returncode == 0:
-                            logger.info("API: Runtime auto-update completed successfully.")
-                            if result.stdout:
-                                logger.info("API: Runtime auto-update stdout (first 400 chars): %s", result.stdout[:400])
-                        else:
-                            logger.warning("API: Runtime auto-update failed: %s", result.stderr or result.stdout or "unknown")
-                    except Exception as e:
-                        logger.warning("API: Runtime auto-update error: %s", e)
-
-                _defer_runtime_update = True
-            else:
-                logger.info("API: Runtime auto-update disabled. Skipping update attempt.")
-        except Exception:
-            logger.debug("API: Runtime auto-update setup skipped due to error", exc_info=True)
 
         # Note: Auto-start the downloader pump so queued items begin processing
         # immediately without waiting for a manual trigger from the frontend.
@@ -1075,10 +1029,6 @@ def start_api(
     from shared.daemon_launcher import MSG_KEEP_TERMINAL_OPEN
     _terminal_msg = MSG_KEEP_TERMINAL_OPEN
     logger.info("API: %s", _terminal_msg)
-    if _defer_runtime_update and _run_runtime_update:
-        # Route through orchestrator so the update is visible in /api/health
-        # active_jobs and queues behind other disk-heavy work on HDD (plan T3).
-        orchestrator.submit_background("runtime_dependencies_update", _run_runtime_update)
     sys.stdout.flush()
     sys.stderr.flush()
     _register_api_shutdown_handlers()

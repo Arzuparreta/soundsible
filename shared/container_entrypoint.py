@@ -83,6 +83,11 @@ def main() -> int:
 
     patch_process()
 
+    # Before `shared.api`, which imports the tools an upgrade replaces.
+    from shared.runtime_updates import apply_runtime_updates
+
+    apply_runtime_updates()
+
     from shared.api import start_api
     from shared.runtime import RuntimeConfig
 

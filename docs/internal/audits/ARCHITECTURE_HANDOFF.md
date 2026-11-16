@@ -19,7 +19,7 @@ The checks were made on `main` at `3c7e4af3`. Those marked as
 | 4 | Server playback queue that no client reads; stub routes | **Closed**: queue, its routes and both stubs deleted |
 | 5 | Business logic in route modules and in the Flask module | Pending |
 | 6 | State JSON files written without protection against power loss | **Closed**: whole-file replace, ordered writes |
-| 7 | yt-dlp update with the module already imported | Pending, not reproduced |
+| 7 | yt-dlp update with the module already imported | **Closed**: entry points upgrade before importing the API |
 | 8 | Dead code and minor details | **Closed** |
 | 9 | Musical identity coupled to hash/video and rebuilt in each client | **Closed** in PR #423 (merged 2026-11-06) |
 
@@ -192,14 +192,24 @@ once lost one change; it now does the three under `publication_lock`.
 `PUT /api/playback/state` arrives every 15 s per playing device, so one fsync
 per write costs nothing measurable.
 
-### 7. Hot yt-dlp update (not reproduced)
+### 7. Hot yt-dlp update (closed; the mechanism was read, not reproduced)
 
-With `YTDLP_AUTO_UPDATE`, `start_api` launches `pip install --upgrade yt-dlp` in
-the background when `yt_dlp` is already imported (checked: `import shared.api`
+With `YTDLP_AUTO_UPDATE`, `start_api` launched `pip install --upgrade yt-dlp` in
+the background when `yt_dlp` was already imported (checked: `import shared.api`
 loads it). The installed version ships `lazy_extractors.py`: on import only
 4 extractors are loaded, and the YouTube one is imported on first use, from the
-new files, alongside the old core in memory. Fix: update before
-importing or restart after updating.
+new files, alongside the old core in memory. `curl-cffi`, a compiled extension,
+was upgraded the same way.
+
+Fix: `shared.runtime_updates.apply_runtime_updates()` runs pip to completion
+(120 s ceiling) and every entry point — `run.py` (daemon and desktop engine),
+`shared/container_entrypoint.py`, `shared/desktop_engine_entry.py` — calls it
+before importing `shared.api`. It refuses to run once either module is
+imported, and skips a frozen desktop build, where `sys.executable -m pip` was
+the engine binary itself. The cost is the pip run on each start while the
+setting is on (a few seconds when up to date). Restarting after a background
+upgrade was the alternative; it was rejected because a restart would interrupt
+downloads and playback streams already running.
 
 ### 8. Dead code and minor items
 
