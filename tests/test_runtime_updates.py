@@ -615,13 +615,13 @@ root = Path(os.environ['SOUNDSIBLE_DATA_DIR']) / 'repair'
 subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(root)], check=True)
 python = root / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
 code = '''
-import ast, shutil, subprocess, sys
+import ast, os, shutil, subprocess, sys
 from pathlib import Path
 from shared.runtime_updates import bootstrap_tool_session
 root = Path(sys.prefix)
 source = ast.parse(Path('run.py').read_text())
 function = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == '_recreate_venv')
-namespace = dict(globals())
+namespace = dict(globals(), __file__=str(Path('run.py').resolve()))
 exec(compile(ast.Module(body=[function], type_ignores=[]), 'run.py', 'exec'), namespace)
 with bootstrap_tool_session(root) as lease:
     lease.require_write()
@@ -638,3 +638,18 @@ print('active-environment-repaired')
         tmp_path,
     )
     assert result == 'active-environment-repaired'
+
+
+def test_venv_repair_preserves_only_the_selected_active_launcher(tmp_path):
+    from shared.venv_repair import RepairBuilder
+
+    active = tmp_path / "python.exe"
+    active.write_bytes(b"working redirector")
+    replacement = tmp_path / "replacement.exe"
+    replacement.write_bytes(b"replacement")
+    builder = RepairBuilder(active)
+    builder.symlink_or_copy(replacement, active)
+    assert active.read_bytes() == b"working redirector"
+    another = tmp_path / "pythonw.exe"
+    builder.symlink_or_copy(replacement, another)
+    assert another.read_bytes() == b"replacement"

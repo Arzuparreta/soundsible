@@ -116,10 +116,17 @@ def _recreate_venv(venv_dir: Path, lease) -> None:
     base_python = Path(getattr(sys, "_base_executable", sys.executable)).resolve(strict=True)
     if base_python.is_relative_to(venv_dir.resolve()):
         raise RuntimeError("Cannot recreate the active virtualenv: no external base interpreter")
+    retained = None
+    if os.name == "nt" and Path(sys.executable).absolute().is_relative_to(venv_dir.resolve()):
+        retained = Path(sys.executable).absolute()
     if venv_dir.exists():
         shutil.rmtree(venv_dir, ignore_errors=True)
     print("Creating virtual environment...", flush=True)
-    lease.install([str(base_python), "-m", "venv", str(venv_dir)], check=True)
+    helper = Path(__file__).resolve().parent / "shared" / "venv_repair.py"
+    command = [str(base_python), str(helper), str(venv_dir)]
+    if retained is not None:
+        command.extend(["--retain-executable", str(retained)])
+    lease.install(command, check=True)
 
 
 def _ensure_venv_with_pip(venv_dir: Path, lease) -> Path:

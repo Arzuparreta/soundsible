@@ -273,6 +273,10 @@ Bootstrap recreation resolves the external base interpreter before removing
 the old environment. The actual repair is exercised from inside a disposable,
 package-free virtualenv under the exclusive lease; it must recreate the Python
 executable and pip without trying to execute the just-deleted interpreter.
+Native Windows CI demonstrated that its active redirector cannot be overwritten.
+The external-base repair uses `shared/venv_repair.py`: it retains only that working
+launcher while the rest of the environment and pip are recreated, under the
+same exclusive lease. The active-venv regression remains enabled on Windows.
 Output is drained as byte lines with tolerant decoding, and child Python pipes
 are explicitly UTF-8. Non-UTF-8 legacy logging cannot close a startup pipe.
 During boot the existing status panel receives the last six child lines, making
