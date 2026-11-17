@@ -19,13 +19,13 @@ export function SkeletonRows(props: { count?: number; compact?: boolean }) {
       <span class={styles.srOnly}>{t('common.loading')}</span>
       <For each={slots(props.count, 8)}>
         {(_, index) => (
-          <div class={styles.row} aria-hidden="true" style={{ '--skeleton-index': index() }}>
-            <span class={`${styles.bone} ${styles.cover}`} />
+          <div class={styles.row} data-skeleton-row aria-hidden="true" style={{ '--skeleton-index': index() }}>
+            <span class={`${styles.bone} ${styles.cover}`} data-skeleton-cover />
             <span class={styles.rowCopy}>
               <span class={`${styles.bone} ${styles.title}`} />
               <span class={`${styles.bone} ${styles.subtitle}`} />
             </span>
-            <span class={`${styles.bone} ${styles.trailing}`} />
+            <span class={`${styles.bone} ${styles.trailing}`} data-skeleton-menu />
           </div>
         )}
       </For>
@@ -40,6 +40,7 @@ export function SkeletonCards(props: { count?: number; compact?: boolean; shape?
     <div
       classList={{ [styles.cards]: true, [styles.compactCards]: props.compact }}
       data-shape={props.shape ?? 'square'}
+      data-skeleton-cards
       role="status"
       aria-live="polite"
       aria-label={t('common.loading')}

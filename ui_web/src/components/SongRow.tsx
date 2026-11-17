@@ -1,3 +1,6 @@
+import { OverflowIcon } from '../design/OverflowIcon';
+import type { MenuEvent } from '../lib/menuEvent';
+import { Control, IconButton } from '../design/Control';
 import { ArtistLinks } from './MusicLinks';
 import { trackMusic, type MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
@@ -6,11 +9,11 @@ import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
-import { createMemo, Show, type JSX } from 'solid-js';
+import { createMemo, Show } from 'solid-js';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
 import styles from './SongRow.module.css';
-import { coverStyle } from '../lib/cover';
+import { ArtworkSurface } from '../design/Artwork';
 import { formatDuration } from '../lib/format';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
@@ -40,15 +43,9 @@ export interface SongRowProps {
   onDragStart?: (event: DragEvent) => void;
   /** When set, exposes the context menu (⋯ button, long-press, right-click).
    * The event (when present) lets the menu anchor a popover at the cursor. */
-  onMenu?: (track: Track, ev?: MouseEvent) => void;
+  onMenu?: (track: Track, ev?: MenuEvent) => void;
   /** Pickers have one action and must suppress the default mobile menu too. */
   hideMenu?: boolean;
-}
-
-/** Layered background: cover on top, deterministic gradient underneath, so a
- * missing/404 cover degrades gracefully instead of showing a broken image. */
-function rowCoverStyle(props: SongRowProps): JSX.CSSProperties {
-  return coverStyle(props.track.id, props.cover ?? props.track.cover);
 }
 
 /**
@@ -59,7 +56,7 @@ function rowCoverStyle(props: SongRowProps): JSX.CSSProperties {
  * (pointer) — restoring the action menu the legacy UI had on every row.
  */
 export default function SongRow(props: SongRowProps) {
-  const openMenu = (ev?: MouseEvent) => props.onMenu?.(props.track, ev);
+  const openMenu = (ev?: MenuEvent) => props.onMenu?.(props.track, ev);
   /** Identity plus snapshot, shared by the heart and the collection control so
    * the two can never disagree about which song this row is. */
   const entry = createMemo(() => savedFromTrack(props.track));
@@ -97,11 +94,11 @@ export default function SongRow(props: SongRowProps) {
       props.onPlay?.(props.track);
       return;
     }
-    // The context menu's keyboard equivalent, matching the ⋯ button and
-    // long-press. No cursor to anchor to, so it opens as the sheet.
+    // Preserve the control for keyboard anchoring; a touch hold has no event
+    // and continues to open the sheet.
     if (props.onMenu && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
       e.preventDefault();
-      openMenu();
+      openMenu(e);
     }
   };
 
@@ -115,7 +112,6 @@ export default function SongRow(props: SongRowProps) {
   return (
     <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.track.title} subtitle={props.track.artist} music={props.music ?? trackMusic(props.track)} seed={props.track.id}
       cover={props.cover ?? props.track.cover} index={props.index} annotation={props.compact ? undefined : props.badge}
-      menuOnHold={props.compact}
       active={props.active} disabled={props.track.unavailable} busy={props.busy || (props.active && state.playback.isLoading)}
       // A compact row carries no collection marks — the same trim the desktop
       // row makes — so the shared row is told there is no entry to mark.
@@ -139,7 +135,7 @@ export default function SongRow(props: SongRowProps) {
       <Show when={props.index != null}>
         <span class={styles.index}>{props.index}</span>
       </Show>
-      <div class={styles.cover} style={rowCoverStyle(props)} />
+      <ArtworkSurface class={styles.cover} seed={props.track.id} src={props.cover ?? props.track.cover} aria-hidden="true" />
       <div class={styles.meta}>
         {/* WebKit suppresses text selection inside native buttons. Keep this
           * selectable title keyboard-operable, separate from the artist links. */}
@@ -166,7 +162,7 @@ export default function SongRow(props: SongRowProps) {
       </Show>
       <div class={styles.actionStripe}>
         <Show when={props.busy}><Spinner size={14} /></Show>
-        <Show when={props.primaryAction}>{(action) => <button type="button" class={styles.primaryAction} disabled={props.busy} onClick={(event) => { event.stopPropagation(); action().onSelect(); }}>{action().label}</button>}</Show>
+        <Show when={props.primaryAction}>{(action) => <Control type="button" class={styles.primaryAction} disabled={props.busy} onClick={(event) => { event.stopPropagation(); action().onSelect(); }}>{action().label}</Control>}</Show>
         <Show when={!props.compact}><span class={styles.duration}>{formatDuration(props.track.duration)}</span></Show>
         {/* Downloaded or not, a song in the library gets a heart — the mark is
           * about which of your songs stand out, not about where they live. What
@@ -175,24 +171,17 @@ export default function SongRow(props: SongRowProps) {
         <Show when={!props.compact && props.favouritable !== false && isSavedTrack(props.track)}>
           <FavouriteButton favourite={entry()} class={styles.rowHeart} />
         </Show>
-        {/* A panel row answers a right-click and a hold like every other row;
-          * what it does without is the button, which in a 280px panel costs
-          * more width than the artist name it was crowding out. */}
-        <Show when={props.onMenu && !props.compact}>
-          <button
+        <Show when={props.onMenu}>
+          <IconButton
             class={styles.iconBtn}
-            aria-label={t('songRow.ariaMore')}
+            label={t('songRow.ariaMore')}
             onClick={(e) => {
               e.stopPropagation();
               openMenu(e);
             }}
           >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-              <circle cx="5" cy="12" r="2" />
-              <circle cx="12" cy="12" r="2" />
-              <circle cx="19" cy="12" r="2" />
-            </svg>
-          </button>
+            <OverflowIcon />
+          </IconButton>
         </Show>
       </div>
     </div>

@@ -9,6 +9,21 @@ import { setMediaQuery } from '../test-setup';
 // them. Here every overlay lives in one reactive registry behind a single
 // <Portal>, so closing disposes the DOM. These tests lock that in.
 describe('overlay manager (anti-leak)', () => {
+  it('claims Escape before workspace shortcuts and dismisses only the top surface', () => {
+    const workspaceKey = vi.fn();
+    window.addEventListener('keydown', workspaceKey);
+    try {
+      render(() => <OverlayOutlet />);
+      openOverlay(() => <p>Underlying dialog</p>);
+      openOverlay(() => <p>Top menu</p>, { variant: 'popover' });
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByText('Top menu')).not.toBeInTheDocument();
+      expect(screen.getByText('Underlying dialog')).toBeInTheDocument();
+      expect(workspaceKey).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('keydown', workspaceKey);
+    }
+  });
   it('mounts overlay content, then removes every node on close', async () => {
     render(() => <OverlayOutlet />);
     expect(screen.queryByText('Leak check')).toBeNull();

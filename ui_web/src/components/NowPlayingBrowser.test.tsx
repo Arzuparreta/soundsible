@@ -175,7 +175,7 @@ describe('NowPlayingBrowser', () => {
     expect(screen.getByRole('button', { name: /^Playlists/ })).toBeInTheDocument();
     expect(screen.queryByText('Listen now')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Explore' })).toBeInTheDocument();
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
     expect(screen.queryByText('Podcasts')).not.toBeInTheDocument();
     expect(screen.queryByText('Settings')).not.toBeInTheDocument();
   });
@@ -200,7 +200,7 @@ describe('NowPlayingBrowser', () => {
       // The discover rail sits on the root view and used to keep both browse
       // controls in DJ Mode, because it never received the flag that hid them.
       expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'More options' }) !== null).toBe(purpose === 'auto-neutral');
       expect(rowClaimsMenu(/Node Song/)).toBe(purpose === 'auto-neutral');
       expect(screen.getByRole('button', { name: 'Add to session: Node Song' })).toBeInTheDocument();
       // The verb is enough on the button; the row still announces the whole of it.
@@ -217,12 +217,12 @@ describe('NowPlayingBrowser', () => {
     },
   );
 
-  it('keeps the queue and overflow controls outside DJ Mode', () => {
+  it('keeps normal browser row actions visible', () => {
     nodeMock.items = [{ id: 'node-1', title: 'Node Song', channel: 'Node Artist' }];
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 
     expect(screen.queryByRole('button', { name: 'Request' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
     expect(rowClaimsMenu(/Local Song/)).toBe(true);
     expect(screen.queryByRole('button', { name: /to the route$/ })).not.toBeInTheDocument();
   });

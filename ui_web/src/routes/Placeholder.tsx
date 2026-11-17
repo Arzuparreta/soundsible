@@ -2,7 +2,7 @@ import { createSignal, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { t } from '../lib/i18n';
 import { useAppBar } from '../lib/appBar';
-import button from '../components/Button.module.css';
+import button from '../design/Button.module.css';
 import styles from './Placeholder.module.css';
 
 /**

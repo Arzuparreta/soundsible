@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
@@ -31,8 +32,8 @@ export default function NativeEntityProfile(props: {
   subject: NativeEntitySubject; generation: number; disconnected: boolean; tracks: Track[];
   catalog: ReturnType<typeof createNativeCatalogActions>; isActive?: (track: Track) => boolean;
   onBack: () => void; onOpen: (path: string) => void;
-  onEntityMenu?: (entry: SavedEntity, event?: MouseEvent) => void;
-  onTrackMenu: (item: CatalogItem, event?: MouseEvent) => void;
+  onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void;
+  onTrackMenu: (item: CatalogItem, event?: MenuEvent) => void;
   onReady?: () => void; onChanged: () => Promise<void>; savedEntities?: SavedEntity[];
   offlineMenuActions?: (tracks: Track[]) => MenuAction[];
 }) {
@@ -85,7 +86,7 @@ export default function NativeEntityProfile(props: {
     closeDetails = openOverlay(() => <CollectionDownloadView title={props.subject.name} job={collection.job()} busy={collection.busy() || props.disconnected}
       onControl={action => void collection.control(action)} onDecide={(row, candidate) => void collection.decide(row, candidate)} />, { ariaLabel: () => props.subject.name });
   }
-  function collectionMenu(event?: MouseEvent) {
+  function collectionMenu(event?: MenuEvent) {
     const generation = props.generation, current = () => !disposed && generation === props.generation && !props.disconnected;
     const disabled = !current() || collection.busy();
     setBookmarkError(false);

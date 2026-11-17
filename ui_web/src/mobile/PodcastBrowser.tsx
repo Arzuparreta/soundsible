@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { registerNativeBack } from './backNavigation';
 import { request } from '../lib/http';
@@ -120,7 +121,7 @@ export default function PodcastBrowser(props: { generation: number; subscription
     } catch { if (job === actionEpoch && generation === props.generation && !controller.signal.aborted) setError(true); }
     finally { if (job === actionEpoch && generation === props.generation) setMutation(false); }
   }
-  function episodeMenu(episode: PodcastEpisode, event?: MouseEvent) {
+  function episodeMenu(episode: PodcastEpisode, event?: MenuEvent) {
     const generation = props.generation; const url = selected()?.rss_url; const existing = episodeJob(episode);
     const current = () => !disposed && generation === props.generation && url === selected()?.rss_url && !props.disconnected;
     const disabled = props.disconnected || mutation();
@@ -133,7 +134,7 @@ export default function PodcastBrowser(props: { generation: number; subscription
       ...(existing ? [{ label: t('common.cancel'), disabled, onSelect: () => { if (current() && episodeJob(episode)?.id === existing.id) void acquire(episode, 'remove', existing); } }] : []),
     ] }, event);
   }
-  function showMenu(event?: MouseEvent) {
+  function showMenu(event?: MenuEvent) {
     const item = selected(); if (!item) return;
     const generation = props.generation; const url = item.rss_url; const remove = Boolean(followed()); const id = followed()?.id;
     openContextMenu({ title: item.title, actions: [{ label: t(remove ? 'podcastShow.unsubscribe' : 'podcasts.subscribe'), disabled: mutation() || props.disconnected, onSelect: () => { if (generation === props.generation && show()?.rss_url === url && !disposed && (remove ? followed()?.id === id : !followed())) void follow(remove); } }] }, event);

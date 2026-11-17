@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { createRowHeight } from '../lib/rowHeight';
 import { createMemo, createSignal, createEffect, on, For, Show } from 'solid-js';
 import { createVirtualizer } from '@tanstack/solid-virtual';
@@ -9,7 +10,7 @@ import type { ProgramCommand, ProgramOccurrence, ProgramState } from '../lib/pro
 import styles from './ProgramQueue.module.css';
 
 /** Observe the service queue; never regenerate its sources from library rows. */
-export default function ProgramQueue(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onMenu?: (entry: ProgramOccurrence, event: MouseEvent | undefined, actions: MenuAction[]) => void }) {
+export default function ProgramQueue(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onMenu?: (entry: ProgramOccurrence, event: MenuEvent | undefined, actions: MenuAction[]) => void }) {
   const [editing, setEditing] = createSignal(false);
   const height = createRowHeight();
   let scroll!: HTMLDivElement;

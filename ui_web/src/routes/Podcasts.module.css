@@ -71,7 +71,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(var(--browse-card-min, 144px), 100%), 1fr));
+  grid-template-columns: var(--browse-grid-columns);
   gap: var(--browse-card-gap, var(--space-lg));
 }
 

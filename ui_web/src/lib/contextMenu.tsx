@@ -1,5 +1,6 @@
-import { createSignal, Show, onCleanup, onMount } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import type { MenuEvent } from './menuEvent';
+import { createSignal, onCleanup, onMount } from 'solid-js';
+import { openOverlay } from './overlay';
 import { ActionMenuList, openActionMenu, type ActionMenuOptions } from '../components/ActionMenu';
 import { claimHoldGesture, clearTextSelection } from './holdGesture';
 import { shieldGhostClicks } from './ghostClick';
@@ -19,15 +20,14 @@ interface PopoverState {
   /** The control a keyboard activation came from; the menu hangs off it. */
   anchor?: DOMRect;
   keyboard: boolean;
-  returnFocus: HTMLElement | null;
 }
 
-const [popover, setPopover] = createSignal<PopoverState | null>(null);
+let closePopover: (() => void) | undefined;
 
 /** Dismiss only the cursor menu; touch sheets belong to the overlay registry. */
 export function dismissContextMenu(): boolean {
-  if (!popover()) return false;
-  setPopover(null);
+  if (!closePopover) return false;
+  closePopover();
   return true;
 }
 
@@ -67,119 +67,101 @@ export function placePopover(
  * Enter or Space on a button arrives as a click with no coordinates, so that
  * one hangs off the control and takes focus into the menu.
  */
-export function openContextMenu(opts: ActionMenuOptions, ev?: MouseEvent): void {
+export function openContextMenu(opts: ActionMenuOptions, ev?: MenuEvent): void {
   if (!ev || !finePointer()) {
     openActionMenu(opts);
     return;
   }
   ev.preventDefault();
-  const keyboard = ev.type === 'click' && ev.detail === 0;
+  const keyboard = ev instanceof KeyboardEvent || ev.type === 'click' && ev.detail === 0;
   const target = keyboard && ev.target instanceof Element
     ? ev.target.closest('button, a, [role="button"]') ?? ev.target
     : null;
-  setPopover({
+  dismissContextMenu();
+  const initial: PopoverState = {
     opts,
-    x: ev.clientX,
-    y: ev.clientY,
+    x: 'clientX' in ev ? ev.clientX : 0,
+    y: 'clientY' in ev ? ev.clientY : 0,
     anchor: target?.getBoundingClientRect(),
     keyboard,
-    returnFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  };
+  closePopover = openOverlay(close => <ContextPopover state={initial} close={close} />, {
+    variant: 'popover', ariaLabel: opts.title, closeOnNavigation: true,
   });
 }
 
-/** Mounted once by the app shell; renders the cursor-anchored popover. */
+/** Kept as an import-compatible lifecycle boundary. Popovers and sheets now
+ * render through OverlayOutlet and share its stack, navigation and disposal. */
 export function ContextMenuOutlet() {
-  onCleanup(() => setPopover(null));
-  return (
-    <Show when={popover()}>
-      {(p) => {
-        const opener = p().returnFocus;
-        const close = () => {
-          setPopover(null);
-          // Before the selected action runs, so an overlay it opens records the
-          // opener as the place its own focus goes back to.
-          if (opener?.isConnected) opener.focus({ preventScroll: true });
-        };
-        let box: HTMLDivElement | undefined;
-        const [pos, setPos] = createSignal({ x: p().x, y: p().y });
-        const items = () => [...box!.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)')];
+  onCleanup(() => dismissContextMenu());
+  return null;
+}
 
-        onMount(() => {
-          const place = () => setPos(placePopover(
-            p(),
-            { width: box!.offsetWidth, height: box!.offsetHeight },
-            { width: window.innerWidth, height: window.innerHeight },
-          ));
-          place();
-          // The box can still grow after it mounts — a web font arriving widens
-          // the labels — and a menu placed against an edge would cross it.
-          const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
-          resized?.observe(box!);
-          onCleanup(() => resized?.disconnect());
-          // A keyboard user lands on the first action; a pointer user gets the
-          // arrow keys without a focus ring appearing on an item nobody chose.
-          (p().keyboard ? items()[0] ?? box! : box!).focus({ preventScroll: true });
+function ContextPopover(props: { state: PopoverState; close: (afterClose?: () => void) => void }) {
+  onCleanup(() => { closePopover = undefined; });
+  const dismiss = () => props.close();
+  let box: HTMLDivElement | undefined;
+  const [pos, setPos] = createSignal({ x: props.state.x, y: props.state.y });
+  const items = () => [...box!.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)')];
 
-          const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
-          // capture so a scroll anywhere dismisses it — except its own, when
-          // the menu is taller than the window and scrolls inside itself
-          const onScroll = (e: Event) => {
-            if (e.target instanceof Node && box!.contains(e.target)) return;
-            close();
-          };
-          window.addEventListener('keydown', onKey);
-          window.addEventListener('resize', close);
-          window.addEventListener('scroll', onScroll, true);
-          // Back leaves the page this menu was about.
-          window.addEventListener('popstate', close);
-          onCleanup(() => {
-            window.removeEventListener('keydown', onKey);
-            window.removeEventListener('resize', close);
-            window.removeEventListener('scroll', onScroll, true);
-            window.removeEventListener('popstate', close);
-          });
-        });
+  onMount(() => {
+    const place = () => setPos(placePopover(
+      props.state,
+      { width: box!.offsetWidth, height: box!.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight },
+    ));
+    place();
+    // The box can still grow after it mounts — a web font arriving widens
+    // the labels — and a menu placed against an edge would cross it.
+    const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    resized?.observe(box!);
+    onCleanup(() => resized?.disconnect());
+    // A keyboard user lands on the first action; a pointer user gets the
+    // arrow keys without a focus ring appearing on an item nobody chose.
+    (props.state.keyboard ? items()[0] ?? box! : box!).focus({ preventScroll: true });
 
-        const onMenuKey = (e: KeyboardEvent) => {
-          if (e.key === 'Tab') {
-            // The menu is one tab stop: leaving it closes it.
-            e.preventDefault();
-            close();
-            return;
-          }
-          const list = items();
-          if (!list.length) return;
-          const at = list.indexOf(document.activeElement as HTMLElement);
-          let next: number;
-          if (e.key === 'ArrowDown') next = at < 0 ? 0 : (at + 1) % list.length;
-          else if (e.key === 'ArrowUp') next = at < 0 ? list.length - 1 : (at - 1 + list.length) % list.length;
-          else if (e.key === 'Home') next = 0;
-          else if (e.key === 'End') next = list.length - 1;
-          else return;
-          e.preventDefault();
-          list[next].focus();
-        };
+    // capture so a scroll anywhere dismisses it — except its own, when
+    // the menu is taller than the window and scrolls inside itself
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && box!.contains(e.target)) return;
+      props.close();
+    };
+    window.addEventListener('resize', dismiss);
+    window.addEventListener('scroll', onScroll, true);
+    // Back leaves the page this menu was about.
+    window.addEventListener('popstate', dismiss);
+    onCleanup(() => {
+      window.removeEventListener('resize', dismiss);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('popstate', dismiss);
+    });
+  });
 
-        return (
-          <Portal>
-            <div class={styles.backdrop} onPointerDown={close} onContextMenu={(e) => (e.preventDefault(), close())} />
-            <div
-              ref={box}
-              class={styles.popover}
-              role="menu"
-              aria-label={p().opts.title}
-              tabindex="-1"
-              style={{ left: `${pos().x}px`, top: `${pos().y}px` }}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={onMenuKey}
-            >
-              <ActionMenuList opts={p().opts} close={close} menu />
-            </div>
-          </Portal>
-        );
-      }}
-    </Show>
-  );
+  const onMenuKey = (e: KeyboardEvent) => {
+    if (e.key === 'Tab') {
+      // The menu is one tab stop: leaving it closes it.
+      e.preventDefault();
+      props.close();
+      return;
+    }
+    const list = items();
+    if (!list.length) return;
+    const at = list.indexOf(document.activeElement as HTMLElement);
+    let next: number;
+    if (e.key === 'ArrowDown') next = at < 0 ? 0 : (at + 1) % list.length;
+    else if (e.key === 'ArrowUp') next = at < 0 ? list.length - 1 : (at - 1 + list.length) % list.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = list.length - 1;
+    else return;
+    e.preventDefault();
+    list[next].focus();
+  };
+
+  return <div ref={box} class={styles.popover} role="menu" aria-label={props.state.opts.title}
+    tabindex="-1" style={{ left: `${pos().x}px`, top: `${pos().y}px` }}
+    onClick={event => event.stopPropagation()} onKeyDown={onMenuKey}>
+    <ActionMenuList opts={props.state.opts} close={props.close} deferSelection menu />
+  </div>;
 }
 
 /**

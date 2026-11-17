@@ -1,3 +1,7 @@
+import { Field, Select } from '../design/Field';
+import { Tabs } from '../design/Tabs';
+import type { MenuEvent } from '../lib/menuEvent';
+import { Control } from '../design/Control';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { savedEntities, entitiesError, entitiesLoading, syncSavedEntities } from '../lib/savedEntities';
 import { openSavedEntityMenu } from './savedEntityActions';
@@ -39,7 +43,7 @@ import {
   state,
 } from '../stores';
 import { coverUrl, trackCoverUrl } from '../lib/media';
-import { coverStyle } from '../lib/cover';
+import { ArtworkSurface } from '../design/Artwork';
 import { parseYouTubeInput } from '../lib/youtube';
 import { resultCredit } from '../lib/queueDiscovery';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
@@ -99,7 +103,7 @@ interface AutoRowProps {
    * announces — a screen reader gets "Add to session: <song>" either way. */
   primaryShort?: string;
   onAddToRoute?: () => void;
-  onMenu?: (event?: MouseEvent) => void;
+  onMenu?: (event?: MenuEvent) => void;
   track?: Track;
   music?: MusicMetadata;
   onCarryTrack?: (track: Track) => void;
@@ -485,7 +489,7 @@ export function NowPlayingBrowser(props: {
     aborter?.abort();
   });
 
-  const openTrackActions = (track: Track, event?: MouseEvent, music: MusicMetadata = libraryTrackMusic(track)) =>
+  const openTrackActions = (track: Track, event?: MenuEvent, music: MusicMetadata = libraryTrackMusic(track)) =>
     openTrackMenu(track, {
       onAddToPlaylist: openPlaylistPicker,
       onEditMetadata: openMetadataEditor,
@@ -602,7 +606,7 @@ export function NowPlayingBrowser(props: {
       <header class={styles.topbar}>
         {props.dragHandle}
         <div class={styles.search}>
-          <button
+          <Control
             class={styles.scopeButton}
             type="button"
             aria-label={routeMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.globalSearch') : t('nowPlayingBrowser.search')}
@@ -614,8 +618,8 @@ export function NowPlayingBrowser(props: {
             >
               <BackIcon />
             </Show>
-          </button>
-          <input
+          </Control>
+          <Field
             ref={inputEl}
             type="search"
             value={query()}
@@ -627,34 +631,34 @@ export function NowPlayingBrowser(props: {
             }}
           />
           <Show when={query()}>
-            <button class={styles.clear} type="button" aria-label={t('searchPanel.clear')} onClick={clear}>
+            <Control class={styles.clear} type="button" aria-label={t('searchPanel.clear')} onClick={clear}>
               <CloseIcon />
-            </button>
+            </Control>
           </Show>
         </div>
-        <button class={styles.close} type="button" aria-label={t('searchPanel.closePanel')} onClick={props.onClose}>
+        <Control class={styles.close} type="button" aria-label={t('searchPanel.closePanel')} onClick={props.onClose}>
           <CloseIcon />
-        </button>
+        </Control>
       </header>
 
       <nav class={styles.destinations} aria-label={t('musicExplorer.title')} ref={markOverflow}>
         <For each={(['library', 'favourites', 'playlists', 'bookmarks', 'root'] as const)}>{(section) =>
-          <button type="button" aria-current={navigation.section() === section ? 'page' : undefined} onClick={() => selectSection(section)}>{section === 'root' ? t('musicExplorer.explore') : section === 'bookmarks' ? t('savedEntities.title') : t(`nav.${section}`)}</button>
+          <Control type="button" aria-current={navigation.section() === section ? 'page' : undefined} onClick={() => selectSection(section)}>{section === 'root' ? t('musicExplorer.explore') : section === 'bookmarks' ? t('savedEntities.title') : t(`nav.${section}`)}</Control>
         }</For>
       </nav>
       <Show when={routeMode() || referenceMode()}>
-        <div class={styles.intent}><span>{changeMode() ? t('musicExplorer.change') : t(referenceMode() ? 'musicExplorer.referencePicking' : 'musicExplorer.placing')}</span><button type="button" onClick={props.onCancelPlacement ?? props.onPlaced}>{t('musicExplorer.cancelPlacement')}</button></div>
+        <div class={styles.intent}><span>{changeMode() ? t('musicExplorer.change') : t(referenceMode() ? 'musicExplorer.referencePicking' : 'musicExplorer.placing')}</span><Control type="button" onClick={props.onCancelPlacement ?? props.onPlaced}>{t('musicExplorer.cancelPlacement')}</Control></div>
       </Show>
       <Show when={query().trim() || scope() !== 'global'}><div class={styles.searchFilters}>
-        <select aria-label={t('musicExplorer.allMusic')} value={scope()} onChange={(event) => { clearSearchState(); setScope(event.currentTarget.value as SearchScope); }}>
+        <Select aria-label={t('musicExplorer.allMusic')} value={scope()} onChange={(event) => { clearSearchState(); setScope(event.currentTarget.value as SearchScope); }}>
           <option value="global">{t('musicExplorer.allMusic')}</option><option value="library">{t('musicExplorer.libraryOnly')}</option><option value="youtube">YouTube</option>
-        </select>
-        <Show when={query().trim()}><select aria-label={t('musicExplorer.types')} value={filter()} onChange={(event) => navigation.update({ filter: event.currentTarget.value as ResultType, scroll: 0 })}>
+        </Select>
+        <Show when={query().trim()}><Select aria-label={t('musicExplorer.types')} value={filter()} onChange={(event) => navigation.update({ filter: event.currentTarget.value as ResultType, scroll: 0 })}>
           <For each={(['all', 'songs', 'artists', 'albums', 'playlists'] as const)}>{(type) => <option value={type}>{type === 'all' ? t('musicExplorer.all') : type === 'playlists' ? t('nav.playlists') : t(`library.${type}`)}</option>}</For>
-        </select></Show>
+        </Select></Show>
       </div></Show>
       <Show when={partial()}><p class={styles.intent} role="status">{t('musicExplorer.partial')}</p></Show>
-      <ErrorBoundary fallback={(_error, reset) => { resetContentError = reset; return <div class={styles.empty} role="alert"><p>{t('searchPanel.searchError')}</p><button type="button" onClick={() => { void refetchSearchAlbums(); reset(); }}>{t('common.retry')}</button></div>; }}><Switch>
+      <ErrorBoundary fallback={(_error, reset) => { resetContentError = reset; return <div class={styles.empty} role="alert"><p>{t('searchPanel.searchError')}</p><Control type="button" onClick={() => { void refetchSearchAlbums(); reset(); }}>{t('common.retry')}</Control></div>; }}><Switch>
         <Match when={localSearching()}>
           <LocalSearchView
             albums={filter() === 'all' || filter() === 'albums' ? localAlbums() : []}
@@ -720,7 +724,7 @@ export function NowPlayingBrowser(props: {
             </Match>
             <Match when={currentView().kind === 'bookmarks'}>
               <div class={styles.body} data-browser-body>
-                <Show when={entitiesError()}><p role="status">{t('common.loadFailed')} <button type="button" onClick={() => void syncSavedEntities()}>{t('common.retry')}</button></p></Show>
+                <Show when={entitiesError()}><p role="status">{t('common.loadFailed')} <Control type="button" onClick={() => void syncSavedEntities()}>{t('common.retry')}</Control></p></Show>
                 <Show when={!entitiesLoading() || savedEntities().length} fallback={<SkeletonRows count={4} />}>
                   <For each={savedEntities()} fallback={<p class={styles.empty}>{t('savedEntities.empty')}</p>}>{entry =>
                     <NavigationRow title={entry.name} subtitle={entry.artist ?? ''} cover={entry.cover} round={entry.kind === 'artist'}
@@ -827,9 +831,9 @@ function RootView(props: { autoRow: (track: Track) => AutoRowProps }) {
     <div class={styles.body} data-browser-body>
       <section>
         <Toolbar label={t('discoverNodes.title')}>
-          <button type="button" aria-label={t('discoverNodes.refresh')} disabled={nodeLoading()} onClick={refreshNodeFeed}>
+          <Control type="button" aria-label={t('discoverNodes.refresh')} disabled={nodeLoading()} onClick={refreshNodeFeed}>
             <RefreshIcon spinning={nodeLoading()} />
-          </button>
+          </Control>
         </Toolbar>
         <Show when={!nodeLoading() || nodeFeed().length > 0} fallback={<SkeletonRows count={6} />}>
           <For each={nodeFeed()}>
@@ -903,24 +907,25 @@ function LibraryView(props: {
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} classList={{ [styles.songScroll]: libraryTab() === 'songs' && props.tracks.length > 0 }} data-browser-body ref={setScrollRef}>
-      <Toolbar lead={<div class={styles.tabs}>
-        <button classList={{ [styles.activeTab]: libraryTab() === 'songs' }} type="button" onClick={() => setLibraryTab('songs')}>{t('library.songs')}</button>
-        <button classList={{ [styles.activeTab]: libraryTab() === 'albums' }} type="button" onClick={() => setLibraryTab('albums')}>{t('library.albums')}</button>
-        <button classList={{ [styles.activeTab]: libraryTab() === 'artists' }} type="button" onClick={() => setLibraryTab('artists')}>{t('library.artists')}</button>
-      </div>}>
+      <Toolbar lead={<Tabs class={styles.tabs} activeClass={styles.activeTab} label={t('nav.library')}
+        value={libraryTab()} onChange={setLibraryTab} items={[
+          { value: 'songs', label: t('library.songs') },
+          { value: 'albums', label: t('library.albums') },
+          { value: 'artists', label: t('library.artists') },
+        ]} />}>
         {/* Worded, it would push the kinds off the bar; the kinds matter more. */}
-        <Show when={props.onUse}><button type="button" aria-label={t('musicExplorer.reference')} title={t('musicExplorer.reference')} onClick={() => props.onUse?.(props.tracks)}><SourceIcon /></button></Show>
-        <button type="button" aria-label={t('nowPlayingBrowser.searchLibrary')} onClick={props.onSearch}><SearchIcon /></button>
-        <Show when={libraryTab() === 'albums'}><button type="button" onClick={openAlbumBrowseMenu} aria-label={t('library.albumSortTitle')}><SortIcon /></button></Show>
-        <Show when={libraryTab() === 'songs'}><button type="button" aria-label={t('library.sortTitle')} onClick={sort}><SortIcon /></button></Show>
+        <Show when={props.onUse}><Control type="button" aria-label={t('musicExplorer.reference')} title={t('musicExplorer.reference')} onClick={() => props.onUse?.(props.tracks)}><SourceIcon /></Control></Show>
+        <Control type="button" aria-label={t('nowPlayingBrowser.searchLibrary')} onClick={props.onSearch}><SearchIcon /></Control>
+        <Show when={libraryTab() === 'albums'}><Control type="button" onClick={openAlbumBrowseMenu} aria-label={t('library.albumSortTitle')}><SortIcon /></Control></Show>
+        <Show when={libraryTab() === 'songs'}><Control type="button" aria-label={t('library.sortTitle')} onClick={sort}><SortIcon /></Control></Show>
       </Toolbar>
       {/* The narrowing lives in the sort menu, so it has to show while it holds;
           tapping the chip clears it, as on the Library route. */}
       <Show when={libraryTab() === 'songs' && libraryFilter() === 'downloaded'}>
         <div class={styles.filterChips}>
-          <button class={styles.chip} type="button" onClick={() => setLibraryFilter('all')}>
+          <Control class={styles.chip} type="button" onClick={() => setLibraryFilter('all')}>
             {t('library.filterDownloaded')} <span aria-hidden="true">×</span>
-          </button>
+          </Control>
         </div>
       </Show>
       <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}>
@@ -976,7 +981,7 @@ function LibraryArtistView(props: {
   return (
     <div class={styles.body} data-browser-body ref={setScrollRef}>
       <Toolbar title={props.name} onBack={props.onBack}>
-        <button type="button" onClick={props.onExplore}>{t('musicExplorer.catalog')}</button>
+        <Control type="button" onClick={props.onExplore}>{t('musicExplorer.catalog')}</Control>
         <Show when={props.onUse}><CollectionActions title={props.name} tracks={tracks()} auto onReference={props.onUse} /></Show>
       </Toolbar>
       <For each={catalog()?.albums ?? []}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For>
@@ -1030,7 +1035,7 @@ function LocalSearchView(props: {
   return (
     <div ref={setScrollRef} class={styles.body} data-browser-body>
       <Show when={props.onUse}>
-        <Toolbar><button type="button" data-glyph-label disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}><SourceIcon />{t('musicExplorer.reference')}</button></Toolbar>
+        <Toolbar><Control type="button" data-glyph-label disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}><SourceIcon />{t('musicExplorer.reference')}</Control></Toolbar>
       </Show>
       <For each={props.albums}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} onClick={() => props.onAlbum(album)} />}</For>
       <For each={props.playlists}>{(name) => <NavigationRow title={name} subtitle={t('nav.playlists')} onClick={() => props.onPlaylist(name)} />}</For>
@@ -1046,7 +1051,7 @@ function LocalSearchView(props: {
         <Show when={props.results.length === 0 && !props.albums.length && !props.playlists.length}>
           <p>{t('library.noSearchResults')}</p>
         </Show>
-        <button type="button" onClick={props.onSearchGlobal}>{t('nowPlayingBrowser.searchEverywhere', { query: props.query })}</button>
+        <Control type="button" onClick={props.onSearchGlobal}>{t('nowPlayingBrowser.searchEverywhere', { query: props.query })}</Control>
       </div>
     </div>
   );
@@ -1074,10 +1079,10 @@ function PlaylistsView(props: {
     <div class={styles.body} data-browser-body>
       <Show when={!picking()}>
         <Toolbar>
-          <button type="button" aria-label={t('musicExplorer.newPlaylist')} onClick={() => void createNew()}><SaveIcon /></button>
-          <button type="button" aria-label={t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit')} aria-pressed={editing()} onClick={() => setEditing(!editing())}>
+          <Control type="button" aria-label={t('musicExplorer.newPlaylist')} onClick={() => void createNew()}><SaveIcon /></Control>
+          <Control type="button" aria-label={t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit')} aria-pressed={editing()} onClick={() => setEditing(!editing())}>
             <Show when={editing()} fallback={<MoveIcon />}><CheckIcon /></Show>
-          </button>
+          </Control>
         </Toolbar>
       </Show>
       <Show when={editing() && !picking()} fallback={
@@ -1121,8 +1126,8 @@ function PlaylistView(props: {
       showPlayAll={props.showPlayAll}
       onUse={props.onUse}
       headerActions={<>
-        <Show when={editing()}><button type="button" aria-label={t('musicExplorer.done')} onClick={() => setEditing(false)}><CheckIcon /></button></Show>
-        <button type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={(event) => openPlaylistMenu(props.name, { shell: true, beforeQueueId: placement.beforeQueueId, onPlaced: placement.onCompleted, onEdit: () => setEditing(true), onRenamed: (name) => navigation.renamePlaylist(props.name, name), onDeleted: () => { navigation.back(); } }, event)}><MoreIcon /></button>
+        <Show when={editing()}><Control type="button" aria-label={t('musicExplorer.done')} onClick={() => setEditing(false)}><CheckIcon /></Control></Show>
+        <Control type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={(event) => openPlaylistMenu(props.name, { shell: true, beforeQueueId: placement.beforeQueueId, onPlaced: placement.onCompleted, onEdit: () => setEditing(true), onRenamed: (name) => navigation.renamePlaylist(props.name, name), onDeleted: () => { navigation.back(); } }, event)}><MoreIcon /></Control>
       </>}
       editContent={editing() ? <MusicReorderList items={state.playlists[props.name] ?? []} label={(id) => props.byId.get(id)?.title ?? id} render={(id) => <span>{props.byId.get(id)?.title ?? id}</span>} onChange={(ids) => actions.reorderPlaylistTracks(props.name, ids)} /> : undefined}
     />
@@ -1151,9 +1156,9 @@ function TrackCollectionView(props: {
       <Toolbar title={props.root ? undefined : props.title} onBack={props.root ? undefined : props.onBack}>
         <Show when={props.onUse}><CollectionActions title={props.title} tracks={props.tracks} auto hideReferenceMenu={Boolean(props.headerActions)} onReference={props.onUse} /></Show>
         <Show when={!props.onUse && props.showPlayAll}>
-          <button type="button" disabled={props.tracks.length === 0} aria-label={t('playlistDetail.play')} onClick={() =>
+          <Control type="button" disabled={props.tracks.length === 0} aria-label={t('playlistDetail.play')} onClick={() =>
             actions.playFrom(props.tracks, 0, { context: props.context })
-          }><PlayIcon /></button>
+          }><PlayIcon /></Control>
         </Show>
         {props.headerActions}
       </Toolbar>
@@ -1235,7 +1240,7 @@ function GlobalSearchView(props: {
       <Show when={!props.loading && !props.direct && empty() && props.youtube.length === 0}>
         <div class={styles.empty}>
           <p>{props.failed ? t('searchPanel.searchError') : t('searchPanel.noResults')}</p>
-          <Show when={props.failed}><button type="button" onClick={props.onRetry}>{t('common.retry')}</button></Show>
+          <Show when={props.failed}><Control type="button" onClick={props.onRetry}>{t('common.retry')}</Control></Show>
         </div>
       </Show>
     </div>
@@ -1389,7 +1394,7 @@ function CatalogAlbumView(props: {
 function Toolbar(props: { title?: string; subtitle?: JSX.Element; label?: string; lead?: JSX.Element; onBack?: () => void; children?: JSX.Element }) {
   return (
     <div class={styles.toolbar} data-browser-toolbar>
-      <Show when={props.onBack}><button type="button" aria-label={t('common.back')} onClick={props.onBack}><BackIcon /></button></Show>
+      <Show when={props.onBack}><Control type="button" aria-label={t('common.back')} onClick={props.onBack}><BackIcon /></Control></Show>
       <div class={styles.toolbarLead}>
         <Show when={props.title}><h2 class={styles.toolbarTitle}>{props.title}</h2></Show>
         <Show when={props.subtitle}><span class={styles.toolbarSubtitle}>{props.subtitle}</span></Show>
@@ -1401,13 +1406,13 @@ function Toolbar(props: { title?: string; subtitle?: JSX.Element; label?: string
   );
 }
 
-function NavigationRow(props: { title: string; subtitle: string; music?: MusicMetadata; destination?: string; cover?: string; round?: boolean; onClick: () => void; onMenu?: (event?: MouseEvent) => void }) {
+function NavigationRow(props: { title: string; subtitle: string; music?: MusicMetadata; destination?: string; cover?: string; round?: boolean; onClick: () => void; onMenu?: (event?: MenuEvent) => void }) {
   const tap = createResponsiveTap({ onTap: props.onClick });
   return (
     <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.title} titlePath={props.destination ?? (props.music?.album ? albumDestination(props.music) : undefined)} subtitle={props.subtitle} music={props.music} seed={props.title}
       cover={props.cover} round={props.round} onActivate={props.onClick} onMenu={props.onMenu} />}>
-    <div class={styles.navRow}><Show when={props.destination ?? (props.music?.album ? albumDestination(props.music) : undefined)} fallback={<button class={styles.rowActivate} type="button" aria-label={props.title} data-pressable {...tap} />}>{(path) => <MusicLink class={styles.rowActivate} path={path()} label={props.title} onMenu={props.onMenu} />}</Show>
-      <span class={styles.navCover} classList={{ [styles.round]: props.round }} style={coverStyle(props.title, props.cover)} />
+    <div class={styles.navRow}><Show when={props.destination ?? (props.music?.album ? albumDestination(props.music) : undefined)} fallback={<Control class={styles.rowActivate} type="button" aria-label={props.title} data-pressable {...tap} />}>{(path) => <MusicLink class={styles.rowActivate} path={path()} label={props.title} onMenu={props.onMenu} />}</Show>
+      <ArtworkSurface class={styles.navCover} classList={{ [styles.round]: props.round }} seed={props.title} src={props.cover} aria-hidden="true" />
       <span class={styles.navText}><strong>{props.title}</strong><small><Show when={props.music} fallback={props.subtitle}>{(music) => <ArtistLinks music={music()} />}</Show></small></span>
       <ChevronIcon />
     </div>
@@ -1438,7 +1443,7 @@ function BrowserTrackRow(props: {
   owned?: boolean;
   onPlay: () => void;
   onQueue: () => void;
-  onMenu?: (event?: MouseEvent) => void;
+  onMenu?: (event?: MenuEvent) => void;
   primaryLabel?: string;
   primaryShort?: string;
   variant?: 'browse' | 'auto';

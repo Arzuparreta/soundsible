@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import type { MenuAction } from '../components/ActionMenu';
 import NativeSettings from './Settings';
 import NativeInvite from './Invite';
@@ -114,11 +115,11 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     const track = incomingSong();
     return !!track && (!stale() || !!offlineState() && availableProgram([track], 0, offlineState()!).index === 0);
   };
-  function entityMenu(entry: SavedEntity, event?: MouseEvent) {
+  function entityMenu(entry: SavedEntity, event?: MenuEvent) {
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
     openContextMenu({ title: entry.name, subtitle: entry.artist, actions: [nativeEntityMark(entry, savedEntities, current, sync, () => { if (current()) setError(t('savedEntities.failed')); })] }, event);
   }
-  function playlistMenu(name: string, event?: MouseEvent) {
+  function playlistMenu(name: string, event?: MenuEvent) {
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
     openContextMenu({ title: name, actions: nativePlaylistActions(name, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) }, event);
   }
@@ -395,7 +396,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     const captured = epoch;
     void openNativePlayOnDevice(track, () => nativeDevices.deviceState().then(state => state.device_id).catch(() => null), () => captured === epoch && !!user() && !stale());
   }
-  function songMenu(track: Track, event?: MouseEvent, context?: { playlist: string; index: number }, catalogActions: MenuAction[] = [], inRoute = false) {
+  function songMenu(track: Track, event?: MenuEvent, context?: { playlist: string; index: number }, catalogActions: MenuAction[] = [], inRoute = false) {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
             const menu = programLibraryMenu(track, program, programPending, runtime.execute, candidate => openNativeDjPlacement(candidate, program, programPending, runtime.execute), inRoute);
             openContextMenu({ ...menu, actions: [...catalogActions, ...(menu.actions ?? []),

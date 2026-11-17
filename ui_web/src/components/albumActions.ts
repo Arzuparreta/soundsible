@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { savedEntityAction } from './savedEntityActions';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
@@ -68,6 +69,6 @@ export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {
 }
 
 /** Open the album menu. Pass the triggering event to anchor a cursor popover. */
-export function openAlbumMenu(album: CatalogAlbum, ctx: AlbumMenuContext = {}, ev?: MouseEvent): void {
+export function openAlbumMenu(album: CatalogAlbum, ctx: AlbumMenuContext = {}, ev?: MenuEvent): void {
   openContextMenu(albumMenuOptions(album, ctx), ev);
 }

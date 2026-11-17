@@ -1,3 +1,4 @@
+import { Control } from '../design/Control';
 import { For, Show, type JSX } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -37,7 +38,7 @@ function ActionButton(props: { action: MenuAction; close: (afterClose?: () => vo
     },
   });
   return (
-    <button
+    <Control
       type="button"
       role={props.menu ? 'menuitem' : undefined}
       tabindex={props.menu ? -1 : undefined}
@@ -53,7 +54,7 @@ function ActionButton(props: { action: MenuAction; close: (afterClose?: () => vo
       </Show>
       <span class={styles.label}>{props.action.label}</span>
       <Show when={props.action.selected}><span aria-hidden="true">✓</span></Show>
-    </button>
+    </Control>
   );
 }
 

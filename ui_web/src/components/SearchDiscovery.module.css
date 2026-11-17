@@ -22,7 +22,7 @@
 .rail { display: flex; gap: var(--browse-card-gap, 16px); margin: -4px; padding: 4px; overflow-x: auto; scroll-padding-inline: 4px; scroll-snap-type: x proximity; overscroll-behavior-x: contain; scroll-behavior: smooth; scrollbar-width: none; }
 .rail::-webkit-scrollbar { display: none; }
 /* Never fewer than two columns, whatever the phone or interface size. */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--browse-card-min, 144px), calc(50% - var(--browse-card-gap, 16px) / 2)), 1fr)); gap: var(--space-xl) var(--browse-card-gap, 16px); }
+.grid { display: grid; grid-template-columns: var(--browse-grid-columns); gap: var(--space-xl) var(--browse-card-gap, 16px); }
 
 .home .entity { display: flex; flex-direction: column; gap: var(--space-sm); min-width: 0; max-width: none; padding: 0; color: var(--ink-primary); font: inherit; text-align: start; text-decoration: none; vertical-align: top; background: none; border: 0; border-radius: var(--radius-md); cursor: pointer; scroll-snap-align: start; }
 .rail > .entity { flex: 0 0 var(--browse-card-width, 156px); }

@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import type { MusicMetadata } from '../lib/musicNavigation';
 import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
 import { savedToTrack, savedVideoId } from '../lib/saved';
@@ -56,6 +57,6 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
   return list;
 }
 
-export function openEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}, event?: MouseEvent): void {
+export function openEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}, event?: MenuEvent): void {
   openContextMenu({ title: entry.title, subtitle: entry.artist, actions: buildEntryMenu(entry, ctx) }, event);
 }

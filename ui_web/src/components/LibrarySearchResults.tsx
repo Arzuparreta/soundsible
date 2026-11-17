@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import SavedEntities from './SavedEntities';
 import { savedEntities } from '../lib/savedEntities';
 import { normalizeLibraryQuery } from '../lib/librarySearch';
@@ -65,7 +66,7 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
 export default function LibrarySearchResults(props: { results: LibrarySearchResult[]; query?: string }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
-  const openMenu = (track: Extract<LibrarySearchResult, { kind: 'track' }>['track'], event?: MouseEvent) =>
+  const openMenu = (track: Extract<LibrarySearchResult, { kind: 'track' }>['track'], event?: MenuEvent) =>
     openTrackMenu(
       track,
       {

@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { savedEntityAction } from './savedEntityActions';
 import { artistPath } from '../lib/artistRoute';
 import { artistDestination, navigateMusic } from '../lib/musicNavigation';
@@ -49,6 +50,6 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
 }
 
 /** Open the artist menu. Pass the triggering event to anchor a cursor popover. */
-export function openArtistMenu(artist: string, ctx: ArtistMenuContext = {}, ev?: MouseEvent): void {
+export function openArtistMenu(artist: string, ctx: ArtistMenuContext = {}, ev?: MenuEvent): void {
   openContextMenu(artistMenuOptions(artist, ctx), ev);
 }

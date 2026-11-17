@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { collectionIndex } from '../lib/collectionIdentity';
 import { type ActionMenuOptions } from './ActionMenu';
 import { menuIcons } from './icons';
@@ -99,7 +100,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
 }
 
 /** Open the playlist menu. Pass the triggering event to anchor a cursor popover. */
-export function openPlaylistMenu(name: string, hooks: PlaylistMenuHooks = {}, ev?: MouseEvent): void {
+export function openPlaylistMenu(name: string, hooks: PlaylistMenuHooks = {}, ev?: MenuEvent): void {
   openContextMenu(playlistMenuOptions(name, hooks), ev);
 }
 

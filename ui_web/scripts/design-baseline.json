@@ -1,0 +1,482 @@
+{
+  "src/app.module.css": {
+    "styles": 4
+  },
+  "src/boot/startup.css": {
+    "styles": 21
+  },
+  "src/components/AlbumGrid.module.css": {
+    "styles": 2
+  },
+  "src/components/AppBar.module.css": {
+    "styles": 11
+  },
+  "src/components/AppBar.tsx": {
+    "controls": 3
+  },
+  "src/components/ArtistDiscoveryView.tsx": {
+    "controls": 1
+  },
+  "src/components/ArtistGrid.module.css": {
+    "styles": 1
+  },
+  "src/components/AutoMode.module.css": {
+    "styles": 22
+  },
+  "src/components/AutoMode.tsx": {
+    "controls": 6
+  },
+  "src/components/AutoReferences.tsx": {
+    "controls": 6
+  },
+  "src/components/BottomNavigationSettings.module.css": {
+    "styles": 15
+  },
+  "src/components/BottomNavigationSettings.tsx": {
+    "controls": 4
+  },
+  "src/components/CatalogCollectionStatus.module.css": {
+    "styles": 1
+  },
+  "src/components/CatalogResultRow.module.css": {
+    "styles": 7
+  },
+  "src/components/CollectionActions.module.css": {
+    "styles": 1
+  },
+  "src/components/CollectionActions.tsx": {
+    "controls": 2
+  },
+  "src/components/CollectionButton.module.css": {
+    "styles": 6
+  },
+  "src/components/CollectionButton.tsx": {
+    "controls": 1
+  },
+  "src/components/CollectionControl.module.css": {
+    "styles": 11
+  },
+  "src/components/CollectionControl.tsx": {
+    "controls": 5
+  },
+  "src/components/CollectionDownloadView.tsx": {
+    "controls": 4
+  },
+  "src/components/CoverPicker.module.css": {
+    "styles": 2
+  },
+  "src/components/CoverPicker.tsx": {
+    "controls": 2
+  },
+  "src/components/DeviceSheet.module.css": {
+    "styles": 4
+  },
+  "src/components/DeviceSheet.tsx": {
+    "controls": 5
+  },
+  "src/components/DisplayPreferences.module.css": {
+    "styles": 12
+  },
+  "src/components/DisplayPreferences.tsx": {
+    "controls": 1
+  },
+  "src/components/DisplayPreferencesView.tsx": {
+    "controls": 4
+  },
+  "src/components/DownloadRowView.tsx": {
+    "controls": 2
+  },
+  "src/components/EmptyState.module.css": {
+    "styles": 13
+  },
+  "src/components/EntityHero.module.css": {
+    "styles": 3
+  },
+  "src/components/EntityViewSelect.tsx": {
+    "controls": 1
+  },
+  "src/components/FavouriteButton.module.css": {
+    "styles": 6
+  },
+  "src/components/FavouriteButton.tsx": {
+    "controls": 1
+  },
+  "src/components/LibrarySearchResults.module.css": {
+    "styles": 3
+  },
+  "src/components/LiveRoomPanel.module.css": {
+    "styles": 3
+  },
+  "src/components/LiveRoomPanel.tsx": {
+    "controls": 2
+  },
+  "src/components/LyricsPanel.module.css": {
+    "styles": 7
+  },
+  "src/components/LyricsPanelView.tsx": {
+    "controls": 5
+  },
+  "src/components/MetadataEditor.module.css": {
+    "styles": 2
+  },
+  "src/components/MusicLinks.module.css": {
+    "styles": 5
+  },
+  "src/components/MusicReorderList.tsx": {
+    "controls": 2
+  },
+  "src/components/NavigationMenu.module.css": {
+    "styles": 12
+  },
+  "src/components/NavigationMenu.tsx": {
+    "controls": 2
+  },
+  "src/components/NowPlaying.module.css": {
+    "styles": 76
+  },
+  "src/components/NowPlaying.tsx": {
+    "controls": 3
+  },
+  "src/components/NowPlayingBrowser.module.css": {
+    "styles": 28
+  },
+  "src/components/OmniBar.module.css": {
+    "styles": 70
+  },
+  "src/components/OmniBar.tsx": {
+    "controls": 5
+  },
+  "src/components/OmniSeek.tsx": {
+    "controls": 1
+  },
+  "src/components/PairDevice.module.css": {
+    "styles": 8
+  },
+  "src/components/PairDevice.tsx": {
+    "controls": 4
+  },
+  "src/components/PasswordFields.module.css": {
+    "styles": 3
+  },
+  "src/components/PasswordFields.tsx": {
+    "controls": 3
+  },
+  "src/components/PlayerLayoutControl.tsx": {
+    "controls": 1
+  },
+  "src/components/PlayerStage.tsx": {
+    "controls": 13
+  },
+  "src/components/PlayerSurface.module.css": {
+    "styles": 25
+  },
+  "src/components/PlayerSurface.tsx": {
+    "controls": 5
+  },
+  "src/components/PlayerTrackList.module.css": {
+    "styles": 81
+  },
+  "src/components/PlayerTrackList.tsx": {
+    "controls": 10
+  },
+  "src/components/PlayerWorkspace.module.css": {
+    "styles": 24
+  },
+  "src/components/PlayerWorkspace.tsx": {
+    "controls": 1
+  },
+  "src/components/PlaylistPicker.tsx": {
+    "controls": 2
+  },
+  "src/components/PodcastCountryPicker.module.css": {
+    "styles": 3
+  },
+  "src/components/PodcastCountryPicker.tsx": {
+    "controls": 1
+  },
+  "src/components/ProgramQueue.module.css": {
+    "styles": 7
+  },
+  "src/components/ProgramQueue.tsx": {
+    "controls": 5
+  },
+  "src/components/ProgramTransport.module.css": {
+    "styles": 10
+  },
+  "src/components/ProgramTransport.tsx": {
+    "controls": 11
+  },
+  "src/components/RadioBadge.tsx": {
+    "controls": 1
+  },
+  "src/components/ResumeBanner.module.css": {
+    "styles": 4
+  },
+  "src/components/ResumeBannerView.tsx": {
+    "controls": 2
+  },
+  "src/components/SavedEntities.module.css": {
+    "styles": 7
+  },
+  "src/components/SavedEntities.tsx": {
+    "controls": 1
+  },
+  "src/components/SearchDiscovery.module.css": {
+    "styles": 9
+  },
+  "src/components/SearchDiscoveryView.tsx": {
+    "controls": 4
+  },
+  "src/components/SearchField.module.css": {
+    "styles": 9
+  },
+  "src/components/SearchField.tsx": {
+    "controls": 2
+  },
+  "src/components/SearchResultRow.module.css": {
+    "styles": 3
+  },
+  "src/components/SearchResultRow.tsx": {
+    "controls": 1
+  },
+  "src/components/SettingsRows.module.css": {
+    "styles": 24
+  },
+  "src/components/SettingsRows.tsx": {
+    "controls": 6
+  },
+  "src/components/SettingsSections.module.css": {
+    "styles": 6
+  },
+  "src/components/SettingsShell.module.css": {
+    "styles": 6
+  },
+  "src/components/SettingsShell.tsx": {
+    "controls": 2
+  },
+  "src/components/Sidebar.module.css": {
+    "styles": 3
+  },
+  "src/components/Skeleton.module.css": {
+    "styles": 17
+  },
+  "src/components/SongRow.module.css": {
+    "styles": 21
+  },
+  "src/components/Spinner.module.css": {
+    "styles": 3
+  },
+  "src/components/TabBar.module.css": {
+    "styles": 8
+  },
+  "src/components/TopResultCard.module.css": {
+    "styles": 4
+  },
+  "src/components/TopResultCard.tsx": {
+    "controls": 1
+  },
+  "src/components/UsersPanel.module.css": {
+    "styles": 5
+  },
+  "src/components/UsersPanel.tsx": {
+    "controls": 4
+  },
+  "src/components/ViewHeader.module.css": {
+    "styles": 9
+  },
+  "src/components/ViewHeader.tsx": {
+    "controls": 1
+  },
+  "src/components/metadataEditorView.tsx": {
+    "controls": 9
+  },
+  "src/lib/confirm.tsx": {
+    "controls": 2
+  },
+  "src/lib/contextMenu.module.css": {
+    "styles": 5
+  },
+  "src/lib/copyLink.tsx": {
+    "controls": 3
+  },
+  "src/lib/deferredComponent.tsx": {
+    "controls": 1
+  },
+  "src/lib/overlay.module.css": {
+    "styles": 17
+  },
+  "src/lib/passwordDialog.tsx": {
+    "controls": 2
+  },
+  "src/lib/prompt.tsx": {
+    "controls": 3
+  },
+  "src/lib/toast.module.css": {
+    "styles": 7
+  },
+  "src/lib/toast.tsx": {
+    "controls": 1
+  },
+  "src/mobile/AndroidStart.module.css": {
+    "styles": 23
+  },
+  "src/mobile/AndroidStart.tsx": {
+    "controls": 27
+  },
+  "src/mobile/CatalogSearch.tsx": {
+    "controls": 5
+  },
+  "src/mobile/Devices.tsx": {
+    "controls": 3
+  },
+  "src/mobile/DjPlacement.tsx": {
+    "controls": 2
+  },
+  "src/mobile/DjSources.tsx": {
+    "controls": 1
+  },
+  "src/mobile/Downloads.tsx": {
+    "controls": 3
+  },
+  "src/mobile/EntityProfile.tsx": {
+    "controls": 7
+  },
+  "src/mobile/IncomingSong.tsx": {
+    "controls": 3
+  },
+  "src/mobile/Invite.tsx": {
+    "controls": 3
+  },
+  "src/mobile/LibraryBrowser.tsx": {
+    "controls": 8
+  },
+  "src/mobile/Live.tsx": {
+    "controls": 14
+  },
+  "src/mobile/Lyrics.tsx": {
+    "controls": 1
+  },
+  "src/mobile/OfflineManager.module.css": {
+    "styles": 8
+  },
+  "src/mobile/OfflineManager.tsx": {
+    "controls": 4
+  },
+  "src/mobile/PlaylistPicker.tsx": {
+    "controls": 2
+  },
+  "src/mobile/PodcastBrowser.tsx": {
+    "controls": 7
+  },
+  "src/mobile/PodcastCharts.tsx": {
+    "controls": 3
+  },
+  "src/mobile/PodcastDirectory.tsx": {
+    "controls": 2
+  },
+  "src/mobile/Settings.tsx": {
+    "controls": 14
+  },
+  "src/mobile/SettingsDownloads.tsx": {
+    "controls": 1
+  },
+  "src/mobile/SettingsLeveling.tsx": {
+    "controls": 2
+  },
+  "src/mobile/SettingsPlayback.tsx": {
+    "controls": 2
+  },
+  "src/mobile/SettingsRecommendations.tsx": {
+    "controls": 1
+  },
+  "src/mobile/SettingsScrobbling.tsx": {
+    "controls": 1
+  },
+  "src/mobile/SettingsSubsonic.tsx": {
+    "controls": 1
+  },
+  "src/mobile/playlistActions.tsx": {
+    "controls": 2
+  },
+  "src/pages/DesignPreview.module.css": {
+    "styles": 5
+  },
+  "src/routes/Album.tsx": {
+    "controls": 4
+  },
+  "src/routes/Artist.module.css": {
+    "styles": 4
+  },
+  "src/routes/Artist.tsx": {
+    "controls": 4
+  },
+  "src/routes/Downloads.module.css": {
+    "styles": 12
+  },
+  "src/routes/Downloads.tsx": {
+    "controls": 2
+  },
+  "src/routes/Invite.tsx": {
+    "controls": 1
+  },
+  "src/routes/Library.module.css": {
+    "styles": 26
+  },
+  "src/routes/Library.tsx": {
+    "controls": 7
+  },
+  "src/routes/LibraryHome.module.css": {
+    "styles": 6
+  },
+  "src/routes/Live.module.css": {
+    "styles": 18
+  },
+  "src/routes/Live.tsx": {
+    "controls": 13
+  },
+  "src/routes/Login.module.css": {
+    "styles": 13
+  },
+  "src/routes/Login.tsx": {
+    "controls": 3
+  },
+  "src/routes/Migrate.module.css": {
+    "styles": 30
+  },
+  "src/routes/MigrateView.tsx": {
+    "controls": 12
+  },
+  "src/routes/Placeholder.module.css": {
+    "styles": 1
+  },
+  "src/routes/PlaylistDetail.tsx": {
+    "controls": 3
+  },
+  "src/routes/Playlists.module.css": {
+    "styles": 5
+  },
+  "src/routes/Playlists.tsx": {
+    "controls": 2
+  },
+  "src/routes/PodcastShow.module.css": {
+    "styles": 5
+  },
+  "src/routes/PodcastShow.tsx": {
+    "controls": 6
+  },
+  "src/routes/Podcasts.module.css": {
+    "styles": 4
+  },
+  "src/routes/Podcasts.tsx": {
+    "controls": 5
+  },
+  "src/routes/Search.module.css": {
+    "styles": 10
+  },
+  "src/routes/Search.tsx": {
+    "controls": 13
+  },
+  "src/styles/app.css": {
+    "styles": 11
+  }
+}

@@ -1,0 +1,67 @@
+import { createEffect, createSignal, onCleanup, Show, useContext, type JSX } from 'solid-js';
+import { ArtworkWidthContext } from '../lib/artworkSlot';
+import { artworkUrl } from '../lib/config';
+import { artworkCandidates, artworkFallback, rejectPreviewArtwork } from '../lib/media';
+
+// URLs only, not image bodies. Previously painted artwork should not re-enter
+// the lazy/async decoding path on every route mount. Bound this session hint.
+const paintedSources = new Set<string>();
+const MAX_PAINTED_SOURCES = 512;
+
+/** Fills its positioned cover slot; observes the actual slot instead of
+ * guessing a grid width. The browser chooses the appropriate density. */
+export function ArtworkImage(props: {
+  src?: string | null;
+  eager?: boolean;
+  alt?: string;
+  variants?: { url: string; width: number }[];
+}) {
+  const [previousSource, setPreviousSource] = createSignal<string>();
+  const source = () => previousSource() || artworkUrl(props.src);
+  const warm = () => !!source() && paintedSources.has(source()!);
+  const rememberPaint = () => {
+    const url = source();
+    if (!url) return;
+    paintedSources.delete(url);
+    paintedSources.add(url);
+    if (paintedSources.size > MAX_PAINTED_SOURCES) paintedSources.delete(paintedSources.values().next().value!);
+  };
+  let image: HTMLImageElement | undefined;
+  const known = useContext(ArtworkWidthContext);
+  const [measured, setWidth] = createSignal(320);
+  const width = () => (known ? Math.max(1, Math.ceil(known())) : measured());
+  const [failed, setFailed] = createSignal(false);
+  createEffect(() => { props.src; setFailed(false); setPreviousSource(undefined); });
+  createEffect(() => {
+    if (known || !props.src || !image) return;
+    const target = image.parentElement;
+    if (!target) return;
+    const measure = () => setWidth(Math.max(1, Math.ceil(target.getBoundingClientRect().width)));
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(target);
+    onCleanup(() => observer.disconnect());
+  });
+  const candidates = () => props.variants?.length
+    ? props.variants.map(v => `${v.url} ${v.width}w`).join(', ')
+    : artworkCandidates(source());
+  // WebKit can start fetching src before applying a dynamic srcset. Keep the
+  // fallback inside the same bounded variant set, never the embedded original.
+  const fallback = () => candidates()?.split(', ')[0]?.replace(/ \d+w$/, '') || source();
+  const style: JSX.CSSProperties = {
+    position: 'absolute', inset: '0', width: '100%', height: '100%',
+    'object-fit': 'cover', 'border-radius': 'inherit', 'pointer-events': 'none',
+  };
+  return <Show when={props.src && !failed()}>
+    <img ref={image} sizes={`${width()}px`} srcset={candidates()} src={fallback()!}
+      alt={props.alt ?? ''} loading={props.eager || warm() ? 'eager' : 'lazy'} decoding={warm() ? 'sync' : 'async'}
+      draggable={false} style={style} onLoad={rememberPaint} onError={() => {
+        const old = artworkFallback(props.src);
+        if (!previousSource() && old) {
+          rejectPreviewArtwork(props.src);
+          setPreviousSource(artworkUrl(old));
+        } else setFailed(true);
+      }} />
+  </Show>;
+}

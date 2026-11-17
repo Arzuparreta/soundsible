@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { type MenuAction, type ActionMenuOptions } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import type { Track } from '../types/music';
@@ -204,6 +205,6 @@ export function trackMenuOptions(track: Track, ctx: TrackMenuContext = {}): Acti
 
 /** Open the action menu for a track. Pass the triggering event to anchor a
  * cursor popover on desktop (otherwise a bottom sheet). */
-export function openTrackMenu(track: Track, ctx: TrackMenuContext = {}, ev?: MouseEvent): void {
+export function openTrackMenu(track: Track, ctx: TrackMenuContext = {}, ev?: MenuEvent): void {
   openContextMenu(trackMenuOptions(track, ctx), ev);
 }
