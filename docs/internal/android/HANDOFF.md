@@ -43,6 +43,12 @@ configured independent update page. Latest-head remote CI and emulator shards
 remain required before merge.
 Physical old-device acceptance remains distinct from build and emulator results.
 
+The public capability manifest must carry the same minimum and target SDKs as
+`android/variables.gradle`. Release recovery on 2026-11-17 found the old API 24
+minimum still in `CAPABILITIES.json`; APK verification correctly rejected the
+API 26 build. The manifest now records API 26, with a repository regression
+checking both SDK fields before another release reaches signed APK verification.
+
 ## How work is done (updated 2026-10-06 to go faster without losing quality)
 
 1. **Inventory first, not by discovery.** The list of gaps below comes
