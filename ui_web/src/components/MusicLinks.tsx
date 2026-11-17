@@ -1,10 +1,11 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { Index, Show, type JSX } from 'solid-js';
 import { artistDestination, albumDestination, navigateMusic, performerNames, type MusicMetadata } from '../lib/musicNavigation';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import styles from './MusicLinks.module.css';
 
 /** Real hash links preserve copy/open-in-tab, while ordinary taps use the router. */
-export function MusicLink(props: { path: string; class?: string; label?: string; onMenu?: (event?: MouseEvent) => void; children?: JSX.Element }) {
+export function MusicLink(props: { path: string; class?: string; label?: string; onMenu?: (event?: MenuEvent) => void; children?: JSX.Element }) {
   const tap = createResponsiveTap({ onTap: (event) => {
     event.stopPropagation();
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -28,7 +29,7 @@ export function ArtistLinks(props: { music: MusicMetadata; class?: string; fallb
   </Show></span>;
 }
 
-export function AlbumLink(props: { music: MusicMetadata; class?: string; onMenu?: (event?: MouseEvent) => void; children?: JSX.Element }) {
+export function AlbumLink(props: { music: MusicMetadata; class?: string; onMenu?: (event?: MenuEvent) => void; children?: JSX.Element }) {
   return <Show when={props.music.linkable !== false && props.music.album?.trim()}
     fallback={<span class={props.class}>{props.children ?? props.music.album}</span>}>
     <MusicLink path={albumDestination(props.music)} class={props.class} onMenu={props.onMenu}>{props.children ?? props.music.album}</MusicLink>

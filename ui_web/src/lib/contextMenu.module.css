@@ -1,9 +1,3 @@
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-popover);
-}
-
 .popover {
   position: fixed;
   z-index: var(--z-popover);

@@ -15,7 +15,7 @@ import type { Track } from '../types/music';
 import { EmptyState } from '../components/EmptyState';
 import { CollectionActions } from '../components/CollectionActions';
 import { favouritesContext } from '../lib/playbackContext';
-import button from '../components/Button.module.css';
+import button from '../design/Button.module.css';
 import styles from './Favourites.module.css';
 
 const context = () => favouritesContext(t('favourites.title'));

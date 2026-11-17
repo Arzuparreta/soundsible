@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { Show, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
@@ -39,7 +40,7 @@ export default function TrackList(props: {
 }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
-  const openMenu = (track: Track, ev?: MouseEvent) =>
+  const openMenu = (track: Track, ev?: MenuEvent) =>
     openTrackMenu(
       track,
       {

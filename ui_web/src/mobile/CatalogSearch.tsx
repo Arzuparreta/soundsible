@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { api, ApiError } from '../lib/api';
 import { itemArtist } from '../lib/catalogTrack';
@@ -30,9 +31,9 @@ export default function CatalogSearch(props: {
   scrollTarget?: () => HTMLElement | undefined;
   generation: number; tracks: Track[]; saved: SavedEntry[]; disconnected: boolean; history?: ReturnType<typeof createSearchHistoryStorage>;
   offlineMenuActions?: (tracks: Track[]) => MenuAction[];
-  onResolvedMenu?: (track: Track, event?: MouseEvent, actions?: MenuAction[]) => void;
+  onResolvedMenu?: (track: Track, event?: MenuEvent, actions?: MenuAction[]) => void;
   onPlayOnDevice?: (track: Track) => void;
-  savedEntities?: SavedEntity[]; onEntityMenu?: (entry: SavedEntity, event?: MouseEvent) => void;
+  savedEntities?: SavedEntity[]; onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void;
   onPlayCollection?: (tracks: Track[], index: number) => Promise<void>;
   activeId?: string; isActive?: (track: Track) => boolean; onAcquire?: (track: Track) => Promise<void>; onPlay: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
   /** An artist or album page asked for from a song menu elsewhere; each id opens once. */
@@ -119,7 +120,7 @@ export default function CatalogSearch(props: {
     onCleanup(() => { clearTimeout(timer); controller.abort(); });
   }));
   onCleanup(() => { disposed = true; searchEpoch++; });
-  function menu(item: CatalogItem, event?: MouseEvent) {
+  function menu(item: CatalogItem, event?: MenuEvent) {
     const resolved = trackFor(item);
     const generation = props.generation;
     const search = searchEpoch, route = navigation;
@@ -146,7 +147,7 @@ export default function CatalogSearch(props: {
       ...feedback,
     ] }, event);
   }
-  function entityMenu(item: CatalogItem, event?: MouseEvent) {
+  function entityMenu(item: CatalogItem, event?: MenuEvent) {
     const entry = catalogEntityBookmark(item); if (entry) props.onEntityMenu?.(entry, event);
   }
   const entityStatus = (item: CatalogItem) => [entitySaved(item) ? t('savedEntities.saved') : '', catalogEntityHeld(item, holdings()) ? t('savedEntities.inLibrary') : ''].filter(Boolean).join(' · ');

@@ -2,7 +2,7 @@
    every other album and artist shelf. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(var(--browse-card-min, 144px), calc((100% - var(--browse-card-gap, 16px)) / 2)), 1fr));
+  grid-template-columns: var(--browse-grid-columns);
   gap: var(--space-xl) var(--browse-card-gap, var(--space-lg));
   padding: var(--space-sm) var(--gutter) var(--space-2xl);
 }

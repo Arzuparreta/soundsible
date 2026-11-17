@@ -156,7 +156,7 @@ describe('unified player geometry', () => {
    on every row; these lock in the other half of the fix — that when the line is
    still too narrow, the note gives way before the name does. */
 describe('list row metadata priority', () => {
-  const row = path.resolve(process.cwd(), 'src/components/MusicListRow.module.css');
+  const row = path.resolve(process.cwd(), 'src/design/MediaRow.module.css');
   const omni = path.resolve(process.cwd(), 'src/components/OmniBar.module.css');
 
   it('gives the note only what is left over, never what the artist still needs', () => {

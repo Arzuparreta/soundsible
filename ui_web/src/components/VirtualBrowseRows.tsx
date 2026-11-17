@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { createRowHeight } from '../lib/rowHeight';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { createEffect, on, For, Show } from 'solid-js';
@@ -7,7 +8,7 @@ import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 
 /** Read-only use of the shared song row: bounded DOM even for a full home library. */
-export function VirtualBrowseRows(props: { tracks: Track[]; onPlay?: (index: number) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MouseEvent, index?: number) => void; offline?: boolean; favourite?: (track: Track) => boolean }) {
+export function VirtualBrowseRows(props: { tracks: Track[]; onPlay?: (index: number) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MenuEvent, index?: number) => void; offline?: boolean; favourite?: (track: Track) => boolean }) {
   let scroll!: HTMLDivElement;
   const height = createRowHeight();
   const rows = createVirtualizer({

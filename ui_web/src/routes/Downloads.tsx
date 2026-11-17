@@ -1,6 +1,6 @@
 import Button from '../components/Button';
 import { A } from '@solidjs/router';
-import button from '../components/Button.module.css';
+import button from '../design/Button.module.css';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { ViewHeader } from '../components/ViewHeader';
 import { EmptyState } from '../components/EmptyState';

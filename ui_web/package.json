@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && vitest run && node --test perf/",
+    "test": "npm run typecheck && npm run design:check && vitest run && node --test perf/",
     "bench": "node perf/bench.mjs",
     "test:unit": "vitest run",
     "test:ui-scale": "playwright test",
@@ -13,10 +13,12 @@
     "showcase": "playwright test -c showcase/playwright.config.ts",
     "test:watch": "vitest",
     "build": "npm run typecheck && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "design:check": "node --test scripts/check-design.test.mjs && node scripts/check-design.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@babel/parser": "^7.29.9",
     "@capacitor/cli": "8.5.3",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fontsource/plus-jakarta-sans": "^5.3.0",

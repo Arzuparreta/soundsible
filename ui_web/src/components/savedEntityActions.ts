@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import type { CatalogItem } from '../types/music';
 import { catalogSavedEntity } from '../lib/catalogCollection';
 import { openContextMenu } from '../lib/contextMenu';
@@ -16,12 +17,12 @@ export function savedEntityAction(entry: SavedEntity): MenuAction {
   };
 }
 
-export function openSavedEntityMenu(entry: SavedEntity, event?: MouseEvent): void {
+export function openSavedEntityMenu(entry: SavedEntity, event?: MenuEvent): void {
   void syncSavedEntities();
   openContextMenu({ title: entry.name, actions: [savedEntityAction(entry)] }, event);
 }
 
-export function openCatalogEntityMenu(item: CatalogItem, event?: MouseEvent): void {
+export function openCatalogEntityMenu(item: CatalogItem, event?: MenuEvent): void {
   const entry = catalogSavedEntity(item);
   if (entry) openSavedEntityMenu(entry, event);
 }

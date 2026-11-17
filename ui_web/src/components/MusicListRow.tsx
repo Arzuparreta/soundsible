@@ -1,6 +1,6 @@
 import { Show } from 'solid-js';
 import { ArtistLinks, MusicLink } from './MusicLinks';
-import styles from './MusicListRow.module.css';
+import styles from '../design/MediaRow.module.css';
 import { MusicListRowView, type MusicListRowViewProps } from './MusicListRowView';
 import { isDownloadingKeys, isFavouriteKeys, state } from '../stores';
 export type MusicListRowProps = MusicListRowViewProps;

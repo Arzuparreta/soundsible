@@ -853,8 +853,8 @@
   }
 
   .desktopLyricsStage .ctrl {
-    width: 40px;
-    height: 40px;
+    width: var(--control-h);
+    height: var(--control-h);
   }
 
   .desktopLyricsStage .ctrl svg {
@@ -882,8 +882,8 @@
   }
 
   .desktopLyricsStage .actBtn {
-    width: 36px;
-    height: 36px;
+    width: var(--control-h);
+    height: var(--control-h);
   }
 
   /* The volume slider needs more room than a narrow dock has, so there it

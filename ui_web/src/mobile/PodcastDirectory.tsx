@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
@@ -40,7 +41,7 @@ export default function PodcastDirectory(props: { generation: number; disconnect
     onCleanup(() => controller.abort());
   }));
   const recommended = () => top().filter(row => !props.subscribed?.(row.feed_url));
-  function topMenu(row: PodcastSearchResult, event?: MouseEvent) {
+  function topMenu(row: PodcastSearchResult, event?: MenuEvent) {
     const generation = props.generation;
     const current = () => generation === props.generation && !props.disconnected;
     openContextMenu({ title: row.title, subtitle: row.author, actions: [

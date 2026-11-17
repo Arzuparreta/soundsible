@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { ArtistLinks } from './MusicLinks';
 import type { MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
@@ -436,7 +437,7 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard;
   const label = () => expandable()
     ? t(expanded() ? 'nowPlaying.contextCollapse' : 'nowPlaying.contextExpand', { name: props.card.title })
     : props.card.openLabel ?? props.card.title;
-  const openMenu = (event?: MouseEvent) => {
+  const openMenu = (event?: MenuEvent) => {
     const actions = props.card.menu?.() ?? [];
     if (actions.length) openContextMenu({ title: props.card.title, subtitle: props.card.detail, actions }, event);
   };

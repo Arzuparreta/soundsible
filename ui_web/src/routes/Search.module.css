@@ -354,7 +354,7 @@
    columns. */
 .entityGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(var(--browse-card-min, 144px), calc(50% - var(--browse-card-gap, 16px) / 2)), 1fr));
+  grid-template-columns: var(--browse-grid-columns);
   gap: var(--space-xl) var(--browse-card-gap, 16px);
   min-width: 0;
 }

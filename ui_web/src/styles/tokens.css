@@ -199,6 +199,8 @@
      A grid column is at least `min` wide, narrower only where two columns
      would not otherwise fit a small phone; a rail card is `width` wide; both
      share `gap`. */
+  --browse-grid-columns: repeat(auto-fill, minmax(min(var(--browse-card-min), calc((100% - var(--browse-card-gap)) / 2)), 1fr));
+  --browse-grid-row-gap: var(--space-xl);
   --browse-card-min: 144px;
   --browse-card-width: 156px;
   --browse-card-gap: var(--space-lg);

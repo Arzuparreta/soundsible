@@ -89,8 +89,8 @@
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr));
-  gap: var(--space-md);
+  grid-template-columns: var(--browse-grid-columns);
+  gap: var(--browse-grid-row-gap) var(--browse-card-gap);
   width: 100%;
   animation: skeleton-breathe 1.65s var(--ease-in-out) infinite;
   animation-play-state: var(--decorative-animation-state, running);
@@ -151,8 +151,8 @@
 
 @media (min-width: 1024px) {
   .cards {
-    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-    gap: var(--space-lg);
+    grid-template-columns: var(--browse-grid-columns);
+    gap: var(--browse-grid-row-gap) var(--browse-card-gap);
   }
 }
 
@@ -167,6 +167,6 @@
   .rows { padding-inline: 0; gap: 0; }
   .row, .compactRows .row { height: var(--row-h); gap: 8px; padding-inline: 12px; border: 0; }
   .rowCopy { order: 0; }
-  .cover { order: 1; }
-  .trailing { order: 2; width: max(44px, var(--control-h)); flex-basis: max(44px, var(--control-h)); }
+  .cover { order: 2; }
+  .trailing { order: 1; width: max(44px, var(--control-h)); flex-basis: max(44px, var(--control-h)); }
 }

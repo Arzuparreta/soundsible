@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createMemo, createResource, createSignal, createEffect, on, For, Show, onCleanup } from 'solid-js';
 import { registerNativeBack } from './backNavigation';
@@ -23,7 +24,7 @@ import styles from './AndroidStart.module.css';
 
 export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap; settings?: LibrarySettings }
 /** Account browse surface; writes are delegated, sharing rows/artwork without the web player. */
-export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlists'; snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number, context?: ProgramContext) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MouseEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MouseEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MouseEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void }) {
+export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlists'; snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number, context?: ProgramContext) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MenuEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MenuEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MenuEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void }) {
   const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists' | 'favourites'>(props.initialTab ?? 'songs');
   const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity } | null>(null);
   const [onlyAvailable, setOnlyAvailable] = createSignal(false);
@@ -105,7 +106,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
   const downloadedFilter = (): MenuAction =>
     ({ label: t('library.filterDownloaded'), selected: libraryFilter() === 'downloaded', onSelect: () => setLibraryFilter(libraryFilter() === 'downloaded' ? 'all' : 'downloaded') });
   /** Album order and the genre/year filter: the engine's lists, read when the menu opens. */
-  async function albumMenu(event?: MouseEvent) {
+  async function albumMenu(event?: MenuEvent) {
     const active = albumFilter();
     const filters: MenuAction[] = [{ label: t('library.albumFilterAll'), selected: active.kind === 'none', onSelect: () => setAlbumFilter(NO_ALBUM_FILTER) }];
     if (!props.disconnected && !onlyAvailable()) {

@@ -1,3 +1,4 @@
+import type { MenuEvent } from '../lib/menuEvent';
 import type { MenuAction } from '../components/ActionMenu';
 import type { Device } from '../lib/api';
 import { openContextMenu } from '../lib/contextMenu';
@@ -58,7 +59,7 @@ export { canPlayOnDevice } from '../lib/remotePlayback';
 import { canPlayOnDevice, remotePlayRequest } from '../lib/remotePlayback';
 
 /** Lists the account's other online devices and asks the chosen one to play this element. */
-export async function openNativePlayOnDevice(track: Track, self: () => Promise<string | null>, current: () => boolean, event?: MouseEvent): Promise<void> {
+export async function openNativePlayOnDevice(track: Track, self: () => Promise<string | null>, current: () => boolean, event?: MenuEvent): Promise<void> {
   if (!current() || !canPlayOnDevice(track)) return;
   let devices: Device[];
   try {

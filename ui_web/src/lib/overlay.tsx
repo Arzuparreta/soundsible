@@ -28,7 +28,7 @@ type OverlayRender = (close: (afterClose?: () => void) => void) => JSX.Element;
  * full screen on mobile, a fixed-size pane on desktop — for a surface that owns
  * its own header and scrollers, like settings.
  */
-type OverlayVariant = 'sheet' | 'window' | 'drawer';
+type OverlayVariant = 'sheet' | 'window' | 'drawer' | 'popover';
 
 /**
  * A thunk keeps the accessible name live. It matters for anything that can be
@@ -66,7 +66,7 @@ function remove(id: number, afterClose?: () => void) {
   entry.cleanup?.();
   setOverlays((list) => list.filter((o) => o.id !== id));
   queueMicrotask(() => {
-    entry.returnFocus?.focus();
+    entry.returnFocus?.focus({ preventScroll: true });
     afterClose?.();
   });
 }
@@ -154,7 +154,7 @@ export function openOverlay(
         if (!afterClose) {
           closingEntry = entry;
           setOverlays(list => list.filter(item => item.id !== id));
-          queueMicrotask(() => entry.returnFocus?.focus());
+          queueMicrotask(() => entry.returnFocus?.focus({ preventScroll: true }));
         }
         window.history.back();
       }
@@ -312,11 +312,16 @@ export const OverlayOutlet: Component = () => {
       const list = overlays();
       const top = list[list.length - 1];
       if (!top) return;
-      if (e.key === 'Escape' && top.dismissable) {
-        remove(top.id);
+      if (e.key === 'Escape') {
+        // One Escape belongs to one surface. Claim it before the player's
+        // window shortcuts can dismiss the workspace underneath this menu.
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (top.dismissable) remove(top.id);
         return;
       }
       if (e.key !== 'Tab') return;
+      if (top.variant === 'popover') return;
       const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]');
       const dialog = dialogs[dialogs.length - 1];
       if (!dialog) return;
@@ -338,8 +343,8 @@ export const OverlayOutlet: Component = () => {
         first.focus();
       }
     };
-    window.addEventListener('keydown', onKey);
-    onCleanup(() => { window.removeEventListener('keydown', onKey); discardOverlays(); });
+    window.addEventListener('keydown', onKey, true);
+    onCleanup(() => { window.removeEventListener('keydown', onKey, true); discardOverlays(); });
   });
 
   return (
@@ -347,6 +352,11 @@ export const OverlayOutlet: Component = () => {
       <For each={overlays()}>
         {(entry) => {
           const close = (afterClose?: () => void) => remove(entry.id, afterClose);
+          if (entry.variant === 'popover') return <div class={styles.scrim} data-variant="popover"
+            role="presentation" onPointerDown={event => event.target === event.currentTarget && entry.dismissable && close()}
+            onContextMenu={event => { if (event.target === event.currentTarget) { event.preventDefault(); close(); } }}>
+            {entry.render(close)}
+          </div>;
           return (
             <div
               class={styles.scrim}
