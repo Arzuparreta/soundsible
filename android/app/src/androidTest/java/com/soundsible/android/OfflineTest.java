@@ -51,6 +51,7 @@ public class OfflineTest {
             web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('input[type=password]')");
             web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");observe(web,scenario);
             // No standalone preparation button in the library shell.
             assertEquals("false",web.evaluate(scenario,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Available offline')"));
@@ -62,7 +63,7 @@ public class OfflineTest {
             long gen=connection.getGeneration();assertNotNull(store.local("member-track",gen));assertEquals(1,store.state(gen).getJSONArray("items").length());
             int before=requests(connection,origin);
             control(connection,origin,"connection-failure","{\"enabled\":true,\"status\":503}");
-            scenario.recreate();waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");observe(web,scenario);
+            scenario.recreate();web.revealLibraryTrack(scenario, "member-track");waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");observe(web,scenario);
             assertEquals("false",web.evaluate(scenario,"!!document.querySelector('input[type=password]')"));
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song').click()");
             waitFor(web,scenario,"window.__play?.playing && window.__play.id==='member-track' && window.__play.items[0].offline===true");

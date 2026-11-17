@@ -48,8 +48,10 @@ class DjContextTest {
                 web.evaluate(scenario, "window.__djTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__dj=s),100)")
                 waitFor("window.__dj?.ready")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh').click()")
+                web.revealLibraryTitle(scenario, "member louder PCM song")
                 waitFor("Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).some(b=>b.textContent==='member louder PCM song')")
                 fun menu(title: String, action: String) {
+                    web.revealLibraryTitle(scenario, title)
                     web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent===" + JSONObject.quote(title) + ").closest('[data-music-list-row]').querySelector('[data-row-menu]').click()")
                     waitFor("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent===" + JSONObject.quote(action) + ")")
                     web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent===" + JSONObject.quote(action) + ").click()")
@@ -153,6 +155,7 @@ class DjContextTest {
                 // A real library click now owns a fresh native DJ programme,
                 // even while the old programme was paused with requests.
                 web.evaluate(scenario, "document.querySelector('[role=dialog] button[aria-label=Close]')?.click();window.__oldProgram=window.__dj.programToken;window.__oldKeys=window.__dj.items.map(i=>i.key)")
+                web.revealLibraryTitle(scenario, "member louder PCM song")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member louder PCM song').click()")
                 waitFor("window.__dj.dj?.active && window.__dj.id==='member-pcm-loud' && window.__dj.playing && window.__dj.playWhenReady && window.__dj.programToken!==window.__oldProgram")
                 waitFor("window.__dj.dj.sources.length===1 && window.__dj.dj.sources[0].tracks[0].id==='member-pcm-loud'")

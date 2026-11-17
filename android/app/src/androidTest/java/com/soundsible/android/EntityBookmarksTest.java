@@ -35,6 +35,7 @@ public class EntityBookmarksTest {
     private void signIn(StartupTest web,ActivityScenario<MainActivity> scenario,String name) throws Exception {
         waitFor(web,scenario,"!!document.querySelector('input[type=password]')");
         web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value="+JSONObject.quote(name)+";document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+        web.revealLibraryTrack(scenario, name + "-track");
         waitFor(web,scenario,"!!document.querySelector('[data-testid=android-library]') && document.body.innerText.includes("+JSONObject.quote(name+" private song")+")");
     }
     private void tab(StartupTest web,ActivityScenario<MainActivity> scenario,String name) throws Exception {

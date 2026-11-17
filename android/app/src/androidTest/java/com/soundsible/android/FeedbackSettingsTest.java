@@ -49,6 +49,7 @@ public class FeedbackSettingsTest {
                 web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
                 waitFor(scenario,"!!document.querySelector('input[type=password]')");
                 web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+                web.revealLibraryTrack(scenario, "member-track");
                 waitFor(scenario,"!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')");
                 observe(scenario);
                 web.evaluate(scenario,"document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");

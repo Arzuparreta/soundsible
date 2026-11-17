@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.json.JSONObject;
 
 /** Exercises the actual packaged Solid assets and native App.getInfo plugin. */
 @RunWith(AndroidJUnit4.class)
@@ -35,6 +36,37 @@ public class StartupTest {
             Thread.sleep(200);
         }
         fail("Packaged Android startup did not complete: " + evaluate(scenario, "document.body.innerText"));
+    }
+
+    /** Bounded rows must be reached by scrolling, not assumed to exist offscreen. */
+    public void revealLibraryTrack(ActivityScenario<MainActivity> scenario, String id) throws Exception {
+        revealLibraryRow(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-browse-track-id]'))"
+            + ".find(row=>row.dataset.browseTrackId===" + JSONObject.quote(id) + ")");
+    }
+
+    public void revealLibraryTitle(ActivityScenario<MainActivity> scenario, String title) throws Exception {
+        revealLibraryRow(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]'))"
+            + ".find(row=>row.textContent===" + JSONObject.quote(title) + ")");
+    }
+
+    private void revealLibraryRow(ActivityScenario<MainActivity> scenario, String row) throws Exception {
+        String port = "document.querySelector('[data-testid=android-library] [data-library-scroll]')";
+        boolean reset = false;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (System.nanoTime() < deadline) {
+            if ("true".equals(evaluate(scenario, "(()=>{const row=" + row
+                + ";if(!row)return false;row.scrollIntoView({block:'nearest'});return true})()"))) return;
+            if (!reset && "true".equals(evaluate(scenario, "!!" + port))) {
+                evaluate(scenario, port + ".scrollTop=0");
+                reset = true;
+            } else if (reset) {
+                evaluate(scenario, "(()=>{const port=" + port + ";if(!port)return;"
+                    + "port.scrollTop=port.scrollTop>=port.scrollHeight-port.clientHeight-1?0:"
+                    + "port.scrollTop+Math.max(1,port.clientHeight*.75)})()");
+            }
+            Thread.sleep(100);
+        }
+        fail("Library row not reached: " + row + ": " + evaluate(scenario, "document.body.innerText"));
     }
 
     @Test public void packagedStartupAndOfflineReopen() throws Exception {

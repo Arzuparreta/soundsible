@@ -44,6 +44,7 @@ class SongMenuTest {
                 }
                 fun menuButton(label: String) = "Array.from(document.querySelectorAll('[role=dialog] button')).find(b=>b.textContent.trim()===${JSONObject.quote(label)})"
                 fun openMenu() {
+                    web.revealLibraryTrack(scenario, "member-track")
                     waitFor("!!document.querySelector('[data-browse-track-id=member-track] [data-row-menu]')")
                     web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-menu]').click()")
                     waitFor("!!document.querySelector('[role=dialog]')")
@@ -58,6 +59,7 @@ class SongMenuTest {
                 web.evaluate(scenario, "${menuButton("Go to album")}.click()")
                 waitFor("document.querySelector('[data-testid=android-entity-profile] h1')?.textContent==='member album'")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='Library').click()")
+                web.revealLibraryTrack(scenario, "member-track")
                 waitFor("!!document.querySelector('[data-browse-track-id=member-track]')")
                 openMenu(); web.evaluate(scenario, "${menuButton("Go to artist")}.click()")
                 waitFor("document.querySelector('[data-testid=android-entity-profile] h1')?.textContent==='member artist'")

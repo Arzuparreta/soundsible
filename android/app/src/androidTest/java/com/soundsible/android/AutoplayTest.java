@@ -53,6 +53,7 @@ public class AutoplayTest {
             web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('input[type=password]')");
             web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
         try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/__fixture/radio-seed").header("X-Android-Fixture","isolated").post(okhttp3.RequestBody.create("{\"failNext\":1}",okhttp3.MediaType.get("application/json"))).build()).execute()){assertEquals(200,response.code());}
             observe(web,scenario);

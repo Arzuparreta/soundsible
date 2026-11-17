@@ -28,7 +28,7 @@ Current state and way of working. What has been superseded is in
   Bluetooth and car following [ALPHA](../../ANDROID_ALPHA.md#community-testing).
   AVD/CI do not replace that evidence. It is a beta requirement, not an alpha requirement.
 
-## WebView compatibility floor (web UI step 9, in progress)
+## WebView compatibility floor (web UI step 9)
 
 The installation floor is API 26 (Android 8), aligned with WebView 120 and the
 Chrome 120 bundle target. Android 7 cannot install that engine; the earlier

@@ -98,6 +98,7 @@ public class PlannerRetirementTest {
             }
             assertNotNull("Computed plan must contain a recording owned by this retirement fixture: " + planned, retired);
             String selector = "[data-browse-track-id=" + JSONObject.quote(retired) + "] [data-row-menu]";
+            web.revealLibraryTrack(scenario, retired);
             waitFor(scenario, "!!document.querySelector(" + JSONObject.quote(selector) + ")");
             web.evaluate(scenario, "document.querySelector(" + JSONObject.quote(selector) + ").click()");
             click(scenario, "Delete from library");

@@ -87,6 +87,7 @@ public class AppearanceSettingsTest {
             web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(origin) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(scenario, "!!document.querySelector('input[autocomplete=username]')");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-menu]')");
             String cookie = connection.cookieHeader(connection.getGeneration()); assertTrue(cookie != null);
             web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-menu]').click()");

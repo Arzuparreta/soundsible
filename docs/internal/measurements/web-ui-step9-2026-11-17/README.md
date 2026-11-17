@@ -237,3 +237,65 @@ tests and the three-surface production DOM/scroll budget
 ([result](ci-node24.json)); the quoted glob also passes, without relying on
 shell expansion. These changes affect CI/test scripts,
 not application rendering or the earlier performance comparisons.
+
+### Checkout metadata and production startup follow-up
+
+Head `9896be7` passed all three CI rendering bursts but failed while recording
+Git provenance: the root container rejected the runner-owned checkout. The
+previous local container reproduction configured Git trust explicitly; that
+setup was missing from the workflow. The rendering step now trusts only
+`$GITHUB_WORKSPACE` in that job's Git config. A fresh container with a
+UID-mismatched home/checkout reproduced the rejection, then completed the
+seven tests, all three bursts, provenance export and the DOM/scroll budget
+after executing the workflow's exact trust command.
+
+The downstream startup job also runs Firefox, so its ephemeral home ownership
+is aligned there as well. Startup projects explicitly select the two startup
+specs; Firefox's separate compatibility matcher previously overrode the
+top-level startup matcher. The 55 UI contracts remain in their dedicated
+Firefox matrix job. Full production startup across all five profiles passed with Node 24.21.0
+and the same image: 123 passed and seven intentional skips. The read-only local reproduction
+uses private tmpfs Vite caches and the exported production bundle.
+
+The new Firefox startup coverage exposed an automation interaction in the
+offline test. An independent service worker that always returns a fixed HTML
+response reproduces `NS_ERROR_OFFLINE` with Playwright HTTP routing enabled;
+removing routing restores a worker-served offline reload. The product worker
+is not involved in that control. The test now removes HTTP mocks before the
+outage and restores them before reconnecting, so connection recovery also
+runs against an actual failed network.
+
+Firefox's protocol `response.text()` then rejected an already-decoded,
+compressed worker body with `NS_ERROR_INVALID_CONTENT_ENCODING`, while the
+document rendered and booted. The HTML-loader assertion now reads the decoded
+CacheStorage body directly in the browser; worker provenance, offline
+navigation, boot completion and reconnection assertions remain. Targeted
+production offline cases pass on Chromium phone/desktop and Firefox (three
+passed); the two existing WebKit automation skips remain unchanged. The final complete startup rerun also passed (123 passed, seven skips). No application code or service-worker
+policy was changed by these CI follow-ups.
+
+
+### Native virtualized-library test follow-up
+
+Six emulator shards on `9896be7` failed because test DOM predicates assumed
+that every library row remained mounted. The affected fixtures contain saved,
+radio and PCM tracks; the original private track and a planned retirement
+can sit below the shared collection's bounded window. The diagnostics showed
+valid library rows at the current scroll position, without an application
+exception.
+
+`StartupTest` now reaches the requested ID/title through the library's actual
+scrollport, polling mounted rows and traversing by three quarters of a viewport.
+It does not filter, mutate the library or enlarge the rendering window. The
+failed connection, metadata, bookmarks, Live, review, Subsonic, offline-removal
+and planner tests use it, along with adjacent native library interactions that
+had the same assumption. Duplicate-playlist/queue and ordering assertions are
+retained. The offline-refusal test brings its saved preview into view before
+opening the manager, preserving the retention assertion during the failure.
+
+The updated Java/Kotlin instrumentation APK compiles, lint passes and the JVM
+task succeeds (102 existing test results; unchanged tests reused by Gradle).
+The native runtime remains a latest-head CI gate: the Device tool reported no
+available local Android emulator/device, so no local instrumentation success
+is claimed. Workflow reproduction results are in
+[ci-workflow-repro.json](ci-workflow-repro.json).

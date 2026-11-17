@@ -326,3 +326,13 @@ Android release. Old-provider behavior on a physical device and community
 listening/Bluetooth/car acceptance remain separate from these package checks.
 Full latest-head emulator CI remains a merge gate. Rendering results and
 shared native collection regressions: [web UI step 9 evidence](../measurements/web-ui-step9-2026-11-17/README.md).
+
+
+The CI follow-up adapts native library interactions to bounded collections:
+`StartupTest.revealLibraryTrack`/`revealLibraryTitle` scroll the real library
+viewport instead of assuming offscreen DOM. This preserves the duplicate,
+account-isolation, offline-retention and planner-retirement assertions. The
+updated instrumentation APK compiles; lint and the cached 102-test JVM task
+succeed. Native execution is verified by the latest-head emulator shards,
+not by local compilation. Detailed failure evidence and the CI environment
+corrections are recorded in the linked web UI evidence.

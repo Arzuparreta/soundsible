@@ -63,6 +63,7 @@ public class FileDeletionTest {
         web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent===" + JSONObject.quote(label) + ").click()");
     }
     private void menu(ActivityScenario<MainActivity> scenario, String id) throws Exception {
+        web.revealLibraryTrack(scenario, id);
         String selector = "[data-browse-track-id=" + JSONObject.quote(id) + "] [data-row-menu]";
         waitFor(scenario, "!!document.querySelector(" + JSONObject.quote(selector) + ")");
         web.evaluate(scenario, "document.querySelector(" + JSONObject.quote(selector) + ").click()");
@@ -170,6 +171,7 @@ public class FileDeletionTest {
             try (var response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/api/static/stream/" + id).header("Cookie", owner).header("Range", "bytes=0-31").build()).execute()) {
                 assertEquals("Member deletion must preserve shared audio", 206, response.code()); assertEquals(32, response.body().bytes().length);
             }
+            web.revealLibraryTrack(scenario, "B1111111111");
             waitFor(scenario, "!!document.querySelector('[data-browse-track-id=B1111111111] [data-row-main][aria-current=true]')");
             var current = acquire(connection, origin, member, "D1111111111", "Delete current file"); String currentId = current.getString("id");
             command(scenario, "action:'queue',index:0,tracks:[{source:'local',id:" + JSONObject.quote(currentId) + ",title:'Delete current file',artist:'member artist'},{source:'local',id:'member-track',title:'Successor',artist:'member artist'}]");

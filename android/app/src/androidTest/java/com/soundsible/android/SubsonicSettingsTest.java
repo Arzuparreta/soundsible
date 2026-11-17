@@ -89,6 +89,7 @@ public class SubsonicSettingsTest {
             web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(origin) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(scenario, "!!document.querySelector('input[type=password]')");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')");
             member = connection.cookieHeader(connection.getGeneration()); assertTrue(member != null);
             owner = loginCookie(connection, origin, "owner");
@@ -120,6 +121,7 @@ public class SubsonicSettingsTest {
             click(scenario, "Sign out"); waitFor(scenario, "!!document.querySelector('[role=dialog]')"); click(scenario, "Sign out");
             waitFor(scenario, "!!document.querySelector('input[type=password]')&&!document.querySelector('[data-subsonic-secret]')");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='owner';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "owner-track");
             waitFor(scenario, "!!document.querySelector('[data-browse-track-id=owner-track] [data-row-main]')"); open(scenario);
             assertEquals("false", web.evaluate(scenario, "!!document.querySelector('[data-subsonic-secret]')"));
             assertEquals("true", web.evaluate(scenario, "document.querySelector('[data-setting=subsonic-username]').textContent.includes('owner')&&!document.querySelector('[data-setting=subsonic-username]').textContent.includes('member')"));

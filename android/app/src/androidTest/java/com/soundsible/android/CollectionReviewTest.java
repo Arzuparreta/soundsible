@@ -56,6 +56,7 @@ public class CollectionReviewTest {
             web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('input[type=password]')");
             web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
             savedBefore=api(connection,origin,"/api/library/saved",null,"GET").getJSONArray("saved");
             web.evaluate(scenario,"window.__reviewTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__review=s),100);Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song').click()");

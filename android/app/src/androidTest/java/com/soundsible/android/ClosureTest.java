@@ -94,6 +94,7 @@ public class ClosureTest {
             web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(origin) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(scenario, "!!document.querySelector('input[type=password]')");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
             long epoch = connection.getGeneration(); String cookie = connection.cookieHeader(epoch);
             AtomicReference<com.google.common.util.concurrent.ListenableFuture<MediaController>> future = new AtomicReference<>();
@@ -137,6 +138,7 @@ public class ClosureTest {
                     if (phase.equals("buffering")) { Thread.sleep(5200); nativeState(controller, true); }
                     waitFor(scenario, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Refresh' && !b.disabled)");
                     web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh' && !b.disabled).click()");
+                    web.revealLibraryTrack(scenario, "member-track");
                     waitFor(scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
                     // Adding to a closed program must not inherit the old Play/shuffle/repeat intention.
                     web.evaluate(scenario, "window.__fresh=null;window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + epoch + ",action:'append',queueToken:s.queueToken,tracks:[{source:'local',id:'member-track',title:'fresh program'}]})).then(s=>window.__fresh=s)");
@@ -146,6 +148,7 @@ public class ClosureTest {
                     closed(scenario, controller, context, connection, epoch, cookie);
                 }
                 // An explicit library activation after all closures can start real playback again.
+                web.revealLibraryTrack(scenario, "member-track");
                 waitFor(scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song').click()");
                 waitFor(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__last=s),window.__last?.playing===true");

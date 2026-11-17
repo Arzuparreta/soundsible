@@ -266,7 +266,13 @@ jobs:
           SOFTWARE: '1'
           TAG: ci-scene
           KEEP_TRACE: perf/results/traces
-        run: node --test perf/*.test.mjs && node perf/bench.mjs && node perf/budget.mjs perf/results/ci-scene.json
+        run: |
+          # checkout's temporary Git config is scoped to the action itself.
+          # The root container also needs to trust this runner-owned checkout.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          node --test perf/*.test.mjs
+          node perf/bench.mjs
+          node perf/budget.mjs perf/results/ci-scene.json
       - name: Upload production rendering evidence
         if: always()
         uses: actions/upload-artifact@v7.0.2
@@ -275,7 +281,10 @@ jobs:
           path: ui_web/perf/results
           retention-days: 7
       - name: Validate production startup and cached PWA
-        run: npx playwright test --config playwright.startup.config.ts
+        run: |
+          # Firefox also runs here and requires the job home to match its UID.
+          chown "$(id -u):$(id -g)" "$HOME"
+          npx playwright test --config playwright.startup.config.ts
       - name: Upload startup browser report
         if: always()
         uses: actions/upload-artifact@v7.0.2
