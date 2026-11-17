@@ -77,12 +77,29 @@ class DevicesUiTest {
                 while (System.nanoTime() < until && !main { active.isPlaying }) Thread.sleep(50)
                 assertTrue(main { active.isPlaying })
                 main { active.seekTo(8321); active.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL; active.shuffleModeEnabled = true }
+                // A seek temporarily buffers. Handoff rejects a source whose transport
+                // changes during its HTTP requests, so wait for the service's confirmed
+                // publication, not the controller's optimistic position after seekTo.
+                val nativeId = JSONObject(main { active.sessionExtras.getString("nativeDevice") }!!).getString("device_id")
+                var published = JSONObject()
+                fun settled(): Boolean {
+                    published = core("/api/playback/state")
+                    val session = published.optJSONObject("session")
+                    return published.optString("device_id") == nativeId && published.optBoolean("is_playing") &&
+                        published.optDouble("position_sec", -1.0) in 8.0..18.0 && session?.optInt("index") == 1 &&
+                        session.optString("repeat") == "all" && session.optBoolean("shuffle")
+                }
+                val seekSettled = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+                while (!settled() && System.nanoTime() < seekSettled) Thread.sleep(50)
+                assertTrue("Native seek/preferences were not published before handoff: $published", settled())
                 waitFor("!!document.querySelector('[data-testid=android-settings-devices] button:not(:disabled)')&&Array.from(document.querySelectorAll('[data-testid=android-settings-devices] button')).some(b=>b.textContent==='Transfer playback'&&!b.disabled)")
                 latestStart.set(null)
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-settings-devices] button')).find(b=>b.textContent==='Transfer playback').click()")
                 val transferred = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
                 while (System.nanoTime() < transferred && latestStart.get()?.optJSONObject("state")?.optJSONObject("session") == null) Thread.sleep(50)
-                val state = latestStart.get()!!.getJSONObject("state")
+                val delivered = latestStart.get()
+                assertNotNull("UI transfer never reached peer Core socket: " + web.evaluate(scenario, "document.querySelector('[data-testid=android-settings-devices]').innerText"), delivered)
+                val state = delivered!!.getJSONObject("state")
                 val session = state.getJSONObject("session")
                 assertEquals(2, session.getJSONArray("queue").length()); assertEquals(1, session.getInt("index"))
                 assertEquals("Native second", session.getJSONArray("queue").getJSONObject(1).getString("title"))
