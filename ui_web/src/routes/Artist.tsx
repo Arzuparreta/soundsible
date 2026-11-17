@@ -9,9 +9,8 @@ import { EntityViewSelect } from '../components/EntityViewSelect';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { CoverImage } from '../components/CoverImage';
-import { libraryTrackMusic } from '../lib/musicNavigation';
 import { MusicLink } from '../components/MusicLinks';
-import { createEffect, createMemo, createResource, createSignal, For, on, Show, onCleanup } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, on, Show, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { actions, musicLibrary, isPlayingItem, state } from '../stores';
 import { api } from '../lib/api';
@@ -30,10 +29,10 @@ import hero from '../components/EntityHero.module.css';
 import { coverGradient } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
-import SongRow from '../components/SongRow';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { ArtistDiscoveryView, fansLabel } from '../components/ArtistDiscoveryView';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
+import { EntityTrackList } from '../components/EntityTrackList';
 import { tabRoot } from '../lib/tabMemory';
 
 type ViewMode = 'discover' | 'library';
@@ -387,26 +386,9 @@ function LibraryView(props: { tracks: Track[]; loading: boolean; failed: boolean
         <EmptyState tone="danger">{t('common.loadFailed')} <Button class={hero.retry} variant="secondary" size="sm" onClick={() => props.onRetry()}>{t('common.retry')}</Button></EmptyState>
       }>
         <Show when={props.tracks.length > 0} fallback={<Show when={props.loading} fallback={<EmptyState>{t('artist.empty')}</EmptyState>}><SkeletonRows /></Show>}>
-          <TrackListLite tracks={props.tracks} context={props.context} />
+          <EntityTrackList tracks={props.tracks} context={props.context} />
         </Show>
       </Show>
-    </div>
-  );
-}
-
-function TrackListLite(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
-  return (
-    <div class={styles.trackList}>
-      <For each={props.tracks}>
-        {(track, i) => (
-          <SongRow
-            track={track} music={libraryTrackMusic(track)}
-            index={i() + 1}
-            cover={trackCoverUrl(track, 'thumb')}
-            onPlay={() => actions.playFrom(props.tracks, i(), { context: props.context })}
-          />
-        )}
-      </For>
     </div>
   );
 }

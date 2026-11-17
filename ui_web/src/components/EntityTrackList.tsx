@@ -1,0 +1,35 @@
+import { For, Show } from 'solid-js';
+import { actions } from '../stores';
+import { libraryTrackMusic } from '../lib/musicNavigation';
+import { trackCoverUrl } from '../lib/media';
+import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
+import type { Track } from '../types/music';
+import SongRow from './SongRow';
+import { CollectionRows } from './CollectionView';
+
+/** Up to this many rows the list is built whole. Measured on the rendering
+ * bench: a list this short costs less to build once than to keep bounded, and
+ * it then scrolls without running any script. Most albums are under it. */
+const WHOLE_LIST_ROWS = 60;
+
+/**
+ * The numbered songs of an album or an artist, under the page's header and in
+ * the page's own scrollport. A long one is bounded like every other song
+ * list: an artist with a thousand songs renders the rows on screen, not a
+ * thousand.
+ */
+export function EntityTrackList(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
+  const row = (track: () => Track, index: () => number) => (
+    <SongRow
+      track={track()} music={libraryTrackMusic(track())}
+      index={index() + 1}
+      cover={trackCoverUrl(track(), 'thumb')}
+      onPlay={() => actions.playFrom(props.tracks, index(), { context: props.context })}
+    />
+  );
+  return (
+    <Show when={props.tracks.length > WHOLE_LIST_ROWS} fallback={<For each={props.tracks}>{(track, index) => row(() => track, index)}</For>}>
+      <CollectionRows items={props.tracks}>{row}</CollectionRows>
+    </Show>
+  );
+}

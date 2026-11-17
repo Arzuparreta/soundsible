@@ -14,6 +14,12 @@ vi.mock('@solidjs/router', () => ({
 
 import AlbumGrid from './AlbumGrid';
 import type { CatalogAlbum } from '../types/music';
+import { mockScrollportLayout } from '../testLayout';
+
+mockScrollportLayout();
+
+/** The grid lives in a route's scrollport. */
+const Grid = (props: Parameters<typeof AlbumGrid>[0]) => <div data-primary-scroll><AlbumGrid {...props} /></div>;
 
 const album = (over: Partial<CatalogAlbum> = {}): CatalogAlbum => ({
   id: 'al-1',
@@ -28,7 +34,7 @@ const album = (over: Partial<CatalogAlbum> = {}): CatalogAlbum => ({
 
 describe('AlbumGrid', () => {
   it('carries the catalog id in the link, so the page can ask which songs these are', () => {
-    render(() => <AlbumGrid albums={[album({ id: 'al-abc' })]} />);
+    render(() => <Grid albums={[album({ id: 'al-abc' })]} />);
     const href = screen.getByRole('link', { name: 'Album' }).getAttribute('href') ?? '';
     expect(href).toContain('album_id=al-abc');
     expect(href).toContain('view=library');
@@ -41,7 +47,7 @@ describe('AlbumGrid', () => {
    */
   it('draws two cards for two records that share a title', () => {
     render(() => (
-      <AlbumGrid
+      <Grid
         albums={[
           album({ id: 'al-queen', title: 'Greatest Hits', album_artist: 'Queen' }),
           album({ id: 'al-abba', title: 'Greatest Hits', album_artist: 'ABBA' }),
@@ -56,7 +62,7 @@ describe('AlbumGrid', () => {
 
   it('credits a compilation to the album artist the engine chose', () => {
     render(() => (
-      <AlbumGrid albums={[album({ is_compilation: true, album_artist: 'Various Artists' })]} />
+      <Grid albums={[album({ is_compilation: true, album_artist: 'Various Artists' })]} />
     ));
     expect(screen.getByText('Various Artists')).toBeInTheDocument();
   });
@@ -64,7 +70,7 @@ describe('AlbumGrid', () => {
   it('renders a record whose artwork the engine could not name', () => {
     // No cover track means no image — the gradient carries the card. Rendering
     // `/cover/undefined` would put a broken request behind every such tile.
-    const { container } = render(() => <AlbumGrid albums={[album({ cover_track_id: null })]} />);
+    const { container } = render(() => <Grid albums={[album({ cover_track_id: null })]} />);
     expect(container.querySelector('[data-pressable]')!.innerHTML).not.toContain('/cover/');
   });
 
@@ -72,7 +78,7 @@ describe('AlbumGrid', () => {
     // The card used to be one link end to end. Wrapping only the cover and the
     // title left the credit line and the song count dead to a tap, which on a
     // phone is most of what a thumb lands on.
-    const { container } = render(() => <AlbumGrid albums={[album()]} />);
+    const { container } = render(() => <Grid albums={[album()]} />);
     const card = container.querySelector('[data-pressable]')!;
     const link = screen.getByRole('link', { name: 'Album' });
     expect(link.parentElement).toBe(card);

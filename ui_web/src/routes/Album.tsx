@@ -7,7 +7,6 @@ import { EntityViewSelect } from '../components/EntityViewSelect';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { CoverImage } from '../components/CoverImage';
-import { libraryTrackMusic } from '../lib/musicNavigation';
 import { ArtistLinks } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
@@ -29,9 +28,9 @@ import hero from '../components/EntityHero.module.css';
 import { coverGradient } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
-import SongRow from '../components/SongRow';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
+import { EntityTrackList } from '../components/EntityTrackList';
 import { tabRoot } from '../lib/tabMemory';
 
 type ViewMode = 'discover' | 'library';
@@ -401,25 +400,8 @@ function LibraryView(props: { tracks: Track[]; context: PlaybackContextDescripto
   return (
     <div class={styles.contentView}>
       <Show when={props.tracks.length > 0} fallback={<EmptyState>{t('album.empty')}</EmptyState>}>
-        <TrackListLite tracks={props.tracks} context={props.context} />
+        <EntityTrackList tracks={props.tracks} context={props.context} />
       </Show>
-    </div>
-  );
-}
-
-function TrackListLite(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
-  return (
-    <div class={styles.trackList}>
-      <For each={props.tracks}>
-        {(track, i) => (
-          <SongRow
-            track={track} music={libraryTrackMusic(track)}
-            index={i() + 1}
-            cover={trackCoverUrl(track, 'thumb')}
-            onPlay={() => actions.playFrom(props.tracks, i(), { context: props.context })}
-          />
-        )}
-      </For>
     </div>
   );
 }

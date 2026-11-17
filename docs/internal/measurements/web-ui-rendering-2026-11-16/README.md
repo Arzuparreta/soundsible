@@ -170,3 +170,50 @@ Two things were measured on the way and are worth knowing:
   that changed. About a third of the frames are still partial at 6×. The
   per-element style cost is the next thing to look at: 72 of the bundle's
   2,161 selectors are tested against every element, which does not explain it.
+
+## Step 6: bounded grids and entity track lists (P3)
+
+`step6-bounded-lists.json`, against the paused baseline. The album and artist
+grids, podcast subscriptions, the player's album tab and long artist or album
+track lists now keep only the rows near the scrollport in the document.
+Elements in the document: albums 5,649 → 604, artists 1,244 → 398, album
+1,565 → 534, artist 1,794 → 529.
+
+| Surface | CPU | Complete / expected | Partial / dropped | Display gap p50 / p95 / max, ms | Longest task, ms | Script / layout / paint, ms | Busy: main / compositor / GPU / display, ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| albums (before) | 1× | 186/194 | 8/0 | 16.7 / 24 / 27.3 | 9.4 | 40.4 / 251.5 / 436.9 | 1397.6 / 138.9 / 1423.1 / 45.9 |
+| albums (after) | 1× | 194/197 | 3/0 | 16.7 / 22.7 / 26.4 | 8.3 | 327.4 / 340.2 / 192.2 | 957.5 / 126.8 / 1023.8 / 45.8 |
+| albums (before) | 6× | 50/161 | 111/0 | 16.7 / 43.2 / 112 | 47.5 | 79.1 / 495.5 / 830 | 3386.2 / 56.4 / 807.6 / 22.5 |
+| albums (after) | 6× | 77/183 | 106/0 | 16.7 / 32.2 / 53.9 | 57.8 | 1294.2 / 1002.4 / 532.4 | 3164.5 / 66.3 / 1053.4 / 28.9 |
+| artists (before) | 1× | 86/87 | 1/0 | 16.7 / 22.7 / 27.9 | 4.8 | 15.6 / 64.3 / 150.1 | 352.8 / 65.7 / 542.5 / 19 |
+| artists (after) | 1× | 86/87 | 1/0 | 16.7 / 21.8 / 23 | 6.1 | 123.6 / 107.1 / 77.3 | 360.8 / 54.7 / 658.8 / 18.9 |
+| artists (before) | 6× | 56/85 | 29/0 | 17.2 / 30.2 / 33.2 | 24 | 57.5 / 251.9 / 559.9 | 1371.8 / 44.8 / 669 / 14.5 |
+| artists (after) | 6× | 42/81 | 39/0 | 16.7 / 32.9 / 52.3 | 49.5 | 480 / 368 / 238.4 | 1278.7 / 32.7 / 541.8 / 14.2 |
+| album (before) | 1× | 44/54 | 8/2 | 16.6 / 23.2 / 33.4 | 23 | 4.6 / 8.2 / 341.8 | 383.7 / 33.4 / 343.5 / 7.7 |
+| album (after) | 1× | 47/50 | 2/1 | 16.7 / 16.8 / 22.8 | 4.9 | 33.4 / 30 / 46.1 | 161.2 / 34.4 / 323.2 / 9.3 |
+| album (before) | 6× | 46/48 | 2/0 | 16.7 / 18.1 / 22.6 | 29.3 | 29.6 / 51 / 312.9 | 544.7 / 37.9 / 207.1 / 10.6 |
+| album (after) | 6× | 47/59 | 12/0 | 15.9 / 24.6 / 26.8 | 30.8 | 157.2 / 138.4 / 177 | 646.6 / 25.9 / 332.6 / 7.8 |
+| artist (before) | 1× | 50/65 | 11/4 | 16.6 / 22.6 / 23.1 | 22.2 | 4.8 / 8.2 / 198.6 | 241.6 / 37.8 / 351.4 / 8.2 |
+| artist (after) | 1× | 54/55 | 1/0 | 16.7 / 17.2 / 22.7 | 5.1 | 40.2 / 40.1 / 55.9 | 199 / 39.9 / 423.4 / 10.8 |
+| artist (before) | 6× | 50/63 | 10/3 | 16.6 / 22.9 / 23 | 33.2 | 23.6 / 36.3 / 328.9 | 492.1 / 31.2 / 338.6 / 7.3 |
+| artist (after) | 6× | 54/71 | 17/0 | 14.5 / 23.5 / 33.2 | 32.4 | 170.2 / 165.2 / 194 | 767 / 30.7 / 394.4 / 9.4 |
+
+What bounding buys is the size of the document and the cost of opening the
+view, which this bench does not measure; an unbounded grid scrolls with no
+script at all. So the scroll numbers are a trade, and they are not all better:
+
+- Albums (600 cards): better. Complete frames at 6× 50 → 77, longest display
+  gap 112 → 54 ms; paint falls by a third at both rates.
+- Artist and album track lists (100 rows): better at 1× (11 partial and 4
+  dropped frames → 1 and 0 on the artist page), more partial frames at 6×
+  (10 → 17, 2 → 12). Lists up to 60 rows are still built whole for this
+  reason (`WHOLE_LIST_ROWS` in `EntityTrackList.tsx`).
+- Artists (200 cards): unchanged at 1×, worse at 6× (complete 56 → 42,
+  longest task 24 → 50 ms).
+
+Three variants of the album grid were measured at 6× before choosing:
+rebuilding cards as rows enter (complete 49/174, longest task 119 ms),
+`content-visibility: auto` on an unbounded grid (78/142, 55 ms, document
+size unchanged), and reused cards placed by grid line (77/183, 58 ms). A
+card's `CoverImage` measuring its own slot was a forced layout per card; the
+grid now tells it the column width (`ArtworkWidthContext`).
