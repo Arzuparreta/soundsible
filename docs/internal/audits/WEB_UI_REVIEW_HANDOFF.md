@@ -247,7 +247,7 @@ Two things that cost time in step 1:
 | 6 P3 | #466 | Done |
 | 7 P4 + A2 (+ A3) | #467 | Done |
 | 8 Design system (U2, U3, U6, U7; U4 decision) | #468 | Done |
-| 9 P6, X1–X3 (+ remaining A1/DJ activity) | `perf/web-ui-step9-platform` | Complete in this change; merge is gated by all latest-head checks |
+| 9 P6, X1–X3 (+ remaining A1/DJ activity) | #469 | Complete in this change; merge is gated by all latest-head checks |
 
 ## Evidence kept outside the repository
 
@@ -259,8 +259,7 @@ reproduced in the reports themselves.
 ## Final delivery and remaining limits
 
 Step 8 merged as #468 (`47734dd0`). Step 9 is complete and locally verified
-on `perf/web-ui-step9-platform`, containing merged step-8 main. The matching
-pull request must pass every latest-head check, including Android and Windows,
+on `perf/web-ui-step9-platform`, containing merged step-8 main. PR #469 must pass every latest-head check, including Android and Windows,
 and a fresh target-base ancestry check before merge. Merging that change
 completes the nine implementation steps. No release is part of this review.
 

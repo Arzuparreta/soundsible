@@ -213,3 +213,27 @@ also passed the DOM/scroll budget again; [payload report](payload.json) records
 211,685 initial authenticated gzip bytes. The fixture-only Vite server was
 stopped after testing. All local gates are complete; latest-head remote CI
 and fresh-base verification remain required for delivery.
+
+## CI environment follow-up for PR #469
+
+Head `9fdec01` exposed two deterministic configuration errors that the original
+local environment did not reproduce:
+
+- CI Node 24 treats `node --test perf/` as a module path and fails before the
+  rendering bench runs. Node 26 accepts that directory argument. Both the
+  package test script and workflow now select `perf/*.test.mjs` explicitly.
+  Reproduced on Node 24.21.0 in the matching Playwright image: old command
+  fails with `MODULE_NOT_FOUND`, explicit selection passes all seven tests.
+- Actions mounts `/github/home` with UID 1001, while the browser container
+  runs as root. Firefox rejects that home before running any test; all 55
+  cases fail to launch. The Firefox matrix entry now gives only that ephemeral
+  home directory the current process UID/GID, without changing `HOME` or
+  recursively changing files. A tmpfs reproduction with owner 1001 confirms
+  the original rejection and successful launch after the exact ownership fix.
+
+The complete Firefox contracts passed again with the ownership correction:
+51 passed and four intentional skips. Node 24.21.0 passed all seven perf
+tests and the three-surface production DOM/scroll budget
+([result](ci-node24.json)); the quoted glob also passes, without relying on
+shell expansion. These changes affect CI/test scripts,
+not application rendering or the earlier performance comparisons.

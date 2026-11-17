@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && npm run design:check && vitest run && node --test perf/",
+    "test": "npm run typecheck && npm run design:check && vitest run && node --test perf/*.test.mjs",
     "bench": "node perf/bench.mjs",
     "test:unit": "vitest run",
     "test:ui-scale": "playwright test",
