@@ -1,12 +1,13 @@
 import { For, Show, createEffect, createMemo, createSignal, on, untrack, type Accessor, type JSX, type Setter } from 'solid-js';
-import { createVirtualizer } from '@tanstack/solid-virtual';
+import { createVirtualizer, defaultRangeExtractor } from '@tanstack/solid-virtual';
 import { createRowHeight, type RowHeight } from '../lib/rowHeight';
 import { createScrollOrigin } from '../lib/scrollOrigin';
 
-export interface Place { index: number; start: number; size: number }
+export interface Place { index: number; start: number; size: number; key?: string | number | bigint }
 export interface Slot { place: Accessor<Place>; setPlace: Setter<Place>; element?: HTMLElement }
 
-const samePlace = (a: Place, b: Place) => a.index === b.index && a.start === b.start && a.size === b.size;
+const samePlace = (a: Place, b: Place) => a.index === b.index && a.start === b.start && a.size === b.size && a.key === b.key;
+const placeKey = (place: Place) => place.key ?? place.index;
 
 /**
  * The slots that show `places`, reusing the slot of a place that left for a
@@ -26,14 +27,26 @@ export function createSlots(
   const slots = createMemo<Slot[]>((previous) => {
     const wanted = places();
     const moving = scrolling();
-    const held = new Map(previous.map((slot) => [untrack(slot.place).index, slot]));
-    const keep = new Set(wanted.map((item) => item.index));
-    const free = previous.filter((slot) => !keep.has(untrack(slot.place).index));
+    // Capture before Solid moves nodes into document order: by the time an
+    // effect runs, moving the focused node may already have blurred it.
+    const focused = document.activeElement;
+    const focusedSlot = focused instanceof HTMLElement
+      ? previous.find(slot => slot.element?.contains(focused)) : undefined;
+    if (focusedSlot) {
+      const key = placeKey(untrack(focusedSlot.place));
+      queueMicrotask(() => {
+        if (focused instanceof HTMLElement && focused.isConnected && document.activeElement === document.body
+            && placeKey(untrack(focusedSlot.place)) === key && canvas()?.contains(focused)) focused.focus({ preventScroll: true });
+      });
+    }
+    const held = new Map(previous.map((slot) => [placeKey(untrack(slot.place)), slot]));
+    const keep = new Set(wanted.map(placeKey));
+    const free = previous.filter((slot) => !keep.has(placeKey(untrack(slot.place))));
     const used = new Set<Slot>();
     const fresh: Slot[] = [];
     const ordered = wanted.map((item) => {
-      const place = { index: item.index, start: item.start, size: item.size };
-      let slot = held.get(item.index);
+      const place = { index: item.index, start: item.start, size: item.size, key: item.key };
+      let slot = held.get(placeKey(item));
       if (!slot && (slot = free.pop())) {
         // Focus belongs to the item that had it, not to whichever item is
         // shown next in the same slot.
@@ -42,7 +55,7 @@ export function createSlots(
       }
       if (slot) slot.setPlace(place);
       else {
-        const [get, set] = createSignal(place, { equals: samePlace });
+        const [get, set] = createSignal<Place>(place, { equals: samePlace });
         slot = { place: get, setPlace: set };
         fresh.push(slot);
       }
@@ -53,14 +66,6 @@ export function createSlots(
     return [...previous.filter((slot) => used.has(slot)), ...fresh];
   }, []);
 
-  // Restoring document order moves nodes, and a moved node loses focus.
-  createEffect(on(slots, () => {
-    const focused = document.activeElement;
-    if (!(focused instanceof HTMLElement) || !canvas()?.contains(focused)) return;
-    queueMicrotask(() => {
-      if (focused.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
-    });
-  }, { defer: true }));
   return slots;
 }
 
@@ -95,6 +100,11 @@ export function CollectionRows<T>(props: {
   /** Height of the content before the rows inside the scrollport. Measured
    * when omitted. */
   scrollMargin?: number;
+  /** Stable occurrence identity for reorderable queues. */
+  itemKey?: (item: T) => string;
+  /** Queue edit controls can make a row taller than the density estimate. */
+  measureRows?: boolean;
+  keepMountedIndex?: number;
   class?: string;
   children: (item: Accessor<T>, index: Accessor<number>) => JSX.Element;
 }) {
@@ -110,6 +120,15 @@ export function CollectionRows<T>(props: {
     get count() { return props.items.length; },
     getScrollElement: () => scroller(),
     estimateSize: () => rowH(),
+    get getItemKey() { return props.itemKey ? (index: number) => props.itemKey!(props.items[index]) : (index: number) => index; },
+    get rangeExtractor() {
+      const pinned = props.keepMountedIndex;
+      return (range: Parameters<typeof defaultRangeExtractor>[0]) => {
+        const indexes = defaultRangeExtractor(range);
+        if (pinned != null && pinned >= 0 && pinned < props.items.length && !indexes.includes(pinned)) indexes.push(pinned);
+        return indexes.sort((a, b) => a - b);
+      };
+    },
     get scrollMargin() { return margin(); },
     get overscan() { return props.overscan ?? 6; },
     onChange: (instance) => setScrolling(instance.isScrolling),
@@ -131,18 +150,23 @@ export function CollectionRows<T>(props: {
           const index = () => slot.place().index;
           // A shrinking list empties its last slots before the window follows.
           const item = () => props.items[index()];
+          createEffect(() => {
+            index();
+            if (props.measureRows && slot.element) virtualizer.measureElement(slot.element);
+          });
           return (
             <div
               ref={(element) => { slot.element = element; }}
+              data-index={index()}
               style={{
                 position: 'absolute',
                 top: 0,
                 left: 0,
                 width: '100%',
-                height: `${slot.place().size}px`,
+                height: props.measureRows ? undefined : `${slot.place().size}px`,
                 // The row cannot change anything outside its box, so one row
                 // changing never lays out its neighbours.
-                contain: 'size layout style',
+                contain: props.measureRows ? 'layout style' : 'size layout style',
                 transform: `translateY(${slot.place().start - margin()}px)`,
               }}
             >

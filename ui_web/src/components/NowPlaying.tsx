@@ -5,7 +5,10 @@ import { navigateMusic, playerTrackMusic } from '../lib/musicNavigation';
 import { buildTrackMenu } from './trackActions';
 import { menuIcons } from './icons';
 import { savedFromTrack } from '../lib/saved';
-import { createEffect, createMemo, createSignal, Show } from 'solid-js';
+import { createEffect, createSignal, Show } from 'solid-js';
+import { createActivityMemo } from '../lib/activityMemo';
+import { mobileListLayout } from '../lib/listLayout';
+import { pageVisible } from '../lib/pageVisibility';
 import { actions, state } from '../stores';
 import { trackCoverUrl } from '../lib/media';
 import {
@@ -57,24 +60,28 @@ export function NowPlaying(props: {
   const [browserView, setBrowserView] = createSignal<'browser' | 'chat'>('browser');
   let desktopQueueEl: HTMLDivElement | undefined;
 
-  // One lookup per queue change, rather than two full scans for every row.
-  const queuePositions = createMemo(() => new Map(state.playback.queue.map((entry, index) => [entry.queueId, index])));
-  const currentQueueEntry = createMemo(() => state.playback.queue[state.playback.index]);
-  const manualQueue = createMemo(() =>
+  const panelActive = (panel: NowPlayingPanelId) => props.surfaceOpen && pageVisible()
+    && (!mobileListLayout() || props.mobilePanel === panel);
+  const queueActive = () => panelActive('queue');
+  // Presentation projections sleep with their panel; transport scheduling stays
+  // in the stores and continues even while the whole workspace is hidden.
+  const queuePositions = createActivityMemo(queueActive, () => new Map(state.playback.queue.map((entry, index) => [entry.queueId, index])), new Map<string, number>());
+  const currentQueueEntry = createActivityMemo(queueActive, () => state.playback.queue[state.playback.index], undefined);
+  const manualQueue = createActivityMemo(queueActive, () =>
     state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'manual'),
-  );
+    []);
   // The radio's picks are still songs to look through. Autoplay's are not: it
   // is a continuation, drawn as its card, however many it has prepared.
-  const radioQueue = createMemo(() =>
+  const radioQueue = createActivityMemo(queueActive, () =>
     state.playback.radioMode
       ? state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'generated')
       : [],
-  );
-  const continuation = createMemo(() =>
+    []);
+  const continuation = createActivityMemo(queueActive, () =>
     state.playback.radioMode
       ? null
       : contextContinuation(state.playback.queue, state.playback.index, state.playback.repeat === 'all'),
-  );
+    null);
   // The browser's widest fixed row (three scope chips and its tools) fits in
   // 320px; the three minimums and the seams between them fit a 1024px window.
   const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 320, stage: 330, queue: 280 };
@@ -249,7 +256,13 @@ export function NowPlaying(props: {
     };
   };
 
-  const queueSections = createMemo<PlayerTrackListSection[]>(() => {
+  // The current occurrence is cheap and keeps a mounted queue's identity even
+  // before the phone first visits it. The full queue is projected on demand.
+  const initialEntry = state.playback.queue[state.playback.index];
+  const initialSections: PlayerTrackListSection[] = initialEntry
+    ? [{ id: 'current', label: t('nowPlaying.nowPlayingSection'), entries: [queueRow(initialEntry, undefined, true)] }]
+    : [];
+  const queueSections = createActivityMemo<PlayerTrackListSection[]>(queueActive, () => {
     const sections: PlayerTrackListSection[] = [];
     const current = currentQueueEntry();
     if (current) {
@@ -283,7 +296,7 @@ export function NowPlaying(props: {
       cards,
     });
     return sections;
-  });
+  }, initialSections);
 
   return (
     <Show
@@ -373,7 +386,7 @@ export function NowPlaying(props: {
                 </button>
               </Show>
               <NowPlayingBrowser
-                active={props.surfaceOpen}
+                active={panelActive('browser')}
                 onClose={() => props.onMobilePanelChange('stage')}
                 dragHandle={dragHandle}
               />

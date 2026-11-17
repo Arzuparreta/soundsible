@@ -13,5 +13,7 @@ test('desktop Now Playing opens Library directly on visible virtual song rows', 
   await browser.getByRole('button', { name: /^Biblioteca/ }).click();
 
   await expect(browser.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
-  await expect.poll(() => browser.locator('[data-virtual-rows] > div').count()).toBeGreaterThan(0);
+  const rows = browser.locator('[data-collection-rows] > div');
+  await expect.poll(() => rows.count()).toBeGreaterThan(0);
+  expect(await rows.count()).toBeLessThan(40);
 });

@@ -1,4 +1,7 @@
 .panel {
+  /* The workspace assigns both dimensions. Descendant text changes must not
+     invalidate the intrinsic size of all three player tiles. */
+  contain: strict;
   display: flex;
   flex-direction: column;
   width: 100%;

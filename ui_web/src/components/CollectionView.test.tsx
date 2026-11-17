@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
 import { render } from '@solidjs/testing-library';
 import { describe, expect, it } from 'vitest';
 import { CollectionRows } from './CollectionView';
@@ -15,13 +15,14 @@ if (typeof window.matchMedia !== 'function') {
 
 const settle = () => new Promise((done) => setTimeout(done, 250));
 
-function mount(count = 1000) {
+function mount(count = 1000, keyed = false, pinned = () => -1) {
   let scroller!: HTMLDivElement;
   let built = 0;
   const [items, setItems] = createSignal(Array.from({ length: count }, (_, at) => `Item ${at}`));
   const view = render(() => (
     <div ref={scroller} style={{ height: '560px', overflow: 'auto' }}>
-      <CollectionRows items={items()} scrollElement={() => scroller} rowHeight={56}>
+      <CollectionRows items={items()} scrollElement={() => scroller} rowHeight={56}
+        itemKey={keyed ? item => item : undefined} keepMountedIndex={pinned()}>
         {(item, index) => {
           built += 1;
           return <button data-row data-at={index()}>{item()}</button>;
@@ -84,5 +85,24 @@ describe('CollectionRows', () => {
     expect(rows().map((row) => row.textContent)).toEqual(['New first', 'Item 0', 'Item 1', 'Item 2']);
     setItems(['New first']);
     expect(rows().map((row) => row.textContent)).toEqual(['New first']);
+  });
+
+  it('keeps an edited occurrence mounted and focused across scrolling and reordering', async () => {
+    const [pinned, setPinned] = createSignal(5);
+    const { rows, setItems, scrollTo } = mount(1000, true, pinned);
+    const edited = rows().find(row => row.textContent === 'Item 5')!;
+    edited.focus();
+    scrollTo(56 * 500);
+    await settle();
+    expect(edited.isConnected).toBe(true);
+    expect(edited.textContent).toBe('Item 5');
+    expect(document.activeElement).toBe(edited);
+    batch(() => {
+      setPinned(6);
+      setItems(['Inserted', ...Array.from({ length: 1000 }, (_, index) => `Item ${index}`)]);
+    });
+    await settle();
+    expect(rows().find(row => row.textContent === 'Item 5')).toBe(edited);
+    expect(document.activeElement).toBe(edited);
   });
 });

@@ -1,4 +1,5 @@
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { apiOrigin, mediaOrigin, artworkUrl } from './config';
 import { previewFallbacks, rejectedPreviews } from './artworkHints';
 import { ROW_ARTWORK, podcastArtworkCandidates, sizedPodcastArtwork } from './podcastArtwork';
@@ -33,20 +34,22 @@ function previewCover(id: string, fallback?: string): string | undefined {
     return best.url;
   } catch { return artworkUrl(fallback); }
 }
-const [artworkMetadata, setArtworkMetadata] = createSignal<Record<string, ArtworkMetadata>>({});
+const [artworkMetadata, setArtworkMetadata] = createStore<Record<string, ArtworkMetadata>>({});
+const artworkFields = (track: ArtworkMetadata): ArtworkMetadata => ({
+  id: track.id, artwork_revision: track.artwork_revision, artwork_width: track.artwork_width,
+  artwork_height: track.artwork_height, artwork_scope: track.artwork_scope,
+});
 export function registerArtworkMetadata(tracks: ArtworkMetadata[]): void {
-  setArtworkMetadata(Object.fromEntries(tracks.map(track => [track.id, track])));
+  setArtworkMetadata(reconcile(Object.fromEntries(tracks.map(track => [track.id, artworkFields(track)]))));
   if (!tracks.length) { setPreviewArtwork({}); previewFallbacks.clear(); rejectedPreviews.clear(); }
 }
 
 /** Apply accepted delta metadata without rebuilding entries for every track. */
 export function patchArtworkMetadata(tracks: ArtworkMetadata[], removed: string[]): void {
   if (!tracks.length && !removed.length) return;
-  setArtworkMetadata(previous => {
-    const next = { ...previous };
-    for (const id of removed) delete next[id];
-    for (const track of tracks) next[track.id] = track;
-    return next;
+  batch(() => {
+    for (const id of removed) setArtworkMetadata(id, undefined!);
+    for (const track of tracks) setArtworkMetadata(track.id, reconcile(artworkFields(track)));
   });
 }
 
@@ -58,7 +61,7 @@ export function artworkCandidates(src?: string | null): string | undefined {
   if (!src.startsWith(base)) return undefined;
   const [identity, query = ''] = src.slice(base.length).split('?');
   const id = decodeURIComponent(identity);
-  const meta = artworkMetadata()[id];
+  const meta = artworkMetadata[id];
   const cap = meta?.artwork_width && meta?.artwork_height
     ? Math.min(meta.artwork_width, meta.artwork_height) : 1280;
   const seen = new Set<number>();
@@ -94,8 +97,8 @@ export const bustCovers = (): void => {
  * now-playing/edit views. */
 export const coverUrl = (id: string, size?: 'thumb'): string => {
   const v = coverVersion();
-  const revision = artworkMetadata()[id]?.artwork_revision;
-  const scope = artworkMetadata()[id]?.artwork_scope;
+  const revision = artworkMetadata[id]?.artwork_revision;
+  const scope = artworkMetadata[id]?.artwork_scope;
   const params = [scope ? `scope=${scope}` : '', size ? `size=${size}` : '', revision ? `rev=${revision}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
   return `${mediaOrigin()}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`;
 };

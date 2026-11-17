@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createComputed, createRoot } from 'solid-js';
 
 vi.mock('./config', () => ({ apiOrigin: () => '', mediaOrigin: () => '', artworkUrl: (url?: string | null) => url || undefined }));
 
@@ -50,6 +51,28 @@ describe('media URLs are cacheable', () => {
     expect(streamUrl('a/../b')).toBe('/api/static/stream/a%2F..%2Fb');
     expect(podcastStreamUrl('a b')).toBe('/api/podcasts/stream/a%20b');
   });
+});
+
+it('invalidates only the artwork keys changed by snapshots and deltas', async () => {
+  const { registerArtworkMetadata, patchArtworkMetadata } = await import('./media');
+  createRoot(dispose => {
+    registerArtworkMetadata([{ id: 'a', artwork_revision: '1' }, { id: 'b', artwork_revision: '1' }]);
+    const readA = vi.fn();
+    const readB = vi.fn();
+    createComputed(() => readA(coverUrl('a')));
+    createComputed(() => readB(coverUrl('b')));
+    registerArtworkMetadata([{ id: 'a', artwork_revision: '1' }, { id: 'b', artwork_revision: '2' }]);
+    expect(readA).toHaveBeenCalledTimes(1);
+    expect(readB).toHaveBeenCalledTimes(2);
+    patchArtworkMetadata([{ id: 'b', artwork_revision: '3' }], []);
+    expect(readA).toHaveBeenCalledTimes(1);
+    expect(readB).toHaveBeenCalledTimes(3);
+    patchArtworkMetadata([], ['a']);
+    expect(readA).toHaveBeenCalledTimes(2);
+    expect(coverUrl('a')).not.toContain('rev=');
+    dispose();
+  });
+  registerArtworkMetadata([]);
 });
 
 /**

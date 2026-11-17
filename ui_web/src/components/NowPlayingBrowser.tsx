@@ -58,7 +58,9 @@ import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { openActionMenu } from './ActionMenu';
-import { VirtualRows } from './VirtualRows';
+import { CollectionRows } from './CollectionView';
+import { createActivityMemo } from '../lib/activityMemo';
+import { pageVisible } from '../lib/pageVisibility';
 import { SkeletonRows } from './Skeleton';
 import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
@@ -208,28 +210,27 @@ export function NowPlayingBrowser(props: {
   let aborter: AbortController | undefined;
   let requestId = 0;
 
-  ensureNodeFeed();
-
-  const libraryTracks = createMemo(() =>
+  const active = () => props.active !== false && pageVisible();
+  createEffect(() => { if (active() && currentView().kind === 'root') ensureNodeFeed(); });
+  const libraryTracks = createActivityMemo(active, () =>
     sortTracks(filterTracks(musicLibrary(), libraryFilter()), librarySort(), new Set(favouriteLibraryIds())),
-  );
-  const favourites = createMemo(() => favouriteTracks().filter((track) => !isPodcastTrack(track)));
-  const libraryArtists = createMemo(() => catalogArtists(state.catalog.artists));
-  const localResults = createMemo(() =>
-    scope() === 'library' ? searchLibrary(libraryTracks(), libraryArtists(), query()) : [],
-  );
-  const [searchAlbums, { refetch: refetchSearchAlbums }] = createResource(() => props.active !== false && scope() === 'library' && query().trim() ? state.catalog.revision : false, () => api.getLibraryAlbums());
-  const localAlbums = createMemo(() => (searchAlbums() ?? []).filter((album) => normalizeLibraryQuery(`${album.title} ${album.album_artist}`).includes(normalizeLibraryQuery(query()))));
+    []);
+  const favourites = createActivityMemo(active, () => favouriteTracks().filter((track) => !isPodcastTrack(track)), []);
+  const libraryArtists = createActivityMemo(active, () => catalogArtists(state.catalog.artists), []);
+  const localResults = createActivityMemo(() => active() && scope() === 'library' && !!query().trim(),
+    () => searchLibrary(libraryTracks(), libraryArtists(), query()), []);
+  const [searchAlbums, { refetch: refetchSearchAlbums }] = createResource(() => active() && scope() === 'library' && query().trim() ? state.catalog.revision : false, () => api.getLibraryAlbums());
+  const localAlbums = createActivityMemo(active, () => (searchAlbums() ?? []).filter((album) => normalizeLibraryQuery(`${album.title} ${album.album_artist}`).includes(normalizeLibraryQuery(query()))), []);
   const globalSearching = createMemo(() => scope() !== 'library' && query().trim().length >= 2);
   const localSearching = createMemo(() => scope() === 'library' && query().trim().length > 0);
   // The panel used to render entities first and then songs, while the Search
   // route rendered songs first and then entities — two hardcoded orders, both
   // wrong in the other's case. Both now follow the one the server sends.
   const resolved = createMemo(() => resolveSections(items(), sections()));
-  const matchingPlaylists = createMemo(() => {
+  const matchingPlaylists = createActivityMemo(active, () => {
     const q = normalizeLibraryQuery(query());
     return q ? Object.keys(state.playlists).filter((name) => normalizeLibraryQuery(name).includes(q)) : [];
-  });
+  }, []);
   const topResult = createMemo(() => filter() === 'all' ? topResultItem(resolved()) : null);
   const panelSections = createMemo<ResolvedSection[]>(() => {
     const sections = resolved().filter((row) => row.id !== 'top');
@@ -246,8 +247,8 @@ export function NowPlayingBrowser(props: {
     resetContentError = undefined;
     reset?.();
   });
-  const playlistNames = createMemo(() => Object.keys(state.playlists));
-  const byId = createMemo(() => collectionIndex(musicLibrary()));
+  const playlistNames = createActivityMemo(active, () => Object.keys(state.playlists), []);
+  const byId = createActivityMemo(active, () => collectionIndex(musicLibrary()), new Map<string, Track>());
   const savePosition = () => {
     const body = panelEl?.querySelector<HTMLElement>('[data-browser-body]');
     if (body && props.active !== false && !restoringScroll) navigation.update({ scroll: body.scrollTop });
@@ -494,11 +495,11 @@ export function NowPlayingBrowser(props: {
     }, event);
 
   createEffect(() => {
-    const value = query(); const searchScope = scope(); const active = props.active !== false;
+    const value = query(); const searchScope = scope(); const searching = active();
     ++requestId;
     aborter?.abort();
     clearTimeout(debounce);
-    if (!active) { aborter?.abort(); return; }
+    if (!searching) { aborter?.abort(); return; }
     debounce = window.setTimeout(() => { untrack(() => runSearch(value)); }, value ? 230 : 0);
     void searchScope;
   });
@@ -555,23 +556,25 @@ export function NowPlayingBrowser(props: {
     void view; void q; void type;
   });
 
-  createEffect(() => { if (currentView().kind === 'bookmarks') void syncSavedEntities(); });
+  createEffect(() => { if (active() && currentView().kind === 'bookmarks') void syncSavedEntities(); });
 
+  /** A row of a bounded list is reused for the next track (CollectionRows),
+   * so the track arrives as an accessor and is read where it is used. */
   const renderTrack = (
-    track: Track,
+    track: () => Track,
     onPlay: () => void,
-    onQueue: () => void = () => actions.enqueue(track),
+    onQueue: () => void = () => actions.enqueue(track()),
   ) => (
     <BrowserTrackRow
-      title={track.title}
-      subtitle={track.artist} music={libraryTrackMusic(track)}
-      cover={trackCoverUrl(track, 'thumb')}
-      seed={track.id}
-      active={isPlayingTrack(track)}
-      queued={isQueuedTrack(track)}
-      onPlay={inAuto() ? () => placeTrack(track) : onPlay}
+      title={track().title}
+      subtitle={track().artist} music={libraryTrackMusic(track())}
+      cover={trackCoverUrl(track(), 'thumb')}
+      seed={track().id}
+      active={isPlayingTrack(track())}
+      queued={isQueuedTrack(track())}
+      onPlay={inAuto() ? () => placeTrack(track()) : onPlay}
       onQueue={onQueue}
-      {...autoRow(track)}
+      {...autoRow(track())}
     />
   );
 
@@ -738,6 +741,7 @@ export function NowPlayingBrowser(props: {
             </Match>
             <Match when={currentView().kind === 'library'}>
               <LibraryView
+                active={active()}
                 tracks={libraryTracks()}
                 artists={libraryArtists()}
                 onBack={back}
@@ -763,6 +767,7 @@ export function NowPlayingBrowser(props: {
             </Match>
             <Match when={currentView().kind === 'libraryArtist'}>
               <LibraryArtistView
+                active={active()}
                 name={(currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name}
                 onAlbum={(album) => push({ kind: 'libraryAlbum', name: album.title, artist: album.album_artist, albumId: album.id })}
                 artistId={(currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).artistId}
@@ -786,7 +791,7 @@ export function NowPlayingBrowser(props: {
               />
             </Match>
             <Match when={currentView().kind === 'libraryAlbum'}>
-              <LibraryAlbumView view={currentView() as Extract<BrowserView, { kind: 'libraryAlbum' }>} onBack={back} renderTrack={renderTrack} inAuto={inAuto()} />
+              <LibraryAlbumView active={active()} view={currentView() as Extract<BrowserView, { kind: 'libraryAlbum' }>} onBack={back} renderTrack={renderTrack} inAuto={inAuto()} />
             </Match>
             <Match when={currentView().kind === 'catalogArtist'}>
               <CatalogArtistView
@@ -852,16 +857,17 @@ function RootView(props: { autoRow: (track: Track) => AutoRowProps }) {
 }
 
 function LibraryView(props: {
+  active: boolean;
   tracks: Track[];
   artists: ReturnType<typeof catalogArtists>;
   onBack: () => void;
   onSearch: () => void;
   onArtist: (name: string) => void;
   onAlbum: (album: CatalogAlbum) => void;
-  renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  renderTrack: (track: () => Track, onPlay: () => void) => JSX.Element;
   onUse?: (tracks: Track[]) => void;
 }) {
-  const [albums] = createResource(() => { void state.catalog.revision; return libraryTab() === 'albums' ? albumBrowseQuery(albumSort(), albumFilter()) : false; }, (params) => api.getLibraryAlbums(params));
+  const [albums] = createResource(() => props.active && libraryTab() === 'albums' && { ...albumBrowseQuery(albumSort(), albumFilter()), revision: state.catalog.revision }, (params) => api.getLibraryAlbums(params));
   // The same menu as the Library route: sorting and the downloaded-only
   // narrowing live together, not in a separate control.
   const sort = () =>
@@ -893,7 +899,7 @@ function LibraryView(props: {
   // because a full library used to build every row up front. A signal, not a
   // plain ref: the rows render inside this element, so they are created before
   // it is assigned and have to react when it appears.
-  const sortedAlbums = createMemo(() => collateAlbums(albums() ?? [], albumSort()));
+  const sortedAlbums = createActivityMemo(() => props.active, () => collateAlbums(albums() ?? [], albumSort()), []);
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} classList={{ [styles.songScroll]: libraryTab() === 'songs' && props.tracks.length > 0 }} data-browser-body ref={setScrollRef}>
@@ -920,67 +926,52 @@ function LibraryView(props: {
       <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}>
         {/* Bounded like the songs and artists tabs: a large library has
             thousands of albums, and each row is a dozen elements. */}
-        <VirtualRows items={sortedAlbums()} scrollElement={scrollRef} rowHeight={{ cssVar: '--row-h', fallback: 56 }}>
-          {(album) => <Show when={album()}>{(row) => <NavigationRow title={row().title} subtitle={row().album_artist} music={albumMusic(row())} cover={row().cover_track_id ? coverUrl(row().cover_track_id!, 'thumb') : undefined} onClick={() => props.onAlbum(row())} />}</Show>}
-        </VirtualRows>
+        <CollectionRows items={sortedAlbums()} scrollElement={scrollRef}>
+          {(row) => <NavigationRow title={row().title} subtitle={row().album_artist} music={albumMusic(row())} cover={row().cover_track_id ? coverUrl(row().cover_track_id!, 'thumb') : undefined} onClick={() => props.onAlbum(row())} />}
+        </CollectionRows>
       </Show></Show>
       <Show when={libraryTab() !== 'albums'}><Show
         when={libraryTab() === 'songs'}
         fallback={
-          <VirtualRows
-            items={props.artists}
-            scrollElement={scrollRef}
-            rowHeight={{ cssVar: '--row-h', fallback: 56 }}
-          >
-            {(artist) => {
-              const row = artist();
-              return row ? (
-                <NavigationRow
-                  title={row.name} destination={artistPath(row.name, { view: "library", artistId: row.id })}
-                  subtitle={t('library.artistTrackCount', { count: row.count })}
-                  cover={coverUrl(row.coverId, 'thumb')}
-                  round
-                  onClick={() => props.onArtist(row.name)}
-                />
-              ) : null;
-            }}
-          </VirtualRows>
+          <CollectionRows items={props.artists} scrollElement={scrollRef}>
+            {(row) => (
+              <NavigationRow
+                title={row().name} destination={artistPath(row().name, { view: "library", artistId: row().id })}
+                subtitle={t('library.artistTrackCount', { count: row().count })}
+                cover={coverUrl(row().coverId, 'thumb')}
+                round
+                onClick={() => props.onArtist(row().name)}
+              />
+            )}
+          </CollectionRows>
         }
       >
-        <VirtualRows
-          items={props.tracks}
-          scrollElement={scrollRef}
-          rowHeight={{ cssVar: '--row-h', fallback: 56 }}
-        >
-          {(track, index) => {
-            const row = track();
-            return row
-              ? props.renderTrack(row, () =>
-                  actions.playFrom(props.tracks, index, { context: libraryContext(t('nav.library')) }),
-                )
-              : null;
-          }}
-        </VirtualRows>
+        <CollectionRows items={props.tracks} scrollElement={scrollRef}>
+          {(track, index) => props.renderTrack(track, () =>
+            actions.playFrom(props.tracks, index(), { context: libraryContext(t('nav.library')) }),
+          )}
+        </CollectionRows>
       </Show></Show>
     </div>
   );
 }
 
 function LibraryArtistView(props: {
+  active: boolean;
   name: string;
   artistId?: string;
   onAlbum: (album: CatalogAlbum) => void;
   onExplore: () => void;
   onBack: () => void;
-  renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  renderTrack: (track: () => Track, onPlay: () => void) => JSX.Element;
   onUse?: (tracks: Track[]) => void;
 }) {
-  const [catalog] = createResource(() => props.artistId, (id) => api.getLibraryArtist(id));
-  const tracks = createMemo(() => props.artistId ? tracksByIds(catalog()?.track_ids ?? []) :
+  const [catalog] = createResource(() => props.active && props.artistId, (id) => api.getLibraryArtist(id));
+  const tracks = createActivityMemo(() => props.active, () => props.artistId ? tracksByIds(catalog()?.track_ids ?? []) :
     musicLibrary().filter((track) =>
       artistKey(track.artist) === artistKey(props.name) || artistKey(track.album_artist) === artistKey(props.name),
     ),
-  );
+    []);
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} data-browser-body ref={setScrollRef}>
@@ -989,37 +980,27 @@ function LibraryArtistView(props: {
         <Show when={props.onUse}><CollectionActions title={props.name} tracks={tracks()} auto onReference={props.onUse} /></Show>
       </Toolbar>
       <For each={catalog()?.albums ?? []}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For>
-      <VirtualRows
-        items={tracks()}
-        scrollElement={scrollRef}
-        rowHeight={{ cssVar: '--row-h', fallback: 56 }}
-      >
-        {(track, index) => {
-          const row = track();
-          return row
-            ? props.renderTrack(row, () =>
-                actions.playFrom(tracks(), index, { context: {
+      <CollectionRows items={tracks()} scrollElement={scrollRef}>
+        {(track, index) => props.renderTrack(track, () => actions.playFrom(tracks(), index(), { context: {
                   id: `artist:${props.name}`,
                   kind: 'artist',
                   label: props.name,
                   destination: artistPath(props.name, { view: 'library', artistId: props.artistId }),
-                } }),
-              )
-            : null;
-        }}
-      </VirtualRows>
+                } }))}
+      </CollectionRows>
     </div>
   );
 }
 
 function LibraryAlbumView(props: {
+  active: boolean;
   view: Extract<BrowserView, { kind: 'libraryAlbum' }>;
   onBack: () => void;
-  renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  renderTrack: (track: () => Track, onPlay: () => void) => JSX.Element;
   inAuto: boolean;
 }) {
-  const [album] = createResource(() => props.view.albumId, (id) => api.getLibraryAlbum(id));
-  const tracks = createMemo(() => tracksByIds(album()?.track_ids ?? []));
+  const [album] = createResource(() => props.active && props.view.albumId, (id) => api.getLibraryAlbum(id));
+  const tracks = createActivityMemo(() => props.active, () => tracksByIds(album()?.track_ids ?? []), []);
   return <Show when={!album.loading} fallback={<SkeletonRows count={8} />}>
     <TrackCollectionView title={props.view.name} tracks={tracks()} empty={t('album.empty')}
       context={{
@@ -1040,25 +1021,27 @@ function LocalSearchView(props: {
   results: LibrarySearchResult[];
   query: string;
   onArtist: (name: string) => void;
-  renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  renderTrack: (track: () => Track, onPlay: () => void) => JSX.Element;
   onSearchGlobal: () => void;
   onUse?: (tracks: Track[]) => void;
 }) {
+  const [scrollRef, setScrollRef] = createSignal<HTMLDivElement | null>(null);
   const tracks = createMemo(() => props.results.flatMap((result) => result.kind === 'track' ? [result.track] : []));
   return (
-    <div class={styles.body} data-browser-body>
+    <div ref={setScrollRef} class={styles.body} data-browser-body>
       <Show when={props.onUse}>
         <Toolbar><button type="button" data-glyph-label disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}><SourceIcon />{t('musicExplorer.reference')}</button></Toolbar>
       </Show>
       <For each={props.albums}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} onClick={() => props.onAlbum(album)} />}</For>
       <For each={props.playlists}>{(name) => <NavigationRow title={name} subtitle={t('nav.playlists')} onClick={() => props.onPlaylist(name)} />}</For>
-      <For each={props.results}>
-        {(result) => result.kind === 'artist'
-          ? <NavigationRow title={result.artist.name} destination={artistPath(result.artist.name, { view: "library", artistId: result.artist.id })} subtitle={t('library.artistTrackCount', { count: result.artist.count })} cover={coverUrl(result.artist.coverId, 'thumb')} round onClick={() => props.onArtist(result.artist.name)} />
-          // A search result is a song picked on its own: the rest of the results
-          // do not follow it.
-          : props.renderTrack(result.track, () => actions.playNow(result.track))}
-      </For>
+      {/* Bounded: a two-letter query matches most of a large library. */}
+      <CollectionRows items={props.results} scrollElement={scrollRef}>
+        {(result) => <Show when={result().kind === 'track'} fallback={<SearchArtistRow result={result() as Extract<LibrarySearchResult, { kind: 'artist' }>} onArtist={props.onArtist} />}>
+          {/* A search result is a song picked on its own: the rest of the
+              results do not follow it. */}
+          {props.renderTrack(() => (result() as Extract<LibrarySearchResult, { kind: 'track' }>).track, () => actions.playNow((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track))}
+        </Show>}
+      </CollectionRows>
       <div class={styles.searchEverywhere}>
         <Show when={props.results.length === 0 && !props.albums.length && !props.playlists.length}>
           <p>{t('library.noSearchResults')}</p>
@@ -1067,6 +1050,13 @@ function LocalSearchView(props: {
       </div>
     </div>
   );
+}
+
+function SearchArtistRow(props: { result: Extract<LibrarySearchResult, { kind: 'artist' }>; onArtist: (name: string) => void }) {
+  const artist = () => props.result.artist;
+  return <NavigationRow title={artist().name} destination={artistPath(artist().name, { view: 'library', artistId: artist().id })}
+    subtitle={t('library.artistTrackCount', { count: artist().count })} cover={coverUrl(artist().coverId, 'thumb')}
+    round onClick={() => props.onArtist(artist().name)} />;
 }
 
 function PlaylistsView(props: {
@@ -1111,7 +1101,7 @@ function PlaylistView(props: {
   name: string;
   byId: Map<string, Track>;
   onBack: () => void;
-  renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  renderTrack: (track: () => Track, onPlay: () => void) => JSX.Element;
   showPlayAll: boolean;
   onUse?: (tracks: Track[]) => void;
 }) {
@@ -1150,7 +1140,7 @@ function TrackCollectionView(props: {
   empty: string;
   context: PlaybackContextDescriptor;
   onBack: () => void;
-  renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  renderTrack: (track: () => Track, onPlay: () => void) => JSX.Element;
   showPlayAll: boolean;
   onUse?: (tracks: Track[]) => void;
 }) {
@@ -1169,9 +1159,9 @@ function TrackCollectionView(props: {
       </Toolbar>
       <Show when={editContent()} fallback={
         <Show when={props.tracks.length > 0} fallback={<div class={styles.empty}><p>{props.empty}</p></div>}>
-          <VirtualRows items={props.tracks} scrollElement={scroller} rowHeight={{ cssVar: '--row-h', fallback: 56 }}>{(track, index) => {
-            const row = track(); return row ? props.renderTrack(row, () => actions.playFrom(props.tracks, index, { context: props.context })) : null;
-          }}</VirtualRows>
+          <CollectionRows items={props.tracks} scrollElement={scroller}>
+            {(track, index) => props.renderTrack(track, () => actions.playFrom(props.tracks, index(), { context: props.context }))}
+          </CollectionRows>
         </Show>
       }>{editContent()}</Show>
     </div>
