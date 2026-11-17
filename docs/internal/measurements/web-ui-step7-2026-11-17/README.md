@@ -80,4 +80,3 @@ queue's one dropped frame in the selected run is retained in the report.
 - Exported production build: initial authenticated payload 211,271 gzip bytes,
   below the unchanged 215,316-byte ceiling. The engine-owned `ui_web/dist` was
   never built or changed.
-
