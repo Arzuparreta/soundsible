@@ -74,7 +74,7 @@ test('custom bar persists and settings remain accessible after removal', async (
 test('local search and view switching keep filters usable', async ({ page }) => {
   const header = page.locator('[data-app-bar]');
   await header.getByRole('button', { name: 'Buscar en biblioteca' }).click();
-  const search = page.getByRole('textbox', { name: 'Buscar canciones y artistas' });
+  const search = page.getByRole('searchbox', { name: 'Buscar canciones y artistas' });
   await expect(search).toBeFocused();
   await search.fill('biblioteca 320');
   await header.getByRole('button', { name: 'Menú' }).click();

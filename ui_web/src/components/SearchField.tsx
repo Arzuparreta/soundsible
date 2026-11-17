@@ -1,4 +1,4 @@
-import { Show, type JSX } from 'solid-js';
+import { children, Show, type JSX } from 'solid-js';
 import { t } from '../lib/i18n';
 import styles from './SearchField.module.css';
 
@@ -8,6 +8,10 @@ export interface SearchFieldProps {
   ariaLabel?: string;
   clearLabel?: string;
   global?: boolean;
+  /** Extra class on the field's box, e.g. to set the --search-field-* colours. */
+  class?: string;
+  /** Replaces the magnifier, e.g. with a button that changes the search scope. */
+  leading?: JSX.Element;
   inputRef?: (element: HTMLInputElement) => void;
   onInput: (value: string) => void;
   onFocus?: JSX.EventHandler<HTMLInputElement, FocusEvent>;
@@ -15,15 +19,19 @@ export interface SearchFieldProps {
   onKeyDown?: JSX.EventHandler<HTMLInputElement, KeyboardEvent>;
 }
 
-/** One responsive search control for full-page search surfaces. */
+/** The one search control of every view: pages, panels and the Android shell. */
 export function SearchField(props: SearchFieldProps) {
   let input: HTMLInputElement | undefined;
+  // Resolved once: reading a JSX prop twice would build the element twice.
+  const leading = children(() => props.leading);
   return (
-    <div class={styles.field}>
-      <svg class={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-4-4" />
-      </svg>
+    <div class={[styles.field, leading() ? styles.withLeading : '', props.class ?? ''].filter(Boolean).join(' ')}>
+      {leading() ?? (
+        <svg class={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-4-4" />
+        </svg>
+      )}
       {/* An unnamed text field with no autocomplete is what browser and
           password-manager heuristics latch onto: Chrome decides a search box
           is an account field, drops a saved email into it and paints it its

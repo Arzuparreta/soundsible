@@ -1,4 +1,5 @@
-import { Field, Select } from '../design/Field';
+import { Select } from '../design/Field';
+import { SearchField } from './SearchField';
 import { Tabs } from '../design/Tabs';
 import type { MenuEvent } from '../lib/menuEvent';
 import { Control } from '../design/Control';
@@ -606,37 +607,32 @@ export function NowPlayingBrowser(props: {
     >
       <header class={styles.topbar}>
         {props.dragHandle}
-        <div class={styles.search}>
-          <Control
-            class={styles.scopeButton}
-            type="button"
-            aria-label={routeMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.globalSearch') : t('nowPlayingBrowser.search')}
-            onClick={() => !routeMode() && scope() === 'library' && leaveLibrarySearch()}
-          >
-            <Show
-              when={!routeMode() && scope() === 'library'}
-              fallback={<SearchIcon />}
+        <SearchField
+          class={styles.search}
+          leading={
+            <Control
+              class={styles.scopeButton}
+              type="button"
+              aria-label={routeMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.globalSearch') : t('nowPlayingBrowser.search')}
+              onClick={() => !routeMode() && scope() === 'library' && leaveLibrarySearch()}
             >
-              <BackIcon />
-            </Show>
-          </Control>
-          <Field
-            ref={inputEl}
-            type="search"
-            value={query()}
-            placeholder={routeMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.searchLibrary') : t('nowPlayingBrowser.searchGlobal')}
-            aria-label={routeMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.searchLibrary') : t('nowPlayingBrowser.searchGlobal')}
-            onInput={(event) => onInput(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape' && query()) clear();
-            }}
-          />
-          <Show when={query()}>
-            <Control class={styles.clear} type="button" aria-label={t('searchPanel.clear')} onClick={clear}>
-              <CloseIcon />
+              <Show
+                when={!routeMode() && scope() === 'library'}
+                fallback={<SearchIcon />}
+              >
+                <BackIcon />
+              </Show>
             </Control>
-          </Show>
-        </div>
+          }
+          inputRef={(element) => (inputEl = element)}
+          value={query()}
+          placeholder={routeMode() ? t('autoMode.dj.searchPlaceholder') : scope() === 'library' ? t('nowPlayingBrowser.searchLibrary') : t('nowPlayingBrowser.searchGlobal')}
+          clearLabel={t('searchPanel.clear')}
+          onInput={onInput}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && query()) clear();
+          }}
+        />
         <Control class={styles.close} type="button" aria-label={t('searchPanel.closePanel')} onClick={props.onClose}>
           <CloseIcon />
         </Control>

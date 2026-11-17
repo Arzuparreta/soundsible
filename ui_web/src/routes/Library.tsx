@@ -6,6 +6,7 @@ import { createEffect, createMemo, createResource, createSignal, Match, on, onCl
 import { A, useSearchParams } from '@solidjs/router';
 import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
+import { SearchField } from '../components/SearchField';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
 import AlbumGrid from '../components/AlbumGrid';
@@ -200,43 +201,21 @@ export default function Library() {
   };
 
   const searchRevealStyle = () =>
-    isMobile()
-      ? `height:${searchProgress() * 56}px;--search-reveal:${searchProgress()};--search-offset:${(1 - searchProgress()) * -8}px`
-      : undefined;
+    isMobile() ? `--search-reveal:${searchProgress()};--search-offset:${(1 - searchProgress()) * -8}px` : undefined;
   const searchHidden = () => isMobile() && searchProgress() === 0;
 
   /** Desktop keeps the filter below the title; mobile reveals it on swipe. */
-  const searchField = (desktop: boolean) => (
-    <div class={styles.localSearch} classList={{ [styles.desktopSearch]: desktop }}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-4-4" />
-      </svg>
-      <input
-        value={query()}
-        onInput={(event) => setQuery(event.currentTarget.value)}
-        onFocus={() => {
-          setSearchFocused(true);
-          setSearchProgress(1);
-        }}
-        onBlur={() => setSearchFocused(false)}
-        placeholder={t('library.searchLibrary')}
-        aria-label={t('library.searchLibrary')}
-      />
-      <Show when={query()}>
-        <button
-          class={styles.clearSearch}
-          type="button"
-          aria-label={t('library.clearSearch')}
-          onClick={() => setQuery('')}
-          data-pressable
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m7 7 10 10M17 7 7 17" />
-          </svg>
-        </button>
-      </Show>
-    </div>
+  const searchField = () => (
+    <SearchField
+      value={query()}
+      placeholder={t('library.searchLibrary')}
+      onInput={setQuery}
+      onFocus={() => {
+        setSearchFocused(true);
+        setSearchProgress(1);
+      }}
+      onBlur={() => setSearchFocused(false)}
+    />
   );
 
   const sortLabel = (sort: AlbumSort) => t(`library.albumSort.${sort}`);
@@ -361,13 +340,13 @@ export default function Library() {
           aria-hidden={searchHidden() ? 'true' : undefined}
           inert={searchHidden()}
         >
-          {searchField(false)}
+          {searchField()}
         </div>
       </Show>
 
       <Show when={!isMobile()}>
         <div class={styles.toolbar}>
-          {searchField(true)}
+          <div class={styles.desktopSearch}>{searchField()}</div>
           <Show when={!searching()}>{sortControl()}</Show>
         </div>
       </Show>

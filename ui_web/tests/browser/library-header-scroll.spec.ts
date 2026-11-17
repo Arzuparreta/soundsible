@@ -92,7 +92,7 @@ test('desktop library search sits below the title and view changes use the sideb
   await page.addInitScript(() => localStorage.setItem('lang', 'en'));
   await page.goto('/player/#/library?view=songs');
   const heading = page.getByRole('heading', { name: 'Your library' });
-  const search = page.getByRole('textbox', { name: 'Search songs and artists' });
+  const search = page.getByRole('searchbox', { name: 'Search songs and artists' });
   await expect(search).toBeVisible();
   const titleBox = await heading.boundingBox();
   const searchBox = await search.boundingBox();

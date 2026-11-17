@@ -1,3 +1,7 @@
+/* The field fills its container on every view; a view sets no width of its own.
+   A surface with its own palette (the player stage) repaints it through the
+   --search-field-* properties, which this file only reads, so the result does
+   not depend on the order the stylesheets load in. */
 .field {
   display: flex;
   align-items: center;
@@ -6,8 +10,8 @@
   height: var(--control-h);
   padding: 0 var(--space-sm) 0 var(--space-md);
   color: var(--ink-tertiary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
+  background: var(--search-field-bg, var(--bg-inset));
+  border: 1px solid var(--search-field-border, var(--hairline));
   border-radius: var(--radius-full);
   box-shadow: 0 1px 0 var(--hairline-soft) inset;
   transition:
@@ -17,9 +21,14 @@
     box-shadow var(--dur-short) var(--ease-out);
 }
 
+/* A leading control is a round button, flush with the field's round end. */
+.withLeading {
+  padding-left: 0;
+}
+
 .field:focus-within {
   color: var(--ink-secondary);
-  background: var(--bg-raised);
+  background: var(--search-field-bg-focus, var(--bg-raised));
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-faint), var(--shadow-1);
 }
@@ -67,12 +76,12 @@
    already outranks this. */
 .input:-webkit-autofill {
   -webkit-text-fill-color: var(--ink-primary);
-  -webkit-box-shadow: 0 0 0 1000px var(--bg-inset) inset;
+  -webkit-box-shadow: 0 0 0 1000px var(--search-field-bg, var(--bg-inset)) inset;
   caret-color: var(--ink-primary);
 }
 
 .field:focus-within .input:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0 1000px var(--bg-raised) inset;
+  -webkit-box-shadow: 0 0 0 1000px var(--search-field-bg-focus, var(--bg-raised)) inset;
 }
 
 .clear {
@@ -102,7 +111,7 @@
 @media (hover: hover) and (pointer: fine) {
   .clear:hover {
     color: var(--ink-primary);
-    background: var(--bg-hover);
+    background: var(--search-field-hover, var(--bg-hover));
   }
 }
 

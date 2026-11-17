@@ -1,14 +1,13 @@
 /* ── Field ────────────────────────────────────────────────────────────────
    The field sits under the page title on the desktop shell and right under
-   the top bar on the touch shell. Its width is capped for reading, and the
-   dropdown is anchored to the same box, so the two always line up. */
+   the top bar on the touch shell. It spans the content width like the search
+   of Library, Podcasts and Settings, and the dropdown is anchored to the same
+   box, so the two always line up. */
 .searchBox {
   --search-top: var(--view-top, var(--space-lg));
   position: relative;
   flex-shrink: 0;
   z-index: 5;
-  width: 100%;
-  max-width: calc(44rem + 2 * var(--gutter));
 }
 
 .underHeader {
