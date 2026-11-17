@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Track } from '../types/music';
 import { clearSearchCache, writeSearchCache } from '../lib/searchCache';
 import { CATALOG_CACHE_NS } from '../lib/searchSections';
+import { mockScrollportLayout } from '../testLayout';
+
+mockScrollportLayout();
 
 const listLayoutMock = vi.hoisted(() => ({ mobile: false }));
 vi.mock('../lib/listLayout', () => ({ mobileListLayout: () => listLayoutMock.mobile }));

@@ -30,6 +30,10 @@ const SURFACES = {
   album: { hash: `#/album/${encodeURIComponent(fixture.albums[0].title)}?artist=${encodeURIComponent(fixture.albums[0].artist.name)}&view=library&album_id=${fixture.albums[0].id}`, ready: '[data-song-row], [data-music-list-row]' },
   artist: { hash: `#/artist/${encodeURIComponent(fixture.artists[0].name)}?view=library&artist_id=${fixture.artists[0].id}`, ready: '[data-song-row], [data-music-list-row]' },
   playlist: { hash: '#/playlists/Playlist%201', ready: '[data-song-row], [data-music-list-row]' },
+  // The full player's own library browser: opened over the Songs view, with
+  // the wheel over its tile.
+  'player-browser': { player: 'browser', ready: '[data-player-tile="browser"] [data-music-list-row], [data-player-tile="browser"] [data-song-row]' },
+  'player-queue': { player: 'queue', ready: '[data-player-tile="queue"] [data-drag-row]' },
 };
 
 /** The input: one wheel event per 60 Hz frame for 3.2 s, 7,500 px/s. */
@@ -128,7 +132,37 @@ async function measure(name, rate) {
       await page.getByRole('button', { name: /^Play .+ by / }).first().click();
       await page.waitForFunction(() => navigator.mediaSession?.playbackState === 'playing', undefined, { timeout: 15_000 });
     }
-    if (name !== 'songs') {
+    let over = null;
+    if (surface.player) {
+      if (surface.player === 'queue') {
+        // Populate the real manual lane through the same menu a listener uses.
+        // This happens before throttling/tracing, never through app internals.
+        await page.evaluate(async () => {
+          for (let index = 0; index < 300; index++) {
+            const opener = document.querySelector('[data-song-row] button[aria-label="More options"]');
+            if (!opener) throw new Error('No song menu for queue setup');
+            opener.click();
+            await new Promise(resolve => setTimeout(resolve, 0));
+            const add = [...document.querySelectorAll('[role="menuitem"]')].find(item => item.textContent.includes('Add to queue'));
+            if (!add) throw new Error('No Add to queue action');
+            add.click();
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        });
+      }
+      // The player opens on what is playing, so something has to be.
+      if (!playing) {
+        await page.getByRole('button', { name: /^Play .+ by / }).first().click();
+        await page.waitForFunction(() => navigator.mediaSession?.playbackState === 'playing', undefined, { timeout: 15_000 });
+      }
+      await page.locator('[data-omni-cover]').locator('xpath=preceding-sibling::button').click({ timeout: 10_000 });
+      await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
+      if (!playing) {
+        await page.locator('[data-player-tile="stage"]').getByRole('button', { name: 'Pause' }).click();
+        await page.waitForFunction(() => navigator.mediaSession?.playbackState !== 'playing', undefined, { timeout: 15_000 });
+      }
+      over = await page.locator(`[data-player-tile="${surface.player}"]`).boundingBox();
+    } else if (name !== 'songs') {
       await page.evaluate((hash) => { window.location.hash = hash; }, surface.hash);
       await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
     }
@@ -140,7 +174,7 @@ async function measure(name, rate) {
 
     const session = await context.newCDPSession(page);
     await session.send('Emulation.setCPUThrottlingRate', { rate });
-    const x = Math.round(width * 0.6), y = Math.round(height * 0.5);
+    const x = Math.round(over ? over.x + over.width / 2 : width * 0.6), y = Math.round(over ? over.y + over.height * 0.6 : height * 0.5);
     await page.mouse.move(x, y);
     const scrollBefore = await page.evaluate(() => [...document.querySelectorAll('*')].reduce((sum, element) => sum + element.scrollTop, 0));
 

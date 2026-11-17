@@ -3,7 +3,7 @@ import type { MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import Button from './Button';
-import { VirtualRows } from './VirtualRows';
+import { CollectionRows } from './CollectionView';
 import { openContextMenu } from '../lib/contextMenu';
 import { coverStyle } from '../lib/cover';
 import { t } from '../lib/i18n';
@@ -409,11 +409,11 @@ function PlayerLane(props: {
   const [scroller, setScroller] = createSignal<HTMLDivElement | null>(null);
   return <div ref={setScroller} class={styles.sectionRows} data-section-rows>
     <Show when={props.virtualize} fallback={<For each={props.entries}>{(entry) => props.children(() => entry)}</For>}>
-      <VirtualRows items={props.entries} scrollElement={scroller}
+      <CollectionRows items={props.entries} scrollElement={scroller} itemKey={entry => entry.id}
         rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows
         keepMountedIndex={props.entries.findIndex((entry) => entry.id === props.editingId)}>
-        {(entry) => <Show when={entry()}>{(current) => props.children(current)}</Show>}
-      </VirtualRows>
+        {(entry) => props.children(entry)}
+      </CollectionRows>
     </Show>
     {props.tail}
   </div>;

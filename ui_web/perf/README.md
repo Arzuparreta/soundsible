@@ -21,7 +21,7 @@ only to its own fixture server on a free port, never to an engine.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `SURFACES` | all | `songs`, `favourites`, `albums`, `artists`, `album`, `artist`, `playlist` |
+| `SURFACES` | all | `songs`, `favourites`, `albums`, `artists`, `album`, `artist`, `playlist`, `player-browser`, `player-queue` |
 | `RATES` | `1,6` | CPU throttling rates. 6× on a desktop CPU is a proxy for a slow laptop, not a measurement of one |
 | `PLAYING` | off | `1` starts a track first and keeps it playing |
 | `REPEATS` | `3` | Runs per case. The reported row is the run with the median longest task; every run's frame counts are kept under `runs` |
@@ -89,7 +89,8 @@ compositing was hardware (`ANGLE (NVIDIA …)`) or software (`SwiftShader`).
 
 - One machine, headless Chromium, 60 Hz. It says nothing about WebKit, an
   iPhone, Android WebView, WebView2 or a 144 Hz display.
-- The player queue and the player's own browser are not surfaces yet; they
-  need the full player opened first (handoff items P4 and A2).
+- `player-browser` opens the full player and scrolls its library browser.
+  `player-queue` adds 300 requests through the real song menu before opening
+  the player and scrolling the manual lane. Setup is outside the timed window.
 - It is not a CI gate. Shared CI runners have no GPU and uneven CPU; a
   threshold there would fail on the runner, not on the code.
