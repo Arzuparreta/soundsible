@@ -9,7 +9,11 @@ async function browserPanel(page: Page, mobile: boolean) {
   const browser = page.locator('[data-now-playing-tile="browser"]');
   await expect(browser).not.toHaveAttribute('inert', '');
   await expect(browser.locator('[data-song-row], [data-music-list-row]').first()).toBeVisible();
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(async () => {
+    const fonts = await document.fonts.load('400 16px "Plus Jakarta Sans"');
+    if (!fonts.length) throw new Error('The Soundsible UI font is unavailable');
+    await document.fonts.ready;
+  });
   return browser;
 }
 
@@ -32,6 +36,12 @@ for (const theme of ['dark', 'light']) for (const size of ['compact', 'normal', 
     const metrics = await row.evaluate(element => ({ height: element.getBoundingClientRect().height,
       expected: parseFloat(getComputedStyle(element).getPropertyValue('--row-h')) }));
     expect(metrics.height).toBeCloseTo(metrics.expected, 0);
+    const cover = await row.locator('[data-artwork-surface]').evaluate(element => ({ height: element.getBoundingClientRect().height,
+      expected: parseFloat(getComputedStyle(element).getPropertyValue('--cover-sm')) }));
+    expect(cover.height).toBeCloseTo(cover.expected, 0);
+    const field = await browser.locator('input[type="search"]').evaluate(element => ({ height: element.getBoundingClientRect().height,
+      expected: parseFloat(getComputedStyle(element).getPropertyValue('--control-h')) }));
+    expect(field.height).toBeCloseTo(field.expected, 0);
     await expect(browser).toHaveScreenshot(`browser-${theme}-${size}.png`);
   });
 }
@@ -63,4 +73,7 @@ test('browser tabs have one keyboard stop and arrow activation', async ({ page, 
   await page.keyboard.press('Home');
   await expect(songs).toBeFocused();
   await expect(songs).toHaveAttribute('aria-selected', 'true');
+  const panel = browser.getByRole('tabpanel', { name: 'Canciones', exact: true });
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveAttribute('aria-labelledby', (await songs.getAttribute('id'))!);
 });

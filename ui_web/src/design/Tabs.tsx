@@ -8,9 +8,11 @@ export function Tabs<T extends string>(props: {
   onChange: (value: T) => void;
   class?: string;
   activeClass?: string;
+  panelId: string;
 }) {
   return <div role="tablist" aria-label={props.label} class={props.class}>
     <For each={props.items}>{(item, index) => <Control role="tab"
+      id={`${props.panelId}-${item.value}`} aria-controls={props.panelId}
       class={props.value === item.value ? props.activeClass : undefined}
       aria-selected={props.value === item.value} tabindex={props.value === item.value ? 0 : -1}
       onClick={() => props.onChange(item.value)} onKeyDown={event => {

@@ -224,7 +224,7 @@
 }
 
 .row[data-compact] { padding-inline: 4px; gap: 10px; }
-.row[data-compact] .cover { width: 36px; height: 36px; flex-basis: 36px; }
+.row[data-compact] .cover { width: var(--cover-sm); height: var(--cover-sm); flex-basis: var(--cover-sm); }
 .row[data-compact] .actionStripe { gap: 2px; }
 .primaryAction { border: 0; background: transparent; color: var(--accent-ink); font: inherit; font-size: var(--text-caption); padding: 0 8px; min-height: 40px; cursor: pointer; }
 .primaryAction:disabled { opacity: 0.5; }
