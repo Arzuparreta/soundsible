@@ -24,42 +24,24 @@
   padding: var(--space-xs) var(--space-xs) var(--space-xs) 20px;
 }
 
-/* A recessed field, no outline until it has focus. */
+/* A recessed field in the stage's palette, no outline until it has focus.
+   SearchField owns the field; the stage only supplies its colours. */
 .search {
-  display: flex;
-  align-items: center;
   flex: 1;
-  min-width: 0;
-  height: var(--control-h);
-  border-radius: var(--radius-full);
-  background: var(--stage-well);
-  box-shadow: inset 0 0 0 1px transparent;
-  transition: box-shadow var(--dur-short), background var(--dur-short);
+  --search-field-bg: var(--stage-well);
+  --search-field-bg-focus: var(--stage-well);
+  --search-field-border: transparent;
+  --search-field-hover: var(--stage-material);
 }
 
-.search:focus-within {
-  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 3px var(--accent-faint);
-}
-
-.search input {
-  flex: 1;
-  min-width: 0;
+/* Inside the field's 1px border: the full height, still a circle. */
+.search .scopeButton {
+  width: auto;
   height: 100%;
-  padding: 0 var(--space-xs);
-  color: var(--ink-primary);
-  font: inherit;
-  font-size: var(--text-label);
-  background: none;
-  border: 0;
-  outline: 0;
-}
-
-.search input::-webkit-search-cancel-button {
-  display: none;
+  aspect-ratio: 1;
 }
 
 .scopeButton,
-.clear,
 .close {
   display: inline-flex;
   align-items: center;
@@ -75,7 +57,6 @@
 }
 
 .scopeButton svg,
-.clear svg,
 .close svg,
 .toolbarActions svg,
 .toolbar > button svg {
@@ -90,7 +71,6 @@
 
 @media (hover: hover) and (pointer: fine) {
   .scopeButton:hover,
-  .clear:hover,
   .close:hover,
   .toolbarActions button:hover,
   .toolbar > button:hover {

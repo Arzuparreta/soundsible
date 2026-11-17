@@ -21,6 +21,7 @@ import { albumFilter, albumSort, filterTracks, libraryFilter, librarySort, setAl
 import { ALBUM_SORTS, NO_ALBUM_FILTER, albumBrowseQuery, collateAlbums } from '../lib/albumBrowse';
 import type { MenuAction } from '../components/ActionMenu';
 import styles from './AndroidStart.module.css';
+import { SearchField } from '../components/SearchField';
 
 export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap; settings?: LibrarySettings }
 /** Account browse surface; writes are delegated, sharing rows/artwork without the web player. */
@@ -155,7 +156,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
             onMenu={props.onPlaylistMenu ? event => props.onPlaylistMenu?.(name, event) : undefined} onActivate={() => { setCollection({ title: name, ids: library().playlists?.[name] ?? [], kind: 'playlists', id: name }); setQuery(''); }} />
       }</For></Show>
     }>
-      <div class={styles.libraryTools}><label class={styles.field}>{t('library.searchLibrary')}<input type="search" value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label>
+      <div class={styles.libraryTools}><SearchField value={query()} placeholder={t('library.searchLibrary')} onInput={setQuery} />
       <Show when={props.onManageOffline}><button class={styles.menuTrigger} data-library-menu aria-label={t('songRow.ariaMore')} onClick={event => {
         const offline: MenuAction[] = [
         { label: t(onlyAvailable() ? 'android.offlineAll' : 'android.offlineOnly'), disabled: props.disconnected, selected: onlyAvailable() || props.disconnected, onSelect: () => { detailEpoch++; setCollection(null); setOnlyAvailable(value => !value); } },

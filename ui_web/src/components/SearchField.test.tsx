@@ -16,3 +16,12 @@ it('returns focus to the search input when its clear button disappears', () => {
   expect(input).toHaveFocus();
   expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
 });
+
+it('puts a leading control in place of the magnifier, built once', () => {
+  let built = 0;
+  const Leading = () => { built += 1; return <button type="button">Back</button>; };
+  const { container } = render(() => <SearchField value="" onInput={() => {}} placeholder="Search" leading={<Leading />} />);
+  expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy();
+  expect(container.querySelector('svg')).toBeNull();
+  expect(built).toBe(1);
+});

@@ -54,104 +54,29 @@
   border-radius: var(--radius-full);
 }
 
+/* Rendered only by the touch shell, which is not a width: at the Large size it
+   also covers small desktop windows (lib/shellLayout.ts). The height is the
+   field plus its bottom gap, scaled by how far the swipe has revealed it. */
 .searchReveal {
   flex-shrink: 0;
   overflow: clip;
+  height: calc(var(--search-reveal, 0) * (var(--control-h) + var(--space-sm)));
+  padding: 0 var(--gutter);
+  transition: height 240ms var(--ease-out);
+  will-change: height;
 }
 
-.localSearch {
-  display: flex;
-  align-items: center;
-  height: 48px;
-  margin: 0 var(--gutter) var(--space-sm);
-  padding: 0 var(--space-sm) 0 var(--space-md);
-  color: var(--ink-tertiary);
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-full);
+.searchReveal > * {
+  opacity: var(--search-reveal, 0);
+  transform: translateY(var(--search-offset, -8px));
   transition:
-    border-color var(--dur-short) var(--ease-out),
-    background var(--dur-short) var(--ease-out);
+    opacity var(--dur-short) var(--ease-out),
+    transform 240ms var(--ease-out);
 }
 
-.localSearch:focus-within {
-  color: var(--ink-secondary);
-  background: var(--bg-elevated);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline));
-}
-
-.localSearch > svg {
-  width: var(--icon-md);
-  height: var(--icon-md);
-  flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-}
-
-.localSearch input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  padding: 0 var(--space-sm);
-  font: inherit;
-  font-size: var(--text-body);
-  color: var(--ink-primary);
-  background: transparent;
-  border: 0;
-  outline: 0;
-}
-
-.localSearch input::placeholder {
-  color: var(--ink-tertiary);
-}
-
-.clearSearch {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex: none;
-  padding: 0;
-  color: var(--ink-tertiary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-full);
-}
-
-.clearSearch svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-@media (max-width: 1023px) {
-  .searchReveal {
-    height: 0;
-    transition: height 240ms var(--ease-out);
-    will-change: height;
-  }
-
-  .searchDragging {
-    transition: none;
-  }
-
-  .localSearch {
-    opacity: var(--search-reveal, 0);
-    transform: translateY(var(--search-offset, -8px));
-    transition:
-      opacity var(--dur-short) var(--ease-out),
-      transform 240ms var(--ease-out);
-  }
-
-  .searchDragging .localSearch {
-    transition: none;
-  }
+.searchDragging,
+.searchDragging > * {
+  transition: none;
 }
 
 .toolbar {
@@ -240,8 +165,7 @@
   height: 48px;
 }
 
-:global(html[data-interface-size='large']) .headerAction,
-:global(html[data-interface-size='large']) .localSearch {
+:global(html[data-interface-size='large']) .headerAction {
   width: auto;
   min-width: 56px;
   height: 56px;
@@ -249,16 +173,6 @@
 
 :global(html[data-interface-size='large']) .headerAction {
   width: 56px;
-}
-
-:global(html[data-interface-size='normal']) .clearSearch {
-  width: 44px;
-  height: 44px;
-}
-
-:global(html[data-interface-size='large']) .clearSearch {
-  width: 48px;
-  height: 48px;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -301,7 +215,6 @@
 .desktopSearch {
   flex: 1;
   min-width: 200px;
-  margin: 0;
 }
 
 @media (min-width: 1024px) {

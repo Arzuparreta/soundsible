@@ -39,7 +39,8 @@ for (const theme of ['dark', 'light']) for (const size of ['compact', 'normal', 
     const cover = await row.locator('[data-artwork-surface]').evaluate(element => ({ height: element.getBoundingClientRect().height,
       expected: parseFloat(getComputedStyle(element).getPropertyValue('--cover-sm')) }));
     expect(cover.height).toBeCloseTo(cover.expected, 0);
-    const field = await browser.locator('input[type="search"]').evaluate(element => ({ height: element.getBoundingClientRect().height,
+    // The shared SearchField box, border included, is what follows the density.
+    const field = await browser.locator('input[type="search"]').evaluate(element => ({ height: element.parentElement!.getBoundingClientRect().height,
       expected: parseFloat(getComputedStyle(element).getPropertyValue('--control-h')) }));
     expect(field.height).toBeCloseTo(field.expected, 0);
     await expect(browser).toHaveScreenshot(`browser-${theme}-${size}.png`);
