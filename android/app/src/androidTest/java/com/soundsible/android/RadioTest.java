@@ -40,6 +40,7 @@ public class RadioTest {
             web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('input[type=password]')");
             web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
         try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/__fixture/radio-seed").header("X-Android-Fixture","isolated").post(okhttp3.RequestBody.create("{\"failNext\":1,\"measured\":true}",okhttp3.MediaType.get("application/json"))).build()).execute()){assertEquals(200,response.code());}
             observe(web,scenario);
@@ -100,6 +101,7 @@ public class RadioTest {
             // Canonical recently-added songs can put the original seed outside
             // the virtualized window. Search before interacting with its row.
             web.evaluate(scenario,"const input=document.querySelector('[data-testid=android-library] input[type=search]');input.value='member private song';input.dispatchEvent(new Event('input',{bubbles:true}))");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song')");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Explore')");

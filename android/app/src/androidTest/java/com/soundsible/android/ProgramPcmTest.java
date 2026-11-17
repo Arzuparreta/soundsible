@@ -111,11 +111,12 @@ public class ProgramPcmTest {
             web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(origin) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(scenario, "!!document.querySelector('input[type=password]')");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')"); observe(scenario);
             original = api(connection, origin, "/api/discovery/settings", "GET", null).getBoolean("volume_leveling");
             api(connection, origin, "/__fixture/loudness-facts", "POST", new JSONObject().put("measured", false));
             level(scenario, false); // Settings before the first programme must be usable.
-            click(scenario, "Library"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");
+            click(scenario, "Library"); web.revealLibraryTrack(scenario, "member-track"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");
             waitFor(scenario, "window.__pcm?.playing"); JSONObject initial = state(scenario); String key = currentKey(initial), programme = initial.getString("programToken"), keys = initial.getJSONArray("items").toString(), cookie = connection.cookieHeader(connection.getGeneration());
             try (var probe = new Probe(connection.getGeneration())) {
                 probe.await(key, 3000, 0); level(scenario, true); probe.await(key, 1893, 0);
@@ -140,6 +141,7 @@ public class ProgramPcmTest {
                 api(connection, origin, "/__fixture/loudness-facts", "POST", new JSONObject().put("album", true));
                 JSONObject first = row(connection, origin, "member-track"), second = row(connection, origin, "member-pcm-loud");
                 click(scenario, "Refresh"); waitFor(scenario, "!!document.querySelector('[data-testid=android-configured]')&&!document.querySelector('[data-testid=android-configured] header button').disabled"); click(scenario, "Library");
+                web.revealLibraryTrack(scenario, "member-pcm-loud");
                 waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-pcm-loud] [data-row-main]')");
                 web.evaluate(scenario, "document.querySelector('[data-testid=android-library] input[type=search]').value='member private song';document.querySelector('[data-testid=android-library] input[type=search]').dispatchEvent(new Event('input',{bubbles:true}))");
                 waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");

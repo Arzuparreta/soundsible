@@ -1,7 +1,7 @@
 import { render, screen } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { VirtualRows } from './VirtualRows';
+import { CollectionRows } from './CollectionView';
 
 beforeAll(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -27,15 +27,15 @@ function renderRows(count: number) {
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   const result = render(() => (
     <div ref={setScrollRef} style={{ height: '600px', overflow: 'auto' }}>
-      <VirtualRows items={items} scrollElement={scrollRef} rowHeight={56}>
+      <CollectionRows items={items} scrollElement={scrollRef} rowHeight={56}>
         {(item) => <div data-testid="row">{item()?.title}</div>}
-      </VirtualRows>
+      </CollectionRows>
     </div>
   ));
   return { ...result, items };
 }
 
-describe('VirtualRows', () => {
+describe('CollectionRows', () => {
   it('renders its initial visible range without waiting for a resize or tab switch', () => {
     renderRows(5000);
 
@@ -46,7 +46,7 @@ describe('VirtualRows', () => {
   it('reserves the full scroll height so the scrollbar is honest', () => {
     const { container } = renderRows(100);
 
-    const spacer = container.querySelector('[data-virtual-rows]') as HTMLElement;
+    const spacer = container.querySelector('[data-collection-rows]') as HTMLElement;
     expect(spacer.style.height).toBe(`${100 * 56}px`);
   });
 
@@ -54,7 +54,7 @@ describe('VirtualRows', () => {
     const { container } = renderRows(0);
 
     expect(screen.queryAllByTestId('row')).toHaveLength(0);
-    expect((container.querySelector('[data-virtual-rows]') as HTMLElement).style.height).toBe('0px');
+    expect((container.querySelector('[data-collection-rows]') as HTMLElement).style.height).toBe('0px');
   });
 
   it('keeps row positions relative to the list when a header precedes it', () => {
@@ -62,12 +62,12 @@ describe('VirtualRows', () => {
     const { container } = render(() => (
       <div ref={setScrollRef}>
         <header style={{ height: '800px' }}>Show with a long title</header>
-        <VirtualRows items={Array.from({ length: 100 }, (_, i) => i)} scrollElement={scrollRef} rowHeight={56} scrollMargin={800}>
+        <CollectionRows items={Array.from({ length: 100 }, (_, i) => i)} scrollElement={scrollRef} rowHeight={56} scrollMargin={800}>
           {(item) => <div>{item()}</div>}
-        </VirtualRows>
+        </CollectionRows>
       </div>
     ));
-    const spacer = container.querySelector('[data-virtual-rows]') as HTMLElement;
+    const spacer = container.querySelector('[data-collection-rows]') as HTMLElement;
     expect(spacer.style.height).toBe(`${100 * 56}px`);
     expect(spacer.querySelector<HTMLElement>('[data-index="0"]')?.style.transform).toBe('translateY(0px)');
   });

@@ -18,7 +18,8 @@ import hero from '../components/EntityHero.module.css';
 import { neutralCoverStyle } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
-import { VirtualRows } from '../components/VirtualRows';
+import { CollectionRows } from '../components/CollectionView';
+import type { MenuEvent } from '../lib/menuEvent';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { followPodcast, shownPodcast } from '../lib/podcasts';
@@ -207,6 +208,18 @@ export default function PodcastShow() {
     if (local) actions.playTrack(local);
     else void actions.playEpisode(ep, show()?.title, show()?.id, image());
   };
+  const openEpisodeMenu = (ep: PodcastEpisode, event?: MenuEvent) => {
+    const downloaded = isDownloaded(ep);
+    const downloading = state.downloads.queue.some(item => item.song_str === ep.enclosure_url
+      && (item.status === 'pending' || item.status === 'downloading'));
+    openContextMenu({ title: ep.title, subtitle: title(), actions: [
+      { icon: menuIcons.play(), label: t('podcastShow.ariaPlay'), onSelect: () => playEp(ep) },
+      { icon: menuIcons.device(), label: t('trackActions.playOnDevice'), onSelect: () => openPlayOnDevice(localByGuid().get(ep.guid) ?? podcastEpisodeToTrack(ep, show()?.title, show()?.id, image())) },
+      { icon: downloaded ? menuIcons.check() : menuIcons.download(), label: t(downloaded ? 'podcastShow.ariaDownloaded' : downloading ? 'collection.downloading' : 'podcastShow.ariaDownload'), disabled: downloaded || downloading,
+        onSelect: () => void actions.downloadEpisode(ep, show()) },
+    ] }, event);
+  };
+
 
   const [following, setFollowing] = createSignal(false);
   const follow = async () => {
@@ -342,37 +355,32 @@ export default function PodcastShow() {
             * a cover is a background image the browser downloads the moment
             * its row exists: a whole feed's worth was a gigabyte of 3000px
             * JPEGs that took the connection from playback for minutes (#250). */}
-          <VirtualRows items={episodes()} scrollElement={scroller} scrollMargin={headerHeight()} rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows>
-            {(item) => <Show when={item()} keyed>{(ep) => {
-              const id = ep.guid || ep.enclosure_url;
-              const downloaded = () => isDownloaded(ep);
-              const downloading = () => state.downloads.queue.some((item) => item.song_str === ep.enclosure_url
+          <CollectionRows items={episodes()} scrollElement={scroller} scrollMargin={headerHeight()} rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows>
+            {(ep) => {
+              const id = () => ep().guid || ep().enclosure_url;
+              const downloaded = () => isDownloaded(ep());
+              const downloading = () => state.downloads.queue.some((item) => item.song_str === ep().enclosure_url
                 && (item.status === 'pending' || item.status === 'downloading'));
-              const tap = createResponsiveTap({ onTap: () => playEp(ep) });
+              const tap = createResponsiveTap({ onTap: () => playEp(ep()) });
               return (
-                <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={ep.title}
-                  subtitle={[fmtDate(ep.published), fmtDur(ep.duration_sec)].filter(Boolean).join(' · ')}
-                  seed={id} cover={podcastArtwork(ep.image || image(), ROW_ARTWORK)} active={isPlayingEpisode(id)} busy={downloading()} busyLabel={t('collection.downloading')}
-                  actionLabel={`${t('podcastShow.ariaPlay')}: ${ep.title}`} onActivate={() => playEp(ep)}
-                  onMenu={() => openContextMenu({ title: ep.title, subtitle: title(), actions: [
-                    { icon: menuIcons.play(), label: t('podcastShow.ariaPlay'), onSelect: () => playEp(ep) },
-                    { icon: menuIcons.device(), label: t('trackActions.playOnDevice'), onSelect: () => openPlayOnDevice(localByGuid().get(ep.guid) ?? podcastEpisodeToTrack(ep, show()?.title, show()?.id, image())) },
-                    { icon: downloaded() ? menuIcons.check() : menuIcons.download(), label: t(downloaded() ? 'podcastShow.ariaDownloaded' : downloading() ? 'collection.downloading' : 'podcastShow.ariaDownload'), disabled: downloaded() || downloading(),
-                      onSelect: () => void actions.downloadEpisode(ep, show()) },
-                  ] })} />}>
+                <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={ep().title}
+                  subtitle={[fmtDate(ep().published), fmtDur(ep().duration_sec)].filter(Boolean).join(' · ')}
+                  seed={id()} cover={podcastArtwork(ep().image || image(), ROW_ARTWORK)} active={isPlayingEpisode(id())} busy={downloading()} busyLabel={t('collection.downloading')}
+                  actionLabel={`${t('podcastShow.ariaPlay')}: ${ep().title}`} onActivate={() => playEp(ep())}
+                  onMenu={event => openEpisodeMenu(ep(), event)} />}>
                 <div
                   class={styles.ep}
-                  data-now-playing={isPlayingEpisode(id) ? '' : undefined}
+                  data-now-playing={isPlayingEpisode(id()) ? '' : undefined}
                   data-pressable
                   role="button"
                   tabindex="0"
-                  aria-label={`${t('podcastShow.ariaPlay')}: ${ep.title}`}
+                  aria-label={`${t('podcastShow.ariaPlay')}: ${ep().title}`}
                   {...tap}
                   onKeyDown={(event) => {
                     if (event.target !== event.currentTarget) return;
                     if (event.key !== 'Enter' && event.key !== ' ') return;
                     event.preventDefault();
-                    playEp(ep);
+                    playEp(ep());
                   }}
                 >
                   <button
@@ -381,7 +389,7 @@ export default function PodcastShow() {
                     aria-label={t('podcastShow.ariaPlay')}
                     onClick={(e) => {
                       e.stopPropagation();
-                      playEp(ep);
+                      playEp(ep());
                     }}
                   >
                     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -392,11 +400,11 @@ export default function PodcastShow() {
                     * list in the app shows a thumbnail beside the title; this
                     * row was the one that did not, so a show's episodes read as
                     * a wall of text next to an album of the same length. */}
-                  <div class={styles.epCover} style={neutralCoverStyle(podcastArtwork(ep.image || image(), ROW_ARTWORK))} />
+                  <div class={styles.epCover} style={neutralCoverStyle(podcastArtwork(ep().image || image(), ROW_ARTWORK))} />
                   <div class={styles.epMeta}>
-                    <span class={styles.epTitle}>{ep.title}</span>
+                    <span class={styles.epTitle}>{ep().title}</span>
                     <span class={styles.epSub}>
-                      {[fmtDate(ep.published), fmtDur(ep.duration_sec)].filter(Boolean).join(' · ')}
+                      {[fmtDate(ep().published), fmtDur(ep().duration_sec)].filter(Boolean).join(' · ')}
                     </span>
                   </div>
                   <Show
@@ -408,7 +416,7 @@ export default function PodcastShow() {
                         aria-label={t('podcastShow.ariaDownload')}
                         onClick={(e) => {
                           e.stopPropagation();
-                          void actions.downloadEpisode(ep, show());
+                          void actions.downloadEpisode(ep(), show());
                         }}
                       >
                         <DownloadIcon size={18} />
@@ -422,8 +430,8 @@ export default function PodcastShow() {
                 </div>
                 </Show>
               );
-            }}</Show>}
-          </VirtualRows>
+            }}
+          </CollectionRows>
           </Show>
           <Show when={next() != null}>
             <div class={styles.more}>

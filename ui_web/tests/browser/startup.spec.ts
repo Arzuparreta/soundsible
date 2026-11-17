@@ -275,21 +275,30 @@ test('cached PWA shell includes the loader and reopens offline', async ({ page, 
   });
   await expect.poll(() => page.evaluate(async () => {
     const names = (await caches.keys()).filter(name => /^soundsible-shell-[a-f0-9]{64}$/.test(name));
-    return (await Promise.all(names.map(async name => Boolean(await (await caches.open(name)).match('/player/'))))).some(Boolean);
+    // Read the decoded cache body in the browser. Firefox's protocol body API
+    // can try to decode an already-decoded, compressed worker response again.
+    return (await Promise.all(names.map(async name => {
+      const shell = await (await caches.open(name)).match('/player/');
+      return shell ? (await shell.text()).includes('id="startup-screen"') : false;
+    }))).some(Boolean);
   })).toBe(true);
   // The first navigation installs the worker after its assets have arrived.
   // A controlled online launch populates the existing immutable asset cache.
   await page.reload();
   await expect(page.locator('#startup-screen')).toHaveCount(0);
   await expect(page.locator('#app')).not.toHaveAttribute('inert');
+  // Firefox's HTTP interception bypasses the worker on offline navigation,
+  // even when no mock matches the document. Remove mocks for a real outage;
+  // the cached shell and the app's connection recovery must stand on their own.
+  await page.unrouteAll({ behavior: 'wait' });
   await context.setOffline(true);
   const response = await page.reload({ waitUntil: 'commit' });
   expect(response?.fromServiceWorker()).toBe(true);
-  expect(await response!.text()).toContain('id="startup-screen"');
   // The navigation deadline plus the HTTP authentication timeout are bounded;
   // offline browsers can take the full timeout before rejecting that request.
   await expect(page.locator('#startup-screen')).toHaveCount(0, { timeout: 15_000 });
   await expect(page.locator('#app')).not.toHaveAttribute('inert');
+  await engine(page);
   await context.setOffline(false);
   await page.reload();
   await expect(page.locator('#startup-screen')).toHaveCount(0);

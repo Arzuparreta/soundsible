@@ -60,6 +60,17 @@ export default defineConfig({
       name: 'webkit-desktop',
       use: { browserName: 'webkit', viewport: { width: 1366, height: 768 } },
     },
+    {
+      name: 'firefox-desktop',
+      // Compatibility and normal-motion coverage for the shared UI contracts.
+      // Audio-clock and CDP-only probes remain on their supported engines.
+      testMatch: [
+        '**/design-system.spec.ts', '**/music-links.spec.ts', '**/menu-tap-passthrough.spec.ts',
+        '**/entity-detail-layout.spec.ts', '**/saved-entities.spec.ts', '**/library-header-scroll.spec.ts',
+        '**/interface-scale.spec.ts', '**/navigation-paint.spec.ts',
+      ],
+      use: { browserName: 'firefox', viewport: { width: 1366, height: 768 }, reducedMotion: 'no-preference' },
+    },
   ],
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'line',
 });

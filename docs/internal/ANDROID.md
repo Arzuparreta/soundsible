@@ -64,7 +64,11 @@ python scripts/android.py doctor
 
 Capacitor core/CLI/Android are pinned together; the Gradle Wrapper includes a
 checksum. The build uses AGP 9 with its built-in Kotlin (without the
-`org.jetbrains.kotlin.android` plugin). The project minimum is API 24 and WebView Chrome 120. **That is a
+`org.jetbrains.kotlin.android` plugin). The project minimum is API 26 (Android 8) and WebView Chrome 120.
+Chromium 120 cannot run on Android 7. Capacitor routes unsupported WebViews to
+the independently packaged `webview-error.html`, which explains how to update
+the provider without loading the application bundle. The preparation checker
+verifies the OS/engine/build-target invariant and standalone page. **That is a
 technical minimum, not evidence that it works on old Android versions.** The initial
 matrix uses API 36; extending versions requires tests, especially of WebView.
 

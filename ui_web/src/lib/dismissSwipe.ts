@@ -132,7 +132,7 @@ export function createDismissSwipe(
     return { captured: wasCaptured, offset: 0 };
   };
 
-  return { begin, move, end, cancel };
+  return { begin, move, end, cancel, isTracking: () => tracking };
 }
 
 /**

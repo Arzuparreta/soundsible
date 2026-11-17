@@ -96,11 +96,15 @@ async function expectSingleToolbar(page: Page) {
 
 async function expectFullTitle(heading: Locator, title: string) {
   await expect(heading).toHaveText(title);
+  await heading.page().evaluate(() => document.fonts.ready);
   expect(await heading.evaluate(element => {
     const elements = [element, ...element.querySelectorAll<HTMLElement>('button')];
     return elements.every(node => {
       const style = getComputedStyle(node);
-      return node.scrollWidth <= node.clientWidth + 1 && node.scrollHeight <= node.clientHeight + 1
+      // Firefox includes glyph ink outside a tight line box in scrollHeight
+      // (34px text over a 31px line). Visible overflow does not clip that ink;
+      // reject clipping/clamping, not the engine's font-overflow accounting.
+      return node.scrollWidth <= node.clientWidth + 1
         && !['hidden', 'clip'].includes(style.overflowY)
         && !/^[1-9]/.test(style.webkitLineClamp);
     });

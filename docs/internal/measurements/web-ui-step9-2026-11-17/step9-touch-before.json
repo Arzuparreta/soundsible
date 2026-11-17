@@ -1,0 +1,125 @@
+{
+  "tag": "step9-touch-before",
+  "date": "2026-11-17T02:35:47.855Z",
+  "revision": "9f6a448adfaecbb7ce1751aa2e4393ba2b6450db",
+  "fixture": {
+    "tracks": 6000,
+    "albums": 600,
+    "artists": 200,
+    "saved": 1800,
+    "favourites": 900,
+    "previews": 600,
+    "stressAlbumTracks": 100
+  },
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "input": {
+    "kind": "touch",
+    "passive_probe": false,
+    "burst_ms": 3200,
+    "stroke_steps": 12,
+    "stroke_interval_ms": 16,
+    "stroke_max_px": 480,
+    "native_fling": true
+  },
+  "browser": "156.0.8078.4",
+  "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL ES 3.2)",
+  "gpu_features": {
+    "2d_canvas": "enabled",
+    "direct_rendering_display_compositor": "disabled_off_ok",
+    "gpu_compositing": "enabled",
+    "multiple_raster_threads": "enabled_on",
+    "opengl": "enabled_on",
+    "rasterization": "enabled_force",
+    "raw_draw": "disabled_off_ok",
+    "skia_graphite": "disabled_off",
+    "trees_in_viz": "disabled_off",
+    "video_decode": "enabled",
+    "video_encode": "disabled_software",
+    "vulkan": "disabled_off",
+    "webgl": "enabled",
+    "webgpu": "enabled",
+    "webgpu_on_vk_via_gl_interop": "enabled",
+    "webnn": "disabled_off"
+  },
+  "gpu_devices": [
+    {
+      "vendorId": 4318,
+      "deviceId": 9476,
+      "vendorString": "Google Inc. (NVIDIA Corporation)",
+      "deviceString": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL ES 3.2 NVIDIA 620.70.06)",
+      "driverVendor": "NVIDIA",
+      "driverVersion": "620.70.06"
+    }
+  ],
+  "compositor": "hardware",
+  "software": false,
+  "scene_probe_css": null,
+  "host": {
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "cores": 16,
+    "load_1m": 0.26
+  },
+  "repeats": 3,
+  "results": [
+    {
+      "surface": "player-browser",
+      "playing": false,
+      "cpu_rate": 6,
+      "threads_busy_ms": {
+        "main": 339.6,
+        "compositor": 18.3,
+        "gpu": 142.2,
+        "display": 15.8
+      },
+      "frames": {
+        "presented": 68,
+        "partial": 14,
+        "dropped": 0,
+        "expected": 68
+      },
+      "display_gap_ms": {
+        "p50": 16.6,
+        "p95": 22.7,
+        "max": 33.8
+      },
+      "main_thread_ms": {
+        "longest_task": 38.5,
+        "tasks_over_50": 0,
+        "script": 162.7,
+        "layout": 89.7,
+        "paint": 85.2
+      },
+      "scrolled_px": 782,
+      "scrollport_height": 646,
+      "moving_ms": 1067,
+      "dom_elements": 1059,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 68,
+          "expected": 68,
+          "partial": 14,
+          "dropped": 0,
+          "longest_task": 39.7
+        },
+        {
+          "presented": 68,
+          "expected": 68,
+          "partial": 14,
+          "dropped": 0,
+          "longest_task": 38.5
+        },
+        {
+          "presented": 69,
+          "expected": 69,
+          "partial": 14,
+          "dropped": 0,
+          "longest_task": 37.9
+        }
+      ]
+    }
+  ]
+}

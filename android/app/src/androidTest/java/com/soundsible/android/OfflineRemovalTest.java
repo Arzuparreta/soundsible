@@ -39,6 +39,7 @@ public class OfflineRemovalTest {
             web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(origin) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(scenario, "!!document.querySelector('input[type=password]')");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-menu]')");
             String cookie = connection.cookieHeader(connection.getGeneration()); assertNotNull(cookie);
             web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-menu]').click()"); click(scenario, "Available offline");
@@ -65,6 +66,7 @@ public class OfflineRemovalTest {
                 Thread.sleep(500);
                 if (held.exists()) break;
             }
+            web.revealLibraryTrack(scenario, "B1111111111");
             web.evaluate(scenario, "document.querySelector('[data-library-menu]').click()"); click(scenario, "Manage offline music");
             waitFor(scenario, "!!document.querySelector('[data-testid=android-offline-manager]')");
             click(scenario, "Remove from this device");

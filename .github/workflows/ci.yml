@@ -257,8 +257,34 @@ jobs:
         run: npm run build
       - name: Enforce initial payload budgets
         run: node scripts/check-payload.mjs
+      - name: Enforce production rendering budgets
+        env:
+          DIST: dist
+          SURFACES: songs,albums,player-browser
+          RATES: '1'
+          REPEATS: '1'
+          SOFTWARE: '1'
+          TAG: ci-scene
+          KEEP_TRACE: perf/results/traces
+        run: |
+          # checkout's temporary Git config is scoped to the action itself.
+          # The root container also needs to trust this runner-owned checkout.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          node --test perf/*.test.mjs
+          node perf/bench.mjs
+          node perf/budget.mjs perf/results/ci-scene.json
+      - name: Upload production rendering evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ui-rendering-budget
+          path: ui_web/perf/results
+          retention-days: 7
       - name: Validate production startup and cached PWA
-        run: npx playwright test --config playwright.startup.config.ts
+        run: |
+          # Firefox also runs here and requires the job home to match its UID.
+          chown "$(id -u):$(id -g)" "$HOME"
+          npx playwright test --config playwright.startup.config.ts
       - name: Upload startup browser report
         if: always()
         uses: actions/upload-artifact@v7.0.2
@@ -440,6 +466,7 @@ jobs:
           - { project: chromium-desktop, shard: 1/1 }
           - { project: webkit-desktop, shard: 1/2 }
           - { project: webkit-desktop, shard: 2/2 }
+          - { project: firefox-desktop, shard: 1/1 }
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Browsers and their libraries come with the image, so nothing is installed
@@ -462,6 +489,12 @@ jobs:
           key: npm-${{ hashFiles('ui_web/package-lock.json') }}
       - name: Install JS dependencies
         run: npm ci
+      - name: Match Firefox home ownership to the container user
+        # Actions mounts /github/home with the runner's UID, while this
+        # container runs as root. Firefox requires its home to match its UID.
+        # Change only this job's directory ownership, leaving HOME unchanged.
+        if: matrix.project == 'firefox-desktop'
+        run: chown "$(id -u):$(id -g)" "$HOME"
       - name: Validate interface scaling
         run: npm run test:ui-scale -- --project=${{ matrix.project }} --shard=${{ matrix.shard }}
       - name: Upload browser report

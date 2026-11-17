@@ -55,6 +55,7 @@ class LiveUiTest {
                 web.evaluate(scenario, "document.querySelector('input[type=url]').value=${JSONObject.quote(origin)};document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()")
                 waitFor("!!document.querySelector('input[type=password]')")
                 web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()")
+                web.revealLibraryTrack(scenario, "member-track")
                 waitFor("Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).some(b=>b.textContent==='member private song')")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').click()")
                 web.evaluate(scenario, "document.querySelector('[data-android-live]').click()")

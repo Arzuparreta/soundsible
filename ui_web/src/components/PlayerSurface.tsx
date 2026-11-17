@@ -6,6 +6,9 @@ import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
+import { createTouchMoveLease } from '../lib/touchMoveLease';
+import { ArtworkBackdrop } from './ArtworkBackdrop';
+import { pageVisible } from '../lib/pageVisibility';
 import type { NowPlayingMobilePanel } from './NowPlaying';
 import { deferredComponent } from '../lib/deferredComponent';
 import { recoverAutoMode, recoverNowPlaying } from './nowPlayingRecovery';
@@ -85,6 +88,7 @@ export function PlayerSurface() {
   let wasAuto = auto();
   let swipeStart: { x: number; y: number; at: number; id: number; scroller: HTMLElement | null } | null = null;
   let swipeActive = false;
+  let touchMove: ReturnType<typeof createTouchMoveLease> | undefined;
   let closeTimer: number | undefined;
   /* Where the exit starts and how long it is worth, handed over by whatever
      closed the surface. Null when the close came from somewhere that has no
@@ -271,6 +275,7 @@ export function PlayerSurface() {
   /** Drop the gesture and every trace of it. Every bail-out goes through here:
       a leftover `data-swiping` pins `transition: none` on the surface forever. */
   const resetSwipe = () => {
+    touchMove?.release();
     swipeStart = null;
     swipeActive = false;
     setSwiping(false);
@@ -291,6 +296,7 @@ export function PlayerSurface() {
     if (scroller && scroller.scrollTop > 1) return;
     swipeStart = { x: touch.clientX, y: touch.clientY, at: performance.now(), id: touch.identifier, scroller };
     swipeActive = false;
+    touchMove?.arm();
   };
 
   const touchById = (touches: TouchList) => {
@@ -303,6 +309,7 @@ export function PlayerSurface() {
   };
 
   const moveTouch = (event: TouchEvent) => {
+    if (event.touches.length !== 1) { resetSwipe(); return; }
     if (!swipeStart || !surfaceEl) return;
     const touch = touchById(event.touches);
     if (!touch) return;
@@ -314,17 +321,17 @@ export function PlayerSurface() {
       // no-op. So the first move that clearly reads as a downward drag has to
       // claim the gesture outright — waiting for 8px was already too late.
       if (Math.abs(dx) > Math.abs(dy)) {
-        if (Math.abs(dx) > HORIZONTAL_CANCEL_THRESHOLD) swipeStart = null;
+        if (Math.abs(dx) > HORIZONTAL_CANCEL_THRESHOLD) resetSwipe();
         return;
       }
       if (dy < -SWIPE_ACTIVATE_THRESHOLD) {
         // Upward: this belongs to the list, not to us.
-        swipeStart = null;
+        resetSwipe();
         return;
       }
       if (dy <= SWIPE_ACTIVATE_THRESHOLD || dy <= Math.abs(dx) * SWIPE_VERTICAL_BIAS) return;
       if (swipeStart.scroller && swipeStart.scroller.scrollTop > 1) {
-        swipeStart = null;
+        resetSwipe();
         return;
       }
       swipeActive = true;
@@ -359,8 +366,8 @@ export function PlayerSurface() {
     const syncLayout = () => setMobileLayout(Boolean(media?.matches));
     media?.addEventListener('change', syncLayout);
     syncLayout();
+    touchMove = createTouchMoveLease(surfaceEl, moveTouch);
     surfaceEl.addEventListener('touchstart', beginTouch, { passive: true });
-    surfaceEl.addEventListener('touchmove', moveTouch, { passive: false });
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
     onCleanup(() => {
@@ -368,7 +375,7 @@ export function PlayerSurface() {
       media?.removeEventListener('change', syncLayout);
       surfaceEl?.removeEventListener('animationend', onCloseAnimationEnd);
       surfaceEl?.removeEventListener('touchstart', beginTouch);
-      surfaceEl?.removeEventListener('touchmove', moveTouch);
+      touchMove?.release();
       surfaceEl?.removeEventListener('touchend', finishSwipe);
       surfaceEl?.removeEventListener('touchcancel', cancelSwipe);
       delete document.documentElement.dataset.playerSurface;
@@ -395,18 +402,10 @@ export function PlayerSurface() {
         aria-hidden={!nowPlayingOpen()}
         tabIndex={-1}
       >
-        <div
-          classList={{ [styles.backdrop]: true, [styles.backdropActive]: backdrops().active === 'first' }}
-          style={{ 'background-image': backdrops().first ? `url("${backdrops().first}")` : undefined }}
-          data-player-backdrop={backdrops().active === 'first' ? 'active' : 'inactive'}
-          aria-hidden="true"
-        />
-        <div
-          classList={{ [styles.backdrop]: true, [styles.backdropActive]: backdrops().active === 'second' }}
-          style={{ 'background-image': backdrops().second ? `url("${backdrops().second}")` : undefined }}
-          data-player-backdrop={backdrops().active === 'second' ? 'active' : 'inactive'}
-          aria-hidden="true"
-        />
+        <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
+          src={backdrops().first} active={backdrops().active === 'first'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
+        <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
+          src={backdrops().second} active={backdrops().active === 'second'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
         <div class={styles.wash} data-player-veil="" aria-hidden="true" />
         <div class={styles.grain} aria-hidden="true" />
 

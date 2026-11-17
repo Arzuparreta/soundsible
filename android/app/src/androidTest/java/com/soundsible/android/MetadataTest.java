@@ -73,6 +73,7 @@ public class MetadataTest {
         waitFor(web,scenario,"window.__done || !!window.__failure");assertEquals(web.evaluate(scenario,"window.__failure"),"true",web.evaluate(scenario,"window.__done"));
     }
     private void edit(StartupTest web,ActivityScenario<MainActivity> scenario,String title) throws Exception {
+        web.revealLibraryTitle(scenario, title);
         waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==="+JSONObject.quote(title)+")");
         web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==="+JSONObject.quote(title)+").closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
         waitFor(web,scenario,"!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Edit details')");

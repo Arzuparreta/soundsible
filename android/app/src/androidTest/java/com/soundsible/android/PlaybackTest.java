@@ -77,6 +77,7 @@ public class PlaybackTest {
             web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(origin) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(web, scenario, "!!document.querySelector('input[type=password]')");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(web, scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
             web.evaluate(scenario, "Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='Playlists').click()");
             waitFor(web, scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member playlist')");
@@ -235,6 +236,7 @@ public class PlaybackTest {
                 waitFor(web, scenario, "!document.querySelector('[data-testid=program-queue]') && !document.querySelector('[data-testid=android-program]')");
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(0, controller.getMediaItemCount()); assertFalse(controller.isPlaying()); assertTrue(controller.getShuffleModeEnabled()); assertEquals(Player.REPEAT_MODE_ALL, controller.getRepeatMode()); });
                 // S2e: add from the real library menu without replacing the service's program.
+                web.revealLibraryTrack(scenario, "member-track");
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
                 waitFor(web, scenario, "!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to queue')");
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to queue').click()");
@@ -244,6 +246,7 @@ public class PlaybackTest {
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(1, controller.getMediaItemCount()); assertFalse(controller.getPlayWhenReady()); assertTrue(controller.getShuffleModeEnabled()); assertEquals(Player.REPEAT_MODE_ALL, controller.getRepeatMode()); controller.seekTo(23000); });
                 web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__beforeInsert=s)");
                 waitFor(web, scenario, "window.__beforeInsert?.items.length===1");
+                web.revealLibraryTrack(scenario, "member-track");
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
                 waitFor(web, scenario, "!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add after current')");
                 web.evaluate(scenario, "window.__menuPainted=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__menuPainted=true))");
@@ -358,6 +361,7 @@ public class PlaybackTest {
                 waitFor(web, scenario, "!!document.querySelector('input[type=password]') && !document.querySelector('[data-testid=android-program]')");
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertFalse(controller.isPlaying()); assertEquals(0, controller.getMediaItemCount()); });
                 web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+                web.revealLibraryTrack(scenario, "member-track");
                 waitFor(web, scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song').click()");
                 waitFor(web, scenario, "Array.from(document.querySelectorAll('[data-testid=android-program] button')).some(b=>b.textContent==='Pause')");

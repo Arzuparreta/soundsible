@@ -1,11 +1,12 @@
+import { mockScrollportLayout } from '../testLayout';
 import { createSignal } from 'solid-js';
 import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ProgramQueue from './ProgramQueue';
 import type { ProgramState } from '../lib/program/runtime';
+mockScrollportLayout(400, 240);
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
-vi.mock('@tanstack/solid-virtual', () => ({ createVirtualizer: (options: { count: number; getItemKey(index: number): string }) => ({ measure() {}, measureElement() {}, getTotalSize: () => options.count * 56, getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({ key: options.getItemKey(index), start: index * 56 })) }) }));
-beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
+beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: true, errorKind: '', playing: true, state: 3, index: 1, id: 'a', title: 'Song', artist: '', queue: ['a', 'a'], items: [{ source: 'local', key: 'first', id: 'a', title: 'Song', artist: '' }, { source: 'local', key: 'second', id: 'a', title: 'Song', artist: '' }], queueToken: 'first-second', positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
 it('targets the selected occurrence and exposes a distinct active row for repeated ids', async () => {

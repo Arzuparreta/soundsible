@@ -105,4 +105,15 @@ describe('CollectionRows', () => {
     expect(rows().find(row => row.textContent === 'Item 5')).toBe(edited);
     expect(document.activeElement).toBe(edited);
   });
+
+  it('keeps occurrence identity and focus when reordering without changing the count', async () => {
+    const { rows, setItems } = mount(3, true);
+    const focused = rows()[1];
+    focused.focus();
+    setItems(['Item 1', 'Item 2', 'Item 0']);
+    await settle();
+    expect(rows()[0]).toBe(focused);
+    expect(document.activeElement).toBe(focused);
+    expect(rows().map(row => row.textContent)).toEqual(['Item 1', 'Item 2', 'Item 0']);
+  });
 });

@@ -24,8 +24,12 @@ the copies are ready before disconnecting. Logging out removes those copies.
 
 ## Compatibility and limits
 
-Technical minimum: Android API 24 and Chrome WebView 120. The initial evidence is
-from an API 36 emulator; older versions are not presented as verified.
+Requires Android 8 (API 26) or later and Android System WebView 120 or later.
+Android 7 cannot install a WebView that meets this requirement and is no longer
+an installation target. An outdated WebView opens an update screen instead of
+trying to load the player. Update WebView (or Chrome when it is the selected
+provider), then close and reopen Soundsible. The initial evidence is from an
+API 36 emulator; other Android versions are not presented as physically verified.
 Services, transport, PCM, controls, restarts and updates are validated.
 Physical listening, Bluetooth and specific cars remain pending for beta.
 The fixtures do not test all public providers. A Soundsible server is

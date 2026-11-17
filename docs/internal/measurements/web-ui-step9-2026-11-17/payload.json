@@ -1,0 +1,63 @@
+{
+  "build_id": "f47c1ecb558eab876108cac45a6d0daba3aec1a5a4dca59f76fff27addd65c48",
+  "baseline_revision": "d608588e0ac994b07fb0a3db203ebbe87f960e76",
+  "method": "Production manifest static JS/CSS dependency closure; excludes fonts, locale dictionaries, dynamic routes and API. Gzip level 9, Brotli quality 5.",
+  "login": {
+    "raw_bytes": 219567,
+    "gzip_bytes": 84433,
+    "brotli_bytes": 79664,
+    "files": [
+      "assets/i18n-CvF-OsZ3.js",
+      "assets/index-BCv1RwQh.css",
+      "assets/index-DG-4pcST.js",
+      "assets/overlay-DAA_UED1.css",
+      "assets/overlay-sVEzUY_M.js",
+      "assets/routing-DeC8JN5O.js",
+      "assets/session-DybBP0hF.js",
+      "assets/web-CmkskI-z.js"
+    ],
+    "gzip_reduction_percent": 66.28
+  },
+  "library": {
+    "raw_bytes": 630697,
+    "gzip_bytes": 211685,
+    "brotli_bytes": 200201,
+    "files": [
+      "assets/Artwork-BcAEb5wD.js",
+      "assets/Artwork-DfcBvJyO.css",
+      "assets/AuthenticatedPlayer-mKI_nmE-.js",
+      "assets/CoverImage-dI_Ywpr8.js",
+      "assets/EmptyState-SAziuNho.css",
+      "assets/EmptyState-Xb0WlBoq.js",
+      "assets/LibraryHome-BZkvrZg2.css",
+      "assets/LibraryHome-tTW3tMHl.js",
+      "assets/PlayerSurface-L5lZIrbR.css",
+      "assets/PlayerSurface.module-DfPwDJfe.js",
+      "assets/SavedEntities-BzKy1uD1.css",
+      "assets/SavedEntities.module-CcqqirYD.js",
+      "assets/api-B147QA0P.js",
+      "assets/appBar-Cyug5x4_.js",
+      "assets/bottomNavigation-B6o09kYn.js",
+      "assets/catalogCollection-B0SO0GUQ.js",
+      "assets/cover-DIN6L_6o.js",
+      "assets/i18n-CvF-OsZ3.js",
+      "assets/icons-Dyln8ohN.js",
+      "assets/index-BCv1RwQh.css",
+      "assets/index-DG-4pcST.js",
+      "assets/listLayout-CohrW_EF.js",
+      "assets/listLayout-DIN7BtSI.css",
+      "assets/overlay-DAA_UED1.css",
+      "assets/overlay-sVEzUY_M.js",
+      "assets/routing-DeC8JN5O.js",
+      "assets/savedEntityActions-CLcTIisK.js",
+      "assets/scrollHistory-DXFadl2k.js",
+      "assets/session-DybBP0hF.js",
+      "assets/shellLayout-C4cWn76z.js",
+      "assets/stores-DpyFlmVQ.css",
+      "assets/stores-djRdpbFS.js",
+      "assets/vendor-socket-BpTHkoz-.js",
+      "assets/web-CmkskI-z.js"
+    ],
+    "gzip_reduction_percent": 15.45
+  }
+}

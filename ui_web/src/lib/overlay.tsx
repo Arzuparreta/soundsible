@@ -1,6 +1,7 @@
 import { createSignal, For, onCleanup, onMount, type JSX, type Component } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createDismissSwipe, dismissExitTiming, type DismissAxis } from './dismissSwipe';
+import { createTouchMoveLease } from './touchMoveLease';
 import { shieldGhostClicks } from './ghostClick';
 import { scrollableAncestor, scrollOffset } from './scrollableAncestor';
 import styles from './overlay.module.css';
@@ -203,6 +204,7 @@ function attachDismissSwipe(
   };
 
   const release = () => {
+    lease.release();
     active = false;
     touchId = null;
     scroller = null;
@@ -220,6 +222,7 @@ function attachDismissSwipe(
   };
 
   const onStart = (event: TouchEvent) => {
+    gesture.cancel();
     release();
     if (event.touches.length !== 1) return;
     const touch = event.touches.item(0);
@@ -235,12 +238,15 @@ function attachDismissSwipe(
       enabled: armed(),
       scrolled: scrollOffset(scroller, scrollAxis) > 1,
     });
+    if (gesture.isTracking()) lease.arm();
   };
 
   const onMove = (event: TouchEvent) => {
+    if (event.touches.length !== 1) { onCancel(); return; }
     const touch = touchById(event.touches);
     if (!touch) return;
     const frame = gesture.move(touch.clientX, touch.clientY, event.timeStamp);
+    if (!gesture.isTracking()) lease.release();
     if (!frame.captured) return;
     // Re-checked at the moment of capture, as the list may have settled since.
     if (!active) {
@@ -291,15 +297,14 @@ function attachDismissSwipe(
     release();
   };
 
+  const lease = createTouchMoveLease(element, onMove);
   element.addEventListener('touchstart', onStart, { passive: true });
-  // Non-passive: claiming the drag means preventing the scroll behind it.
-  element.addEventListener('touchmove', onMove, { passive: false });
   element.addEventListener('touchend', onEnd, { passive: true });
   element.addEventListener('touchcancel', onCancel, { passive: true });
   onCleanup(() => {
     window.clearTimeout(exitTimer);
     element.removeEventListener('touchstart', onStart);
-    element.removeEventListener('touchmove', onMove);
+    lease.release();
     element.removeEventListener('touchend', onEnd);
     element.removeEventListener('touchcancel', onCancel);
   });

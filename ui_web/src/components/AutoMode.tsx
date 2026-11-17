@@ -2,6 +2,9 @@ import { ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { savedFromTrack } from '../lib/saved';
 import { createMemo, createSignal, Show, type JSX } from 'solid-js';
+import { createActivityMemo } from '../lib/activityMemo';
+import { mobileListLayout } from '../lib/listLayout';
+import { pageVisible } from '../lib/pageVisibility';
 import { actions, state } from '../stores';
 import {
   AUTO_MODE_LAYOUT_KEY,
@@ -95,8 +98,11 @@ export function AutoMode(props: {
     setLayoutPersisted(autoModeLayoutFromPreset('balanced'));
   };
 
-  const upcoming = createMemo(() => state.playback.queue.slice(Math.max(0, state.playback.index + 1)));
-  const staleSeams = createMemo(() => new Set(state.autoMode.staleSeams));
+  const panelActive = (panel: AutoModePanelId) => props.surfaceOpen && pageVisible()
+    && (!mobileListLayout() || props.panel === panel);
+  const routeActive = () => panelActive('route');
+  const upcoming = createActivityMemo(routeActive, () => state.playback.queue.slice(Math.max(0, state.playback.index + 1)), []);
+  const staleSeams = createActivityMemo(routeActive, () => new Set(state.autoMode.staleSeams), new Set<string>());
   /** The rows that travel together. A bridge exists only to reach the song it
    * leads into, so aiming at either of them describes the same block. */
   const routeBlock = (queueId: string): string[] => {
@@ -110,7 +116,7 @@ export function AutoMode(props: {
       .map((row) => row.queueId);
     return block.length ? block : [queueId];
   };
-  const routeEntries = createMemo<PlayerTrackListEntry[]>(() => upcoming().map((track, index) => {
+  const routeEntries = createActivityMemo<PlayerTrackListEntry[]>(routeActive, () => upcoming().map((track, index) => {
     const committed = index === 0 && state.autoMode.transition.status !== 'idle';
     // Tapping a seam is the touch path: drops are handled by the list itself,
     // which can aim at the nearest seam instead of asking for a hit on this.
@@ -164,7 +170,7 @@ export function AutoMode(props: {
       onCarry: committed ? undefined : () => setCarriedTrack({ track, queueId: track.queueId }),
       menu,
     };
-  }));
+  }), []);
 
   const mixPending = createMemo(() => routeEntries().some((entry) => entry.stale));
   const routeWaiting = createMemo(() => (
@@ -250,7 +256,7 @@ export function AutoMode(props: {
       <div class={styles.sourceBrowser}>
         <NowPlayingBrowser
           dragHandle={dragHandle}
-          active={props.surfaceOpen}
+          active={panelActive('browser')}
           purpose={destination().kind === 'change' ? 'auto-change' : destination().kind === 'reference' ? 'auto-reference' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
           routeBeforeQueueId={destination().beforeQueueId}
           onPlaced={() => finishDestination('route')}

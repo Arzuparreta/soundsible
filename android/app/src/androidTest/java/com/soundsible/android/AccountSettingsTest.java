@@ -90,6 +90,7 @@ public class AccountSettingsTest {
             var initial = api(connection, origin, cookie, "/api/auth/state", "GET", null).getJSONObject("user");
             id = initial.getString("id"); originalName = initial.getString("display_name"); originalUsername = initial.getString("username");
             observe(scenario); waitFor(scenario, "window.__accountState?.ready");
+            web.revealLibraryTrack(scenario, "member-track");
             waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-menu]')");
             web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-menu]').click()"); click(scenario, "Available offline");
             var store = OfflineStore.shared(context); long generation = connection.getGeneration();

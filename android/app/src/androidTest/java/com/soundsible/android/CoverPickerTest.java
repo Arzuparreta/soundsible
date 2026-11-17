@@ -113,6 +113,7 @@ public class CoverPickerTest {
             web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             waitFor(web,scenario,"!!document.querySelector('input[type=password]')");web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");waitFor(web,scenario,"!!document.querySelector('[data-testid=android-library]')");
             original=cover(connection,origin);
+            web.revealLibraryTitle(scenario, "member private song");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Edit details')");web.evaluate(scenario,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Edit details').click()");waitFor(web,scenario,"!!document.querySelector('[data-track-metadata-editor]')");
             String upload="Array.from(document.querySelectorAll('[data-track-metadata-editor] button')).find(b=>b.textContent==='Upload cover')";

@@ -1,0 +1,108 @@
+{
+  "tag": "step9-cpu-no-transform",
+  "date": "2026-11-17T02:26:26.379Z",
+  "revision": "9f6a448adfaecbb7ce1751aa2e4393ba2b6450db",
+  "fixture": {
+    "tracks": 6000,
+    "albums": 600,
+    "artists": 200,
+    "saved": 1800,
+    "favourites": 900,
+    "previews": 600,
+    "stressAlbumTracks": 100
+  },
+  "viewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "input": {
+    "kind": "wheel",
+    "passive_probe": false,
+    "burst_ms": 3200,
+    "wheel_interval_ms": 16,
+    "wheel_delta_px": 120
+  },
+  "browser": "156.0.8078.4",
+  "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "gpu_features": {
+    "2d_canvas": "unavailable_software",
+    "direct_rendering_display_compositor": "disabled_off_ok",
+    "gpu_compositing": "disabled_software",
+    "multiple_raster_threads": "enabled_on",
+    "opengl": "disabled_off",
+    "rasterization": "disabled_software",
+    "raw_draw": "disabled_off_ok",
+    "skia_graphite": "disabled_off",
+    "trees_in_viz": "disabled_off",
+    "video_decode": "disabled_software",
+    "video_encode": "disabled_software",
+    "vulkan": "disabled_off",
+    "webgl": "unavailable_software",
+    "webgpu": "unavailable_software",
+    "webgpu_on_vk_via_gl_interop": "disabled_off",
+    "webnn": "unavailable_software"
+  },
+  "gpu_devices": [
+    {
+      "vendorId": 65535,
+      "deviceId": 65535,
+      "vendorString": "Google Inc. (Google)",
+      "deviceString": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+      "driverVendor": "SwANGLE",
+      "driverVersion": "5.0.0"
+    }
+  ],
+  "compositor": "cpu",
+  "software": true,
+  "scene_probe_css": "[data-player-surface-open]{transform:none!important;}",
+  "host": {
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "cores": 16,
+    "load_1m": 0.31
+  },
+  "repeats": 1,
+  "results": [
+    {
+      "surface": "player-browser",
+      "playing": false,
+      "cpu_rate": 1,
+      "threads_busy_ms": {
+        "main": 665.4,
+        "compositor": 125.3,
+        "gpu": 3.9,
+        "display": 3257.6
+      },
+      "frames": {
+        "presented": 87,
+        "partial": 1,
+        "dropped": 116,
+        "expected": 203
+      },
+      "display_gap_ms": {
+        "p50": 38.2,
+        "p95": 41.6,
+        "max": 44.5
+      },
+      "main_thread_ms": {
+        "longest_task": 7.5,
+        "tasks_over_50": 0,
+        "script": 157.4,
+        "layout": 107.7,
+        "paint": 143.5
+      },
+      "scrolled_px": 24000,
+      "moving_ms": 3363,
+      "dom_elements": 1038,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 87,
+          "expected": 203,
+          "partial": 1,
+          "dropped": 116,
+          "longest_task": 7.5
+        }
+      ]
+    }
+  ]
+}

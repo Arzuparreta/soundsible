@@ -178,12 +178,15 @@ public class ConnectionTest {
             web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(server) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             awaitText(web, scenario, "Sign in");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTitle(scenario, "member private song");
             awaitText(web, scenario, "member private song");
+            web.revealLibraryTitle(scenario, "member saved song");
             awaitText(web, scenario, "member saved song");
             assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('owner saved song')"));
             assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('owner private song')"));
             assertEquals("false", web.evaluate(scenario, "!!document.querySelector('audio') || !!navigator.serviceWorker?.controller"));
             awaitText(web, scenario, "Development build:");
+            web.revealLibraryTrack(scenario, "member-track");
             String coverReady = "(()=>{const row=Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')?.closest('[data-music-list-row]');const cover=row?.querySelector('[data-row-cover]');window.__fixtureCoverSource=cover?/url\\(\"([^\"]+)\"\\)/.exec(getComputedStyle(cover).backgroundImage)?.[1]:null;return !!window.__fixtureCoverSource})()";
             long sourceDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
             while (!"true".equals(web.evaluate(scenario, coverReady)) && System.nanoTime() < sourceDeadline) Thread.sleep(100);
@@ -200,13 +203,19 @@ public class ConnectionTest {
             web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Albums').click()");
             awaitText(web, scenario, "member album");
             web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='member album').click()");
+            web.revealLibraryTitle(scenario, "member private song");
             awaitText(web, scenario, "member private song");
-            control(server, "append", "member"); awaitText(web, scenario, "member event song");
-            scenario.recreate(); awaitText(web, scenario, "member private song");
+            control(server, "append", "member");
+            web.revealLibraryTitle(scenario, "member event song");
+            awaitText(web, scenario, "member event song");
+            scenario.recreate();
+            web.revealLibraryTitle(scenario, "member private song");
+            awaitText(web, scenario, "member private song");
             web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Sign out').click()");
             awaitText(web, scenario, "Sign in");
             assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('member private song')"));
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='owner';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            web.revealLibraryTitle(scenario, "owner private song");
             awaitText(web, scenario, "owner private song");
             assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('member private song')"));
         } finally { cleanup.clearSession(true); }

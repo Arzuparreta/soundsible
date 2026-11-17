@@ -102,7 +102,6 @@ vi.mock('../stores', async () => {
     favouriteTracks: () => storeMock.state.favorites.includes(storeMock.local.id) ? [storeMock.local] : [],
   };
 });
-vi.mock('./VirtualRows', () => ({ VirtualRows: (props: { items: Track[]; children: (item: () => Track, index: number) => unknown }) => props.items.map((item, index) => props.children(() => item, index)) }));
 vi.mock('./trackActions', () => ({ openTrackMenu: vi.fn() }));
 vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
 vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));

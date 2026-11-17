@@ -116,11 +116,18 @@ export function CollectionRows<T>(props: {
   // is an empty window; `createScrollOrigin` hands it over once mounted.
   const { scroller, origin } = createScrollOrigin(() => canvas, { scrollElement: props.scrollElement });
   const margin = () => props.scrollMargin ?? origin();
+  const keys = createMemo(() => props.itemKey ? props.items.map(props.itemKey) : undefined, undefined, {
+    equals: (a, b) => a === b || !!a && !!b && a.length === b.length && a.every((key, index) => key === b[index]),
+  });
+  const itemKey = createMemo(() => {
+    const current = keys();
+    return (index: number) => current?.[index] ?? index;
+  });
   const virtualizer = createVirtualizer({
     get count() { return props.items.length; },
     getScrollElement: () => scroller(),
     estimateSize: () => rowH(),
-    get getItemKey() { return props.itemKey ? (index: number) => props.itemKey!(props.items[index]) : (index: number) => index; },
+    get getItemKey() { return itemKey(); },
     get rangeExtractor() {
       const pinned = props.keepMountedIndex;
       return (range: Parameters<typeof defaultRangeExtractor>[0]) => {

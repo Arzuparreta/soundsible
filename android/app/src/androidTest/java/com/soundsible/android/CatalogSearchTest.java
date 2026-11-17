@@ -38,6 +38,7 @@ public class CatalogSearchTest {
     private void signIn(StartupTest web,ActivityScenario<MainActivity> scenario,String name) throws Exception {
         waitFor(web,scenario,"!!document.querySelector('input[type=password]')");
         web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value="+JSONObject.quote(name)+";document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+        web.revealLibraryTrack(scenario, name + "-track");
         waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==="+JSONObject.quote(name+" private song")+")");
     }
     private void menu(StartupTest web,ActivityScenario<MainActivity> scenario,String title,String action) throws Exception {
@@ -80,7 +81,7 @@ public class CatalogSearchTest {
             waitFor(web,scenario,"window.__catalog?.items.length===0");
             assertEquals("false",web.evaluate(scenario,"document.body.innerText.includes('fixture resolved song')"));
             web.evaluate(scenario,"Array.from(document.querySelectorAll('header button')).find(b=>b.textContent==='Sign out').click()");
-            signIn(web,scenario,"member");waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='fixture resolved song')");
+            signIn(web,scenario,"member");web.revealLibraryTrack(scenario, "C1111111111");waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='fixture resolved song')");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='fixture resolved song').click()");
             waitFor(web,scenario,"window.__catalog?.id==='C1111111111' && window.__catalog.playing");
             api(connection,origin,"/api/library/saved/set","{\"entries\":[{\"title\":\"fixture resolved song\",\"keys\":[\"yt:C1111111111\"]}],\"saved\":false}");

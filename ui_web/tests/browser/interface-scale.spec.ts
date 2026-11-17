@@ -363,7 +363,7 @@ test.describe('interface scale geometry', () => {
     expect(results.violations).toEqual([]);
   });
 
-  test('large mode reflows through the narrow and short edge matrix', async ({ page, browserName }) => {
+  test('large mode reflows through the narrow and short edge matrix', async ({ page }) => {
     await mockEngine(page, true);
     await installPreferences(page, 'large');
     for (const viewport of [
@@ -377,7 +377,6 @@ test.describe('interface scale geometry', () => {
       await expect(page.locator('[data-settings-page]')).toBeVisible();
       await assertGeometry(page);
     }
-    expect(['chromium', 'webkit']).toContain(browserName);
   });
 
   test('large mode keeps every primary application surface inside the viewport', async ({ page }) => {
