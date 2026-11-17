@@ -5,6 +5,9 @@ import Album from './Album';
 import { setLocale } from '../lib/i18n';
 import { trackCount } from '../lib/format';
 import type { AlbumProfile, CatalogItem, Track } from '../types/music';
+import { mockScrollportLayout } from '../testLayout';
+
+mockScrollportLayout();
 
 const apiMock = vi.hoisted(() => ({
   getAlbumProfile: vi.fn(),

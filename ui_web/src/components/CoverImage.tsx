@@ -1,4 +1,5 @@
-import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, Show, useContext, type JSX } from 'solid-js';
+import { ArtworkWidthContext } from '../lib/artworkSlot';
 import { artworkUrl } from '../lib/config';
 import { artworkCandidates, artworkFallback, rejectPreviewArtwork } from '../lib/media';
 
@@ -26,11 +27,13 @@ export function CoverImage(props: {
     if (paintedSources.size > MAX_PAINTED_SOURCES) paintedSources.delete(paintedSources.values().next().value!);
   };
   let image: HTMLImageElement | undefined;
-  const [width, setWidth] = createSignal(320);
+  const known = useContext(ArtworkWidthContext);
+  const [measured, setWidth] = createSignal(320);
+  const width = () => (known ? Math.max(1, Math.ceil(known())) : measured());
   const [failed, setFailed] = createSignal(false);
   createEffect(() => { props.src; setFailed(false); setPreviousSource(undefined); });
   createEffect(() => {
-    if (!props.src || !image) return;
+    if (known || !props.src || !image) return;
     const target = image.parentElement;
     if (!target) return;
     const measure = () => setWidth(Math.max(1, Math.ceil(target.getBoundingClientRect().width)));

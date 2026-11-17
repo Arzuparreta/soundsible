@@ -16,6 +16,7 @@ import { ensureDiscover, refreshDiscover, topPodcasts, topEpisodes, chartsCountr
 import { t } from '../lib/i18n';
 import type { PodcastSearchResult, PopularPodcastEpisode, PodcastEpisode } from '../types/podcast';
 import styles from './Podcasts.module.css';
+import { CollectionGrid } from '../components/CollectionGrid';
 import { neutralCoverStyle } from '../lib/cover';
 import type { ActionMenuOptions } from '../components/ActionMenu';
 import { followPodcast, podcastPath } from '../lib/podcasts';
@@ -245,20 +246,18 @@ export default function Podcasts() {
             <>
               <Show when={state.podcastSubscriptions.length > 0}>
                 <h2 class={styles.sectionTitle}>{t('podcasts.yourShows')}</h2>
-                <div class={styles.grid}>
-                  <For each={state.podcastSubscriptions}>
+                <CollectionGrid items={state.podcastSubscriptions} class={styles.grid}>
                     {(s) => {
-                      const href = `/podcasts/${encodeURIComponent(s.id)}`;
+                      const href = () => `/podcasts/${encodeURIComponent(s().id)}`;
                       return (
-                        <A href={href} class={styles.card} data-pressable {...openTap(() => href)}>
-                          <div class={styles.cover} style={neutralCoverStyle(podcastArtwork(s.image_url, CARD_ARTWORK))} />
-                          <span class={styles.name}>{s.title}</span>
-                          <span class={styles.author}>{s.author}</span>
+                        <A href={href()} class={styles.card} data-pressable {...openTap(href)}>
+                          <div class={styles.cover} style={neutralCoverStyle(podcastArtwork(s().image_url, CARD_ARTWORK))} />
+                          <span class={styles.name}>{s().title}</span>
+                          <span class={styles.author}>{s().author}</span>
                         </A>
                       );
                     }}
-                  </For>
-                </div>
+                </CollectionGrid>
               </Show>
 
               <Show when={genres().length > 0}>

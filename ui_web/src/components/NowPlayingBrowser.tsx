@@ -893,6 +893,7 @@ function LibraryView(props: {
   // because a full library used to build every row up front. A signal, not a
   // plain ref: the rows render inside this element, so they are created before
   // it is assigned and have to react when it appears.
+  const sortedAlbums = createMemo(() => collateAlbums(albums() ?? [], albumSort()));
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} classList={{ [styles.songScroll]: libraryTab() === 'songs' && props.tracks.length > 0 }} data-browser-body ref={setScrollRef}>
@@ -916,7 +917,13 @@ function LibraryView(props: {
           </button>
         </div>
       </Show>
-      <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}><For each={collateAlbums(albums() ?? [], albumSort())}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For></Show></Show>
+      <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}>
+        {/* Bounded like the songs and artists tabs: a large library has
+            thousands of albums, and each row is a dozen elements. */}
+        <VirtualRows items={sortedAlbums()} scrollElement={scrollRef} rowHeight={{ cssVar: '--row-h', fallback: 56 }}>
+          {(album) => <Show when={album()}>{(row) => <NavigationRow title={row().title} subtitle={row().album_artist} music={albumMusic(row())} cover={row().cover_track_id ? coverUrl(row().cover_track_id!, 'thumb') : undefined} onClick={() => props.onAlbum(row())} />}</Show>}
+        </VirtualRows>
+      </Show></Show>
       <Show when={libraryTab() !== 'albums'}><Show
         when={libraryTab() === 'songs'}
         fallback={

@@ -1,6 +1,7 @@
 import { ArtistLinks, MusicLink } from './MusicLinks';
 import { albumDestination, albumMusic } from '../lib/musicNavigation';
-import { For, Show } from 'solid-js';
+import { Show } from 'solid-js';
+import { CollectionGrid } from './CollectionGrid';
 import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
 import { openAlbumMenu } from './albumActions';
@@ -16,8 +17,7 @@ import { CoverImage } from './CoverImage';
  * compilation is credited to Various Artists. */
 export default function AlbumGrid(props: { albums: CatalogAlbum[] }) {
   return (
-    <div class={styles.grid}>
-      <For each={props.albums}>
+    <CollectionGrid items={props.albums} class={styles.grid}>
         {(album) => {
           return (
             <div
@@ -28,22 +28,23 @@ export default function AlbumGrid(props: { albums: CatalogAlbum[] }) {
                 * the cover, the title, the credit line and the song count are
                 * all the record, so all of them open it. The artist links keep
                 * their own layer above it and stay separately reachable. */}
-              <Show when={album.title.trim()}>
-                <MusicLink class={styles.activate} path={albumDestination(albumMusic(album))} label={album.title}
-                  onMenu={(event) => openAlbumMenu(album, {}, event)} />
+              <Show when={album().title.trim()}>
+                <MusicLink class={styles.activate} path={albumDestination(albumMusic(album()))} label={album().title}
+                  onMenu={(event) => openAlbumMenu(album(), {}, event)} />
               </Show>
               <div class={styles.sleeve}>
-                <div class={styles.cover} style={{ position: 'relative', background: coverGradient(album.title) }}>
-                  <CoverImage src={album.cover_track_id ? coverUrl(album.cover_track_id) : undefined} />
+                <div class={styles.cover} style={{ position: 'relative', background: coverGradient(album().title) }}>
+                  {/* A new element per record: a reused image would keep showing the
+                    * previous record's sleeve until the next one arrived. */}
+                  <Show when={album().cover_track_id} keyed>{(id) => <CoverImage src={coverUrl(id)} />}</Show>
                 </div>
-                <span class={styles.title}>{album.title}</span>
+                <span class={styles.title}>{album().title}</span>
               </div>
-              <ArtistLinks class={styles.artist} music={albumMusic(album)} />
-              <span class={styles.count}>{trackCount(album.track_count)}</span>
+              <ArtistLinks class={styles.artist} music={albumMusic(album())} />
+              <span class={styles.count}>{trackCount(album().track_count)}</span>
             </div>
           );
         }}
-      </For>
-    </div>
+    </CollectionGrid>
   );
 }

@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Artist from './Artist';
 import { setLocale } from '../lib/i18n';
 import type { ArtistProfile, Track } from '../types/music';
+import { mockScrollportLayout } from '../testLayout';
+
+mockScrollportLayout();
 
 const apiMock = vi.hoisted(() => ({
   getArtistProfile: vi.fn(),
