@@ -16,6 +16,7 @@ import {
   createMemo,
   createResource,
   createSignal,
+  createUniqueId,
   For,
   ErrorBoundary,
   Match,
@@ -871,6 +872,7 @@ function LibraryView(props: {
   renderTrack: (track: () => Track, onPlay: () => void) => JSX.Element;
   onUse?: (tracks: Track[]) => void;
 }) {
+  const panelId = createUniqueId();
   const [albums] = createResource(() => props.active && libraryTab() === 'albums' && { ...albumBrowseQuery(albumSort(), albumFilter()), revision: state.catalog.revision }, (params) => api.getLibraryAlbums(params));
   // The same menu as the Library route: sorting and the downloaded-only
   // narrowing live together, not in a separate control.
@@ -908,7 +910,7 @@ function LibraryView(props: {
   return (
     <div class={styles.body} classList={{ [styles.songScroll]: libraryTab() === 'songs' && props.tracks.length > 0 }} data-browser-body ref={setScrollRef}>
       <Toolbar lead={<Tabs class={styles.tabs} activeClass={styles.activeTab} label={t('nav.library')}
-        value={libraryTab()} onChange={setLibraryTab} items={[
+        panelId={panelId} value={libraryTab()} onChange={setLibraryTab} items={[
           { value: 'songs', label: t('library.songs') },
           { value: 'albums', label: t('library.albums') },
           { value: 'artists', label: t('library.artists') },
@@ -928,6 +930,7 @@ function LibraryView(props: {
           </Control>
         </div>
       </Show>
+      <div id={panelId} role="tabpanel" aria-labelledby={`${panelId}-${libraryTab()}`}>
       <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}>
         {/* Bounded like the songs and artists tabs: a large library has
             thousands of albums, and each row is a dozen elements. */}
@@ -957,6 +960,7 @@ function LibraryView(props: {
           )}
         </CollectionRows>
       </Show></Show>
+      </div>
     </div>
   );
 }

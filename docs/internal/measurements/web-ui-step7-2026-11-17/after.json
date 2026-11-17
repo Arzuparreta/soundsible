@@ -1,0 +1,247 @@
+{
+  "tag": "step7-after",
+  "date": "2026-11-17T01:02:46.588Z",
+  "revision": "41a1452f9ba52f6fd1d32512c2587f5cfc768cc4",
+  "fixture": {
+    "tracks": 6000,
+    "albums": 600,
+    "artists": 200,
+    "saved": 1800,
+    "favourites": 900,
+    "previews": 600,
+    "stressAlbumTracks": 100
+  },
+  "viewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "input": {
+    "kind": "wheel",
+    "burst_ms": 3200,
+    "wheel_interval_ms": 16,
+    "wheel_delta_px": 120
+  },
+  "browser": "156.0.8078.4",
+  "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL ES 3.2)",
+  "software": false,
+  "host": {
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "cores": 16,
+    "load_1m": 1.08
+  },
+  "repeats": 3,
+  "results": [
+    {
+      "surface": "player-browser",
+      "playing": false,
+      "cpu_rate": 1,
+      "threads_busy_ms": {
+        "main": 837.2,
+        "compositor": 160.9,
+        "gpu": 1188,
+        "display": 81.2
+      },
+      "frames": {
+        "presented": 200,
+        "partial": 3,
+        "dropped": 0,
+        "expected": 200
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 18.1,
+        "max": 23.1
+      },
+      "main_thread_ms": {
+        "longest_task": 5.1,
+        "tasks_over_50": 0,
+        "script": 203.2,
+        "layout": 142.2,
+        "paint": 195.2
+      },
+      "scrolled_px": 24000,
+      "moving_ms": 3324,
+      "dom_elements": 999,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 200,
+          "expected": 200,
+          "dropped": 0,
+          "longest_task": 5.1
+        },
+        {
+          "presented": 201,
+          "expected": 201,
+          "dropped": 0,
+          "longest_task": 15.3
+        },
+        {
+          "presented": 200,
+          "expected": 200,
+          "dropped": 0,
+          "longest_task": 4.9
+        }
+      ]
+    },
+    {
+      "surface": "player-browser",
+      "playing": false,
+      "cpu_rate": 6,
+      "threads_busy_ms": {
+        "main": 3231.2,
+        "compositor": 111.2,
+        "gpu": 1079.2,
+        "display": 54
+      },
+      "frames": {
+        "presented": 206,
+        "partial": 71,
+        "dropped": 0,
+        "expected": 206
+      },
+      "display_gap_ms": {
+        "p50": 19.5,
+        "p95": 25.7,
+        "max": 32.1
+      },
+      "main_thread_ms": {
+        "longest_task": 27.7,
+        "tasks_over_50": 0,
+        "script": 899.2,
+        "layout": 553.2,
+        "paint": 690.1
+      },
+      "scrolled_px": 24000,
+      "moving_ms": 3370,
+      "dom_elements": 999,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 206,
+          "expected": 206,
+          "dropped": 0,
+          "longest_task": 27.1
+        },
+        {
+          "presented": 206,
+          "expected": 206,
+          "dropped": 0,
+          "longest_task": 27.7
+        },
+        {
+          "presented": 208,
+          "expected": 208,
+          "dropped": 0,
+          "longest_task": 85.6
+        }
+      ]
+    },
+    {
+      "surface": "player-queue",
+      "playing": false,
+      "cpu_rate": 1,
+      "threads_busy_ms": {
+        "main": 431.4,
+        "compositor": 83.6,
+        "gpu": 760.8,
+        "display": 39.7
+      },
+      "frames": {
+        "presented": 123,
+        "partial": 4,
+        "dropped": 1,
+        "expected": 124
+      },
+      "display_gap_ms": {
+        "p50": 16.4,
+        "p95": 18.7,
+        "max": 28.2
+      },
+      "main_thread_ms": {
+        "longest_task": 5,
+        "tasks_over_50": 0,
+        "script": 98.2,
+        "layout": 68.4,
+        "paint": 162.1
+      },
+      "scrolled_px": 15320,
+      "moving_ms": 2160,
+      "dom_elements": 1202,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 123,
+          "expected": 124,
+          "dropped": 1,
+          "longest_task": 5
+        },
+        {
+          "presented": 124,
+          "expected": 125,
+          "dropped": 1,
+          "longest_task": 4.9
+        },
+        {
+          "presented": 123,
+          "expected": 123,
+          "dropped": 0,
+          "longest_task": 5.4
+        }
+      ]
+    },
+    {
+      "surface": "player-queue",
+      "playing": false,
+      "cpu_rate": 6,
+      "threads_busy_ms": {
+        "main": 1336.6,
+        "compositor": 52.9,
+        "gpu": 652.3,
+        "display": 26.8
+      },
+      "frames": {
+        "presented": 111,
+        "partial": 42,
+        "dropped": 0,
+        "expected": 111
+      },
+      "display_gap_ms": {
+        "p50": 19,
+        "p95": 29,
+        "max": 34.7
+      },
+      "main_thread_ms": {
+        "longest_task": 36.9,
+        "tasks_over_50": 0,
+        "script": 345.4,
+        "layout": 227.5,
+        "paint": 468.6
+      },
+      "scrolled_px": 15280,
+      "moving_ms": 2153,
+      "dom_elements": 1202,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 107,
+          "expected": 108,
+          "dropped": 1,
+          "longest_task": 52.3
+        },
+        {
+          "presented": 111,
+          "expected": 111,
+          "dropped": 0,
+          "longest_task": 36.9
+        },
+        {
+          "presented": 111,
+          "expected": 111,
+          "dropped": 0,
+          "longest_task": 34
+        }
+      ]
+    }
+  ]
+}
