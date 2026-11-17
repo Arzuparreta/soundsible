@@ -99,6 +99,18 @@ intermittency, not a resolved cause. The assertions are not relaxed.
 
 ## Remote handoff diagnostics
 
+PR #473, run `44077652665`, shard 6 failed `DevicesUiTest.tlsDevices` after
+waiting for a handoff event, then dereferencing the absent payload. The emulator
+log shows the test seeking at 11:58:21.287, buffering, and returning to PLAYING
+at 11:58:21.476. The test clicked transfer immediately after issuing seek,
+repeat and shuffle commands. Native handoff deliberately rejects a source whose
+transport/session changes during its HTTP requests, so this setup could race
+that guard. The test now waits for the service's Core publication to confirm
+playing at the requested position with the intended queue index, repeat and
+shuffle before clicking transfer. The peer-delivery, queue, position and native
+stop assertions remain intact; a missing event reports the devices panel instead
+of a null-pointer exception. Remote emulator validation remains required.
+
 In PR #434, run `42567024132`, shard 7 ran 33 cases and failed
 `QueueLanesTest.httpQueueLanesAndResume`: the laptop received the stop command,
 but the phone's native snapshot still had an empty queue after accepting
