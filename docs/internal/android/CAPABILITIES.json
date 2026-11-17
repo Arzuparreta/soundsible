@@ -6,7 +6,7 @@
   "required_capabilities": ["phone", "account", "library", "acquisition", "normal", "podcasts", "radio", "dj", "live-listen", "live-publish", "android-auto", "offline"],
   "automated": ["phone", "account", "library", "acquisition", "normal", "podcasts", "radio", "dj", "live-listen", "live-publish", "android-auto", "offline"],
   "physical_acceptance": "pending-beta",
-  "min_sdk": 24,
+  "min_sdk": 26,
   "target_sdk": 36,
   "min_webview": 120,
   "validated_api": [36]

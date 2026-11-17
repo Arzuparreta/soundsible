@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import sys
 from zipfile import ZipFile
 import xml.etree.ElementTree as ET
@@ -131,6 +132,15 @@ def test_repository_manifest_records_alpha_limits():
     assert capabilities["physical_acceptance"] == "pending-beta"
     assert capabilities["validated_api"] == [36]
     assert signing["application_id"] == release.PACKAGE
+
+
+def test_release_sdk_policy_matches_the_application_build():
+    variables = (release.ROOT / "android/variables.gradle").read_text()
+    capabilities, _ = release.gates()
+    for capability, variable in (("min_sdk", "minSdkVersion"), ("target_sdk", "targetSdkVersion")):
+        match = re.search(rf"\b{variable}\s*=\s*(\d+)", variables)
+        assert match, f"Declare {variable} explicitly in android/variables.gradle"
+        assert capabilities[capability] == int(match[1]), f"Release {capability} differs from {variable}"
 
 
 @pytest.mark.parametrize(
