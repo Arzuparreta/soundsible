@@ -28,8 +28,20 @@ async function openPlayer(page: Page) {
   await settle(page, '[data-player-surface-open]');
 }
 
-const SHOTS: Array<{ name: string; project: 'desktop' | 'mobile'; stage: (page: Page) => Promise<void> }> = [
+const SHOTS: Array<{ name: string; project: 'desktop' | 'mobile'; themes?: string[]; stage: (page: Page) => Promise<void> }> = [
   { name: 'desktop-now-playing', project: 'desktop', stage: openPlayer },
+  {
+    name: 'desktop-lyrics',
+    project: 'desktop',
+    themes: ['dark'], // The social card uses the dark shell with its lyrics open.
+    stage: async (page) => {
+      await openPlayer(page);
+      await page.locator('[data-player-stage-mode="now-playing"]').getByRole('button', { name: 'Show lyrics' }).click();
+      await expect(page.locator('[data-lyrics-stage]')).toBeVisible();
+      await expect(page.locator('[data-lyrics-scroll]')).toContainText('And god help any fool');
+      await settle(page, '[data-player-surface-open]');
+    },
+  },
   { name: 'desktop-library', project: 'desktop', stage: (page) => startup(page, '/library?view=songs') },
   { name: 'desktop-search', project: 'desktop', stage: (page) => startup(page, '/search?q=Josh%20Woodward') },
   { name: 'mobile-library', project: 'mobile', stage: (page) => startup(page, '/library?view=songs') },
@@ -49,7 +61,7 @@ const SHOTS: Array<{ name: string; project: 'desktop' | 'mobile'; stage: (page: 
 ];
 
 for (const shot of SHOTS) {
-  for (const theme of PALETTES) {
+  for (const theme of shot.themes ?? PALETTES) {
     test(`${shot.name} · ${theme}`, async ({ page }, info) => {
       test.skip(info.project.name !== shot.project, `${shot.name} is a ${shot.project} screenshot`);
       await mockShowcaseEngine(page, theme);

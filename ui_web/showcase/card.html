@@ -3,12 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Soundsible social card</title>
-<!--
-  The repository's social card, rendered at 1280×640 by card.spec.ts from the
-  screenshots screens.spec.ts has just taken. It is read at a fraction of that
-  size — a link preview, a feed — so everything on it is large and there is
-  little of it.
--->
+<!-- Keep the entire composition inside the central 1280×480 crop used by feeds. -->
 <style>
   @font-face {
     font-family: 'Plus Jakarta Sans';
@@ -20,97 +15,67 @@
     font-weight: 800;
     src: url('../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-800-normal.woff2') format('woff2');
   }
-  :root {
-    --bg: #0c0c0e;
-    --ink: #f2f2f5;
-    --ink-soft: #b4b4bc;
-    --accent: #f97a12;
-    --glow: rgba(249, 122, 18, 0.24);
-  }
   * { box-sizing: border-box; margin: 0; }
   html, body { width: 1280px; height: 640px; overflow: hidden; }
   body {
     position: relative;
-    background:
-      radial-gradient(640px 420px at 82% -8%, var(--glow), transparent 70%),
-      radial-gradient(520px 360px at 6% 104%, rgba(249, 122, 18, 0.10), transparent 70%),
-      var(--bg);
-    color: var(--ink);
+    background: #141713;
+    color: #edefe9;
     font-family: 'Plus Jakarta Sans', sans-serif;
   }
-  .copy {
-    position: absolute;
-    left: 64px;
-    top: 56px;
-    width: 560px;
-  }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    font-size: 56px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-  .brand img {
-    width: 84px;
-    height: 84px;
-    filter: drop-shadow(0 8px 24px var(--glow));
-  }
-  h1 {
-    margin-top: 44px;
-    font-size: 84px;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: -0.035em;
-  }
-  h1 em { font-style: normal; color: var(--accent); }
-  p {
-    margin-top: 32px;
-    color: var(--ink-soft);
-    font-size: 30px;
-    font-weight: 500;
-    line-height: 1.3;
-  }
-  /* The desktop window from its stage onwards: the library pane would sit
-     under the headline and say nothing at this size. */
+  .copy { position: absolute; left: 80px; top: 230px; }
+  .brand { display: flex; align-items: center; gap: 20px; }
+  .brand img { width: 72px; height: 72px; border-radius: 16px; }
+  h1 { font-size: 68px; font-weight: 800; line-height: 1.1; letter-spacing: -0.045em; }
+  p { margin-top: 24px; font-size: 36px; line-height: 1.25; letter-spacing: -0.025em; font-weight: 500; color: #d1d5ce; white-space: nowrap; }
   .desktop {
     position: absolute;
     left: 640px;
-    top: 64px;
-    width: 700px;
-    height: 640px;
+    top: 144px;
+    width: 560px;
+    border-radius: 10px;
     overflow: hidden;
-    border-radius: 20px 0 0 0;
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    outline: 1px solid #ffffff26;
+    box-shadow: 0 16px 36px #0005;
   }
-  .desktop img {
-    display: block;
-    width: 1180px;
-    margin-left: -440px;
-  }
+  img { display: block; width: 100%; }
   .phone {
     position: absolute;
-    left: 960px;
-    top: 112px;
-    width: 312px;
-    padding: 9px;
-    border-radius: 46px;
-    background: #1b1b20;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.7), -20px 0 60px rgba(0, 0, 0, 0.45);
+    left: 594px;
+    top: 218px;
+    width: 142px;
+    padding: 4px;
+    border: 1px solid #55565a;
+    border-radius: 23px;
+    background: #08090a;
+    box-shadow: 0 12px 24px #0006, inset 0 0 0 1px #18191b;
   }
-  .phone img { display: block; width: 100%; border-radius: 37px; }
+  .screen { overflow: hidden; border-radius: 18px; }
+  .status { position: relative; height: 18px; background: #151414; color: #f5f5f5; }
+  .time { position: absolute; left: 10px; top: 7px; font: 600 5px/1 Arial, sans-serif; }
+  .camera { position: absolute; left: 50%; top: 5px; width: 35px; height: 8px; transform: translateX(-50%); border-radius: 10px; background: #000; }
+  .indicators { position: absolute; right: 9px; top: 7px; display: flex; gap: 2px; }
+  .indicators svg { height: 4px; width: auto; }
 </style>
 </head>
 <body>
   <section class="copy">
-    <div class="brand"><img src="../../branding/logo-app.png" alt="">Soundsible</div>
-    <h1>Your server.<br>Your music.<br>Your <em>DJ</em>.</h1>
-    <p>Self-hosted music streaming, with a DJ that mixes your library.</p>
+    <div class="brand"><img src="../../branding/logo-app.png" alt=""><h1>soundsible</h1></div>
+    <p>self-hosted music experience</p>
   </section>
-  <div class="desktop"><img src="../../docs/images/screenshots/dark/desktop-now-playing.webp" alt=""></div>
-  <div class="phone"><img src="../../docs/images/screenshots/dark/mobile-now-playing.webp" alt=""></div>
+  <div class="desktop"><img src="../../docs/images/screenshots/dark/desktop-lyrics.webp" alt="Soundsible desktop shell with lyrics, library and queue"></div>
+  <div class="phone">
+    <div class="screen">
+      <div class="status" aria-hidden="true">
+        <span class="time">9:41</span><span class="camera"></span>
+        <span class="indicators">
+          <svg viewBox="0 0 14 10" fill="currentColor"><path d="M0 7h2.5v3H0zm3.8-2h2.5v5H3.8zm3.7-2.5H10V10H7.5zM11.3 0h2.5v10h-2.5z"/></svg>
+          <svg viewBox="0 0 14 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 2.5a9 9 0 0 1 12 0M3.4 5a5.5 5.5 0 0 1 7.2 0M5.8 7.5a1.9 1.9 0 0 1 2.4 0"/></svg>
+          <svg viewBox="0 0 20 10" fill="currentColor"><rect x=".6" y=".6" width="16.8" height="8.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.2" y="2.2" width="13.6" height="5.6" rx=".8"/><path d="M18.6 3v4a2 2 0 0 0 0-4"/></svg>
+        </span>
+      </div>
+      <img src="../../docs/images/screenshots/dark/mobile-library.webp" alt="Soundsible mobile music library">
+    </div>
+  </div>
 </body>
 </html>
