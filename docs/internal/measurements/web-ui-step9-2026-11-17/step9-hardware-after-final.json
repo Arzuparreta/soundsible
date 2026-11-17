@@ -1,0 +1,296 @@
+{
+  "tag": "step9-hardware-after-final",
+  "date": "2026-11-17T02:43:51.540Z",
+  "revision": "eac315cde421ce21ade68c16b0f056192a2016a6",
+  "fixture": {
+    "tracks": 6000,
+    "albums": 600,
+    "artists": 200,
+    "saved": 1800,
+    "favourites": 900,
+    "previews": 600,
+    "stressAlbumTracks": 100
+  },
+  "viewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "input": {
+    "kind": "wheel",
+    "passive_probe": false,
+    "burst_ms": 3200,
+    "wheel_interval_ms": 16,
+    "wheel_delta_px": 120
+  },
+  "bundle_build_id": "40595c664ccb018f04c14a3a12309fd0140fa7c87c595e27d1d942336f48b963",
+  "source_worktree_dirty": false,
+  "browser": "156.0.8078.4",
+  "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL ES 3.2)",
+  "gpu_features": {
+    "2d_canvas": "enabled",
+    "direct_rendering_display_compositor": "disabled_off_ok",
+    "gpu_compositing": "enabled",
+    "multiple_raster_threads": "enabled_on",
+    "opengl": "enabled_on",
+    "rasterization": "enabled_force",
+    "raw_draw": "disabled_off_ok",
+    "skia_graphite": "disabled_off",
+    "trees_in_viz": "disabled_off",
+    "video_decode": "enabled",
+    "video_encode": "disabled_software",
+    "vulkan": "disabled_off",
+    "webgl": "enabled",
+    "webgpu": "enabled",
+    "webgpu_on_vk_via_gl_interop": "enabled",
+    "webnn": "disabled_off"
+  },
+  "gpu_devices": [
+    {
+      "vendorId": 4318,
+      "deviceId": 9476,
+      "vendorString": "Google Inc. (NVIDIA Corporation)",
+      "deviceString": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL ES 3.2 NVIDIA 620.70.06)",
+      "driverVendor": "NVIDIA",
+      "driverVersion": "620.70.06"
+    }
+  ],
+  "compositor": "hardware",
+  "software": false,
+  "scene_probe_css": null,
+  "host": {
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "cores": 16,
+    "load_1m": 2.12
+  },
+  "repeats": 3,
+  "results": [
+    {
+      "surface": "songs",
+      "playing": false,
+      "cpu_rate": 1,
+      "threads_busy_ms": {
+        "main": 869.2,
+        "compositor": 176.5,
+        "gpu": 1224.3,
+        "display": 41.5
+      },
+      "frames": {
+        "presented": 205,
+        "partial": 4,
+        "dropped": 0,
+        "expected": 205
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 22.5,
+        "max": 22.9
+      },
+      "main_thread_ms": {
+        "longest_task": 16.9,
+        "tasks_over_50": 0,
+        "script": 174.5,
+        "layout": 155.5,
+        "paint": 278.4
+      },
+      "scrolled_px": 24000,
+      "scrollport_height": 571,
+      "moving_ms": 3342,
+      "dom_elements": 641,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 201,
+          "expected": 202,
+          "partial": 2,
+          "dropped": 1,
+          "longest_task": 5.7
+        },
+        {
+          "presented": 205,
+          "expected": 205,
+          "partial": 4,
+          "dropped": 0,
+          "longest_task": 16.9
+        },
+        {
+          "presented": 206,
+          "expected": 206,
+          "partial": 5,
+          "dropped": 0,
+          "longest_task": 17.1
+        }
+      ]
+    },
+    {
+      "surface": "songs",
+      "playing": false,
+      "cpu_rate": 6,
+      "threads_busy_ms": {
+        "main": 3294.6,
+        "compositor": 126,
+        "gpu": 1511.1,
+        "display": 37.7
+      },
+      "frames": {
+        "presented": 267,
+        "partial": 72,
+        "dropped": 5,
+        "expected": 272
+      },
+      "display_gap_ms": {
+        "p50": 14.6,
+        "p95": 24.6,
+        "max": 31.8
+      },
+      "main_thread_ms": {
+        "longest_task": 87.8,
+        "tasks_over_50": 1,
+        "script": 745.5,
+        "layout": 596.5,
+        "paint": 919.4
+      },
+      "scrolled_px": 24000,
+      "scrollport_height": 571,
+      "moving_ms": 3372,
+      "dom_elements": 641,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 273,
+          "expected": 274,
+          "partial": 75,
+          "dropped": 1,
+          "longest_task": 102
+        },
+        {
+          "presented": 267,
+          "expected": 272,
+          "partial": 72,
+          "dropped": 5,
+          "longest_task": 87.8
+        },
+        {
+          "presented": 267,
+          "expected": 268,
+          "partial": 70,
+          "dropped": 1,
+          "longest_task": 29.2
+        }
+      ]
+    },
+    {
+      "surface": "player-browser",
+      "playing": false,
+      "cpu_rate": 1,
+      "threads_busy_ms": {
+        "main": 878.3,
+        "compositor": 157,
+        "gpu": 1306,
+        "display": 46.9
+      },
+      "frames": {
+        "presented": 200,
+        "partial": 2,
+        "dropped": 0,
+        "expected": 200
+      },
+      "display_gap_ms": {
+        "p50": 16.7,
+        "p95": 17.6,
+        "max": 23
+      },
+      "main_thread_ms": {
+        "longest_task": 5.9,
+        "tasks_over_50": 0,
+        "script": 210.7,
+        "layout": 147.4,
+        "paint": 219.8
+      },
+      "scrolled_px": 24000,
+      "scrollport_height": 598,
+      "moving_ms": 3327,
+      "dom_elements": 1038,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 201,
+          "expected": 201,
+          "partial": 1,
+          "dropped": 0,
+          "longest_task": 5.9
+        },
+        {
+          "presented": 200,
+          "expected": 200,
+          "partial": 2,
+          "dropped": 0,
+          "longest_task": 5.9
+        },
+        {
+          "presented": 200,
+          "expected": 200,
+          "partial": 1,
+          "dropped": 0,
+          "longest_task": 6.1
+        }
+      ]
+    },
+    {
+      "surface": "player-browser",
+      "playing": false,
+      "cpu_rate": 6,
+      "threads_busy_ms": {
+        "main": 3238.3,
+        "compositor": 102,
+        "gpu": 1135.4,
+        "display": 31.8
+      },
+      "frames": {
+        "presented": 207,
+        "partial": 81,
+        "dropped": 0,
+        "expected": 207
+      },
+      "display_gap_ms": {
+        "p50": 19.9,
+        "p95": 27,
+        "max": 29
+      },
+      "main_thread_ms": {
+        "longest_task": 29.8,
+        "tasks_over_50": 0,
+        "script": 882.3,
+        "layout": 560.5,
+        "paint": 737.7
+      },
+      "scrolled_px": 24000,
+      "scrollport_height": 598,
+      "moving_ms": 3365,
+      "dom_elements": 1038,
+      "playing_at_end": false,
+      "runs": [
+        {
+          "presented": 207,
+          "expected": 207,
+          "partial": 81,
+          "dropped": 0,
+          "longest_task": 29.8
+        },
+        {
+          "presented": 209,
+          "expected": 209,
+          "partial": 80,
+          "dropped": 0,
+          "longest_task": 29.9
+        },
+        {
+          "presented": 205,
+          "expected": 205,
+          "partial": 85,
+          "dropped": 0,
+          "longest_task": 28.6
+        }
+      ]
+    }
+  ]
+}

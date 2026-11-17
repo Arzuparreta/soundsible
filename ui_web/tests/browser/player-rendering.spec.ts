@@ -92,7 +92,7 @@ test('a collapsed player defers wallpaper raster work until it opens again', asy
   await page.locator('[data-player-surface-open]').getByRole('button', { name: 'Cerrar', exact: true }).click();
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   // Wait for the finite exit: the backdrop is still visible while it travels.
-  await expect(page.locator('[data-player-backdrop="active"]')).not.toBeVisible();
+  await expect.poll(() => page.locator('[data-player-stage]').evaluate(element => getComputedStyle(element).visibility)).toBe('hidden');
   const filters = () => page.locator('[data-player-backdrop] canvas').evaluateAll(elements =>
     elements.map(element => (element as HTMLCanvasElement).getContext('2d')!.filter));
   const parked = await filters();

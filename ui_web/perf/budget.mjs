@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export function checkBudget(report, maximum = 1800) {
-  if (report.fixture?.tracks < 6000 || report.input?.kind !== 'wheel') throw new Error('The rendering budget needs the large scrolling fixture');
+  if (!Number.isFinite(report.fixture?.tracks) || report.fixture.tracks < 6000
+      || report.input?.kind !== 'wheel') throw new Error('The rendering budget needs the large scrolling fixture');
   for (const surface of ['songs', 'albums', 'player-browser']) {
     const row = report.results.find(item => item.surface === surface && item.cpu_rate === 1);
     if (!row) throw new Error(`Missing rendering case: ${surface}`);

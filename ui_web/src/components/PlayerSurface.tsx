@@ -8,6 +8,7 @@ import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import { createTouchMoveLease } from '../lib/touchMoveLease';
 import { ArtworkBackdrop } from './ArtworkBackdrop';
+import { pageVisible } from '../lib/pageVisibility';
 import type { NowPlayingMobilePanel } from './NowPlaying';
 import { deferredComponent } from '../lib/deferredComponent';
 import { recoverAutoMode, recoverNowPlaying } from './nowPlayingRecovery';
@@ -402,9 +403,9 @@ export function PlayerSurface() {
         tabIndex={-1}
       >
         <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
-          src={backdrops().first} active={backdrops().active === 'first'} visible={nowPlayingOpen() || closing()} />
+          src={backdrops().first} active={backdrops().active === 'first'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
         <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
-          src={backdrops().second} active={backdrops().active === 'second'} visible={nowPlayingOpen() || closing()} />
+          src={backdrops().second} active={backdrops().active === 'second'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
         <div class={styles.wash} data-player-veil="" aria-hidden="true" />
         <div class={styles.grain} aria-hidden="true" />
 

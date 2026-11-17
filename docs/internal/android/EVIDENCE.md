@@ -310,3 +310,19 @@ The earlier local results do not replace those checks of the current head.
   of evidence/exit code passed; Ruff and `git diff --check` passed.
   Local log `/tmp/soundsible-android-ci-final-validation.log`. Native acceptance
   of the new traces and the PR checks pending in GitHub.
+
+## Web UI step 9: supported WebView floor (2026-11-17)
+
+The minimum OS is API 26, aligned with WebView/JavaScript target 120. The
+standalone `webview-error.html` is emitted by the Android Vite build and
+configured as Capacitor's `server.errorPath`; preparation validates it before
+sync. Six checker tests passed. `scripts/android.py build` passed development
+APK/test-APK assembly and lint; the separate `:app:testDebugUnitTest` task
+passed 102 tests. `aapt dump badging` confirms SDK 26 in the actual APK, and ZIP
+inspection confirms the independent page and matching configuration.
+
+This raises the installation floor (major impact) and does not publish an
+Android release. Old-provider behavior on a physical device and community
+listening/Bluetooth/car acceptance remain separate from these package checks.
+Full latest-head emulator CI remains a merge gate. Rendering results and
+shared native collection regressions: [web UI step 9 evidence](../measurements/web-ui-step9-2026-11-17/README.md).

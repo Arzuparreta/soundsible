@@ -107,7 +107,7 @@ test('episode virtualization accounts for a wrapping header at large interface s
   } }));
   await page.goto('/player/#/podcasts/show-1');
   await expect(page.getByRole('heading', { name: subscription.title.trim(), exact: true })).toBeVisible();
-  const list = page.locator('[data-virtual-rows]');
+  const list = page.locator('[data-collection-rows]');
   await expect(list).toBeAttached();
   // Move just beyond the header: the first episodes must still be mounted,
   // even when the header is taller than the virtualizer's overscan window.

@@ -37,7 +37,10 @@ installation floor and must carry a major impact label. It is not a release.
 Capacitor uses `server.errorPath` for an independent HTML update screen when
 the installed provider is too old. It has no JavaScript or external stylesheet.
 `scripts/android.py prepare` checks the packaged entry before Capacitor sync.
-Build/JVM/lint and APK asset/manifest verification are pending at this checkpoint.
+Local APK/test-APK assembly and lint passed; the separate JVM task passed
+102 tests. The actual APK manifest declares API 26 and its ZIP contains the
+configured independent update page. Latest-head remote CI and emulator shards
+remain required before merge.
 Physical old-device acceptance remains distinct from build and emulator results.
 
 ## How work is done (updated 2026-10-06 to go faster without losing quality)
