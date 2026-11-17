@@ -35,7 +35,7 @@ until visible. Engines without Canvas filter support retain the CSS fallback.
 
 Three repeated production runs per case, same Ryzen/NVIDIA host, median
 longest task. The committed JSON retains each run's frame counts and actual
-GPU features. The final visibility-only guard does not change the timed open
+GPU features. The final closed/document-hidden guard does not change the timed open
 player path; a final exported bundle also passed the CI budget smoke.
 
 ### CPU composition
@@ -138,7 +138,9 @@ packaged asset before sync. This is a development artifact, not a release.
 Local `scripts/android.py build` passed APK/test-APK assembly and lint.
 `aapt dump badging` confirms `sdkVersion: 26`; ZIP inspection confirms
 `assets/public/webview-error.html`, WebView 120 and the matching configured
-error path in the actual APK. Six checker tests passed. The separate `:app:testDebugUnitTest` task passed 102 tests in 27 report
+error path in the actual APK. [The packaged update screen](webview-update-screen.png)
+was also rendered with JavaScript disabled; this is an HTML/package check,
+not an old Android device test. Six checker tests passed. The separate `:app:testDebugUnitTest` task passed 102 tests in 27 report
 files with zero failures/errors/skips. Remote emulator checks remain required.
 
 ## Visual evidence
@@ -158,9 +160,11 @@ contracts remain covered by the browser suite.
 
 - `npm test`: type checking, design-debt gate, 1,989 Vitest tests, seven
   trace/budget tests and three design-gate tests passed.
-- Initial authenticated payload: 211,686 gzip bytes under the unchanged
+- Initial authenticated payload: 211,685 gzip bytes under the unchanged
   215,316-byte ceiling. Exported Vite output only; engine UI dist untouched.
-- Whole four-profile suite and Firefox final run are in progress.
+- Whole Chromium phone/desktop suite: 454 passed, 78 intentional skips
+  with two workers. Whole WebKit phone/desktop suite: 438 passed, 94 intentional skips
+  with one worker. Firefox desktop normal-motion contracts: 51 passed, four intentional skips.
 - Native JVM: 102 passed. Remote latest-head CI is pending.
 
 Raw exploratory traces remain under `/tmp/soundsible-step9-*-traces` on the
@@ -181,3 +185,31 @@ The isolated Chromium pass ran shared-tempo PCM and all podcast contracts
 with one worker: 33 passed and one intentional skip. The final full pass
 uses two workers to limit unrelated concurrent renderer load; remote CI
 retains its existing single-worker policy. No audio threshold was weakened.
+
+The final whole Chromium run passed all 532 cases (454 passed, 78 intentional
+skips), including the unchanged shared-tempo threshold. This narrows the
+observed intermittency to a failing concurrent run versus isolated and lower-load
+passes; it does not establish the internal cause of the PCM deviation.
+
+Firefox's first screenshot pass produced all seven baselines and passed the
+layout assertions, but one test ended with a legacy assertion that the browser
+name must be Chromium or WebKit. That runner-name assertion was removed; the
+viewport, control-size, clipping and accessibility assertions remain. All six
+Firefox theme/density images and the high-contrast Settings image were visually
+reviewed. The complete Firefox contract run passed: 51 tests and four intentional skips.
+
+The first complete Firefox run found three false failures in the full-title
+helper: with the actual UI font loaded, Firefox reports 33px scroll height for
+a 31.05px line box (text range 34px), with both overflow axes explicitly
+visible and no clamp. The text is not clipped. The helper now waits for fonts
+and checks horizontal overflow plus actual vertical clipping/clamping, rather
+than treating visible font ink outside tight leading as truncation. No product
+CSS or font was changed. The portable title/scale contracts are re-run on all
+four original profiles after that test correction.
+
+Final portable title/scale revalidation: 46 passed on Chromium phone/desktop
+and 46 passed on WebKit phone/desktop. The exported final production bundle
+also passed the DOM/scroll budget again; [payload report](payload.json) records
+211,685 initial authenticated gzip bytes. The fixture-only Vite server was
+stopped after testing. All local gates are complete; latest-head remote CI
+and fresh-base verification remain required for delivery.

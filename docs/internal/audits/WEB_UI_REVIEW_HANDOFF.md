@@ -247,7 +247,7 @@ Two things that cost time in step 1:
 | 6 P3 | #466 | Done |
 | 7 P4 + A2 (+ A3) | #467 | Done |
 | 8 Design system (U2, U3, U6, U7; U4 decision) | #468 | Done |
-| 9 P6, X1–X3 (+ remaining A1/DJ activity) | `perf/web-ui-step9-platform` | Implemented; final local validation in progress, then latest-head checks and merge required |
+| 9 P6, X1–X3 (+ remaining A1/DJ activity) | `perf/web-ui-step9-platform` | Complete in this change; merge is gated by all latest-head checks |
 
 ## Evidence kept outside the repository
 
@@ -256,24 +256,33 @@ The raw corpus (Chrome traces, CPU profiles, harness scripts, fixture server,
 not committed. The imported reports name those files; their numbers are
 reproduced in the reports themselves.
 
-## Final-step continuation checkpoint
+## Final delivery and remaining limits
 
-Step 8 merged as #468 (`47734dd0`). Step 9 is in
-`/tmp/soundsible-web-ui-step9`, branch `perf/web-ui-step9-platform`, with
-merged step-8 main already incorporated. Its measurements, before/after images
-and recording are in `../measurements/web-ui-step9-2026-11-17/`; the README
-records exact evidence states. Do not run overlapping browser/benchmark work.
-The shared dependency symlink `ui_web/node_modules` is untracked: never commit it.
+Step 8 merged as #468 (`47734dd0`). Step 9 is complete and locally verified
+on `perf/web-ui-step9-platform`, containing merged step-8 main. The matching
+pull request must pass every latest-head check, including Android and Windows,
+and a fresh target-base ancestry check before merge. Merging that change
+completes the nine implementation steps. No release is part of this review.
 
-Finish the whole four-profile suite and Firefox, inspect its goldens, run the
-actual JVM task (the Android `build` command assembles/lints but does not run
-JVM tests), update evidence, commit and open one `impact:major` PR. Fresh-fetch
-and ancestry verification are required before opening and merging. Wait for
-all latest-head checks, including Android and Windows, fix confirmed failures
-and merge. No release is authorized by this web review.
+Durable evidence, exact validation counts, before/after images and recordings
+are in [step 9](../measurements/web-ui-step9-2026-11-17/README.md); Android
+package/JVM evidence is also in its handoff. The final whole-suite passes are
+Chromium 454/78 skipped and WebKit 438/94 skipped, plus Firefox 51/4 skipped.
+The title/scale helper corrections passed another 46 cases per engine family.
+Local JVM: 102; Vitest: 1,989; checker tests: six. The initial authenticated
+payload is 211,685 gzip bytes under the unchanged 215,316-byte ceiling.
+
+The implementation worktree is `/tmp/soundsible-web-ui-step9`. The dependency
+symlink `ui_web/node_modules` is intentionally untracked: never commit it.
+Owned test servers are stopped. Source/fixture changes must be revalidated;
+do not overlap browser suites, builds and performance runs. Read live PR
+state rather than assuming an open PR has reached main.
 
 The nine migration steps are an implementation sequence, not proof of
-Spotify/YouTube parity. Remaining frame partials under CPU 6× (P2), the
-physical target-device matrix, live-library conditions and 144 Hz remain
-explicit measurement limits. The legacy per-file design baseline is an
-inventory for incremental migration, not a claim that every control was rewritten.
+Spotify/YouTube parity. P2 remains partly closed: CPU 6× still produces
+partial frames from style/paint deadlines, despite removing its row-mount
+hotspot. Physical X270/iPhone/WebView/WebView2, live-library and 144 Hz
+acceptance remain unmeasured. Any next performance work starts by tracing
+that residual on the target device, not by inferring a framework rewrite
+from the proxy. The legacy per-file design baseline remains an inventory
+for incremental migration, not a claim that every control was rewritten.
