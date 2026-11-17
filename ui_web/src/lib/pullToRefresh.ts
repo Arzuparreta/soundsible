@@ -1,3 +1,5 @@
+import { createTouchMoveLease } from './touchMoveLease';
+
 const ACTIVATION_SLOP = 8;
 /** How far the finger travels for each pixel the list gives: the pull drags
  * behind the finger, the way a native list's does. */
@@ -77,7 +79,7 @@ export function createPullGesture() {
     return result;
   };
 
-  return { begin, move, end, cancel };
+  return { begin, move, end, cancel, isTracking: () => tracking && !cancelled };
 }
 
 /**
@@ -91,38 +93,43 @@ export function attachPullToRefresh(
 ): () => void {
   const gesture = createPullGesture();
   const onStart = (event: TouchEvent) => {
-    if (event.touches.length !== 1) { gesture.cancel(); return; }
+    lease.release();
+    if (event.touches.length !== 1) { onCancel(); return; }
     const touch = event.touches[0];
     gesture.begin(touch.clientX, touch.clientY, scroller.scrollTop <= 0 && (handlers.enabled?.() ?? true));
+    if (gesture.isTracking()) lease.arm();
   };
   const onMove = (event: TouchEvent) => {
     if (event.touches.length !== 1) {
-      if (gesture.cancel().captured) handlers.onPull({ captured: false, distance: 0, armed: false });
+      onCancel();
       return;
     }
     const touch = event.touches[0];
     const frame = gesture.move(touch.clientX, touch.clientY);
+    if (!gesture.isTracking()) lease.release();
     if (!frame.captured) return;
     // Taken: the list neither scrolls nor bounces under the pull.
     if (event.cancelable) event.preventDefault();
     handlers.onPull(frame);
   };
   const onEnd = () => {
+    lease.release();
     const frame = gesture.end();
     if (!frame.captured) return;
     handlers.onPull({ captured: false, distance: 0, armed: false });
     if (frame.refresh) handlers.onRefresh();
   };
   const onCancel = () => {
+    lease.release();
     if (gesture.cancel().captured) handlers.onPull({ captured: false, distance: 0, armed: false });
   };
+  const lease = createTouchMoveLease(scroller, onMove);
   scroller.addEventListener('touchstart', onStart, { passive: true });
-  scroller.addEventListener('touchmove', onMove, { passive: false });
   scroller.addEventListener('touchend', onEnd, { passive: true });
   scroller.addEventListener('touchcancel', onCancel, { passive: true });
   return () => {
     scroller.removeEventListener('touchstart', onStart);
-    scroller.removeEventListener('touchmove', onMove);
+    lease.release();
     scroller.removeEventListener('touchend', onEnd);
     scroller.removeEventListener('touchcancel', onCancel);
   };

@@ -16,6 +16,9 @@ export default defineConfig({
   plugins: [
     {
       name: 'soundsible-android-entry',
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'webview-error.html', source: readFileSync(new URL('./src/mobile/webview-error.html', import.meta.url), 'utf8') });
+      },
       transformIndexHtml: {
         order: 'pre',
         handler: html => html

@@ -38,7 +38,7 @@ const SURFACES = {
 
 /** The input: one wheel event per 60 Hz frame for 3.2 s, 7,500 px/s. */
 const BURST_MS = 3200, WHEEL_INTERVAL_MS = 16, WHEEL_DELTA = 120;
-const CATEGORIES = ['benchmark', 'cc', 'toplevel', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.frame', 'blink.user_timing', '__metadata'];
+const CATEGORIES = ['benchmark', 'cc', 'input', 'latencyInfo', 'toplevel', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.frame', 'blink.user_timing', '__metadata'];
 
 const list = (name, fallback) => (process.env[name] ?? fallback).split(',').map((value) => value.trim()).filter(Boolean);
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -66,7 +66,10 @@ if (process.argv[2] === '--table') {
 const surfaces = list('SURFACES', Object.keys(SURFACES).join(','));
 const rates = list('RATES', '1,6').map(Number);
 const playing = process.env.PLAYING === '1';
-const idle = process.env.INPUT === 'none';
+const input = process.env.INPUT ?? 'wheel';
+if (!['none', 'wheel', 'touch'].includes(input)) throw new Error(`Unknown input ${input}`);
+const idle = input === 'none';
+const touch = input === 'touch';
 const repeats = Number(process.env.REPEATS ?? 3);
 const [width, height] = (process.env.SIZE ?? '1366x768').split('x').map(Number);
 const tag = process.env.TAG ?? 'run';
@@ -98,11 +101,20 @@ const browser = await chromium.launch({
 });
 
 async function open() {
-  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, locale: 'en-US', colorScheme: 'dark' });
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, locale: 'en-US', colorScheme: 'dark', ...(touch ? { hasTouch: true, isMobile: width < 1024 } : {}) });
   await context.addInitScript(() => {
     localStorage.setItem('lang', 'en');
     localStorage.setItem('soundsible:interface-size', 'normal');
     localStorage.setItem('device_id', 'bench-device');
+  });
+  if (process.env.PASSIVE_PROBE === '1') await context.addInitScript(() => {
+    // Diagnostic ablation only: removes cancellation, so dismissal gestures
+    // are intentionally not supported by this probe. Never an app setting.
+    const add = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function(type, listener, options) {
+      if (type === 'touchmove' && typeof options === 'object' && options?.passive === false) options = { ...options, passive: true };
+      return add.call(this, type, listener, options);
+    };
   });
   const page = await context.newPage();
   return { context, page };
@@ -139,11 +151,11 @@ async function measure(name, rate) {
         // This happens before throttling/tracing, never through app internals.
         await page.evaluate(async () => {
           for (let index = 0; index < 300; index++) {
-            const opener = document.querySelector('[data-song-row] button[aria-label="More options"]');
+            const opener = document.querySelector('[data-song-row] button[aria-label="More options"], [data-music-list-row] [data-row-menu]');
             if (!opener) throw new Error('No song menu for queue setup');
             opener.click();
             await new Promise(resolve => setTimeout(resolve, 0));
-            const add = [...document.querySelectorAll('[role="menuitem"]')].find(item => item.textContent.includes('Add to queue'));
+            const add = [...document.querySelectorAll('[role="menuitem"], [role="dialog"] button')].find(item => item.textContent.includes('Add to queue'));
             if (!add) throw new Error('No Add to queue action');
             add.click();
             await new Promise(resolve => setTimeout(resolve, 0));
@@ -156,11 +168,13 @@ async function measure(name, rate) {
         await page.waitForFunction(() => navigator.mediaSession?.playbackState === 'playing', undefined, { timeout: 15_000 });
       }
       await page.locator('[data-omni-cover]').locator('xpath=preceding-sibling::button').click({ timeout: 10_000 });
-      await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
       if (!playing) {
         await page.locator('[data-player-tile="stage"]').getByRole('button', { name: 'Pause' }).click();
         await page.waitForFunction(() => navigator.mediaSession?.playbackState !== 'playing', undefined, { timeout: 15_000 });
       }
+      if (width < 1024) await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button')
+        .nth(surface.player === 'browser' ? 0 : 2).click();
+      await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
       over = await page.locator(`[data-player-tile="${surface.player}"]`).boundingBox();
     } else if (name !== 'songs') {
       await page.evaluate((hash) => { window.location.hash = hash; }, surface.hash);
@@ -196,7 +210,12 @@ async function measure(name, rate) {
     const started = await page.evaluate(() => { performance.mark('bench-start'); return performance.now(); });
     const sends = [];
     const began = Date.now();
-    for (let tick = 0; !idle && tick * WHEEL_INTERVAL_MS < BURST_MS; tick += 1) {
+    if (touch) await session.send('Input.synthesizeScrollGesture', {
+      x, y, yDistance: -WHEEL_DELTA * BURST_MS / WHEEL_INTERVAL_MS,
+      speed: WHEEL_DELTA * 1000 / WHEEL_INTERVAL_MS,
+      gestureSourceType: 'touch', preventFling: true,
+    });
+    for (let tick = 0; !idle && !touch && tick * WHEEL_INTERVAL_MS < BURST_MS; tick += 1) {
       const due = began + tick * WHEEL_INTERVAL_MS;
       if (due > Date.now()) await sleep(due - Date.now());
       sends.push(session.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY: WHEEL_DELTA }).catch(() => {}));
@@ -271,7 +290,7 @@ try {
 
 const report = {
   tag, date: new Date().toISOString(), revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim(),
-  fixture: SIZES, viewport: { width, height }, input: { kind: idle ? 'none' : 'wheel', burst_ms: BURST_MS, wheel_interval_ms: WHEEL_INTERVAL_MS, wheel_delta_px: WHEEL_DELTA },
+  fixture: SIZES, viewport: { width, height }, input: { kind: input, passive_probe: process.env.PASSIVE_PROBE === '1', burst_ms: BURST_MS, wheel_interval_ms: WHEEL_INTERVAL_MS, wheel_delta_px: WHEEL_DELTA },
   browser: browser.version(), gpu, software, host: { cpu: cpus()[0]?.model, cores: cpus().length, load_1m: loadavg()[0] }, repeats, results,
 };
 const out = join(root, 'perf', 'results');

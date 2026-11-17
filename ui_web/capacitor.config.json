@@ -6,5 +6,8 @@
     "path": "../android",
     "minWebViewVersion": 120
   },
-  "loggingBehavior": "none"
+  "loggingBehavior": "none",
+  "server": {
+    "errorPath": "webview-error.html"
+  }
 }

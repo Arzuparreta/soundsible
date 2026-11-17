@@ -85,6 +85,7 @@ def prepare(*, channel: str = "development", version_code: int | None = None) ->
         encoding="utf-8",
     )
     run(tool("npm"), "exec", "--", "vite", "build", "--config", "vite.android.config.ts", cwd=UI)
+    run(sys.executable, "scripts/check_android_webview.py")
     run(tool("npm"), "exec", "--", "cap", "sync", "android", cwd=UI)
 
 
