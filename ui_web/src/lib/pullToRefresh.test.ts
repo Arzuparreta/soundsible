@@ -66,4 +66,36 @@ describe('pull to refresh', () => {
     touch('touchend', 0);
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
+
+  it('does not make idle, disabled or deep scrolling wait for a move handler', () => {
+    const scroller = document.createElement('div');
+    const add = vi.spyOn(scroller, 'addEventListener');
+    const remove = vi.spyOn(scroller, 'removeEventListener');
+    let enabled = false;
+    const detach = attachPullToRefresh(scroller, { onPull: vi.fn(), onRefresh: vi.fn(), enabled: () => enabled });
+    const send = (type: string, y: number) => {
+      const event = new Event(type, { cancelable: true }) as TouchEvent;
+      Object.defineProperty(event, 'touches', { value: [{ clientX: 50, clientY: y }] });
+      scroller.dispatchEvent(event);
+    };
+    const registrations = () => add.mock.calls.filter(([type]) => type === 'touchmove').length;
+    expect(registrations()).toBe(0);
+    send('touchstart', 100);
+    expect(registrations()).toBe(0);
+    enabled = true;
+    scroller.scrollTop = 100;
+    send('touchstart', 100);
+    expect(registrations()).toBe(0);
+    scroller.scrollTop = 0;
+    send('touchstart', 100);
+    expect(registrations()).toBe(1);
+    send('touchmove', 70);
+    expect(remove).toHaveBeenCalledWith('touchmove', expect.any(Function));
+    send('touchstart', 100);
+    send('touchcancel', 100);
+    expect(remove.mock.calls.filter(([type]) => type === 'touchmove')).toHaveLength(2);
+    send('touchstart', 100);
+    detach();
+    expect(remove.mock.calls.filter(([type]) => type === 'touchmove')).toHaveLength(3);
+  });
 });

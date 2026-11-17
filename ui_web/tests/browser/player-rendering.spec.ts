@@ -22,18 +22,26 @@ test('wallpaper retains artwork and themes and parks only when hidden', async ({
     // resolution and evaluation. Read the currently active layer atomically.
     const element = document.querySelector('[data-player-surface-open] [data-player-backdrop="active"]')!;
     const css = getComputedStyle(element);
-    return { image: css.backgroundImage, filter: css.filter, duration: css.animationDuration,
+    const canvas = element.querySelector('canvas');
+    const context = canvas?.getContext('2d');
+    const rasterized = element.hasAttribute('data-rasterized');
+    const pixel = rasterized && context ? [...context.getImageData(canvas!.width / 2, canvas!.height / 2, 1, 1).data] : null;
+    return { image: css.backgroundImage, filter: rasterized ? context!.filter : css.filter,
+      rasterized, supported: !!context && 'filter' in context, pixel, duration: css.animationDuration,
       timing: css.animationTimingFunction, transition: css.transitionDuration };
   });
   await expect.poll(async () => (await appearance()).duration).toBe('38s');
+  if ((await appearance()).supported) await expect.poll(async () => (await appearance()).rasterized).toBe(true);
   const dark = await appearance();
-  expect(dark.image).toContain('/api/static/cover/');
+  if (dark.rasterized) expect(dark.pixel![0]).toBeGreaterThan(dark.pixel![1]);
+  else expect(dark.image).toContain('/api/static/cover/');
   expect(dark.filter).toContain('blur(62px)');
   expect(dark.duration).toBe('38s');
   expect(dark.timing).toMatch(/^steps\(76(?:, end)?\)$/);
   expect(dark.transition).toContain('0.72s');
   await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
   await expect.poll(async () => (await appearance()).filter).toContain('blur(64px)');
+  if (dark.rasterized) expect((await appearance()).pixel![0]).toBeGreaterThan(dark.pixel![0] + 40);
   expect((await appearance()).image).toBe(dark.image);
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   await expect(page.locator('html')).not.toHaveAttribute('data-page-hidden');
@@ -72,6 +80,29 @@ test('the open stage veils the wallpaper once, with no backdrop filter per panel
   });
   expect(veil).not.toBeNull();
   expect(veil).not.toBe('rgba(0, 0, 0, 0)');
+});
+
+test('a collapsed player defers wallpaper raster work until it opens again', async ({ page }) => {
+  await page.route('**/api/static/cover/**', route => route.fulfill({ contentType: 'image/svg+xml', body:
+    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640"><rect width="640" height="640" fill="#b03060"/></svg>' }));
+  await openMusicPlayer(page);
+  const supported = await page.evaluate(() => 'filter' in document.createElement('canvas').getContext('2d')!);
+  test.skip(!supported, 'this engine retains the CSS wallpaper fallback');
+  await expect(page.locator('[data-player-backdrop="active"]')).toHaveAttribute('data-rasterized', '');
+  await page.locator('[data-player-surface-open]').getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  // Wait for the finite exit: the backdrop is still visible while it travels.
+  await expect(page.locator('[data-player-backdrop="active"]')).not.toBeVisible();
+  const filters = () => page.locator('[data-player-backdrop] canvas').evaluateAll(elements =>
+    elements.map(element => (element as HTMLCanvasElement).getContext('2d')!.filter));
+  const parked = await filters();
+  await page.evaluate(async () => {
+    document.documentElement.dataset.theme = 'light';
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  expect(await filters()).toEqual(parked);
+  await page.locator('[data-omni-player]').getByRole('button', { name: /^NORMAL:/ }).click();
+  await expect.poll(filters).toContain('blur(64px) saturate(1.85) brightness(1.22)');
 });
 
 test('the queue equaliser moves all its bars on the same few frames a second', async ({ page }) => {

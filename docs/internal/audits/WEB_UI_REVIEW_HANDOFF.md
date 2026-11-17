@@ -246,7 +246,7 @@ Two things that cost time in step 1:
 | 5 P2 + A1 | #465 | Done: P2 and A1 partly closed |
 | 6 P3 | #466 | Done |
 | 7 P4 + A2 (+ A3) | #467 | Done |
-| 8 Design system (U2, U3, U6, U7; U4 decision) | `fix/web-ui-step8-design` | Implemented and locally validated; remote checks and merge pending |
+| 8 Design system (U2, U3, U6, U7; U4 decision) | #468 | Done |
 | 9 P6, X1–X3 | `perf/web-ui-step9-platform` | In progress in `/tmp/soundsible-web-ui-step9`; incorporate the final step-8 main before PR |
 
 ## Evidence kept outside the repository

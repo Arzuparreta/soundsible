@@ -28,6 +28,18 @@ Current state and way of working. What has been superseded is in
   Bluetooth and car following [ALPHA](../../ANDROID_ALPHA.md#community-testing).
   AVD/CI do not replace that evidence. It is a beta requirement, not an alpha requirement.
 
+## WebView compatibility floor (web UI step 9, in progress)
+
+The installation floor is API 26 (Android 8), aligned with WebView 120 and the
+Chrome 120 bundle target. Android 7 cannot install that engine; the earlier
+API 24 declaration advertised an unsupported combination. This raises the
+installation floor and must carry a major impact label. It is not a release.
+Capacitor uses `server.errorPath` for an independent HTML update screen when
+the installed provider is too old. It has no JavaScript or external stylesheet.
+`scripts/android.py prepare` checks the packaged entry before Capacitor sync.
+Build/JVM/lint and APK asset/manifest verification are pending at this checkpoint.
+Physical old-device acceptance remains distinct from build and emulator results.
+
 ## How work is done (updated 2026-10-06 to go faster without losing quality)
 
 1. **Inventory first, not by discovery.** The list of gaps below comes

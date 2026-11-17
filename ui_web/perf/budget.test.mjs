@@ -21,3 +21,10 @@ test('a missing surface or a wheel that never reached the collection fails', () 
   value.results[1].scrolled_px = 1000;
   assert.throws(() => checkBudget(value), /Missing rendering case/);
 });
+test('missing or nonnumeric scroll/frame evidence cannot pass', () => {
+  for (const field of ['scrolled_px', 'frames']) {
+    const value = report();
+    delete value.results[0][field];
+    assert.throws(() => checkBudget(value), /no rendered scroll/);
+  }
+});

@@ -87,16 +87,21 @@ if (!process.env.DIST) {
   console.error('Building the production bundle…');
   execFileSync('npx', ['vite', 'build', '--outDir', dist, '--emptyOutDir', '--logLevel', 'error', ...(profileDir ? ['--minify', 'false'] : [])], { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] });
 }
+const bundleBuildId = readFileSync(join(dist, 'index.html'), 'utf8').match(/name="soundsible-build" content="([a-f0-9]+)"/)?.[1] ?? null;
 const server = await startServer(dist);
 
 // New headless (`channel: 'chromium'`) can use the machine's GPU; the default
 // headless shell cannot. SOFTWARE=1 forces SwiftShader for the no-GPU case.
-const software = process.env.SOFTWARE === '1';
+const compositor = process.env.COMPOSITOR ?? (process.env.SOFTWARE === '1' ? 'swiftshader' : 'hardware');
+if (!['hardware', 'swiftshader', 'cpu'].includes(compositor)) throw new Error(`Unknown compositor ${compositor}`);
+const software = compositor !== 'hardware';
 const browser = await chromium.launch({
   channel: 'chromium',
   args: [
     '--autoplay-policy=no-user-gesture-required',
-    ...(software ? ['--use-angle=swiftshader', '--disable-gpu-rasterization'] : ['--use-gl=angle', '--use-angle=gl-egl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization']),
+    ...(compositor === 'cpu' ? ['--disable-gpu', '--disable-gpu-compositing']
+      : compositor === 'swiftshader' ? ['--use-angle=swiftshader', '--disable-gpu-rasterization']
+        : ['--use-gl=angle', '--use-angle=gl-egl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization']),
   ],
 });
 
@@ -137,9 +142,11 @@ function selfTime(profile, top = 60) {
 async function measure(name, rate) {
   const surface = SURFACES[name];
   const { context, page } = await open();
+  let tracing = false;
   try {
     await page.goto(`${server.origin}/player/#/library?view=songs`);
     await page.locator(SURFACES.songs.ready).first().waitFor({ timeout: 30_000 });
+    if (process.env.SCENE_CSS) await page.addStyleTag({ content: readFileSync(process.env.SCENE_CSS, 'utf8') });
     if (playing) {
       await page.getByRole('button', { name: /^Play .+ by / }).first().click();
       await page.waitForFunction(() => navigator.mediaSession?.playbackState === 'playing', undefined, { timeout: 15_000 });
@@ -172,8 +179,15 @@ async function measure(name, rate) {
         await page.locator('[data-player-tile="stage"]').getByRole('button', { name: 'Pause' }).click();
         await page.waitForFunction(() => navigator.mediaSession?.playbackState !== 'playing', undefined, { timeout: 15_000 });
       }
-      if (width < 1024) await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button')
-        .nth(surface.player === 'browser' ? 0 : 2).click();
+      if (width < 1024) {
+        await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button')
+          .nth(surface.player === 'browser' ? 0 : 2).click();
+        await page.waitForFunction(panel => {
+          const tile = document.querySelector(`[data-player-tile="${panel}"]`);
+          const carousel = document.querySelector('[data-now-playing-carousel]');
+          return tile && carousel && Math.abs(tile.getBoundingClientRect().left - carousel.getBoundingClientRect().left) < 2;
+        }, surface.player);
+      }
       await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
       over = await page.locator(`[data-player-tile="${surface.player}"]`).boundingBox();
     } else if (name !== 'songs') {
@@ -190,6 +204,12 @@ async function measure(name, rate) {
     await session.send('Emulation.setCPUThrottlingRate', { rate });
     const x = Math.round(over ? over.x + over.width / 2 : width * 0.6), y = Math.round(over ? over.y + over.height * 0.6 : height * 0.5);
     await page.mouse.move(x, y);
+    const scrollportHeight = await page.evaluate(({ x, y, height }) => {
+      for (let element = document.elementFromPoint(x, y); element; element = element.parentElement) {
+        if (element.scrollHeight > element.clientHeight && /auto|scroll/.test(getComputedStyle(element).overflowY)) return element.clientHeight;
+      }
+      return height;
+    }, { x, y, height });
     const scrollBefore = await page.evaluate(() => [...document.querySelectorAll('*')].reduce((sum, element) => sum + element.scrollTop, 0));
 
     // When the list last moved. A short list reaches its end inside the burst,
@@ -201,6 +221,7 @@ async function measure(name, rate) {
       document.addEventListener('scroll', () => { window.__benchLastScroll = performance.now(); }, { capture: true, passive: true });
     });
     await browser.startTracing(page, { categories: CATEGORIES });
+    tracing = true;
     if (profileDir) {
       await session.send('Profiler.enable');
       await session.send('Profiler.setSamplingInterval', { interval: 200 });
@@ -210,11 +231,20 @@ async function measure(name, rate) {
     const started = await page.evaluate(() => { performance.mark('bench-start'); return performance.now(); });
     const sends = [];
     const began = Date.now();
-    if (touch) await session.send('Input.synthesizeScrollGesture', {
-      x, y, yDistance: -WHEEL_DELTA * BURST_MS / WHEEL_INTERVAL_MS,
-      speed: WHEEL_DELTA * 1000 / WHEEL_INTERVAL_MS,
-      gestureSourceType: 'touch', preventFling: true,
-    });
+    if (touch) {
+      // A paced finger stroke inside the viewport followed by native fling.
+      // synthesizeScrollGesture produced pointer events but no actual scroll
+      // on this Chromium build; the motion guard rejects that empty sample.
+      const distance = Math.min(480, y - 32);
+      await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      for (let step = 1; step <= 12; step++) {
+        const due = began + step * WHEEL_INTERVAL_MS;
+        if (due > Date.now()) await sleep(due - Date.now());
+        await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - distance * step / 12 }] });
+      }
+      await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(Math.max(0, began + BURST_MS - Date.now()));
+    }
     for (let tick = 0; !idle && !touch && tick * WHEEL_INTERVAL_MS < BURST_MS; tick += 1) {
       const due = began + tick * WHEEL_INTERVAL_MS;
       if (due > Date.now()) await sleep(due - Date.now());
@@ -236,6 +266,7 @@ async function measure(name, rate) {
       writeFileSync(`${base}.self-time.txt`, selfTime(profile));
     }
     const trace = JSON.parse((await browser.stopTracing()).toString());
+    tracing = false;
     await session.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     await Promise.race([Promise.all(sends), sleep(5000)]);
 
@@ -249,11 +280,12 @@ async function measure(name, rate) {
     if (!mark) throw new Error(`${name}: the trace has no bench-start mark, so its window cannot be placed`);
     const window = { from: mark, to: mark + (ended - started) * 1000 };
     const scrolled = (await page.evaluate(() => [...document.querySelectorAll('*')].reduce((sum, element) => sum + element.scrollTop, 0))) - scrollBefore;
-    if (!idle && scrolled < height) throw new Error(`${name}: the burst scrolled only ${scrolled}px — the wheel did not reach the list`);
+    if (!idle && scrolled < Math.min(height, scrollportHeight)) throw new Error(`${name}: the burst scrolled only ${scrolled}px — the input did not travel one scrollport`);
     const page_state = await page.evaluate(() => ({ dom_elements: document.querySelectorAll('*').length, playing_at_end: navigator.mediaSession?.playbackState === 'playing' }));
     if (playing && !page_state.playing_at_end) throw new Error(`${name}: playback stopped during the run`);
-    return { ...analyse(events, window), scrolled_px: Math.round(scrolled), moving_ms: Math.round(ended - started), ...page_state };
+    return { ...analyse(events, window), scrolled_px: Math.round(scrolled), scrollport_height: scrollportHeight, moving_ms: Math.round(ended - started), ...page_state };
   } finally {
+    if (tracing) await browser.stopTracing().catch(() => {});
     await context.close();
   }
 }
@@ -268,6 +300,9 @@ const gpu = await (async () => {
   await context.close();
   return renderer;
 })();
+const browserSession = await browser.newBrowserCDPSession();
+const { gpu: gpuInfo } = await browserSession.send('SystemInfo.getInfo');
+await browserSession.detach();
 
 const results = [];
 try {
@@ -278,7 +313,7 @@ try {
       // run that measured nothing, not a result.
       runs.push(await measure(name, rate).catch((error) => { console.error(`retrying: ${error.message}`); return measure(name, rate); }));
     }
-    const row = { surface: name, playing, cpu_rate: rate, ...median(runs), runs: runs.map((run) => ({ presented: run.frames.presented, expected: run.frames.expected, dropped: run.frames.dropped, longest_task: run.main_thread_ms.longest_task })) };
+    const row = { surface: name, playing, cpu_rate: rate, ...median(runs), runs: runs.map((run) => ({ presented: run.frames.presented, expected: run.frames.expected, partial: run.frames.partial, dropped: run.frames.dropped, longest_task: run.main_thread_ms.longest_task })) };
     results.push(row);
     console.error(`${name} ${rate}× ${playing ? 'playing' : 'paused'}: ${row.frames.presented - row.frames.partial}/${row.frames.expected} complete frames, ${row.frames.partial} partial, ${row.frames.dropped} dropped, longest task ${row.main_thread_ms.longest_task} ms`);
   }
@@ -290,8 +325,14 @@ try {
 
 const report = {
   tag, date: new Date().toISOString(), revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim(),
-  fixture: SIZES, viewport: { width, height }, input: { kind: input, passive_probe: process.env.PASSIVE_PROBE === '1', burst_ms: BURST_MS, wheel_interval_ms: WHEEL_INTERVAL_MS, wheel_delta_px: WHEEL_DELTA },
-  browser: browser.version(), gpu, software, host: { cpu: cpus()[0]?.model, cores: cpus().length, load_1m: loadavg()[0] }, repeats, results,
+  fixture: SIZES, viewport: { width, height }, input: { kind: input, passive_probe: process.env.PASSIVE_PROBE === '1', burst_ms: BURST_MS,
+    ...(touch ? { stroke_steps: 12, stroke_interval_ms: WHEEL_INTERVAL_MS, stroke_max_px: 480, native_fling: true }
+      : { wheel_interval_ms: WHEEL_INTERVAL_MS, wheel_delta_px: WHEEL_DELTA }) },
+  bundle_build_id: bundleBuildId,
+  source_worktree_dirty: !!execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: root }).toString().trim(),
+  browser: browser.version(), gpu, gpu_features: gpuInfo.featureStatus, gpu_devices: gpuInfo.devices,
+  compositor, software, scene_probe_css: process.env.SCENE_CSS ? readFileSync(process.env.SCENE_CSS, 'utf8') : null,
+  host: { cpu: cpus()[0]?.model, cores: cpus().length, load_1m: loadavg()[0] }, repeats, results,
 };
 const out = join(root, 'perf', 'results');
 mkdirSync(out, { recursive: true });

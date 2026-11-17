@@ -8,7 +8,8 @@ export function checkBudget(report, maximum = 1800) {
     const row = report.results.find(item => item.surface === surface && item.cpu_rate === 1);
     if (!row) throw new Error(`Missing rendering case: ${surface}`);
     if (!Number.isFinite(row.dom_elements) || row.dom_elements > maximum) throw new Error(`${surface}: DOM budget exceeded (${row.dom_elements}, maximum ${maximum})`);
-    if (row.scrolled_px < report.viewport.height || row.frames.presented < 1) throw new Error(`${surface}: no rendered scroll observed`);
+    if (!Number.isFinite(row.scrolled_px) || row.scrolled_px < report.viewport.height
+        || !Number.isFinite(row.frames?.presented) || row.frames.presented < 1) throw new Error(`${surface}: no rendered scroll observed`);
   }
 }
 

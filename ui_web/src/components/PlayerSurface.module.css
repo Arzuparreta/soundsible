@@ -130,6 +130,15 @@
   transition-delay: 0s;
 }
 
+.backdrop[data-rasterized] {
+  filter: none;
+}
+
+.backdrop canvas {
+  width: 100%;
+  height: 100%;
+}
+
 .open .backdropActive {
   /* Two steps a second. Each one moves the artwork by under a CSS pixel on a
      1920px-wide window (two at 4K), which a 62px blur makes invisible, and

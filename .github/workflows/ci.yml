@@ -266,7 +266,7 @@ jobs:
           SOFTWARE: '1'
           TAG: ci-scene
           KEEP_TRACE: perf/results/traces
-        run: node perf/bench.mjs && node perf/budget.mjs perf/results/ci-scene.json
+        run: node --test perf/ && node perf/bench.mjs && node perf/budget.mjs perf/results/ci-scene.json
       - name: Upload production rendering evidence
         if: always()
         uses: actions/upload-artifact@v7.0.2

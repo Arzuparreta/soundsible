@@ -26,9 +26,12 @@ only to its own fixture server on a free port, never to an engine.
 | `PLAYING` | off | `1` starts a track first and keeps it playing |
 | `REPEATS` | `3` | Runs per case. The reported row is the run with the median longest task; every run's frame counts are kept under `runs` |
 | `SIZE` | `1366x768` | Viewport, at device pixel ratio 1 |
-| `SOFTWARE` | off | `1` forces SwiftShader: the no-GPU case |
+| `SOFTWARE` | off | `1` selects SwiftShader GL emulation; it is distinct from CPU composition |
+| `COMPOSITOR` | `hardware` | `hardware`, `swiftshader` or `cpu` (GPU composition disabled). The report records actual `SystemInfo` feature status as well as the WebGL renderer |
+| `SCENE_CSS` | — | File containing diagnostic scene CSS. Its exact contents are recorded; this is an ablation, never a product setting |
 | `TAG` | `run` | Result file name: `perf/results/<TAG>.json` (ignored by git) |
-| `INPUT` | `wheel` | `none` sends nothing and measures 3.6s of the page at rest |
+| `INPUT` | `wheel` | `touch` sends a paced 12-step, ≤480px upward finger stroke over 192ms, then native fling; `none` measures the page at rest |
+| `PASSIVE_PROBE` | off | Diagnostic `1` forces non-passive move listeners passive, deliberately breaking dismissal cancellation; never a product setting |
 | `KEEP_TRACE` | — | Directory to keep each raw Chrome trace in, for Perfetto |
 | `DIST` | — | Use an existing bundle instead of building one |
 | `PROFILE` | — | Directory for a CPU profile of each burst (`.cpuprofile` and a self-time summary). Builds unminified so functions keep their names; the frame numbers of a profiled run are not comparable |
@@ -44,7 +47,7 @@ engine is.
 
 Input is one 120px wheel event every 16ms for 3.2s (7,500px/s) at the middle
 of the content area, sent through the DevTools protocol, followed by 400ms for
-the frames it caused. A run that scrolls less than one viewport fails instead
+the frames it caused. A run that scrolls less than one actual scrollport fails instead
 of reporting a list that never moved.
 
 **The measured window is the time the list was moving**: from the first wheel
@@ -82,8 +85,10 @@ a pull request cites are copied to `docs/internal/measurements/`.
 
 Run it on an otherwise idle machine: the result file records the 1-minute load
 average at the end of the run, and a browser suite or a build running next to
-it shows up as dropped frames. The GPU string in the result says whether
-compositing was hardware (`ANGLE (NVIDIA …)`) or software (`SwiftShader`).
+it shows up as dropped frames. The report records Chromium GPU feature status: a WebGL renderer string alone
+does not establish composition mode. With GPU composition disabled WebGL can
+still identify itself as SwiftShader. The bundle build ID records the actual
+exported input, including when the worktree has uncommitted source changes.
 
 ## Limits
 
@@ -92,5 +97,10 @@ compositing was hardware (`ANGLE (NVIDIA …)`) or software (`SwiftShader`).
 - `player-browser` opens the full player and scrolls its library browser.
   `player-queue` adds 300 requests through the real song menu before opening
   the player and scrolling the manual lane. Setup is outside the timed window.
-- It is not a CI gate. Shared CI runners have no GPU and uneven CPU; a
-  threshold there would fail on the runner, not on the code.
+- CI runs songs, albums and player-browser against the built production bundle
+  with 6,000 tracks. `budget.mjs` requires bounded DOM (≤1,800 elements), actual
+  scroll and presented frames. Timing and partial frames are uploaded for
+  diagnosis; there is no absolute FPS gate on uneven shared runners.
+- Touch and wheel have different input profiles and cannot be compared as if
+  they were the same gesture. Failed zero-motion injection attempts are rejected.
+  Raw traces need the input categories enabled for native touch arbitration.

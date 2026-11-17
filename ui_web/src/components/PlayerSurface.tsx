@@ -7,6 +7,7 @@ import { t } from '../lib/i18n';
 import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import { createTouchMoveLease } from '../lib/touchMoveLease';
+import { ArtworkBackdrop } from './ArtworkBackdrop';
 import type { NowPlayingMobilePanel } from './NowPlaying';
 import { deferredComponent } from '../lib/deferredComponent';
 import { recoverAutoMode, recoverNowPlaying } from './nowPlayingRecovery';
@@ -400,18 +401,10 @@ export function PlayerSurface() {
         aria-hidden={!nowPlayingOpen()}
         tabIndex={-1}
       >
-        <div
-          classList={{ [styles.backdrop]: true, [styles.backdropActive]: backdrops().active === 'first' }}
-          style={{ 'background-image': backdrops().first ? `url("${backdrops().first}")` : undefined }}
-          data-player-backdrop={backdrops().active === 'first' ? 'active' : 'inactive'}
-          aria-hidden="true"
-        />
-        <div
-          classList={{ [styles.backdrop]: true, [styles.backdropActive]: backdrops().active === 'second' }}
-          style={{ 'background-image': backdrops().second ? `url("${backdrops().second}")` : undefined }}
-          data-player-backdrop={backdrops().active === 'second' ? 'active' : 'inactive'}
-          aria-hidden="true"
-        />
+        <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
+          src={backdrops().first} active={backdrops().active === 'first'} visible={nowPlayingOpen() || closing()} />
+        <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
+          src={backdrops().second} active={backdrops().active === 'second'} visible={nowPlayingOpen() || closing()} />
         <div class={styles.wash} data-player-veil="" aria-hidden="true" />
         <div class={styles.grain} aria-hidden="true" />
 
