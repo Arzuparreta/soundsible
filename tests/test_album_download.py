@@ -3,6 +3,7 @@ runs through the import machinery, and what arrives is filed on the record."""
 
 from __future__ import annotations
 
+import shared.catalog_search as _catalog_search
 from unittest.mock import MagicMock
 
 import pytest
@@ -199,7 +200,7 @@ def test_the_album_routes_download_from_the_catalog_and_report_progress(monkeypa
     from shared.api.routes import catalog
 
     monkeypatch.setattr(catalog, "_deezer_album_profile", lambda deezer_id: PROFILE)
-    monkeypatch.setattr(catalog, "_library_tracks", lambda: [])
+    monkeypatch.setattr(_catalog_search, "library_tracks", lambda: [])
     monkeypatch.setattr("shared.migration.service.start_migration_job", MagicMock())
     app.config["TESTING"] = True
     client = app.test_client()

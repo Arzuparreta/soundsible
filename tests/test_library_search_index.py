@@ -33,10 +33,13 @@ def test_digest_migration_rehashes_without_refolding(library, monkeypatch):
     assert state[1] == library_search.model_fingerprint(search.metadata.tracks)
 
 _ROOT = Path(__file__).resolve().parents[1]
+# The search service is imported as itself; only the route module is loaded by
+# path, because importing anything under `shared.api` starts the application.
+import shared.catalog_search as catalog
 _SPEC = importlib.util.spec_from_file_location("catalog_search_index_under_test", _ROOT / "shared/api/routes/catalog.py")
-catalog = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = catalog
-_SPEC.loader.exec_module(catalog)
+catalog_routes = importlib.util.module_from_spec(_SPEC)
+sys.modules[_SPEC.name] = catalog_routes
+_SPEC.loader.exec_module(catalog_routes)
 # The frozen pre-optimization selector, bound to the current ranking helpers.
 _FROZEN = runpy.run_path(str(_ROOT / "tests/fixtures/local_catalog_reference.py"))["_local_catalog"]
 reference_selector = FunctionType(_FROZEN.__code__, vars(catalog))
@@ -129,19 +132,19 @@ class _Search:
         monkeypatch.setattr(library_search, "candidates", spy)
 
     def _run(self, function, tracks, query):
-        self.monkeypatch.setattr(catalog, "_library_tracks", lambda: tracks)
+        self.monkeypatch.setattr(catalog, "library_tracks", lambda: tracks)
         return function(query, 30)
 
     def indexed_tracks(self):
-        tracks = catalog._LibraryTracks(self.metadata.tracks)
+        tracks = catalog.LibraryTracks(self.metadata.tracks)
         tracks.search_db = self.db
         return tracks
 
     def indexed(self, query):
-        return self._run(catalog._local_catalog, self.indexed_tracks(), query)
+        return self._run(catalog.local_catalog, self.indexed_tracks(), query)
 
     def scanned(self, query):
-        return self._run(catalog._local_catalog, list(self.metadata.tracks), query)
+        return self._run(catalog.local_catalog, list(self.metadata.tracks), query)
 
     def reference(self, query):
         return self._run(reference_selector, list(self.metadata.tracks), query)
@@ -208,9 +211,9 @@ def test_candidate_filter_keeps_every_row_that_scores(library):
                 title = getattr(track, "title", "") or ""
                 artist = track.artist or track.album_artist or ""
                 return (
-                    catalog._text_score(q_folded, q_tokens, title, 100, 70, 42, apply_coverage=True),
-                    catalog._text_score(q_folded, q_tokens, artist, 100, 70, 42, apply_coverage=False),
-                    catalog._text_score(q_folded, q_tokens, track.album or "", 100, 70, 42, apply_coverage=False),
+                    catalog.text_score(q_folded, q_tokens, title, 100, 70, 42, apply_coverage=True),
+                    catalog.text_score(q_folded, q_tokens, artist, 100, 70, 42, apply_coverage=False),
+                    catalog.text_score(q_folded, q_tokens, track.album or "", 100, 70, 42, apply_coverage=False),
                 )
 
             scoring = [position for position, track in enumerate(metadata.tracks) if any(scores(track))]
@@ -479,10 +482,10 @@ def test_concurrent_indexed_searches_equal_the_reference(library):
     queries = _queries(search.metadata, random.Random(9), 30)
     expected = [search.reference(query) for query in queries]
     tracks = search.indexed_tracks()
-    search.monkeypatch.setattr(catalog, "_library_tracks", lambda: tracks)
+    search.monkeypatch.setattr(catalog, "library_tracks", lambda: tracks)
     before = len(search.used)
     with ThreadPoolExecutor(max_workers=8) as pool:
-        actual = list(pool.map(lambda query: catalog._local_catalog(query, 30), queries))
+        actual = list(pool.map(lambda query: catalog.local_catalog(query, 30), queries))
     assert actual == expected
     assert search.used[before:] == [True] * sum(1 for query in queries if fold_text(query))
 
@@ -490,33 +493,36 @@ def test_concurrent_indexed_searches_equal_the_reference(library):
 def test_catalog_search_route_serves_the_same_library_rows(library, monkeypatch):
     search = library(_base())
     lib = SimpleNamespace(db=search.db, metadata=search.metadata, refresh_if_stale=lambda: None)
-    monkeypatch.setattr(catalog, "_get_api", lambda: {"get_library": lambda: lib})
+    monkeypatch.setattr(catalog, "engine_api", lambda: {"get_library": lambda: lib})
     for name in ("_deezer_search", "_musicbrainz_search", "_youtube_search"):
         monkeypatch.setattr(catalog, name, lambda query, limit: [])
     app = Flask(__name__)
-    app.register_blueprint(catalog.catalog_bp)
+    catalog.catalog_memo.clear()
+    app.register_blueprint(catalog_routes.catalog_bp)
     bodies = []
     for db in (search.db, None):
         lib.db = db
-        catalog._catalog_memo.clear()
+        catalog.catalog_memo.clear()
         body = app.test_client().get("/api/catalog/search?q=radio").get_json()
         body.pop("generated_at")
         bodies.append(body)
-    catalog._catalog_memo.clear()
+    catalog.catalog_memo.clear()
     assert search.used == [True]
     assert bodies[0] == bodies[1]
     assert bodies[0]["items"]
 
 
 # Update only together with INDEX_FORMAT, after re-checking the proof below.
-_PINNED = (1, "941cec340f1ed670e70bcde2085427eed6b9ee4871182c96819d925631fef447")
+# Re-pinned when `_score_folded` moved to shared/catalog_search.py as `score_folded`;
+# only its name and the names it calls changed, so INDEX_FORMAT stays.
+_PINNED = (1, "cf58b6bfed2ea9f65a9e619b5ce61d1c19774e34c31a9b2f2103b4394542cef2")
 
 
 def test_matching_semantics_are_pinned_to_the_index_format():
     functions = (
         text_utils.collapse_text, text_utils.normalize_text, text_utils.fold_text, text_utils.match_tokens,
         text_utils.strip_release_junk, library_search.search_title, library_search.search_text,
-        library_search.search_row, library_search._loose, library_search._candidate_query, catalog._score_folded,
+        library_search.search_row, library_search._loose, library_search._candidate_query, catalog.score_folded,
     )
     parts = [inspect.getsource(function) for function in functions]
     parts += [text_utils._RELEASE_JUNK.pattern, str(text_utils._RELEASE_JUNK.flags),

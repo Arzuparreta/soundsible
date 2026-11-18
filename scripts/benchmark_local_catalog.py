@@ -41,7 +41,7 @@ def main():
     parser.add_argument("--sizes", nargs="+", type=int, default=[1000, 10000, 50000])
     parser.add_argument("--repeats", type=int, default=3)
     args = parser.parse_args()
-    spec = importlib.util.spec_from_file_location("benchmark_catalog", ROOT / "shared/api/routes/catalog.py")
+    spec = importlib.util.spec_from_file_location("benchmark_catalog", ROOT / "shared/catalog_search.py")
     catalog = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(catalog)
     frozen = runpy.run_path(str(ROOT / "tests/fixtures/local_catalog_reference.py"))["_local_catalog"]
@@ -51,10 +51,10 @@ def main():
             id=f"t{i:06}", title=f"Song {i}", artist=f"Artist {i // 100}", album=f"Album {i // 10}",
             duration=180, file_hash=f"hash{i}", original_filename=f"{i}.mp3", file_size=1000, bitrate=320, format="mp3",
         ) for i in range(size)]
-        catalog._library_tracks = lambda: tracks
+        catalog.library_tracks = lambda: tracks
         for query in ("artist", "song", "album 17", "absent"):
             before, old = measure(reference, query, args.repeats)
-            after, new = measure(catalog._local_catalog, query, args.repeats)
+            after, new = measure(catalog.local_catalog, query, args.repeats)
             assert before == after, (size, query)
             print(json.dumps({"tracks": size, "query": query, "before": old, "after": new}), flush=True)
 

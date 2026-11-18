@@ -1,5 +1,7 @@
 """Route-level integration tests for POST /api/discovery/save."""
 
+import shared.music_candidates as _music_candidates
+import shared.dj.planning as _dj_planning
 import importlib
 import importlib.util
 import sys
@@ -31,6 +33,7 @@ parse_intake_item = _dq.parse_intake_item
 # each module its own copy of the shared blueprint.
 import shared.api.routes.discovery as _disc_routes
 import shared.api.routes.auto_mode as _auto_mode
+from shared.dj.contracts import analysis_summary
 import shared.api.routes.discovery_feed as _disc_feed
 discovery_bp = _disc_routes.discovery_bp
 
@@ -41,6 +44,19 @@ from unittest.mock import patch
 import pytest
 from flask import Flask
 
+
+
+def _plan_body(items: list[dict]) -> dict:
+    """A complete `/api/discovery/music/plan` answer around `items`."""
+    complete = [{
+        "title": "", "artist": "", "source": "library" if item.get("track_id") else "preview", "source_pool": "local",
+        "recommendation_identity": f"music:track:{item.get('id')}", "recommendation_source": "auto_mode", **item,
+    } for item in items]
+    return {
+        "v": 1, "plan_id": "base-plan", "intent": "auto_mode", "profile": "balanced", "seed_identity": "seed",
+        "items": complete, "degraded": False, "pool_counts": {"local": 0, "related": len(items), "discovery": 0},
+        "generated_at": 1,
+    }
 
 def _fake_parse_intake(item: dict):
     """Minimal parse_intake_item stand-in that accepts ytmusic_search items."""
@@ -259,13 +275,14 @@ def test_dj_plan_eventually_places_an_exact_request_and_prefers_it_next(tmp_path
         "outro_cue": 130,
         "intro_cue": 8,
         "bar_seconds": 2,
+        "analysed": True,
     }
     mock_api = _mock_api()
     mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
         patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
-        patch.object(_auto_mode, "_dj_item_analysis", return_value=features),
+        patch.object(_dj_planning, "item_analysis", return_value=features),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -329,14 +346,15 @@ def test_dj_plan_keeps_an_artist_request_until_a_playable_track_fulfils_it(tmp_p
         "outro_cue": 130,
         "intro_cue": 8,
         "bar_seconds": 1.9,
+        "analysed": True,
     }
     mock_api = _mock_api()
     mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
         patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
         patch.object(_auto_mode, "_planner_artist_candidates", return_value=[target]),
-        patch.object(_auto_mode, "_dj_item_analysis", return_value=features),
+        patch.object(_dj_planning, "item_analysis", return_value=features),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -387,10 +405,10 @@ def test_auto_library_pool_only_promotes_tracks_inside_the_session_path(tmp_path
     }]
 
     with (
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)),
-        patch.object(_auto_mode, "_planner_related_artist_pool", return_value=([], [])),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk(related, False, False)),
+        patch.object(_music_candidates, "related_artist_pool", return_value=([], [])),
     ):
-        pools, degraded = _disc_routes._build_auto_pools(
+        pools, degraded = _music_candidates.build_auto_pools(
             metadata,
             [{"title": "Seed", "artist": "Techno Artist", "youtube_id": "seedvideo01"}],
             favourite_ids={"chant-favourite"},
@@ -425,7 +443,7 @@ def test_music_plan_returns_server_ordered_playable_radio_items(tmp_path):
     mock_api["get_downloader"].return_value.downloader.get_related_videos.return_value = related
 
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
         patch.object(
             _auto_mode,
             "_build_discovery_feed_body",
@@ -954,11 +972,11 @@ def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
     mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     queued: list[str] = []
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
         patch.object(_auto_mode, "_build_music_plan", return_value=(base, 200)),
-        patch.object(_auto_mode, "_dj_source_path", return_value="/library/candidate.mp3"),
-        patch.object(_auto_mode, "cached_analysis", return_value=None),
-        patch.object(_auto_mode, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
+        patch.object(_dj_planning, "source_path", return_value="/library/candidate.mp3"),
+        patch.object(_dj_planning, "cached_analysis", return_value=None),
+        patch.object(_dj_planning, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
         patch("shared.dj.store._decode_measured", side_effect=AssertionError("decoded during a plan request")),
     ):
         response = _make_app().test_client().post(
@@ -987,8 +1005,8 @@ def test_dj_plan_v6_ignores_legacy_boundaries_and_walks_explicit_sources(tmp_pat
         "source": "preview", "source_pool": "related", "recommendation_identity": "music:youtube:related001",
     }]
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)) as graph,
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk(related, False, False)) as graph,
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -1037,8 +1055,8 @@ def test_dj_plan_v6_keeps_hour_long_recordings_out_of_a_route_of_songs(tmp_path)
         "recommendation_identity": "music:youtube:longset0001",
     }]
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk(related, False, False)),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -1062,8 +1080,8 @@ def test_dj_plan_v6_still_opens_a_source_made_only_of_long_recordings(tmp_path):
     mock_api = _mock_api()
     mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -1085,8 +1103,8 @@ def test_dj_plan_v6_chooses_an_opening_from_a_source_when_there_is_no_seed(tmp_p
     mock_api = _mock_api()
     mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -1130,15 +1148,15 @@ def test_dj_plan_v6_analysis_does_not_select_music_or_steer_the_opening(tmp_path
     def plan(analysed: bool) -> dict:
         def analysis(_metadata, item, *, schedule=False):
             if not analysed:
-                return _auto_mode._dj_fallback_analysis(220)
+                return _dj_planning.fallback_analysis(220)
             rates = {"calm": 0.5, "middle": 2.0, "busy": 5.0, "loud": 8.0}
             return {"duration": 220, "bpm": 120, "key": "C", "mode": "major", "confidence": 0.9,
                     "note_rate": rates.get(str(item.get("track_id") or item.get("id")), 3.0), "analysed": True}
 
         with (
-            patch.object(_auto_mode, "_get_api", return_value=mock_api),
-            patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
-            patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+            patch.object(_music_candidates, "engine_api", return_value=mock_api),
+            patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
+            patch.object(_dj_planning, "item_analysis", side_effect=analysis),
         ):
             response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
                 "session_id": "no-arc", "sources": [{"id": "album:chosen", "label": "Chosen", "tracks": tracks}],
@@ -1172,14 +1190,14 @@ def test_dj_plan_v6_selects_before_analysis_and_preserves_cold_slots(tmp_path, w
         key = item["id"]
         read.append(key)
         if key not in known:
-            return _auto_mode._dj_fallback_analysis(240)
+            return _dj_planning.fallback_analysis(240)
         return {"analysed": True, "bpm": 120, "key": "C", "mode": "major", "duration": 240,
                 "confidence": .9, "note_rate": float(len(key)), "loudness_lufs": -14., "spectral_flatness": .05}
 
     with (
-        patch.object(_auto_mode, "_get_api", return_value=api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
-        patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+        patch.object(_music_candidates, "engine_api", return_value=api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
+        patch.object(_dj_planning, "item_analysis", side_effect=analysis),
     ):
         client = _make_app().test_client()
         def plan():
@@ -1228,10 +1246,10 @@ def test_dj_plan_v6_reorders_decoded_audio_and_returns_chained_plans(tmp_path):
               for key in ("seed", "a", "b")}
     paths = {key: tmp_path / f"{key}.wav" for key in tracks}
     with (
-        patch.object(_auto_mode, "_get_api", return_value=api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
-        patch.object(_auto_mode, "_dj_source_path", side_effect=lambda _, item: paths[item["id"]]),
-        patch.object(_auto_mode, "request_analysis"),
+        patch.object(_music_candidates, "engine_api", return_value=api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
+        patch.object(_dj_planning, "source_path", side_effect=lambda _, item: paths[item["id"]]),
+        patch.object(_dj_planning, "request_analysis"),
     ):
         client = _make_app().test_client()
         payload = {"session_id": "decoded", "seed": tracks["seed"],
@@ -1252,10 +1270,10 @@ def test_dj_plan_v6_reorders_decoded_audio_and_returns_chained_plans(tmp_path):
         assert response.status_code == 200
         body = response.get_json()
         assert [row["id"] for row in body["items"]] == [good, bad]
-        assert body["seed_analysis"] == _auto_mode._dj_analysis_summary(features["seed"])
+        assert body["seed_analysis"] == analysis_summary(features["seed"])
         previous = features["seed"]
         for row in body["items"]:
-            assert row["analysis"] == _auto_mode._dj_analysis_summary(features[row["id"]])
+            assert row["analysis"] == analysis_summary(features[row["id"]])
             assert row["transition"] == plan_transition(previous, features[row["id"]])
             previous = features[row["id"]]
 
@@ -1280,9 +1298,9 @@ def test_dj_plan_ignores_the_direction_older_clients_still_send(tmp_path):
 
     def plan(extra: dict) -> list[str]:
         with (
-            patch.object(_auto_mode, "_get_api", return_value=mock_api),
+            patch.object(_music_candidates, "engine_api", return_value=mock_api),
             patch.object(_auto_mode, "_build_music_plan", return_value=(json.loads(json.dumps(base)), 200)) as built,
-            patch.object(_auto_mode, "_dj_item_analysis", return_value=features),
+            patch.object(_dj_planning, "item_analysis", return_value=features),
         ):
             response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
                 "dj_profile": "adaptive", "seed": {"id": "seed", "title": "Seed", "artist": "Artist", "duration": 180},
@@ -1321,8 +1339,8 @@ def test_dj_plan_v6_walks_from_sources_and_applies_exact_exclusions(tmp_path):
         "limit": 4,
     }
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)) as graph,
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk(related, False, False)) as graph,
     ):
         root_excluded = _make_app().test_client().post("/api/discovery/music/dj-plan", json=payload)
         related_excluded = _make_app().test_client().post(
@@ -1347,8 +1365,8 @@ def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_
     mock_api = _mock_api()
     mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-place",
@@ -1389,7 +1407,7 @@ def test_dj_place_never_bridges_through_the_requested_or_playing_song_under_anot
 
     def analysis(_metadata, item, *, schedule=False):
         key = str(item.get("track_id") or item.get("youtube_id") or item.get("id") or "")
-        return measured.get(key, _auto_mode._dj_fallback_analysis(float(item.get("duration") or 0)))
+        return measured.get(key, _dj_planning.fallback_analysis(float(item.get("duration") or 0)))
 
     def copy(track_id: str, video: str, title: str, artist: str) -> dict:
         return {"id": video, "track_id": track_id, "youtube_id": video, "title": title, "artist": artist,
@@ -1399,9 +1417,9 @@ def test_dj_place_never_bridges_through_the_requested_or_playing_song_under_anot
 
     related = [copy("wanted", "wantedvid01", "Wanted", "Listener"), copy("seed", "seedvideo01", "Seed", "Artist")]
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)),
-        patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk(related, False, False)),
+        patch.object(_dj_planning, "item_analysis", side_effect=analysis),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-place",
@@ -1440,8 +1458,8 @@ def _post_repair(body: dict, related=None):
     mock_api = _mock_api()
     mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related or [], False, False)),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk(related or [], False, False)),
     ):
         return _make_app().test_client().post("/api/discovery/music/dj-repair", json=body)
 
@@ -1476,7 +1494,7 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
 
     def analysis(_metadata, item, *, schedule=False):
         key = str(item.get("track_id") or item.get("youtube_id") or item.get("id") or "")
-        return measured.get(key, _auto_mode._dj_fallback_analysis(float(item.get("duration") or 0)))
+        return measured.get(key, _dj_planning.fallback_analysis(float(item.get("duration") or 0)))
 
     related = [{
         "id": "bridge01", "youtube_id": "bridge01", "title": "Bridge", "artist": "Other",
@@ -1484,7 +1502,7 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
         "recommendation_identity": "music:youtube:bridge01", "recommendation_source": "auto_mode",
         "score": 0.9, "semantic_score": 0.9, "external_ids": {"youtube_id": "bridge01"},
     }]
-    with patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis):
+    with patch.object(_dj_planning, "item_analysis", side_effect=analysis):
         response = _post_repair(
             {
                 "seed": _REPAIR_SEED,
@@ -1513,11 +1531,11 @@ def test_dj_repair_never_decodes_audio_on_the_interaction_path(tmp_path):
     mock_api = _mock_api()
     mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
-        patch.object(_auto_mode, "_dj_source_path", return_value="/library/candidate.mp3"),
-        patch.object(_auto_mode, "cached_analysis", return_value=None),
-        patch.object(_auto_mode, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
+        patch.object(_dj_planning, "source_path", return_value="/library/candidate.mp3"),
+        patch.object(_dj_planning, "cached_analysis", return_value=None),
+        patch.object(_dj_planning, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
         patch("shared.dj.store._decode_measured", side_effect=AssertionError("decoded during a repair request")),
     ):
         response = _make_app().test_client().post(
@@ -1608,9 +1626,9 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
         "to": {"id": "b", "track_id": "b", "title": "B", "artist": "Artist", "duration": 220},
     }
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_dj_source_path", return_value="/library/track.mp3"),
-        patch.object(_auto_mode, "cached_analysis", return_value=measured),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_dj_planning, "source_path", return_value="/library/track.mp3"),
+        patch.object(_dj_planning, "cached_analysis", return_value=measured),
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-transition", json=pair)
 
@@ -1624,8 +1642,8 @@ def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
     # Nothing measured yet: answer immediately with the conservative plan
     # rather than making the player wait for a decode it cannot use in time.
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_dj_source_path", return_value=None),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_dj_planning, "source_path", return_value=None),
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-transition", json=pair)
     assert response.get_json()["measured"] is False
@@ -1661,9 +1679,9 @@ def test_measured_audio_sections_reach_route_and_refinement_without_client_repla
         refs[key] = {"id": key, "track_id": key, "title": key, "artist": "Synthetic", "duration": 240}
         paths[key] = aac
         analyses[key] = dj_engine.analyse_audio(aac, dj_engine.analysis_identity(refs[key]))
-    with (patch.object(_auto_mode, "_get_api", return_value=api),
-          patch.object(_auto_mode, "_dj_source_path", side_effect=lambda _, item: paths[item["id"]]),
-          patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False))):
+    with (patch.object(_music_candidates, "engine_api", return_value=api),
+          patch.object(_dj_planning, "source_path", side_effect=lambda _, item: paths[item["id"]]),
+          patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False))):
         client = _make_app().test_client()
         route = client.post("/api/discovery/music/dj-plan", json={"session_id": "sections", "seed": refs["outgoing"],
             "sources": [{"id": "source", "tracks": [refs["incoming"]]}], "limit": 1})
@@ -1683,7 +1701,7 @@ def test_measured_audio_sections_reach_route_and_refinement_without_client_repla
                 response = client.post(f"/api/discovery/music/{endpoint}", json=payload)
                 assert response.status_code == 200, (endpoint, profile, response.get_json())
                 assert response.get_json()["items"][0]["transition"] == expected, (endpoint, profile)
-            with patch.object(_auto_mode, "_build_music_plan", return_value=({"items": [refs["incoming"]]}, 200)):
+            with patch.object(_auto_mode, "_build_music_plan", return_value=(_plan_body([refs["incoming"]]), 200)):
                 legacy = client.post("/api/discovery/music/dj-plan", json={**common, "limit": 1})
             assert legacy.status_code == 200
             assert legacy.get_json()["items"][0]["transition"] == expected
@@ -1745,10 +1763,10 @@ def test_dj_transition_prefers_relative_keys_over_parallel_and_mixed_mode_fifths
     client = _make_app().test_client()
     plans = {}
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_dj_source_path", side_effect=lambda metadata, item: item["id"]),
-        patch.object(_auto_mode, "cached_analysis", side_effect=lambda path, identity: measured[path]),
-        patch.object(_auto_mode, "request_analysis", side_effect=AssertionError("already measured")),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_dj_planning, "source_path", side_effect=lambda metadata, item: item["id"]),
+        patch.object(_dj_planning, "cached_analysis", side_effect=lambda path, identity: measured[path]),
+        patch.object(_dj_planning, "request_analysis", side_effect=AssertionError("already measured")),
     ):
         for incoming in ("relative", "parallel", "mixed-fifth"):
             response = client.post("/api/discovery/music/dj-transition", json={
@@ -1774,8 +1792,8 @@ def test_dj_collection_places_every_occurrence_beyond_the_analysis_window(tmp_pa
         for index in range(24)
     ]
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-place", json={
             "seed": {"id": "seed", "title": "Seed", "artist": "Artist"},
@@ -1809,7 +1827,7 @@ def test_dj_collection_keeps_a_selected_seam_beyond_the_analysis_window(tmp_path
          "requested_queue_id": f"wanted-{index}"}
         for index in range(24)
     ]
-    with patch.object(_auto_mode, "_get_api", return_value=mock_api):
+    with patch.object(_music_candidates, "engine_api", return_value=mock_api):
         response = _make_app().test_client().post("/api/discovery/music/dj-place", json={
             "seed": _REPAIR_SEED, "route": route, "before_queue_id": "q-23", "requests": requests,
         })
@@ -1847,8 +1865,8 @@ def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path
     ]}
     body = {"source_policy": "explicit", "seed": seed, "sources": [source], "heard": [seed]}
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(_house_related(), False, False)) as graph,
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk(_house_related(), False, False)) as graph,
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-plan", json=body)
         assert response.status_code == 200
@@ -1856,7 +1874,7 @@ def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path
         assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens"]
         assert all(item["recommendation_identity"] != "music:track:rock" for item in response.get_json()["items"])
         graph.reset_mock()
-        bridges = _auto_mode._dj_place_bridge_pool(None, body, set())
+        bridges = _dj_planning.place_bridge_pool(None, body, set())
         assert bridges
         assert graph.call_count == 1
         assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens"]
@@ -1882,10 +1900,10 @@ def test_explicit_dj_route_continues_from_confirmed_exploration(tmp_path):
         "source": "library", "source_pool": "local", "recommendation_identity": "music:track:rescue",
     }]
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
         patch.object(
-            _auto_mode, "_planner_context_related",
-            side_effect=[_auto_mode._GraphWalk([], False, False), _auto_mode._GraphWalk(recovered, False, False)],
+            _music_candidates, "context_related",
+            side_effect=[_music_candidates.GraphWalk([], False, False), _music_candidates.GraphWalk(recovered, False, False)],
         ) as graph,
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
@@ -1916,10 +1934,10 @@ def test_explicit_dj_bridges_use_sources_and_confirmed_exploration(tmp_path):
     }]
     body = {"source_policy": "explicit", "sources": [source], "heard": [heard], "exploration": [heard]}
     with patch.object(
-        _auto_mode, "_planner_context_related",
-        return_value=_auto_mode._GraphWalk(bridge, False, False),
+        _music_candidates, "context_related",
+        return_value=_music_candidates.GraphWalk(bridge, False, False),
     ) as graph:
-        candidates = _auto_mode._dj_place_bridge_pool(None, body, set())
+        candidates = _dj_planning.place_bridge_pool(None, body, set())
     assert graph.call_count == 1
     assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens", "Extremoduro"]
     assert [item["recommendation_identity"] for item, _ in candidates] == ["music:track:seam"]
@@ -1932,8 +1950,8 @@ def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):
     rock = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
     house = {"id": "house", "track_id": "house", "title": "Gecko", "artist": "Oliver Heldens"}
     with (
-        patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)) as graph,
+        patch.object(_music_candidates, "engine_api", return_value=mock_api),
+        patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)) as graph,
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
             "source_policy": "explicit", "seed": rock, "heard": [rock],
@@ -1952,10 +1970,10 @@ def test_dj_empty_result_distinguishes_exhaustion_from_provider_failure(tmp_path
     api = _mock_api()
     api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     track = {"id": "one", "title": "One", "artist": "Artist"}
-    with patch.object(_auto_mode, "_get_api", return_value=api), patch.object(
-        _auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], failed, False),
+    with patch.object(_music_candidates, "engine_api", return_value=api), patch.object(
+        _music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], failed, False),
     ):
-        body, status = _auto_mode._build_music_set_route({
+        body, status = _dj_planning.build_music_set_route({
             "seed": track, "sources": [{"tracks": [track]}], "source_policy": "explicit",
             "exclude": ["music:track:one"], "exploration": [], "direction_revision": 4,
         })
@@ -1982,17 +2000,17 @@ def test_dj_explores_even_before_sources_run_out_and_continues_thirty_routes(tmp
     def graph(_metadata, roots, **_kwargs):
         rows = {row["id"]: row for root in roots
                 for row in [track(0), track(int(root["id"][1:]) + 1)]}
-        return _auto_mode._GraphWalk(list(rows.values()), False, False)
+        return _music_candidates.GraphWalk(list(rows.values()), False, False)
 
     data = {"seed": track(0), "sources": [{"id": "source", "tracks": [track(0)]}],
             "source_policy": "explicit", "heard": [track(0)], "exploration": [],
             "exclude": ["music:track:t0"], "session_id": "continuity"}
-    with patch.object(_auto_mode, "_get_api", return_value=api), patch.object(
-        _auto_mode, "_planner_context_related", side_effect=graph,
+    with patch.object(_music_candidates, "engine_api", return_value=api), patch.object(
+        _music_candidates, "context_related", side_effect=graph,
     ) as walk:
         for segment in range(30):
             data["segment_index"] = segment
-            body, status = _auto_mode._build_music_set_route(data)
+            body, status = _dj_planning.build_music_set_route(data)
             assert status == 200
             assert body["items"], segment
             played = body["items"][-1]
@@ -2003,8 +2021,8 @@ def test_dj_explores_even_before_sources_run_out_and_continues_thirty_routes(tmp
         # With a full influence pool the moving roots must still be queried.
         walk.reset_mock()
         walk.side_effect = None
-        walk.return_value = _auto_mode._GraphWalk(_house_related(), False, False)
-        _auto_mode._build_music_set_route({**data, "exclude": []})
+        walk.return_value = _music_candidates.GraphWalk(_house_related(), False, False)
+        _dj_planning.build_music_set_route({**data, "exclude": []})
         assert walk.call_count == 2
 
 
@@ -2018,11 +2036,11 @@ def test_partial_graph_failure_is_not_reported_as_exhaustion(tmp_path):
     database = MagicMock()
     database.get_related_mixes.return_value = {'cached': []}
     with (
-        patch.object(_auto_mode, 'instance_db', return_value=database),
-        patch.object(_auto_mode, '_planner_video_id', side_effect=lambda _, row: row['id']),
-        patch.object(_auto_mode, '_planner_related_future', return_value=failed),
+        patch.object(_music_candidates, 'instance_db', return_value=database),
+        patch.object(_music_candidates, 'video_id_for', side_effect=lambda _, row: row['id']),
+        patch.object(_music_candidates, 'related_future', return_value=failed),
     ):
-        walk = _auto_mode._planner_context_related(
+        walk = _music_candidates.context_related(
             None, [{'id': 'cached'}, {'id': 'uncached'}], personalise=False,
         )
     assert walk.items == []
@@ -2037,11 +2055,11 @@ def test_impend_seed_cannot_be_its_own_route(tmp_path, warming, exclude):
     api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     seed = {"id": "FgGtOCKWLwI", "title": "Impend", "artist": "Artist", "source": "preview"}
     with (
-        patch.object(_auto_mode, "_get_api", return_value=api),
-        patch.object(_auto_mode, "_planner_context_related",
-                     return_value=_auto_mode._GraphWalk([], warming, warming)),
+        patch.object(_music_candidates, "engine_api", return_value=api),
+        patch.object(_music_candidates, "context_related",
+                     return_value=_music_candidates.GraphWalk([], warming, warming)),
     ):
-        body, status = _auto_mode._build_music_set_route({
+        body, status = _dj_planning.build_music_set_route({
             "seed": seed, "sources": [{"tracks": [seed]}], "exclude": exclude,
         })
     assert status == 200
@@ -2070,20 +2088,20 @@ def test_cold_graph_joins_inflight_fetch_then_uses_persisted_result(tmp_path):
         return rows
 
     with (
-        patch.object(_auto_mode, "_planner_uncached_related", side_effect=fetch) as provider,
-        patch.object(_auto_mode, "_AUTO_GRAPH_WAIT_SEC", 0.01),
+        patch.object(_music_candidates, "uncached_related", side_effect=fetch) as provider,
+        patch.object(_music_candidates, "AUTO_GRAPH_WAIT_SEC", 0.01),
     ):
         try:
-            first = _auto_mode._planner_context_related(None, [seed], personalise=False)
+            first = _music_candidates.context_related(None, [seed], personalise=False)
             assert started.wait(1)
-            second = _auto_mode._planner_context_related(None, [seed], personalise=False)
+            second = _music_candidates.context_related(None, [seed], personalise=False)
             assert first.warming and second.warming
             assert first.cache_miss == 1
             assert provider.call_count == 1
-            future = _auto_mode._planner_related_future(seed["id"])
+            future = _music_candidates.related_future(seed["id"])
             release.set()
             future.result(timeout=5)
-            warm = _auto_mode._planner_context_related(None, [seed], personalise=False)
+            warm = _music_candidates.context_related(None, [seed], personalise=False)
             assert not warm.warming and not warm.degraded
             assert warm.cache_hit == 1
             assert warm.items[0]["id"] == "abc11111111"
@@ -2098,10 +2116,10 @@ def test_graph_timeout_does_not_cancel_queued_work(tmp_path):
     _make_runtime(tmp_path)
     pending = Future()
     with (
-        patch.object(_auto_mode, '_planner_related_future', return_value=pending),
-        patch.object(_auto_mode, '_AUTO_GRAPH_WAIT_SEC', 0),
+        patch.object(_music_candidates, 'related_future', return_value=pending),
+        patch.object(_music_candidates, 'AUTO_GRAPH_WAIT_SEC', 0),
     ):
-        walk = _auto_mode._planner_context_related(None, [
+        walk = _music_candidates.context_related(None, [
             {'id': 'FgGtOCKWLwI', 'source': 'preview'},
         ], personalise=False)
     assert walk.warming and walk.degraded
@@ -2114,10 +2132,10 @@ def test_heard_relaxation_preserves_last_two_tracks(tmp_path):
     api['get_library'].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     tracks = [{'id': str(n), 'title': str(n), 'artist': 'Artist'} for n in range(4)]
     with (
-        patch.object(_auto_mode, '_get_api', return_value=api),
-        patch.object(_auto_mode, '_planner_context_related', return_value=_auto_mode._GraphWalk([], False, False)),
+        patch.object(_music_candidates, 'engine_api', return_value=api),
+        patch.object(_music_candidates, 'context_related', return_value=_music_candidates.GraphWalk([], False, False)),
     ):
-        body, status = _auto_mode._build_music_set_route({
+        body, status = _dj_planning.build_music_set_route({
             'seed': tracks[-1], 'sources': [{'tracks': tracks}], 'heard': tracks,
             'exclude': ['0'],
         })
@@ -2160,11 +2178,11 @@ def test_dj_cohort_is_bounded_identical_for_cold_and_warm_pools_and_reports_cove
     prepared = []
     def features(_metadata, item, *, schedule=False):
         return {"analysed": ready, "duration": 240, "bpm": 120, "key": "C", "mode": "major", "confidence": .9}
-    with (patch.object(_auto_mode, "_get_api", return_value=api),
-          patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
-          patch.object(_auto_mode, "_dj_item_analysis", side_effect=features),
-          patch.object(_auto_mode, "_dj_prepare_cohort", side_effect=lambda _, rows: prepared.append([r["id"] for r in rows])),
-          caplog.at_level("INFO", logger=_auto_mode.__name__)):
+    with (patch.object(_music_candidates, "engine_api", return_value=api),
+          patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
+          patch.object(_dj_planning, "item_analysis", side_effect=features),
+          patch.object(_dj_planning, "prepare_cohort", side_effect=lambda _, rows: prepared.append([r["id"] for r in rows])),
+          caplog.at_level("INFO", logger=_dj_planning.__name__)):
         client = _make_app().test_client()
         ready = False
         cold = client.post("/api/discovery/music/dj-plan", json=data).get_json()
@@ -2197,13 +2215,13 @@ def test_dj_plan_v6_inserts_a_bridge_only_when_every_frozen_candidate_is_measure
     def features(_metadata, item, *, schedule=False):
         key = item["id"]
         if key not in known:
-            return _auto_mode._dj_fallback_analysis(240)
+            return _dj_planning.fallback_analysis(240)
         return _pulsed({"analysed": True, "duration": 240, "bpm": tempos[key], "key": "C", "mode": "major", "confidence": .9, "tempo_confidence": 1.})
     cohort = []
-    with (patch.object(_auto_mode, "_get_api", return_value=api),
-          patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
-          patch.object(_auto_mode, "_dj_item_analysis", side_effect=features),
-          patch.object(_auto_mode, "_dj_prepare_cohort", side_effect=lambda _, rows: cohort.extend(r["id"] for r in rows))):
+    with (patch.object(_music_candidates, "engine_api", return_value=api),
+          patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
+          patch.object(_dj_planning, "item_analysis", side_effect=features),
+          patch.object(_dj_planning, "prepare_cohort", side_effect=lambda _, rows: cohort.extend(r["id"] for r in rows))):
         client = _make_app().test_client()
         cold = client.post("/api/discovery/music/dj-plan", json=data).get_json()
         target = cold["items"][0]["id"]
@@ -2241,7 +2259,7 @@ def test_committed_preview_is_analysed_before_refinement_and_serving_ranges_keep
     def measure(path, identity, **kwargs):
         queued.append(identity)
         dj_engine.analyse_audio(path, identity, **kwargs)
-    with (patch.object(_auto_mode, "_get_api", return_value=api),
+    with (patch.object(_music_candidates, "engine_api", return_value=api),
           patch("shared.dj.store.request_analysis", side_effect=measure)):
         client = _make_app().test_client()
         assert client.post("/api/discovery/music/dj-transition", json={"from": ref, "to": ref}).get_json()["measured"] is False
@@ -2269,12 +2287,12 @@ def test_dj_preparation_queues_only_the_frozen_previews_and_keeps_refresh_contra
     rows = [{"id": "local", "track_id": "local"},
             {"id": "candidate01", "youtube_id": "candidate01", "discovery_youtube_id": "discovery01", "source": "preview"},
             {"id": "candidate02", "youtube_id": "candidate02", "source": "preview"}]
-    with (patch.object(_auto_mode, "_get_api", return_value=api),
-          patch.object(_auto_mode, "_dj_item_analysis") as analyse,
+    with (patch.object(_music_candidates, "engine_api", return_value=api),
+          patch.object(_dj_planning, "item_analysis") as analyse,
           patch.object(preview_cache, "request_prefetch") as prefetch,
           patch.object(playback.preview_streams, "resolve", return_value="resolved") as resolve,
           patch.object(playback.preview_streams, "invalidate") as invalidate):
-        _auto_mode._dj_prepare_cohort(None, rows)
+        _dj_planning.prepare_cohort(None, rows)
         assert [call.args[1] for call in analyse.call_args_list] == rows
         assert all(call.kwargs == {"schedule": True} for call in analyse.call_args_list)
         assert prefetch.call_args.args == (["candidate01", "candidate02"],)
@@ -2285,7 +2303,7 @@ def test_dj_preparation_queues_only_the_frozen_previews_and_keeps_refresh_contra
         resolve.assert_called_with(api["get_downloader"], "candidate01", skip_fast_path=True)
         prefetch.reset_mock()
         with patch.object(preview_cache, "cache_limit_bytes", return_value=0):
-            _auto_mode._dj_prepare_cohort(None, rows)
+            _dj_planning.prepare_cohort(None, rows)
         prefetch.assert_not_called()
 
 
@@ -2299,7 +2317,7 @@ def test_v6_analysis_summary_keeps_sixteen_fast_long_starts_within_native_respon
                 "phrases": [{"start": t, "bars": 8, "evidence": "counted"} for t in beats[::32]]}
     full = {"seed_analysis": analysis, "items": [{"analysis": analysis}] * 16}
     assert len(json.dumps(full).encode()) > 262144
-    summary = _auto_mode._dj_analysis_summary(analysis)
+    summary = analysis_summary(analysis)
     compact = {"seed_analysis": summary, "items": [{"analysis": summary}] * 16}
     assert len(json.dumps(compact).encode()) < 16384
     assert summary["bpm"] == 220 and summary["key"] == "C" and summary["analysed"] is True
@@ -2326,10 +2344,10 @@ def test_measured_aac_echo_period_survives_route_and_refinement(tmp_path, bpm):
         paths[key] = aac
         measured = dj_engine.analyse_audio(aac, dj_engine.analysis_identity(refs[key]))
         assert measured["analysed"] is True
-    with (patch.object(_auto_mode, "_get_api", return_value=api),
-          patch.object(_auto_mode, "_dj_source_path", side_effect=lambda _, item: paths[item["id"]]),
-          patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
-          patch.object(_auto_mode, "_build_music_plan", return_value=({"items": [refs["incoming"]]}, 200))):
+    with (patch.object(_music_candidates, "engine_api", return_value=api),
+          patch.object(_dj_planning, "source_path", side_effect=lambda _, item: paths[item["id"]]),
+          patch.object(_music_candidates, "context_related", return_value=_music_candidates.GraphWalk([], False, False)),
+          patch.object(_auto_mode, "_build_music_plan", return_value=(_plan_body([refs["incoming"]]), 200))):
         client = _make_app().test_client()
         # Both planning paths and refinement now choose echo without a profile.
         route = client.post("/api/discovery/music/dj-plan", json={"session_id": "echo", "seed": refs["outgoing"],
@@ -2391,10 +2409,10 @@ def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, 
                          (dj_engine.analysis_identity(refs[key]), store._source_stamp(aac), ANALYSER_VERSION - 1,
                           json.dumps({'version': ANALYSER_VERSION - 1, 'bpm': 120, 'bar_seconds': 2., 'analysed': True}), 0))
         assert dj_engine.cached_analysis(aac, dj_engine.analysis_identity(refs[key])) is None
-    with (patch.object(_auto_mode, '_get_api', return_value=api),
-          patch.object(_auto_mode, '_dj_source_path', side_effect=lambda _, item: paths[item['id']]),
-          patch.object(_auto_mode, 'request_analysis'),
-          patch.object(_auto_mode, '_planner_context_related', return_value=_auto_mode._GraphWalk([], False, False))):
+    with (patch.object(_music_candidates, 'engine_api', return_value=api),
+          patch.object(_dj_planning, 'source_path', side_effect=lambda _, item: paths[item['id']]),
+          patch.object(_dj_planning, 'request_analysis'),
+          patch.object(_music_candidates, 'context_related', return_value=_music_candidates.GraphWalk([], False, False))):
         client = _make_app().test_client()
         pair = {'from': refs['outgoing'], 'to': refs['incoming']}
         cold = client.post('/api/discovery/music/dj-transition', json=pair).get_json()
@@ -2437,7 +2455,7 @@ def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, 
                     assert 'beat_grid' not in summary
                     assert summary['beats_per_bar'] == analyses['incoming']['beats_per_bar']
                     assert summary['metre_confidence'] == analyses['incoming']['metre_confidence']
-            with patch.object(_auto_mode, '_build_music_plan', return_value=({'items': [refs['incoming']]}, 200)):
+            with patch.object(_auto_mode, '_build_music_plan', return_value=(_plan_body([refs["incoming"]]), 200)):
                 legacy = client.post('/api/discovery/music/dj-plan', json={**common, 'limit': 1})
             assert legacy.get_json()['items'][0]['transition'] == expected
             # Requests enter a separate legacy orchestration path, retaining
@@ -2446,8 +2464,8 @@ def test_metric_aac_cache_upgrade_cold_warm_and_all_http_entry_points(tmp_path, 
                 {'id': 'track-request', 'kind': 'track', 'track': refs['incoming']},
                 {'id': 'artist-request', 'kind': 'artist', 'artist': {'name': 'Metric fixture'}},
             ):
-                with (patch.object(_auto_mode, '_build_music_plan', return_value=({'items': []}, 200)),
-                      patch.object(_auto_mode, '_planner_artist_candidates', return_value=[dict(refs['incoming'])])):
+                with (patch.object(_auto_mode, '_build_music_plan', return_value=(_plan_body([]), 200)),
+                      patch.object(_auto_mode, '_planner_artist_candidates', return_value=_plan_body([refs['incoming']])['items'])):
                     requested = client.post('/api/discovery/music/dj-plan', json={
                         **common, 'requests': [request_row], 'limit': 1})
                 assert requested.status_code == 200

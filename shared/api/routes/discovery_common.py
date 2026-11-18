@@ -63,22 +63,6 @@ _DISCOVERY_FEED_INFLIGHT: set[str] = set()
 _DISCOVERY_FEED_LOCK = threading.Lock()
 _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
 
-# ── Auto Mode / Planner constants ──
-_PLAN_RESOLVE_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="soundsible-plan-resolve")
-# Related extraction has a shared demand-owned lane in shared/related_work.py.
-_CANONICAL_RESOLVE_BUDGET_SEC = 2.5
-_AUTO_CONTEXT_MAX = 5
-_AUTO_GRAPH_ANCHORS = 4
-_AUTO_GRAPH_FETCH_MISSES = 4
-# How long a caller waits for a cold related mix before answering "still
-# warming". The fetch it started is never thrown away: it keeps running, fills
-# the cache, and the next call is a hit.
-_AUTO_GRAPH_WAIT_SEC = 8
-_AUTO_GRAPH_RETRY_AFTER_SEC = 2.0
-_AUTO_RAW_LIMIT = 100
-_AUTO_SHORTLIST_LIMIT = 48
-_AUTO_ROUTER_LIMIT = 24
-
 
 def _invalidate_personalized_cache() -> None:
     from shared.user_context import current_user_id

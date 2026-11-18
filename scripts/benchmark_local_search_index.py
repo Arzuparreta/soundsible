@@ -47,26 +47,49 @@ QUERIES = {
 
 
 def catalog_module(revision=None):
+    """The local search of `revision` (the working tree when None).
+
+    It lives in shared/catalog_search.py; older revisions kept it in the catalog
+    routes, as `_local_catalog`, `_library_tracks` and `_LibraryTracks`.
+    """
     name = f"search_benchmark_catalog_{revision or 'current'}"
-    spec = importlib.util.spec_from_file_location(name, ROOT / "shared/api/routes/catalog.py")
+    path = "shared/catalog_search.py"
+    if revision and subprocess.run(["git", "cat-file", "-e", f"{revision}:{path}"], cwd=ROOT).returncode:
+        path = "shared/api/routes/catalog.py"
+    spec = importlib.util.spec_from_file_location(name, ROOT / path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     if revision:
-        source = subprocess.check_output(["git", "show", f"{revision}:shared/api/routes/catalog.py"], cwd=ROOT, text=True)
+        source = subprocess.check_output(["git", "show", f"{revision}:{path}"], cwd=ROOT, text=True)
         exec(compile(source, spec.origin, "exec"), module.__dict__)
     else:
         spec.loader.exec_module(module)
+    for old, new in (("_local_catalog", "local_catalog"), ("_library_tracks", "library_tracks"), ("_LibraryTracks", "LibraryTracks")):
+        if not hasattr(module, new):
+            setattr(module, new, getattr(module, old))
     return module
 
 
 def reference_writer(revision):
-    """The previous revision's schema setup and canonical save, nothing else."""
-    source = subprocess.check_output(["git", "show", f"{revision}:shared/database.py"], cwd=ROOT, text=True)
-    cls = next(node for node in ast.parse(source).body if isinstance(node, ast.ClassDef) and node.name == "DatabaseManager")
-    methods = [node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in {"replace_library", "_apply_schema"}]
-    scope = dict(vars(database))
+    """The previous revision's schema setup and canonical save, nothing else.
+
+    They were `DatabaseManager` methods in shared/database.py; later revisions
+    keep them in the shared/db/ mixins.
+    """
+    wanted = {"replace_library", "_apply_schema"}
+    methods, scope = [], dict(vars(database))
+    for path in ("shared/database.py", "shared/db/schema.py", "shared/db/library.py"):
+        try:
+            source = subprocess.check_output(["git", "show", f"{revision}:{path}"], cwd=ROOT, text=True, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            continue
+        if path != "shared/database.py":
+            module = importlib.import_module(path[:-3].replace("/", "."))
+            scope.update(vars(module))
+        for cls in (node for node in ast.parse(source).body if isinstance(node, ast.ClassDef)):
+            methods += [node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in wanted]
     exec(compile(ast.Module(body=methods, type_ignores=[]), "<reference writer>", "exec"), scope)
-    return type("ReferenceWriter", (DatabaseManager,), {name: scope[name] for name in ("replace_library", "_apply_schema")})
+    return type("ReferenceWriter", (DatabaseManager,), {name: scope[name] for name in wanted})
 
 
 def library(count):
@@ -100,8 +123,10 @@ def peak(function):
 
 
 def selector(module, tracks):
-    module._library_tracks = lambda: tracks
-    return lambda query: module._local_catalog(query, 30)
+    module.library_tracks = lambda: tracks
+    if hasattr(module, "_library_tracks"):
+        module._library_tracks = module.library_tracks
+    return lambda query: module.local_catalog(query, 30)
 
 
 def file_bytes(path):
@@ -197,7 +222,7 @@ def main():
             build_ms = round((time.perf_counter() - start) * 1000, 2)
             print(json.dumps({"tracks": size, "kind": "build", "schema_setup_ms": build_ms}), flush=True)
 
-            tracks = current._LibraryTracks(metadata.tracks)
+            tracks = current.LibraryTracks(metadata.tracks)
             tracks.search_db = db
             _, fingerprint_ms = timed(lambda: library_search.model_fingerprint(tracks), args.repeats)
             print(json.dumps({"tracks": size, "kind": "fingerprint", "median_ms": fingerprint_ms}), flush=True)

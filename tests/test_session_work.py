@@ -1,5 +1,7 @@
 """Demand lifetime through queues, shared consumers, HTTP and real worker death."""
 
+import shared.dj.planning as _dj_planning
+import shared.music_candidates as _music_candidates
 from concurrent.futures import CancelledError
 import json
 from pathlib import Path
@@ -126,7 +128,7 @@ def _app(monkeypatch):
     app = Flask(__name__)
     app.register_blueprint(discovery_bp)
     monkeypatch.setattr(
-        auto_mode, "_get_api", lambda: {"get_library": lambda: SimpleNamespace(metadata=None)}
+        _music_candidates, "engine_api", lambda: {"get_library": lambda: SimpleNamespace(metadata=None)}
     )
     return app.test_client(), auto_mode
 
@@ -141,7 +143,7 @@ def _headers(epoch=1, request_id=None):
 def test_runway_update_drops_removed_work_and_rejects_out_of_order_revisions(monkeypatch):
     client, auto_mode = _app(monkeypatch)
     prepared = []
-    monkeypatch.setattr(auto_mode, "_dj_prepare_cohort", lambda _, tracks: prepared.append([t["id"] for t in tracks]))
+    monkeypatch.setattr(_dj_planning, "prepare_cohort", lambda _, tracks: prepared.append([t["id"] for t in tracks]))
     endpoint = "/api/discovery/music/dj-work"
     assert client.post(endpoint, headers=_headers(), json={"revision": 2, "tracks": [{"id": "new"}]}).status_code == 200
     assert client.post(endpoint, headers=_headers(), json={"revision": 1, "tracks": [{"id": "old"}]}).status_code == 200

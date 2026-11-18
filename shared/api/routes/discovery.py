@@ -36,17 +36,6 @@ from .discovery_common import _get_api, _invalidate_personalized_cache
 
 # Re-exported for external consumers that used to import these from discovery.py.
 from .discovery_graph import _discover_executor, _discover_inflight, warm_discover_top_seeds  # noqa: F401  # imported by shared/api/__init__.py and tests
-from .auto_mode import (  # noqa: F401  # imported by tests
-    _build_auto_pools,
-    _build_music_plan,
-    _dj_item_analysis,
-    _dj_source_path,
-    _planner_artist_candidates,
-    _planner_context_related,
-    _planner_item_from_related,
-    _planner_related_artist_pool,
-    _resolve_generated_playback,
-)
 from .discovery_common import _DEEZER_TRACK_CACHE_TTL_SEC, _DISCOVERY_FEED_CACHE  # noqa: F401  # imported by tests
 from .discovery_feed import (  # noqa: F401  # imported by tests
     _build_discovery_feed_body,

@@ -3,6 +3,7 @@ filed on its own record."""
 
 from __future__ import annotations
 
+import shared.catalog_search as _catalog_search
 from unittest.mock import MagicMock
 
 import pytest
@@ -101,7 +102,7 @@ def test_every_song_is_filed_on_its_own_record(deezer):
 def test_the_artist_routes_list_download_and_report(deezer, monkeypatch):
     from shared.api import app
 
-    monkeypatch.setattr(catalog, "_library_tracks", lambda: [])
+    monkeypatch.setattr(_catalog_search, "library_tracks", lambda: [])
     monkeypatch.setattr("shared.migration.service.start_migration_job", MagicMock())
     app.config["TESTING"] = True
     client = app.test_client()

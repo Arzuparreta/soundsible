@@ -1,4 +1,6 @@
 """Provider boundaries must retain musical metadata without extra lookups."""
+import shared.catalog_search as _catalog_search
+import shared.music_candidates as _music_candidates
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -26,12 +28,12 @@ def test_legacy_mix_and_fresh_adaptation_agree(channel):
     assert music['artist_is_channel'] is False
     assert youtube_music_metadata({**raw, **music}) == music
     assert adapt_youtube_rows([raw]) == [{**raw, **music}]
-    assert auto_mode._planner_item_from_related(raw)['artist'] == 'Extremoduro'
+    assert _music_candidates.item_from_related(raw)['artist'] == 'Extremoduro'
 
 
 def test_explicit_artist_and_title_survive_a_label_channel():
     row = {'id': VIDEO, 'artist': 'An Artist (Official)', 'title': 'One - Two (Live)', 'channel': 'Record Label'}
-    result = auto_mode._planner_item_from_related(row)
+    result = _music_candidates.item_from_related(row)
     assert result['artist'] == row['artist']
     assert result['title'] == row['title']
     assert result['source_artist'] == 'Record Label'
@@ -39,7 +41,7 @@ def test_explicit_artist_and_title_survive_a_label_channel():
 
 
 def test_unknown_channel_does_not_certify_itself_or_lose_its_video():
-    result = auto_mode._planner_item_from_related({'id': VIDEO, 'title': 'Demo', 'channel': 'Music Mirror'})
+    result = _music_candidates.item_from_related({'id': VIDEO, 'title': 'Demo', 'channel': 'Music Mirror'})
     assert result['youtube_id'] == VIDEO
     assert result['artist_is_channel'] is True
     assert result['playback_source_kind'] == 'unverified'
@@ -53,23 +55,23 @@ def test_cleaning_the_title_keeps_the_upload_classified_as_a_video():
     """
     row = {'id': VIDEO, 'title': 'Extremoduro - So Payaso (Official Music Video)',
            'channel': 'Extremoduro (Oficial)'}
-    item = auto_mode._planner_item_from_related(row)
+    item = _music_candidates.item_from_related(row)
     assert (item['artist'], item['title']) == ('Extremoduro', 'So Payaso')
-    again = auto_mode._planner_item_from_feed(item, pool='discovery')
+    again = _music_candidates.item_from_feed(item, pool='discovery')
     for adapted in (item, again):
         assert adapted['playback_source_kind'] == 'official_video'
         assert not synced_lyrics_safe(adapted['playback_source_kind'])
 
 
 def test_official_video_still_upgrades_to_the_artists_audio():
-    item = auto_mode._planner_item_from_related({
+    item = _music_candidates.item_from_related({
         'id': 'video000001', 'title': 'KREAM - Arrival (Official Music Video)', 'channel': 'KREAM',
         'duration': 180,
     })
     best = {'id': 'audio000001', 'title': 'KREAM - Arrival (Audio)', 'channel': 'KREAM',
             'duration': 180, 'confidence': 0.95}
     with patch('shared.catalog_resolution.resolve_candidates', return_value=(best, [best])):
-        resolved = auto_mode._resolve_generated_playback(item, None)
+        resolved = _music_candidates.resolve_generated_playback(item, None)
     assert resolved['youtube_id'] == 'audio000001'
     assert resolved['playback_source_kind'] == 'artist_audio'
     assert (resolved['artist'], resolved['title']) == ('KREAM', 'Arrival')
@@ -95,7 +97,7 @@ def test_search_keeps_every_song_by_one_deezer_artist():
     items = [catalog.deezer_catalog.track_to_catalog_item(_deezer_row(707777 + n, f'Song {n}')) for n in range(3)]
     for rank, item in enumerate(items):
         item['_rank'] = rank
-    assert len(catalog._collapse_duplicates(items)) == 3
+    assert len(_catalog_search.collapse_duplicates(items)) == 3
 
 
 def test_deezer_seed_keeps_catalog_metadata_through_audio_resolution():
@@ -104,7 +106,7 @@ def test_deezer_seed_keeps_catalog_metadata_through_audio_resolution():
             'deezer_artist_id': '997', 'deezer_album_id': '6575789'}
     best = {'id': 'bowie000001', 'title': 'David Bowie – Starman (Official Video)', 'channel': 'David Bowie'}
     with patch('shared.catalog_resolution.resolve_candidates', return_value=(best, [best])):
-        item = auto_mode._planner_resolve_artist_candidate(seed, None)
+        item = _music_candidates.resolve_artist_candidate(seed, None)
     assert (item['artist'], item['title']) == ('David Bowie', 'Starman - 2012 Remaster')
     assert (item['deezer_artist_id'], item['deezer_album_id']) == ('997', '6575789')
     assert item['artist_is_channel'] is False
@@ -117,12 +119,12 @@ def local(identifier='local', artist='My edited artist'):
 
 
 def test_library_reconciliation_preserves_policy_and_account_edits():
-    item = auto_mode._planner_item_from_related({'id': VIDEO, 'title': TITLE, 'channel': 'Extremoduro (Oficial)'})
+    item = _music_candidates.item_from_related({'id': VIDEO, 'title': TITLE, 'channel': 'Extremoduro (Oficial)'})
     a = SimpleNamespace(tracks=[local()])
     b = SimpleNamespace(tracks=[local(artist='Other account')])
     with request_scope.request_scope():
-        result = auto_mode._reconcile_library_sources(a, [item])[0]
-        other = auto_mode._reconcile_library_sources(b, [item])[0]
+        result = _music_candidates.reconcile_library_sources(a, [item])[0]
+        other = _music_candidates.reconcile_library_sources(b, [item])[0]
     assert result['track_id'] == 'local'
     assert result['artist'] == 'My edited artist'
     assert result['title'] == 'My - edited title'
@@ -130,35 +132,35 @@ def test_library_reconciliation_preserves_policy_and_account_edits():
     for key in ['youtube_id', 'discovery_youtube_id', 'source_pool', 'score', 'recommendation_identity']:
         assert result[key] == item[key]
     assert item['source'] == 'preview'
-    again = auto_mode._planner_item_from_feed(result, pool='related')
+    again = _music_candidates.item_from_feed(result, pool='related')
     assert again['title'] == result['title']
     assert again['artist'] == result['artist']
 
 
 def test_reconciled_video_and_library_track_are_one_song_to_the_planner():
-    item = auto_mode._planner_item_from_related({'id': VIDEO, 'title': TITLE, 'channel': 'Extremoduro (Oficial)'})
+    item = _music_candidates.item_from_related({'id': VIDEO, 'title': TITLE, 'channel': 'Extremoduro (Oficial)'})
     track = local()
-    reconciled = auto_mode._reconcile_library_sources(SimpleNamespace(tracks=[track]), [item])[0]
-    library = auto_mode._planner_local_item(track, semantic_score=0.8, basis='same_artist', favourite=False)
+    reconciled = _music_candidates.reconcile_library_sources(SimpleNamespace(tracks=[track]), [item])[0]
+    library = _music_candidates.local_item(track, semantic_score=0.8, basis='same_artist', favourite=False)
     assert reconciled['canonical_identity'] == library['canonical_identity']
 
 
 def test_ambiguous_library_video_is_not_chosen_arbitrarily():
-    item = auto_mode._planner_item_from_related({'id': VIDEO, 'title': TITLE, 'channel': 'Extremoduro (Oficial)'})
+    item = _music_candidates.item_from_related({'id': VIDEO, 'title': TITLE, 'channel': 'Extremoduro (Oficial)'})
     metadata = SimpleNamespace(tracks=[local(), local('second', 'Different')])
-    assert auto_mode._reconcile_library_sources(metadata, [item]) == [item]
+    assert _music_candidates.reconcile_library_sources(metadata, [item]) == [item]
     explicit = {**item, 'track_id': 'second'}
-    assert auto_mode._reconcile_library_sources(metadata, [explicit]) == [explicit]
+    assert _music_candidates.reconcile_library_sources(metadata, [explicit]) == [explicit]
 
 
 def test_graph_reuses_library_metadata_before_selection(monkeypatch):
     raw = {'id': VIDEO, 'title': TITLE, 'channel': 'Extremoduro (Oficial)'}
     db = Mock()
     db.get_related_mixes.return_value = {VIDEO: [raw]}
-    monkeypatch.setattr(auto_mode, 'instance_db', lambda: db)
+    monkeypatch.setattr(_music_candidates, 'instance_db', lambda: db)
     fetch = Mock(side_effect=AssertionError('Cached graph must not fetch'))
-    monkeypatch.setattr(auto_mode, '_planner_related_future', fetch)
-    walk = auto_mode._planner_context_related(SimpleNamespace(tracks=[local()]), [{'youtube_id': VIDEO}], personalise=False)
+    monkeypatch.setattr(_music_candidates, 'related_future', fetch)
+    walk = _music_candidates.context_related(SimpleNamespace(tracks=[local()]), [{'youtube_id': VIDEO}], personalise=False)
     assert walk.items[0]['track_id'] == 'local'
     assert walk.items[0]['artist'] == 'My edited artist'
     fetch.assert_not_called()
@@ -175,6 +177,6 @@ def test_dj_known_collection_item_cannot_adopt_another_editions_source():
     first.item_id, second.item_id = 'edition-one', 'edition-two'
     item = {'id': VIDEO, 'youtube_id': VIDEO, 'source': 'preview', 'item_id': 'edition-two'}
     metadata = SimpleNamespace(tracks=[first, second])
-    assert auto_mode._reconcile_library_sources(metadata, [item])[0]['track_id'] == 'second'
+    assert _music_candidates.reconcile_library_sources(metadata, [item])[0]['track_id'] == 'second'
     missing = {**item, 'item_id': 'edition-without-file'}
-    assert auto_mode._reconcile_library_sources(SimpleNamespace(tracks=[first]), [missing]) == [missing]
+    assert _music_candidates.reconcile_library_sources(SimpleNamespace(tracks=[first]), [missing]) == [missing]

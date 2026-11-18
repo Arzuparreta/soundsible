@@ -6,7 +6,7 @@ from __future__ import annotations
 def install(app):
     from flask import jsonify, request
     from gevent import sleep
-    from shared.api.routes import catalog
+    from shared import catalog_search as catalog, deezer_catalog
     from shared.downloader.youtube_downloader import YouTubeDownloader
 
     controls = {"partial": True, "delay": False, "status": 0, "resolve_status": 0, "resolve_failures": 0}
@@ -86,7 +86,7 @@ def install(app):
 
     # Only the external provider is synthetic: profile/discography routes,
     # identity normalization, saved mutations and durable job ownership stay real.
-    real_deezer_get = catalog.deezer_catalog.deezer_get
+    real_deezer_get = deezer_catalog.deezer_get
 
     def provider(path, params=None, timeout=8):
         review = next((name for name, identity in review_albums.items() if path.startswith(f"album/{identity}")), None)
@@ -123,7 +123,7 @@ def install(app):
             return {"data": [track], "total": 1}
         raise RuntimeError("Unexpected synthetic provider path")
 
-    catalog.deezer_catalog.deezer_get = provider
+    deezer_catalog.deezer_get = provider
     catalog._youtube_search = direct
     catalog._deezer_search = recording
     catalog._musicbrainz_search = musicbrainz
