@@ -4,6 +4,35 @@ import type { WorkReference } from './http';
 import type { DownloadEvidence } from './track';
 export { request, setUnauthorizedHandler, ApiError } from './http';
 import type {
+  ListeningPlanIntent,
+  ListeningPlanProfile,
+  ListeningPlanResponse,
+  DjPlanResponse,
+  DjRouteKind,
+  DjPlacementResponse,
+  DjRepairResponse,
+  DjTransitionResponse,
+  DjPlacementsResponse,
+} from './generated/djContract';
+export type {
+  ListeningPlanIntent,
+  ListeningPlanProfile,
+  DjMetricCoverage,
+  DjTransitionPlan,
+  ListeningPlanItem,
+  ListeningPlanResponse,
+  DjPlanResponse,
+  DjRouteKind,
+  DjPlacementResponse,
+  DjRepairResponse,
+  DjAnalysis,
+  DjPlacementItem,
+  DjRepairItem,
+  DjTransitionResponse,
+  DjRequestStatus,
+  DjPlacementsResponse,
+} from './generated/djContract';
+import type {
   CatalogAlbum,
   CatalogItem,
   CatalogArtist,
@@ -219,59 +248,8 @@ export interface DiscoveryMusicFeed {
   };
 }
 
-export type ListeningPlanIntent = 'autoplay' | 'radio' | 'auto_mode';
-export type ListeningPlanProfile = 'familiar' | 'balanced' | 'explore';
 
-export interface DjMetricCoverage {
-  start: number;
-  end: number;
-  pulse_unit: 'quarter' | 'dotted_quarter' | null;
-  beats_per_bar: number;
-  subdivision: number | null;
-  pulse_confidence: number;
-  metre_confidence: number;
-  downbeat_confidence: number;
-  subdivision_confidence: number;
-}
 
-export interface DjTransitionPlan {
-  technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade';
-  /** Null when the planner could not place the cue — the player owns the real
-   * duration and positions a safe fade against it. */
-  out_cue: number | null;
-  in_cue: number;
-  overlap_seconds: number;
-  overlap_bars: number | null;
-  /** Incoming media seconds per outgoing media second, whatever speed the
-   * outgoing deck plays at. */
-  playback_rate: number;
-  /** Outgoing deck speed through the overlap; the incoming deck plays at
-   * `playback_rate × out_playback_rate`. Absent: 1. */
-  out_playback_rate?: number;
-  /** The outgoing deck reaches `out_playback_rate` over `seconds` of its own
-   * media, starting `lead_seconds` before `out_cue`. */
-  out_rate_ramp?: { lead_seconds: number; seconds: number };
-  /** One measured outgoing beat in media seconds; absent when echo is unsafe. */
-  echo_delay_seconds?: number;
-  score: number;
-  confidence: number;
-  fallback: boolean;
-  sync?: {
-    out_period: number;
-    in_period: number;
-    phase_tolerance_ms: number;
-    grid_source: 'measured' | 'estimated';
-    alignment: 'bars' | 'beats' | 'none';
-    out_bar_seconds?: number | null;
-    in_bar_seconds?: number | null;
-    out_metre?: DjMetricCoverage | null;
-    in_metre?: DjMetricCoverage | null;
-    /** m outgoing beats last as long as n incoming beats at the planned rate. */
-    cycle_beats?: [number, number] | null;
-    /** The only step the outgoing cue may move by: whole bars and whole cycles. */
-    relocation_seconds?: number | null;
-  };
-}
 
 export interface DjMusicSetSource {
   id: string;
@@ -295,87 +273,8 @@ export interface DjItemRef {
   duration?: number;
 }
 
-export interface ListeningPlanItem {
-  item_id?: string | null;
-  id: string;
-  track_id?: string | null;
-  youtube_id?: string | null;
-  discovery_youtube_id?: string | null;
-  playback_source_kind?: string | null;
-  canonical_identity?: string | null;
-  title: string;
-  artist: string;
-  /** `artist` is only the uploading channel's name, not a known performer. */
-  artist_is_channel?: boolean;
-  artists?: string[] | null;
-  deezer_artist_id?: string | null;
-  deezer_album_id?: string | null;
-  /** The upload as YouTube names it, kept as provenance. */
-  source_title?: string;
-  source_artist?: string;
-  album?: string;
-  duration?: number;
-  cover?: string;
-  source: 'library' | 'preview';
-  source_pool: 'local' | 'related' | 'discovery';
-  reason?: string;
-  reason_code?: string;
-  recommendation_identity: string;
-  recommendation_source: ListeningPlanIntent;
-  score?: number;
-  external_ids?: Record<string, string | number | boolean | null | undefined>;
-  transition?: DjTransitionPlan;
-  analysis?: {
-    duration: number;
-    bpm: number;
-    key?: string | null;
-    mode?: string | null;
-    /** Notes per second of sounding music; null until measured. */
-    note_rate?: number | null;
-    /** EBU R128 integrated loudness. */
-    loudness_lufs?: number | null;
-    /** 0 for a pure tone, about 0.56 for white noise. */
-    spectral_flatness?: number | null;
-    confidence: number;
-    analysed: boolean;
-  };
-  request_id?: string;
-  source_set_id?: string;
-  source_set_label?: string;
-  lineage?: string[];
-}
 
-export interface ListeningPlanResponse {
-  v: 1 | 2 | 3 | 4 | 5 | 6;
-  plan_id: string;
-  intent: ListeningPlanIntent;
-  profile: ListeningPlanProfile;
-  seed_identity: string;
-  items: ListeningPlanItem[];
-  degraded: boolean;
-  warming?: boolean;
-  retry_after?: number | null;
-  empty_reason?: 'exhausted' | 'temporary_failure' | null;
-  direction_revision?: number;
-  pool_counts: Record<'local' | 'related' | 'discovery', number>;
-  generated_at: number;
-  session_id?: string | null;
-  segment_index?: number;
-  source_sequence?: Array<'local' | 'related' | 'discovery'>;
-}
 
-export interface DjPlanResponse extends ListeningPlanResponse {
-  v: 2 | 3 | 4 | 5 | 6;
-  source_profile: ListeningPlanProfile;
-  /** Features of the track the route continues from — the only reading the
-   * player has for a song it did not plan itself. */
-  seed_analysis?: Partial<NonNullable<ListeningPlanItem['analysis']>>;
-  analysis_coverage?: { candidates: number; analysed: number; cohort: number; cohort_analysed: number; bridges: number };
-  /** Present only when a source-only DJ session asked the server to choose its
-   * opening. It is not repeated in `items`; those are the route after it. */
-  opening?: ListeningPlanItem;
-  items: ListeningPlanItem[];
-}
 
 export interface DjRouteRef extends DjItemRef {
   queue_id: string;
@@ -384,40 +283,8 @@ export interface DjRouteRef extends DjItemRef {
   route_kind?: DjRouteKind;
 }
 
-export type DjRouteKind = 'user' | 'generated' | 'bridge';
 
-export interface DjPlacementResponse {
-  v: 1;
-  insert_at: number;
-  before_queue_id: string | null;
-  requested_queue_id: string;
-  items: Array<ListeningPlanItem & {
-    route_kind: 'user' | 'bridge';
-    owner_queue_id?: string;
-  }>;
-  following_transition?: DjTransitionPlan;
-  degraded: boolean;
-}
 
-/**
- * The whole route, re-seamed around the songs the listener pinned.
- *
- * `items[i].transition` is always planned out of `items[i-1]`, and `items[0]`
- * out of the seed — the same chain `dj-plan` guarantees. A non-null `queue_id`
- * names an occurrence that already exists and should be kept rather than
- * recreated.
- */
-export interface DjRepairResponse {
-  v: 1;
-  seed_analysis?: DjPlanResponse['seed_analysis'];
-  items: Array<ListeningPlanItem & {
-    queue_id: string | null;
-    route_kind: DjRouteKind;
-    owner_queue_id?: string;
-  }>;
-  dropped: string[];
-  degraded: boolean;
-}
 
 export interface DeviceRegistration {
   device_id: string;
@@ -1056,7 +923,7 @@ export const api = {
       before_queue_id?: string; sources?: DjMusicSetSource[]; heard?: Track[]; exclude?: string[];
       requests: Array<{ track: Track; requested_queue_id: string }>;
     },
-  ): Promise<{ placements: DjPlacementResponse[] }> => request('/api/discovery/music/dj-place', {
+  ): Promise<DjPlacementsResponse> => request('/api/discovery/music/dj-place', {
     method: 'POST', body, timeoutMs: 60000,
   }),
   /** Re-seam the whole route around the songs the listener pinned. Every ref
@@ -1090,7 +957,7 @@ export const api = {
     },
     signal?: AbortSignal,
   ) =>
-    request<{ transition: DjTransitionPlan; measured: boolean; analysis?: { from: NonNullable<ListeningPlanItem['analysis']>; to: NonNullable<ListeningPlanItem['analysis']> } }>('/api/discovery/music/dj-transition', {
+    request<DjTransitionResponse>('/api/discovery/music/dj-transition', {
       method: 'POST',
       body,
       timeoutMs: 8000,

@@ -185,25 +185,9 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
             val item = ProgramQueue.items(connection, decoded, owner).single()
             seen.add(item.mediaId)
             val previous = route.lastOrNull()?.item?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
-            route.add(ProgramDjSession.Row(item, proposal(candidate, previous), "generated"))
+            route.add(ProgramDjSession.Row(item, ProgramDjPlan.proposal(candidate, previous), "generated"))
         }
         return route
-    }
-    fun proposal(candidate: JSONObject, previous: String?): ProgramDjPlan.Proposal? {
-        val transition = candidate.optJSONObject("transition")
-        return if (transition != null && previous != null) {
-            val technique = runCatching { ProgramMixCurve.Technique.valueOf(transition.optString("technique").uppercase(java.util.Locale.ROOT)) }.getOrDefault(ProgramMixCurve.Technique.SAFE_FADE)
-            val sync = transition.optJSONObject("sync")
-            ProgramDjPlan.Proposal(previous, technique, transition.optDouble("out_cue", Double.NaN),
-                transition.optDouble("in_cue", Double.NaN), transition.optDouble("overlap_seconds", Double.NaN),
-                transition.optDouble("playback_rate", Double.NaN), transition.optDouble("confidence", 0.0),
-                sync?.optDouble("phase_tolerance_ms", 5.0) ?: 5.0, sync?.optDouble("out_period", 0.0) ?: 0.0,
-                transition.optDouble("echo_delay_seconds", Double.NaN).takeIf { it.isFinite() && it > 0 && it <= 2 },
-                sync?.let { JSONObject(it.toString()) },
-                transition.optDouble("out_playback_rate", 1.0),
-                transition.optJSONObject("out_rate_ramp")?.optDouble("lead_seconds", Double.NaN) ?: Double.NaN,
-                transition.optJSONObject("out_rate_ramp")?.optDouble("seconds", Double.NaN) ?: Double.NaN)
-        } else null
     }
     fun clear() {
         serial++; requestId?.let { connection.cancel(it); work.cancel(it, requestWork) }; requestId = null

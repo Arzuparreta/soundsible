@@ -1,0 +1,937 @@
+{
+  "title": "Generated queue and DJ route responses",
+  "description": "What /api/discovery/music/plan, dj-plan, dj-place, dj-repair and dj-transition answer. The engine's responses are validated against these definitions in tests, the web client's types are generated from them (ui_web/src/lib/generated/djContract.ts, by scripts/api_contract.py), and Android parses the examples next to this file. `$extends` copies another definition's properties and required names; the child's properties win.",
+  "$defs": {
+    "ListeningPlanIntent": {
+      "enum": [
+        "autoplay",
+        "radio",
+        "auto_mode"
+      ]
+    },
+    "ListeningPlanProfile": {
+      "enum": [
+        "familiar",
+        "balanced",
+        "explore"
+      ]
+    },
+    "DjRouteKind": {
+      "enum": [
+        "user",
+        "generated",
+        "bridge"
+      ]
+    },
+    "DjMetricCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "pulse_unit",
+        "beats_per_bar",
+        "subdivision",
+        "pulse_confidence",
+        "metre_confidence",
+        "downbeat_confidence",
+        "subdivision_confidence"
+      ],
+      "properties": {
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        },
+        "pulse_unit": {
+          "enum": [
+            "quarter",
+            "dotted_quarter",
+            null
+          ]
+        },
+        "beats_per_bar": {
+          "type": "number"
+        },
+        "subdivision": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pulse_confidence": {
+          "type": "number"
+        },
+        "metre_confidence": {
+          "type": "number"
+        },
+        "downbeat_confidence": {
+          "type": "number"
+        },
+        "subdivision_confidence": {
+          "type": "number"
+        }
+      }
+    },
+    "DjTransitionPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "technique",
+        "out_cue",
+        "in_cue",
+        "overlap_seconds",
+        "overlap_bars",
+        "playback_rate",
+        "score",
+        "confidence",
+        "fallback"
+      ],
+      "properties": {
+        "technique": {
+          "enum": [
+            "long_blend",
+            "bass_swap",
+            "filter_blend",
+            "echo_cut",
+            "structural_fade",
+            "safe_fade"
+          ]
+        },
+        "out_cue": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Null when the planner could not place the cue — the player owns the real\nduration and positions a safe fade against it."
+        },
+        "in_cue": {
+          "type": "number"
+        },
+        "overlap_seconds": {
+          "type": "number"
+        },
+        "overlap_bars": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "playback_rate": {
+          "type": "number",
+          "description": "Incoming media seconds per outgoing media second, whatever speed the\noutgoing deck plays at."
+        },
+        "out_playback_rate": {
+          "type": "number",
+          "description": "Outgoing deck speed through the overlap; the incoming deck plays at\n`playback_rate × out_playback_rate`. Absent: 1."
+        },
+        "out_rate_ramp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "lead_seconds",
+            "seconds"
+          ],
+          "properties": {
+            "lead_seconds": {
+              "type": "number"
+            },
+            "seconds": {
+              "type": "number"
+            }
+          },
+          "description": "The outgoing deck reaches `out_playback_rate` over `seconds` of its own\nmedia, starting `lead_seconds` before `out_cue`."
+        },
+        "echo_delay_seconds": {
+          "type": "number",
+          "description": "One measured outgoing beat in media seconds; absent when echo is unsafe."
+        },
+        "score": {
+          "type": "number"
+        },
+        "confidence": {
+          "type": "number"
+        },
+        "fallback": {
+          "type": "boolean"
+        },
+        "sync": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "out_period",
+            "in_period",
+            "phase_tolerance_ms",
+            "grid_source",
+            "alignment"
+          ],
+          "properties": {
+            "out_period": {
+              "type": "number"
+            },
+            "in_period": {
+              "type": "number"
+            },
+            "phase_tolerance_ms": {
+              "type": "number"
+            },
+            "grid_source": {
+              "enum": [
+                "measured",
+                "estimated"
+              ]
+            },
+            "alignment": {
+              "enum": [
+                "bars",
+                "beats",
+                "none"
+              ]
+            },
+            "out_bar_seconds": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "in_bar_seconds": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "out_metre": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DjMetricCoverage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "in_metre": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DjMetricCoverage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cycle_beats": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "m outgoing beats last as long as n incoming beats at the planned rate."
+            },
+            "relocation_seconds": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "The only step the outgoing cue may move by: whole bars and whole cycles."
+            }
+          }
+        }
+      }
+    },
+    "DjAnalysis": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "number",
+          "string",
+          "boolean",
+          "null"
+        ]
+      },
+      "required": [
+        "duration",
+        "bpm",
+        "confidence",
+        "analysed"
+      ],
+      "properties": {
+        "duration": {
+          "type": "number"
+        },
+        "bpm": {
+          "type": "number"
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Notes per second of sounding music; null until measured."
+        },
+        "loudness_lufs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "EBU R128 integrated loudness."
+        },
+        "spectral_flatness": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "0 for a pure tone, about 0.56 for white noise."
+        },
+        "confidence": {
+          "type": "number"
+        },
+        "analysed": {
+          "type": "boolean"
+        },
+        "bar_seconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "description": "The client view of a song's measurement (`shared.dj.contracts.analysis_summary`): the\nfields both clients read, plus any other scalar the analyser adds. Grids stay on the server."
+    },
+    "ListeningPlanItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "artist",
+        "source",
+        "source_pool",
+        "recommendation_identity",
+        "recommendation_source"
+      ],
+      "properties": {
+        "item_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "youtube_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "discovery_youtube_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "playback_source_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "canonical_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "artist": {
+          "type": "string"
+        },
+        "artist_is_channel": {
+          "type": "boolean",
+          "description": "`artist` is only the uploading channel's name, not a known performer."
+        },
+        "artist_metadata_explicit": {
+          "type": "boolean",
+          "description": "The extractor named the performer itself (`shared.music_identity`)."
+        },
+        "artists": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "deezer_artist_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deezer_album_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_title": {
+          "type": "string",
+          "description": "The upload as YouTube names it, kept as provenance."
+        },
+        "source_artist": {
+          "type": "string"
+        },
+        "album": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "number"
+        },
+        "cover": {
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "library",
+            "preview"
+          ]
+        },
+        "source_pool": {
+          "enum": [
+            "local",
+            "related",
+            "discovery"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "reason_code": {
+          "type": "string"
+        },
+        "recommendation_identity": {
+          "type": "string"
+        },
+        "recommendation_source": {
+          "$ref": "#/$defs/ListeningPlanIntent"
+        },
+        "score": {
+          "type": "number"
+        },
+        "external_ids": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "transition": {
+          "$ref": "#/$defs/DjTransitionPlan"
+        },
+        "analysis": {
+          "$ref": "#/$defs/DjAnalysis"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "track",
+            "artist"
+          ],
+          "description": "On a dj-plan item placed for an explicit request: what was requested."
+        },
+        "label": {
+          "type": "string",
+          "description": "On a dj-plan item placed for an explicit request: the request's label."
+        },
+        "source_set_id": {
+          "type": "string"
+        },
+        "source_set_label": {
+          "type": "string"
+        },
+        "lineage": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_weight": {
+          "type": "number",
+          "description": "The source's weight in the planner's draw; provenance, not read by clients."
+        },
+        "semantic_score": {
+          "type": "number",
+          "description": "The library match score that admitted the song; provenance, not read by clients."
+        },
+        "route_kind": {
+          "$ref": "#/$defs/DjRouteKind",
+          "description": "Set on dj-plan items the DJ added as bridges."
+        }
+      }
+    },
+    "ListeningPlanResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "plan_id",
+        "intent",
+        "profile",
+        "seed_identity",
+        "items",
+        "degraded",
+        "pool_counts",
+        "generated_at"
+      ],
+      "properties": {
+        "v": {
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "plan_id": {
+          "type": "string"
+        },
+        "intent": {
+          "$ref": "#/$defs/ListeningPlanIntent"
+        },
+        "profile": {
+          "$ref": "#/$defs/ListeningPlanProfile"
+        },
+        "seed_identity": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ListeningPlanItem"
+          }
+        },
+        "degraded": {
+          "type": "boolean"
+        },
+        "warming": {
+          "type": "boolean"
+        },
+        "retry_after": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "empty_reason": {
+          "enum": [
+            "exhausted",
+            "temporary_failure",
+            null
+          ]
+        },
+        "direction_revision": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pool_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "local",
+            "related",
+            "discovery"
+          ],
+          "properties": {
+            "local": {
+              "type": "number"
+            },
+            "related": {
+              "type": "number"
+            },
+            "discovery": {
+              "type": "number"
+            }
+          }
+        },
+        "generated_at": {
+          "type": "number"
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "segment_index": {
+          "type": "number"
+        },
+        "source_sequence": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "local",
+              "related",
+              "discovery"
+            ]
+          }
+        }
+      }
+    },
+    "DjAnalysisCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidates",
+        "analysed",
+        "cohort",
+        "cohort_analysed",
+        "bridges"
+      ],
+      "properties": {
+        "candidates": {
+          "type": "number"
+        },
+        "analysed": {
+          "type": "number"
+        },
+        "cohort": {
+          "type": "number"
+        },
+        "cohort_analysed": {
+          "type": "number"
+        },
+        "bridges": {
+          "type": "number"
+        }
+      }
+    },
+    "DjPlanResponse": {
+      "$extends": "#/$defs/ListeningPlanResponse",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_profile"
+      ],
+      "properties": {
+        "v": {
+          "enum": [
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "source_profile": {
+          "$ref": "#/$defs/ListeningPlanProfile"
+        },
+        "seed_analysis": {
+          "$ref": "#/$defs/DjAnalysis",
+          "partial": true,
+          "description": "Features of the track the route continues from — the only reading the\nplayer has for a song it did not plan itself."
+        },
+        "analysis_coverage": {
+          "$ref": "#/$defs/DjAnalysisCoverage"
+        },
+        "opening": {
+          "$ref": "#/$defs/ListeningPlanItem",
+          "description": "Present only when a source-only DJ session asked the server to choose its\nopening. It is not repeated in `items`; those are the route after it."
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DjRequestStatus"
+          }
+        }
+      }
+    },
+    "DjPlacementItem": {
+      "$extends": "#/$defs/ListeningPlanItem",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "route_kind"
+      ],
+      "properties": {
+        "route_kind": {
+          "enum": [
+            "user",
+            "bridge"
+          ]
+        },
+        "owner_queue_id": {
+          "type": "string"
+        },
+        "queue_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A collection placement names the occurrence each item becomes."
+        }
+      }
+    },
+    "DjPlacementResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "insert_at",
+        "before_queue_id",
+        "requested_queue_id",
+        "items",
+        "degraded"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "insert_at": {
+          "type": "integer"
+        },
+        "before_queue_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requested_queue_id": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DjPlacementItem"
+          }
+        },
+        "following_transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DjTransitionPlan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "degraded": {
+          "type": "boolean"
+        }
+      }
+    },
+    "DjPlacementsResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "placements"
+      ],
+      "properties": {
+        "placements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DjPlacementResponse"
+          }
+        }
+      }
+    },
+    "DjRepairItem": {
+      "$extends": "#/$defs/ListeningPlanItem",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "queue_id",
+        "route_kind"
+      ],
+      "properties": {
+        "queue_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "route_kind": {
+          "$ref": "#/$defs/DjRouteKind"
+        },
+        "owner_queue_id": {
+          "type": "string"
+        }
+      }
+    },
+    "DjRepairResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "items",
+        "dropped",
+        "degraded"
+      ],
+      "description": "The whole route, re-seamed around the songs the listener pinned.\n\n`items[i].transition` is always planned out of `items[i-1]`, and `items[0]`\nout of the seed — the same chain `dj-plan` guarantees. A non-null `queue_id`\nnames an occurrence that already exists and should be kept rather than\nrecreated.",
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "seed_analysis": {
+          "$ref": "#/$defs/DjAnalysis",
+          "partial": true
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DjRepairItem"
+          }
+        },
+        "dropped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "degraded": {
+          "type": "boolean"
+        }
+      }
+    },
+    "DjTransitionResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transition",
+        "measured"
+      ],
+      "properties": {
+        "transition": {
+          "$ref": "#/$defs/DjTransitionPlan"
+        },
+        "measured": {
+          "type": "boolean"
+        },
+        "analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "to"
+          ],
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/DjAnalysis"
+            },
+            "to": {
+              "$ref": "#/$defs/DjAnalysis"
+            }
+          }
+        }
+      }
+    },
+    "DjRequestStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "status",
+        "eta_tracks",
+        "scheduled_position"
+      ],
+      "description": "What became of one explicit request the dj-plan body carried.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "failed"
+          ]
+        },
+        "track_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "eta_tracks": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "scheduled_position": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "failure_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_position": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "preferred_position": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

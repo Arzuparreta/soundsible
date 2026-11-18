@@ -1,0 +1,161 @@
+{
+  "v": 6,
+  "plan_id": "plan-example",
+  "intent": "auto_mode",
+  "profile": "balanced",
+  "seed_identity": "music:track:seed",
+  "source_profile": "balanced",
+  "items": [
+    {
+      "id": "bridge00001",
+      "youtube_id": "bridge00001",
+      "title": "Bridge Song",
+      "artist": "Example Artist",
+      "album": "Example Album",
+      "duration": 240,
+      "cover": "https://example.invalid/cover.jpg",
+      "source": "preview",
+      "source_pool": "related",
+      "reason": "Related to what is playing",
+      "reason_code": "related",
+      "recommendation_identity": "music:youtube:bridge00001",
+      "recommendation_source": "auto_mode",
+      "score": 0.7,
+      "external_ids": {
+        "youtube_id": "bridge00001"
+      },
+      "analysis": {
+        "duration": 240.0,
+        "bpm": 120.0,
+        "key": "A",
+        "mode": "minor",
+        "note_rate": 3.2,
+        "loudness_lufs": -9.5,
+        "spectral_flatness": 0.21,
+        "confidence": 0.8,
+        "analysed": true,
+        "bar_seconds": 2.0,
+        "beats_per_bar": 4,
+        "version": 9
+      },
+      "transition": {
+        "technique": "safe_fade",
+        "out_cue": null,
+        "in_cue": 0.0,
+        "overlap_seconds": 6.0,
+        "overlap_bars": null,
+        "playback_rate": 1.0,
+        "score": 0.2,
+        "confidence": 0.1,
+        "fallback": true
+      },
+      "route_kind": "bridge"
+    },
+    {
+      "id": "generated01",
+      "youtube_id": "generated01",
+      "title": "Generated Song",
+      "artist": "Example Artist",
+      "album": "Example Album",
+      "duration": 240,
+      "cover": "https://example.invalid/cover.jpg",
+      "source": "preview",
+      "source_pool": "related",
+      "reason": "Related to what is playing",
+      "reason_code": "related",
+      "recommendation_identity": "music:youtube:generated01",
+      "recommendation_source": "auto_mode",
+      "score": 0.7,
+      "external_ids": {
+        "youtube_id": "generated01"
+      },
+      "analysis": {
+        "duration": 240.0,
+        "bpm": 120.0,
+        "key": "A",
+        "mode": "minor",
+        "note_rate": 3.2,
+        "loudness_lufs": -9.5,
+        "spectral_flatness": 0.21,
+        "confidence": 0.8,
+        "analysed": true,
+        "bar_seconds": 2.0,
+        "beats_per_bar": 4,
+        "version": 9
+      },
+      "transition": {
+        "technique": "bass_swap",
+        "out_cue": 182.4,
+        "in_cue": 8.0,
+        "overlap_seconds": 15.0,
+        "overlap_bars": 8,
+        "playback_rate": 1.025,
+        "out_playback_rate": 0.99,
+        "out_rate_ramp": {
+          "lead_seconds": 15.0,
+          "seconds": 8.0
+        },
+        "echo_delay_seconds": 0.5,
+        "score": 0.81,
+        "confidence": 0.74,
+        "fallback": false,
+        "sync": {
+          "out_period": 0.5,
+          "in_period": 0.4878,
+          "phase_tolerance_ms": 12.0,
+          "grid_source": "measured",
+          "alignment": "bars",
+          "out_bar_seconds": 2.0,
+          "in_bar_seconds": 1.951,
+          "out_metre": {
+            "start": 0.0,
+            "end": 240.0,
+            "pulse_unit": "quarter",
+            "beats_per_bar": 4,
+            "subdivision": 2,
+            "pulse_confidence": 0.9,
+            "metre_confidence": 0.8,
+            "downbeat_confidence": 0.7,
+            "subdivision_confidence": 0.6
+          },
+          "in_metre": null,
+          "cycle_beats": [
+            4,
+            4
+          ],
+          "relocation_seconds": 2.0
+        }
+      }
+    }
+  ],
+  "degraded": false,
+  "warming": false,
+  "retry_after": null,
+  "empty_reason": null,
+  "direction_revision": 3,
+  "pool_counts": {
+    "local": 4,
+    "related": 12,
+    "discovery": 0
+  },
+  "generated_at": 1763460000,
+  "session_id": "session-example",
+  "segment_index": 1,
+  "source_sequence": [
+    "local",
+    "related"
+  ],
+  "seed_analysis": {
+    "duration": 200.0,
+    "bpm": 118.0,
+    "confidence": 0.7,
+    "analysed": true
+  },
+  "analysis_coverage": {
+    "candidates": 16,
+    "analysed": 12,
+    "cohort": 8,
+    "cohort_analysed": 6,
+    "bridges": 1
+  }
+}

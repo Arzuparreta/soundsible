@@ -157,12 +157,12 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
                 requests++; requested
             } else ProgramQueue.items(connection, decoded, requested.mediaMetadata.extras!!.getString(ProgramQueue.PROGRAM)!!).single()
             val owned = bridgeOwner(item, kind, candidate.optString("owner_queue_id"), setOf(key(requested)))
-            additions.add(ProgramDjSession.Row(owned, planner.proposal(candidate, previous), kind)); previous = key(owned)
+            additions.add(ProgramDjSession.Row(owned, ProgramDjPlan.proposal(candidate, previous), kind)); previous = key(owned)
         }
         require(requests == 1)
         val tail = future.drop(insertion).toMutableList()
         response.optJSONObject("following_transition")?.let { transition ->
-            if (tail.isNotEmpty()) tail[0] = tail[0].copy(proposal = planner.proposal(JSONObject().put("transition", transition), previous))
+            if (tail.isNotEmpty()) tail[0] = tail[0].copy(proposal = ProgramDjPlan.proposal(JSONObject().put("transition", transition), previous))
         }
         return future.take(insertion) + additions + tail
     }
@@ -201,7 +201,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
             }
             require(seenKeys.add(key(item)))
             val owned = bridgeOwner(item, kind, candidate.optString("owner_queue_id"), anchors.toSet())
-            result.add(ProgramDjSession.Row(owned, planner.proposal(candidate, previous), kind))
+            result.add(ProgramDjSession.Row(owned, ProgramDjPlan.proposal(candidate, previous), kind))
             previous = key(owned)
         }
         require(returned == anchors) { "REPAIR_LOST_USER_ANCHOR" }

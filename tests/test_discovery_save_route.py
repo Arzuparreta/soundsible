@@ -1775,7 +1775,7 @@ def test_dj_transition_prefers_relative_keys_over_parallel_and_mixed_mode_fifths
             assert response.status_code == 200
             body = response.get_json()
             assert body["measured"] is True
-            assert body["analysis"]["to"] == measured[incoming]
+            assert body["analysis"]["to"] == analysis_summary(measured[incoming])
             plans[incoming] = body["transition"]
     assert plans["relative"]["technique"] == "bass_swap"
     assert plans["parallel"]["technique"] == plans["mixed-fifth"]["technique"] == "filter_blend"

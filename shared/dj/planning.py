@@ -84,6 +84,15 @@ def item_analysis(metadata, item: dict, *, schedule: bool = False) -> dict:
 
 
 
+def wire_item(item: dict) -> dict:
+    """A route item as clients receive it: its analysis without the grids.
+
+    Neither client reads beat grids, downbeats, phrases or sections, and sixteen
+    of them would overrun Android's 256 KiB response budget.
+    """
+    analysis = item.get("analysis")
+    return {**item, "analysis": analysis_summary(analysis)} if isinstance(analysis, dict) else item
+
 def transition_analysis(metadata, item: dict) -> tuple[dict, bool]:
     """A song's measured features and True, or the fallback and False.
 
@@ -435,7 +444,7 @@ def build_music_set_route(data: dict) -> tuple[dict, int]:
         "seed_identity": str(seed.get("id") or seed.get("youtube_id") or ""),
         "seed_analysis": analysis_summary(previous),
         **({"opening": {**opening, "analysis": analysis_summary(opening_analysis)}} if opening else {}),
-        "items": [{**item, "analysis": analysis_summary(item["analysis"])} for item in route],
+        "items": [wire_item(item) for item in route],
         "degraded": degraded,
         "warming": warming,
         "retry_after": music_candidates.AUTO_GRAPH_RETRY_AFTER_SEC if warming else None,
@@ -598,7 +607,7 @@ def place_one(data: dict) -> tuple[dict, int]:
         "insert_at": route_offset + insert_at,
         "before_queue_id": route[insert_at][0].get("queue_id") if insert_at < len(route) else None,
         "requested_queue_id": requested_queue_id,
-        "items": items,
+        "items": [wire_item(item) for item in items],
         "following_transition": following,
         "degraded": not bool(target_analysis.get("analysed")),
     }), 200
@@ -636,6 +645,7 @@ def repair_anchor(raw: dict) -> dict:
         "reason": "Placed in route",
         "reason_code": "route_user",
         "recommendation_identity": recommendation_identity,
+        "recommendation_source": "auto_mode",
         "score": 1.0,
         "external_ids": {},
         "source_set_id": "route",

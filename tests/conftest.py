@@ -110,3 +110,46 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
             pass
         set_output_dir(None)
         reset_runtime()
+
+
+#: Engine endpoints whose successful answers must match the DJ API contract.
+_CONTRACT_ROUTES = {
+    "/api/discovery/music/plan": "ListeningPlanResponse",
+    "/api/discovery/music/dj-plan": "DjPlanResponse",
+    "/api/discovery/music/dj-place": "DjPlacementResponse",
+    "/api/discovery/music/dj-repair": "DjRepairResponse",
+    "/api/discovery/music/dj-transition": "DjTransitionResponse",
+}
+
+
+@pytest.fixture(autouse=True)
+def dj_contract(monkeypatch):
+    """Check every DJ answer a test produces against shared/contracts/api/dj.schema.json.
+
+    The scenario tests already drive these routes through every branch they
+    care about; validating what they get back is what keeps the schema, the web
+    client's generated types and Android's parsers describing the real engine.
+    """
+    from urllib.parse import urlsplit
+
+    from flask.testing import FlaskClient
+
+    from scripts.api_contract import load, validate_response
+
+    root = load()
+    original = FlaskClient.open
+
+    def checked(self, *args, **kwargs):
+        response = original(self, *args, **kwargs)
+        target = args[0] if args and isinstance(args[0], str) else kwargs.get("path", "")
+        definition = _CONTRACT_ROUTES.get(urlsplit(target).path)
+        # Only the engine's own routes; a test's stand-in route answers whatever it needs.
+        engine = "discovery" in self.application.blueprints
+        if definition and engine and response.status_code == 200 and response.is_json:
+            body = response.get_json()
+            if definition == "DjPlacementResponse" and "placements" in body:
+                definition = "DjPlacementsResponse"
+            validate_response(definition, body, root)
+        return response
+
+    monkeypatch.setattr(FlaskClient, "open", checked)

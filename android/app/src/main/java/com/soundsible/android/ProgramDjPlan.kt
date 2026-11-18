@@ -173,4 +173,22 @@ internal object ProgramDjPlan {
             else proposed + ceil((earliest - proposed) / barSeconds) * barSeconds
         return if (moved in earliest..latest) moved else clamped
     }
+    /** The planned transition into `candidate` out of the occurrence `previous`, or null when there is none. */
+    fun proposal(candidate: JSONObject, previous: String?): Proposal? {
+        val transition = candidate.optJSONObject("transition")
+        return if (transition != null && previous != null) {
+            val technique = runCatching { ProgramMixCurve.Technique.valueOf(transition.optString("technique").uppercase(java.util.Locale.ROOT)) }.getOrDefault(ProgramMixCurve.Technique.SAFE_FADE)
+            val sync = transition.optJSONObject("sync")
+            Proposal(previous, technique, transition.optDouble("out_cue", Double.NaN),
+                transition.optDouble("in_cue", Double.NaN), transition.optDouble("overlap_seconds", Double.NaN),
+                transition.optDouble("playback_rate", Double.NaN), transition.optDouble("confidence", 0.0),
+                sync?.optDouble("phase_tolerance_ms", 5.0) ?: 5.0, sync?.optDouble("out_period", 0.0) ?: 0.0,
+                transition.optDouble("echo_delay_seconds", Double.NaN).takeIf { it.isFinite() && it > 0 && it <= 2 },
+                sync?.let { JSONObject(it.toString()) },
+                transition.optDouble("out_playback_rate", 1.0),
+                transition.optJSONObject("out_rate_ramp")?.optDouble("lead_seconds", Double.NaN) ?: Double.NaN,
+                transition.optJSONObject("out_rate_ramp")?.optDouble("seconds", Double.NaN) ?: Double.NaN)
+        } else null
+    }
+
 }

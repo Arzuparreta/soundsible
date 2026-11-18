@@ -246,8 +246,8 @@ def discovery_music_dj_plan():
         **base,
         "v": 4,
         "source_profile": source_profile,
-        "seed_analysis": seed_analysis,
-        "items": route,
+        "seed_analysis": dj_planning.analysis_summary(seed_analysis),
+        "items": [dj_planning.wire_item(item) for item in route],
         "requests": request_statuses,
     })
 
@@ -340,8 +340,8 @@ def discovery_music_dj_repair():
     kept = {row["queue_id"] for row in built if row["queue_id"]}
     return jsonify({
         "v": 1,
-        "seed_analysis": seed_analysis,
-        "items": built,
+        "seed_analysis": dj_planning.analysis_summary(seed_analysis),
+        "items": [dj_planning.wire_item(row) for row in built],
         "dropped": [
             queue_id for raw in refs
             if (queue_id := str(raw.get("queue_id") or "")) and queue_id not in kept
@@ -383,7 +383,7 @@ def discovery_music_dj_transition():
     in_analysis, in_ready = dj_planning.transition_analysis(metadata, incoming)
     return jsonify({
         "transition": plan_transition(out_analysis, in_analysis),
-        "analysis": {"from": out_analysis, "to": in_analysis},
+        "analysis": {"from": dj_planning.analysis_summary(out_analysis), "to": dj_planning.analysis_summary(in_analysis)},
         "measured": out_ready and in_ready,
     })
 
