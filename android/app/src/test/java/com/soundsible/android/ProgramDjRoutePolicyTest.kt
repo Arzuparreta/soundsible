@@ -13,7 +13,7 @@ class ProgramDjRoutePolicyTest {
             row.optString("group").ifEmpty { null }, row.optString("recording").ifEmpty { key })
     }
     private fun JSONObject.text(name: String): String? = if (isNull(name)) null else optString(name).ifEmpty { null }
-    private fun expected(vector: JSONObject): Any? = when (val value = vector.get("expect")) {
+    private fun expected(vector: JSONObject): Any? = when (val value = vector.get(if (vector.has("expect_android")) "expect_android" else "expect")) {
         JSONObject.NULL -> null
         is JSONArray -> (0 until value.length()).map { value.getString(it) }
         else -> (value as Number).toInt()

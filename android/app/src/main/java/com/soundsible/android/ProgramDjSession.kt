@@ -353,9 +353,9 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val owners = live.mapNotNull { it.ownerKey }.toSet()
         return live.map { itemKey(it.item) }.toSet() + route.filter { itemKey(it.item) in owners || it.ownerKey in owners }.map { itemKey(it.item) }
     }
-    private fun policyRow(row: Row) = ProgramDjRoutePolicy.RouteRow(itemKey(row.item), row.kind, row.ownerKey,
-        ProgramQueue.requestGroup(row.item), recording(row.item))
-    private fun policyRows(rows: List<Row> = route) = rows.map(::policyRow)
+    private fun policyRows(rows: List<Row> = route, identity: (MediaItem) -> String = ::recording) =
+        rows.map { row -> ProgramDjRoutePolicy.RouteRow(itemKey(row.item), row.kind, row.ownerKey,
+            ProgramQueue.requestGroup(row.item), identity(row.item)) }
     private fun recording(item: MediaItem) = (item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) ?: "") + ":" + item.mediaId
     private fun byKey(rows: List<Row>, keys: List<String>): List<Row> { val index = rows.associateBy { itemKey(it.item) }; return keys.map { index.getValue(it) } }
     /** The start of `beforeKey`'s block when a request may be queued in front of it, otherwise null. */
@@ -507,7 +507,10 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val committedIds = prefix.map { it.item.mediaId }.toSet()
         val candidates = rows.drop(1).filter { it.item.mediaId !in committedIds }
         val previous = route.drop(protected + 1)
-        val future = byKey(previous + candidates, ProgramDjRoutePolicy.replan(policyRows(previous), policyRows(candidates)))
+        val order = requireNotNull(ProgramDjRoutePolicy.replan(
+            policyRows(previous, MediaItem::mediaId), policyRows(candidates, MediaItem::mediaId),
+        )) { "Not enough replacement music to preserve requested positions" }
+        val future = byKey(previous + candidates, order)
         val next = prefix + future
         applyPlaylist(next.map { it.item }, false)
         route = next; player.routeChanged()

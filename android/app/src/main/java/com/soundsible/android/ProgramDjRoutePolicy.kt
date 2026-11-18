@@ -95,21 +95,17 @@ internal object ProgramDjRoutePolicy {
     /**
      * The future a replan writes. Requests and their bridges keep their depth; generated rows fill
      * the other places in order, skipping recordings a kept row plays, and continue after the last
-     * kept row. When the generated rows run out first, the kept rows close up in their order.
+     * kept row. A short answer cannot move an Android request earlier.
      */
-    fun replan(previous: List<RouteRow>, generated: List<RouteRow>): List<String> {
+    fun replan(previous: List<RouteRow>, generated: List<RouteRow>): List<String>? {
         val requests = previous.filter { it.kind == "user" }.map { it.key }.toSet()
         val kept = previous.withIndex().filter { (_, row) -> row.kind == "user" || row.bridgeOwner in requests }
         val keptRecordings = kept.map { it.value.recording }.toSet()
         val filler = generated.filter { it.recording !in keptRecordings }
-        val result = mutableListOf<String>()
+        val size = kept.size + filler.size
+        if ((kept.lastOrNull()?.index ?: -1) >= size) return null
+        val anchors = kept.associate { it.index to it.value.key }
         var next = 0
-        for ((index, row) in kept) {
-            while (result.size < index && next < filler.size) result.add(filler[next++].key)
-            result.add(row.key)
-        }
-        while (next < filler.size) result.add(filler[next++].key)
-        return result
+        return List(size) { index -> anchors[index] ?: filler[next++].key }
     }
-
 }
