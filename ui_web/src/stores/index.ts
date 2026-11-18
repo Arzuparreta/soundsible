@@ -6,6 +6,7 @@ import { audioService, disposeAudio } from '../lib/audio';
 import { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { createTransport } from './transport';
 import { createDj } from './dj';
+import { createRunway } from './runway';
 import { createQueue } from './queue';
 import { createSession } from './session';
 import { createPodcasts } from './podcasts';
@@ -60,13 +61,13 @@ function createClient() {
       return queue.prefetchUpcoming;
     },
     get ensureAutoplay() {
-      return dj.ensureAutoplay;
+      return runway.ensureAutoplay;
     },
     get generatedQueue() {
-      return dj.generatedQueue;
+      return runway.generatedQueue;
     },
     set generatedQueue(value) {
-      dj.generatedQueue = value;
+      runway.generatedQueue = value;
     },
     get savePodcastProgress() {
       return podcasts.savePodcastProgress;
@@ -78,25 +79,25 @@ function createClient() {
       return session.pushEmptyPlaybackState;
     },
     get boundaryFacts() {
-      return dj.boundaryFacts;
+      return runway.boundaryFacts;
     },
     get playingDuration() {
       return dj.playingDuration;
     },
     get PREMATURE_END_SECONDS() {
-      return dj.PREMATURE_END_SECONDS;
+      return runway.PREMATURE_END_SECONDS;
     },
     get promotePreparedAutoSuccessor() {
-      return dj.promotePreparedAutoSuccessor;
+      return runway.promotePreparedAutoSuccessor;
     },
     get nextEntry() {
       return queue.nextEntry;
     },
     get enterStarved() {
-      return dj.enterStarved;
+      return runway.enterStarved;
     },
     get resumeFromStarved() {
-      return dj.resumeFromStarved;
+      return runway.resumeFromStarved;
     },
     get discardFutureAutoplay() {
       return queue.discardFutureAutoplay;
@@ -114,7 +115,7 @@ function createClient() {
       return queue.abandonContextMatches;
     },
     get ensureGeneratedQueue() {
-      return dj.ensureGeneratedQueue;
+      return runway.ensureGeneratedQueue;
     },
     get commitSeq() {
       return dj.commitSeq;
@@ -196,31 +197,63 @@ function createClient() {
     get updateUpcomingPreparation() {
       return queue.updateUpcomingPreparation;
     },
-    get emitPlaybackEvent() {
-      return transport.emitPlaybackEvent;
+    get abandonContextMatches() {
+      return queue.abandonContextMatches;
+    },
+    get runway() {
+      return runway;
+    }
+  }, lifetime);
+  const runway = createRunway({
+    get dj() {
+      return dj.runwayPort;
+    },
+    get actions() {
+      return actions;
+    },
+    get prefetchUpcoming() {
+      return queue.prefetchUpcoming;
     },
     get stageNext() {
       return queue.stageNext;
     },
-    get nextEntry() {
-      return queue.nextEntry;
+    get discardFutureAutoplay() {
+      return queue.discardFutureAutoplay;
+    },
+    get cancelPendingRadio() {
+      return queue.cancelPendingRadio;
+    },
+    get abandonContextMatches() {
+      return queue.abandonContextMatches;
     },
     get previewLookahead() {
       return queue.previewLookahead;
     },
+    get nextEntry() {
+      return queue.nextEntry;
+    },
+    get stagedEntry() {
+      return queue.stagedEntry;
+    },
+    set stagedEntry(value) {
+      queue.stagedEntry = value;
+    },
+    get trackPrepared() {
+      return transport.trackPrepared;
+    },
+    get loadIndex() {
+      return transport.loadIndex;
+    },
+    get emitPlaybackEvent() {
+      return transport.emitPlaybackEvent;
+    },
     get runWhenAudible() {
       return transport.runWhenAudible;
-    },
-    set runWhenAudible(value) {
-      transport.runWhenAudible = value;
-    },
-    get abandonContextMatches() {
-      return queue.abandonContextMatches;
     }
   }, lifetime);
   const queue = createQueue({
     get onPreviewPreparation() {
-      return dj.onPreviewPreparation;
+      return runway.onPreviewPreparation;
     },
     get runWhenAudible() {
       return transport.runWhenAudible;
@@ -238,10 +271,10 @@ function createClient() {
       return transport.levelFor;
     },
     get generatedQueue() {
-      return dj.generatedQueue;
+      return runway.generatedQueue;
     },
     set generatedQueue(value) {
-      dj.generatedQueue = value;
+      runway.generatedQueue = value;
     },
     get actions() {
       return actions;
@@ -250,10 +283,10 @@ function createClient() {
       return transport.emitPlaybackEvent;
     },
     get ensureAutoplay() {
-      return dj.ensureAutoplay;
+      return runway.ensureAutoplay;
     },
     get resumeFromStarved() {
-      return dj.resumeFromStarved;
+      return runway.resumeFromStarved;
     },
     get insertionFloor() {
       return dj.insertionFloor;
@@ -291,10 +324,10 @@ function createClient() {
       return actions;
     },
     get generatedQueue() {
-      return dj.generatedQueue;
+      return runway.generatedQueue;
     },
     set generatedQueue(value) {
-      dj.generatedQueue = value;
+      runway.generatedQueue = value;
     },
     get stagedEntry() {
       return queue.stagedEntry;
@@ -321,7 +354,7 @@ function createClient() {
       transport.userPlaybackStartedThisSession = value;
     },
     get ensureGeneratedQueue() {
-      return dj.ensureGeneratedQueue;
+      return runway.ensureGeneratedQueue;
     },
     get loadIndex() {
       return transport.loadIndex;
@@ -420,7 +453,7 @@ function createClient() {
       return session.programMediaSession;
     },
     get ensureAutoplay() {
-      return dj.ensureAutoplay;
+      return runway.ensureAutoplay;
     },
     get discardFutureAutoplay() {
       return queue.discardFutureAutoplay;
@@ -510,7 +543,7 @@ function createClient() {
       return dj.evaluateDjRunway;
     },
     get watchRunway() {
-      return dj.watchRunway;
+      return runway.watchRunway;
     },
     get updatePositionState() {
       return session.updatePositionState;
@@ -519,7 +552,7 @@ function createClient() {
       return queue.revalidatePreparation;
     },
     get resumeFromStarved() {
-      return dj.resumeFromStarved;
+      return runway.resumeFromStarved;
     },
     get actions() {
       return actions;
@@ -568,6 +601,7 @@ function createClient() {
   const actions: PlayerActions = {
     ...transport.actions,
     ...dj.actions,
+    ...runway.actions,
     ...queue.actions,
     ...session.actions,
     ...podcasts.actions,
@@ -585,6 +619,7 @@ function createClient() {
       lifetime.close();
       transport.dispose();
       dj.dispose();
+      runway.dispose();
       queue.dispose();
       invalidateLibrarySync();
       clearDownloadTimers();

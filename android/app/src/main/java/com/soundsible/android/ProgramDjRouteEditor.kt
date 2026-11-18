@@ -31,10 +31,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
         val start = programme.editableFrom()
         val locked = snapshot.rows.subList(snapshot.floor + 1, start)
         val allFuture = snapshot.rows.drop(start)
-        var count = minOf(16, allFuture.size)
-        allFuture.take(count).mapNotNull { it.ownerKey }.forEach { owner ->
-            count = maxOf(count, allFuture.indexOfFirst { key(it.item) == owner } + 1)
-        }
+        val count = ProgramDjRoutePolicy.repairHorizon(allFuture.map { ProgramDjRoutePolicy.RouteRow(key(it.item), it.kind, it.ownerKey) }, 16)
         val future = allFuture.take(count)
         require(future.size >= 2)
         val seed = snapshot.rows[start - 1].item
@@ -46,7 +43,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
     fun place(track: MediaItem, beforeKey: String?) {
         val programme = owner() ?: error("NO_DJ")
         clear()
-        val destination = beforeKey?.let(programme::blockStartKey)
+        val destination = programme.requestDestination(beforeKey)
         val snapshot = programme.addRequested(track, destination)
         val start = programme.editableFrom()
         val locked = snapshot.rows.subList(snapshot.floor + 1, start)
@@ -64,7 +61,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
         val programme = owner() ?: error("NO_DJ")
         require(tracks.size in 2..ProgramQueue.LIMIT && tracks.map(::key).toSet().size == tracks.size)
         clear()
-        val destination = beforeKey?.let(programme::blockStartKey)
+        val destination = programme.requestDestination(beforeKey)
         val snapshot = programme.addRequestedGroup(tracks, destination)
         val start = programme.editableFrom()
         val locked = snapshot.rows.subList(snapshot.floor + 1, start)

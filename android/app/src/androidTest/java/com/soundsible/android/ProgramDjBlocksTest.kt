@@ -79,9 +79,10 @@ class ProgramDjBlocksTest {
                 assertEquals(2000, owner.player.currentPosition)
                 owner.seek(0, 0)
                 val retainedEpoch = owner.routeSnapshot().epoch
+                // Removing a bridge removes only that song; the request it led into stays.
                 owner.editBlock("remove", 1, 1)
                 assertEquals(retainedEpoch, owner.routeSnapshot().epoch)
-                assertEquals(listOf(key(0), key(3)), owner.items().map { it.mediaMetadata.extras!!.getString(ProgramQueue.KEY) })
+                assertEquals(listOf(key(0), key(2), key(3)), owner.items().map { it.mediaMetadata.extras!!.getString(ProgramQueue.KEY) })
                 assertEquals(0, owner.player.currentPosition); assertFalse(owner.player.playWhenReady)
                 owner.player.play()
             }

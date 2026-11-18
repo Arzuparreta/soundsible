@@ -2306,6 +2306,38 @@ describe('Auto Mode store contract', () => {
     expect(state.playback.queue.at(-2)!.autoRoute).toMatchObject({ kind: 'bridge', ownerQueueId: wanted.queueId });
   });
 
+  it('keeps a bridged request whole when another song is moved in front of it or the route is replanned', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1', 'route-2', 'route-3']));
+    const placeDjTrack = vi.fn().mockImplementation(async (body: { track: Track; requested_queue_id: string }) => ({
+      v: 1, insert_at: 1, before_queue_id: null, requested_queue_id: body.requested_queue_id, degraded: false,
+      items: [
+        { id: 'bridge', youtube_id: 'bridge', title: 'Bridge', artist: 'DJ', source: 'preview', source_pool: 'related',
+          recommendation_identity: 'music:youtube:bridge', recommendation_source: 'auto_mode', route_kind: 'bridge' },
+        { id: body.track.id, youtube_id: body.track.id, title: body.track.title, artist: body.track.artist, source: 'preview',
+          source_pool: 'related', recommendation_identity: `music:youtube:${body.track.id}`, recommendation_source: 'auto_mode', route_kind: 'user' },
+      ],
+    }));
+    const { actions, state } = await loadStore({ planDjQueue, placeDjTrack });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(5));
+    await actions.placeAutoTrack({ id: 'wanted', title: 'Wanted', artist: 'Listener' });
+    const wanted = state.playback.queue.find((entry) => entry.id === 'wanted')!;
+    const last = state.playback.queue.at(-1)!;
+
+    // Dropped on the request, the song lands in front of its bridge.
+    actions.moveAutoRoute(last.queueId, wanted.queueId);
+    const ids = () => state.playback.queue.map((entry) => entry.id);
+    expect(ids().indexOf(last.id) + 1).toBe(ids().indexOf('bridge'));
+    expect(ids().indexOf('bridge') + 1).toBe(ids().indexOf('wanted'));
+
+    planDjQueue.mockResolvedValue(autoPlan(['next-0', 'next-1', 'next-2', 'next-3', 'next-4', 'next-5']));
+    actions.addAutoSource([t2], 'Direction');
+    await vi.waitFor(() => expect(ids()).toContain('next-0'));
+    expect(ids().indexOf('bridge') + 1).toBe(ids().indexOf('wanted'));
+    expect(ids()).not.toContain('route-0');
+  });
+
   it('never moves a route entry in front of the song that is playing', async () => {
     const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1', 'route-2']));
     const { actions, state } = await loadStore({ planDjQueue });

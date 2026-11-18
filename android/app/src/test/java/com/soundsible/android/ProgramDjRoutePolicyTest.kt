@@ -1,40 +1,57 @@
 package com.soundsible.android
 
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ProgramDjRoutePolicyTest {
-    private data class Song(val id: String, val key: String, val pin: Boolean = false, val owner: String? = null)
-    private fun apply(before: List<Song>, next: List<Song>) = ProgramDjRoutePolicy.retainPins(before, next, Song::pin, Song::id)
-    @Test fun retainsChosenDepthAndOccurrenceWhileChangingFiller() {
-        val pin = Song("request", "chosen", true)
-        val result = apply(listOf(Song("old", "old"), pin, Song("old2", "old2")),
-            listOf(Song("new", "new"), Song("request", "new-duplicate"), Song("new2", "new2")))
-        assertEquals(listOf("new", "chosen", "new2"), result.map { it.key })
+    private fun rows(array: JSONArray) = (0 until array.length()).map { index ->
+        val row = array.getJSONObject(index)
+        val key = row.getString("key")
+        ProgramDjRoutePolicy.RouteRow(key, row.getString("kind"), row.optString("owner").ifEmpty { null },
+            row.optString("group").ifEmpty { null }, row.optString("recording").ifEmpty { key })
     }
-    @Test fun preservesTwoRequestedOccurrencesOfTheSameRecording() {
-        val first = Song("request", "first", true); val second = Song("request", "second", true)
-        assertEquals(listOf(first, second), apply(listOf(first, second), listOf(Song("request", "replacement"))))
+    private fun JSONObject.text(name: String): String? = if (isNull(name)) null else optString(name).ifEmpty { null }
+    private fun expected(vector: JSONObject): Any? = when (val value = vector.get("expect")) {
+        JSONObject.NULL -> null
+        is JSONArray -> (0 until value.length()).map { value.getString(it) }
+        else -> (value as Number).toInt()
     }
-    @Test fun rejectsAReplanThatWouldMoveADeepRequestEarlier() {
-        val before = listOf(Song("a", "a"), Song("b", "b"), Song("request", "chosen", true))
-        assertThrows(IllegalArgumentException::class.java) { apply(before, listOf(Song("new", "new"))) }
-    }
-    @Test fun movingEitherBridgeOrOwnerMovesTheirWholeBlockAcrossNeighbouringBlocks() {
-        val rows = listOf(Song("seed", "seed"), Song("bridge", "bridge", owner = "request"),
-            Song("request", "request", true), Song("other-bridge", "other-bridge", owner = "other"), Song("other", "other", true))
-        for (key in listOf("bridge", "request")) {
-            val moved = ProgramDjRoutePolicy.moveBlock(rows, key, 3, Song::key, Song::owner)
-            assertEquals(listOf("seed", "other-bridge", "other", "bridge", "request"), moved.map { it.key })
-            val restored = ProgramDjRoutePolicy.moveBlock(moved, key, 1, Song::key, Song::owner)
-            assertEquals(rows, restored)
+
+    @Test fun sharedRouteRulesMatchTheWebClient() {
+        val text = ProgramDjRoutePolicyTest::class.java.classLoader!!.getResourceAsStream("dj_route_rules.json")!!.bufferedReader().use { it.readText() }
+        val cases = JSONObject(text).getJSONArray("cases")
+        val rules = mutableSetOf<String>()
+        for (index in 0 until cases.length()) {
+            val vector = cases.getJSONObject(index)
+            val rule = vector.getString("rule"); rules.add(rule)
+            val actual: Any? = when (rule) {
+                "editable_from" -> ProgramDjRoutePolicy.editableFrom(rows(vector.getJSONArray("rows")), vector.getInt("current"), vector.getInt("floor"))
+                "block" -> ProgramDjRoutePolicy.block(rows(vector.getJSONArray("rows")), vector.getString("target"))
+                "move" -> ProgramDjRoutePolicy.moveBefore(rows(vector.getJSONArray("rows")), vector.getString("target"), vector.text("before"), vector.getInt("floor"))
+                "request_insertion" -> ProgramDjRoutePolicy.requestInsertion(rows(vector.getJSONArray("rows")), vector.getInt("floor"), vector.text("before"))
+                "remove" -> ProgramDjRoutePolicy.removed(rows(vector.getJSONArray("rows")), vector.getString("target"))
+                "repair_horizon" -> ProgramDjRoutePolicy.repairHorizon(rows(vector.getJSONArray("future")), vector.getInt("limit"))
+                "session_survivors" -> ProgramDjRoutePolicy.sessionSurvivors(rows(vector.getJSONArray("future")), vector.text("lead"))
+                "replan" -> ProgramDjRoutePolicy.replan(rows(vector.getJSONArray("previous")), rows(vector.getJSONArray("generated")))
+                else -> error("Unknown rule $rule")
+            }
+            assertEquals("$rule: ${vector.getString("name")}", expected(vector), actual)
         }
+        assertEquals(setOf("editable_from", "block", "move", "request_insertion", "remove", "repair_horizon", "session_survivors", "replan"), rules)
     }
-    @Test fun blockRemovalDistinguishesRepeatedRecordingsAndTargetsBridgeOwner() {
-        val rows = listOf(Song("request", "first", true), Song("bridge", "bridge", owner = "second"), Song("request", "second", true))
-        val removed = ProgramDjRoutePolicy.block(rows, "bridge", Song::key, Song::owner).map(Song::key).toSet()
-        assertEquals(setOf("bridge", "second"), removed)
-        assertEquals(listOf("first"), rows.filter { it.key !in removed }.map { it.key })
+
+    @Test fun aDragMovesWholeBlocksPastTheirNeighbours() {
+        val rows = listOf(ProgramDjRoutePolicy.RouteRow("seed", "generated"), ProgramDjRoutePolicy.RouteRow("bridge", "bridge", "request"),
+            ProgramDjRoutePolicy.RouteRow("request", "user"), ProgramDjRoutePolicy.RouteRow("other-bridge", "bridge", "other"),
+            ProgramDjRoutePolicy.RouteRow("other", "user"))
+        for (key in listOf("bridge", "request")) {
+            val moved = ProgramDjRoutePolicy.moveToIndex(rows, key, 3, 0)!!
+            assertEquals(listOf("seed", "other-bridge", "other", "bridge", "request"), moved)
+            val reordered = moved.map { name -> rows.first { it.key == name } }
+            assertEquals(rows.map { it.key }, ProgramDjRoutePolicy.moveToIndex(reordered, key, 1, 0))
+        }
+        assertEquals(null, ProgramDjRoutePolicy.moveToIndex(rows, "request", 1, 0))
     }
 }
