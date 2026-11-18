@@ -17,7 +17,8 @@ export interface TransportPorts {
   mix: ActiveMix | null;
   cancelMix: (reason: MixCancelReason) => void;
   primeAudioSession: (context: AudioContext) => void;
-  resumeContext: () => void;
+  resumeContext: (interactive?: boolean) => void;
+  cancelContextResume: () => void;
   tick: () => void;
   reportProgramTransport: (kind: ProgramTransportEvent['kind'], origin: ProgramTransportOrigin, phase: MixPhase, dominant: boolean) => void;
   stopRateReturn: () => void;
@@ -354,6 +355,14 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
   function deckIsPlaying(deck: HTMLAudioElement): boolean {
     return !deck.paused && !deck.ended && Boolean(deck.currentSrc || deck.getAttribute('src')) && !holdsUnlockSample(deck);
   }
+  function requestPlayback(interactive = !playbackRequested || navigator.userActivation?.isActive === true): void {
+    playbackRequested = true;
+    ports.resumeContext(interactive);
+  }
+  function revokePlayback(): void {
+    playbackRequested = false;
+    ports.cancelContextResume();
+  }
   function playProgramDeck(deck: HTMLAudioElement): Promise<void> {
     if (!playbackRequested) return Promise.resolve();
     ports.resumeContext();
@@ -428,7 +437,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     }
     pendingDetach.clear();
   }
-  function reconcilePlatformPlayback(): void {
+  function reconcilePlatformPlayback(interactive = false): void {
     if (!playbackRequested || outputRecovering) return;
     // A song that played to its end is paused by definition. That is a track
     // boundary for `ended` to settle, not the platform taking the music away —
@@ -438,7 +447,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       ports.audioService.pause('platform', 'native_paused_on_restore');
       return;
     }
-    ports.resumeContext();
+    ports.resumeContext(interactive);
   }
   let lifecycleBound = false;
   function bindLifecycle(): void {
@@ -455,8 +464,8 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         }
       });
     }
-    lifetime.listen(document, 'resume', reconcilePlatformPlayback);
-    lifetime.listen(window, 'pageshow', reconcilePlatformPlayback);
+    lifetime.listen(document, 'resume', () => reconcilePlatformPlayback());
+    lifetime.listen(window, 'pageshow', () => reconcilePlatformPlayback());
     // A blend is driven by a chain of timeouts, and a backgrounded page does not
     // get to keep its timers: iOS throttles them to whatever it likes and stops
     // them altogether once the page is frozen. `timeupdate` and `ended` come from
@@ -518,7 +527,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
   const actions = {
     load(url: string, level: number, positionSec = 0): Promise<void> {
       cancelOutputRecovery();
-      playbackRequested = true;
+      requestPlayback();
       ports.cancelMix('load');
       const a = audioEl();
       const token = ++loadSeq;
@@ -554,9 +563,10 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     recover(url: string, positionSec: number, level: number, options?: { requestPlayback?: boolean }): Promise<void> {
       // Automatic recovery must honour a pause. An explicit Retry owns a new
       // play request and must not resolve without loading the replacement.
-      if (options?.requestPlayback) playbackRequested = true;
-      if (!playbackRequested) return Promise.resolve();
+      if (!playbackRequested && !options?.requestPlayback) return Promise.resolve();
       cancelOutputRecovery();
+      // Start the context in the Retry turn, before metadata arrives.
+      if (options?.requestPlayback) requestPlayback(true);
       ports.cancelMix('load');
       const fromIndex = activeIndex;
       const toIndex = 1 - fromIndex;
@@ -635,7 +645,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       });
     },
     prime(url: string, positionSec: number, level: number): void {
-      playbackRequested = false;
+      revokePlayback();
       cancelOutputRecovery();
       ports.cancelMix('load');
       const a = audioEl();
@@ -669,10 +679,10 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         origin
       });
       if (outputRecovering) return Promise.resolve();
-      playbackRequested = true;
       recoveryAttempted = false;
       outputHealth = 'healthy';
       configurePlaybackSession();
+      requestPlayback(true);
       const current = ports.mix;
       const phase = current?.phase ?? 'idle';
       const dominant = current?.dominant ?? false;
@@ -685,7 +695,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         origin,
         reason
       });
-      playbackRequested = false;
+      revokePlayback();
       loadSeq += 1;
       cancelOutputRecovery();
       const current = ports.mix;
@@ -696,7 +706,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       ports.reportProgramTransport('pause', origin, phase, dominant);
     },
     stop(): void {
-      playbackRequested = false;
+      revokePlayback();
       cancelOutputRecovery();
       loadSeq += 1;
       ports.cancelMix('stop');
@@ -777,7 +787,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       // and throw away everything this one already has.
       if (to.networkState === NETWORK_NO_SOURCE) return null;
       cancelOutputRecovery();
-      playbackRequested = true;
+      requestPlayback();
       const fromIndex = activeIndex;
       const token = ++loadSeq;
       stagedUrl = '';
@@ -833,9 +843,6 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     reconcilePlatformPlayback,
     get playbackRequested() {
       return playbackRequested;
-    },
-    set playbackRequested(value: boolean) {
-      playbackRequested = value;
     },
     unlockDecks,
     deckIsPlaying,

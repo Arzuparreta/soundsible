@@ -2,6 +2,7 @@ import { RuntimeLifetime } from './runtimeLifetime';
 import { createTransport } from './audio/transport';
 import { createGraph } from './audio/graph';
 import { createMixer } from './audio/mixer';
+import { isAppleMobile } from './audio/appleMobile';
 import { createCapture } from './audio/capture';
 import type { AudioService } from './audio/contracts';
 export type * from './audio/contracts';
@@ -64,6 +65,9 @@ function createAudioRuntime() {
     get resumeContext() {
       return graph.resumeContext;
     },
+    get cancelContextResume() {
+      return graph.cancelContextResume;
+    },
     get tick() {
       return mixer.tick;
     },
@@ -98,9 +102,6 @@ function createAudioRuntime() {
     },
     get playbackRequested() {
       return transport.playbackRequested;
-    },
-    set playbackRequested(value) {
-      transport.playbackRequested = value;
     },
     get unlockDecks() {
       return transport.unlockDecks;
@@ -140,6 +141,7 @@ function createAudioRuntime() {
     }
   }, lifetime);
   const mixer = createMixer({
+    fixedTempo: typeof navigator !== 'undefined' && isAppleMobile(navigator),
     deckSignal: index => graph.deckSignal(index),
     deckOutputSignal: index => graph.deckOutputSignal(index),
     get decks() {
@@ -226,9 +228,6 @@ function createAudioRuntime() {
     get playbackRequested() {
       return transport.playbackRequested;
     },
-    set playbackRequested(value) {
-      transport.playbackRequested = value;
-    },
     get resumeContext() {
       return graph.resumeContext;
     },
@@ -285,7 +284,7 @@ function createAudioRuntime() {
     technique: mixer.mix?.technique ?? null,
     localVolume: graph.masterVolume,
     localMuted: graph.allMuted
-  }));
+  }), graph.diagnosticOutputTiming);
   return {
     audioService,
     setBroadcastLostReporter: capture.setBroadcastLostReporter,

@@ -1,3 +1,4 @@
+import { isAppleMobile } from '../lib/audio/appleMobile';
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { syncSavedEntities } from "../lib/savedEntities";
 import { user } from "../lib/session";
@@ -133,7 +134,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     if (diagnosticUser) lifetime.own(startAutomaticPlaybackDiagnostics({
       userId: diagnosticUser,
       deviceId: state.device.device_id,
-      platform: /(?:iPhone|iPad|iPod)/.test(navigator.userAgent) ? `ios-reported-${navigator.userAgent.match(/OS ([\d_]+)/)?.[1]?.replaceAll('_', '.') ?? 'unknown'}` : 'other',
+      platform: isAppleMobile(navigator) ? `ios-reported-${navigator.userAgent.match(/OS ([\d_]+)/)?.[1]?.replaceAll('_', '.') ?? 'unknown'}` : 'other',
       displayMode: displayMode()
     }, api.sendPlaybackTrace, () => user()?.id === diagnosticUser, import.meta.env.DEV));
 

@@ -76,6 +76,7 @@ export interface LiveTransitionPlan {
   echo_delay_seconds?: number;
   confidence: number;
   sync?: {
+    out_bar_seconds?: number | null;
     phase_tolerance_ms?: number;
   };
 }

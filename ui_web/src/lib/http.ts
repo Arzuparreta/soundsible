@@ -1,5 +1,6 @@
 import { apiOrigin, ownerToken } from './config';
 import { randomId } from './randomId';
+import { isAppleMobile } from './audio/appleMobile';
 
 export class ApiError extends Error {
   constructor(
@@ -61,9 +62,9 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const headers: Record<string, string> = {};
   const work = opts.work ?? (path.startsWith('/api/discovery/music/dj-') ? djWork : undefined);
   if (work) headers['X-Soundsible-Work'] = JSON.stringify(work);
-  // This player moves both decks toward a shared tempo (`mixer.ts`); without
-  // the header the engine plans for players that move only the incoming one.
-  if (path.startsWith('/api/discovery/music/dj-')) headers['X-Soundsible-Dj-Rates'] = 'split';
+  if (path.startsWith('/api/discovery/music/dj-')) {
+    headers['X-Soundsible-Dj-Rates'] = typeof navigator !== 'undefined' && isAppleMobile(navigator) ? 'fixed' : 'split';
+  }
   if (work && /\/dj-(plan|place|repair)$/.test(path)) {
     const requestId = randomId();
     headers['X-Soundsible-Work-Request'] = requestId;

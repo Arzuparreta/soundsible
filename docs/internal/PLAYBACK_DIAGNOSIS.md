@@ -4,6 +4,68 @@ Status: candidate iOS output and source-retirement correction, **not a device-ve
 proves what Now Playing, CarPlay or the head unit displays, or that sound reaches
 the speakers. Device acceptance is still required.
 
+## November 18: iOS DJ cut, Media Session Play and crackling after reopening
+
+The trip's standalone iPhone captures report iOS 18.7. Their UI content
+fingerprint matches the station's bundle and merged source tree. The
+reported cut is in the third mix of the final captured DJ session. The
+incoming deck finished loading at 13:16:26 CET. At 13:16:55.466 the
+outgoing deck, with readiness 4, changed from 1× to 0.9975×. Over the
+next 3.384 s its media clock advanced 0.200 s while the audio context
+advanced 3.384 s. Both deck output meters read zero at the fallback, and
+the outgoing deck had no wait, seek or pause event in that interval.
+After the fallback set the outgoing deck to 1× it was progressing again
+by the next observation. The structural fade began at 13:17:13.905.
+This was a new occurrence of the rate-write failure measured in
+[DJ verification](dj/VERIFICATION.md). The measured lost progress is
+3.184 s. A single RMS reading cannot give the exact audible duration.
+
+Apple mobile browsers now advertise fixed tempo to the shared planner.
+The planner uses its eight-bar echo cuts and fades, keeps recommendation
+relevance in the route, and avoids searching for beatmatched bridges.
+A held plan from an older server or route still falls back to a
+structural fade of at most eight bars. Both decks play at 1× for the
+entire audio runtime because a mix armed in the foreground can be
+underway when the screen locks. This trades tempo alignment for steady
+playback on iOS and iPadOS, including iPad desktop user agents. Other
+runtimes start with variable-rate support and can disable it on measured
+failure.
+
+In another capture, the context requested an automatic resume at
+12:55:06.129 while suspended. Media Session Pause followed at 12:55:06.832
+and Play at 12:55:10.681. The source started immediately, but Play issued no
+fresh context request. The earlier attempt timed out at 12:55:11.130.
+The context stayed suspended with the source advancing, until visibility
+returned and the next resume succeeded at 12:55:22.142. A Pause or Stop
+now retires the outstanding context request. Play, a new selection, a
+prepared handoff after Pause and explicit Retry can request context
+activation immediately. Retry requests it before waiting for source
+metadata. A foreground gesture can replace a pending passive request.
+An obsolete deadline or promise settlement cannot clear the new
+request or restart a paused source.
+
+Two standalone captures began at 12:52:59 and 12:53:26 and played the same
+library track. Both reached a running context and positive deck RMS, at
+different startup latencies. The captures contain no recording of the
+distortion and cannot establish which part of the output path caused it.
+The account-local trace now adds the reported audio-session state, context
+sample rate, base and output latency, and output clock timing where
+supported. These fields use the existing context events, first real
+`playing` event and sampled active-deck updates within 12 s of that start.
+The unlock samples do not start the window. No additional polling, PCM
+capture or route identifiers are used. Missing APIs leave the original
+events intact. An old client capture remains readable. Compare those
+fields on the next affected and clean start along with the existing
+source clocks, readiness and PCM level. Output timestamps are estimates
+at the browser destination and cannot measure samples played by the car.
+
+The fixed-tempo fallback and fresh Play have deterministic regressions.
+The browser regression plays real PCM and checks uninterrupted outgoing
+clicks through the former ramp and both decks at 1×. Chromium completes
+the handoff with the same fixture. The next drive can verify physical
+output and provide the first
+capture of the reported distortion with the added timing fields.
+
 ## November 6: desktop songs start fast, then drop out and settle
 
 The listener reports that, on a fresh desktop client in normal mode, a song

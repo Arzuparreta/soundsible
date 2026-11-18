@@ -13,6 +13,7 @@ const FIRST = 0.25;
 const CASES = [
   { name: 'incoming deck alone', inBpm: 126, split: false },
   { name: 'both decks at a shared tempo', inBpm: 132, split: true },
+  { name: 'iOS continuity at normal speed', inBpm: 132, split: true, fixedTempo: true },
 ];
 const OUT_TONE = 1000, IN_TONE = 3000;
 
@@ -37,12 +38,15 @@ function clicks(bpm: number, tone: number, seconds: number): Buffer {
   return wav;
 }
 
-for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: ${name}`, async ({ page, browserName }) => {
+for (const { name, inBpm: IN_BPM, split, fixedTempo = false } of CASES) test(`DJ output: ${name}`, async ({ page, browserName }) => {
   // Measured in the Playwright image: its GStreamer WebKit drops any element
   // to HAVE_CURRENT_DATA (readyState 4 → 2) at a playbackRate other than 1,
   // and keeps it there back at 1×, so the mixer never admits a stretched
   // deck. The iPhone's WebKit keeps readyState 4 through rate ramps (P15).
-  test.skip(browserName === 'webkit', 'GStreamer WebKit reports readyState 2 at any playbackRate other than 1');
+  test.skip(!fixedTempo && browserName === 'webkit', 'GStreamer WebKit reports readyState 2 at any playbackRate other than 1');
+  if (fixedTempo) await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15' });
+  });
   test.setTimeout(90_000);
   await mockMusicEngine(page);
   const files: Record<string, Buffer> = { out: clicks(OUT_BPM, OUT_TONE, 40), in: clicks(IN_BPM, IN_TONE, 40) };
@@ -67,13 +71,18 @@ for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: 
     ...(split ? { out_playback_rate: outRate, out_rate_ramp: { lead_seconds: 7, seconds: 3 } } : {}),
   };
   const ramp = { lead_seconds: 7, seconds: 3 };
-  await page.evaluate(({ plan, outTone, inTone }) => {
+  // GStreamer WebKit does not reliably admit this second WAV to the blend.
+  // On that renderer check the outgoing deck across the former ramp.
+  const checkHandoff = browserName !== 'webkit';
+  await page.evaluate(({ plan, outTone, inTone, checkHandoff }) => {
     const button = document.createElement('button');
     button.textContent = 'Probar tempo compartido';
     const recorded: Float32Array[] = [];
     let rate = 0;
     button.onclick = async () => {
       try {
+        const recorder = new AudioContext();
+        const recorderReady = recorder.resume();
         const path = '/player/src/lib/audio.ts';
         const diagnosticsPath = '/player/src/lib/playbackDiagnostics.ts';
         const diagnostics = await import(diagnosticsPath);
@@ -86,8 +95,7 @@ for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: 
         // faders, effects and limiter. One stream keeps their relative timing.
         const stream = audioService.acquireBroadcastCapture()?.stream;
         if (!stream) throw new Error('no programme capture');
-        const recorder = new AudioContext();
-        await recorder.resume();
+        await recorderReady;
         rate = recorder.sampleRate;
         const tap = recorder.createScriptProcessor(4096, 1, 1);
         tap.onaudioprocess = event => recorded.push(new Float32Array(event.inputBuffer.getChannelData(0)));
@@ -106,7 +114,11 @@ for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: 
           const snap = audioService.programMixSnapshot();
           log.push(`${outgoing.currentTime.toFixed(2)} ${snap.phase} ${snap.decks.map((d: { position: number; gain: number }) => d.position.toFixed(2) + '/' + d.gain.toFixed(2)).join(' ')}`);
         }, 250);
-        await done;
+        const beforeMix = () => new Promise<void>(resolve => {
+          const wait = () => outgoing.currentTime >= 10 ? resolve() : setTimeout(wait, 40);
+          wait();
+        });
+        await (checkHandoff ? done : Promise.race([done, beforeMix()]));
         clearInterval(sampler);
         await new Promise(resolve => setTimeout(resolve, 300));
         audioService.stop();
@@ -135,10 +147,13 @@ for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: 
           });
           return times;
         };
-        const mix = JSON.parse(diagnostics.playbackDiagnosticExport()).events
-          .filter((row: { event: string }) => row.event.startsWith('mix.')).map((row: { event: string }) => row.event);
-        button.dataset.result = JSON.stringify({ out: onsets(outTone), in: onsets(inTone), speeds, mix,
-          finalIn });
+        const rows = JSON.parse(diagnostics.playbackDiagnosticExport()).events;
+        const mix = rows
+          .filter((row: { event: string }) => row.event.startsWith('mix.') && row.event !== 'mix.cancelled')
+          .map((row: { event: string; facts: { reason?: string; technique?: string } }) => [row.event, row.facts.reason ?? row.facts.technique]);
+        const deckRates = [...new Set<number>(rows.flatMap((row: { media: Array<{ sourceKind: string; rate: number }> }) =>
+          row.media.filter(media => media.sourceKind === 'track').map(media => media.rate)))];
+        button.dataset.result = JSON.stringify({ out: onsets(outTone), in: onsets(inTone), speeds, mix, deckRates, finalIn });
       } catch (error) {
         const diagnosticsPath = '/player/src/lib/playbackDiagnostics.ts';
         const diagnostics = await import(diagnosticsPath);
@@ -150,16 +165,34 @@ for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: 
       }
     };
     document.body.append(button);
-  }, { plan, outTone: OUT_TONE, inTone: IN_TONE });
+  }, { plan, outTone: OUT_TONE, inTone: IN_TONE, checkHandoff });
   const button = page.getByRole('button', { name: 'Probar tempo compartido', exact: true });
   await button.click();
   await expect(button).toHaveAttribute('data-result', /./, { timeout: 60_000 });
   const result = JSON.parse((await button.getAttribute('data-result'))!);
   expect(result.error, JSON.stringify({ mix: result.mix, decks: result.decks, log: result.log }, null, 1)).toBeUndefined();
   const out: number[] = result.out, incoming: number[] = result.in;
-  // No fallback: the blend ran as planned.
-  expect(result.mix).toEqual(['mix.started']);
   const speeds: Array<[number, number]> = result.speeds;
+  if (fixedTempo) {
+    expect(result.mix).toEqual([
+      ['mix.execution_fallback', 'ios_fixed_tempo'],
+      ...(checkHandoff ? [['mix.started', 'structural_fade']] : []),
+    ]);
+    expect(speeds.filter(([position]) => position >= plan.out_cue - ramp.lead_seconds && position < 10).length).toBeGreaterThan(10);
+    expect(speeds.every(([, speed]) => speed === 1)).toBe(true);
+    expect(result.deckRates).toEqual([1]);
+    // The outgoing clicks remain a continuous half-second apart throughout
+    // the time that would have belonged to the outgoing speed ramp.
+    const duringPrepare = out.slice(2, 19);
+    expect(duringPrepare.length).toBeGreaterThanOrEqual(15);
+    expect(duringPrepare.slice(1).every((time, index) => Math.abs(time - duringPrepare[index] - outBeat) < 0.02)).toBe(true);
+    if (checkHandoff) {
+      expect(result.finalIn).toBe(1);
+      expect(incoming.length).toBeGreaterThan(5);
+    }
+    return;
+  }
+  expect(result.mix).toEqual([['mix.started', 'bass_swap']]);
 
   // The outgoing deck kept its speed until the ramp, reached the shared one
   // over it, and held it through the blend.

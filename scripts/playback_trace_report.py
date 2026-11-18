@@ -11,6 +11,10 @@ import sqlite3
 from statistics import median
 
 
+OUTPUT_TIMING = {'sampleRateHz', 'baseLatencyMs', 'outputLatencyMs',
+                 'outputContextTime', 'outputTimestampAgeMs', 'audioSessionState'}
+
+
 def clock_comparison(rows):
     """Compare stable source/context clocks, not sound at the physical output."""
     groups = defaultdict(list)
@@ -95,7 +99,8 @@ def report(path: Path, since: str | None = None) -> str:
                         advancing.append(media['id'])
             mismatch = row.get('declaredState') != 'playing' and bool(advancing)
             previous = row
-            if not is_window and not mismatch and not row['event'].startswith(('mix.', 'connection.', 'output.')) and row['event'] not in {'reject.play', 'media.error', 'context.statechange'}:
+            output_timing = not OUTPUT_TIMING.isdisjoint(row['facts'])
+            if not is_window and not mismatch and not output_timing and not row['event'].startswith(('mix.', 'connection.', 'output.')) and row['event'] not in {'reject.play', 'media.error', 'context.statechange'}:
                 continue
             timestamp = datetime.fromtimestamp(start + row['elapsedMs'] / 1000, timezone.utc).isoformat(timespec='milliseconds')
             media = ','.join(f"{m.get('id')}:{'paused' if m.get('paused') else 'playing'}:{'muted' if m.get('muted') else 'unmuted'}@{m.get('position')}" for m in row['media'])
@@ -103,6 +108,9 @@ def report(path: Path, since: str | None = None) -> str:
             measured = {key: row.get('program', {})[key] for key in
                         ('technique', 'gain0Actual', 'gain1Actual', 'signal0Rms', 'signal1Rms', 'output0Rms', 'output1Rms')
                         if key in row.get('program', {})}
+            if output_timing:
+                measured.update({key: row['program'][key] for key in ('contextState', 'contextTime')
+                                 if key in row['program']})
             evidence = f' graph={json.dumps(measured, sort_keys=True)}' if measured else ''
             output.append(f"{timestamp} #{row['sequence']} +{row['elapsedMs']:.1f}ms {row['event']} declared={row.get('declaredState')} {json.dumps(row['facts'], sort_keys=True)} [{media}]{evidence}{flag}")
     if not sessions:

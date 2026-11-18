@@ -36,24 +36,25 @@ RATE_RAMP_SECONDS = 8.0
 # 5.4 media seconds). The rest is margin for the cue the player relocates.
 RATE_RAMP_END_LEAD = 7.0
 
-# Clients that can play both decks at a shared tempo send
-# `X-Soundsible-Dj-Rates: split` (`session.scoped`). Every other client keeps
-# the plans it was built for: only the incoming deck changes speed.
-_SPLIT_RATES: ContextVar[bool] = ContextVar('dj_split_rates', default=False)
+# Unrecognised capabilities retain the legacy single-deck pitch range.
+_RATE_MODE: ContextVar[str] = ContextVar('dj_rate_mode', default='incoming')
 
 
 @contextmanager
-def split_rates(enabled: bool):
-    """Plan for clients that move both decks toward a common tempo."""
-    token = _SPLIT_RATES.set(bool(enabled))
+def rate_mode(value: str | None):
+    token = _RATE_MODE.set(value if value in ('split', 'fixed') else 'incoming')
     try:
         yield
     finally:
-        _SPLIT_RATES.reset(token)
+        _RATE_MODE.reset(token)
 
 
 def split_enabled() -> bool:
-    return _SPLIT_RATES.get()
+    return _RATE_MODE.get() == 'split'
+
+
+def fixed_tempo() -> bool:
+    return _RATE_MODE.get() == 'fixed'
 
 
 def deck_rates(relation: PlaybackRatio) -> tuple[PlaybackRatio, PlaybackRatio] | None:

@@ -187,7 +187,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       confidence: chained?.confidence ?? 0,
       ...(trusted && chained!.echo_delay_seconds != null ? { echo_delay_seconds: chained!.echo_delay_seconds } : {}),
       // The planner's phase tolerance, as Android already receives it.
-      ...(trusted && chained!.sync ? { sync: { phase_tolerance_ms: chained!.sync.phase_tolerance_ms } } : {})
+      ...(trusted && chained!.sync ? { sync: { out_bar_seconds: chained!.sync.out_bar_seconds, phase_tolerance_ms: chained!.sync.phase_tolerance_ms } } : {})
     };
   }
   function unmixed(plan: LiveTransitionPlan): LiveTransitionPlan {

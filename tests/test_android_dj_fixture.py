@@ -32,7 +32,7 @@ def test_shared_tempo_fixture_writes_known_clicks_and_counts_split_clients(tmp_p
     import wave
     import numpy as np
     from scripts.android_dj_fixture import SHARED_TEMPO, install_shared_tempo, shared_tempo_plan
-    from shared.dj.timing import deck_rates, split_rates
+    from shared.dj.timing import deck_rates, rate_mode
 
     tracks = tmp_path / 'music/tracks'
     tracks.mkdir(parents=True)
@@ -69,6 +69,6 @@ def test_shared_tempo_fixture_writes_known_clicks_and_counts_split_clients(tmp_p
     assert (state['split_requests'], state['other_requests']) == (1, 1)
     # The same speeds the engine plans for this pair.
     transition = shared_tempo_plan()
-    with split_rates(True):
+    with rate_mode('split'):
         out, _ = deck_rates(transition['playback_rate'])
     assert out == pytest.approx(transition['out_playback_rate'], abs=1e-6)
