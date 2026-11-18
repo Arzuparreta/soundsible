@@ -623,7 +623,10 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
         },
         enterAutoMode: () => ports.actions.enterAutoMode(),
         exitAutoMode: () => ports.actions.exitAutoMode(),
-        closeNowPlaying: () => setNowPlayingOpen(false)
+        closeNowPlaying: () => setNowPlayingOpen(false),
+        // Loaded on use: lib/searchFocus imports the stores, so a static
+        // import would close a cycle back into this file.
+        focusSearch: () => void import('../lib/searchFocus').then(m => m.openSearch())
       }));
     }
   }

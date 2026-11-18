@@ -47,6 +47,8 @@ export interface ShortcutActions {
   enterAutoMode(): void;
   exitAutoMode(): void;
   closeNowPlaying(): void;
+  /** Go to Discover's search field and put the cursor in it. */
+  focusSearch(): void;
 }
 
 /** Surfaces where a keystroke is text, not a command. */
@@ -88,6 +90,17 @@ export function createShortcutHandler(
     if (isTextEntry(el)) return;
 
     const ctx = getContext();
+
+    // `/` is the web's "search" key (YouTube, GitHub, Gmail). Matched by the
+    // character, not the key position: it sits on Shift+7 on Spanish and German
+    // layouts. A modal dialog keeps it — its trapped focus is the target — so
+    // a pending confirmation is never navigated away from.
+    if (e.key === '/') {
+      if (el?.closest('[aria-modal="true"]')) return;
+      e.preventDefault(); // Firefox would open Quick Find
+      actions.focusSearch();
+      return;
+    }
 
     if (e.code === 'Space') {
       if (isActivatable(el)) return; // the focused control owns Space

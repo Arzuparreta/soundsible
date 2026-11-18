@@ -5,6 +5,7 @@ import { CoverImage } from '../components/CoverImage';
 import { ArtistLinks, MusicLink } from '../components/MusicLinks';
 import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
+import { focusRequestedSearch } from '../lib/searchFocus';
 import { ViewHeader } from '../components/ViewHeader';
 import { openOverlay } from '../lib/overlay';
 import { desktopShell } from '../lib/shellLayout';
@@ -289,11 +290,9 @@ export default function Search() {
       setDomain(inputDomain(initialQuery));
       runSearch(parseSearchInput(initialQuery).query, inputDomain(initialQuery), initialTab);
     }
-    // Mobile navigation should land on Search without summoning the keyboard.
-    // Fine pointers retain the fast desktop workflow.
-    if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
-      requestAnimationFrame(() => searchInput?.focus());
-    }
+    // Arriving on Discover shows the feed; only an explicit request to search
+    // (`/`) brings the cursor with it. See lib/searchFocus.
+    focusRequestedSearch(searchInput);
   });
 
   const runCatalog = (query: string) => {

@@ -15,6 +15,7 @@ function makeActions() {
     enterAutoMode: vi.fn(),
     exitAutoMode: vi.fn(),
     closeNowPlaying: vi.fn(),
+    focusSearch: vi.fn(),
   };
 }
 
@@ -102,6 +103,37 @@ describe('transport keys', () => {
   });
 });
 
+describe('search key', () => {
+  it('opens search on "/", shifted or not, and keeps Firefox Quick Find shut', () => {
+    const bare = press({ key: '/' });
+    // Spanish and German layouts type "/" with Shift+7.
+    press({ key: '/', shiftKey: true });
+    expect(actions.focusSearch).toHaveBeenCalledTimes(2);
+    expect(bare.defaultPrevented).toBe(true);
+  });
+
+  it('opens search over an open Now Playing sheet', () => {
+    context = { ...idle, nowPlayingOpen: true };
+    press({ key: '/' });
+    expect(actions.focusSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('types "/" into a field and leaves a modal dialog where it is', () => {
+    press({ key: '/', target: document.createElement('input') });
+    const dialog = document.createElement('div');
+    dialog.setAttribute('aria-modal', 'true');
+    const confirm = document.createElement('button');
+    dialog.appendChild(confirm);
+    document.body.appendChild(dialog);
+    // Dispatched in place: `press` would move the button out of the dialog.
+    const event = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true });
+    confirm.dispatchEvent(event);
+    dialog.remove();
+    expect(actions.focusSearch).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+});
+
 describe('keys that are not ours', () => {
   it.each([
     ['ctrlKey', { ctrlKey: true }],
@@ -114,7 +146,9 @@ describe('keys that are not ours', () => {
     press({ code: 'ArrowRight', ...modifier });
     press({ key: 'a', ...modifier });
     press({ key: 'm', ...modifier });
+    press({ key: '/', ...modifier });
 
+    expect(actions.focusSearch).not.toHaveBeenCalled();
     expect(actions.togglePlay).not.toHaveBeenCalled();
     expect(actions.seekBy).not.toHaveBeenCalled();
     expect(actions.toggleMute).not.toHaveBeenCalled();
