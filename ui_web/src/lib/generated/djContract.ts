@@ -196,11 +196,19 @@ export interface DjLegacyPlanResponse extends DjPlanBase {
 }
 
 export interface DjRouteItem extends ListeningPlanItem {
+  analysis: DjAnalysis;
+  transition: DjTransitionPlan;
 }
 
 export interface DjRouteResponse extends DjPlanBase {
   v: 6;
   items: DjRouteItem[];
+  analysis_coverage: DjAnalysisCoverage;
+  /**
+   * Features of the track the route continues from — the only reading the
+   * player has for a song it did not plan itself.
+   */
+  seed_analysis: Partial<DjAnalysis>;
 }
 
 export type DjPlanResponse = DjRouteResponse | DjLegacyPlanResponse;
@@ -210,6 +218,8 @@ export interface DjPlacementItem extends ListeningPlanItem {
   owner_queue_id?: string;
   /** A collection placement names the occurrence each item becomes. */
   queue_id?: string | null;
+  analysis: DjAnalysis;
+  transition: DjTransitionPlan;
 }
 
 export interface DjPlacementResponse {
@@ -230,6 +240,8 @@ export interface DjRepairItem extends ListeningPlanItem {
   queue_id: string | null;
   route_kind: DjRouteKind;
   owner_queue_id?: string;
+  analysis: DjAnalysis;
+  transition: DjTransitionPlan;
 }
 
 /**

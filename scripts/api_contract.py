@@ -195,7 +195,10 @@ def typescript(root: dict | None = None) -> str:
         out.append("\n" + _comment(schema.get("description"), ""))
         if "$extends" in schema:
             parent = schema["$extends"][len("#/$defs/"):]
-            body = _members(expand(root, schema), root, "  ", schema.get("properties", {}))
+            expanded = expand(root, schema)
+            names = dict.fromkeys([*schema.get("properties", {}), *schema.get("required", [])])
+            properties = {name: expanded["properties"][name] for name in names}
+            body = _members(expanded, root, "  ", properties)
             out.append(f"export interface {name} extends {parent} {{\n{body}}}\n")
         elif schema.get("type") == "object":
             out.append(f"export interface {name} {{\n{_members(schema, root, '  ')}}}\n")

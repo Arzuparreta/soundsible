@@ -1,5 +1,18 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi, afterEach } from 'vitest';
 import { request } from './api';
+import type {
+  DjAnalysis, DjAnalysisCoverage, DjPlacementItem, DjPlanResponse, DjRepairItem, DjTransitionPlan,
+} from './generated/djContract';
+
+it('requires the measured DJ fields in the generated response types', () => {
+  type Route = Extract<DjPlanResponse, { v: 6 }>;
+  type Measured = { analysis: DjAnalysis; transition: DjTransitionPlan };
+
+  expectTypeOf<Route>().toExtend<{ seed_analysis: Partial<DjAnalysis>; analysis_coverage: DjAnalysisCoverage }>();
+  expectTypeOf<Route['items'][number]>().toExtend<Measured>();
+  expectTypeOf<DjPlacementItem>().toExtend<Measured>();
+  expectTypeOf<DjRepairItem>().toExtend<Measured>();
+});
 
 const realFetch = globalThis.fetch;
 

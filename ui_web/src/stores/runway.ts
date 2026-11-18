@@ -198,12 +198,13 @@ export function createRunway(ports: RunwayPorts, lifetime: RuntimeLifetime) {
     const immediate = pb.queue[pb.index + 1];
     if (!immediate) return false;
     if (ports.trackPrepared(immediate)) return true;
-    if (routeKind(immediate) !== 'generated' || ports.dj.committedQueueId() === immediate.queueId) return false;
+    if (immediate.queueLane !== 'generated' || routeKind(immediate) !== 'generated'
+      || ports.dj.committedQueueId() === immediate.queueId) return false;
     let readyIndex = -1;
     for (let index = pb.index + 2; index < pb.queue.length; index += 1) {
       const candidate = pb.queue[index];
       // Moving a single ready song must not split or overtake an explicit request.
-      if (routeKind(candidate) !== 'generated') break;
+      if (candidate.queueLane !== 'generated' || routeKind(candidate) !== 'generated') break;
       if (ports.trackPrepared(candidate)) {
         readyIndex = index;
         break;

@@ -4608,6 +4608,19 @@ describe('preview preparation ownership', () => {
     expect(state.playback.previewPreparation).toBeNull();
   });
 
+  it('keeps the normal playback order when a later preview becomes ready first', async () => {
+    const s = await loadStore({
+      __previewPreparationState: (id: string) => id === previews[2].id ? 'ready' : 'streamable',
+    });
+    s.initStore();
+    s.actions.playFrom(previews, 0);
+    s.fireDeckEvent('playing');
+    s.firePreviewStatus(previews[2].id, { state: 'ready' });
+
+    expect(s.state.autoMode.active).toBe(false);
+    expect(s.state.playback.queue.map(row => row.id)).toEqual(previews.map(track => track.id));
+  });
+
   it('revalidates owned IDs on reconnect and resume without discarding a staged deck', async () => {
     const readiness: Record<string, 'ready' | 'cold'> = {};
     const { actions, initStore, fireSocketEvent, fireDeckEvent, firePreviewStatus, preparationOwners, audioService } = await loadStore({
