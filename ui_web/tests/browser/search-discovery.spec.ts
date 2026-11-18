@@ -30,7 +30,7 @@ test('home has distinct entities, bounded songs, working sections and restoratio
   await expect(artists).toBeVisible();
   await expect(albums).toBeVisible();
   await expect(home.getByText(/^Canción recomendada /)).toHaveCount(5);
-  if (info.project.name.includes('mobile')) await expect(page.getByRole('searchbox')).not.toBeFocused();
+  await expect(page.getByRole('searchbox')).not.toBeFocused();
   const artist = artists.getByRole('link', { name: 'Artista recomendado 1', exact: true });
   await expect(artist).toHaveAttribute('href', /deezer_id=1/);
   const album = albums.getByRole('link', { name: 'Un disco por descubrir 1', exact: true });
@@ -69,6 +69,30 @@ test('entity navigation returns to the same recommendations', async ({ page }) =
   await expect(page).toHaveURL(/album/);
   await page.goBack();
   await expect(home.getByRole('link', { name: 'Un disco por descubrir 1', exact: true })).toBeVisible();
+});
+
+test('Discover arrives on the feed and searches only when asked', async ({ page }) => {
+  await page.goto('/player/#/search');
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  const home = page.getByTestId('search-discovery');
+  const field = page.getByRole('searchbox');
+  const album = home.getByRole('link', { name: 'Un disco por descubrir 1', exact: true });
+  await expect(album).toBeVisible();
+  await expect(field).not.toBeFocused();
+  await expect(page.getByText('Búsquedas recientes')).toHaveCount(0);
+  await album.click();
+  await expect(page).toHaveURL(/album/);
+  await page.goBack();
+  await expect(album).toBeVisible();
+  await expect(field).not.toBeFocused();
+  // "/" from anywhere returns to Discover's search with the cursor in it, and
+  // the key itself is not typed.
+  await album.click();
+  await expect(page).toHaveURL(/album/);
+  await page.keyboard.press('/');
+  await expect(page).toHaveURL(/#\/search$/);
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue('');
 });
 
 test('360px layout keeps horizontal exploration inside the viewport', async ({ page }, info) => {

@@ -6,6 +6,7 @@ import { setLocale } from '../lib/i18n';
 import { clearSearchCache } from '../lib/searchCache';
 import { setSearchHistoryEnabled } from '../lib/searchHistory';
 import { encodeTrackCapsule } from '../lib/trackShare';
+import { openSearch } from '../lib/searchFocus';
 
 const apiMock = vi.hoisted(() => ({
   getDiscoveryMusicFeed: vi.fn(),
@@ -39,6 +40,10 @@ vi.mock('../lib/shellLayout', async (importOriginal) => ({
   ...await importOriginal<typeof import('../lib/shellLayout')>(),
   desktopShell: () => shellMock.desktop,
 }));
+vi.mock('../lib/musicNavigation', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/musicNavigation')>(),
+  navigateMusic: vi.fn(),
+}));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/toast', () => ({
   toast: {
@@ -52,6 +57,7 @@ vi.mock('../stores', async () => {
   const { identityMock } = await import('../lib/identityMock');
   return {
     musicLibrary: () => storeMock.library,
+    setNowPlayingOpen: vi.fn(),
     actions: {
       playTrack: storeMock.playTrack,
       loadDownloads: vi.fn(),
@@ -456,6 +462,34 @@ describe('Search route', () => {
     await vi.advanceTimersByTimeAsync(15000);
     expect(apiMock.getDiscoveryMusicFeed).toHaveBeenCalledTimes(1);
     expect(apiMock.getDiscoveryMusicFeed.mock.calls[0][0].aborted).toBe(true);
+  });
+
+  it('arrives on the feed, not in the field, even with a mouse', async () => {
+    // Back from an album remounts Discover; focusing on mount reopened recent
+    // searches over the feed every time and kept Space from pausing.
+    const fine = vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      matches: true, media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(),
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+    }));
+    localStorage.setItem('catalog_search_recents', JSON.stringify(['Marea']));
+    render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(screen.getByRole('searchbox')).not.toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Marea' })).not.toBeInTheDocument();
+    localStorage.removeItem('catalog_search_recents');
+    fine.mockRestore();
+  });
+
+  it('brings the cursor along once when "/" asked for search', async () => {
+    openSearch();
+    const first = render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(screen.getByRole('searchbox')).toHaveFocus();
+    first.unmount();
+    // The request was spent: returning later (Back from an album) shows the feed.
+    render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(screen.getByRole('searchbox')).not.toHaveFocus();
   });
 
   it('shows recent searches only while the empty field has focus', async () => {
