@@ -1,6 +1,6 @@
 import type { RuntimeLifetime } from '../runtimeLifetime';
 import { MAX_LINEAR as MAX_LEVEL, MIN_LINEAR as MIN_LEVEL } from "../loudness";
-import { recordPlaybackDiagnostic } from "../playbackDiagnostics";
+import { recordPlaybackDiagnostic, type DiagnosticFacts } from "../playbackDiagnostics";
 import { storedVolume } from "../audioPreferences";
 import { createSignalMeter } from './signal';
 import type { DeckEffects, GraphState, BroadcastCapture } from "./contracts";
@@ -230,48 +230,52 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
       /* a context that refuses a one-sample buffer is caught by the probe */
     }
   }
-  const pendingContextResumes = new WeakMap<AudioContext, object>();
-  function resumeContext(): void {
+  let cancelPendingResume: (() => void) | null = null;
+  function resumeContext(newPlaybackIntent = false): void {
     const context = audioContext;
-    if (!ports.playbackRequested || ports.outputRecovering || !context || context.state === 'running' || context.state === 'closed' || pendingContextResumes.has(context)) return;
-    const request = {};
-    pendingContextResumes.set(context, request);
-    const finish = () => {
-      if (pendingContextResumes.get(context) === request) pendingContextResumes.delete(context);
-    };
-    const deadline = lifetime.setTimeout(() => {
-      recordPlaybackDiagnostic('context.resume_result', {
-        state: context.state,
-        error: 'resume_timeout'
-      });
-      finish(); // A later Play may retry; this timeout never retries by itself.
-    }, 5000);
-    recordPlaybackDiagnostic('context.resume_request', {
-      state: context.state
-    });
-    // Keep the native request in the activation turn. Statechange can fire before
-    // its promise resolves; the guard prevents recursive requests.
-    try {
-      void context.resume().then(lifetime.guard(() => {
-        recordPlaybackDiagnostic('context.resume_result', {
-          state: context.state
-        });
-      }), lifetime.guard(() => {
-        recordPlaybackDiagnostic('context.resume_result', {
-          state: context.state,
-          error: 'resume_failed'
-        });
-      })).finally(lifetime.guard(() => {
-        lifetime.clearTimeout(deadline);
-        finish();
-      }));
-    } catch {
+    if (!ports.playbackRequested || ports.outputRecovering || !context || context.state === 'running' || context.state === 'closed') return;
+    if (cancelPendingResume && !newPlaybackIntent) return;
+    // A new Play after Pause gets its own activation turn and deadline.
+    // A pending automatic resume from before Pause may never have activated output.
+    cancelPendingResume?.();
+    const cancel = () => {
       lifetime.clearTimeout(deadline);
-      finish();
-      recordPlaybackDiagnostic('context.resume_result', {
-        error: 'resume_failed'
-      });
+      cancelPendingResume = null;
+    };
+    const finish = (error?: string) => {
+      if (cancelPendingResume !== cancel) return;
+      cancel();
+      recordPlaybackDiagnostic('context.resume_result', { state: context.state, ...(error && { error }) });
+    };
+    const deadline = lifetime.setTimeout(() => finish('resume_timeout'), 5000);
+    cancelPendingResume = cancel;
+    recordPlaybackDiagnostic('context.resume_request', { state: context.state });
+    try {
+      // Call in the activation turn. Statechange can fire before settlement.
+      void context.resume().then(lifetime.guard(() => finish()), lifetime.guard(() => finish('resume_failed')));
+    } catch {
+      finish('resume_failed');
     }
+  }
+  function diagnosticOutputTiming(): DiagnosticFacts {
+    const context = audioContext;
+    const session = (navigator as Navigator & { audioSession?: { state?: string } }).audioSession;
+    const state = session?.state;
+    const facts: DiagnosticFacts = {
+      audioSessionState: state === 'active' || state === 'inactive' || state === 'interrupted' ? state : null,
+    };
+    if (!context) return facts;
+    if (Number.isFinite(context.sampleRate)) facts.sampleRateHz = context.sampleRate;
+    if (Number.isFinite(context.baseLatency)) facts.baseLatencyMs = context.baseLatency * 1000;
+    if (Number.isFinite(context.outputLatency)) facts.outputLatencyMs = context.outputLatency * 1000;
+    if (typeof context.getOutputTimestamp === 'function') {
+      const { contextTime, performanceTime } = context.getOutputTimestamp();
+      if (Number.isFinite(contextTime) && Number.isFinite(performanceTime) && performanceTime! > 0) {
+        facts.outputContextTime = contextTime!;
+        facts.outputTimestampAgeMs = performance.now() - performanceTime!;
+      }
+    }
+    return facts;
   }
   function watchContextState(context: AudioContext): void {
     if (typeof context.addEventListener !== 'function') return;
@@ -288,6 +292,7 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
   }
   function discardGraph(): void {
     const context = audioContext;
+    cancelPendingResume?.();
     const lostBroadcast = ports.broadcastCapture?.kind === 'program';
     ports.releaseBroadcastCapture();
     audioContext = null;
@@ -465,6 +470,7 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
     graphReady,
     primeAudioSession,
     resumeContext,
+    diagnosticOutputTiming,
     get programOutput() {
       return programOutput;
     },

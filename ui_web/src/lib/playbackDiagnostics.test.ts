@@ -12,10 +12,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function media() {
+function media(index?: number) {
   const element = document.createElement('audio');
   element.src = 'https://private.invalid/song?credential=secret';
-  cleanups.push(observeDiagnosticMedia(element, 'deck'));
+  cleanups.push(observeDiagnosticMedia(element, 'deck', index));
   return element;
 }
 const exported = () => JSON.parse(playbackDiagnosticExport());
@@ -92,6 +92,47 @@ describe('local playback flight recorder', () => {
     await expect(diagnosticPlay(element)).rejects.toBe(error);
     expect(exported().events.at(-1).facts.error).toBe('NotAllowedError');
     expect(playbackDiagnosticExport()).not.toContain('secret');
+  });
+
+  it('records iOS output timing at context changes and during the first real track', () => {
+    const active = media(0);
+    const idle = media(1);
+    for (const deck of [active, idle]) Object.defineProperty(deck, 'paused', { value: false });
+    active.src = 'data:audio/wav;base64,AA==';
+    const time = vi.spyOn(performance, 'now').mockReturnValue(100);
+    const timing = vi.fn(() => ({ audioSessionState: 'active', sampleRateHz: 48000, outputContextTime: 1.5 }));
+    setDiagnosticSnapshot(() => ({ activeIndex: 0 }), timing);
+    startPlaybackDiagnostics({ ...setup, platform: 'ios-reported-18.7' });
+
+    active.dispatchEvent(new Event('playing'));
+    idle.dispatchEvent(new Event('playing'));
+    expect(timing).not.toHaveBeenCalled();
+    recordPlaybackDiagnostic('context.statechange', { state: 'running' });
+    expect(exported().events.at(-1).facts).toMatchObject({ state: 'running', audioSessionState: 'active' });
+
+    active.src = '/track';
+    active.dispatchEvent(new Event('playing'));
+    time.mockReturnValue(6100);
+    active.dispatchEvent(new Event('timeupdate'));
+    expect(exported().events.at(-1).facts).toMatchObject({ outputContextTime: 1.5 });
+    time.mockReturnValue(14_100);
+    active.dispatchEvent(new Event('timeupdate'));
+    active.dispatchEvent(new Event('playing'));
+    expect(timing).toHaveBeenCalledTimes(3);
+    expect(exported().events.at(-1).facts).not.toHaveProperty('outputContextTime');
+
+    stopPlaybackDiagnostics();
+    startPlaybackDiagnostics(setup);
+    recordPlaybackDiagnostic('context.statechange');
+    expect(timing).toHaveBeenCalledTimes(3);
+  });
+
+  it('preserves the context event if the optional timing API throws', () => {
+    setDiagnosticSnapshot(() => ({}), () => { throw new Error('unavailable'); });
+    startPlaybackDiagnostics({ ...setup, platform: 'ios-reported-unknown' });
+    recordPlaybackDiagnostic('context.resume_result', { state: 'running' });
+    expect(exported().events.at(-1).facts).toEqual({ state: 'running' });
+    expect(diagnosticStatus().dropped).toBe(0);
   });
 
   it('counts recorder failures without throwing into playback', () => {

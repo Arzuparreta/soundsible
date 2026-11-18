@@ -11,6 +11,10 @@ import sqlite3
 from statistics import median
 
 
+OUTPUT_TIMING = {'sampleRateHz', 'baseLatencyMs', 'outputLatencyMs',
+                 'outputContextTime', 'outputTimestampAgeMs', 'audioSessionState'}
+
+
 def clock_comparison(rows):
     """Compare stable source/context clocks, not sound at the physical output."""
     groups = defaultdict(list)
@@ -95,7 +99,7 @@ def report(path: Path, since: str | None = None) -> str:
                         advancing.append(media['id'])
             mismatch = row.get('declaredState') != 'playing' and bool(advancing)
             previous = row
-            if not is_window and not mismatch and not row['event'].startswith(('mix.', 'connection.', 'output.')) and row['event'] not in {'reject.play', 'media.error', 'context.statechange'}:
+            if not is_window and not mismatch and not OUTPUT_TIMING.intersection(row['facts']) and not row['event'].startswith(('mix.', 'connection.', 'output.')) and row['event'] not in {'reject.play', 'media.error', 'context.statechange'}:
                 continue
             timestamp = datetime.fromtimestamp(start + row['elapsedMs'] / 1000, timezone.utc).isoformat(timespec='milliseconds')
             media = ','.join(f"{m.get('id')}:{'paused' if m.get('paused') else 'playing'}:{'muted' if m.get('muted') else 'unmuted'}@{m.get('position')}" for m in row['media'])

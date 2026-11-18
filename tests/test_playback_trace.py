@@ -63,6 +63,22 @@ def test_retains_renderer_signal_and_execution_evidence():
     assert row['program']['output1Rms'] == 0.1
 
 
+def test_ios_output_timing_survives_storage_and_operator_report(tmp_path):
+    from scripts.playback_trace_report import report
+
+    batch = sample()
+    fields = dict(node='deck-1', sampleRateHz=48000, baseLatencyMs=2.67, outputLatencyMs=21,
+                  outputContextTime=1.2, outputTimestampAgeMs=15, audioSessionState='active')
+    batch['events'][0].update(event='media.playing', facts=fields)
+    validated = validate_batch(batch, TEST_USER_ID)
+    assert validated['events'][0]['facts'] == fields
+    save_batch(validated, tmp_path)
+    result = report(tmp_path / 'playback-traces.sqlite3')
+    assert 'media.playing' in result
+    assert '"outputLatencyMs": 21' in result
+    assert '"audioSessionState": "active"' in result
+
+
 def test_retention_and_size_budget(tmp_path, monkeypatch):
     import shared.playback_trace as trace
     monkeypatch.setattr(trace, 'MAX_BYTES', 700)

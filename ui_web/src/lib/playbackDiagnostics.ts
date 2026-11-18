@@ -31,8 +31,13 @@ const deckIndexes = new WeakMap<HTMLMediaElement, number>();
 const ids = new WeakMap<HTMLMediaElement, string>();
 const buffer: Array<ReturnType<typeof entry>> = [];
 let snapshot: (() => Facts) | null = null;
+let outputTiming: (() => Facts) | undefined;
+let startupUntil: number | null = null;
 
-export function setDiagnosticSnapshot(reader: () => Facts): void { snapshot = reader; }
+export function setDiagnosticSnapshot(reader: () => Facts, readOutputTiming?: () => Facts): void {
+  snapshot = reader;
+  outputTiming = readOutputTiming;
+}
 export function diagnosticStatus() { return { active, setup, retained: buffer.length, dropped }; }
 
 export function startPlaybackDiagnostics(options: DiagnosticSetup, retain = true): void {
@@ -46,6 +51,7 @@ export function startPlaybackDiagnostics(options: DiagnosticSetup, retain = true
   buffer.length = 0;
   cursor = 0;
   ringDiscarded = 0;
+  startupUntil = null;
   active = true;
   recordPlaybackDiagnostic('capture.start');
 }
@@ -56,7 +62,7 @@ export function stopPlaybackDiagnostics(): void {
 }
 
 function entry(event: string, facts: Facts) {
-  return {
+  const row = {
     sequence: ++sequence, elapsedMs: performance.now() - start, event, facts,
     declaredState: typeof navigator !== 'undefined' && 'mediaSession' in navigator
       ? navigator.mediaSession.playbackState : 'unsupported',
@@ -74,6 +80,19 @@ function entry(event: string, facts: Facts) {
       errorCode: element.error?.code ?? 0,
     })),
   };
+  if (!outputTiming || !setup?.platform.startsWith('ios-reported-')) return row;
+  const contextEvent = event === 'context.statechange' || event === 'context.resume_request' || event === 'context.resume_result';
+  const startupEvent = (event === 'media.playing' || event === 'media.timeupdate') &&
+    row.media.some(deck => deck.deckIndex === row.program.activeIndex && deck.id === facts.node &&
+      !deck.paused && deck.sourceKind === 'track');
+  // Reuse native events and the existing sampling cadence. The silent unlock
+  // samples do not spend the first-track window, and no extra poller runs.
+  if (startupEvent && event === 'media.playing') startupUntil ??= row.elapsedMs + 12_000;
+  if (contextEvent || (startupEvent && startupUntil !== null && row.elapsedMs <= startupUntil)) {
+    try { row.facts = { ...row.facts, ...outputTiming() }; }
+    catch { /* Missing output APIs must never cost the underlying event. */ }
+  }
+  return row;
 }
 
 /** Recording must never alter a transport operation or throw into a handler. */

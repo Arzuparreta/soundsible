@@ -13,6 +13,7 @@ const FIRST = 0.25;
 const CASES = [
   { name: 'incoming deck alone', inBpm: 126, split: false },
   { name: 'both decks at a shared tempo', inBpm: 132, split: true },
+  { name: 'iOS continuity at normal speed', inBpm: 132, split: true, fixedTempo: true },
 ];
 const OUT_TONE = 1000, IN_TONE = 3000;
 
@@ -37,12 +38,15 @@ function clicks(bpm: number, tone: number, seconds: number): Buffer {
   return wav;
 }
 
-for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: ${name}`, async ({ page, browserName }) => {
+for (const { name, inBpm: IN_BPM, split, fixedTempo = false } of CASES) test(`DJ output: ${name}`, async ({ page, browserName }) => {
   // Measured in the Playwright image: its GStreamer WebKit drops any element
   // to HAVE_CURRENT_DATA (readyState 4 → 2) at a playbackRate other than 1,
   // and keeps it there back at 1×, so the mixer never admits a stretched
   // deck. The iPhone's WebKit keeps readyState 4 through rate ramps (P15).
-  test.skip(browserName === 'webkit', 'GStreamer WebKit reports readyState 2 at any playbackRate other than 1');
+  test.skip(!fixedTempo && browserName === 'webkit', 'GStreamer WebKit reports readyState 2 at any playbackRate other than 1');
+  if (fixedTempo) await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15' });
+  });
   test.setTimeout(90_000);
   await mockMusicEngine(page);
   const files: Record<string, Buffer> = { out: clicks(OUT_BPM, OUT_TONE, 40), in: clicks(IN_BPM, IN_TONE, 40) };
@@ -136,7 +140,8 @@ for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: 
           return times;
         };
         const mix = JSON.parse(diagnostics.playbackDiagnosticExport()).events
-          .filter((row: { event: string }) => row.event.startsWith('mix.')).map((row: { event: string }) => row.event);
+          .filter((row: { event: string }) => row.event.startsWith('mix.'))
+          .map((row: { event: string; facts: { reason?: string; technique?: string } }) => [row.event, row.facts.reason ?? row.facts.technique]);
         button.dataset.result = JSON.stringify({ out: onsets(outTone), in: onsets(inTone), speeds, mix,
           finalIn });
       } catch (error) {
@@ -157,9 +162,24 @@ for (const { name, inBpm: IN_BPM, split } of CASES) test(`kicks sound together: 
   const result = JSON.parse((await button.getAttribute('data-result'))!);
   expect(result.error, JSON.stringify({ mix: result.mix, decks: result.decks, log: result.log }, null, 1)).toBeUndefined();
   const out: number[] = result.out, incoming: number[] = result.in;
-  // No fallback: the blend ran as planned.
-  expect(result.mix).toEqual(['mix.started']);
   const speeds: Array<[number, number]> = result.speeds;
+  if (fixedTempo) {
+    expect(result.mix).toEqual([
+      ['mix.execution_fallback', 'ios_fixed_tempo'],
+      ['mix.started', 'structural_fade'],
+    ]);
+    expect(speeds.filter(([position]) => position >= plan.out_cue - ramp.lead_seconds && position < plan.out_cue).length).toBeGreaterThan(10);
+    expect(speeds.every(([, speed]) => speed === 1)).toBe(true);
+    expect(result.finalIn).toBe(1);
+    // The outgoing clicks remain a continuous half-second apart throughout
+    // the time that would have belonged to the outgoing speed ramp.
+    const duringPrepare = out.slice(2, 19);
+    expect(duringPrepare).toHaveLength(17);
+    expect(duringPrepare.slice(1).every((time, index) => Math.abs(time - duringPrepare[index] - outBeat) < 0.02)).toBe(true);
+    expect(incoming.length).toBeGreaterThan(5);
+    return;
+  }
+  expect(result.mix).toEqual([['mix.started', 'bass_swap']]);
 
   // The outgoing deck kept its speed until the ramp, reached the shared one
   // over it, and held it through the blend.

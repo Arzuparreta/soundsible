@@ -2,6 +2,7 @@ import { RuntimeLifetime } from './runtimeLifetime';
 import { createTransport } from './audio/transport';
 import { createGraph } from './audio/graph';
 import { createMixer } from './audio/mixer';
+import { isAppleMobile } from './audio/appleMobile';
 import { createCapture } from './audio/capture';
 import type { AudioService } from './audio/contracts';
 export type * from './audio/contracts';
@@ -140,6 +141,7 @@ function createAudioRuntime() {
     }
   }, lifetime);
   const mixer = createMixer({
+    fixedTempo: typeof navigator !== 'undefined' && isAppleMobile(navigator),
     deckSignal: index => graph.deckSignal(index),
     deckOutputSignal: index => graph.deckOutputSignal(index),
     get decks() {
@@ -285,7 +287,7 @@ function createAudioRuntime() {
     technique: mixer.mix?.technique ?? null,
     localVolume: graph.masterVolume,
     localMuted: graph.allMuted
-  }));
+  }), graph.diagnosticOutputTiming);
   return {
     audioService,
     setBroadcastLostReporter: capture.setBroadcastLostReporter,

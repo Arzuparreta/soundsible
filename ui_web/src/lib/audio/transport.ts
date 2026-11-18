@@ -17,7 +17,7 @@ export interface TransportPorts {
   mix: ActiveMix | null;
   cancelMix: (reason: MixCancelReason) => void;
   primeAudioSession: (context: AudioContext) => void;
-  resumeContext: () => void;
+  resumeContext: (newPlaybackIntent?: boolean) => void;
   tick: () => void;
   reportProgramTransport: (kind: ProgramTransportEvent['kind'], origin: ProgramTransportOrigin, phase: MixPhase, dominant: boolean) => void;
   stopRateReturn: () => void;
@@ -354,9 +354,9 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
   function deckIsPlaying(deck: HTMLAudioElement): boolean {
     return !deck.paused && !deck.ended && Boolean(deck.currentSrc || deck.getAttribute('src')) && !holdsUnlockSample(deck);
   }
-  function playProgramDeck(deck: HTMLAudioElement): Promise<void> {
+  function playProgramDeck(deck: HTMLAudioElement, newPlaybackIntent = false): Promise<void> {
     if (!playbackRequested) return Promise.resolve();
-    ports.resumeContext();
+    ports.resumeContext(newPlaybackIntent);
     superviseClock();
     setDeckParticipation(deck, true);
     const start = {};
@@ -669,6 +669,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         origin
       });
       if (outputRecovering) return Promise.resolve();
+      const newPlaybackIntent = !playbackRequested;
       playbackRequested = true;
       recoveryAttempted = false;
       outputHealth = 'healthy';
@@ -676,7 +677,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       const current = ports.mix;
       const phase = current?.phase ?? 'idle';
       const dominant = current?.dominant ?? false;
-      const started = playProgramDeck(audioEl());
+      const started = playProgramDeck(audioEl(), newPlaybackIntent);
       ports.reportProgramTransport('resume', origin, phase, dominant);
       return started;
     },

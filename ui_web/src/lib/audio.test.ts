@@ -1911,6 +1911,43 @@ describe('CarPlay interruption recovery', () => {
     audioService.releaseBroadcastStream();
   });
 
+  it('lets a new Play supersede a context request made before Pause', async () => {
+    const { audioService, context, deck } = await setup();
+    const handler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
+    let finishOld!: () => void;
+    let finishNew!: () => void;
+    context.resume.mockClear();
+    context.resume
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finishOld = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>(resolve => { finishNew = resolve; }));
+    hide();
+    context.state = 'suspended';
+    handler();
+    await vi.advanceTimersByTimeAsync(4400);
+    audioService.pause('media_session');
+    const play = audioService.resume('media_session');
+    expect(context.resume).toHaveBeenCalledTimes(2);
+    await play;
+    expect(deck.paused).toBe(false);
+
+    // Neither the obsolete deadline nor its late settlement can let a passive
+    // lifecycle event start another request while the new Play is pending.
+    await vi.advanceTimersByTimeAsync(650);
+    finishOld();
+    await Promise.resolve();
+    const starts = deck.play.mock.calls.length;
+    handler();
+    reveal();
+    expect(context.resume).toHaveBeenCalledTimes(2);
+    expect(deck.play).toHaveBeenCalledTimes(starts);
+    context.state = 'running';
+    finishNew();
+    await Promise.resolve();
+    expect(deck.paused).toBe(false);
+    expect(context.suspend).not.toHaveBeenCalled();
+    audioService.stop();
+  });
+
   it('does not restart a source when context resume settles after Pause', async () => {
     const { audioService, context, deck } = await setup();
     let finishResume!: () => void;
@@ -2365,6 +2402,25 @@ describe('shared tempo across both decks', () => {
     expect(outgoing.playbackRate).toBe(split.out_playback_rate);
     expect(ramp.length).toBeGreaterThan(10);
     expect(incoming.paused).toBe(true);
+  });
+
+  it.each([
+    { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 },
+    { userAgent: 'Macintosh', platform: 'MacIntel', maxTouchPoints: 5 },
+  ])('runs the Apple mobile blend at fixed tempo even when armed in the foreground ($platform)', async (browser) => {
+    vi.stubGlobal('navigator', browser);
+    const { audioService, outgoing, incoming, handlers } = await armedAt(80);
+    expect(incoming.playbackRate).toBe(1);
+    hide();
+    const speeds: number[] = [];
+    await playOut(outgoing, 108.5, speeds);
+    expect(new Set(speeds)).toEqual(new Set([1]));
+    expect(audioService.mixPhase()).toBe('prerolling');
+    expect(incoming.playbackRate).toBe(1);
+    incoming.currentTime = 2 - (110 - outgoing.currentTime);
+    await advancePair(outgoing, incoming, 12_000);
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
+    expect(incoming.playbackRate).toBe(1);
   });
 
   it('holds the ramp while the listener pauses, then resumes it from the same speed', async () => {

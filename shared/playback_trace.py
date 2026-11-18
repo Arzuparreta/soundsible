@@ -17,6 +17,8 @@ KEY = re.compile(r"^[a-zA-Z0-9_.:-]{1,128}$")
 FACTS = set("node operation error index from to state origin action reason expectedState mode phase syncReason persisted lost technique requestedTechnique rate overlap atMs".split())
 # Additive, bounded fields for linked DJ observations. No titles or media IDs.
 FACTS |= set("djSession sessionMs direction startKnown edgeId toOccurrence transitionId ordinal selectionKnown fromAnalysed toAnalysed notesDelta lufsDelta flatnessDelta outCue inCue score confidence alignment planId plannerSession segment candidateCount cohortCount cohortReady routeCount accepted manual mixing outcome".split())
+# Output clock and Audio Session state at iOS activation and first track.
+FACTS |= set("sampleRateHz baseLatencyMs outputLatencyMs outputContextTime outputTimestampAgeMs audioSessionState".split())
 PROGRAM = set("activeIndex mixPhase dominant contextState contextTime outputMode gain0Target gain1Target gain0Actual gain1Actual signal0Rms signal1Rms output0Rms output1Rms technique localVolume localMuted".split())
 MEDIA = set("id deckIndex paused ended muted position duration rate volume readyState networkState hasSource sourceKind errorCode".split())
 CAPTURE = set("id startedAt clientRevision userId deviceId platform displayMode".split())

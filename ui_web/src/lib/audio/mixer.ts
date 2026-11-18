@@ -5,6 +5,7 @@ import type { DeckEffects, ProgramMixSnapshot, LiveTransitionPlan, MixPhase, Mix
 import { MediaClockHealth } from './mediaClock';
 import { MAX_STRETCH, RATE_STEP, clampDeckSpeed, planDeckRates } from '../djRates';
 export interface MixerPorts {
+  fixedTempo: boolean;
   deckSignal: (index: number) => number | null;
   deckOutputSignal: (index: number) => number | null;
   decks: () => HTMLAudioElement[];
@@ -102,9 +103,9 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
   let mix: ActiveMix | null = null;
   const rateFallbacks = new WeakSet<ActiveMix>();
   const incomingClock = new MediaClockHealth();
-  // Capability belongs to this audio runtime. Once this renderer fails at
-  // variable speed, do not expose the listener to the same failure every song.
-  let rateControlAvailable = true;
+  // On iOS a rate write can stall a buffered, audible deck while locked.
+  // Keep this policy for the whole runtime: a running mix can become hidden.
+  let rateControlAvailable = !ports.fixedTempo;
   const rateChangedAt = new WeakMap<HTMLAudioElement, number>();
   const outgoingClock = new MediaClockHealth();
   /** Assigns a speed at most every RATE_CHANGE_MS unless `force`. */
@@ -190,11 +191,10 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
     stopRateReturn();
     const deck = ports.decks()[index];
     const from = deck.playbackRate;
-    if (Math.abs(from - 1) < 0.001) {
-      deck.playbackRate = 1;
+    if (Math.abs(from - 1) < 0.001 || !rateControlAvailable) {
+      if (from !== 1) deck.playbackRate = 1;
       return;
     }
-    if (!rateControlAvailable) { deck.playbackRate = 1; return; }
     const clock = new MediaClockHealth();
     clock.observe(deck);
     // Progress counts playing time only: a pause holds the ramp where it is.
@@ -695,7 +695,9 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       const outCue = manual ? from.currentTime : Math.max(0, Number(plan.out_cue) || 0);
       const held = HELD_TECHNIQUES.has(plan.technique);
       let speeds = rateControlAvailable && !manual ? planDeckRates(plan) : null;
-      let fallbackReason = !rateControlAvailable && held ? 'rate_control_unavailable' : held && !manual && !speeds ? 'rate_out_of_range' : null;
+      let fallbackReason = !rateControlAvailable
+        ? (ports.fixedTempo ? 'ios_fixed_tempo' : 'rate_control_unavailable')
+        : 'rate_out_of_range';
       let outRamp: ActiveMix['outRamp'] = null;
       if (speeds && Math.abs(speeds.out - 1) > 1e-6) {
         const start = outCue - plan.out_rate_ramp!.lead_seconds;
@@ -711,9 +713,9 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
       }
       const rate = speeds ? Number(plan.playback_rate) : 1;
       const outRate = speeds?.out ?? 1;
-      const technique = held && !manual && !speeds ? 'structural_fade' : !rateControlAvailable && held ? 'structural_fade' : plan.technique;
+      const technique = held && (!rateControlAvailable || (!manual && !speeds)) ? 'structural_fade' : plan.technique;
       if (technique !== plan.technique && fallbackReason !== 'rate_ramp_late') recordPlaybackDiagnostic('mix.execution_fallback', { ...options.diagnostic,
-        reason: fallbackReason ?? 'rate_control_unavailable', technique, requestedTechnique: plan.technique });
+        reason: fallbackReason, technique, requestedTechnique: plan.technique });
       // Overlap and preroll are planned in outgoing media seconds; the gain
       // envelope runs on the output clock.
       const overlap = manual ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4)) : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6) / outRate;
