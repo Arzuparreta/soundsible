@@ -520,6 +520,9 @@
         },
         "loudness_peak_dbtp": {
           "type": "number"
+        },
+        "resolution_candidates": {
+          "type": "integer"
         }
       }
     },
@@ -663,7 +666,7 @@
         }
       }
     },
-    "DjPlanResponse": {
+    "DjPlanBase": {
       "$extends": "#/$defs/ListeningPlanResponse",
       "type": "object",
       "additionalProperties": false,
@@ -671,15 +674,6 @@
         "source_profile"
       ],
       "properties": {
-        "v": {
-          "enum": [
-            2,
-            3,
-            4,
-            5,
-            6
-          ]
-        },
         "source_profile": {
           "$ref": "#/$defs/ListeningPlanProfile"
         },
@@ -702,6 +696,57 @@
           }
         }
       }
+    },
+    "DjLegacyPlanResponse": {
+      "$extends": "#/$defs/DjPlanBase",
+      "type": "object",
+      "properties": {
+        "v": {
+          "enum": [
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      }
+    },
+    "DjRouteItem": {
+      "$extends": "#/$defs/ListeningPlanItem",
+      "type": "object",
+      "required": [
+        "analysis",
+        "transition"
+      ]
+    },
+    "DjRouteResponse": {
+      "$extends": "#/$defs/DjPlanBase",
+      "type": "object",
+      "required": [
+        "analysis_coverage",
+        "seed_analysis"
+      ],
+      "properties": {
+        "v": {
+          "const": 6
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DjRouteItem"
+          }
+        }
+      }
+    },
+    "DjPlanResponse": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DjRouteResponse"
+        },
+        {
+          "$ref": "#/$defs/DjLegacyPlanResponse"
+        }
+      ]
     },
     "DjPlacementItem": {
       "$extends": "#/$defs/ListeningPlanItem",

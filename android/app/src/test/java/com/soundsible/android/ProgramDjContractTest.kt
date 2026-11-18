@@ -48,5 +48,7 @@ class ProgramDjContractTest {
     @Test fun aRefinementExampleIsReadLikeAPlannedSeam() {
         val proposal = ProgramDjPlan.proposal(example("dj-transition.json"), "previous")!!
         assertEquals(ProgramMixCurve.Technique.BASS_SWAP, proposal.technique)
+        val resolved = ProgramDjPlan.resolve("previous", 240_000_000, proposal, mixing = true)!!
+        assertEquals(ProgramMixCurve.Technique.BASS_SWAP, resolved.technique)
     }
 }

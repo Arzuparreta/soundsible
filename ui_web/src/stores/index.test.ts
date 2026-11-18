@@ -30,6 +30,55 @@ const PULSE_SYNC: NonNullable<DjTransitionPlan['sync']> = {
 };
 
 describe('DJ session work and first mix', () => {
+  it('seeds the first replacement gap from its real predecessor and keeps the measured mix', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 6 }, (_, index) => `route-${index}`)));
+    const armTransition = vi.fn();
+    const s = await loadStore({ planDjQueue, __previewPreparationState: () => 'ready' }, { armTransition });
+    s.initStore();
+    s.actions.playFrom([t1], 0);
+    s.fireDeckEvent('playing');
+    s.actions.enterAutoMode();
+    await vi.waitFor(() => expect(s.state.playback.queue.length).toBe(7));
+    await s.actions.placeAutoTrack(t2);
+
+    const measured = { technique: 'bass_swap', out_cue: 170, in_cue: 2,
+      overlap_seconds: 8, playback_rate: 1.01, confidence: .9, sync: PULSE_SYNC };
+    const replan = autoPlan(['replacement-1', 'replacement-2']);
+    planDjQueue.mockResolvedValue({ ...replan, items: replan.items.map(item => ({ ...item, transition: measured })) });
+    s.actions.addAutoSource([t2], 'New source');
+    await vi.waitFor(() => expect(s.state.playback.queue[1].id).toBe('replacement-1'));
+    expect(planDjQueue.mock.calls.at(-1)![0].seed).toMatchObject({ id: t1.id });
+    expect(s.state.playback.queue[2].id).toBe(t2.id);
+
+    s.deck.currentTime = 130;
+    s.fireDeckEvent('timeupdate');
+    expect(armTransition.mock.calls[0][1]).toMatchObject({ technique: 'bass_swap' });
+  });
+
+  it('does not promote a ready bridge away from its request', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 6 }, (_, index) => `route-${index}`)));
+    const placeDjTrack = vi.fn().mockResolvedValue({
+      insert_at: 1,
+      items: [
+        { ...autoPlan(['bridge']).items[0], route_kind: 'bridge' },
+        { ...t2, route_kind: 'user' },
+      ],
+    });
+    const s = await loadStore({ planDjQueue, placeDjTrack,
+      __previewPreparationState: (id: string) => id === 'bridge' ? 'ready' : 'streamable' });
+    s.initStore();
+    s.actions.playFrom([t1], 0);
+    s.fireDeckEvent('playing');
+    s.actions.enterAutoMode();
+    await vi.waitFor(() => expect(s.state.playback.queue.length).toBe(7));
+    await s.actions.placeAutoTrack(t2);
+    const before = s.state.playback.queue.map(row => row.id);
+    expect(before.slice(1, 4)).toEqual(['route-0', 'bridge', t2.id]);
+    s.deck.currentTime = 130;
+    s.fireDeckEvent('timeupdate');
+    expect(s.state.playback.queue.map(row => row.id)).toEqual(before);
+  });
+
   it('repairs the predecessor and measures a ready successor promoted ahead of a cold song', async () => {
     const measured = { technique: 'bass_swap', out_cue: 170, in_cue: 2,
       overlap_seconds: 8, playback_rate: 1.01, confidence: .9, sync: PULSE_SYNC };

@@ -1390,6 +1390,28 @@ def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_
     assert body["items"][0]["request_id"] == "q-wanted"
 
 
+def test_generated_plan_keeps_resolution_provenance_on_the_wire(tmp_path):
+    _make_runtime(tmp_path)
+    seed = "seed0000001"
+    instance_db().set_related_mix(seed, [
+        {"id": "lyrics00001", "title": "KREAM - Arrival (Lyrics)", "channel": "Lyrics Cloud", "duration": 180},
+    ])
+    best = {"id": "official001", "title": "KREAM - Arrival", "channel": "KREAM - Topic", "duration": 180, "confidence": 0.95}
+    api = _mock_api()
+    api["get_library"].return_value = _FakeLibrary(None)
+    with (
+        patch.object(_music_candidates, "engine_api", return_value=api),
+        patch("shared.catalog_resolution.resolve_candidates", return_value=(best, [best])),
+        patch.object(_auto_mode, "_build_discovery_feed_body", return_value={"items": []}),
+    ):
+        response = _make_app().test_client().post("/api/discovery/music/plan", json={
+            "intent": "autoplay", "seed": {"youtube_id": seed, "title": "Seed", "artist": "Listener"},
+        })
+    assert response.status_code == 200
+    item = response.get_json()["items"][0]
+    assert (item["youtube_id"], item["discovery_youtube_id"], item["resolution_candidates"]) == ("official001", "lyrics00001", 1)
+
+
 @pytest.mark.parametrize("start", [0, 15, 22])
 def test_dj_place_refuses_a_fixed_seam_inside_a_bridge_block(tmp_path, start):
     _make_runtime(tmp_path)

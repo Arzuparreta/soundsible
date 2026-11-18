@@ -59,6 +59,18 @@ def test_seed_analysis_may_be_partial_but_items_may_not():
         api_contract.validate_response("DjPlanResponse", body)
 
 
+@pytest.mark.parametrize("remove, message", [
+    (lambda body: body.pop("analysis_coverage"), "missing 'analysis_coverage'"),
+    (lambda body: body["items"][0].pop("analysis"), "missing 'analysis'"),
+    (lambda body: body["items"][0].pop("transition"), "missing 'transition'"),
+])
+def test_v6_route_retains_its_measurements_and_transition_chain(remove, message):
+    body = _plan()
+    remove(body)
+    with pytest.raises(api_contract.ContractError, match=message):
+        api_contract.validate_response("DjPlanResponse", body)
+
+
 @pytest.mark.parametrize("filename, remove, message", [
     ("dj-place.json", lambda body: body["items"][0].pop("analysis"), "missing 'analysis'"),
     ("dj-place.json", lambda body: body["items"][0].pop("transition"), "missing 'transition'"),

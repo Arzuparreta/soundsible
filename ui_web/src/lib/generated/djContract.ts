@@ -141,6 +141,7 @@ export interface ListeningPlanItem {
   personal_score?: number;
   loudness_lufs?: number;
   loudness_peak_dbtp?: number;
+  resolution_candidates?: number;
 }
 
 export interface ListeningPlanResponse {
@@ -174,8 +175,7 @@ export interface DjAnalysisCoverage {
   bridges: number;
 }
 
-export interface DjPlanResponse extends ListeningPlanResponse {
-  v: 2 | 3 | 4 | 5 | 6;
+export interface DjPlanBase extends ListeningPlanResponse {
   source_profile: ListeningPlanProfile;
   /**
    * Features of the track the route continues from — the only reading the
@@ -190,6 +190,20 @@ export interface DjPlanResponse extends ListeningPlanResponse {
   opening?: ListeningPlanItem;
   requests?: DjRequestStatus[];
 }
+
+export interface DjLegacyPlanResponse extends DjPlanBase {
+  v: 2 | 3 | 4 | 5;
+}
+
+export interface DjRouteItem extends ListeningPlanItem {
+}
+
+export interface DjRouteResponse extends DjPlanBase {
+  v: 6;
+  items: DjRouteItem[];
+}
+
+export type DjPlanResponse = DjRouteResponse | DjLegacyPlanResponse;
 
 export interface DjPlacementItem extends ListeningPlanItem {
   route_kind: "user" | "bridge";

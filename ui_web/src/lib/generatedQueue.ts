@@ -366,10 +366,9 @@ export class GeneratedQueueController {
     if (needed === 0) return Promise.resolve(true);
 
     const snapshot = this.deps.snapshot();
-    const retained = replace
-      ? runwayReplacement(snapshot.queue, snapshot.index, snapshot.committedQueueId).retained
-      : snapshot.queue;
-    const anchor = retained.at(-1) ?? snapshot.currentTrack ?? session.seed;
+    const replacement = replace ? runwayReplacement(snapshot.queue, snapshot.index, snapshot.committedQueueId) : null;
+    const retained = replacement?.retained ?? snapshot.queue;
+    const anchor = (replacement ? replacement.anchor : snapshot.queue.at(-1)) ?? snapshot.currentTrack ?? session.seed;
     const exclusions = this.exclusions(retained);
     const input = JSON.stringify([replace, session.profile, this.deps.planningContext?.(), exclusions, this.deps.identity(anchor)]);
     if (session.intent === 'auto_mode' && this.settledInput === input) return Promise.resolve(false);
@@ -378,7 +377,7 @@ export class GeneratedQueueController {
     const aborter = new AbortController();
     this.aborter = aborter;
     this.deps.onStatus(session.intent, 'planning', undefined, replace);
-    // Auto Mode continues the route from wherever it currently ends. Radio
+    // Auto Mode continues from the append or replacement seam. Radio
     // remains anchored to the song the listener explicitly chose, so a manual
     // request inserted ahead of its generated lane cannot silently retune the
     // station. Autoplay's caller advances `session.seed` to the tail it is

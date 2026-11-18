@@ -46,8 +46,8 @@ def run(lab):
         with patch.dict(os.environ, env):
             sys.path.insert(0, str(ROOT / 'tests'))
             import test_discovery_save_route as fixture
-            from shared import dj_engine
-            from shared.dj import contracts, store, timing, weights
+            from shared import dj_engine, music_candidates
+            from shared.dj import contracts, planning, store, timing, weights
             from shared.hardening import _reset_rate_limits_for_tests
             from shared.runtime import reset_runtime
             from shared.user_context import bind_user, unbind_user
@@ -65,10 +65,10 @@ def run(lab):
                 auto = fixture._auto_mode
                 database = temp / 'analysis.sqlite3'
                 with (patch.object(store, '_cache_path', return_value=database),
-                      patch.object(auto, '_get_api', return_value=api),
-                      patch.object(auto, '_dj_source_path', side_effect=lambda _, item: paths[item['id']]),
-                      patch.object(auto, 'request_analysis'),
-                      patch.object(auto, '_planner_context_related', return_value=auto._GraphWalk([], False, False)),
+                      patch.object(music_candidates, 'engine_api', return_value=api),
+                      patch.object(planning, 'source_path', side_effect=lambda _, item: paths[item['id']]),
+                      patch.object(planning, 'request_analysis'),
+                      patch.object(music_candidates, 'context_related', return_value=music_candidates.GraphWalk([], False, False)),
                       patch('shared.preview_cache.request_prefetch', return_value=[])):
                     client = fixture._make_app().test_client()
                     # Matching content stamps must not promote the previous version.

@@ -26,7 +26,7 @@ class CatalogQueries:
         """Fast search tracks using FTS5 or LIKE."""
         if not query:
             return self.get_all_tracks()
-            
+
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             try:
@@ -41,7 +41,7 @@ class CatalogQueries:
             except sqlite3.OperationalError:
                 # Note: Fallback to LIKE
                 cursor = conn.execute("""
-                    SELECT * FROM tracks 
+                    SELECT * FROM tracks
                     WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
                     ORDER BY artist, title
                 """, (f"%{query}%", f"%{query}%", f"%{query}%"))

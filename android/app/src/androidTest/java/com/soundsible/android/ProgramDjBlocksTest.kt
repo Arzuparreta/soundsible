@@ -53,7 +53,7 @@ class ProgramDjBlocksTest {
                 val owner = ProgramDjSession(instrumentation.targetContext, generation, owns, DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)), tap, { false }, rows, mixing = { false })
                 session = owner
                 val epoch = owner.routeSnapshot().epoch
-                assertEquals(key(1), owner.blockStartKey(key(2)))
+                assertEquals(key(1), owner.requestDestination(key(2)))
                 val extra = ProgramQueue.items(connection, JSONArray("[{\"source\":\"local\",\"id\":\"member-pcm-soft\",\"title\":\"Extra\"}]"), items[0].mediaMetadata.extras!!.getString(ProgramQueue.PROGRAM)!!).single()
                 owner.addRequested(extra, key(2))
                 assertEquals(key(1), owner.items()[2].mediaMetadata.extras!!.getString(ProgramQueue.KEY))
@@ -67,10 +67,10 @@ class ProgramDjBlocksTest {
                 owner.seek(1, 2000)
                 assertTrue(owner.protectedKeys().contains(key(2)))
                 assertEquals(3, owner.editableFrom())
-                assertThrows(IllegalArgumentException::class.java) { owner.addRequested(extra, key(2)) }
+                assertNull(owner.requestDestination(key(2)))
                 val lockedSnapshot = owner.routeSnapshot()
                 assertThrows(IllegalArgumentException::class.java) { owner.editFuture(lockedSnapshot, lockedSnapshot.rows.drop(2).reversed()) }
-                owner.addRequested(extra, null)
+                owner.addRequested(extra, key(2))
                 assertEquals(key(2), owner.items()[2].mediaMetadata.extras!!.getString(ProgramQueue.KEY))
                 assertEquals(extra.mediaMetadata.extras!!.getString(ProgramQueue.KEY), owner.items()[3].mediaMetadata.extras!!.getString(ProgramQueue.KEY))
                 owner.editBlock("remove", 3, 3)

@@ -8,7 +8,7 @@ import { queueIdentity, queueIndexOf } from '../lib/queueDiscovery';
 import { GeneratedQueueController } from '../lib/generatedQueue';
 import { t as tr } from '../lib/i18n';
 import { createQueueEntry, futureEntries, isPendingEntry, type PlaybackQueueEntry } from '../lib/playbackQueue';
-import { replanRunway, routeRows, runwayReplacement } from '../lib/djRoute';
+import { replanRunway, routeKind, routeRows, runwayReplacement } from '../lib/djRoute';
 import { planItemTrack, planSeed } from '../lib/planItems';
 import type { Track } from '../types/music';
 import { state, setState } from './core';
@@ -198,11 +198,12 @@ export function createRunway(ports: RunwayPorts, lifetime: RuntimeLifetime) {
     const immediate = pb.queue[pb.index + 1];
     if (!immediate) return false;
     if (ports.trackPrepared(immediate)) return true;
-    if (immediate.queueLane !== 'generated') return false;
+    if (routeKind(immediate) !== 'generated' || ports.dj.committedQueueId() === immediate.queueId) return false;
     let readyIndex = -1;
     for (let index = pb.index + 2; index < pb.queue.length; index += 1) {
       const candidate = pb.queue[index];
-      if (candidate.queueLane !== 'generated') break;
+      // Moving a single ready song must not split or overtake an explicit request.
+      if (routeKind(candidate) !== 'generated') break;
       if (ports.trackPrepared(candidate)) {
         readyIndex = index;
         break;

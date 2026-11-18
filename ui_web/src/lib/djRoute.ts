@@ -184,5 +184,9 @@ export function runwayReplacement(queue: PlaybackQueueEntry[], index: number, co
   const previous = queue.slice(start);
   const future = rows.slice(start);
   const kept = replanKeeps(future);
-  return { head, previous, future, kept, retained: [...head, ...previous.filter(entry => kept.has(entry.queueId))] };
+  const firstGap = future.findIndex(row => !kept.has(row.key));
+  // The first replacement plays in the first gap, even when later requests
+  // are retained at their existing depths.
+  const anchor = (firstGap < 0 ? previous.at(-1) : previous[firstGap - 1]) ?? head.at(-1);
+  return { head, previous, future, kept, anchor, retained: [...head, ...previous.filter(entry => kept.has(entry.queueId))] };
 }
