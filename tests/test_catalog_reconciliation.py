@@ -1,3 +1,4 @@
+import shared.catalog_search as _catalog_search
 from copy import deepcopy
 from dataclasses import replace
 from unittest.mock import Mock
@@ -25,7 +26,7 @@ def song(**changes):
 
 def profile():
     return {'title': 'Lo Que Aletea en Nuestras Cabezas', 'artist': 'Robe', 'cover': 'cover', 'genre': 'Rock',
-            'year': 2015, 'tracklist': [catalog.catalog_item(
+            'year': 2015, 'tracklist': [_catalog_search.catalog_item(
                 item_id='deezer:track:3240262871', item_type='track', source='deezer',
                 title='Contra Todos', artist='Robe', duration=427,
                 album='Lo Que Aletea en Nuestras Cabezas', external_ids={'isrc': 'ES71G1502918'},
@@ -164,11 +165,11 @@ def test_other_accounts_do_not_receive_the_repair(lib, cached):
 
 def test_album_route_read_then_authenticated_repair(lib, cached, monkeypatch):
     import shared.api as api
-    monkeypatch.setattr(catalog, '_get_api', lambda: {'get_library': lambda: lib})
+    monkeypatch.setattr(_catalog_search, 'engine_api', lambda: {'get_library': lambda: lib})
     monkeypatch.setattr(catalog, '_deezer_album_profile', lambda *args: profile())
     emit = Mock()
     monkeypatch.setattr("shared.realtime.emit_to_user", emit)
-    catalog._album_memo.clear()
+    _catalog_search.album_memo.clear()
     app = Flask(__name__)
     app.register_blueprint(catalog.catalog_bp)
     client = app.test_client()

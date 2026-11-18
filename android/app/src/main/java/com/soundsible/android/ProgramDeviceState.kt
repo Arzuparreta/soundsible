@@ -133,7 +133,7 @@ internal object ProgramDeviceState {
             val from = planned?.optString("fromKey")
             val previousIdentity = previousEntry?.optString("youtube_id")?.ifBlank { previousEntry.optString("id") }
             val previousKey = items.getOrNull(i - 1)?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
-            ProgramDjSession.Row(item, if (planned != null && from == previousIdentity && previousKey != null) planner.proposal(planned, previousKey) else null, kind)
+            ProgramDjSession.Row(item, if (planned != null && from == previousIdentity && previousKey != null) ProgramDjPlan.proposal(planned, previousKey) else null, kind)
         }
     }
     private fun row(track: JSONObject): JSONObject {

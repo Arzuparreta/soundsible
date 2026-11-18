@@ -12,6 +12,7 @@ from shared.memo import Memo
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.text_utils import fold_text
+import shared.catalog_search as catalog_search
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location("catalog_routes_under_test", _ROOT / "shared/api/routes/catalog.py")
@@ -90,24 +91,24 @@ def _fake_api(metadata):
 def _reset(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
-    catalog_routes._catalog_memo.clear()
-    catalog_routes._artist_memo.clear()
-    catalog_routes._album_memo.clear()
+    catalog_search.catalog_memo.clear()
+    catalog_search.artist_memo.clear()
+    catalog_search.album_memo.clear()
     yield
-    catalog_routes._catalog_memo.clear()
-    catalog_routes._artist_memo.clear()
-    catalog_routes._album_memo.clear()
+    catalog_search.catalog_memo.clear()
+    catalog_search.artist_memo.clear()
+    catalog_search.album_memo.clear()
     reset_runtime()
 
 
 def test_catalog_search_combines_local_deezer_and_sections(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[_track("local-1", "Rosalia Local", "Rosalia")], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(
-        catalog_routes,
+        catalog_search,
         "_deezer_search",
         lambda q, limit: [
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:track:10",
                 item_type="track",
                 source="deezer",
@@ -119,7 +120,7 @@ def test_catalog_search_combines_local_deezer_and_sections(monkeypatch):
             )
         ],
     )
-    monkeypatch.setattr(catalog_routes, "_musicbrainz_search", lambda q, limit: [])
+    monkeypatch.setattr(catalog_search, "_musicbrainz_search", lambda q, limit: [])
 
     body = _make_app().test_client().get("/api/catalog/search?q=rosalia").get_json()
 
@@ -133,9 +134,9 @@ def test_catalog_search_combines_local_deezer_and_sections(monkeypatch):
 
 def test_catalog_search_returns_partial_failures(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
-    monkeypatch.setattr(catalog_routes, "_deezer_search", lambda q, limit: (_ for _ in ()).throw(RuntimeError("down")))
-    monkeypatch.setattr(catalog_routes, "_musicbrainz_search", lambda q, limit: [])
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "_deezer_search", lambda q, limit: (_ for _ in ()).throw(RuntimeError("down")))
+    monkeypatch.setattr(catalog_search, "_musicbrainz_search", lambda q, limit: [])
 
     body = _make_app().test_client().get("/api/catalog/search?q=queen").get_json()
 
@@ -145,12 +146,12 @@ def test_catalog_search_returns_partial_failures(monkeypatch):
 
 def test_catalog_search_uses_public_creator_consensus_without_hiding_literal_results(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(
-        catalog_routes,
+        catalog_search,
         "_deezer_search",
         lambda q, limit: [
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:track:literal",
                 item_type="track",
                 source="deezer",
@@ -159,12 +160,12 @@ def test_catalog_search_uses_public_creator_consensus_without_hiding_literal_res
             )
         ],
     )
-    monkeypatch.setattr(catalog_routes, "_musicbrainz_search", lambda q, limit: [])
+    monkeypatch.setattr(catalog_search, "_musicbrainz_search", lambda q, limit: [])
     monkeypatch.setattr(
-        catalog_routes,
+        catalog_search,
         "_youtube_search",
         lambda q, limit: [
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id=f"youtube:track:{i}",
                 item_type="track",
                 source="youtube",
@@ -184,7 +185,7 @@ def test_catalog_search_uses_public_creator_consensus_without_hiding_literal_res
 
 
 def test_catalog_rank_never_uses_library_ownership_for_ties():
-    public = catalog_routes.catalog_item(
+    public = catalog_search.catalog_item(
         item_id="deezer:track:1",
         item_type="track",
         source="deezer",
@@ -194,7 +195,7 @@ def test_catalog_rank_never_uses_library_ownership_for_ties():
     )
     owned = {**public, "action_state": {**public["action_state"], "in_library": True}}
 
-    assert catalog_routes._rank(public, "neutral song", 0) == catalog_routes._rank(
+    assert catalog_search._rank(public, "neutral song", 0) == catalog_search._rank(
         owned,
         "neutral song",
         0,
@@ -209,40 +210,40 @@ def test_popularity_is_neutral_for_every_source_that_publishes_no_metric():
     back into a ranking that is contractually query-only.
     """
     rows = [
-        catalog_routes.catalog_item(
+        catalog_search.catalog_item(
             item_id="library:track:1", item_type="library_track", source="library",
             title="Song", artist="Artist", in_library=True,
         ),
-        catalog_routes.catalog_item(
+        catalog_search.catalog_item(
             item_id="mb:artist:1", item_type="artist", source="musicbrainz", title="Artist",
         ),
-        catalog_routes.catalog_item(
+        catalog_search.catalog_item(
             item_id="deezer:track:1", item_type="track", source="deezer",
             title="Song", artist="Artist", popularity=900000,
         ),
-        catalog_routes.catalog_item(
+        catalog_search.catalog_item(
             item_id="deezer:track:2", item_type="track", source="deezer",
             title="Song", artist="Artist", popularity=10,
         ),
     ]
 
-    scores = catalog_routes._popularity_scores(rows)
+    scores = catalog_search._popularity_scores(rows)
 
-    assert scores["library:track:1"] == scores["mb:artist:1"] == catalog_routes._POPULARITY_NEUTRAL
-    assert scores["deezer:track:1"] == catalog_routes._POPULARITY_MAX
+    assert scores["library:track:1"] == scores["mb:artist:1"] == catalog_search._POPULARITY_NEUTRAL
+    assert scores["deezer:track:1"] == catalog_search._POPULARITY_MAX
     assert scores["deezer:track:2"] == 0.0
 
 
 def test_popularity_gives_equal_raw_values_equal_scores():
     rows = [
-        catalog_routes.catalog_item(
+        catalog_search.catalog_item(
             item_id=f"deezer:track:{i}", item_type="track", source="deezer",
             title="Song", artist="Artist", popularity=pop,
         )
         for i, pop in enumerate((500, 500, 1))
     ]
 
-    scores = catalog_routes._popularity_scores(rows)
+    scores = catalog_search._popularity_scores(rows)
 
     assert scores["deezer:track:0"] == scores["deezer:track:1"]
     assert scores["deezer:track:0"] > scores["deezer:track:2"]
@@ -252,13 +253,13 @@ def test_title_score_prefers_the_title_the_query_nearly_fills():
     q, tokens = "radio", frozenset({"radio"})
 
     def score(title):
-        return catalog_routes._text_score(
+        return catalog_search.text_score(
             q, tokens, title,
-            catalog_routes._TITLE_EXACT, catalog_routes._TITLE_PREFIX, catalog_routes._TITLE_CONTAINS,
+            catalog_search._TITLE_EXACT, catalog_search._TITLE_PREFIX, catalog_search._TITLE_CONTAINS,
             apply_coverage=True,
         )
 
-    assert score("Radio") == catalog_routes._TITLE_EXACT
+    assert score("Radio") == catalog_search._TITLE_EXACT
     assert score("Radio") > score("Radiohead") > score("Radiohead - Creep Forever And Ever")
     # Provider boilerplate must not manufacture a penalty.
     assert score("Radiohead (Official Video) [HD]") == score("Radiohead")
@@ -266,38 +267,38 @@ def test_title_score_prefers_the_title_the_query_nearly_fills():
 
 def test_text_score_folds_accents_and_accepts_reordered_tokens():
     def score(query, title):
-        return catalog_routes._text_score(
+        return catalog_search.text_score(
             catalog_routes.fold_text(query),
-            frozenset(catalog_routes.match_tokens(query)),
+            frozenset(catalog_search.match_tokens(query)),
             title,
-            catalog_routes._TITLE_EXACT, catalog_routes._TITLE_PREFIX, catalog_routes._TITLE_CONTAINS,
+            catalog_search._TITLE_EXACT, catalog_search._TITLE_PREFIX, catalog_search._TITLE_CONTAINS,
             apply_coverage=False,
         )
 
-    assert score("jose", "José") == catalog_routes._TITLE_EXACT
-    assert score("rainbows in", "In Rainbows") == catalog_routes._TITLE_CONTAINS
+    assert score("jose", "José") == catalog_search._TITLE_EXACT
+    assert score("rainbows in", "In Rainbows") == catalog_search._TITLE_CONTAINS
     assert score("nothing alike", "In Rainbows") == 0.0
 
 
 def _entity_search(monkeypatch, *, deezer=(), musicbrainz=(), youtube=(), tracks=()):
     metadata = LibraryMetadata(version=1, tracks=list(tracks), playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
-    monkeypatch.setattr(catalog_routes, "_deezer_search", lambda q, limit: list(deezer))
-    monkeypatch.setattr(catalog_routes, "_musicbrainz_search", lambda q, limit: list(musicbrainz))
-    monkeypatch.setattr(catalog_routes, "_youtube_search", lambda q, limit: list(youtube))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "_deezer_search", lambda q, limit: list(deezer))
+    monkeypatch.setattr(catalog_search, "_musicbrainz_search", lambda q, limit: list(musicbrainz))
+    monkeypatch.setattr(catalog_search, "_youtube_search", lambda q, limit: list(youtube))
     return lambda query: _make_app().test_client().get(f"/api/catalog/search?q={query}").get_json()
 
 
 def _deezer_artist_rows(name: str, songs: list[str]) -> list[dict]:
     rows = [
-        catalog_routes.catalog_item(
+        catalog_search.catalog_item(
             item_id=f"deezer:artist:{name}", item_type="artist", source="deezer",
             title=name, subtitle="Artist", artist=name,
             external_ids={"deezer_artist_id": name},
         )
     ]
     rows += [
-        catalog_routes.catalog_item(
+        catalog_search.catalog_item(
             item_id=f"deezer:track:{i}", item_type="track", source="deezer",
             title=title, subtitle=name, artist=name, album="Some Album",
             popularity=900000 - i, external_ids={"deezer_id": str(i)},
@@ -320,14 +321,14 @@ def test_artist_name_query_leads_with_the_artist_not_their_songs(monkeypatch):
         monkeypatch,
         deezer=[
             *_deezer_artist_rows("Radiohead", songs),
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:artist:tribute", item_type="artist", source="deezer",
                 title="Radiohead Tribute Band", subtitle="Artist", artist="Radiohead Tribute Band",
                 external_ids={"deezer_artist_id": "tribute"},
             ),
         ],
         youtube=[
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id=f"youtube:track:{i}", item_type="track", source="youtube",
                 title=f"Radiohead - {title} (Official Video)", subtitle="Radiohead",
                 artist="Radiohead", popularity=50_000_000,
@@ -354,17 +355,17 @@ def test_song_title_query_leads_with_songs(monkeypatch):
     search = _entity_search(
         monkeypatch,
         deezer=[
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:track:1", item_type="track", source="deezer",
                 title="Karma Police", subtitle="Radiohead", artist="Radiohead",
                 duration=261, popularity=900000, external_ids={"deezer_id": "1"},
             ),
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:track:2", item_type="track", source="deezer",
                 title="Karma Police (Live In Praha)", subtitle="Radiohead", artist="Radiohead",
                 duration=300, popularity=1000, external_ids={"deezer_id": "2"},
             ),
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:artist:1", item_type="artist", source="deezer",
                 title="Radiohead", subtitle="Artist", artist="Radiohead",
                 external_ids={"deezer_artist_id": "1"},
@@ -382,18 +383,18 @@ def test_album_name_query_leads_with_the_album(monkeypatch):
     search = _entity_search(
         monkeypatch,
         deezer=[
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:album:1", item_type="album", source="deezer",
                 title="In Rainbows", subtitle="Radiohead", artist="Radiohead", album="In Rainbows",
                 external_ids={"deezer_album_id": "1"},
             ),
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:album:2", item_type="album", source="deezer",
                 title="In Rainbows Disk 2", subtitle="Radiohead", artist="Radiohead",
                 album="In Rainbows Disk 2", external_ids={"deezer_album_id": "2"},
             ),
             *[
-                catalog_routes.catalog_item(
+                catalog_search.catalog_item(
                     item_id=f"deezer:track:{i}", item_type="track", source="deezer",
                     title=title, subtitle="Radiohead", artist="Radiohead", album="In Rainbows",
                     popularity=900000, external_ids={"deezer_id": str(i)},
@@ -414,7 +415,7 @@ def test_no_top_result_when_nothing_matches_confidently(monkeypatch):
     search = _entity_search(
         monkeypatch,
         deezer=[
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:track:1", item_type="track", source="deezer",
                 title="Something Else Entirely", subtitle="Another Band", artist="Another Band",
                 external_ids={"deezer_id": "1"},
@@ -433,12 +434,12 @@ def test_no_top_result_when_a_type_boost_alone_decided_the_winner(monkeypatch):
     search = _entity_search(
         monkeypatch,
         deezer=[
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:artist:1", item_type="artist", source="deezer",
                 title="Ambiguous", subtitle="Artist", artist="Ambiguous",
                 external_ids={"deezer_artist_id": "1"},
             ),
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:album:1", item_type="album", source="deezer",
                 title="Ambiguous", subtitle="Ambiguous", artist="Ambiguous", album="Ambiguous",
                 external_ids={"deezer_album_id": "1"},
@@ -456,7 +457,7 @@ def test_owned_song_collapses_with_its_public_copies_without_moving_up(monkeypat
         monkeypatch,
         tracks=[_track("local-1", "Karma Police", "Radiohead")],
         deezer=[
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:track:1", item_type="track", source="deezer",
                 title="Karma Police", subtitle="Radiohead", artist="Radiohead",
                 duration=180, popularity=900000, external_ids={"deezer_id": "1"},
@@ -479,7 +480,7 @@ def test_a_different_cut_of_the_same_title_stays_separate(monkeypatch):
         monkeypatch,
         tracks=[_track("local-1", "Karma Police", "Radiohead")],
         deezer=[
-            catalog_routes.catalog_item(
+            catalog_search.catalog_item(
                 item_id="deezer:track:1", item_type="track", source="deezer",
                 title="Karma Police", subtitle="Radiohead", artist="Radiohead",
                 duration=720, popularity=900000, external_ids={"deezer_id": "1"},
@@ -496,14 +497,14 @@ def test_a_different_cut_of_the_same_title_stays_separate(monkeypatch):
 def test_ranking_is_identical_whatever_order_the_providers_finish_in(monkeypatch):
     rows = _deezer_artist_rows("Radiohead", ["Creep", "Nude", "Reckoner"])
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
-    monkeypatch.setattr(catalog_routes, "_musicbrainz_search", lambda q, limit: [])
-    monkeypatch.setattr(catalog_routes, "_youtube_search", lambda q, limit: [])
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "_musicbrainz_search", lambda q, limit: [])
+    monkeypatch.setattr(catalog_search, "_youtube_search", lambda q, limit: [])
 
     orders = []
     for shuffled in (rows, list(reversed(rows))):
-        catalog_routes._catalog_memo.clear()
-        monkeypatch.setattr(catalog_routes, "_deezer_search", lambda q, limit, r=shuffled: list(r))
+        catalog_search.catalog_memo.clear()
+        monkeypatch.setattr(catalog_search, "_deezer_search", lambda q, limit, r=shuffled: list(r))
         body = _make_app().test_client().get("/api/catalog/search?q=radiohead").get_json()
         orders.append([item["id"] for item in body["items"]])
 
@@ -518,9 +519,9 @@ def test_local_catalog_finds_the_artist_behind_a_wall_of_their_own_songs(monkeyp
         playlists={},
         settings={},
     )
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
 
-    rows = catalog_routes._local_catalog("rosalia", 30)
+    rows = catalog_search.local_catalog("rosalia", 30)
 
     assert any(row["type"] == "artist" and row["title"] == "Rosalia" for row in rows)
 
@@ -533,16 +534,16 @@ def test_local_catalog_does_not_match_across_field_boundaries(monkeypatch):
         playlists={},
         settings={},
     )
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
 
-    assert catalog_routes._local_catalog("closer nine", 30) == []
-    assert catalog_routes._local_catalog("closer", 30)
+    assert catalog_search.local_catalog("closer nine", 30) == []
+    assert catalog_search.local_catalog("closer", 30)
 
 
 def test_catalog_save_confirmed_video_queues_download(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fake_api = _fake_api(metadata)
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: fake_api)
 
     res = _make_app().test_client().post(
         "/api/catalog/save",
@@ -558,7 +559,7 @@ def test_catalog_save_confirmed_video_queues_download(monkeypatch):
 
 
 def test_catalog_dedupe_keeps_one_unambiguous_recording_mbid():
-    winner = catalog_routes.catalog_item(
+    winner = catalog_search.catalog_item(
         item_id="deezer:track:1",
         item_type="track",
         source="deezer",
@@ -566,7 +567,7 @@ def test_catalog_dedupe_keeps_one_unambiguous_recording_mbid():
         artist="An Artist",
         external_ids={"deezer_id": "1"},
     )
-    musicbrainz = catalog_routes.catalog_item(
+    musicbrainz = catalog_search.catalog_item(
         item_id=f"musicbrainz:track:{RECORDING_MBID}",
         item_type="track",
         source="musicbrainz",
@@ -575,7 +576,7 @@ def test_catalog_dedupe_keeps_one_unambiguous_recording_mbid():
         external_ids={"musicbrainz_id": RECORDING_MBID.upper()},
     )
 
-    catalog_routes._merge_action_state(winner, [winner, musicbrainz])
+    catalog_search._merge_action_state(winner, [winner, musicbrainz])
 
     assert winner["external_ids"] == {
         "deezer_id": "1",
@@ -585,7 +586,7 @@ def test_catalog_dedupe_keeps_one_unambiguous_recording_mbid():
 
 def test_catalog_dedupe_drops_conflicting_recording_mbids():
     other_mbid = "ebf79ba5-085e-48d2-9eb8-2d992fbf0f6d"
-    winner = catalog_routes.catalog_item(
+    winner = catalog_search.catalog_item(
         item_id=f"musicbrainz:track:{RECORDING_MBID}",
         item_type="track",
         source="musicbrainz",
@@ -593,7 +594,7 @@ def test_catalog_dedupe_drops_conflicting_recording_mbids():
         artist="An Artist",
         external_ids={"musicbrainz_id": RECORDING_MBID},
     )
-    conflicting = catalog_routes.catalog_item(
+    conflicting = catalog_search.catalog_item(
         item_id=f"musicbrainz:track:{other_mbid}",
         item_type="track",
         source="musicbrainz",
@@ -602,7 +603,7 @@ def test_catalog_dedupe_drops_conflicting_recording_mbids():
         external_ids={"musicbrainz_id": other_mbid},
     )
 
-    catalog_routes._merge_action_state(winner, [winner, conflicting])
+    catalog_search._merge_action_state(winner, [winner, conflicting])
 
     assert "musicbrainz_id" not in winner["external_ids"]
 
@@ -610,7 +611,7 @@ def test_catalog_dedupe_drops_conflicting_recording_mbids():
 def test_catalog_save_carries_a_normalized_recording_mbid_to_the_queue(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fake_api = _fake_api(metadata)
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: fake_api)
 
     response = _make_app().test_client().post(
         "/api/catalog/save",
@@ -634,7 +635,7 @@ def test_catalog_save_carries_a_normalized_recording_mbid_to_the_queue(monkeypat
 def test_catalog_save_ignores_an_invalid_recording_mbid(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fake_api = _fake_api(metadata)
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: fake_api)
 
     response = _make_app().test_client().post(
         "/api/catalog/save",
@@ -673,7 +674,7 @@ def test_resolve_candidates_warms_preview_stream_cache_for_best_id(monkeypatch, 
         }
     ]
     fake_api["get_downloader"] = MagicMock(return_value=fake_dl)
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: fake_api)
 
     prefetched = []
 
@@ -717,7 +718,7 @@ def test_resolve_candidates_skips_warm_on_db_cache_hit(monkeypatch, tmp_path):
     monkeypatch.setattr(catalog_routes.catalog_resolution, "instance_db", lambda: fake_db)
 
     fake_api = _fake_api(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: fake_api)
 
     best, ranked = catalog_routes.catalog_resolution.resolve_candidates(
         fake_api["get_downloader"], "Artist", "Cached Track", 200
@@ -748,7 +749,7 @@ def _track_full(track_id: str, title: str, artist: str, album: str = "Album") ->
 
 def _mock_deezer_artist_top(artist_id, limit=50, library_keys=None):
     return [
-        catalog_routes.catalog_item(
+        catalog_search.catalog_item(
             item_id="deezer:track:101",
             item_type="track",
             source="deezer",
@@ -798,7 +799,7 @@ def _mock_resolve_artist_id_ambiguous(name, deezer_id=None):
 
 def test_artist_endpoint_with_deezer_id(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes.deezer_catalog, "resolve_artist_id", _mock_resolve_artist_id)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes.deezer_catalog, "artist_top_tracks", _mock_deezer_artist_top)
@@ -822,7 +823,7 @@ def test_artist_endpoint_with_deezer_id(monkeypatch):
 
 def test_artist_endpoint_by_name_only(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes.deezer_catalog, "resolve_artist_id", _mock_resolve_artist_id)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes.deezer_catalog, "artist_top_tracks", _mock_deezer_artist_top)
@@ -838,7 +839,7 @@ def test_artist_endpoint_by_name_only(monkeypatch):
 
 def test_artist_endpoint_ambiguous_name(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes.deezer_catalog, "resolve_artist_id", _mock_resolve_artist_id_ambiguous)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes.deezer_catalog, "artist_top_tracks", _mock_deezer_artist_top)
@@ -855,7 +856,7 @@ def test_artist_endpoint_ambiguous_name(monkeypatch):
 
 def test_artist_endpoint_not_in_deezer(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[_track_full("local-1", "Local Song", "Obscure Artist")], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes.deezer_catalog, "resolve_artist_id", lambda name, deezer_id=None: (None, []))
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes.deezer_catalog, "artist_top_tracks", _mock_deezer_artist_top)
@@ -872,7 +873,7 @@ def test_artist_endpoint_not_in_deezer(monkeypatch):
 
 def test_artist_endpoint_caching(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes.deezer_catalog, "resolve_artist_id", _mock_resolve_artist_id)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes.deezer_catalog, "artist_top_tracks", _mock_deezer_artist_top)
@@ -889,12 +890,12 @@ def test_artist_endpoint_caching(monkeypatch):
 
 def test_artist_endpoint_in_library_badge(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[_track_full("local-1", "Gecko", "Oliver Heldens")], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes.deezer_catalog, "resolve_artist_id", _mock_resolve_artist_id)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
 
     def top_with_library(artist_id, limit=50, library_keys=None):
-        item = catalog_routes.catalog_item(
+        item = catalog_search.catalog_item(
             item_id="deezer:track:101",
             item_type="track",
             source="deezer",
@@ -919,7 +920,7 @@ def test_artist_endpoint_in_library_badge(monkeypatch):
 
 def test_album_endpoint_with_deezer_id(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
 
     def mock_album_profile(album_id, library_keys=None):
         return {
@@ -929,7 +930,7 @@ def test_album_endpoint_with_deezer_id(monkeypatch):
             "year": 2020,
             "genre": "Electronic",
             "tracklist": [
-                catalog_routes.catalog_item(
+                catalog_search.catalog_item(
                     item_id="deezer:track:201",
                     item_type="track",
                     source="deezer",
@@ -956,7 +957,7 @@ def test_album_endpoint_with_deezer_id(monkeypatch):
 
 def test_album_endpoint_by_name(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes, "_resolve_album_deezer_id", lambda name, artist: "201")
 
     def mock_album_profile(album_id, library_keys=None):
@@ -979,7 +980,7 @@ def test_album_endpoint_by_name(monkeypatch):
 
 def test_album_endpoint_not_in_deezer(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[_track_full("local-1", "Local Track", "Oliver Heldens", "Local Album")], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes, "_resolve_album_deezer_id", lambda name, artist: None)
 
     body = _make_app().test_client().get("/api/catalog/album?name=Local+Album&artist=Oliver+Heldens").get_json()
@@ -1070,7 +1071,7 @@ def test_artist_endpoint_reports_failing_fetch_instead_of_null(monkeypatch):
     """A fetch that raises must surface in partial_failures and leave the rail
     an empty list. Reading greenlet .value swallowed the error and emitted null."""
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_routes.deezer_catalog, "resolve_artist_id", _mock_resolve_artist_id)
     monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
     monkeypatch.setattr(catalog_routes.deezer_catalog, "artist_top_tracks", _mock_deezer_artist_top)
@@ -1097,7 +1098,7 @@ def test_gather_reports_timed_out_job(monkeypatch):
     pytest.importorskip("gevent")
     import gevent
 
-    monkeypatch.setattr(catalog_routes, "_DEEZER_FANOUT_TIMEOUT_SEC", 0.05)
+    monkeypatch.setattr(catalog_search, "DEEZER_FANOUT_TIMEOUT_SEC", 0.05)
     failures = []
 
     def slow():
@@ -1114,24 +1115,24 @@ def test_gather_reports_timed_out_job(monkeypatch):
 def test_memo_resolve_caps_size_and_reports_hits():
     memo = Memo(ttl_sec=600, maxsize=3)
     for i in range(10):
-        body, cached = catalog_routes._memo_resolve(memo, f"k{i}", lambda i=i: {"v": i})
+        body, cached = catalog_search.memo_resolve(memo, f"k{i}", lambda i=i: {"v": i})
         assert cached is False
 
     assert len(memo) <= 3
-    assert catalog_routes._memo_resolve(memo, "k9", lambda: {"v": "recomputed"}) == ({"v": 9}, True)
+    assert catalog_search.memo_resolve(memo, "k9", lambda: {"v": "recomputed"}) == ({"v": 9}, True)
 
 
 def test_memo_resolve_drops_expired_entry():
     memo = Memo(ttl_sec=-1)
-    catalog_routes._memo_resolve(memo, "k", lambda: {"v": 1})
-    assert memo.get(catalog_routes._scoped("k")) is None
+    catalog_search.memo_resolve(memo, "k", lambda: {"v": 1})
+    assert memo.get(catalog_search._scoped("k")) is None
 
 
 def test_cached_body_is_isolated_from_caller_mutation():
     memo = Memo(ttl_sec=600)
-    first, _ = catalog_routes._memo_resolve(memo, "k", lambda: {"v": 1})
+    first, _ = catalog_search.memo_resolve(memo, "k", lambda: {"v": 1})
     first["v"] = "mutated"
-    assert catalog_routes._memo_resolve(memo, "k", lambda: {"v": "recomputed"}) == ({"v": 1}, True)
+    assert catalog_search.memo_resolve(memo, "k", lambda: {"v": "recomputed"}) == ({"v": 1}, True)
 
 
 def test_memo_resolve_collapses_concurrent_identical_searches():
@@ -1147,7 +1148,7 @@ def test_memo_resolve_collapses_concurrent_identical_searches():
 
     results: list[dict] = []
     threads = [
-        threading.Thread(target=lambda: results.append(catalog_routes._memo_resolve(memo, "k", compute)[0]))
+        threading.Thread(target=lambda: results.append(catalog_search.memo_resolve(memo, "k", compute)[0]))
         for _ in range(5)
     ]
     for thread in threads:
@@ -1240,7 +1241,7 @@ def test_resolve_album_id_takes_the_artists_edition_over_a_tribute(monkeypatch):
 
 
 def _naive_artist_keys(tracks, name):
-    norm, key = fold_text, catalog_routes._key
+    norm, key = fold_text, catalog_search._key
     name_key = norm(name)
     keys = set()
     for track in tracks:
@@ -1252,7 +1253,7 @@ def _naive_artist_keys(tracks, name):
 
 
 def _naive_album_keys(tracks, album_name, artist):
-    norm, key = fold_text, catalog_routes._key
+    norm, key = fold_text, catalog_search._key
     album_key, artist_key = norm(album_name), norm(artist)
     keys = set()
     for track in tracks:
@@ -1274,7 +1275,7 @@ def indexed_library(monkeypatch):
         _track_full("t4", "Delta", "Aphex Twin", album="Geogaddi"),
         _track_full("t5", "Epsilon", "aphex twin", album="Drukqs"),
     ]
-    monkeypatch.setattr(catalog_routes, "_load_library_tracks", lambda: tracks)
+    monkeypatch.setattr(catalog_search, "_load_library_tracks", lambda: tracks)
     return tracks
 
 
@@ -1286,7 +1287,7 @@ def test_artist_keys_match_a_full_scan(indexed_library, artist):
     from shared import request_scope
 
     with request_scope.request_scope():
-        assert catalog_routes._library_artist_keys(artist) == _naive_artist_keys(
+        assert catalog_search.library_artist_keys(artist) == _naive_artist_keys(
             indexed_library, artist
         )
 
@@ -1305,7 +1306,7 @@ def test_album_keys_match_a_full_scan(indexed_library, album, artist):
     from shared import request_scope
 
     with request_scope.request_scope():
-        assert catalog_routes._library_album_keys(album, artist) == _naive_album_keys(
+        assert catalog_search.library_album_keys(album, artist) == _naive_album_keys(
             indexed_library, album, artist
         )
 
@@ -1314,7 +1315,7 @@ def test_songs_held_under_an_undecorated_name_are_owned_on_the_catalog_page(monk
     from shared import request_scope
 
     tracks = [_track_full("t1", "(Don't Fear) The Reaper", "Blue Oyster Cult", album="Agents of Fortune")]
-    monkeypatch.setattr(catalog_routes, "_load_library_tracks", lambda: tracks)
+    monkeypatch.setattr(catalog_search, "_load_library_tracks", lambda: tracks)
     row = {
         "id": 3135556, "title": "(Don't Fear) The Reaper",
         "artist": {"id": 692, "name": "Blue Öyster Cult"},
@@ -1323,10 +1324,10 @@ def test_songs_held_under_an_undecorated_name_are_owned_on_the_catalog_page(monk
 
     with request_scope.request_scope():
         for page_name in ("Blue Öyster Cult", "Blue Oyster Cult"):
-            keys = catalog_routes._library_artist_keys(page_name)
+            keys = catalog_search.library_artist_keys(page_name)
             assert keys, page_name
             assert catalog_routes.deezer_catalog.track_to_catalog_item(row, keys)["action_state"]["in_library"]
-        assert catalog_routes._library_album_keys("Agents Of Fortune", "Blue Öyster Cult")
+        assert catalog_search.library_album_keys("Agents Of Fortune", "Blue Öyster Cult")
 
 
 def test_library_is_loaded_once_per_request(monkeypatch):
@@ -1338,12 +1339,12 @@ def test_library_is_loaded_once_per_request(monkeypatch):
         calls["n"] += 1
         return []
 
-    monkeypatch.setattr(catalog_routes, "_load_library_tracks", counting_load)
+    monkeypatch.setattr(catalog_search, "_load_library_tracks", counting_load)
 
     with request_scope.request_scope():
-        catalog_routes._library_artist_keys("A")
-        catalog_routes._library_album_keys("B", "C")
-        catalog_routes._library_tracks()
+        catalog_search.library_artist_keys("A")
+        catalog_search.library_album_keys("B", "C")
+        catalog_search.library_tracks()
 
     assert calls["n"] == 1
 
@@ -1355,7 +1356,7 @@ def test_local_selection_matches_full_sort_reference(monkeypatch, query):
     from types import FunctionType
 
     frozen = runpy.run_path(str(_ROOT / "tests/fixtures/local_catalog_reference.py"))["_local_catalog"]
-    reference = FunctionType(frozen.__code__, vars(catalog_routes))
+    reference = FunctionType(frozen.__code__, vars(catalog_search))
     rng = random.Random(47)
     tracks = [
         _track_full(
@@ -1372,29 +1373,29 @@ def test_local_selection_matches_full_sort_reference(monkeypatch, query):
     tracks[1].album = tracks[0].album
     tracks[2].artist = ""
     tracks[2].album_artist = "Rosalía"
-    monkeypatch.setattr(catalog_routes, "_library_tracks", lambda: tracks)
-    assert catalog_routes._local_catalog(query, 1) == reference(query, 1)
+    monkeypatch.setattr(catalog_search, "library_tracks", lambda: tracks)
+    assert catalog_search.local_catalog(query, 1) == reference(query, 1)
     tracks.reverse()
-    assert catalog_routes._local_catalog(query, 100) == reference(query, 100)
+    assert catalog_search.local_catalog(query, 100) == reference(query, 100)
 
 
 def test_local_scores_reuse_fields_without_retaining_previous_library(monkeypatch):
     tracks = [_track_full(str(i), f"Song {i}", "Rosalía", "Live") for i in range(500)]
-    monkeypatch.setattr(catalog_routes, "_library_tracks", lambda: tracks)
-    original = catalog_routes._score_folded
+    monkeypatch.setattr(catalog_search, "library_tracks", lambda: tracks)
+    original = catalog_search.score_folded
     calls = []
 
     def counted(*args, **kwargs):
         calls.append(args[2])
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(catalog_routes, "_score_folded", counted)
-    assert catalog_routes._local_catalog("rosalia", 30)
+    monkeypatch.setattr(catalog_search, "score_folded", counted)
+    assert catalog_search.local_catalog("rosalia", 30)
     assert calls.count("rosalia") == 1
     assert calls.count("live") == 1
     for track in tracks:
         track.artist = "Changed"
-    assert catalog_routes._local_catalog("rosalia", 30) == []
+    assert catalog_search.local_catalog("rosalia", 30) == []
 
 
 def test_local_selection_handles_cache_eviction_and_concurrent_queries(monkeypatch):
@@ -1403,14 +1404,14 @@ def test_local_selection_handles_cache_eviction_and_concurrent_queries(monkeypat
     from types import FunctionType
 
     frozen = runpy.run_path(str(_ROOT / "tests/fixtures/local_catalog_reference.py"))["_local_catalog"]
-    reference = FunctionType(frozen.__code__, vars(catalog_routes))
+    reference = FunctionType(frozen.__code__, vars(catalog_search))
     tracks = [_track_full(str(i), f"Song {i}", f"Artist {i}", f"Album {i}") for i in range(5000)]
     tracks.extend([_track_full("last", "Song 0", "Artist 0", "Album 0")])
-    monkeypatch.setattr(catalog_routes, "_library_tracks", lambda: tracks)
+    monkeypatch.setattr(catalog_search, "library_tracks", lambda: tracks)
     queries = ["artist", "album 0", "song", "absent"]
     expected = [reference(query, 30) for query in queries]
     with ThreadPoolExecutor(max_workers=4) as pool:
-        actual = list(pool.map(lambda query: catalog_routes._local_catalog(query, 30), queries))
+        actual = list(pool.map(lambda query: catalog_search.local_catalog(query, 30), queries))
     assert actual == expected
 
 
@@ -1496,7 +1497,7 @@ def test_album_profile_keeps_the_embedded_tracks_when_the_listing_fails(monkeypa
 def test_catalog_save_files_the_download_under_the_record_it_came_from(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fake_api = _fake_api(metadata)
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: fake_api)
 
     response = _make_app().test_client().post(
         "/api/catalog/save",
@@ -1522,7 +1523,7 @@ def test_catalog_save_files_the_download_under_the_record_it_came_from(monkeypat
 def test_catalog_save_drops_album_evidence_it_cannot_trust(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     fake_api = _fake_api(metadata)
-    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: fake_api)
 
     client = _make_app().test_client()
     base = {"artist": "Daft Punk", "title": "Digital Love", "confirm_video_id": "abcdefghijk"}

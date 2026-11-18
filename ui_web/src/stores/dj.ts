@@ -1,26 +1,41 @@
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { createDjEvidence } from '../lib/djEvidence';
 import { recordPlaybackDiagnostic, setDiagnosticContext } from '../lib/playbackDiagnostics';
-import { api, type DjItemRef, type DjPlanResponse, type DjRouteKind, type ListeningPlanItem, type PreviewPreparation } from "../lib/api";
-import { audioService, type LiveTransitionPlan, type ProgramPlaybackSnapshot } from "../lib/audio";
-import { type MediaSessionSyncReason } from "../lib/mediaSession";
-import { playbackYoutubeId } from "../lib/media";
-import { createPreparationOwner } from "../lib/prefetch";
-import { metricCuePlacement } from "../lib/djCue";
+import { api, type DjPlanResponse, type ListeningPlanItem, type ListeningPlanResponse } from '../lib/api';
+import { audioService, type LiveTransitionPlan } from '../lib/audio';
+import { type MediaSessionSyncReason } from '../lib/mediaSession';
+import { playbackYoutubeId } from '../lib/media';
+import { createPreparationOwner } from '../lib/prefetch';
 import { setDjWork } from '../lib/http';
-import { toast } from "../lib/toast";
-import { confirmDialog } from "../lib/confirm";
-import { isPodcastTrack } from "../lib/track";
-import { queueIdentity, queueIndexOf } from "../lib/queueDiscovery";
-import { GeneratedQueueController, type AutoActivity, type AutoMusicSet, type AutoPlanItem } from "../lib/generatedQueue";
-import { t as tr } from "../lib/i18n";
-import { ListeningLearning } from "../lib/listeningLearning";
-import { createQueueEntry, futureEntries, isPendingEntry, type PlaybackQueueEntry } from "../lib/playbackQueue";
-import { shuffled } from "../lib/shuffle";
-import type { Track } from "../types/music";
-import { favouriteTracks, musicLibrary } from "./identity";
-import { state, setState, setNowPlayingOpen, randomId, type RepeatMode } from "./core";
-import type { PlayerActions, PlaybackTrigger, PlaybackAttempt, LoadOptions, CommittedTransition, PublishedPlaybackState } from "./contracts";
+import { toast } from '../lib/toast';
+import { confirmDialog } from '../lib/confirm';
+import { isPodcastTrack } from '../lib/track';
+import { queueIdentity, queueIndexOf } from '../lib/queueDiscovery';
+import type { AutoActivity, AutoMusicSet, AutoPlanItem, GeneratedQueueController } from '../lib/generatedQueue';
+import { t as tr } from '../lib/i18n';
+import { ListeningLearning } from '../lib/listeningLearning';
+import { createQueueEntry, futureEntries, type PlaybackQueueEntry } from '../lib/playbackQueue';
+import { shuffled } from '../lib/shuffle';
+import {
+  editableFrom,
+  insertionFloor as committedFloor,
+  moveRouteBlock,
+  removedOccurrences,
+  repairHorizon,
+  requestInsertion,
+  routeBlock,
+  routeKind,
+  routeRows,
+  sessionSurvivors,
+} from '../lib/djRoute';
+import { IMMEDIATE_TRANSITION, TRUSTED_CONFIDENCE, resolveTransition, skipTransition, unmixed } from '../lib/djTransition';
+import { autoReasonKey, djItemRef, planItemTrack, routePlanEntry } from '../lib/planItems';
+import type { Track } from '../types/music';
+import { favouriteTracks, musicLibrary } from './identity';
+import { state, setState, setNowPlayingOpen, randomId, type RepeatMode } from './core';
+import type { PlayerActions, PlaybackTrigger, PlaybackAttempt, CommittedTransition, PublishedPlaybackState } from './contracts';
+import type { DjRunwayPort } from './runway';
+
 export interface DjPorts {
   createPlaybackAttempt: (track: Track, generation: number, trigger: PlaybackTrigger, id?: string) => PlaybackAttempt;
   beginLoad: () => number;
@@ -40,43 +55,74 @@ export interface DjPorts {
     attemptId: string;
     url: string;
   } | null;
-  actions: Pick<PlayerActions, 'addAutoSource' | 'enterAutoMode' | 'exitAutoMode' | 'next' | 'placeAutoTrack' | 'placeAutoTracks' | 'playFrom' | 'repairAutoRoute' | 'resumePlayback' | 'retryCurrent' | 'startRadio'>;
+  actions: Pick<PlayerActions, 'addAutoSource' | 'enterAutoMode' | 'exitAutoMode' | 'next' | 'placeAutoTrack' | 'placeAutoTracks' | 'repairAutoRoute' | 'resumePlayback' | 'retryCurrent'>;
   levelFor: (entry: PlaybackQueueEntry | Track | null | undefined) => number;
   trackPrepared: (track: Track) => boolean;
   discardFutureAutoplay: () => void;
   cancelPendingRadio: () => void;
-  loadIndex: (i: number, opts?: LoadOptions) => void;
+  loadIndex: (i: number) => void;
   updateUpcomingPreparation: () => void;
-  emitPlaybackEvent: (phase: string, extra?: Record<string, number | boolean>, strings?: {
-    failure_reason?: string;
-    display_mode?: string;
-    transport_action?: string;
-    transport_origin?: string;
-    mix_phase?: string;
-    media_session_state?: string;
-    sync_reason?: string;
-    video_id?: string;
-    queue_lane?: string;
-    queue_source?: string;
-  }) => void;
-  stageNext: () => void;
-  nextEntry: () => PlaybackQueueEntry | undefined;
-  previewLookahead: () => string[];
-  runWhenAudible: (() => void) | null;
   abandonContextMatches: (keep?: (queueId: string) => boolean) => void;
+  /** The generated lanes this session's runway is planned through. */
+  runway: {
+    ensureGeneratedQueue: () => GeneratedQueueController;
+    readonly generatedQueue: GeneratedQueueController | null;
+    enterStarved: () => void;
+    promotePreparedAutoSuccessor: () => boolean;
+  };
 }
 
-/** Owns dj behaviour; cross-domain work enters through explicit ports. */
+const COMMIT_LEAD_SECONDS = 45;
+const IDLE_TRANSITION = {
+  status: 'idle',
+  technique: undefined,
+  nextTrackId: undefined,
+  at: undefined
+} as const;
+const MAX_CONSECUTIVE_AUTO_HANDOFF_FAILURES = 2;
+const AUTO_HANDOFF_COOLDOWN_MS = 30_000;
+const REFINE_RETRY_MS = 2_000;
+const REPLAN_DEBOUNCE_MS = 800;
+const REPAIR_LIMIT = 16;
+const AUTO_OPENING_MIN_FAVOURITES = 8;
+const AUTO_OPENING_SAMPLE = 40;
+
+/**
+ * Owns the DJ session: its sources and direction, the handoffs between songs,
+ * and the listener's edits to the route. Route rules live in `lib/djRoute.ts`
+ * and are shared with Android; the generated runway is planned through
+ * `ports.runway`, which this session plugs into with `runwayPort`.
+ */
 export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   const evidence = createDjEvidence(recordPlaybackDiagnostic, randomId);
   lifetime.own(setDiagnosticContext(() => evidence.context()));
   function syncEvidence(): void { evidence.sync(state.autoMode.active, state.autoMode.directionRevision ?? 0); }
-  let generatedQueue: GeneratedQueueController | null = null;
+  const generated = () => ports.runway.generatedQueue;
   let autoPlaybackPrefs: {
     shuffle: boolean;
     repeat: RepeatMode;
   } | null = null;
   let autoSessionEpoch = 0;
+  let repairToken = 0;
+  function advanceAutoSession() {
+    if (state.autoMode.repairing) setState('autoMode', 'repairing', false);
+    return ++autoSessionEpoch;
+  }
+  let generatedActivityId = 0;
+  function activity(status: AutoActivity['status'], key: string, values?: AutoActivity['values']): AutoActivity {
+    return { id: ++generatedActivityId, status, key, values };
+  }
+  function directionRevision(): number {
+    return state.autoMode.directionRevision ?? 0;
+  }
+  function sourceBodies() {
+    return state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation }));
+  }
+  function routeEntry(track: Track, revision = directionRevision()): PlaybackQueueEntry {
+    return { ...createQueueEntry(track, 'generated', 'auto_mode'), autoRoute: { kind: 'generated', directionRevision: revision } };
+  }
+
+  // --- Work the engine does for this session --------------------------------
   const workClient = `dj-${randomId()}`;
   let workRevision = 0;
   let workSignature = '';
@@ -105,41 +151,11 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     refinementAborter?.abort();
     refinement = { pair: '', inFlight: false, nextAt: 0, measured: false };
   }
+
+  // --- Handoffs ---------------------------------------------------------------
   let pendingImmediateAutoTrack: Track | null = null;
   let autoOpeningAborter: AbortController | null = null;
   let autoOpeningRetry: ReturnType<typeof setTimeout> | null = null;
-  const AUTOPLAY_TARGET = 8;
-  const AUTOPLAY_PREPARE_THRESHOLD = 2;
-  const AUTOPLAY_REFILL_THRESHOLD = 5;
-  async function ensureAutoplay(force = false): Promise<boolean> {
-    const pb = state.playback;
-    const current = pb.currentTrack;
-    if (!pb.autoplayEnabled || !current || isPendingEntry(current) || isPodcastTrack(current) || pb.radioMode || state.autoMode.active || pb.repeat !== 'off') {
-      return false;
-    }
-    const upcoming = futureEntries(pb.queue, pb.index);
-    const generated = upcoming.filter(entry => entry.queueLane === 'generated' && entry.queueSource === 'autoplay');
-    const deterministic = upcoming.filter(entry => !(entry.queueLane === 'generated' && entry.queueSource === 'autoplay'));
-    if (!force && deterministic.length > AUTOPLAY_PREPARE_THRESHOLD) return false;
-    if (!force && generated.length >= AUTOPLAY_REFILL_THRESHOLD) return false;
-
-    // A context song still waiting on its match has nothing to seed a plan with.
-    const seed = generated.at(-1) ?? deterministic.filter(entry => !isPendingEntry(entry)).at(-1) ?? current;
-    if (generated.length >= AUTOPLAY_TARGET) return true;
-    return ensureGeneratedQueue().ensureAutoplay(seed, force);
-  }
-  const COMMIT_LEAD_SECONDS = 45;
-  const MIN_PLAY_SECONDS = 90;
-  const MIN_PLAY_FRACTION = 0.6;
-  const TRUSTED_CONFIDENCE = 0.35;
-  const IDLE_TRANSITION = {
-    status: 'idle',
-    technique: undefined,
-    nextTrackId: undefined,
-    at: undefined
-  } as const;
-  const MAX_CONSECUTIVE_AUTO_HANDOFF_FAILURES = 2;
-  const AUTO_HANDOFF_COOLDOWN_MS = 30_000;
   let autoHandoffFailures = 0;
   let autoHandoffCooldownUntil = 0;
   let committedTransition: CommittedTransition | null = null;
@@ -150,55 +166,12 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     const declared = state.playback.currentTrack?.duration ?? 0;
     return Number.isFinite(declared) && declared > 0 ? declared : 0;
   }
-  function resolveTransition(fromKey: string, duration: number, item: AutoPlanItem | undefined): LiveTransitionPlan | null {
-    if (!Number.isFinite(duration) || duration <= 4) return null;
-    if (!state.playback.djMixing) {
-      return {
-        technique: 'direct',
-        out_cue: duration,
-        in_cue: 0,
-        overlap_seconds: 0,
-        overlap_bars: 0,
-        playback_rate: 1,
-        confidence: 0
-      };
-    }
-    const chained = item?.fromKey === fromKey ? item.transition : undefined;
-    const trusted = (chained?.confidence ?? 0) >= TRUSTED_CONFIDENCE;
-    const requested = chained?.overlap_seconds ?? 6;
-    const overlap = Math.max(1.5, Math.min(trusted ? requested : Math.min(requested, 6), duration * 0.25));
-    const latest = duration - overlap - 1;
-    if (latest <= 0) return null;
-    const earliest = Math.min(Math.min(MIN_PLAY_SECONDS, duration * MIN_PLAY_FRACTION), latest);
-    const proposed = chained && Number.isFinite(chained.out_cue) && (chained.out_cue ?? 0) > 0 ? Number(chained.out_cue) : latest;
-    const placement = metricCuePlacement(proposed, earliest, latest, trusted ? chained : undefined, overlap);
-    const beatmatch = chained && ['bass_swap', 'filter_blend', 'long_blend'].includes(chained.technique);
-    const metricFallback = trusted && beatmatch && !placement.aligned;
-    return {
-      technique: metricFallback ? 'structural_fade' : trusted ? chained!.technique : 'safe_fade',
-      out_cue: placement.cue,
-      in_cue: trusted ? chained!.in_cue : 0,
-      overlap_seconds: overlap,
-      overlap_bars: chained?.overlap_bars ?? 0,
-      playback_rate: trusted && !metricFallback ? chained!.playback_rate : 1,
-      // Both decks meet at a shared tempo; the mixer checks it can still ramp.
-      ...(trusted && !metricFallback && chained!.out_playback_rate != null
-        ? { out_playback_rate: chained!.out_playback_rate, out_rate_ramp: chained!.out_rate_ramp } : {}),
-      confidence: chained?.confidence ?? 0,
-      ...(trusted && chained!.echo_delay_seconds != null ? { echo_delay_seconds: chained!.echo_delay_seconds } : {}),
-      // The planner's phase tolerance, as Android already receives it.
-      ...(trusted && chained!.sync ? { sync: { out_bar_seconds: chained!.sync.out_bar_seconds, phase_tolerance_ms: chained!.sync.phase_tolerance_ms } } : {})
-    };
+  function insertionFloor(): number {
+    return committedFloor(state.playback.queue, state.playback.index, committedTransition?.queueId);
   }
-  function unmixed(plan: LiveTransitionPlan): LiveTransitionPlan {
-    return {
-      ...plan,
-      technique: 'direct',
-      in_cue: 0,
-      overlap_seconds: 0,
-      overlap_bars: 0,
-      playback_rate: 1
-    };
+  /** The first queue index a route edit may touch. */
+  function routeStart(): number {
+    return editableFrom(routeRows(state.playback.queue), state.playback.index, insertionFloor());
   }
   function adoptHandoffAttempt(track: PlaybackQueueEntry): void {
     const attempt = ports.createPlaybackAttempt(track, ports.beginLoad(), 'handoff');
@@ -275,7 +248,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         if (state.autoMode.active && pending) {
           queueMicrotask(() => mixAutoTrackNow(pending));
         } else if (state.autoMode.active) {
-          void generatedQueue?.ensureRunway();
+          void generated()?.ensureRunway();
         }
       },
       onCancel: reason => {
@@ -315,9 +288,9 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           // incoming deck never became playable, ownership is still on the song
           // that just finished; promote another verified runway entry rather than
           // exposing the failed URL as the current 0:00 Retry track.
-          if (promotePreparedAutoSuccessor()) ports.actions.next('ended');else {
+          if (ports.runway.promotePreparedAutoSuccessor()) ports.actions.next('ended');else {
             ports.prefetchUpcoming();
-            enterStarved();
+            ports.runway.enterStarved();
           }
           return;
         }
@@ -344,20 +317,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   }
   let refinement = { pair: '', inFlight: false, nextAt: 0, measured: false };
   let refinementAborter: AbortController | null = null;
-  const REFINE_RETRY_MS = 2_000;
-  function djItemRef(track: Track): DjItemRef {
-    return {
-      item_id: track.item_id,
-      id: track.id,
-      track_id: track.source === 'preview' ? undefined : track.id,
-      youtube_id: track.youtube_id ?? (track.source === 'preview' ? track.id : undefined),
-      source: track.source,
-      title: track.title,
-      artist: track.artist,
-      artist_is_channel: track.artist_is_channel,
-      duration: track.duration
-    };
-  }
   function autoRecommendationIdentity(track: Track): string {
     if (track.recommendation?.identity) return track.recommendation.identity;
     return track.source === 'preview' ? `music:youtube:${track.youtube_id || track.id}` : `music:track:${track.id}`;
@@ -432,7 +391,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     if (!ports.trackPrepared(next)) {
       const videoId = playbackYoutubeId(next);
       if (videoId) ports.prefetchUpcoming();
-      promotePreparedAutoSuccessor();
+      ports.runway.promotePreparedAutoSuccessor();
       return;
     }
     const fromKey = queueIdentity(current);
@@ -441,7 +400,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       setState('autoMode', 'plan', next.queueId, { ...entry, fromKey, transition: undefined });
       refinement = { pair: '', inFlight: false, nextAt: 0, measured: false };
     }
-    const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[next.queueId]);
+    const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[next.queueId], state.playback.djMixing);
     if (!plan) return;
     // A measured blend is only worth asking for when there will be a blend.
     if (state.playback.djMixing && pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS) {
@@ -450,18 +409,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     if (pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS) return;
     commitTransition(next, fromKey, plan, false);
   }
-  function insertionFloor(): number {
-    const pb = state.playback;
-    if (!committedTransition) return pb.index;
-    const committed = pb.queue.findIndex(entry => entry.queueId === committedTransition!.queueId);
-    return committed > pb.index ? committed : pb.index;
-  }
-  function autoRouteKind(entry: PlaybackQueueEntry): DjRouteKind {
-    if (entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user') return 'user';
-    return entry.autoRoute?.kind ?? 'generated';
-  }
   function explicitAutoRunway(): PlaybackQueueEntry[] {
-    return futureEntries(state.playback.queue, state.playback.index).filter(entry => autoRouteKind(entry) === 'user');
+    return futureEntries(state.playback.queue, state.playback.index).filter(entry => routeKind(entry) === 'user');
   }
   function mixAutoTrackNow(track: Track): void {
     if (!state.autoMode.active || isPodcastTrack(track)) return;
@@ -472,14 +421,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     }
     if (audioService.mixPhase() === 'crossfading') {
       pendingImmediateAutoTrack = track;
-      setState('autoMode', 'activity', {
-        id: ++generatedActivityId,
-        status: 'working',
-        key: 'autoMode.agent.immediateQueued',
-        values: {
-          title: track.title
-        }
-      });
+      setState('autoMode', 'activity', activity('working', 'autoMode.agent.immediateQueued', { title: track.title }));
       return;
     }
     ports.discardFutureAutoplay();
@@ -506,14 +448,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       plan: {},
       staleSeams: [],
       transition: IDLE_TRANSITION,
-      activity: {
-        id: ++generatedActivityId,
-        status: 'working',
-        key: 'autoMode.agent.mixingImmediate',
-        values: {
-          title: track.title
-        }
-      }
+      activity: activity('working', 'autoMode.agent.mixingImmediate', { title: track.title })
     });
     if (!current || pb.index < 0) {
       setState('playback', {
@@ -524,7 +459,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         radioSeedId: null
       });
       ports.loadIndex(0);
-      void ensureGeneratedQueue().start('auto_mode', requested, state.autoMode.profile);
+      void ports.runway.ensureGeneratedQueue().start('auto_mode', requested, state.autoMode.profile);
       return;
     }
     const prefix = pb.queue.slice(0, pb.index + 1);
@@ -534,77 +469,40 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       radioLoading: false,
       radioSeedId: null
     });
-    const fromKey = queueIdentity(current);
-    commitTransition(requested, fromKey, {
-      technique: 'safe_fade',
-      out_cue: 0,
-      in_cue: 0,
-      overlap_seconds: 1.6,
-      overlap_bars: 0,
-      playback_rate: 1,
-      confidence: 0
-    }, true);
-    void ensureGeneratedQueue().start('auto_mode', requested, state.autoMode.profile);
+    commitTransition(requested, queueIdentity(current), IMMEDIATE_TRANSITION, true);
+    void ports.runway.ensureGeneratedQueue().start('auto_mode', requested, state.autoMode.profile);
   }
   function rememberDjExploration(): void {
     if (!state.autoMode.active) return;
     const entry = state.playback.queue[state.playback.index];
-    if (entry?.autoRoute?.kind !== 'generated' || entry.autoRoute.directionRevision !== (state.autoMode.directionRevision ?? 0)) return;
+    if (entry?.autoRoute?.kind !== 'generated' || entry.autoRoute.directionRevision !== directionRevision()) return;
     const roots = state.autoMode.exploration ?? [];
     const identity = queueIdentity(entry);
     if (roots.some(track => queueIdentity(track) === identity)) return;
     setState('autoMode', 'exploration', [...roots, entry].slice(-4));
-    void generatedQueue?.ensureRunway();
+    void generated()?.ensureRunway();
   }
+
+  // --- Opening a session ------------------------------------------------------
   function startAutoFromSourcePlan(response: DjPlanResponse): boolean {
     if (!response.opening) return false;
     syncEvidence();
     evidence.route(response);
-    const opening = planItemTrack(response.opening);
-    const openingEntry = {
-      ...createQueueEntry(opening, 'generated', 'auto_mode'),
-      autoRoute: {
-        kind: 'generated' as const,
-        directionRevision: state.autoMode.directionRevision ?? 0
-      }
-    };
-    const candidates = response.items.map(item => ({
-      item,
-      track: planItemTrack(item)
-    })).filter(({
-      track
-    }) => queueIndexOf([openingEntry], track) === -1);
-    const entries = candidates.map(({
-      track
-    }) => ({
-      ...createQueueEntry(track, 'generated', 'auto_mode'),
-      autoRoute: {
-        kind: 'generated' as const,
-        directionRevision: state.autoMode.directionRevision ?? 0
-      }
-    }));
+    const opening = planItemTrack(response.opening, state.library);
+    const openingEntry = routeEntry(opening);
+    const candidates = response.items
+      .map(item => ({ item, track: planItemTrack(item, state.library) }))
+      .filter(({ track }) => queueIndexOf([openingEntry], track) === -1);
+    const entries = candidates.map(({ track }) => routeEntry(track));
     const plan: Record<string, AutoPlanItem> = {};
     let fromKey = queueIdentity(openingEntry);
-    candidates.forEach(({
-      item
-    }, index) => {
+    candidates.forEach(({ item }, index) => {
       const entry = entries[index];
       evidence.select(fromKey, entry.queueId, index ? candidates[index - 1].item.analysis : response.opening?.analysis,
         item.analysis, item.transition, response);
       plan[entry.queueId] = {
-        trackId: queueIdentity(entry),
-        source: item.source_pool,
-        reasonKey: autoReasonKey(item),
-        reasonValues: item.source_pool === 'related' ? {
-          title: opening.title
-        } : undefined,
-        fromKey,
-        transition: item.transition,
-        bpm: item.analysis?.bpm,
-        key: item.analysis?.key,
-        sourceSetId: item.source_set_id,
-        sourceSetLabel: item.source_set_label,
-        lineage: item.lineage
+        ...routePlanEntry(item, queueIdentity(entry), fromKey, item.transition),
+        reasonValues: item.source_pool === 'related' ? { title: opening.title } : undefined,
       };
       fromKey = queueIdentity(entry);
     });
@@ -617,7 +515,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       radioLoading: false,
       radioSeedId: null
     });
-    ensureGeneratedQueue().adopt('auto_mode', openingEntry, state.autoMode.profile, {
+    ports.runway.ensureGeneratedQueue().adopt('auto_mode', openingEntry, state.autoMode.profile, {
       sessionId: response.session_id,
       nextSegmentIndex: (response.segment_index ?? 0) + 1
     });
@@ -626,14 +524,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       plan,
       staleSeams: [],
       phase: entries.length ? 'ready' : response.warming ? 'warming' : 'degraded',
-      activity: {
-        id: ++generatedActivityId,
-        status: 'done',
-        key: 'autoMode.agent.openedSource',
-        values: {
-          title: opening.title
-        }
-      }
+      activity: activity('done', 'autoMode.agent.openedSource', { title: opening.title })
     });
     ports.loadIndex(0);
     ports.prefetchUpcoming();
@@ -651,11 +542,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     autoOpeningAborter = aborter;
     setState('autoMode', {
       phase: 'planning',
-      activity: {
-        id: ++generatedActivityId,
-        status: 'working',
-        key: 'autoMode.agent.openingSource'
-      }
+      activity: activity('working', 'autoMode.agent.openingSource')
     });
     try {
       const response = await api.planDjQueue({
@@ -663,39 +550,21 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         segment_index: 0,
         source_policy: 'explicit',
         exploration: state.autoMode.exploration ?? [],
-        direction_revision: state.autoMode.directionRevision ?? 0,
-        sources: state.autoMode.sources.map(({
-          id,
-          label,
-          tracks,
-          activation
-        }) => ({
-          id,
-          label,
-          tracks,
-          activation
-        })),
+        direction_revision: directionRevision(),
+        sources: sourceBodies(),
         heard: [],
         exclude: state.autoMode.avoidedIdentities,
         limit: 8
       }, aborter.signal);
-      if (!isCurrent()) {
-        return;
-      }
+      if (!isCurrent()) return;
       if (aborter.signal.aborted || !state.autoMode.active || sessionEpoch !== autoSessionEpoch || state.playback.currentTrack) return;
       if (!startAutoFromSourcePlan(response)) throw new Error('no opening');
-    } catch (error) {
-      if (!isCurrent()) {
-        return;
-      }
+    } catch {
+      if (!isCurrent()) return;
       if (aborter.signal.aborted || !state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
       setState('autoMode', {
         phase: 'degraded',
-        activity: {
-          id: ++generatedActivityId,
-          status: 'error',
-          key: 'autoMode.agent.openingFailed'
-        }
+        activity: activity('error', 'autoMode.agent.openingFailed')
       });
       const delay = [2_000, 5_000, 15_000, 30_000, 60_000][Math.min(retryStep, 4)];
       autoOpeningRetry = lifetime.setTimeout(() => {
@@ -708,8 +577,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       if (autoOpeningAborter === aborter) autoOpeningAborter = null;
     }
   }
-  const AUTO_OPENING_MIN_FAVOURITES = 8;
-  const AUTO_OPENING_SAMPLE = 40;
   async function openAutoFromCollection(): Promise<void> {
     const isCurrent = lifetime.capture();
     const epoch = autoSessionEpoch;
@@ -733,18 +600,12 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     autoOpeningAborter = aborter;
     setState('autoMode', {
       phase: 'planning',
-      activity: {
-        id: ++generatedActivityId,
-        status: 'working',
-        key: 'autoMode.agent.openingSource'
-      }
+      activity: activity('working', 'autoMode.agent.openingSource')
     });
     let recommended: Track[] = [];
     try {
       const feed = await api.getDiscoveryMusicFeed(aborter.signal);
-      if (!isCurrent()) {
-        return;
-      }
+      if (!isCurrent()) return;
       recommended = (feed.items ?? []).flatMap((item): Track[] => {
         const owned = item.track_id ? state.library.find(track => track.id === item.track_id) : undefined;
         if (owned) return isPodcastTrack(owned) ? [] : [owned];
@@ -761,10 +622,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         }];
       });
     } catch {
-      if (!isCurrent()) {
-        return;
-      }
-
+      if (!isCurrent()) return;
       // Nothing to open from, which is said below.
     } finally {
       if (autoOpeningAborter === aborter) autoOpeningAborter = null;
@@ -776,11 +634,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     }
     setState('autoMode', {
       phase: 'idle',
-      activity: {
-        id: ++generatedActivityId,
-        status: 'error',
-        key: 'autoMode.noSeed'
-      }
+      activity: activity('error', 'autoMode.noSeed')
     });
   }
   async function confirmNormalMode(kind: 'podcast' | 'radio', proceed: () => void | Promise<void>): Promise<void> {
@@ -790,27 +644,31 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       message: tr(kind === 'podcast' ? 'modeChange.podcastMessage' : 'modeChange.radioMessage'),
       confirmLabel: tr(kind === 'podcast' ? 'modeChange.playPodcast' : 'modeChange.startRadio')
     });
-    if (!isCurrent()) {
-      return;
-    }
+    if (!isCurrent()) return;
     if (!ok || !state.autoMode.active) return;
     ports.actions.exitAutoMode();
     await proceed();
-    if (!isCurrent()) {
-      return;
-    }
   }
-  function dropAutoRouteOccurrence(queueId: string): PlaybackQueueEntry | null {
+
+  // --- Route edits --------------------------------------------------------------
+  /** Drop one occurrence and the bridges into it. A listener's edit never
+   * reaches a row the playing or cued song depends on; a failed occurrence
+   * goes, but never takes what is playing or cued with it. */
+  function dropAutoRouteOccurrence(queueId: string, edit = false): PlaybackQueueEntry | null {
     if (!state.autoMode.active || committedTransition?.queueId === queueId) return null;
-    const track = state.playback.queue.find(entry => entry.queueId === queueId);
-    if (!track) return null;
-    const owned = new Set(state.playback.queue.filter(entry => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId).map(entry => entry.queueId));
-    owned.add(queueId);
+    const queue = state.playback.queue;
+    const index = queue.findIndex(entry => entry.queueId === queueId);
+    if (index === -1 || (edit && index < routeStart())) return null;
+    const track = queue[index];
+    const floor = insertionFloor();
+    if (index <= floor) return null;
+    const affected = new Set(removedOccurrences(routeRows(queue), queueId));
+    const owned = new Set(queue.slice(floor + 1).filter(entry => affected.has(entry.queueId)).map(entry => entry.queueId));
     setState('playback', 'queue', queue => queue.filter(entry => !owned.has(entry.queueId)));
     setState('autoMode', 'plan', plan => Object.fromEntries(Object.entries(plan).filter(([id]) => !owned.has(id))));
     setState('autoMode', 'staleSeams', seams => seams.filter(id => !owned.has(id)));
     ports.updateUpcomingPreparation();
-    void generatedQueue?.ensureRunway();
+    void generated()?.ensureRunway();
     return track;
   }
   function avoidAutoIdentity(track: Track): void {
@@ -824,14 +682,34 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       setState('autoMode', 'avoidedIdentities', identities => identities.filter(value => value !== identity));
     });
   }
-  let replanTimer: ReturnType<typeof setTimeout> | null = null;
-  const REPLAN_DEBOUNCE_MS = 800;
-  let replanNote = '';
-  function isSingleRequest(entry: PlaybackQueueEntry): boolean {
-    if (entry.autoRoute?.kind === 'bridge') return false;
-    if (entry.autoRoute?.requestGroup) return false;
-    return entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user';
+  /** Where a request in front of `before` goes: the start of that block when
+   * it is editable, otherwise nowhere fixed. */
+  function requestDestination(before: string | undefined): string | undefined {
+    if (!before) return undefined;
+    const queue = state.playback.queue;
+    const anchor = routeBlock(routeRows(queue), before)?.[0];
+    const index = anchor === undefined ? -1 : queue.findIndex(entry => entry.queueId === anchor);
+    return index >= routeStart() ? anchor : undefined;
   }
+  function insertRequests(occurrences: PlaybackQueueEntry[], before: string | undefined): void {
+    const at = requestInsertion(routeRows(state.playback.queue), routeStart() - 1, before);
+    setState('playback', 'queue', queue => [...queue.slice(0, at), ...occurrences, ...queue.slice(at)]);
+  }
+  /** A route row as the DJ endpoints take it, with its block. */
+  function routeRef(entry: PlaybackQueueEntry) {
+    const kind = routeKind(entry);
+    return {
+      ...djItemRef(entry),
+      queue_id: entry.queueId,
+      route_kind: kind,
+      ...(kind === 'bridge' && entry.autoRoute?.ownerQueueId ? { owner_queue_id: entry.autoRoute.ownerQueueId } : {}),
+    };
+  }
+  function routeSignature(start = routeStart()): string {
+    return state.playback.queue.slice(start).map(entry => entry.queueId).join('|');
+  }
+  let replanTimer: ReturnType<typeof setTimeout> | null = null;
+  let replanNote = '';
   function changeAutoSession(tracks: Track[], label: string, lead?: Track): boolean {
     const usable = tracks.filter(track => !isPodcastTrack(track));
     if (!state.autoMode.active || !usable.length || lead && isPodcastTrack(lead)) return false;
@@ -841,8 +719,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     if (autoOpeningRetry) lifetime.clearTimeout(autoOpeningRetry);
     autoOpeningRetry = null;
     pendingImmediateAutoTrack = null;
-    autoSessionEpoch += 1;
-    const revision = (state.autoMode.directionRevision ?? 0) + 1;
+    advanceAutoSession();
+    const revision = directionRevision() + 1;
     const source: AutoMusicSet = {
       id: randomId(),
       label: label.trim() || usable[0].title,
@@ -859,17 +737,13 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     }
     const pb = state.playback;
     const current = pb.currentTrack;
-    const floor = current ? insertionFloor() : pb.index;
+    const floor = current ? routeStart() - 1 : pb.index;
     const anchor = pb.queue[floor] ?? current;
-    const leadEntry = lead && anchor && queueIndexOf([anchor], lead) !== 0 ? {
-      ...createQueueEntry(lead, 'generated', 'auto_mode'),
-      autoRoute: {
-        kind: 'generated' as const,
-        directionRevision: revision
-      }
-    } : null;
+    const leadEntry = lead && anchor && queueIndexOf([anchor], lead) !== 0 ? routeEntry(lead, revision) : null;
     // A request for the very song the session now starts from is that start.
-    const kept = pb.queue.slice(floor + 1).filter(entry => isSingleRequest(entry) && !(leadEntry && queueIndexOf([entry], leadEntry) === 0));
+    const future = pb.queue.slice(floor + 1);
+    const survivors = new Set(sessionSurvivors(routeRows(future), leadEntry ? queueIdentity(leadEntry) : undefined));
+    const kept = future.filter(entry => survivors.has(entry.queueId));
     const head = pb.queue.slice(0, floor + 1);
     const queue = [...head, ...(leadEntry ? [leadEntry] : []), ...kept];
     if (ports.stagedEntry && !queue.some(entry => entry.queueId === ports.stagedEntry!.queueId)) {
@@ -908,25 +782,18 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       staleSeams: [],
       repairing: false,
       phase: 'planning',
-      activity: {
-        id: ++generatedActivityId,
-        status: 'working',
-        key: 'autoMode.agent.sourceChanged',
-        values: {
-          title: source.label
-        }
-      }
+      activity: activity('working', 'autoMode.agent.sourceChanged', { title: source.label })
     });
     ports.updateUpcomingPreparation();
     if (!current) {
       // Nothing to mix out of: the planner opens inside the new source.
-      generatedQueue?.stop('auto_mode');
+      generated()?.stop('auto_mode');
       void startAutoFromSources();
     } else {
       // The DJ's own measurement of the seam into the chosen song, asked for now
       // rather than a minute before the end — it may well leave sooner.
       if (leadEntry && anchor) maybeRefineTransition(anchor, leadEntry, queueIdentity(anchor));
-      void ensureGeneratedQueue().start('auto_mode', queue.at(-1) ?? current, state.autoMode.profile);
+      void ports.runway.ensureGeneratedQueue().start('auto_mode', queue.at(-1) ?? current, state.autoMode.profile);
     }
     ports.prefetchUpcoming();
     ports.pushPlaybackState();
@@ -940,19 +807,12 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       pendingDirection: true,
       // Answer the gesture immediately. Waiting out the debounce before saying
       // anything reads as a surface that ignored you.
-      activity: {
-        id: ++generatedActivityId,
-        status: 'working',
-        key: 'autoMode.agent.heard',
-        values: {
-          note
-        }
-      }
+      activity: activity('working', 'autoMode.agent.heard', { note })
     });
     replanTimer = lifetime.setTimeout(() => {
       replanTimer = null;
       setState('autoMode', 'pendingDirection', false);
-      if (state.autoMode.active) void ensureGeneratedQueue().replan(state.autoMode.profile);
+      if (state.autoMode.active) void ports.runway.ensureGeneratedQueue().replan(state.autoMode.profile);
     }, REPLAN_DEBOUNCE_MS);
   }
   function cancelRunwayReplan(): void {
@@ -961,417 +821,104 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     replanNote = '';
     setState('autoMode', 'pendingDirection', false);
   }
-  const PREMATURE_END_SECONDS = 3;
-  let starvedQueueId: string | null = null;
-  function enterStarved(): void {
-    starvedQueueId = state.playback.queue[state.playback.index]?.queueId ?? null;
-    setState('playback', {
-      isPlaying: false,
-      isLoading: false,
-      phase: 'starved'
-    });
-    ports.emitPlaybackEvent('ui_queue_starved', {
-      lane_remaining: futureEntries(state.playback.queue, state.playback.index).length,
-      auto_mode: state.autoMode.active,
-      radio: state.playback.radioMode,
-      // Starving in the foreground is a spinner; starving with the phone locked is
-      // a drive that goes quiet, because the refill it waits on cannot complete.
-      hidden: typeof document !== 'undefined' && document.visibilityState === 'hidden'
-    });
-  }
-  function resumeFromStarved(): void {
-    if (state.playback.phase !== 'starved') return;
-    const pb = state.playback;
-    if (pb.queue[pb.index]?.queueId !== starvedQueueId) return;
-    if (pb.index >= pb.queue.length - 1) {
-      // Nothing yet. Ask again — for autoplay this is also what re-arms the
-      // controller's own retry, which is otherwise only started by a failure.
-      void ensureAutoplay(true);
-      void generatedQueue?.refillNow();
-      return;
-    }
-    if (state.autoMode.active) promotePreparedAutoSuccessor();
-    const next = state.playback.queue[state.playback.index + 1];
-    if (!next || !ports.trackPrepared(next)) {
-      ports.prefetchUpcoming();
-      return;
-    }
-    starvedQueueId = null;
-    ports.loadIndex(state.playback.index + 1, {
-      trigger: 'ended'
-    });
-  }
-  const RUNWAY_LEAD_SECONDS = 60;
-  const EMPTY_RUNWAY_RETRY_MS = 5_000;
-  let runwayCheckedFor = '';
-  let lastEmptyRefillAt = 0;
-  function watchRunway(snapshot: ProgramPlaybackSnapshot): void {
-    syncEvidence();
-    const pb = state.playback;
-    const duration = snapshot.duration;
-    if (!Number.isFinite(duration) || duration <= 0) return;
-    if (duration - snapshot.position > RUNWAY_LEAD_SECONDS) return;
-    const key = pb.queue[pb.index]?.queueId ?? '';
-    if (!key) return;
-    // The check is latched per track, but an empty runway un-latches it: a lane
-    // that was long enough a moment ago and is not any more has to be asked about
-    // again, and this last minute is the only chance to fix it before `ended`
-    // arrives and there is nothing to play.
-    const empty = pb.index >= pb.queue.length - 1;
-    if (runwayCheckedFor === key && !empty) return;
-    // `timeupdate` arrives four times a second, so the un-latched case needs a
-    // rate of its own or a lane that stays empty becomes a request storm.
-    if (empty && Date.now() - lastEmptyRefillAt < EMPTY_RUNWAY_RETRY_MS) return;
-    if (empty) lastEmptyRefillAt = Date.now();
-    runwayCheckedFor = key;
-    // Also re-stages: an entry that landed after this track started would not
-    // otherwise be cued up on the idle deck in time to matter.
-    ports.stageNext();
-    // Forced when the lane is actually empty. Waiting for `ended` to discover it
-    // means asking the network from a page iOS has already frozen, which is how a
-    // drive ends in silence — the answer arrives when the phone is unlocked.
-    void ensureAutoplay(empty);
-    if (pb.radioMode || state.autoMode.active) {
-      void (empty ? generatedQueue?.refillNow() : generatedQueue?.ensureRunway());
-    }
-  }
-  function boundaryFacts(): Record<string, boolean> {
-    const next = ports.nextEntry();
-    return {
-      hidden: typeof document !== 'undefined' && document.visibilityState === 'hidden',
-      handoff_dj: audioService.mixPhase() !== 'idle',
-      handoff_staged: !!next && ports.stagedEntry?.queueId === next.queueId,
-      starved: !next
-    };
-  }
-  function promotePreparedAutoSuccessor(): boolean {
-    const pb = state.playback;
-    const immediate = pb.queue[pb.index + 1];
-    if (!immediate) return false;
-    if (ports.trackPrepared(immediate)) return true;
-    if (immediate.queueLane !== 'generated') return false;
-    let readyIndex = -1;
-    for (let index = pb.index + 2; index < pb.queue.length; index += 1) {
-      const candidate = pb.queue[index];
-      if (candidate.queueLane !== 'generated') break;
-      if (ports.trackPrepared(candidate)) {
-        readyIndex = index;
-        break;
-      }
-    }
-    if (readyIndex === -1) return false;
-    setState('playback', 'queue', queue => {
-      const copy = queue.slice();
-      const [ready] = copy.splice(readyIndex, 1);
-      copy.splice(pb.index + 1, 0, ready);
-      return copy;
-    });
-    return true;
-  }
-  function onPreviewPreparation(videoId: string, status: PreviewPreparation): void {
-    const pb = state.playback;
-    const currentId = pb.currentTrack && playbackYoutubeId(pb.currentTrack);
-    const wanted = ports.previewLookahead().slice(0, 3);
-    if (videoId !== currentId && !wanted.includes(videoId)) return;
-    if (pb.currentTrack && currentId === videoId) {
-      setState('playback', 'previewPreparation', status);
-    }
-    if (ports.runWhenAudible) return;
-    const future = pb.queue.slice(Math.max(0, pb.index + 1));
-    const matching = future.filter(entry => playbackYoutubeId(entry) === videoId);
-    if (status.state === 'unavailable' && matching.length > 0) {
-      const failedIds = new Set(matching.map(entry => entry.queueId));
-      for (const entry of matching) generatedQueue?.exclude(entry);
-      if (state.autoMode.active) {
-        for (const entry of matching) {
-          if (entry.queueLane === 'generated') dropAutoRouteOccurrence(entry.queueId);
+
+  // --- The runway's DJ intent ---------------------------------------------------
+  const runwayPort: DjRunwayPort = {
+    committedQueueId: () => committedTransition?.queueId ?? null,
+    activateWork: activateDjWork,
+    syncEvidence,
+    planningContext: () => JSON.stringify([state.autoMode.directionRevision, state.autoMode.sources.map(source => [source.id, source.activation, source.tracks.map(queueIdentity)]), (state.autoMode.exploration ?? []).map(queueIdentity), state.autoMode.avoidedIdentities]),
+    requestPlan(seed, limit, exclude, signal, session) {
+      syncDjWork();
+      if (typeof api.planDjQueue !== 'function') return null;
+      return api.planDjQueue({
+        session_id: session?.id,
+        segment_index: session?.segmentIndex,
+        context: state.autoMode.heard.slice(-8).map(djItemRef),
+        seed,
+        source_policy: 'explicit',
+        exploration: state.autoMode.exploration ?? [],
+        direction_revision: directionRevision(),
+        sources: sourceBodies(),
+        heard: state.autoMode.heard,
+        exclude: [...new Set([...exclude, ...state.autoMode.avoidedIdentities])],
+        limit
+      }, signal);
+    },
+    acceptsPlan: response => response.direction_revision == null || response.direction_revision === directionRevision(),
+    routeEntry: track => routeEntry(track),
+    planApplied(response: ListeningPlanResponse, accepted: Map<ListeningPlanItem, PlaybackQueueEntry>, replace: boolean, anchor: Track) {
+      syncEvidence();
+      evidence.route(response);
+      const plan: Record<string, AutoPlanItem> = replace ? {} : { ...state.autoMode.plan };
+      // The server chains a route: item N's transition is planned out of item
+      // N-1, starting at the anchor. Walk the response in order so each entry
+      // records which track its cue belongs to. An item dropped as a duplicate
+      // breaks the chain, and the entry behind it loses a transition it can no
+      // longer honour — a plain fade, rather than a cue from the wrong song.
+      let previousKey = queueIdentity(anchor);
+      let previousAnalysis = (response as DjPlanResponse).seed_analysis;
+      let chained = true;
+      for (const item of response.items) {
+        const entry = accepted.get(item);
+        if (!entry) {
+          chained = false;
+          continue;
         }
+        const id = queueIdentity(entry);
+        evidence.select(previousKey, entry.queueId, chained ? previousAnalysis : undefined,
+          item.analysis, chained ? item.transition : undefined, response);
+        previousAnalysis = item.analysis;
+        plan[entry.queueId] = {
+          ...routePlanEntry(item, id, previousKey, chained ? item.transition : undefined),
+          reasonValues: item.source_pool === 'related' ? { title: state.playback.currentTrack?.title ?? '' } : undefined,
+        };
+        previousKey = id;
+        chained = true;
       }
-      // Auto's route helper may already have removed generated entries and their
-      // bridges. This second pass owns manual/context and non-Auto generated
-      // lanes, and is intentionally occurrence-scoped.
-      setState('playback', 'queue', queue => queue.filter(entry => !failedIds.has(entry.queueId)));
-      if (ports.stagedEntry && failedIds.has(ports.stagedEntry.queueId)) {
-        ports.stagedEntry = null;
-        audioService.clearStaged();
-      }
-      ports.emitPlaybackEvent('ui_preview_unavailable', {
-        occurrences: matching.length,
-        retry_after_sec: status.retry_after ?? 0
-      }, {
-        video_id: videoId,
-        queue_lane: matching[0]?.queueLane,
-        queue_source: matching[0]?.queueSource
+      setState('autoMode', 'plan', plan);
+      // A replacing plan re-seams every join it writes, so the only unplanned
+      // ones left are those belonging to rows it was not allowed to touch.
+      setState('autoMode', 'staleSeams', seams => {
+        if (!replace) return seams;
+        const live = new Set(state.playback.queue.map(entry => entry.queueId));
+        return seams.filter(id => live.has(id) && plan[id] === undefined);
       });
-      if (matching.some(entry => entry.queueLane === 'generated')) {
-        void generatedQueue?.refillNow();
+      syncDjWork();
+    },
+    status(status, response, replacing) {
+      if (status === 'idle') {
+        setState('autoMode', { phase: 'idle', pendingDirection: false });
+        return;
       }
-      ports.prefetchUpcoming();
-    }
-    if (status.state === 'ready') promotePreparedAutoSuccessor();
-    ports.stageNext();
-    resumeFromStarved();
-  }
-  let generatedActivityId = 0;
-  function planItemTrack(item: ListeningPlanItem): Track {
-    const local = item.track_id ? state.library.find(track => track.id === item.track_id) : null;
-    const base: Track = local ? {
-      ...local
-    } : {
-      id: item.youtube_id || item.id,
-      title: item.title,
-      artist: item.artist,
-      album: item.album,
-      duration: item.duration,
-      cover: item.cover,
-      source: 'preview'
-    };
-    return {
-      ...base,
-      item_id: item.item_id ?? base.item_id,
-      artist_is_channel: local ? false : item.artist_is_channel,
-      artists: local?.artists ?? item.artists ?? undefined,
-      deezer_artist_id: base.deezer_artist_id ?? item.deezer_artist_id ?? undefined,
-      deezer_album_id: base.deezer_album_id ?? item.deezer_album_id ?? undefined,
-      source_title: item.source_title,
-      source_artist: item.source_artist,
-      youtube_id: item.youtube_id ?? base.youtube_id,
-      discovery_youtube_id: item.discovery_youtube_id,
-      playback_source_kind: item.playback_source_kind,
-      canonical_identity: item.canonical_identity,
-      recommendation: {
-        identity: item.recommendation_identity,
-        source: item.recommendation_source,
-        reason: item.recommendation_source === 'autoplay' ? tr('autoplay.reason') : item.reason,
-        reason_code: item.reason_code,
-        discovery_youtube_id: item.discovery_youtube_id ?? undefined
-      }
-    };
-  }
-  function autoReasonKey(item: ListeningPlanItem): string {
-    if (item.source_pool === 'related') return 'autoMode.reason.related';
-    if (item.source_pool === 'local') return 'autoMode.reason.library';
-    return 'autoMode.reason.node';
-  }
-  function ensureGeneratedQueue(): GeneratedQueueController {
-    if (state.autoMode.active) activateDjWork();
-    if (generatedQueue) return generatedQueue;
-    generatedQueue = new GeneratedQueueController({
-      snapshot: () => ({
-        currentTrack: state.playback.currentTrack,
-        queue: state.playback.queue.slice(),
-        index: state.playback.index
-      }),
-      identity: queueIdentity,
-      planningContext: () => JSON.stringify([state.autoMode.directionRevision, state.autoMode.sources.map(source => [source.id, source.activation, source.tracks.map(queueIdentity)]), (state.autoMode.exploration ?? []).map(queueIdentity), state.autoMode.avoidedIdentities]),
-      isCommitted: entry => committedTransition?.queueId === entry.queueId,
-      requestPlan: (intent, profile, seed, limit, exclude, signal, generatedSession) => {
-        if (intent === 'auto_mode') syncDjWork();
-        const seedBody = {
-          id: seed.id,
-          track_id: seed.source === 'preview' ? undefined : seed.id,
-          youtube_id: seed.youtube_id ?? (seed.source === 'preview' ? seed.id : undefined),
-          discovery_youtube_id: seed.discovery_youtube_id ?? undefined,
-          source: seed.source,
-          title: seed.title,
-          artist: seed.artist,
-          album: seed.album,
-          duration: seed.duration
-        };
-        if (intent === 'auto_mode' && typeof api.planDjQueue === 'function') {
-          return api.planDjQueue({
-            session_id: generatedSession?.id,
-            segment_index: generatedSession?.segmentIndex,
-            context: state.autoMode.heard.slice(-8).map(djItemRef),
-            seed: seedBody,
-            source_policy: 'explicit',
-            exploration: state.autoMode.exploration ?? [],
-            direction_revision: state.autoMode.directionRevision ?? 0,
-            sources: state.autoMode.sources.map(({
-              id,
-              label,
-              tracks,
-              activation
-            }) => ({
-              id,
-              label,
-              tracks,
-              activation
-            })),
-            heard: state.autoMode.heard,
-            exclude: [...new Set([...exclude, ...state.autoMode.avoidedIdentities])],
-            limit
-          }, signal);
-        }
-        return api.planMusicQueue({
-          intent,
-          profile,
-          seed: seedBody,
-          exclude,
-          limit
-        }, signal);
-      },
-      applyPlan: (intent, response, replace, anchor) => {
-        if (intent === 'auto_mode' && response.direction_revision != null && response.direction_revision !== (state.autoMode.directionRevision ?? 0)) return 0;
-        // What a replacing plan keeps: everything already played, every explicit
-        // request, and the one handoff that is already loaded and cued.
-        const previousUpcoming = replace ? futureEntries(state.playback.queue, state.playback.index) : [];
-        const held = replace ? previousUpcoming.filter(entry => entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user' || committedTransition?.queueId === entry.queueId) : [];
-        const retained = replace ? [...state.playback.queue.slice(0, state.playback.index + 1), ...held] : state.playback.queue;
-        const candidates = response.items.map(item => ({
-          item,
-          track: planItemTrack(item)
-        })).filter(({
-          track
-        }) => queueIndexOf(retained, track) === -1);
-        if (candidates.length === 0) return 0;
-        if (intent === 'auto_mode') { syncEvidence(); evidence.route(response); }
-        const entries = candidates.map(({
-          track
-        }) => ({
-          ...createQueueEntry(track, 'generated', intent),
-          autoRoute: intent === 'auto_mode' ? {
-            kind: 'generated' as const,
-            directionRevision: state.autoMode.directionRevision ?? 0
-          } : undefined
-        }));
-        if (replace) {
-          let generatedIndex = 0;
-          const runway = previousUpcoming.map(entry => {
-            const preserved = entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user' || committedTransition?.queueId === entry.queueId;
-            return preserved ? entry : entries[generatedIndex++];
-          }).filter((entry): entry is PlaybackQueueEntry => Boolean(entry));
-          runway.push(...entries.slice(generatedIndex));
-          setState('playback', 'queue', [...state.playback.queue.slice(0, state.playback.index + 1), ...runway]);
-        } else {
-          setState('playback', 'queue', queue => [...queue, ...entries]);
-        }
-        if (intent === 'auto_mode') {
-          const plan: Record<string, AutoPlanItem> = replace ? {} : {
-            ...state.autoMode.plan
-          };
-          // The server chains a route: item N's transition is planned out of item
-          // N-1, starting at the anchor. Walk the response in order so each entry
-          // records which track its cue belongs to. An item dropped as a duplicate
-          // breaks the chain, and the entry behind it loses a transition it can no
-          // longer honour — a plain fade, rather than a cue from the wrong song.
-          let previousKey = queueIdentity(anchor);
-          let previousAnalysis = (response as DjPlanResponse).seed_analysis;
-          let chained = true;
-          const accepted = new Map(candidates.map(({
-            item
-          }, index) => [item, entries[index]] as const));
-          for (const item of response.items) {
-            if (!accepted.has(item)) {
-              chained = false;
-              continue;
-            }
-            const track = planItemTrack(item);
-            const id = queueIdentity(track);
-            const entry = accepted.get(item)!;
-            evidence.select(previousKey, entry.queueId, chained ? previousAnalysis : undefined,
-              item.analysis, chained ? item.transition : undefined, response);
-            previousAnalysis = item.analysis;
-            plan[entry.queueId] = {
-              trackId: id,
-              source: item.source_pool,
-              reasonKey: autoReasonKey(item),
-              reasonValues: item.source_pool === 'related' ? {
-                title: state.playback.currentTrack?.title ?? ''
-              } : undefined,
-              fromKey: previousKey,
-              transition: chained ? item.transition : undefined,
-              bpm: item.analysis?.bpm,
-              key: item.analysis?.key,
-              sourceSetId: item.source_set_id,
-              sourceSetLabel: item.source_set_label,
-              lineage: item.lineage
-            };
-            previousKey = id;
-            chained = true;
-          }
-          // The anchor is a track the route continues from, not one it chose, so
-          // it has no plan entry of its own. Recording its reading is what lets
-          // the booth show a BPM for the song that is actually playing when a
-          // session starts from whatever the listener already had on.
-          setState('autoMode', 'plan', plan);
-          // A replacing plan re-seams every join it writes, so the only unplanned
-          // ones left are those belonging to rows it was not allowed to touch.
-          setState('autoMode', 'staleSeams', seams => {
-            if (!replace) return seams;
-            const live = new Set(state.playback.queue.map(entry => entry.queueId));
-            return seams.filter(id => live.has(id) && plan[id] === undefined);
-          });
-          syncDjWork();
-        }
-        ports.prefetchUpcoming();
-        // New runway. If the music ran out waiting for exactly this, start it
-        // again — the plan arriving is the event, and nothing else is watching.
-        if (entries.length > 0) {
-          ports.stageNext();
-          resumeFromStarved();
-        }
-        return entries.length;
-      },
-      onStatus: (intent, status, response, replacing) => {
-        if (intent === 'autoplay') {
-          setState('playback', 'autoplayLoading', status === 'planning');
-          return;
-        }
-        if (intent === 'radio') {
-          setState('playback', 'radioLoading', status === 'planning');
-          return;
-        }
-        if (status === 'idle') {
-          setState('autoMode', {
-            phase: 'idle',
-            pendingDirection: false
-          });
-          return;
-        }
-        if (status === 'planning') {
-          setState('autoMode', {
-            phase: 'planning',
-            activity: {
-              id: ++generatedActivityId,
-              status: 'working',
-              key: replacing ? 'autoMode.agent.redrawing' : 'autoMode.agent.searching',
-              values: replacing ? {
-                note: replanNote
-              } : {
-                title: state.playback.currentTrack?.title ?? ''
-              }
-            }
-          });
-          return;
-        }
-        const counts = response?.pool_counts ?? {
-          local: 0,
-          related: 0,
-          discovery: 0
-        };
-        const exhausted = status === 'exhausted';
-        const degraded = status === 'degraded' || exhausted;
+      if (status === 'planning') {
         setState('autoMode', {
-          phase: exhausted ? 'exhausted' : status === 'warming' ? 'warming' : degraded ? 'degraded' : 'ready',
-          activity: {
-            id: ++generatedActivityId,
-            status: degraded ? 'error' : 'done',
-            key: exhausted ? 'autoMode.route.exhausted' : degraded ? 'autoMode.agent.retrying' : replacing ? 'autoMode.agent.steered' : 'autoMode.agent.queued',
-            values: {
-              note: replanNote,
-              count: response?.items.length ?? 0,
-              tracks: response?.items.slice(0, 2).map(item => item.title).join(' · ') ?? '',
-              related: counts.related,
-              node: counts.discovery,
-              local: counts.local
-            }
-          }
+          phase: 'planning',
+          activity: activity('working', replacing ? 'autoMode.agent.redrawing' : 'autoMode.agent.searching',
+            replacing ? { note: replanNote } : { title: state.playback.currentTrack?.title ?? '' })
         });
+        return;
       }
-    });
-    return generatedQueue;
-  }
+      const counts = response?.pool_counts ?? { local: 0, related: 0, discovery: 0 };
+      const exhausted = status === 'exhausted';
+      const degraded = status === 'degraded' || exhausted;
+      setState('autoMode', {
+        phase: exhausted ? 'exhausted' : status === 'warming' ? 'warming' : degraded ? 'degraded' : 'ready',
+        activity: activity(degraded ? 'error' : 'done',
+          exhausted ? 'autoMode.route.exhausted' : degraded ? 'autoMode.agent.retrying' : replacing ? 'autoMode.agent.steered' : 'autoMode.agent.queued', {
+            note: replanNote,
+            count: response?.items.length ?? 0,
+            tracks: response?.items.slice(0, 2).map(item => item.title).join(' · ') ?? '',
+            related: counts.related,
+            node: counts.discovery,
+            local: counts.local
+          })
+      });
+    },
+    dropOccurrence: dropAutoRouteOccurrence,
+    confirmNormalMode,
+  };
+
   const domainActions = {
     enterAutoMode(options?: {
       source: Track;
@@ -1379,13 +926,13 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     }): void {
       const current = state.playback.currentTrack;
       if (state.autoMode.active || current && isPodcastTrack(current) || options && isPodcastTrack(options.source)) return;
-      evidence.start((state.autoMode.directionRevision ?? 0) + 1);
+      evidence.start(directionRevision() + 1);
       // Asking for Auto is asking to see it. This lives here rather than in a
       // reaction to `autoMode.active`, because the flag also turns on when a
       // session is restored on boot — and a restore has no one asking for
       // anything, so it must leave the shell collapsed.
       setNowPlayingOpen(true);
-      autoSessionEpoch += 1;
+      advanceAutoSession();
       pendingImmediateAutoTrack = null;
       autoOpeningAborter?.abort();
       autoOpeningAborter = null;
@@ -1427,7 +974,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         }] : [],
         heard: current ? [current] : [],
         exploration: [],
-        directionRevision: (state.autoMode.directionRevision ?? 0) + 1,
+        directionRevision: directionRevision() + 1,
         avoidedIdentities: [],
         transition: {
           status: 'idle'
@@ -1454,10 +1001,10 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       // gesture that will ever vouch for that playback.
       audioService.unlockAudio();
       if (options?.deferPlanning) {
-        generatedQueue?.stop();
+        generated()?.stop();
         return;
       }
-      if (current) void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);else void openAutoFromCollection();
+      if (current) void ports.runway.ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);else void openAutoFromCollection();
     },
     exitAutoMode(): void {
       evidence.end('exit');
@@ -1471,14 +1018,14 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       // prepared is dropped.
       if (audioService.mixPhase() !== 'crossfading') audioService.cancelMix('exit');
       const prefix = state.playback.queue.slice(0, state.playback.index + 1);
-      const survivors = futureEntries(state.playback.queue, state.playback.index).filter(entry => entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user' || audioService.mixPhase() === 'crossfading' && committedTransition?.queueId === entry.queueId).map(entry => ({
+      const survivors = futureEntries(state.playback.queue, state.playback.index).filter(entry => routeKind(entry) === 'user' || audioService.mixPhase() === 'crossfading' && committedTransition?.queueId === entry.queueId).map(entry => ({
         ...entry,
         queueLane: 'manual' as const,
         queueSource: 'add_to_queue' as const,
         autoRoute: undefined
       }));
       setState('playback', 'queue', [...prefix, ...survivors]);
-      generatedQueue?.stop('auto_mode');
+      generated()?.stop('auto_mode');
       if (autoPlaybackPrefs) {
         setState('playback', {
           shuffle: autoPlaybackPrefs.shuffle,
@@ -1517,7 +1064,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       if (state.playback.currentTrack) scheduleRunwayReplan(tr('autoMode.note.direction'));else void startAutoFromSources();
     },
     beginAutoSessionChange(): number {
-      return ++autoSessionEpoch;
+      return advanceAutoSession();
     },
     startDjSelection(tracks: Track[], label: string): boolean {
       const music = tracks.filter(track => !isPodcastTrack(track) && !track.unavailable);
@@ -1529,9 +1076,9 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       autoOpeningAborter = null;
       if (autoOpeningRetry) lifetime.clearTimeout(autoOpeningRetry);
       autoOpeningRetry = null;
-      generatedQueue?.stop();
+      generated()?.stop();
       pendingImmediateAutoTrack = null;
-      autoSessionEpoch += 1;
+      advanceAutoSession();
       autoHandoffFailures = 0;
       autoHandoffCooldownUntil = 0;
       ports.discardFutureAutoplay();
@@ -1543,10 +1090,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       audioService.cancelMix('superseded');
       audioService.clearStaged();
       audioService.unlockAudio();
-      const revision = (state.autoMode.directionRevision ?? 0) + 1;
-      const opening = { ...createQueueEntry(music[0], 'generated', 'auto_mode'),
-        autoRoute: { kind: 'generated' as const, directionRevision: revision } };
-
+      const revision = directionRevision() + 1;
+      const opening = routeEntry(music[0], revision);
       evidence.start(revision);
       setState('autoMode', {
         sources: [{ id: randomId(), label: label.trim() || music[0].title, tracks: music, activation: 1 }],
@@ -1558,7 +1103,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       setState('playback', { queue: [opening], index: -1, shuffle: false, repeat: 'off',
         radioMode: false, radioLoading: false, radioSeedId: null });
       ports.loadIndex(0);
-      void ensureGeneratedQueue().start('auto_mode', opening, state.autoMode.profile);
+      void ports.runway.ensureGeneratedQueue().start('auto_mode', opening, state.autoMode.profile);
       ports.pushPlaybackState();
       return true;
     },
@@ -1582,7 +1127,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         void startAutoFromSources();
         return;
       }
-      void generatedQueue?.retry();
+      void generated()?.retry();
     },
     useAutoTrackAsSource(track: Track): void {
       syncEvidence(); evidence.interaction('route_edit');
@@ -1610,7 +1155,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     },
     removeAutoRouteOccurrence(queueId: string): void {
       syncEvidence(); evidence.interaction('route_edit');
-      const track = dropAutoRouteOccurrence(queueId);
+      const track = dropAutoRouteOccurrence(queueId, true);
       if (!track) return;
       toast.action(tr('autoMode.note.dropped', {
         title: track.title
@@ -1620,17 +1165,12 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     },
     avoidAutoTrackForSession(queueId: string): void {
       syncEvidence(); evidence.interaction('route_edit');
-      const track = dropAutoRouteOccurrence(queueId);
+      const track = dropAutoRouteOccurrence(queueId, true);
       if (track) avoidAutoIdentity(track);
     },
     reportAutoActivity(key: string, status: AutoActivity['status'], values?: Record<string, string | number>): void {
       if (!state.autoMode.active) return;
-      setState('autoMode', 'activity', {
-        id: ++generatedActivityId,
-        status,
-        key,
-        values
-      });
+      setState('autoMode', 'activity', activity(status, key, values));
     },
     autoSessionToken(): number {
       return autoSessionEpoch;
@@ -1646,61 +1186,52 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       const epoch = autoSessionEpoch;
       if (!state.playback.currentTrack) {
         await ports.actions.placeAutoTrack(usable[0], undefined, group);
-        if (!isCurrent()) {
-          return;
-        }
+        if (!isCurrent()) return;
         if (!state.autoMode.active || epoch !== autoSessionEpoch) return;
         return ports.actions.placeAutoTracks(usable.slice(1), beforeQueueId, group);
       }
-      const floor = insertionFloor();
-      const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
-      const route = state.playback.queue.slice(floor + 1);
-      const signature = route.map(row => row.queueId).join('|');
+      const start = routeStart();
+      const seed = state.playback.queue[start - 1] ?? state.playback.currentTrack;
+      const route = state.playback.queue.slice(start);
+      const signature = routeSignature(start);
+      const destination = requestDestination(beforeQueueId);
       const occurrences = usable.map(track => ({
         ...createQueueEntry(track, 'generated', 'auto_mode'),
         autoRoute: {
           kind: 'user' as const,
-          placement: beforeQueueId ? 'fixed' as const : 'dj' as const,
+          placement: destination ? 'fixed' as const : 'dj' as const,
           requestGroup: group
         }
       }));
       const progress = toast.loading(tr('musicExplorer.requesting'));
       const fallback = () => {
         if (!state.autoMode.active || epoch !== autoSessionEpoch) return;
-        const currentFloor = insertionFloor();
-        const target = beforeQueueId ? state.playback.queue.findIndex(row => row.queueId === beforeQueueId) : -1;
-        const at = target > currentFloor ? target : currentFloor + 1;
-        setState('playback', 'queue', queue => [...queue.slice(0, at), ...occurrences, ...queue.slice(at)]);
-        setState('autoMode', 'staleSeams', state.playback.queue.slice(currentFloor + 1).map(row => row.queueId));
+        insertRequests(occurrences, beforeQueueId);
+        setState('autoMode', 'staleSeams', state.playback.queue.slice(routeStart()).map(row => row.queueId));
         ports.prefetchUpcoming();
       };
       try {
         const response = await api.placeDjTracks({
           seed: djItemRef(seed),
-          route: route.map(row => ({
-            ...djItemRef(row),
-            queue_id: row.queueId
-          })),
+          route: route.map(routeRef),
           requests: occurrences.map(row => ({
             track: row,
             requested_queue_id: row.queueId
           })),
-          before_queue_id: beforeQueueId,
+          before_queue_id: destination,
           source_policy: 'explicit',
           exploration: state.autoMode.exploration ?? [],
-          direction_revision: state.autoMode.directionRevision ?? 0,
+          direction_revision: directionRevision(),
           sources: state.autoMode.sources,
           heard: state.autoMode.heard,
           exclude: state.autoMode.avoidedIdentities
         });
-        if (!isCurrent()) {
-          return;
-        }
+        if (!isCurrent()) return;
         if (!state.autoMode.active || epoch !== autoSessionEpoch) {
           progress.dismiss();
           return;
         }
-        if (insertionFloor() !== floor || state.playback.queue.slice(floor + 1).map(row => row.queueId).join('|') !== signature) {
+        if (routeStart() !== start || routeSignature(start) !== signature) {
           fallback();
         } else {
           const working = [...route];
@@ -1712,30 +1243,27 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           for (const placement of response.placements) {
             const requested = byId.get(placement.requested_queue_id);
             if (!requested || placed.has(requested.queueId)) throw new Error('invalid collection placement');
+            if (!Number.isInteger(placement.insert_at) || placement.insert_at < 0 || placement.insert_at > working.length) throw new Error('invalid insertion');
+            const behind = working[placement.insert_at - 1];
+            if (behind && routeKind(behind) === 'bridge') throw new Error('placement splits a block');
+            if (destination && working[placement.insert_at]?.queueId !== destination) throw new Error('placement moved a fixed request');
             placed.add(requested.queueId);
             let fromKey = queueIdentity(working[placement.insert_at - 1] ?? seed);
             const entries = placement.items.map((item, index) => {
               const entry = item.route_kind === 'user' ? requested : {
-                ...createQueueEntry(planItemTrack(item), 'generated', 'auto_mode'),
+                ...createQueueEntry(planItemTrack(item, state.library), 'generated', 'auto_mode'),
                 queueId: `${requested.queueId}:bridge:${index}`,
                 autoRoute: {
                   kind: 'bridge' as const,
                   ownerQueueId: requested.queueId
                 }
               };
-              plan[entry.queueId] = {
-                trackId: queueIdentity(entry),
-                source: item.source_pool,
-                reasonKey: autoReasonKey(item),
-                fromKey,
-                transition: item.transition,
-                bpm: item.analysis?.bpm,
-                key: item.analysis?.key
-              };
+              plan[entry.queueId] = routePlanEntry(item, queueIdentity(entry), fromKey, item.transition);
               fromKey = queueIdentity(entry);
               return entry;
             });
-            if (entries.filter(row => row.queueId === requested.queueId).length !== 1) throw new Error('missing request');
+            if (entries.at(-1)?.queueId !== requested.queueId
+              || entries.filter(row => row.queueId === requested.queueId).length !== 1) throw new Error('invalid request block');
             const following = working[placement.insert_at];
             if (following && placement.following_transition) plan[following.queueId] = {
               ...(plan[following.queueId] ?? {
@@ -1749,7 +1277,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
             working.splice(placement.insert_at, 0, ...entries);
           }
           if (placed.size !== occurrences.length) throw new Error('incomplete collection placement');
-          setState('playback', 'queue', queue => [...queue.slice(0, floor + 1), ...working]);
+          setState('playback', 'queue', queue => [...queue.slice(0, start), ...working]);
           setState('autoMode', 'plan', plan);
           ports.prefetchUpcoming();
         }
@@ -1757,9 +1285,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           count: occurrences.length
         }));
       } catch {
-        if (!isCurrent()) {
-          return;
-        }
+        if (!isCurrent()) return;
         if (!state.autoMode.active || epoch !== autoSessionEpoch) {
           progress.dismiss();
           return;
@@ -1776,14 +1302,15 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       syncEvidence(); evidence.interaction('route_edit');
       const isCurrent = lifetime.capture();
       if (!state.autoMode.active || isPodcastTrack(track)) return;
-      const floor = insertionFloor();
-      const route = state.playback.queue.slice(floor + 1);
-      const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
+      const start = routeStart();
+      const route = state.playback.queue.slice(start);
+      const seed = state.playback.queue[start - 1] ?? state.playback.currentTrack;
+      const destination = requestDestination(beforeQueueId);
       const occurrence = {
         ...createQueueEntry(track, 'generated', 'auto_mode'),
         autoRoute: {
           kind: 'user' as const,
-          placement: beforeQueueId ? 'fixed' as const : 'dj' as const,
+          placement: destination ? 'fixed' as const : 'dj' as const,
           requestGroup
         }
       };
@@ -1795,63 +1322,40 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           repeat: 'off'
         });
         ports.loadIndex(0);
-        void ensureGeneratedQueue().start('auto_mode', occurrence, state.autoMode.profile);
+        void ports.runway.ensureGeneratedQueue().start('auto_mode', occurrence, state.autoMode.profile);
         return;
       }
       const sessionEpoch = autoSessionEpoch;
-      const routeSignature = route.map(entry => entry.queueId).join('|');
-      const fallbackIndex = beforeQueueId ? Math.max(floor + 1, state.playback.queue.findIndex(entry => entry.queueId === beforeQueueId)) : floor + 1;
-      setState('autoMode', 'activity', {
-        id: ++generatedActivityId,
-        status: 'working',
-        key: 'autoMode.agent.placing',
-        values: {
-          title: track.title
-        }
-      });
+      const signature = routeSignature(start);
+      setState('autoMode', 'activity', activity('working', 'autoMode.agent.placing', { title: track.title }));
       try {
         const response = await api.placeDjTrack({
           seed: djItemRef(seed),
-          route: route.map(entry => ({
-            ...djItemRef(entry),
-            queue_id: entry.queueId
-          })),
+          route: route.map(routeRef),
           track,
           requested_queue_id: occurrence.queueId,
-          before_queue_id: beforeQueueId,
+          before_queue_id: destination,
           source_policy: 'explicit',
           exploration: state.autoMode.exploration ?? [],
-          direction_revision: state.autoMode.directionRevision ?? 0,
-          sources: state.autoMode.sources.map(({
-            id,
-            label,
-            tracks,
-            activation
-          }) => ({
-            id,
-            label,
-            tracks,
-            activation
-          })),
+          direction_revision: directionRevision(),
+          sources: sourceBodies(),
           heard: state.autoMode.heard,
           exclude: state.autoMode.avoidedIdentities
         });
-        if (!isCurrent()) {
-          return;
-        }
+        if (!isCurrent()) return;
         if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
-        const currentRoute = state.playback.queue.slice(insertionFloor() + 1);
-        if (currentRoute.map(entry => entry.queueId).join('|') !== routeSignature) {
-          const currentFloor = insertionFloor();
-          const before = beforeQueueId ? state.playback.queue.findIndex(entry => entry.queueId === beforeQueueId) : currentFloor + 1;
-          const at = before > currentFloor ? before : currentFloor + 1;
-          setState('playback', 'queue', queue => [...queue.slice(0, at), occurrence, ...queue.slice(at)]);
+        if (routeStart() !== start || routeSignature(start) !== signature) {
+          insertRequests([occurrence], beforeQueueId);
           ports.prefetchUpcoming();
           return;
         }
+        if (!Number.isInteger(response.insert_at) || response.insert_at < 0 || response.insert_at > route.length) throw new Error('invalid insertion');
+        const behind = route[response.insert_at - 1];
+        if (behind && routeKind(behind) === 'bridge') throw new Error('placement splits a block');
+        if (destination && route[response.insert_at]?.queueId !== destination) throw new Error('placement moved a fixed request');
         const entries = response.items.map(item => {
           const isUser = item.route_kind === 'user';
-          const entry = isUser ? occurrence : createQueueEntry(planItemTrack(item), 'generated', 'auto_mode');
+          const entry = isUser ? occurrence : createQueueEntry(planItemTrack(item, state.library), 'generated', 'auto_mode');
           return {
             ...entry,
             autoRoute: isUser ? occurrence.autoRoute : {
@@ -1860,29 +1364,18 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
             }
           };
         });
-        const at = Math.min(state.playback.queue.length, floor + 1 + response.insert_at);
+        if (entries.at(-1)?.queueId !== occurrence.queueId
+          || entries.filter(entry => entry.queueId === occurrence.queueId).length !== 1) throw new Error('invalid request block');
+        const at = start + response.insert_at;
         setState('playback', 'queue', queue => [...queue.slice(0, at), ...entries, ...queue.slice(at)]);
         const plan = {
           ...state.autoMode.plan
         };
         let fromKey = queueIdentity(state.playback.queue[at - 1] ?? seed);
-        for (let index = 0; index < entries.length; index += 1) {
-          const entry = entries[index];
-          const item = response.items[index];
-          plan[entry.queueId] = {
-            trackId: queueIdentity(entry),
-            source: item.source_pool,
-            reasonKey: autoReasonKey(item),
-            fromKey,
-            transition: item.transition,
-            bpm: item.analysis?.bpm,
-            key: item.analysis?.key,
-            sourceSetId: item.source_set_id,
-            sourceSetLabel: item.source_set_label,
-            lineage: item.lineage
-          };
+        entries.forEach((entry, index) => {
+          plan[entry.queueId] = routePlanEntry(response.items[index], queueIdentity(entry), fromKey, response.items[index].transition);
           fromKey = queueIdentity(entry);
-        }
+        });
         const following = state.playback.queue[at + entries.length];
         if (following && response.following_transition) {
           plan[following.queueId] = {
@@ -1897,40 +1390,20 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         }
         setState('autoMode', {
           plan,
-          activity: {
-            id: ++generatedActivityId,
-            status: 'done',
-            key: 'autoMode.agent.placed',
-            values: {
-              title: track.title
-            }
-          }
+          activity: activity('done', 'autoMode.agent.placed', { title: track.title })
         });
-        const insertedIds = new Set(entries.map(entry => entry.queueId));
         toast.action(tr('autoMode.note.added', {
           title: track.title
         }), tr('common.undo'), () => {
-          if (!state.autoMode.active) return;
-          setState('playback', 'queue', queue => queue.filter(entry => !insertedIds.has(entry.queueId)));
-          setState('autoMode', 'plan', current => Object.fromEntries(Object.entries(current).filter(([queueId]) => !insertedIds.has(queueId))));
-          void generatedQueue?.ensureRunway();
+          if (isCurrent() && state.autoMode.active && sessionEpoch === autoSessionEpoch) dropAutoRouteOccurrence(occurrence.queueId, true);
         });
         ports.prefetchUpcoming();
       } catch {
-        if (!isCurrent()) {
-          return;
-        }
+        if (!isCurrent()) return;
         if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
         // The user's placement is authoritative even if musical analysis is not.
-        setState('playback', 'queue', queue => [...queue.slice(0, fallbackIndex), occurrence, ...queue.slice(fallbackIndex)]);
-        setState('autoMode', 'activity', {
-          id: ++generatedActivityId,
-          status: 'error',
-          key: 'autoMode.agent.placedFallback',
-          values: {
-            title: track.title
-          }
-        });
+        insertRequests([occurrence], beforeQueueId);
+        setState('autoMode', 'activity', activity('error', 'autoMode.agent.placedFallback', { title: track.title }));
         ports.prefetchUpcoming();
       }
     },
@@ -1938,82 +1411,54 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       syncEvidence(); evidence.interaction('route_edit');
       const isCurrent = lifetime.capture();
       if (!state.autoMode.active || state.autoMode.repairing) return;
-      const floor = insertionFloor();
-      const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
-      const fullRoute = state.playback.queue.slice(floor + 1);
-      const route = fullRoute.slice(0, 16);
-      const untouchedTail = fullRoute.slice(16);
+      const start = routeStart();
+      const seed = state.playback.queue[start - 1] ?? state.playback.currentTrack;
+      const fullRoute = state.playback.queue.slice(start);
+      const horizon = repairHorizon(routeRows(fullRoute), REPAIR_LIMIT);
+      const route = fullRoute.slice(0, horizon);
+      const untouchedTail = fullRoute.slice(horizon);
       // One seam is a transition, not a route. There is nothing to re-seam.
       if (!seed || route.length < 2) return;
       const sessionEpoch = autoSessionEpoch;
-      const routeSignature = fullRoute.map(entry => entry.queueId).join('|');
+      const token = ++repairToken;
+      // A repair answers only for the session and the press that asked for it.
+      const owns = () => token === repairToken && sessionEpoch === autoSessionEpoch && state.autoMode.active;
+      const signature = routeSignature(start);
       const previousQueue = state.playback.queue.slice();
       const previousPlan = {
         ...state.autoMode.plan
       };
       const previousStaleSeams = state.autoMode.staleSeams.slice();
-      const anchors = route.filter(entry => autoRouteKind(entry) === 'user').map(entry => entry.queueId);
+      const anchors = route.filter(entry => routeKind(entry) === 'user').map(entry => entry.queueId);
       setState('autoMode', {
         repairing: true,
-        activity: {
-          id: ++generatedActivityId,
-          status: 'working',
-          key: 'autoMode.agent.repairing'
-        }
+        activity: activity('working', 'autoMode.agent.repairing')
       });
       try {
         const response = await api.repairDjRoute({
           seed: djItemRef(seed),
-          route: route.map(entry => ({
-            ...djItemRef(entry),
-            queue_id: entry.queueId,
-            route_kind: autoRouteKind(entry)
-          })),
+          route: route.map(routeRef),
           source_policy: 'explicit',
           exploration: state.autoMode.exploration ?? [],
-          direction_revision: state.autoMode.directionRevision ?? 0,
-          sources: state.autoMode.sources.map(({
-            id,
-            label,
-            tracks,
-            activation
-          }) => ({
-            id,
-            label,
-            tracks,
-            activation
-          })),
+          direction_revision: directionRevision(),
+          sources: sourceBodies(),
           heard: state.autoMode.heard,
           exclude: state.autoMode.avoidedIdentities
         });
-        if (!isCurrent()) {
-          return;
-        }
-        if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
-        const currentFloor = insertionFloor();
-        const unchanged = state.playback.queue.slice(currentFloor + 1).map(entry => entry.queueId).join('|') === routeSignature;
-        // A handoff that committed mid-flight moves the floor, so it shows up
-        // here as a changed route and is caught by the same check.
-        if (!unchanged) {
-          setState('autoMode', 'activity', {
-            id: ++generatedActivityId,
-            status: 'error',
-            key: 'autoMode.agent.repairSkipped'
-          });
-          return;
-        }
+        if (!isCurrent() || !owns()) return;
+        const byQueueId = new Map(route.map(entry => [entry.queueId, entry] as const));
+        // A handoff that committed mid-flight moves the start, so it shows up
+        // here as a changed route and is caught by the same check. So does a
+        // repair that names an occurrence it was never sent.
+        const unchanged = routeStart() === start && routeSignature(start) === signature;
+        const known = response.items.every(item => !item.queue_id || byQueueId.has(item.queue_id));
         // Cheap insurance against a server regression: a repair that lost one of
         // the listener's songs does nothing at all, rather than losing it here.
         const returned = response.items.filter(item => item.route_kind === 'user').map(item => item.queue_id ?? '');
-        if (returned.join('|') !== anchors.join('|')) {
-          setState('autoMode', 'activity', {
-            id: ++generatedActivityId,
-            status: 'error',
-            key: 'autoMode.agent.repairSkipped'
-          });
+        if (!unchanged || !known || returned.join('|') !== anchors.join('|')) {
+          setState('autoMode', 'activity', activity('error', 'autoMode.agent.repairSkipped'));
           return;
         }
-        const byQueueId = new Map(route.map(entry => [entry.queueId, entry] as const));
         const entries = response.items.map(item => {
           const kept = item.queue_id ? byQueueId.get(item.queue_id) : undefined;
           const autoRoute = item.route_kind === 'bridge' ? {
@@ -2021,7 +1466,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
             ownerQueueId: item.owner_queue_id
           } : {
             kind: 'generated' as const,
-            directionRevision: state.autoMode.directionRevision ?? 0
+            directionRevision: directionRevision()
           };
           // Spreading the kept entry preserves its lane and context, which is how
           // an explicitly queued song stays an explicit request through a repair.
@@ -2030,18 +1475,19 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
             autoRoute
           };
           return {
-            ...createQueueEntry(planItemTrack(item), 'generated', 'auto_mode'),
+            ...createQueueEntry(planItemTrack(item, state.library), 'generated', 'auto_mode'),
             autoRoute
           };
         });
-        setState('playback', 'queue', queue => [...queue.slice(0, floor + 1), ...entries, ...untouchedTail]);
+        setState('playback', 'queue', queue => [...queue.slice(0, start), ...entries, ...untouchedTail]);
 
-        // Everything up to and including the floor keeps its plan. Wiping it
+        // Everything before the editable start keeps its plan. Wiping it
         // wholesale would strip the cued handoff's own entry and turn a blend
         // that is already loaded into a fade at the moment it fires.
-        const prefix = new Set(state.playback.queue.slice(0, floor + 1).map(entry => entry.queueId));
-        const plan: Record<string, AutoPlanItem> = Object.fromEntries(Object.entries(state.autoMode.plan).filter(([id]) => prefix.has(id) || untouchedTail.some(row => row.queueId === id)));
-        let fromKey = queueIdentity(state.playback.queue[floor] ?? seed);
+        const prefix = new Set(state.playback.queue.slice(0, start).map(entry => entry.queueId));
+        const tail = new Set(untouchedTail.map(row => row.queueId));
+        const plan: Record<string, AutoPlanItem> = Object.fromEntries(Object.entries(state.autoMode.plan).filter(([id]) => prefix.has(id) || tail.has(id)));
+        let fromKey = queueIdentity(state.playback.queue[start - 1] ?? seed);
         entries.forEach((entry, index) => {
           const item = response.items[index];
           // The server rebuilds a kept row as a generic "Route" item, so its own
@@ -2067,17 +1513,14 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           // Only the analysed horizon was repaired. Keep the untouched tail
           // visible and mark its joins for planning as playback approaches.
           staleSeams: untouchedTail.map(row => row.queueId),
-          activity: {
-            id: ++generatedActivityId,
-            status: 'done',
-            key: 'autoMode.agent.repaired'
-          }
+          activity: activity('done', 'autoMode.agent.repaired')
         });
         ports.prefetchUpcoming();
+        const repairedSignature = routeSignature(start);
         toast.action(tr('autoMode.note.repaired'), tr('common.undo'), () => {
-          if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
-          if (insertionFloor() !== floor) return;
-          if (state.playback.queue[floor]?.queueId !== previousQueue[floor]?.queueId) return;
+          if (!isCurrent() || !owns()) return;
+          if (routeStart() !== start || routeSignature(start) !== repairedSignature) return;
+          if (state.playback.queue[start - 1]?.queueId !== previousQueue[start - 1]?.queueId) return;
           setState('playback', 'queue', previousQueue);
           setState('autoMode', {
             plan: previousPlan,
@@ -2086,19 +1529,12 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           ports.prefetchUpcoming();
         });
       } catch {
-        if (!isCurrent()) {
-          return;
-        }
-
+        if (!isCurrent() || !owns()) return;
         // Nothing was written — the queue is only touched once an answer lands —
         // so there is no half-repaired route to unwind.
-        setState('autoMode', 'activity', {
-          id: ++generatedActivityId,
-          status: 'error',
-          key: 'autoMode.agent.repairFailed'
-        });
+        setState('autoMode', 'activity', activity('error', 'autoMode.agent.repairFailed'));
       } finally {
-        setState('autoMode', 'repairing', false);
+        if (isCurrent() && owns()) setState('autoMode', 'repairing', false);
       }
     },
     async autoSkip(): Promise<void> {
@@ -2117,12 +1553,12 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           // other skip would, from the deck that was already holding it.
           ports.listeningLearning.skip(skipped, playingDuration());
           ports.actions.next();
-          void generatedQueue?.ensureRunway();
+          void generated()?.ensureRunway();
           return;
         }
         if (outcome === 'blend' || outcome === 'finished' && !owned) {
           ports.listeningLearning.skip(skipped, playingDuration());
-          void generatedQueue?.ensureRunway();
+          void generated()?.ensureRunway();
           return;
         }
         // The blend had already handed over, so the listener is skipping the
@@ -2139,29 +1575,15 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           ports.actions.next();
         } else if (next && current) {
           const fromKey = queueIdentity(current);
-          const item = state.autoMode.plan[next.queueId];
-          const chained = item?.fromKey === fromKey ? item.transition : undefined;
-          const trusted = (chained?.confidence ?? 0) >= TRUSTED_CONFIDENCE;
-          commitTransition(next, fromKey, {
-            technique: trusted ? chained!.technique : 'safe_fade',
-            out_cue: 0,
-            // a manual skip blends from wherever the track is now
-            in_cue: trusted ? chained!.in_cue : 0,
-            overlap_seconds: 1.6,
-            overlap_bars: chained?.overlap_bars ?? 0,
-            playback_rate: trusted ? chained!.playback_rate : 1,
-            confidence: chained?.confidence ?? 0
-          }, true);
+          commitTransition(next, fromKey, skipTransition(fromKey, state.autoMode.plan[next.queueId]), true);
         } else {
           ports.actions.next();
         }
-        void generatedQueue?.ensureRunway();
+        void generated()?.ensureRunway();
         return;
       }
-      await generatedQueue?.refillNow();
-      if (!isCurrent()) {
-        return;
-      }
+      await generated()?.refillNow();
+      if (!isCurrent()) return;
 
       // A failed final URL can happen while a refill is already in flight. Wait
       // briefly for that real plan instead of leaving Auto stopped on the error.
@@ -2171,172 +1593,62 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           return;
         }
         await new Promise(resolve => lifetime.setTimeout(() => resolve(undefined), 250));
-        if (!isCurrent()) {
-          return;
-        }
+        if (!isCurrent()) return;
       }
     },
     promoteInAutoRoute(queueId: string): void {
       syncEvidence(); evidence.interaction('route_edit');
-      const pb = state.playback;
-      const from = pb.queue.findIndex(entry => entry.queueId === queueId);
-      const to = insertionFloor() + 1;
-      if (from <= pb.index || from === to || to > from) return;
-      const queue = pb.queue.slice();
-      const [entry] = queue.splice(from, 1);
-      queue.splice(to, 0, entry);
-      setState('playback', 'queue', queue);
+      const start = routeStart();
+      const first = state.playback.queue[start]?.queueId;
+      if (!first) return;
+      const order = moveRouteBlock(routeRows(state.playback.queue), queueId, first, start - 1);
+      if (!order || order.every((id, index) => id === state.playback.queue[index].queueId)) return;
+      const byId = new Map(state.playback.queue.map(entry => [entry.queueId, entry] as const));
+      setState('playback', 'queue', order.map(id => byId.get(id)!));
       ports.prefetchUpcoming();
     },
     moveAutoRoute(queueId: string, beforeQueueId?: string): void {
       syncEvidence(); evidence.interaction('route_edit');
       if (!state.autoMode.active || queueId === beforeQueueId) return;
-      const source = state.playback.queue.find(entry => entry.queueId === queueId);
-      if (!source) return;
+      const current = state.playback.queue;
+      const rows = routeRows(current);
       // Grabbing a bridge is a request to move what it leads into: on its own it
-      // connects nothing, and leaving it behind would strand its owner.
+      // connects nothing, and leaving it behind would strand its owner. Never in
+      // front of a handoff that is already loaded; the route panel stops
+      // offering that seam, and this is what happens if anything else asks.
+      const order = moveRouteBlock(rows, queueId, beforeQueueId, routeStart() - 1);
+      // A drop that resolves to where the block already is moves nothing and pins nothing.
+      if (!order || order.every((id, index) => id === current[index].queueId)) return;
+      const blockIds = new Set(routeBlock(rows, queueId));
+      const source = current.find(entry => entry.queueId === queueId)!;
       const ownerId = source.autoRoute?.kind === 'bridge' && source.autoRoute.ownerQueueId ? source.autoRoute.ownerQueueId : queueId;
-      const blockIds = new Set(state.playback.queue.filter(entry => entry.queueId === ownerId || entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === ownerId).map(entry => entry.queueId));
-      if (!blockIds.has(ownerId) || beforeQueueId && blockIds.has(beforeQueueId)) return;
-      const floor = insertionFloor();
-      const start = state.playback.queue.findIndex(entry => blockIds.has(entry.queueId));
-      if (start <= floor) return;
-      const block = state.playback.queue.filter(entry => blockIds.has(entry.queueId));
-      const rest = state.playback.queue.filter(entry => !blockIds.has(entry.queueId));
-      // Everything before the block is untouched by lifting it out, so the row
-      // that closes over the gap is the one that lands on its old index.
-      const closed = rest[start]?.queueId;
-      const target = beforeQueueId ? rest.findIndex(entry => entry.queueId === beforeQueueId) : rest.length;
-      // Never in front of a handoff that is already loaded. The route panel stops
-      // offering that seam; this is what happens if anything else asks for it.
-      const at = Math.max(floor + 1, target === -1 ? rest.length : target);
-      const moved = block.map(entry => entry.queueId === ownerId ? {
+      const byId = new Map(current.map(entry => [entry.queueId, entry.queueId === ownerId ? {
         ...entry,
         autoRoute: {
           kind: 'user' as const,
           placement: 'fixed' as const
         }
-      } : entry);
-      const queue = [...rest.slice(0, at), ...moved, ...rest.slice(at)];
-      const opened = [moved[0].queueId, closed, rest[at]?.queueId].filter((id): id is string => Boolean(id));
+      } : entry] as const));
+      const queue = order.map(id => byId.get(id)!);
+      // The joins the move opened: into the block, out of it, and over the gap
+      // it left (the row that now sits where the block started).
+      const oldStart = current.findIndex(entry => blockIds.has(entry.queueId));
+      const closed = current.filter(entry => !blockIds.has(entry.queueId))[oldStart]?.queueId;
+      const firstMoved = queue.findIndex(entry => blockIds.has(entry.queueId));
+      const after = queue[firstMoved + blockIds.size]?.queueId;
+      const opened = [queue[firstMoved].queueId, closed, after].filter((id): id is string => Boolean(id));
       setState('playback', 'queue', queue);
       setState('autoMode', 'staleSeams', seams => {
         const live = new Set(queue.map(entry => entry.queueId));
         return [...new Set([...seams.filter(id => live.has(id)), ...opened])];
       });
       ports.prefetchUpcoming();
-      const owner = block.find(entry => entry.queueId === ownerId) ?? source;
+      const owner = current.find(entry => entry.queueId === ownerId) ?? source;
       toast.action(tr('autoMode.route.moved', {
         title: owner.title
       }), tr('autoMode.route.fix'), () => {
         if (state.autoMode.active) void ports.actions.repairAutoRoute();
       });
-    },
-    async startRadio(seed: Track): Promise<void> {
-      const isCurrent = lifetime.capture();
-      if (isPodcastTrack(seed)) {
-        toast.error(tr('toast.radioUnavailable'));
-        return;
-      }
-      if (state.autoMode.active) {
-        await confirmNormalMode('radio', () => ports.actions.startRadio(seed));
-        if (!isCurrent()) {
-          return;
-        }
-        return;
-      }
-      const t = toast.loading(tr('toast.startingRadio'));
-      ports.discardFutureAutoplay();
-      ports.cancelPendingRadio();
-      setState('playback', {
-        radioMode: true,
-        radioLoading: true,
-        radioSeedId: seed.id
-      });
-      const isCurrentPlaying = state.playback.currentTrack?.id === seed.id && state.playback.isPlaying;
-      if (isCurrentPlaying) {
-        ports.abandonContextMatches();
-        const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
-        setState('playback', {
-          queue: [createQueueEntry(seed, 'context', 'radio', {
-            id: `radio:${seed.id}`,
-            kind: 'single',
-            label: seed.title
-          }), ...manual],
-          index: 0
-        });
-      } else {
-        ports.actions.playFrom([seed], 0, {
-          radio: true
-        });
-      }
-      const ready = await ensureGeneratedQueue().start('radio', seed);
-      if (!isCurrent()) {
-        return;
-      }
-      if (generatedQueue?.activeIntent() !== 'radio' || !state.playback.radioMode || state.playback.radioSeedId !== seed.id) {
-        t.dismiss();
-        return;
-      }
-      if (ready) {
-        void api.emitDiscoveryEvent('music_started_radio', {
-          track_id: seed.source === 'preview' ? undefined : seed.id,
-          title: seed.title,
-          artist: seed.artist,
-          album: seed.album,
-          youtube_id: seed.youtube_id ?? (seed.source === 'preview' ? seed.id : undefined),
-          source: seed.source ?? 'library'
-        }).catch(lifetime.guard(() => {}));
-        t.update('success', tr('toast.radioStarted'));
-      } else {
-        t.update('error', tr('toast.radioFailed', {
-          ytId: seed.youtube_id || tr('toast.radioFailedFallback')
-        }));
-        generatedQueue.stop('radio');
-        const cur = state.playback.queue[state.playback.index];
-        const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
-        setState('playback', {
-          radioMode: false,
-          radioLoading: false,
-          radioSeedId: null,
-          queue: cur ? [cur, ...manual] : manual,
-          index: cur ? 0 : -1
-        });
-      }
-    },
-    stopRadio(): void {
-      ports.cancelPendingRadio();
-      const cur = state.playback.queue[state.playback.index];
-      const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
-      setState('playback', {
-        radioMode: false,
-        radioLoading: false,
-        radioSeedId: null,
-        queue: cur ? [cur, ...manual] : manual,
-        index: cur ? 0 : -1
-      });
-    },
-    async setAutoplayEnabled(enabled: boolean): Promise<boolean> {
-      const isCurrent = lifetime.capture();
-      const previous = state.playback.autoplayEnabled;
-      if (enabled === previous) return true;
-      setState('playback', 'autoplayEnabled', enabled);
-      if (enabled) queueMicrotask(() => void ensureAutoplay(true));else ports.discardFutureAutoplay();
-      try {
-        await api.setAutoplayEnabled(enabled);
-        if (!isCurrent()) {
-          return false;
-        }
-        return true;
-      } catch {
-        if (!isCurrent()) {
-          return false;
-        }
-        setState('playback', 'autoplayEnabled', previous);
-        if (previous) queueMicrotask(() => void ensureAutoplay(true));
-        toast.error(tr('toast.updateFailed'));
-        return false;
-      }
     }
   };
   return {
@@ -2345,30 +1657,13 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       releaseDjWork();
       ++autoSessionEpoch;
       autoOpeningAborter?.abort();
-      generatedQueue?.stop();
-      generatedQueue = null;
     },
     actions: domainActions,
-    onPreviewPreparation,
-    get generatedQueue() {
-      return generatedQueue;
-    },
-    set generatedQueue(value: GeneratedQueueController | null) {
-      generatedQueue = value;
-    },
-    ensureAutoplay,
-    resumeFromStarved,
+    runwayPort,
     insertionFloor,
-    boundaryFacts,
     playingDuration,
-    get PREMATURE_END_SECONDS() {
-      return PREMATURE_END_SECONDS;
-    },
-    promotePreparedAutoSuccessor,
-    enterStarved,
     confirmNormalMode,
     mixAutoTrackNow,
-    ensureGeneratedQueue,
     get commitSeq() {
       return commitSeq;
     },
@@ -2397,7 +1692,6 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       autoPlaybackPrefs = value;
     },
     rememberDjExploration,
-    evaluateDjRunway,
-    watchRunway
+    evaluateDjRunway
   };
 }

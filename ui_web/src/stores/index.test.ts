@@ -30,6 +30,55 @@ const PULSE_SYNC: NonNullable<DjTransitionPlan['sync']> = {
 };
 
 describe('DJ session work and first mix', () => {
+  it('seeds the first replacement gap from its real predecessor and keeps the measured mix', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 6 }, (_, index) => `route-${index}`)));
+    const armTransition = vi.fn();
+    const s = await loadStore({ planDjQueue, __previewPreparationState: () => 'ready' }, { armTransition });
+    s.initStore();
+    s.actions.playFrom([t1], 0);
+    s.fireDeckEvent('playing');
+    s.actions.enterAutoMode();
+    await vi.waitFor(() => expect(s.state.playback.queue.length).toBe(7));
+    await s.actions.placeAutoTrack(t2);
+
+    const measured = { technique: 'bass_swap', out_cue: 170, in_cue: 2,
+      overlap_seconds: 8, playback_rate: 1.01, confidence: .9, sync: PULSE_SYNC };
+    const replan = autoPlan(['replacement-1', 'replacement-2']);
+    planDjQueue.mockResolvedValue({ ...replan, items: replan.items.map(item => ({ ...item, transition: measured })) });
+    s.actions.addAutoSource([t2], 'New source');
+    await vi.waitFor(() => expect(s.state.playback.queue[1].id).toBe('replacement-1'));
+    expect(planDjQueue.mock.calls.at(-1)![0].seed).toMatchObject({ id: t1.id });
+    expect(s.state.playback.queue[2].id).toBe(t2.id);
+
+    s.deck.currentTime = 130;
+    s.fireDeckEvent('timeupdate');
+    expect(armTransition.mock.calls[0][1]).toMatchObject({ technique: 'bass_swap' });
+  });
+
+  it('does not promote a ready bridge away from its request', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 6 }, (_, index) => `route-${index}`)));
+    const placeDjTrack = vi.fn().mockResolvedValue({
+      insert_at: 1,
+      items: [
+        { ...autoPlan(['bridge']).items[0], route_kind: 'bridge' },
+        { ...t2, route_kind: 'user' },
+      ],
+    });
+    const s = await loadStore({ planDjQueue, placeDjTrack,
+      __previewPreparationState: (id: string) => id === 'bridge' ? 'ready' : 'streamable' });
+    s.initStore();
+    s.actions.playFrom([t1], 0);
+    s.fireDeckEvent('playing');
+    s.actions.enterAutoMode();
+    await vi.waitFor(() => expect(s.state.playback.queue.length).toBe(7));
+    await s.actions.placeAutoTrack(t2);
+    const before = s.state.playback.queue.map(row => row.id);
+    expect(before.slice(1, 4)).toEqual(['route-0', 'bridge', t2.id]);
+    s.deck.currentTime = 130;
+    s.fireDeckEvent('timeupdate');
+    expect(s.state.playback.queue.map(row => row.id)).toEqual(before);
+  });
+
   it('repairs the predecessor and measures a ready successor promoted ahead of a cold song', async () => {
     const measured = { technique: 'bass_swap', out_cue: 170, in_cue: 2,
       overlap_seconds: 8, playback_rate: 1.01, confidence: .9, sync: PULSE_SYNC };
@@ -184,10 +233,12 @@ function autoPlan(ids: string[]) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((r, fail) => {
     resolve = r;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 async function flush() {
@@ -2306,6 +2357,89 @@ describe('Auto Mode store contract', () => {
     expect(state.playback.queue.at(-2)!.autoRoute).toMatchObject({ kind: 'bridge', ownerQueueId: wanted.queueId });
   });
 
+  it('keeps a bridged request whole when another song is moved in front of it or the route is replanned', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1', 'route-2', 'route-3']));
+    const placeDjTrack = vi.fn().mockImplementation(async (body: { track: Track; requested_queue_id: string }) => ({
+      v: 1, insert_at: 1, before_queue_id: null, requested_queue_id: body.requested_queue_id, degraded: false,
+      items: [
+        { id: 'bridge', youtube_id: 'bridge', title: 'Bridge', artist: 'DJ', source: 'preview', source_pool: 'related',
+          recommendation_identity: 'music:youtube:bridge', recommendation_source: 'auto_mode', route_kind: 'bridge' },
+        { id: body.track.id, youtube_id: body.track.id, title: body.track.title, artist: body.track.artist, source: 'preview',
+          source_pool: 'related', recommendation_identity: `music:youtube:${body.track.id}`, recommendation_source: 'auto_mode', route_kind: 'user' },
+      ],
+    }));
+    const { actions, state } = await loadStore({ planDjQueue, placeDjTrack });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(5));
+    await actions.placeAutoTrack({ id: 'wanted', title: 'Wanted', artist: 'Listener' });
+    const wanted = state.playback.queue.find((entry) => entry.id === 'wanted')!;
+    const last = state.playback.queue.at(-1)!;
+
+    const before = state.playback.queue[1];
+    const seams = [...state.autoMode.staleSeams];
+    actions.moveAutoRoute(before.queueId, wanted.queueId);
+    expect(state.playback.queue[1].autoRoute?.kind).toBe('generated');
+    expect(state.autoMode.staleSeams).toEqual(seams);
+
+    // Dropped on the request, the song lands in front of its bridge.
+    actions.moveAutoRoute(last.queueId, wanted.queueId);
+    const ids = () => state.playback.queue.map((entry) => entry.id);
+    expect(ids().indexOf(last.id) + 1).toBe(ids().indexOf('bridge'));
+    expect(ids().indexOf('bridge') + 1).toBe(ids().indexOf('wanted'));
+
+    planDjQueue.mockResolvedValue(autoPlan(['next-0', 'next-1', 'next-2', 'next-3', 'next-4', 'next-5']));
+    actions.addAutoSource([t2], 'Direction');
+    await vi.waitFor(() => expect(ids()).toContain('next-0'));
+    expect(ids().indexOf('bridge') + 1).toBe(ids().indexOf('wanted'));
+    expect(ids()).not.toContain('route-0');
+  });
+
+  it('does not reuse a discarded candidate’s transition for the following song', async () => {
+    const plan = autoPlan(['t1', 'after-duplicate', 'after-accepted']);
+    const transition = { technique: 'long_blend', out_cue: 120 };
+    const planDjQueue = vi.fn().mockResolvedValue({
+      ...plan, items: plan.items.map(item => ({ ...item, transition })),
+    });
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+
+    const [, first, second] = state.playback.queue;
+    expect(first.id).toBe('after-duplicate');
+    expect(state.autoMode.plan[first.queueId].transition).toBeUndefined();
+    expect(state.autoMode.plan[second.queueId].transition).toMatchObject(transition);
+  });
+
+  it('uses the requested destination when an in-flight placement loses its bridge', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 6 }, (_, index) => `route-${index}`)));
+    const gate = deferred<unknown>();
+    const placeDjTrack = vi.fn().mockImplementationOnce(async (body: { track: Track; requested_queue_id: string }) => ({
+      insert_at: 3,
+      items: [
+        { ...autoPlan(['bridge']).items[0], route_kind: 'bridge' },
+        { ...body.track, route_kind: 'user' },
+      ],
+    })).mockReturnValueOnce(gate.promise);
+    const { actions, state } = await loadStore({ planDjQueue, placeDjTrack });
+    actions.playFrom([t1], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(7));
+    await actions.placeAutoTrack({ id: 'wanted', title: 'Wanted', artist: 'Listener' });
+    const wanted = state.playback.queue.find(row => row.id === 'wanted')!;
+    const bridge = state.playback.queue.find(row => row.id === 'bridge')!;
+
+    const pending = actions.placeAutoTrack(t2, wanted.queueId);
+    expect(placeDjTrack.mock.calls[1][0].before_queue_id).toBe(bridge.queueId);
+    actions.removeAutoRouteOccurrence(bridge.queueId);
+    gate.resolve({});
+    await pending;
+
+    const ids = state.playback.queue.map(row => row.id);
+    expect(ids.slice(1, 6)).toEqual(['route-0', 'route-1', 'route-2', t2.id, 'wanted']);
+  });
+
   it('never moves a route entry in front of the song that is playing', async () => {
     const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1', 'route-2']));
     const { actions, state } = await loadStore({ planDjQueue });
@@ -2568,6 +2702,30 @@ describe('Auto Mode store contract', () => {
 
     gate.resolve({ v: 1, items: [], dropped: [], degraded: false });
     await pending;
+    expect(state.autoMode.repairing).toBe(false);
+  });
+
+  it('keeps a new session’s repair busy when an older repair fails', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 5 }, (_, index) => `route-${index}`)));
+    const old = deferred<unknown>();
+    const next = deferred<unknown>();
+    const repairDjRoute = vi.fn().mockReturnValueOnce(old.promise).mockReturnValueOnce(next.promise);
+    const { actions, state } = await loadStore({ planDjQueue, repairDjRoute });
+    actions.playFrom([t1], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(6));
+
+    const obsolete = actions.repairAutoRoute();
+    actions.beginAutoSessionChange();
+    const current = actions.repairAutoRoute();
+    expect(repairDjRoute).toHaveBeenCalledTimes(2);
+
+    old.reject(new Error('obsolete repair'));
+    await obsolete;
+    expect(state.autoMode.repairing).toBe(true);
+    expect(state.autoMode.activity?.key).toBe('autoMode.agent.repairing');
+    next.resolve({ v: 1, items: [], dropped: [], degraded: false });
+    await current;
     expect(state.autoMode.repairing).toBe(false);
   });
 
@@ -4448,6 +4606,19 @@ describe('preview preparation ownership', () => {
     actions.dismissPlayback();
     firePreviewStatus(previews[0].id, { state: 'pending' });
     expect(state.playback.previewPreparation).toBeNull();
+  });
+
+  it('keeps the normal playback order when a later preview becomes ready first', async () => {
+    const s = await loadStore({
+      __previewPreparationState: (id: string) => id === previews[2].id ? 'ready' : 'streamable',
+    });
+    s.initStore();
+    s.actions.playFrom(previews, 0);
+    s.fireDeckEvent('playing');
+    s.firePreviewStatus(previews[2].id, { state: 'ready' });
+
+    expect(s.state.autoMode.active).toBe(false);
+    expect(s.state.playback.queue.map(row => row.id)).toEqual(previews.map(track => track.id));
   });
 
   it('revalidates owned IDs on reconnect and resume without discarding a staged deck', async () => {

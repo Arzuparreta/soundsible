@@ -6,6 +6,7 @@ import type {
 } from './api';
 import type { LiveTransitionPlan } from './audio';
 import type { PlaybackQueueEntry } from './playbackQueue';
+import { runwayReplacement } from './djRoute';
 import type { Track } from '../types/music';
 
 export type AutoProfile = ListeningPlanProfile;
@@ -92,6 +93,7 @@ export interface GeneratedSnapshot {
   currentTrack: Track | null;
   queue: PlaybackQueueEntry[];
   index: number;
+  committedQueueId?: string | null;
 }
 
 export interface GeneratedQueueDeps {
@@ -125,9 +127,6 @@ export interface GeneratedQueueDeps {
   ) => void;
   identity: (track: Track) => string;
   planningContext?: () => string;
-  /** True for the one queue entry whose handoff is already loaded and cued. A
-   * replan may rewrite everything after it, never it. */
-  isCommitted?: (entry: PlaybackQueueEntry) => boolean;
 }
 
 interface GeneratedSession {
@@ -340,42 +339,9 @@ export class GeneratedQueueController {
       .length;
   }
 
-  /** The queue as it will look once this plan is applied: what a replace keeps,
-   * or everything when the plan is appended. */
-  private retained(replace: boolean): PlaybackQueueEntry[] {
-    const snapshot = this.deps.snapshot();
-    if (!replace) return snapshot.queue;
-    return snapshot.queue.filter(
-      (entry, index) =>
-        index <= snapshot.index
-        || entry.queueLane === 'manual'
-        || this.deps.isCommitted?.(entry) === true,
-    );
-  }
-
-  /**
-   * The track the next plan continues from.
-   *
-   * It is the *tail* of what survives, not the track that is playing: a route's
-   * transitions are chained, so a plan seeded anywhere else produces cues that
-   * belong to a song nobody will be listening to when they are reached.
-   */
-  private anchor(replace: boolean): Track {
-    const snapshot = this.deps.snapshot();
-    return this.retained(replace).at(-1) ?? snapshot.currentTrack ?? this.session!.seed;
-  }
-
-  private context(replace: boolean): Track[] {
-    return this.retained(replace).slice(-5);
-  }
-
-  private exclusions(replace = false): string[] {
+  private exclusions(retained: readonly Track[]): string[] {
     const values = new Set(this.recent);
-    const retained = this.retained(replace);
-    const routeAnchors = replace
-      ? this.deps.snapshot().queue.filter((entry) => entry.autoRoute?.kind === 'user')
-      : [];
-    for (const track of [...retained, ...routeAnchors]) {
+    for (const track of retained) {
       const identity = this.deps.identity(track);
       if (identity) values.add(identity);
       if (track.recommendation?.identity) values.add(track.recommendation.identity);
@@ -399,31 +365,36 @@ export class GeneratedQueueController {
     const needed = replace ? TARGET_LOOKAHEAD : Math.max(0, TARGET_LOOKAHEAD - remaining);
     if (needed === 0) return Promise.resolve(true);
 
-    const input = JSON.stringify([replace, session.profile, this.deps.planningContext?.(), this.exclusions(replace), this.deps.identity(this.anchor(replace))]);
+    const snapshot = this.deps.snapshot();
+    const replacement = replace ? runwayReplacement(snapshot.queue, snapshot.index, snapshot.committedQueueId) : null;
+    const retained = replacement?.retained ?? snapshot.queue;
+    const anchor = (replacement ? replacement.anchor : snapshot.queue.at(-1)) ?? snapshot.currentTrack ?? session.seed;
+    const exclusions = this.exclusions(retained);
+    const input = JSON.stringify([replace, session.profile, this.deps.planningContext?.(), exclusions, this.deps.identity(anchor)]);
     if (session.intent === 'auto_mode' && this.settledInput === input) return Promise.resolve(false);
     const generation = ++this.generation;
     this.aborter?.abort();
     const aborter = new AbortController();
     this.aborter = aborter;
     this.deps.onStatus(session.intent, 'planning', undefined, replace);
-    // Auto Mode continues the route from wherever it currently ends. Radio
+    // Auto Mode continues from the append or replacement seam. Radio
     // remains anchored to the song the listener explicitly chose, so a manual
     // request inserted ahead of its generated lane cannot silently retune the
     // station. Autoplay's caller advances `session.seed` to the tail it is
     // extending.
-    const seed = session.intent === 'auto_mode' ? this.anchor(replace) : session.seed;
+    const seed = session.intent === 'auto_mode' ? anchor : session.seed;
     const task = this.deps.requestPlan(
       session.intent,
       session.profile,
       seed,
       needed,
-      this.exclusions(replace),
+      exclusions,
       aborter.signal,
       session.intent === 'auto_mode' && session.id
         ? {
             id: session.id,
             segmentIndex: session.segmentIndex,
-            context: this.context(replace),
+            context: retained.slice(-5),
           }
         : undefined,
     ).then((response) => {

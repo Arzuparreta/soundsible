@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT))
 import shared.database as database
 from shared import library_search
 from shared.database import DatabaseManager
+from shared.db import library as library_store, schema as schema_store
 from shared.models import LibraryMetadata, Track
 from shared.text_utils import fold_text, match_tokens
 
@@ -47,26 +48,49 @@ QUERIES = {
 
 
 def catalog_module(revision=None):
+    """The local search of `revision` (the working tree when None).
+
+    It lives in shared/catalog_search.py; older revisions kept it in the catalog
+    routes, as `_local_catalog`, `_library_tracks` and `_LibraryTracks`.
+    """
     name = f"search_benchmark_catalog_{revision or 'current'}"
-    spec = importlib.util.spec_from_file_location(name, ROOT / "shared/api/routes/catalog.py")
+    path = "shared/catalog_search.py"
+    if revision and subprocess.run(["git", "cat-file", "-e", f"{revision}:{path}"], cwd=ROOT).returncode:
+        path = "shared/api/routes/catalog.py"
+    spec = importlib.util.spec_from_file_location(name, ROOT / path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     if revision:
-        source = subprocess.check_output(["git", "show", f"{revision}:shared/api/routes/catalog.py"], cwd=ROOT, text=True)
+        source = subprocess.check_output(["git", "show", f"{revision}:{path}"], cwd=ROOT, text=True)
         exec(compile(source, spec.origin, "exec"), module.__dict__)
     else:
         spec.loader.exec_module(module)
+    for old, new in (("_local_catalog", "local_catalog"), ("_library_tracks", "library_tracks"), ("_LibraryTracks", "LibraryTracks")):
+        if not hasattr(module, new):
+            setattr(module, new, getattr(module, old))
     return module
 
 
 def reference_writer(revision):
-    """The previous revision's schema setup and canonical save, nothing else."""
-    source = subprocess.check_output(["git", "show", f"{revision}:shared/database.py"], cwd=ROOT, text=True)
-    cls = next(node for node in ast.parse(source).body if isinstance(node, ast.ClassDef) and node.name == "DatabaseManager")
-    methods = [node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in {"replace_library", "_apply_schema"}]
-    scope = dict(vars(database))
-    exec(compile(ast.Module(body=methods, type_ignores=[]), "<reference writer>", "exec"), scope)
-    return type("ReferenceWriter", (DatabaseManager,), {name: scope[name] for name in ("replace_library", "_apply_schema")})
+    """The previous revision's schema setup and canonical save, nothing else.
+
+    They were `DatabaseManager` methods in shared/database.py; later revisions
+    keep them in the shared/db/ mixins.
+    """
+    methods = {}
+    for name, module in (("replace_library", library_store), ("_apply_schema", schema_store)):
+        current_path = Path(module.__file__).relative_to(ROOT)
+        source = subprocess.run(["git", "show", f"{revision}:{current_path}"], cwd=ROOT,
+                                capture_output=True, text=True)
+        if source.returncode:
+            source = subprocess.run(["git", "show", f"{revision}:shared/database.py"], cwd=ROOT,
+                                    capture_output=True, text=True, check=True)
+        method = next(node for cls in ast.parse(source.stdout).body if isinstance(cls, ast.ClassDef)
+                      for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        scope = {**vars(database), **vars(module), "_MUSIC_ONLY": library_store.MUSIC_ONLY}
+        exec(compile(ast.Module(body=[method], type_ignores=[]), f"<reference {name}>", "exec"), scope)
+        methods[name] = scope[name]
+    return type("ReferenceWriter", (DatabaseManager,), methods)
 
 
 def library(count):
@@ -100,8 +124,10 @@ def peak(function):
 
 
 def selector(module, tracks):
-    module._library_tracks = lambda: tracks
-    return lambda query: module._local_catalog(query, 30)
+    module.library_tracks = lambda: tracks
+    if hasattr(module, "_library_tracks"):
+        module._library_tracks = module.library_tracks
+    return lambda query: module.local_catalog(query, 30)
 
 
 def file_bytes(path):
@@ -197,7 +223,7 @@ def main():
             build_ms = round((time.perf_counter() - start) * 1000, 2)
             print(json.dumps({"tracks": size, "kind": "build", "schema_setup_ms": build_ms}), flush=True)
 
-            tracks = current._LibraryTracks(metadata.tracks)
+            tracks = current.LibraryTracks(metadata.tracks)
             tracks.search_db = db
             _, fingerprint_ms = timed(lambda: library_search.model_fingerprint(tracks), args.repeats)
             print(json.dumps({"tracks": size, "kind": "fingerprint", "median_ms": fingerprint_ms}), flush=True)

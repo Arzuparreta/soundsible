@@ -82,18 +82,18 @@ def search(args):
     from scripts.benchmark_runtime_optimizations import fixture
     from shared import library_search
     from shared.user_context import user_context
-    from shared.api.routes import catalog
+    from shared import catalog_search as catalog
     from shared.database import reset_database_managers
     from flask import Flask, jsonify
     results = []
     with tempfile.TemporaryDirectory(prefix='soundsible-search-', dir=ROOT.parent) as directory, user_context('benchmark'):
         manager, _, _, _ = fixture(Path(directory), args.tracks)
-        tracks = catalog._LibraryTracks(manager.metadata.tracks)
+        tracks = catalog.LibraryTracks(manager.metadata.tracks)
         tracks.search_db = manager.db
         app = Flask(__name__)
-        app.add_url_rule('/local-search/<query>', view_func=lambda query: jsonify(catalog._local_catalog(query, 30)))
+        app.add_url_rule('/local-search/<query>', view_func=lambda query: jsonify(catalog.local_catalog(query, 30)))
         client = app.test_client()
-        with patch.object(catalog, '_library_tracks', return_value=tracks):
+        with patch.object(catalog, 'library_tracks', return_value=tracks):
             for query in ('song 4242', 'zzqx', 'so'):
                 reference = None
                 calls = {}

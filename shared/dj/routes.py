@@ -307,7 +307,7 @@ def choose_placement(
     gap_indexes = [fixed_index] if fixed_index is not None else list(range(len(route) + 1))
     best = None
     for gap in gap_indexes:
-        if gap is None:
+        if gap and route[gap - 1][0].get("route_kind") == "bridge":
             continue
         previous = current_analysis if gap == 0 else route[gap - 1][1]
         segment = route_to_request(

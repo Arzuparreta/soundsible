@@ -31,10 +31,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
         val start = programme.editableFrom()
         val locked = snapshot.rows.subList(snapshot.floor + 1, start)
         val allFuture = snapshot.rows.drop(start)
-        var count = minOf(16, allFuture.size)
-        allFuture.take(count).mapNotNull { it.ownerKey }.forEach { owner ->
-            count = maxOf(count, allFuture.indexOfFirst { key(it.item) == owner } + 1)
-        }
+        val count = ProgramDjRoutePolicy.repairHorizon(allFuture.map { ProgramDjRoutePolicy.RouteRow(key(it.item), it.kind, it.ownerKey) }, 16)
         val future = allFuture.take(count)
         require(future.size >= 2)
         val seed = snapshot.rows[start - 1].item
@@ -46,7 +43,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
     fun place(track: MediaItem, beforeKey: String?) {
         val programme = owner() ?: error("NO_DJ")
         clear()
-        val destination = beforeKey?.let(programme::blockStartKey)
+        val destination = programme.requestDestination(beforeKey)
         val snapshot = programme.addRequested(track, destination)
         val start = programme.editableFrom()
         val locked = snapshot.rows.subList(snapshot.floor + 1, start)
@@ -64,7 +61,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
         val programme = owner() ?: error("NO_DJ")
         require(tracks.size in 2..ProgramQueue.LIMIT && tracks.map(::key).toSet().size == tracks.size)
         clear()
-        val destination = beforeKey?.let(programme::blockStartKey)
+        val destination = programme.requestDestination(beforeKey)
         val snapshot = programme.addRequestedGroup(tracks, destination)
         val start = programme.editableFrom()
         val locked = snapshot.rows.subList(snapshot.floor + 1, start)
@@ -143,6 +140,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
         require(response.getInt("v") == 1 && response.getString("requested_queue_id") == key(requested))
         val insertion = response.getInt("insert_at")
         require(insertion in 0..future.size)
+        require(future.getOrNull(insertion - 1)?.kind != "bridge")
         if (beforeKey != null) require(insertion == future.indexOfFirst { key(it.item) == beforeKey })
         else require(insertion <= horizon)
         val items = response.getJSONArray("items"); require(items.length() in 1..3)
@@ -160,12 +158,12 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
                 requests++; requested
             } else ProgramQueue.items(connection, decoded, requested.mediaMetadata.extras!!.getString(ProgramQueue.PROGRAM)!!).single()
             val owned = bridgeOwner(item, kind, candidate.optString("owner_queue_id"), setOf(key(requested)))
-            additions.add(ProgramDjSession.Row(owned, planner.proposal(candidate, previous), kind)); previous = key(owned)
+            additions.add(ProgramDjSession.Row(owned, ProgramDjPlan.proposal(candidate, previous), kind)); previous = key(owned)
         }
         require(requests == 1)
         val tail = future.drop(insertion).toMutableList()
         response.optJSONObject("following_transition")?.let { transition ->
-            if (tail.isNotEmpty()) tail[0] = tail[0].copy(proposal = planner.proposal(JSONObject().put("transition", transition), previous))
+            if (tail.isNotEmpty()) tail[0] = tail[0].copy(proposal = ProgramDjPlan.proposal(JSONObject().put("transition", transition), previous))
         }
         return future.take(insertion) + additions + tail
     }
@@ -204,7 +202,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
             }
             require(seenKeys.add(key(item)))
             val owned = bridgeOwner(item, kind, candidate.optString("owner_queue_id"), anchors.toSet())
-            result.add(ProgramDjSession.Row(owned, planner.proposal(candidate, previous), kind))
+            result.add(ProgramDjSession.Row(owned, ProgramDjPlan.proposal(candidate, previous), kind))
             previous = key(owned)
         }
         require(returned == anchors) { "REPAIR_LOST_USER_ANCHOR" }

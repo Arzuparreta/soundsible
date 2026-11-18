@@ -9,15 +9,19 @@ import pytest
 
 import shared.database as database
 from shared.database import DatabaseManager, StaleLibraryWrite
+from shared.db import library as library_store
 from shared.models import LibraryMetadata, Track
 
 
 def legacy_class():
     frozen = runpy.run_path(str(Path(__file__).parent / 'fixtures/library_writer_reference.py'))
 
+    # The frozen writer runs on the globals the library store's methods see.
+    scope = {**vars(database), **vars(library_store)}
+
     class Legacy(DatabaseManager):
-        replace_library = FunctionType(frozen['replace_library'].__code__, vars(database))
-        _replace_catalog_projection = staticmethod(FunctionType(frozen['_replace_catalog_projection'].__code__, vars(database)))
+        replace_library = FunctionType(frozen['replace_library'].__code__, scope)
+        _replace_catalog_projection = staticmethod(FunctionType(frozen['_replace_catalog_projection'].__code__, scope))
     Legacy.replace_library.__kwdefaults__ = frozen['replace_library'].__kwdefaults__
     return Legacy
 

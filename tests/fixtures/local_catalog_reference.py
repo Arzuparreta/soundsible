@@ -31,12 +31,12 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     albums: dict[str, tuple[float, str, Any]] = {}
 
     def score(value: object, *, coverage: bool) -> float:
-        return _text_score(
+        return text_score(
             q_folded, q_tokens, value,
             _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=coverage,
         )
 
-    for track in _library_tracks():
+    for track in library_tracks():
         title = getattr(track, "title", "") or ""
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         album = getattr(track, "album", "") or ""

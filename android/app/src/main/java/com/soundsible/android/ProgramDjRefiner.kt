@@ -57,7 +57,7 @@ internal class ProgramDjRefiner(private val connection: EngineConnection, privat
                     runCatching { connection.sessionIdentity(generation) }.getOrNull() != account) return@post
                 val answer = response ?: return@post
                 if (!answer.optBoolean("measured")) return@post
-                planner.proposal(answer, fromKey)?.let {
+                ProgramDjPlan.proposal(answer, fromKey)?.let {
                     retry.finish(identity, owner.applyRefinement(snapshot, it))
                 }
             }

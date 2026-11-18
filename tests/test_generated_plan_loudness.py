@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from shared.api.routes.auto_mode import _annotate_plan_loudness
+from shared.music_candidates import annotate_plan_loudness as _annotate_plan_loudness
 
 
 def test_plan_facts_use_recording_hash_and_preserve_selection():

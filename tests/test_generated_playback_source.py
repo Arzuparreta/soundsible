@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
-from shared.api.routes.discovery import (
-    _planner_item_from_related,
-    _resolve_generated_playback,
+from shared.music_candidates import (
+    item_from_related as _planner_item_from_related,
+    resolve_generated_playback as _resolve_generated_playback,
 )
 
 

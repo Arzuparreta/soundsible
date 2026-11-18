@@ -234,7 +234,7 @@ def test_expired_entry_is_recomputed_under_coordination(monkeypatch):
 
 
 def test_catalog_consumer_keeps_account_isolation_and_copy_on_read():
-    from shared.api.routes.catalog import _memo_resolve
+    from shared.catalog_search import memo_resolve as _memo_resolve
     from shared.user_context import user_context
 
     memo = Memo(ttl_sec=60)

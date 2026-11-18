@@ -110,3 +110,59 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
             pass
         set_output_dir(None)
         reset_runtime()
+
+
+#: Engine endpoints whose successful answers must match the DJ API contract.
+_CONTRACT_ROUTES = {
+    "/api/discovery/music/plan": "ListeningPlanResponse",
+    "/api/discovery/music/dj-plan": "DjPlanResponse",
+    "/api/discovery/music/dj-place": "DjPlacementResponse",
+    "/api/discovery/music/dj-repair": "DjRepairResponse",
+    "/api/discovery/music/dj-transition": "DjTransitionResponse",
+}
+
+
+@pytest.fixture(scope="session")
+def dj_contract_schema():
+    from scripts.api_contract import load
+
+    return load()
+
+
+@pytest.fixture(autouse=True)
+def dj_contract(monkeypatch, dj_contract_schema):
+    """Validate successful responses from the real DJ blueprint during tests."""
+    from flask import request, request_finished
+    from flask.testing import FlaskClient
+
+    from scripts.api_contract import ContractError, validate_response
+
+    original = FlaskClient.open
+
+    def checked(self, *args, **kwargs):
+        app = self.application
+        if "discovery" not in app.blueprints:
+            return original(self, *args, **kwargs)
+
+        answers = []
+
+        def capture(sender, response, **extra):
+            if request.blueprint != "discovery" or response.status_code != 200 or not request.url_rule:
+                return
+            definition = _CONTRACT_ROUTES.get(request.url_rule.rule)
+            if definition:
+                if definition == "DjPlacementResponse":
+                    payload = request.get_json(silent=True)
+                    if isinstance(payload, dict) and payload.get("requests") is not None:
+                        definition = "DjPlacementsResponse"
+                answers.append((definition, response))
+
+        with request_finished.connected_to(capture, app):
+            response = original(self, *args, **kwargs)
+        for definition, answer in answers:
+            if not answer.is_json:
+                raise ContractError(f"{definition}: expected a JSON response")
+            validate_response(definition, answer.get_json(silent=True), dj_contract_schema)
+        return response
+
+    monkeypatch.setattr(FlaskClient, "open", checked)

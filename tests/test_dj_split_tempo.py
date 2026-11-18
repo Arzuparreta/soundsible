@@ -1,5 +1,7 @@
 """Both decks share a tempo change, for clients that say they can play it."""
 
+import shared.music_candidates as _music_candidates
+import shared.dj.planning as _dj_planning
 import copy
 import math
 import subprocess
@@ -171,8 +173,8 @@ def test_measured_aac_pair_is_split_only_for_clients_that_ask(tmp_path):
     api = _mock_api()
     api['get_library'].return_value = _FakeLibrary(None)
     pair = {'from': refs['outgoing'], 'to': refs['incoming']}
-    with (patch.object(_auto_mode, '_get_api', return_value=api),
-          patch.object(_auto_mode, '_dj_source_path', side_effect=lambda _, item: paths[item['id']])):
+    with (patch.object(_music_candidates, 'engine_api', return_value=api),
+          patch.object(_dj_planning, 'source_path', side_effect=lambda _, item: paths[item['id']])):
         client = _make_app().test_client()
         legacy = client.post('/api/discovery/music/dj-transition', json=pair).get_json()
         split = client.post('/api/discovery/music/dj-transition', json=pair,
