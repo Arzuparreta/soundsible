@@ -334,7 +334,6 @@ def test_dj_plan_keeps_an_artist_request_until_a_playable_track_fulfils_it(tmp_p
         "source": "preview",
         "source_pool": "related",
         "recommendation_identity": "music:youtube:heldens001",
-        "recommendation_source": "auto_mode",
         "score": 0.9,
     }
     features = {
@@ -1391,6 +1390,33 @@ def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_
     assert body["items"][0]["request_id"] == "q-wanted"
 
 
+@pytest.mark.parametrize("start", [0, 15, 22])
+def test_dj_place_refuses_a_fixed_seam_inside_a_bridge_block(tmp_path, start):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_library"].return_value = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
+    route = _repair_route(*(["generated"] * start), "bridge", "user")
+    route[start]["owner_queue_id"] = route[start + 1]["queue_id"]
+    with patch.object(_music_candidates, "engine_api", return_value=mock_api):
+        response = _make_app().test_client().post("/api/discovery/music/dj-place", json={
+            "seed": _REPAIR_SEED, "route": route,
+            "track": {"id": "wanted", "title": "Wanted", "artist": "Listener"},
+            "requested_queue_id": "wanted", "before_queue_id": route[start + 1]["queue_id"],
+        })
+    assert response.status_code == 409
+
+
+def test_dj_auto_placement_does_not_score_the_inside_of_a_bridge_block():
+    from shared.dj import routes
+
+    bridge = {"route_kind": "bridge"}, {"bpm": 100}
+    owner = {"route_kind": "user"}, {"bpm": 112}
+    scores = {100: 1.0, 105: 0.2, 112: 0.6, 124: 0.2}
+    with patch.object(routes, "plan_transition", side_effect=lambda left, right: {"score": scores[left["bpm"]]}):
+        result = routes.choose_placement({"bpm": 124}, [bridge, owner], ({}, {"bpm": 105}), [])
+    assert result is not None and result[0] == 2
+
+
 def test_dj_place_never_bridges_through_the_requested_or_playing_song_under_another_identity(tmp_path):
     # User's session, 2026-10-26: «Teardrops (Rules Remix)» came back as its own
     # bridge. The library copy reached the pool through the heard songs as
@@ -1499,7 +1525,8 @@ def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
     related = [{
         "id": "bridge01", "youtube_id": "bridge01", "title": "Bridge", "artist": "Other",
         "duration": 220, "source": "preview", "source_pool": "related",
-        "recommendation_identity": "music:youtube:bridge01", "recommendation_source": "auto_mode",
+        "recommendation_identity": "music:youtube:bridge01",
+        "reason": None, "semantic_basis": "related_track",
         "score": 0.9, "semantic_score": 0.9, "external_ids": {"youtube_id": "bridge01"},
     }]
     with patch.object(_dj_planning, "item_analysis", side_effect=analysis):

@@ -358,7 +358,6 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private fun policyRows(rows: List<Row> = route) = rows.map(::policyRow)
     private fun recording(item: MediaItem) = (item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) ?: "") + ":" + item.mediaId
     private fun byKey(rows: List<Row>, keys: List<String>): List<Row> { val index = rows.associateBy { itemKey(it.item) }; return keys.map { index.getValue(it) } }
-    fun blockStartKey(key: String) = ProgramDjRoutePolicy.block(policyRows(), key)?.first() ?: error("Unknown occurrence")
     /** The start of `beforeKey`'s block when a request may be queued in front of it, otherwise null. */
     fun requestDestination(beforeKey: String?): String? {
         val start = beforeKey?.let { ProgramDjRoutePolicy.block(policyRows(), it)?.first() } ?: return null
@@ -381,7 +380,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         }
         applyPlaylist(next.map { it.item }, false)
     }
-    fun editableFrom(): Int = ProgramDjRoutePolicy.editableFrom(policyRows(), current, protectedIndex())
+    fun editableFrom(): Int = ProgramDjRoutePolicy.editableFrom(route, current, protectedIndex(), { itemKey(it.item) }, { it.ownerKey })
     private fun protectedIndex() = if (armed || recovering) maxOf(current, indices.maxOrNull() ?: current) else current
     fun routeSnapshot(): RouteSnapshot {
         check(Looper.myLooper() == main.looper && owns())
@@ -399,19 +398,10 @@ internal class ProgramDjSession(private val context: Context, private val genera
         return true
     }
     /** The request remains queued even if musical placement is cancelled or fails. */
-    fun addRequested(item: MediaItem, beforeKey: String?): RouteSnapshot {
-        val floor = protectedIndex()
-        val locked = protectedKeys()
-        val insertion = beforeKey?.let(::blockStartKey)?.let { key -> route.indexOfFirst { itemKey(it.item) == key }.also { require(it > floor && key !in locked) } } ?: editableFrom()
-        val next = route.take(insertion) + Row(item) + route.drop(insertion)
-        applyPlaylist(next.map { it.item }, false)
-        return routeSnapshot()
-    }
+    fun addRequested(item: MediaItem, beforeKey: String?): RouteSnapshot = addRequestedGroup(listOf(item), beforeKey)
     /** A collection's songs requested together, queued at once; the editor then places them musically. */
     fun addRequestedGroup(items: List<MediaItem>, beforeKey: String?): RouteSnapshot {
-        val floor = protectedIndex()
-        val locked = protectedKeys()
-        val insertion = beforeKey?.let(::blockStartKey)?.let { key -> route.indexOfFirst { itemKey(it.item) == key }.also { require(it > floor && key !in locked) } } ?: editableFrom()
+        val insertion = ProgramDjRoutePolicy.requestInsertion(policyRows(), editableFrom() - 1, beforeKey)
         val next = route.take(insertion) + items.map { Row(it) } + route.drop(insertion)
         applyPlaylist(next.map { it.item }, false)
         return routeSnapshot()

@@ -122,34 +122,47 @@ _CONTRACT_ROUTES = {
 }
 
 
+@pytest.fixture(scope="session")
+def dj_contract_schema():
+    from scripts.api_contract import load
+
+    return load()
+
+
 @pytest.fixture(autouse=True)
-def dj_contract(monkeypatch):
-    """Check every DJ answer a test produces against shared/contracts/api/dj.schema.json.
-
-    The scenario tests already drive these routes through every branch they
-    care about; validating what they get back is what keeps the schema, the web
-    client's generated types and Android's parsers describing the real engine.
-    """
-    from urllib.parse import urlsplit
-
+def dj_contract(monkeypatch, dj_contract_schema):
+    """Validate successful responses from the real DJ blueprint during tests."""
+    from flask import request, request_finished
     from flask.testing import FlaskClient
 
-    from scripts.api_contract import load, validate_response
+    from scripts.api_contract import ContractError, validate_response
 
-    root = load()
     original = FlaskClient.open
 
     def checked(self, *args, **kwargs):
-        response = original(self, *args, **kwargs)
-        target = args[0] if args and isinstance(args[0], str) else kwargs.get("path", "")
-        definition = _CONTRACT_ROUTES.get(urlsplit(target).path)
-        # Only the engine's own routes; a test's stand-in route answers whatever it needs.
-        engine = "discovery" in self.application.blueprints
-        if definition and engine and response.status_code == 200 and response.is_json:
-            body = response.get_json()
-            if definition == "DjPlacementResponse" and "placements" in body:
-                definition = "DjPlacementsResponse"
-            validate_response(definition, body, root)
+        app = self.application
+        if "discovery" not in app.blueprints:
+            return original(self, *args, **kwargs)
+
+        answers = []
+
+        def capture(sender, response, **extra):
+            if request.blueprint != "discovery" or response.status_code != 200 or not request.url_rule:
+                return
+            definition = _CONTRACT_ROUTES.get(request.url_rule.rule)
+            if definition:
+                if definition == "DjPlacementResponse":
+                    payload = request.get_json(silent=True)
+                    if isinstance(payload, dict) and payload.get("requests") is not None:
+                        definition = "DjPlacementsResponse"
+                answers.append((definition, response))
+
+        with request_finished.connected_to(capture, app):
+            response = original(self, *args, **kwargs)
+        for definition, answer in answers:
+            if not answer.is_json:
+                raise ContractError(f"{definition}: expected a JSON response")
+            validate_response(definition, answer.get_json(silent=True), dj_contract_schema)
         return response
 
     monkeypatch.setattr(FlaskClient, "open", checked)

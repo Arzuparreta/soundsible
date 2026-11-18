@@ -87,6 +87,7 @@ export interface DjAnalysis {
   confidence: number;
   analysed: boolean;
   bar_seconds?: number | null;
+  [key: string]: number | string | boolean | null | undefined;
 }
 
 export interface ListeningPlanItem {
@@ -114,7 +115,7 @@ export interface ListeningPlanItem {
   cover?: string;
   source: "library" | "preview";
   source_pool: "local" | "related" | "discovery";
-  reason?: string;
+  reason?: string | null;
   reason_code?: string;
   recommendation_identity: string;
   recommendation_source: ListeningPlanIntent;
@@ -136,6 +137,10 @@ export interface ListeningPlanItem {
   semantic_score?: number;
   /** Set on dj-plan items the DJ added as bridges. */
   route_kind?: DjRouteKind;
+  semantic_basis?: string;
+  personal_score?: number;
+  loudness_lufs?: number;
+  loudness_peak_dbtp?: number;
 }
 
 export interface ListeningPlanResponse {
@@ -199,7 +204,7 @@ export interface DjPlacementResponse {
   before_queue_id: string | null;
   requested_queue_id: string;
   items: DjPlacementItem[];
-  following_transition?: DjTransitionPlan | null;
+  following_transition: DjTransitionPlan | null;
   degraded: boolean;
 }
 
@@ -232,7 +237,7 @@ export interface DjRepairResponse {
 export interface DjTransitionResponse {
   transition: DjTransitionPlan;
   measured: boolean;
-  analysis?: {
+  analysis: {
     from: DjAnalysis;
     to: DjAnalysis;
   };

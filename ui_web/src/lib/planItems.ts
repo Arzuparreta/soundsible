@@ -32,7 +32,7 @@ export function planItemTrack(item: ListeningPlanItem, library: readonly Track[]
     recommendation: {
       identity: item.recommendation_identity,
       source: item.recommendation_source,
-      reason: item.recommendation_source === 'autoplay' ? tr('autoplay.reason') : item.reason,
+      reason: item.recommendation_source === 'autoplay' ? tr('autoplay.reason') : item.reason ?? undefined,
       reason_code: item.reason_code,
       discovery_youtube_id: item.discovery_youtube_id ?? undefined,
     },
@@ -75,8 +75,9 @@ export function autoReasonKey(item: ListeningPlanItem): string {
   return 'autoMode.reason.node';
 }
 
-/** The route's record of why `item` is there and which song its cue leaves. */
-export function routePlanEntry(item: ListeningPlanItem, trackId: string, fromKey: string, transition = item.transition): AutoPlanItem {
+/** The route's record of why `item` is there and which song its cue leaves.
+ * `transition` is explicit: a chain broken by a dropped item passes undefined. */
+export function routePlanEntry(item: ListeningPlanItem, trackId: string, fromKey: string, transition: ListeningPlanItem['transition']): AutoPlanItem {
   return {
     trackId,
     source: item.source_pool,

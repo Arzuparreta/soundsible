@@ -53,9 +53,9 @@ def child(args):
         configure_runtime(RuntimeConfig.default())
         from shared.user_context import bind_user
         bind_user('queue-benchmark')
-        from shared import dj_engine as engine
-        from shared.dj import store as analysis_store
-        from shared.api.routes import auto_mode
+        from shared import dj_engine as engine, music_candidates
+        from shared.dj import planning, store as analysis_store
+        from shared.api.routes import auto_mode  # noqa: F401  # registers the DJ routes
         from shared.api.routes.discovery_bp import discovery_bp
         from flask import Flask
         from scripts.benchmark_dj_analysis import synthetic_pcm
@@ -83,7 +83,7 @@ def child(args):
 
         def candidates(metadata, roots, **kwargs):
             offset = int(roots[0]['id'].rsplit('-', 1)[1])
-            return auto_mode._GraphWalk([item(offset + i) for i in range(1, 9)], False, False)
+            return music_candidates.GraphWalk([item(offset + i) for i in range(1, 9)], False, False)
 
         # Bounded by this finite corpus (maximum 36 identities), not a
         # production event history. Instrumentation is entirely benchmark-local.
@@ -159,11 +159,10 @@ def child(args):
                 gevent.sleep(0.01)
                 hub.append(max(0, time.perf_counter() - before - 0.01))
 
-        with (patch.object(auto_mode, '_get_api', return_value=api),
-              patch.object(auto_mode, '_planner_context_related', side_effect=candidates),
-              patch.object(auto_mode, '_planner_warm_related'),
-              patch.object(auto_mode, '_dj_source_path', return_value=str(source)),
-              patch.object(auto_mode, 'request_analysis', side_effect=request),
+        with (patch.object(music_candidates, 'engine_api', return_value=api),
+              patch.object(music_candidates, 'context_related', side_effect=candidates),
+              patch.object(planning, 'source_path', return_value=str(source)),
+              patch.object(planning, 'request_analysis', side_effect=request),
               patch.object(analysis_store, 'analyse_audio', side_effect=analyse)):
             if args.scenario == 'warm':
                 plan(0)

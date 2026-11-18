@@ -63,13 +63,14 @@ export function editableFrom(rows: readonly RouteRow[], current: number, floor: 
   const protectedEnd = Math.max(current, floor);
   const live = rows.slice(Math.max(0, current), protectedEnd + 1);
   const owners = new Set(live.map(ownerOf).filter((owner): owner is string => !!owner));
-  const locked = new Set(live.map(row => row.key));
+  if (owners.size === 0) return protectedEnd + 1;
   let last = protectedEnd;
-  rows.forEach((row, index) => {
-    if (locked.has(row.key) || owners.has(row.key) || (ownerOf(row) !== undefined && owners.has(ownerOf(row)!))) {
-      last = Math.max(last, index);
+  for (let index = protectedEnd + 1; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (owners.has(row.key) || (ownerOf(row) !== undefined && owners.has(ownerOf(row)!))) {
+      last = index;
     }
-  });
+  }
   return last + 1;
 }
 
@@ -125,13 +126,14 @@ export function removedOccurrences(rows: readonly RouteRow[], target: string): s
   return rows.filter(row => row.key === target || ownerOf(row) === target).map(row => row.key);
 }
 
-/** How many future rows a repair sends: `limit`, extended so no bridge inside
- * it is sent without the request it leads into. */
+/** How many future rows a repair sends: at most `limit` (the engine reads no
+ * more), ending before any block that would cross the limit so a bridge never
+ * leaves without the request it leads into. */
 export function repairHorizon(future: readonly RouteRow[], limit: number): number {
-  let count = Math.min(limit, future.length);
-  for (const row of future.slice(0, count)) {
-    const owner = ownerOf(row);
-    if (owner !== undefined) count = Math.max(count, future.findIndex(candidate => candidate.key === owner) + 1);
+  const count = Math.min(limit, future.length);
+  for (let index = 0; index < count; index += 1) {
+    const owner = ownerOf(future[index]);
+    if (owner !== undefined && future.findIndex(row => row.key === owner) >= count) return index;
   }
   return count;
 }
@@ -152,18 +154,35 @@ export function sessionSurvivors(future: readonly RouteRow[], lead?: string): st
  * kept row already plays, and continue after the last kept row. When the
  * generated rows run out first, the kept rows close up in their order.
  */
-export function replanRunway(previous: readonly RouteRow[], generated: readonly RouteRow[]): string[] {
-  const requests = new Set(previous.filter(row => row.kind === 'user').map(row => row.key));
-  const pinned = (row: RouteRow) => row.kind === 'user' || (ownerOf(row) !== undefined && requests.has(ownerOf(row)!));
-  const kept = previous.map((row, index) => ({ row, index })).filter(({ row }) => pinned(row));
-  const keptRecordings = new Set(kept.map(({ row }) => row.recording));
+export function replanRunway(previous: readonly RouteRow[], generated: readonly RouteRow[], kept = replanKeeps(previous)): string[] {
+  const pinned = previous.map((row, index) => ({ row, index })).filter(({ row }) => kept.has(row.key));
+  const keptRecordings = new Set(pinned.map(({ row }) => row.recording));
   const filler = generated.filter(row => !keptRecordings.has(row.recording));
   const result: string[] = [];
   let next = 0;
-  for (const { row, index } of kept) {
+  for (const { row, index } of pinned) {
     while (result.length < index && next < filler.length) result.push(filler[next++].key);
     result.push(row.key);
   }
   while (next < filler.length) result.push(filler[next++].key);
   return result;
+}
+
+/** The rows a replan keeps: every request and the bridges into it. */
+function replanKeeps(previous: readonly RouteRow[]): Set<string> {
+  const requests = new Set(previous.filter(row => row.kind === 'user').map(row => row.key));
+  return new Set(previous
+    .filter(row => requests.has(row.key) || (ownerOf(row) !== undefined && requests.has(ownerOf(row)!)))
+    .map(row => row.key));
+}
+
+/** Partition a replacement once so its seed, exclusions and application use the same rules. */
+export function runwayReplacement(queue: PlaybackQueueEntry[], index: number, committedQueueId?: string | null) {
+  const rows = routeRows(queue);
+  const start = editableFrom(rows, index, insertionFloor(queue, index, committedQueueId));
+  const head = queue.slice(0, start);
+  const previous = queue.slice(start);
+  const future = rows.slice(start);
+  const kept = replanKeeps(future);
+  return { head, previous, future, kept, retained: [...head, ...previous.filter(entry => kept.has(entry.queueId))] };
 }

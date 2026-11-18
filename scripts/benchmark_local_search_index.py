@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT))
 import shared.database as database
 from shared import library_search
 from shared.database import DatabaseManager
+from shared.db import library as library_store, schema as schema_store
 from shared.models import LibraryMetadata, Track
 from shared.text_utils import fold_text, match_tokens
 
@@ -76,20 +77,20 @@ def reference_writer(revision):
     They were `DatabaseManager` methods in shared/database.py; later revisions
     keep them in the shared/db/ mixins.
     """
-    wanted = {"replace_library", "_apply_schema"}
-    methods, scope = [], dict(vars(database))
-    for path in ("shared/database.py", "shared/db/schema.py", "shared/db/library.py"):
-        try:
-            source = subprocess.check_output(["git", "show", f"{revision}:{path}"], cwd=ROOT, text=True, stderr=subprocess.DEVNULL)
-        except subprocess.CalledProcessError:
-            continue
-        if path != "shared/database.py":
-            module = importlib.import_module(path[:-3].replace("/", "."))
-            scope.update(vars(module))
-        for cls in (node for node in ast.parse(source).body if isinstance(node, ast.ClassDef)):
-            methods += [node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in wanted]
-    exec(compile(ast.Module(body=methods, type_ignores=[]), "<reference writer>", "exec"), scope)
-    return type("ReferenceWriter", (DatabaseManager,), {name: scope[name] for name in wanted})
+    methods = {}
+    for name, module in (("replace_library", library_store), ("_apply_schema", schema_store)):
+        current_path = Path(module.__file__).relative_to(ROOT)
+        source = subprocess.run(["git", "show", f"{revision}:{current_path}"], cwd=ROOT,
+                                capture_output=True, text=True)
+        if source.returncode:
+            source = subprocess.run(["git", "show", f"{revision}:shared/database.py"], cwd=ROOT,
+                                    capture_output=True, text=True, check=True)
+        method = next(node for cls in ast.parse(source.stdout).body if isinstance(cls, ast.ClassDef)
+                      for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        scope = {**vars(database), **vars(module), "_MUSIC_ONLY": library_store.MUSIC_ONLY}
+        exec(compile(ast.Module(body=[method], type_ignores=[]), f"<reference {name}>", "exec"), scope)
+        methods[name] = scope[name]
+    return type("ReferenceWriter", (DatabaseManager,), methods)
 
 
 def library(count):

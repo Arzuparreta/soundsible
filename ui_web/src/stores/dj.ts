@@ -103,6 +103,11 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     repeat: RepeatMode;
   } | null = null;
   let autoSessionEpoch = 0;
+  let repairToken = 0;
+  function advanceAutoSession() {
+    if (state.autoMode.repairing) setState('autoMode', 'repairing', false);
+    return ++autoSessionEpoch;
+  }
   let generatedActivityId = 0;
   function activity(status: AutoActivity['status'], key: string, values?: AutoActivity['values']): AutoActivity {
     return { id: ++generatedActivityId, status, key, values };
@@ -496,7 +501,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       evidence.select(fromKey, entry.queueId, index ? candidates[index - 1].item.analysis : response.opening?.analysis,
         item.analysis, item.transition, response);
       plan[entry.queueId] = {
-        ...routePlanEntry(item, queueIdentity(entry), fromKey),
+        ...routePlanEntry(item, queueIdentity(entry), fromKey, item.transition),
         reasonValues: item.source_pool === 'related' ? { title: opening.title } : undefined,
       };
       fromKey = queueIdentity(entry);
@@ -646,11 +651,19 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
   }
 
   // --- Route edits --------------------------------------------------------------
-  function dropAutoRouteOccurrence(queueId: string): PlaybackQueueEntry | null {
+  /** Drop one occurrence and the bridges into it. A listener's edit never
+   * reaches a row the playing or cued song depends on; a failed occurrence
+   * goes, but never takes what is playing or cued with it. */
+  function dropAutoRouteOccurrence(queueId: string, edit = false): PlaybackQueueEntry | null {
     if (!state.autoMode.active || committedTransition?.queueId === queueId) return null;
-    const track = state.playback.queue.find(entry => entry.queueId === queueId);
-    if (!track) return null;
-    const owned = new Set(removedOccurrences(routeRows(state.playback.queue), queueId));
+    const queue = state.playback.queue;
+    const index = queue.findIndex(entry => entry.queueId === queueId);
+    if (index === -1 || (edit && index < routeStart())) return null;
+    const track = queue[index];
+    const floor = insertionFloor();
+    if (index <= floor) return null;
+    const affected = new Set(removedOccurrences(routeRows(queue), queueId));
+    const owned = new Set(queue.slice(floor + 1).filter(entry => affected.has(entry.queueId)).map(entry => entry.queueId));
     setState('playback', 'queue', queue => queue.filter(entry => !owned.has(entry.queueId)));
     setState('autoMode', 'plan', plan => Object.fromEntries(Object.entries(plan).filter(([id]) => !owned.has(id))));
     setState('autoMode', 'staleSeams', seams => seams.filter(id => !owned.has(id)));
@@ -682,6 +695,16 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     const at = requestInsertion(routeRows(state.playback.queue), routeStart() - 1, before);
     setState('playback', 'queue', queue => [...queue.slice(0, at), ...occurrences, ...queue.slice(at)]);
   }
+  /** A route row as the DJ endpoints take it, with its block. */
+  function routeRef(entry: PlaybackQueueEntry) {
+    const kind = routeKind(entry);
+    return {
+      ...djItemRef(entry),
+      queue_id: entry.queueId,
+      route_kind: kind,
+      ...(kind === 'bridge' && entry.autoRoute?.ownerQueueId ? { owner_queue_id: entry.autoRoute.ownerQueueId } : {}),
+    };
+  }
   function routeSignature(start = routeStart()): string {
     return state.playback.queue.slice(start).map(entry => entry.queueId).join('|');
   }
@@ -696,7 +719,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     if (autoOpeningRetry) lifetime.clearTimeout(autoOpeningRetry);
     autoOpeningRetry = null;
     pendingImmediateAutoTrack = null;
-    autoSessionEpoch += 1;
+    advanceAutoSession();
     const revision = directionRevision() + 1;
     const source: AutoMusicSet = {
       id: randomId(),
@@ -909,7 +932,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       // session is restored on boot — and a restore has no one asking for
       // anything, so it must leave the shell collapsed.
       setNowPlayingOpen(true);
-      autoSessionEpoch += 1;
+      advanceAutoSession();
       pendingImmediateAutoTrack = null;
       autoOpeningAborter?.abort();
       autoOpeningAborter = null;
@@ -1041,7 +1064,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       if (state.playback.currentTrack) scheduleRunwayReplan(tr('autoMode.note.direction'));else void startAutoFromSources();
     },
     beginAutoSessionChange(): number {
-      return ++autoSessionEpoch;
+      return advanceAutoSession();
     },
     startDjSelection(tracks: Track[], label: string): boolean {
       const music = tracks.filter(track => !isPodcastTrack(track) && !track.unavailable);
@@ -1055,7 +1078,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       autoOpeningRetry = null;
       generated()?.stop();
       pendingImmediateAutoTrack = null;
-      autoSessionEpoch += 1;
+      advanceAutoSession();
       autoHandoffFailures = 0;
       autoHandoffCooldownUntil = 0;
       ports.discardFutureAutoplay();
@@ -1132,7 +1155,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     },
     removeAutoRouteOccurrence(queueId: string): void {
       syncEvidence(); evidence.interaction('route_edit');
-      const track = dropAutoRouteOccurrence(queueId);
+      const track = dropAutoRouteOccurrence(queueId, true);
       if (!track) return;
       toast.action(tr('autoMode.note.dropped', {
         title: track.title
@@ -1142,7 +1165,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
     },
     avoidAutoTrackForSession(queueId: string): void {
       syncEvidence(); evidence.interaction('route_edit');
-      const track = dropAutoRouteOccurrence(queueId);
+      const track = dropAutoRouteOccurrence(queueId, true);
       if (track) avoidAutoIdentity(track);
     },
     reportAutoActivity(key: string, status: AutoActivity['status'], values?: Record<string, string | number>): void {
@@ -1183,17 +1206,14 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       const progress = toast.loading(tr('musicExplorer.requesting'));
       const fallback = () => {
         if (!state.autoMode.active || epoch !== autoSessionEpoch) return;
-        insertRequests(occurrences, destination);
+        insertRequests(occurrences, beforeQueueId);
         setState('autoMode', 'staleSeams', state.playback.queue.slice(routeStart()).map(row => row.queueId));
         ports.prefetchUpcoming();
       };
       try {
         const response = await api.placeDjTracks({
           seed: djItemRef(seed),
-          route: route.map(row => ({
-            ...djItemRef(row),
-            queue_id: row.queueId
-          })),
+          route: route.map(routeRef),
           requests: occurrences.map(row => ({
             track: row,
             requested_queue_id: row.queueId
@@ -1224,6 +1244,9 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
             const requested = byId.get(placement.requested_queue_id);
             if (!requested || placed.has(requested.queueId)) throw new Error('invalid collection placement');
             if (!Number.isInteger(placement.insert_at) || placement.insert_at < 0 || placement.insert_at > working.length) throw new Error('invalid insertion');
+            const behind = working[placement.insert_at - 1];
+            if (behind && routeKind(behind) === 'bridge') throw new Error('placement splits a block');
+            if (destination && working[placement.insert_at]?.queueId !== destination) throw new Error('placement moved a fixed request');
             placed.add(requested.queueId);
             let fromKey = queueIdentity(working[placement.insert_at - 1] ?? seed);
             const entries = placement.items.map((item, index) => {
@@ -1235,11 +1258,12 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
                   ownerQueueId: requested.queueId
                 }
               };
-              plan[entry.queueId] = routePlanEntry(item, queueIdentity(entry), fromKey);
+              plan[entry.queueId] = routePlanEntry(item, queueIdentity(entry), fromKey, item.transition);
               fromKey = queueIdentity(entry);
               return entry;
             });
-            if (entries.filter(row => row.queueId === requested.queueId).length !== 1) throw new Error('missing request');
+            if (entries.at(-1)?.queueId !== requested.queueId
+              || entries.filter(row => row.queueId === requested.queueId).length !== 1) throw new Error('invalid request block');
             const following = working[placement.insert_at];
             if (following && placement.following_transition) plan[following.queueId] = {
               ...(plan[following.queueId] ?? {
@@ -1307,10 +1331,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       try {
         const response = await api.placeDjTrack({
           seed: djItemRef(seed),
-          route: route.map(entry => ({
-            ...djItemRef(entry),
-            queue_id: entry.queueId
-          })),
+          route: route.map(routeRef),
           track,
           requested_queue_id: occurrence.queueId,
           before_queue_id: destination,
@@ -1324,11 +1345,14 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         if (!isCurrent()) return;
         if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
         if (routeStart() !== start || routeSignature(start) !== signature) {
-          insertRequests([occurrence], destination);
+          insertRequests([occurrence], beforeQueueId);
           ports.prefetchUpcoming();
           return;
         }
         if (!Number.isInteger(response.insert_at) || response.insert_at < 0 || response.insert_at > route.length) throw new Error('invalid insertion');
+        const behind = route[response.insert_at - 1];
+        if (behind && routeKind(behind) === 'bridge') throw new Error('placement splits a block');
+        if (destination && route[response.insert_at]?.queueId !== destination) throw new Error('placement moved a fixed request');
         const entries = response.items.map(item => {
           const isUser = item.route_kind === 'user';
           const entry = isUser ? occurrence : createQueueEntry(planItemTrack(item, state.library), 'generated', 'auto_mode');
@@ -1340,7 +1364,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
             }
           };
         });
-        if (entries.filter(entry => entry.queueId === occurrence.queueId).length !== 1) throw new Error('missing request');
+        if (entries.at(-1)?.queueId !== occurrence.queueId
+          || entries.filter(entry => entry.queueId === occurrence.queueId).length !== 1) throw new Error('invalid request block');
         const at = start + response.insert_at;
         setState('playback', 'queue', queue => [...queue.slice(0, at), ...entries, ...queue.slice(at)]);
         const plan = {
@@ -1348,7 +1373,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
         };
         let fromKey = queueIdentity(state.playback.queue[at - 1] ?? seed);
         entries.forEach((entry, index) => {
-          plan[entry.queueId] = routePlanEntry(response.items[index], queueIdentity(entry), fromKey);
+          plan[entry.queueId] = routePlanEntry(response.items[index], queueIdentity(entry), fromKey, response.items[index].transition);
           fromKey = queueIdentity(entry);
         });
         const following = state.playback.queue[at + entries.length];
@@ -1367,21 +1392,17 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           plan,
           activity: activity('done', 'autoMode.agent.placed', { title: track.title })
         });
-        const insertedIds = new Set(entries.map(entry => entry.queueId));
         toast.action(tr('autoMode.note.added', {
           title: track.title
         }), tr('common.undo'), () => {
-          if (!state.autoMode.active) return;
-          setState('playback', 'queue', queue => queue.filter(entry => !insertedIds.has(entry.queueId)));
-          setState('autoMode', 'plan', current => Object.fromEntries(Object.entries(current).filter(([queueId]) => !insertedIds.has(queueId))));
-          void generated()?.ensureRunway();
+          if (isCurrent() && state.autoMode.active && sessionEpoch === autoSessionEpoch) dropAutoRouteOccurrence(occurrence.queueId, true);
         });
         ports.prefetchUpcoming();
       } catch {
         if (!isCurrent()) return;
         if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
         // The user's placement is authoritative even if musical analysis is not.
-        insertRequests([occurrence], destination);
+        insertRequests([occurrence], beforeQueueId);
         setState('autoMode', 'activity', activity('error', 'autoMode.agent.placedFallback', { title: track.title }));
         ports.prefetchUpcoming();
       }
@@ -1399,6 +1420,9 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       // One seam is a transition, not a route. There is nothing to re-seam.
       if (!seed || route.length < 2) return;
       const sessionEpoch = autoSessionEpoch;
+      const token = ++repairToken;
+      // A repair answers only for the session and the press that asked for it.
+      const owns = () => token === repairToken && sessionEpoch === autoSessionEpoch && state.autoMode.active;
       const signature = routeSignature(start);
       const previousQueue = state.playback.queue.slice();
       const previousPlan = {
@@ -1413,11 +1437,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       try {
         const response = await api.repairDjRoute({
           seed: djItemRef(seed),
-          route: route.map(entry => ({
-            ...djItemRef(entry),
-            queue_id: entry.queueId,
-            route_kind: routeKind(entry)
-          })),
+          route: route.map(routeRef),
           source_policy: 'explicit',
           exploration: state.autoMode.exploration ?? [],
           direction_revision: directionRevision(),
@@ -1425,8 +1445,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           heard: state.autoMode.heard,
           exclude: state.autoMode.avoidedIdentities
         });
-        if (!isCurrent()) return;
-        if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
+        if (!isCurrent() || !owns()) return;
         const byQueueId = new Map(route.map(entry => [entry.queueId, entry] as const));
         // A handoff that committed mid-flight moves the start, so it shows up
         // here as a changed route and is caught by the same check. So does a
@@ -1497,9 +1516,10 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           activity: activity('done', 'autoMode.agent.repaired')
         });
         ports.prefetchUpcoming();
+        const repairedSignature = routeSignature(start);
         toast.action(tr('autoMode.note.repaired'), tr('common.undo'), () => {
-          if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
-          if (routeStart() !== start) return;
+          if (!isCurrent() || !owns()) return;
+          if (routeStart() !== start || routeSignature(start) !== repairedSignature) return;
           if (state.playback.queue[start - 1]?.queueId !== previousQueue[start - 1]?.queueId) return;
           setState('playback', 'queue', previousQueue);
           setState('autoMode', {
@@ -1509,12 +1529,12 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
           ports.prefetchUpcoming();
         });
       } catch {
-        if (!isCurrent()) return;
+        if (!isCurrent() || !owns()) return;
         // Nothing was written — the queue is only touched once an answer lands —
         // so there is no half-repaired route to unwind.
         setState('autoMode', 'activity', activity('error', 'autoMode.agent.repairFailed'));
       } finally {
-        setState('autoMode', 'repairing', false);
+        if (isCurrent() && owns()) setState('autoMode', 'repairing', false);
       }
     },
     async autoSkip(): Promise<void> {
@@ -1582,7 +1602,7 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       const first = state.playback.queue[start]?.queueId;
       if (!first) return;
       const order = moveRouteBlock(routeRows(state.playback.queue), queueId, first, start - 1);
-      if (!order) return;
+      if (!order || order.every((id, index) => id === state.playback.queue[index].queueId)) return;
       const byId = new Map(state.playback.queue.map(entry => [entry.queueId, entry] as const));
       setState('playback', 'queue', order.map(id => byId.get(id)!));
       ports.prefetchUpcoming();
@@ -1597,7 +1617,8 @@ export function createDj(ports: DjPorts, lifetime: RuntimeLifetime) {
       // front of a handoff that is already loaded; the route panel stops
       // offering that seam, and this is what happens if anything else asks.
       const order = moveRouteBlock(rows, queueId, beforeQueueId, routeStart() - 1);
-      if (!order) return;
+      // A drop that resolves to where the block already is moves nothing and pins nothing.
+      if (!order || order.every((id, index) => id === current[index].queueId)) return;
       const blockIds = new Set(routeBlock(rows, queueId));
       const source = current.find(entry => entry.queueId === queueId)!;
       const ownerId = source.autoRoute?.kind === 'bridge' && source.autoRoute.ownerQueueId ? source.autoRoute.ownerQueueId : queueId;

@@ -140,6 +140,7 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
         require(response.getInt("v") == 1 && response.getString("requested_queue_id") == key(requested))
         val insertion = response.getInt("insert_at")
         require(insertion in 0..future.size)
+        require(future.getOrNull(insertion - 1)?.kind != "bridge")
         if (beforeKey != null) require(insertion == future.indexOfFirst { key(it.item) == beforeKey })
         else require(insertion <= horizon)
         val items = response.getJSONArray("items"); require(items.length() in 1..3)

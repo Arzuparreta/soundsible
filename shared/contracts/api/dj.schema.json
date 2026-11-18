@@ -437,7 +437,10 @@
           ]
         },
         "reason": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "reason_code": {
           "type": "string"
@@ -505,6 +508,18 @@
         "route_kind": {
           "$ref": "#/$defs/DjRouteKind",
           "description": "Set on dj-plan items the DJ added as bridges."
+        },
+        "semantic_basis": {
+          "type": "string"
+        },
+        "personal_score": {
+          "type": "number"
+        },
+        "loudness_lufs": {
+          "type": "number"
+        },
+        "loudness_peak_dbtp": {
+          "type": "number"
         }
       }
     },
@@ -693,7 +708,9 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "route_kind"
+        "route_kind",
+        "analysis",
+        "transition"
       ],
       "properties": {
         "route_kind": {
@@ -723,7 +740,8 @@
         "before_queue_id",
         "requested_queue_id",
         "items",
-        "degraded"
+        "degraded",
+        "following_transition"
       ],
       "properties": {
         "v": {
@@ -783,7 +801,9 @@
       "additionalProperties": false,
       "required": [
         "queue_id",
-        "route_kind"
+        "route_kind",
+        "analysis",
+        "transition"
       ],
       "properties": {
         "queue_id": {
@@ -840,7 +860,8 @@
       "additionalProperties": false,
       "required": [
         "transition",
-        "measured"
+        "measured",
+        "analysis"
       ],
       "properties": {
         "transition": {

@@ -8,7 +8,7 @@ import { queueIdentity, queueIndexOf } from '../lib/queueDiscovery';
 import { GeneratedQueueController } from '../lib/generatedQueue';
 import { t as tr } from '../lib/i18n';
 import { createQueueEntry, futureEntries, isPendingEntry, type PlaybackQueueEntry } from '../lib/playbackQueue';
-import { insertionFloor, replanRunway, routeRows } from '../lib/djRoute';
+import { replanRunway, routeRows, runwayReplacement } from '../lib/djRoute';
 import { planItemTrack, planSeed } from '../lib/planItems';
 import type { Track } from '../types/music';
 import { state, setState } from './core';
@@ -76,11 +76,8 @@ export function createRunway(ports: RunwayPorts, lifetime: RuntimeLifetime) {
     const pb = state.playback;
     // What a replacing plan keeps: everything already played, the handoff that
     // is already loaded and cued, and every request with its bridges.
-    const floor = insertionFloor(pb.queue, pb.index, ports.dj.committedQueueId());
-    const head = replace ? pb.queue.slice(0, floor + 1) : [];
-    const previous = replace ? pb.queue.slice(floor + 1) : [];
-    const kept = new Set(replace ? replanRunway(routeRows(previous), []) : []);
-    const retained = replace ? [...head, ...previous.filter(entry => kept.has(entry.queueId))] : pb.queue;
+    const replacement = replace ? runwayReplacement(pb.queue, pb.index, ports.dj.committedQueueId()) : null;
+    const retained = replacement?.retained ?? pb.queue;
     const candidates = response.items
       .map(item => ({ item, track: planItemTrack(item, state.library) }))
       .filter(({ track }) => queueIndexOf(retained, track) === -1);
@@ -88,9 +85,10 @@ export function createRunway(ports: RunwayPorts, lifetime: RuntimeLifetime) {
       item,
       entry: dj ? dj.routeEntry(track) : createQueueEntry(track, 'generated', intent),
     }));
-    if (replace) {
+    if (replacement) {
+      const { head, previous, future, kept } = replacement;
       const entries = planned.map(({ entry }) => entry);
-      const order = replanRunway(routeRows(previous), routeRows(entries));
+      const order = replanRunway(future, routeRows(entries), kept);
       const placed = new Set(order);
       const written = planned.filter(({ entry }) => placed.has(entry.queueId));
       if (written.length === 0) return 0;
@@ -122,10 +120,10 @@ export function createRunway(ports: RunwayPorts, lifetime: RuntimeLifetime) {
         currentTrack: state.playback.currentTrack,
         queue: state.playback.queue.slice(),
         index: state.playback.index,
+        committedQueueId: ports.dj.committedQueueId(),
       }),
       identity: queueIdentity,
       planningContext: () => ports.dj.planningContext(),
-      isCommitted: entry => ports.dj.committedQueueId() === entry.queueId,
       requestPlan: (intent, profile, seed, limit, exclude, signal, generatedSession) => {
         const seedBody = planSeed(seed);
         const planned = intent === 'auto_mode' ? ports.dj.requestPlan(seedBody, limit, exclude, signal, generatedSession) : null;

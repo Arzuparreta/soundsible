@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -25,7 +26,7 @@ GENERATED = ROOT / "ui_web/src/lib/generated/djContract.ts"
 
 _TYPES = {
     "string": lambda v: isinstance(v, str),
-    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "number": lambda v: type(v) is int or isinstance(v, float) and math.isfinite(v),
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
     "boolean": lambda v: isinstance(v, bool),
     "null": lambda v: v is None,
@@ -59,6 +60,12 @@ def expand(root: dict, schema: dict) -> dict:
     return merged
 
 
+def _same_scalar(value, literal) -> bool:
+    if _TYPES["number"](literal):
+        return _TYPES["number"](value) and value == literal
+    return type(value) is type(literal) and value == literal
+
+
 def validate(instance, schema: dict, root: dict, path: str = "$", *, partial: bool = False) -> None:
     """Raise ContractError naming the first place `instance` breaks `schema`."""
     if "$ref" in schema:
@@ -76,9 +83,9 @@ def validate(instance, schema: dict, root: dict, path: str = "$", *, partial: bo
                 errors.append(str(error))
         else:
             raise ContractError(f"{path}: matches no option ({'; '.join(errors)})")
-    if "const" in schema and instance != schema["const"]:
+    if "const" in schema and not _same_scalar(instance, schema["const"]):
         raise ContractError(f"{path}: expected {schema['const']!r}, got {instance!r}")
-    if "enum" in schema and instance not in schema["enum"]:
+    if "enum" in schema and not any(_same_scalar(instance, value) for value in schema["enum"]):
         raise ContractError(f"{path}: {instance!r} is not one of {schema['enum']!r}")
     if "type" in schema:
         kinds = schema["type"] if isinstance(schema["type"], list) else [schema["type"]]
@@ -166,6 +173,8 @@ def _members(schema: dict, root: dict, indent: str, own_only: dict | None = None
     for name, prop in properties.items():
         optional = "" if name in required else "?"
         out.append(_comment(prop.get("description"), indent) + f"{indent}{name}{optional}: {_ts(prop, root, indent)};\n")
+    if own_only is None and isinstance(extra := schema.get("additionalProperties"), dict):
+        out.append(f"{indent}[key: string]: {_ts(extra, root, indent)} | undefined;\n")
     return "".join(out)
 
 

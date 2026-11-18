@@ -76,10 +76,10 @@
     {"rule": "repair_horizon", "name": "a long route is cut at the limit",
      "future": [{"key": "a", "kind": "generated"}, {"key": "b", "kind": "generated"}, {"key": "c", "kind": "generated"}, {"key": "d", "kind": "generated"}, {"key": "e", "kind": "generated"}],
      "limit": 3, "expect": 3},
-    {"rule": "repair_horizon", "name": "a bridge at the limit pulls in its request",
+    {"rule": "repair_horizon", "name": "a block crossing the limit stays whole in the tail",
      "future": [{"key": "a", "kind": "generated"}, {"key": "b", "kind": "generated"}, {"key": "c", "kind": "bridge", "owner": "e"}, {"key": "d", "kind": "generated"}, {"key": "e", "kind": "user"}],
-     "limit": 3, "expect": 5},
-    {"rule": "repair_horizon", "name": "a request inside the limit changes nothing",
+     "limit": 3, "expect": 2},
+    {"rule": "repair_horizon", "name": "a block that ends at the limit is repaired",
      "future": [{"key": "a", "kind": "generated"}, {"key": "b", "kind": "bridge", "owner": "c"}, {"key": "c", "kind": "user"}, {"key": "d", "kind": "generated"}],
      "limit": 3, "expect": 3},
 

@@ -93,7 +93,7 @@ def search(args):
         app = Flask(__name__)
         app.add_url_rule('/local-search/<query>', view_func=lambda query: jsonify(catalog.local_catalog(query, 30)))
         client = app.test_client()
-        with patch.object(catalog, '_library_tracks', return_value=tracks):
+        with patch.object(catalog, 'library_tracks', return_value=tracks):
             for query in ('song 4242', 'zzqx', 'so'):
                 reference = None
                 calls = {}

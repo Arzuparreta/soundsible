@@ -11,6 +11,7 @@ import requests
 import pytest
 
 from fixture_ports import late_bound_port
+from scripts.api_contract import validate_response
 
 
 @pytest.mark.parametrize("audio_format", ["wav", "flac"])
@@ -74,7 +75,9 @@ def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path, audio_fo
                 timeout=30,
             )
             assert answer.status_code == 200, answer.text
-            rows = answer.json()["items"]
+            payload = answer.json()
+            validate_response("ListeningPlanResponse", payload)
+            rows = payload["items"]
             assert rows, answer.text
             acquired = {row["id"]: row for row in member.get(origin + "/api/library", timeout=10).json()["tracks"]}
             # The fixture creates distinct songs by copying synthetic bytes;

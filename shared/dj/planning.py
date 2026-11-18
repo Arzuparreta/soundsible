@@ -14,8 +14,6 @@ import random
 import time
 import uuid
 
-from flask import has_request_context, request
-
 from shared import preview_streams
 from shared.dj.timing import fixed_tempo
 from shared.dj_engine import (
@@ -25,11 +23,10 @@ from shared.dj_engine import (
     order_continuous_route,
     request_analysis,
 )
-from shared.dj.routes import (
-    choose_placement,
-)
+from shared.dj.routes import REPAIR_ROUTE_CAP, choose_placement, choose_request_segment, order_route, repair_route
 from shared.dj.contracts import analysis_summary
 from shared.dj_pool import ANALYSIS_COHORT_SIZE, add_measured_bridges
+from shared.listening_planner import auto_source_sequence
 from shared.music_identity import canonical_music_identity
 from shared.path_resolver import resolve_local_track_path
 from shared.url_utils import validate_youtube_video_id
@@ -77,8 +74,7 @@ def item_analysis(metadata, item: dict, *, schedule: bool = False) -> dict:
     cached = cached_analysis(path, identity)
     if cached is not None:
         return cached
-    if schedule and (not has_request_context() or not request.headers.get("X-Soundsible-Work")
-                     or request.path.endswith(("dj-work", "dj-transition"))):
+    if schedule:
         request_analysis(path, identity, duration_hint=duration_hint)
     return fallback_analysis(duration_hint)
 
@@ -93,7 +89,7 @@ def wire_item(item: dict) -> dict:
     analysis = item.get("analysis")
     return {**item, "analysis": analysis_summary(analysis)} if isinstance(analysis, dict) else item
 
-def transition_analysis(metadata, item: dict) -> tuple[dict, bool]:
+def transition_analysis(metadata, item: dict, *, schedule: bool) -> tuple[dict, bool]:
     """A song's measured features and True, or the fallback and False.
 
     A refinement outside a client's own DJ work also queues the measurement.
@@ -102,7 +98,7 @@ def transition_analysis(metadata, item: dict) -> tuple[dict, bool]:
     analysis = cached_analysis(path, analysis_identity(item)) if path else None
     if analysis is not None:
         return analysis, True
-    if path and not request.headers.get("X-Soundsible-Work"):
+    if path and schedule:
         request_analysis(path, analysis_identity(item), duration_hint=float(item.get("duration") or 0))
     return fallback_analysis(float(item.get("duration") or 0)), False
 
@@ -247,7 +243,7 @@ def exploration_related(metadata, heard_roots: list[dict]) -> music_candidates.G
     return walk._replace(items=related)
 
 
-def build_music_set_route(data: dict) -> tuple[dict, int]:
+def build_music_set_route(data: dict, *, schedule: bool = True) -> tuple[dict, int]:
     """Auto v6: conduct accumulating sources without semantic fences.
 
     Explicit sources and confirmed automatic playback are the only graph roots.
@@ -379,7 +375,7 @@ def build_music_set_route(data: dict) -> tuple[dict, int]:
         roots.sort(key=lambda item: -float(item.get("source_weight") or 0))
         opening = dict(roots[0])
         available = [item for item in available if item is not roots[0]]
-        opening_analysis = item_analysis(metadata, opening, schedule=True)
+        opening_analysis = item_analysis(metadata, opening, schedule=schedule)
         opening["analysis"] = opening_analysis
         opening.pop("transition", None)
         seed = opening
@@ -392,11 +388,11 @@ def build_music_set_route(data: dict) -> tuple[dict, int]:
     snapshots = {id(item): item_analysis(metadata, item) for item in available}
     analysed = [(item, snapshots[id(item)]) for item in cohort[:limit]]
     spares = [(item, snapshots[id(item)]) for item in cohort[limit:]]
-    previous = opening_analysis or item_analysis(metadata, seed, schedule=True)
+    previous = opening_analysis or item_analysis(metadata, seed, schedule=schedule)
     route = add_measured_bridges(previous, order_continuous_route(previous, analysed), spares)
     # Cold alternatives are not revisited after this response. Only actual
     # route members have a consumer for newly acquired bytes/measurements.
-    if not has_request_context() or not request.headers.get("X-Soundsible-Work"):
+    if schedule:
         prepare_cohort(metadata, [seed, *route])
     coverage = {
         "candidates": len(available),
@@ -522,7 +518,7 @@ def place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tuple[di
             if not keys or keys & occupied or not song_sized(item):
                 continue
             occupied.update(keys)
-            candidates.append((item, item_analysis(metadata, item)))
+            candidates.append(({**item, "recommendation_source": "auto_mode"}, item_analysis(metadata, item)))
             if len(candidates) >= 12:
                 break
         return candidates
@@ -530,7 +526,7 @@ def place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tuple[di
     return walk([*source_roots, *heard_roots])
 
 
-def place_one(data: dict) -> tuple[dict, int]:
+def place_one(data: dict, *, schedule: bool = True) -> tuple[dict, int]:
     """Plan one insertion; collection requests reuse the same scoring contract."""
     seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
     raw_track = data.get("track") if isinstance(data.get("track"), dict) else {}
@@ -551,7 +547,7 @@ def place_one(data: dict) -> tuple[dict, int]:
         "reason": "Placed in route",
         "reason_code": "route_user",
     })
-    target_analysis = item_analysis(metadata, target, schedule=True)
+    target_analysis = item_analysis(metadata, target, schedule=schedule)
 
     # A listener-selected seam may sit beyond the automatic analysis horizon.
     # Score only its immediate neighbours, then translate the local insertion
@@ -565,17 +561,20 @@ def place_one(data: dict) -> tuple[dict, int]:
             return {"error": "before_queue_id is not in the editable route"}, 409
         if raw_index >= 16:
             seed = raw_route[raw_index - 1]
+            if not isinstance(seed, dict) or seed.get("route_kind") == "bridge":
+                return {"error": "before_queue_id is not an editable gap"}, 409
             route_offset = raw_index
 
     route: list[tuple[dict, dict]] = []
     horizon = raw_route[route_offset:route_offset + (1 if route_offset else 16)]
     for raw in horizon:
         if not isinstance(raw, dict):
-            continue
+            return {"error": "invalid route occurrence"}, 400
         item = music_set_item(raw, source_id="route", label="Route")
         if not item:
-            continue
+            return {"error": "invalid route occurrence"}, 400
         item["queue_id"] = str(raw.get("queue_id") or "")
+        item["route_kind"] = raw.get("route_kind")
         route.append((item, item_analysis(metadata, item)))
     occupied = occupied_keys(data, [target, *(item for item, _ in route)])
 
@@ -586,7 +585,7 @@ def place_one(data: dict) -> tuple[dict, int]:
     if before_queue_id and fixed_index is None:
         return ({"error": "before_queue_id is not in the editable route"}), 409
     bridge_pool = [] if fixed_index is not None or fixed_tempo() else place_bridge_pool(metadata, data, occupied)
-    seed_analysis = item_analysis(metadata, seed, schedule=True)
+    seed_analysis = item_analysis(metadata, seed, schedule=schedule)
 
     placement = choose_placement(seed_analysis, route, (target, target_analysis), bridge_pool,
                                  fixed_index=fixed_index)
@@ -601,7 +600,7 @@ def place_one(data: dict) -> tuple[dict, int]:
         if not is_target:
             placed["owner_queue_id"] = requested_queue_id
         items.append(placed)
-        item_analysis(metadata, placed, schedule=True)
+        item_analysis(metadata, placed, schedule=schedule)
     return ({
         "v": 1,
         "insert_at": route_offset + insert_at,
@@ -653,3 +652,193 @@ def repair_anchor(raw: dict) -> dict:
         "source_weight": 1.0,
         "lineage": [recommendation_identity],
     }
+
+
+def build_legacy_route(data: dict, *, build_plan, artist_candidates, schedule: bool = True) -> tuple[dict, int]:
+    """Plan the route for clients that supply a seed and optional song or artist requests."""
+    # Older clients may still send dj_profile; technique selection is automatic.
+    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
+    if not seed:
+        return {"error": "seed is required"}, 400
+    try:
+        requested_limit = min(8, max(3, int(data.get("limit") or 8)))
+    except (TypeError, ValueError):
+        return {"error": "limit must be numeric"}, 400
+    source_profile = "balanced"
+    base, status = build_plan({
+        "intent": "auto_mode",
+        "profile": source_profile,
+        "seed": seed,
+        "context": data.get("context") or [],
+        "session_id": data.get("session_id"),
+        "segment_index": data.get("segment_index"),
+        "exclude": data.get("exclude") or [],
+        "limit": music_candidates.AUTO_ROUTER_LIMIT,
+    })
+    if status != 200:
+        return base, status
+
+    api = music_candidates.engine_api()
+    lib = api["get_library"]()
+    metadata = getattr(lib, "metadata", None)
+    seed_analysis = item_analysis(metadata, seed, schedule=schedule)
+    candidates = []
+    for candidate in base.get("items") or []:
+        candidate_analysis = item_analysis(metadata, candidate)
+        semantic_fit = max(0.0, min(1.0, float(candidate.get("semantic_score") or 0.5)))
+        personal_fit = max(0.0, min(1.0, float(candidate.get("personal_score") or 0.5)))
+        candidate["score"] = max(
+            0.0,
+            min(
+                1.0,
+                semantic_fit * 0.5
+                + personal_fit * 0.15
+                + float(candidate.get("score") or 0.5) * 0.05,
+            ),
+        )
+        candidates.append((candidate, candidate_analysis))
+    requests = [
+        item
+        for raw in (data.get("requests") if isinstance(data.get("requests"), list) else [])
+        if isinstance(raw, dict) and (item := normalise_request(raw))
+    ]
+
+    route: list[dict] = []
+    previous = seed_analysis
+    remaining = list(candidates)
+    max_items = requested_limit
+    request_statuses: list[dict] = []
+    for requested in requests:
+        if len(route) >= max_items:
+            break
+        targets: list[dict]
+        if requested["kind"] == "artist":
+            from shared.user_context import current_user_id
+
+            targets = artist_candidates(requested["artist_name"], current_user_id(), 8)
+            for target in targets:
+                target.update({
+                    "request_id": requested["request_id"],
+                    "reason": f"Requested artist: {requested['artist_name']}",
+                    "reason_code": "dj_artist_request",
+                    "recommendation_source": "auto_mode",
+                })
+        else:
+            targets = [requested]
+        measured_targets = [(target, item_analysis(metadata, target)) for target in targets]
+        candidate_segment = choose_request_segment(previous, remaining, measured_targets,
+                                                   max_starts=min(5, max_items - len(route)))
+        if candidate_segment is None:
+            request_statuses.append({
+                "id": requested["request_id"],
+                "kind": requested["kind"],
+                "label": requested["label"],
+                "status": "failed",
+                "eta_tracks": None,
+                "scheduled_position": None,
+                "failure_code": "unavailable",
+            })
+            continue
+        segment, requested_analysis = candidate_segment
+        route.extend(segment)
+        used = {str(item.get("recommendation_identity") or item.get("id")) for item in segment}
+        remaining = [
+            (item, analysis)
+            for item, analysis in remaining
+            if str(item.get("recommendation_identity") or item.get("id")) not in used
+        ]
+        previous = requested_analysis
+        eta = next(
+            (index + 1 for index, row in enumerate(route) if row.get("request_id") == requested["request_id"]),
+            None,
+        )
+        request_statuses.append({
+            "id": requested["request_id"],
+            "kind": requested["kind"],
+            "label": requested["label"],
+            "status": "planned",
+            "track_identity": next(
+                (row.get("recommendation_identity") for row in route if row.get("request_id") == requested["request_id"]),
+                None,
+            ),
+            "eta_tracks": eta,
+            "scheduled_position": eta + 1 if eta is not None else None,
+            "preferred_position": 2,
+            "max_position": 6,
+            "failure_code": None,
+        })
+    if len(route) < max_items:
+        route.extend(order_route(
+            previous,
+            remaining,
+            limit=max_items - len(route),
+            source_sequence=base.get("source_sequence") or auto_source_sequence(source_profile),
+            source_offset=len(route),
+        ))
+
+    # Only the accepted route is allowed to schedule local analysis. External
+    # previews are fetched by the existing browser runway prefetch, then refined
+    # shortly before their handoff.
+    for item in route:
+        item_analysis(metadata, item, schedule=schedule)
+
+    return {
+        **base,
+        "v": 4,
+        "source_profile": source_profile,
+        "seed_analysis": analysis_summary(seed_analysis),
+        "items": [wire_item(item) for item in route],
+        "requests": request_statuses,
+    }, 200
+
+
+def build_repair(data: dict, *, schedule: bool = True) -> tuple[dict, int]:
+    """Re-seam one route window without moving any of its pinned occurrences."""
+    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
+    raw_route = data.get("route") if isinstance(data.get("route"), list) else []
+    if not seed or not raw_route:
+        return {"error": "seed and route are required"}, 400
+    # Older clients may still send dj_profile; technique selection is automatic.
+    raw_limit = data.get("limit")
+    if raw_limit is not None and not isinstance(raw_limit, int):
+        return {"error": "limit must be an integer"}, 400
+
+    api = music_candidates.engine_api()
+    lib = api["get_library"]()
+    metadata = getattr(lib, "metadata", None)
+
+    refs = [raw for raw in raw_route[:REPAIR_ROUTE_CAP] if isinstance(raw, dict)]
+    parsed: list[tuple[bool, dict, dict]] = []
+    for raw in refs:
+        pinned = str(raw.get("route_kind") or "generated").strip() == "user"
+        item = repair_anchor(raw) if pinned else music_set_item(raw, source_id="route", label="Route")
+        if not item:
+            continue
+        item["queue_id"] = str(raw.get("queue_id") or "")
+        parsed.append((pinned, item, item_analysis(metadata, item)))
+    if not parsed:
+        return {"error": "route has nothing to repair"}, 400
+
+    anchors = [(item, analysis) for pinned, item, analysis in parsed if pinned]
+    spares = [(item, analysis) for pinned, item, analysis in parsed if not pinned]
+    occupied = occupied_keys(data, [item for item, _ in (*anchors, *spares)])
+    extra_pool = place_bridge_pool(metadata, data, occupied)
+    seed_analysis = item_analysis(metadata, seed, schedule=schedule)
+    target = min(REPAIR_ROUTE_CAP, max(len(refs), int(raw_limit or len(refs))))
+    built = repair_route(seed_analysis, parsed, extra_pool, target=target)
+
+    for row in built:
+        row["queue_id"] = row.get("queue_id") or None
+        item_analysis(metadata, row, schedule=schedule)
+
+    kept = {row["queue_id"] for row in built if row["queue_id"]}
+    return {
+        "v": 1,
+        "seed_analysis": analysis_summary(seed_analysis),
+        "items": [wire_item(row) for row in built],
+        "dropped": [
+            queue_id for raw in refs
+            if (queue_id := str(raw.get("queue_id") or "")) and queue_id not in kept
+        ],
+        "degraded": any(not analysis.get("analysed") for _, analysis in anchors),
+    }, 200

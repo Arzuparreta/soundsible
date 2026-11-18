@@ -387,6 +387,20 @@ describe('AutoMode workspace', () => {
     }
   });
 
+  it('does not offer to remove a request while its bridge is playing', () => {
+    const original = state.playback.queue[0];
+    const bridge = { ...original, autoRoute: { kind: 'bridge', ownerQueueId: 'q-next' } };
+    state.playback.queue[0] = bridge;
+    try {
+      const { container } = renderAuto('route');
+      fireEvent.contextMenu(container.querySelector('[data-drag-row="q-next"]')!);
+      const options = openContextMenu.mock.calls.at(-1)![0];
+      expect(options.actions.map((action: { label: string }) => action.label)).not.toContain('autoMode.route.remove');
+    } finally {
+      state.playback.queue[0] = original;
+    }
+  });
+
   it('reaches Sources from the transport chip, where a phone cannot drag across panels', () => {
     vi.useFakeTimers();
     renderAuto('route');

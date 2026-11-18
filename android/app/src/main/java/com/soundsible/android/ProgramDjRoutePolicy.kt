@@ -14,13 +14,16 @@ internal object ProgramDjRoutePolicy {
     }
 
     /** The first index nothing playing or committed depends on. */
-    fun editableFrom(rows: List<RouteRow>, current: Int, floor: Int): Int {
+    fun editableFrom(rows: List<RouteRow>, current: Int, floor: Int): Int =
+        editableFrom(rows, current, floor, RouteRow::key, RouteRow::bridgeOwner)
+
+    inline fun <T> editableFrom(rows: List<T>, current: Int, floor: Int, key: (T) -> String, owner: (T) -> String?): Int {
         val protectedEnd = maxOf(current, floor)
-        val live = rows.subList(maxOf(0, current).coerceAtMost(rows.size), (protectedEnd + 1).coerceIn(0, rows.size))
-        val owners = live.mapNotNull { it.bridgeOwner }.toSet()
-        val locked = live.map { it.key }.toSet()
-        val last = rows.indices.lastOrNull { rows[it].key in locked || rows[it].key in owners || rows[it].bridgeOwner in owners } ?: -1
-        return maxOf(protectedEnd, last) + 1
+        val start = protectedEnd + 1
+        val owners = (maxOf(0, current) until minOf(start, rows.size)).mapNotNull { owner(rows[it]) }.toSet()
+        if (owners.isEmpty()) return start
+        val last = (start until rows.size).lastOrNull { key(rows[it]) in owners || owner(rows[it]) in owners }
+        return last?.plus(1) ?: start
     }
 
     /** The keys of `target`'s block in route order, or null for an unknown row. */
@@ -73,11 +76,12 @@ internal object ProgramDjRoutePolicy {
         return rows.filter { it.key == target || it.bridgeOwner == target }.map { it.key }
     }
 
-    /** How many future rows a repair sends: `limit`, extended so no bridge inside it leaves without its request. */
+    /** How many future rows a repair sends: at most `limit` (the engine reads no more), ending before any block that would cross it. */
     fun repairHorizon(future: List<RouteRow>, limit: Int): Int {
-        var count = minOf(limit, future.size)
-        future.take(count).mapNotNull { it.bridgeOwner }.forEach { owner ->
-            count = maxOf(count, future.indexOfFirst { it.key == owner } + 1)
+        val count = minOf(limit, future.size)
+        for (index in 0 until count) {
+            val owner = future[index].bridgeOwner ?: continue
+            if (future.indexOfFirst { it.key == owner } >= count) return index
         }
         return count
     }
@@ -107,4 +111,5 @@ internal object ProgramDjRoutePolicy {
         while (next < filler.size) result.add(filler[next++].key)
         return result
     }
+
 }

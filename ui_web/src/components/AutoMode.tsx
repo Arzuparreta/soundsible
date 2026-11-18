@@ -19,6 +19,7 @@ import {
 } from '../lib/autoModeLayout';
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { dropBeforeId, isNoopMove } from '../lib/dragReorder';
+import { editableFrom, routeRows } from '../lib/djRoute';
 import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
@@ -102,6 +103,11 @@ export function AutoMode(props: {
     && (!mobileListLayout() || props.panel === panel);
   const routeActive = () => panelActive('route');
   const upcoming = createActivityMemo(routeActive, () => state.playback.queue.slice(Math.max(0, state.playback.index + 1)), []);
+  const firstEditable = createActivityMemo(routeActive, () => {
+    const index = state.playback.index;
+    const floor = state.autoMode.transition.status === 'idle' ? index : index + 1;
+    return editableFrom(routeRows(state.playback.queue), index, floor);
+  }, 0);
   const staleSeams = createActivityMemo(routeActive, () => new Set(state.autoMode.staleSeams), new Set<string>());
   /** The rows that travel together. A bridge exists only to reach the song it
    * leads into, so aiming at either of them describes the same block. */
@@ -141,7 +147,7 @@ export function AutoMode(props: {
       { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
       { icon: menuIcons.changeSession(), label: t('musicExplorer.startDjFromSong'), onSelect: () => void actions.startDjFromTrack(track) },
       ...buildTrackMenu(track, { music: playerTrackMusic(track), inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor }),
-      ...(committed ? [] : [{
+      ...(state.playback.index + index + 1 < firstEditable() ? [] : [{
         icon: menuIcons.remove(), label: t('autoMode.route.remove'), danger: true,
         onSelect: () => actions.removeAutoRouteOccurrence(track.queueId),
       }]),

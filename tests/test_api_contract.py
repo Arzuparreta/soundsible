@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
+from flask import Blueprint, Flask, Response
+from flask.testing import EnvironBuilder
 
 from scripts import api_contract
 
@@ -55,3 +57,38 @@ def test_seed_analysis_may_be_partial_but_items_may_not():
     del body["items"][0]["analysis"]["analysed"]
     with pytest.raises(api_contract.ContractError, match="missing 'analysed'"):
         api_contract.validate_response("DjPlanResponse", body)
+
+
+@pytest.mark.parametrize("filename, remove, message", [
+    ("dj-place.json", lambda body: body["items"][0].pop("analysis"), "missing 'analysis'"),
+    ("dj-place.json", lambda body: body["items"][0].pop("transition"), "missing 'transition'"),
+    ("dj-place.json", lambda body: body.update(v=True), "expected 1"),
+    ("dj-transition.json", lambda body: body.pop("analysis"), "missing 'analysis'"),
+    ("dj-transition.json", lambda body: body["transition"].update(playback_rate=float("nan")), "expected number"),
+])
+def test_placement_and_refinement_require_valid_measurements(filename, remove, message):
+    body = json.loads((EXAMPLES / filename).read_text())
+    remove(body)
+    with pytest.raises(api_contract.ContractError, match=message):
+        api_contract.validate_response(DEFINITIONS[filename], body)
+
+
+@pytest.mark.parametrize("mimetype, message", [
+    ("text/html", "expected a JSON response"),
+    ("application/json", "DjPlacementResponse: missing 'v'"),
+])
+def test_contract_gate_uses_the_matched_request_even_with_an_environ_builder(mimetype, message):
+    app = Flask(__name__)
+    routes = Blueprint("discovery", __name__)
+
+    @routes.post("/api/discovery/music/dj-place")
+    def place():
+        return Response('{"placements":[]}', mimetype=mimetype)
+
+    app.register_blueprint(routes)
+    builder = EnvironBuilder(app, path="/api/discovery/music/dj-place?source=test", method="POST", json={})
+    try:
+        with pytest.raises(api_contract.ContractError, match=message):
+            app.test_client().open(builder)
+    finally:
+        builder.close()

@@ -15,18 +15,9 @@ from flask import jsonify, request
 
 from shared.dj_engine import (
     analysis_identity,
-    order_route,
     plan_transition,
 )
-from shared.dj.routes import (
-    REPAIR_ROUTE_CAP as _DJ_REPAIR_ROUTE_CAP,
-    choose_request_segment,
-    repair_route,
-)
 from shared.hardening import rate_limit
-from shared.listening_planner import (
-    auto_source_sequence,
-)
 from shared.providers import deezer
 
 from shared import music_candidates, music_plan
@@ -37,6 +28,11 @@ from .discovery_graph import _resolve_seed_yt_id
 from shared.dj.session import scoped as _dj_scoped
 from shared import work
 logger = logging.getLogger(__name__)
+
+
+def _owns_analysis_work() -> bool:
+    # Explicit work clients schedule their analysis through dj-work.
+    return not request.headers.get("X-Soundsible-Work")
 
 
 def _planner_artist_candidates(seed_artist: str, user_id: str | None, limit: int) -> list[dict]:
@@ -115,141 +111,13 @@ def discovery_music_dj_plan():
     """Build a short transition-aware route exclusively for Auto Mode."""
     data = request.get_json(silent=True) or {}
     if isinstance(data.get("sources"), list):
-        payload, status = dj_planning.build_music_set_route(data)
+        payload, status = dj_planning.build_music_set_route(data, schedule=_owns_analysis_work())
         return jsonify(payload), status
-    # Older clients may still send dj_profile; technique selection is automatic.
-    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
-    if not seed:
-        return jsonify({"error": "seed is required"}), 400
-    try:
-        requested_limit = min(8, max(3, int(data.get("limit") or 8)))
-    except (TypeError, ValueError):
-        return jsonify({"error": "limit must be numeric"}), 400
-    source_profile = "balanced"
-    base, status = _build_music_plan({
-        "intent": "auto_mode",
-        "profile": source_profile,
-        "seed": seed,
-        "context": data.get("context") or [],
-        "session_id": data.get("session_id"),
-        "segment_index": data.get("segment_index"),
-        "exclude": data.get("exclude") or [],
-        "limit": music_candidates.AUTO_ROUTER_LIMIT,
-    })
-    if status != 200:
-        return jsonify(base), status
-
-    api = music_candidates.engine_api()
-    lib = api["get_library"]()
-    metadata = getattr(lib, "metadata", None)
-    seed_analysis = dj_planning.item_analysis(metadata, seed, schedule=True)
-    candidates = []
-    for candidate in base.get("items") or []:
-        candidate_analysis = dj_planning.item_analysis(metadata, candidate)
-        semantic_fit = max(0.0, min(1.0, float(candidate.get("semantic_score") or 0.5)))
-        personal_fit = max(0.0, min(1.0, float(candidate.get("personal_score") or 0.5)))
-        candidate["score"] = max(
-            0.0,
-            min(
-                1.0,
-                semantic_fit * 0.5
-                + personal_fit * 0.15
-                + float(candidate.get("score") or 0.5) * 0.05,
-            ),
-        )
-        candidates.append((candidate, candidate_analysis))
-    requests = [
-        item
-        for raw in (data.get("requests") if isinstance(data.get("requests"), list) else [])
-        if isinstance(raw, dict) and (item := dj_planning.normalise_request(raw))
-    ]
-
-    route: list[dict] = []
-    previous = seed_analysis
-    remaining = list(candidates)
-    max_items = requested_limit
-    request_statuses: list[dict] = []
-    for requested in requests:
-        if len(route) >= max_items:
-            break
-        targets: list[dict]
-        if requested["kind"] == "artist":
-            from shared.user_context import current_user_id
-
-            targets = _planner_artist_candidates(requested["artist_name"], current_user_id(), 8)
-            for target in targets:
-                target.update({
-                    "request_id": requested["request_id"],
-                    "reason": f"Requested artist: {requested['artist_name']}",
-                    "reason_code": "dj_artist_request",
-                })
-        else:
-            targets = [requested]
-        measured_targets = [(target, dj_planning.item_analysis(metadata, target)) for target in targets]
-        candidate_segment = choose_request_segment(previous, remaining, measured_targets,
-                                                   max_starts=min(5, max_items - len(route)))
-        if candidate_segment is None:
-            request_statuses.append({
-                "id": requested["request_id"],
-                "kind": requested["kind"],
-                "label": requested["label"],
-                "status": "failed",
-                "eta_tracks": None,
-                "scheduled_position": None,
-                "failure_code": "unavailable",
-            })
-            continue
-        segment, requested_analysis = candidate_segment
-        route.extend(segment)
-        used = {str(item.get("recommendation_identity") or item.get("id")) for item in segment}
-        remaining = [
-            (item, analysis)
-            for item, analysis in remaining
-            if str(item.get("recommendation_identity") or item.get("id")) not in used
-        ]
-        previous = requested_analysis
-        eta = next(
-            (index + 1 for index, row in enumerate(route) if row.get("request_id") == requested["request_id"]),
-            None,
-        )
-        request_statuses.append({
-            "id": requested["request_id"],
-            "kind": requested["kind"],
-            "label": requested["label"],
-            "status": "planned",
-            "track_identity": next(
-                (row.get("recommendation_identity") for row in route if row.get("request_id") == requested["request_id"]),
-                None,
-            ),
-            "eta_tracks": eta,
-            "scheduled_position": eta + 1 if eta is not None else None,
-            "preferred_position": 2,
-            "max_position": 6,
-            "failure_code": None,
-        })
-    if len(route) < max_items:
-        route.extend(order_route(
-            previous,
-            remaining,
-            limit=max_items - len(route),
-            source_sequence=base.get("source_sequence") or auto_source_sequence(source_profile),
-            source_offset=len(route),
-        ))
-
-    # Only the accepted route is allowed to schedule local analysis. External
-    # previews are fetched by the existing browser runway prefetch, then refined
-    # shortly before their handoff.
-    for item in route:
-        dj_planning.item_analysis(metadata, item, schedule=True)
-
-    return jsonify({
-        **base,
-        "v": 4,
-        "source_profile": source_profile,
-        "seed_analysis": dj_planning.analysis_summary(seed_analysis),
-        "items": [dj_planning.wire_item(item) for item in route],
-        "requests": request_statuses,
-    })
+    payload, status = dj_planning.build_legacy_route(
+        data, build_plan=_build_music_plan, artist_candidates=_planner_artist_candidates,
+        schedule=_owns_analysis_work(),
+    )
+    return jsonify(payload), status
 
 
 @discovery_bp.route("/api/discovery/music/dj-place", methods=["POST"])
@@ -260,7 +128,7 @@ def discovery_music_dj_place():
     data = request.get_json(silent=True) or {}
     requests = data.get("requests")
     if requests is None:
-        body, status = dj_planning.place_one(data)
+        body, status = dj_planning.place_one(data, schedule=_owns_analysis_work())
         return jsonify(body), status
     if not isinstance(requests, list) or not requests:
         return jsonify({"error": "requests must be a non-empty list"}), 400
@@ -269,8 +137,9 @@ def discovery_music_dj_place():
         return jsonify({"error": "each request needs a unique requested_queue_id"}), 400
     route = list(data.get("route") or [])
     placements = []
+    schedule = _owns_analysis_work()
     for requested in requests:
-        result, status = dj_planning.place_one({**data, **requested, "route": route})
+        result, status = dj_planning.place_one({**data, **requested, "route": route}, schedule=schedule)
         if status != 200:
             return jsonify(result), status
         # Give bridge occurrences identities that the browser can reproduce.
@@ -300,54 +169,8 @@ def discovery_music_dj_repair():
     how a cue ends up belonging to the wrong song.
     """
     data = request.get_json(silent=True) or {}
-    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
-    raw_route = data.get("route") if isinstance(data.get("route"), list) else []
-    if not seed or not raw_route:
-        return jsonify({"error": "seed and route are required"}), 400
-    # Older clients may still send dj_profile; technique selection is automatic.
-    raw_limit = data.get("limit")
-    if raw_limit is not None and not isinstance(raw_limit, int):
-        return jsonify({"error": "limit must be an integer"}), 400
-
-    api = music_candidates.engine_api()
-    lib = api["get_library"]()
-    metadata = getattr(lib, "metadata", None)
-
-    refs = [raw for raw in raw_route[:_DJ_REPAIR_ROUTE_CAP] if isinstance(raw, dict)]
-    parsed: list[tuple[bool, dict, dict]] = []
-    for raw in refs:
-        pinned = str(raw.get("route_kind") or "generated").strip() == "user"
-        item = dj_planning.repair_anchor(raw) if pinned else dj_planning.music_set_item(raw, source_id="route", label="Route")
-        if not item:
-            continue
-        item["queue_id"] = str(raw.get("queue_id") or "")
-        parsed.append((pinned, item, dj_planning.item_analysis(metadata, item)))
-    if not parsed:
-        return jsonify({"error": "route has nothing to repair"}), 400
-
-    anchors = [(item, analysis) for pinned, item, analysis in parsed if pinned]
-    spares = [(item, analysis) for pinned, item, analysis in parsed if not pinned]
-    occupied = dj_planning.occupied_keys(data, [item for item, _ in (*anchors, *spares)])
-    extra_pool = dj_planning.place_bridge_pool(metadata, data, occupied)
-    seed_analysis = dj_planning.item_analysis(metadata, seed, schedule=True)
-    target = min(_DJ_REPAIR_ROUTE_CAP, max(len(refs), int(raw_limit or len(refs))))
-    built = repair_route(seed_analysis, parsed, extra_pool, target=target)
-
-    for row in built:
-        row["queue_id"] = row.get("queue_id") or None
-        dj_planning.item_analysis(metadata, row, schedule=True)
-
-    kept = {row["queue_id"] for row in built if row["queue_id"]}
-    return jsonify({
-        "v": 1,
-        "seed_analysis": dj_planning.analysis_summary(seed_analysis),
-        "items": [dj_planning.wire_item(row) for row in built],
-        "dropped": [
-            queue_id for raw in refs
-            if (queue_id := str(raw.get("queue_id") or "")) and queue_id not in kept
-        ],
-        "degraded": any(not analysis.get("analysed") for _, analysis in anchors),
-    }), 200
+    body, status = dj_planning.build_repair(data, schedule=_owns_analysis_work())
+    return jsonify(body), status
 
 
 @discovery_bp.route("/api/discovery/music/dj-transition", methods=["POST"])
@@ -369,8 +192,9 @@ def discovery_music_dj_transition():
     if not outgoing or not incoming:
         return jsonify({"error": "from and to are required"}), 400
 
+    schedule = _owns_analysis_work()
     demand = work.current()
-    if demand is not None and not request.headers.get("X-Soundsible-Work"):
+    if demand is not None and schedule:
         interested = getattr(demand, "tracks", {})
         interested.update({analysis_identity(item): dict(item) for item in (outgoing, incoming)})
         demand.tracks = interested
@@ -379,8 +203,8 @@ def discovery_music_dj_transition():
     lib = api["get_library"]()
     metadata = getattr(lib, "metadata", None)
 
-    out_analysis, out_ready = dj_planning.transition_analysis(metadata, outgoing)
-    in_analysis, in_ready = dj_planning.transition_analysis(metadata, incoming)
+    out_analysis, out_ready = dj_planning.transition_analysis(metadata, outgoing, schedule=schedule)
+    in_analysis, in_ready = dj_planning.transition_analysis(metadata, incoming, schedule=schedule)
     return jsonify({
         "transition": plan_transition(out_analysis, in_analysis),
         "analysis": {"from": dj_planning.analysis_summary(out_analysis), "to": dj_planning.analysis_summary(in_analysis)},
