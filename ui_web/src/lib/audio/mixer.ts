@@ -3,6 +3,7 @@ import { diagnosticLoad, diagnosticPause, diagnosticSource, recordPlaybackDiagno
 import type { DiagnosticFacts } from "../playbackDiagnostics";
 import type { DeckEffects, ProgramMixSnapshot, LiveTransitionPlan, MixPhase, MixCancelReason, ProgramTransportOrigin, ProgramTransportEvent, MixCallbacks, ActiveMix } from "./contracts";
 import { MediaClockHealth } from './mediaClock';
+import { planBarSeconds } from '../djCue';
 import { MAX_STRETCH, RATE_STEP, clampDeckSpeed, planDeckRates } from '../djRates';
 export interface MixerPorts {
   fixedTempo: boolean;
@@ -29,7 +30,7 @@ export interface MixerPorts {
   stagedUrl: string;
   notifySourcesSettled: () => void;
   outputRecovering: boolean;
-  playbackRequested: boolean;
+  readonly playbackRequested: boolean;
   resumeContext: () => void;
   pendingDetach: Set<HTMLAudioElement>;
   setDeckLevel: (index: number, linear: number, ramp?: boolean) => void;
@@ -718,7 +719,12 @@ export function createMixer(ports: MixerPorts, lifetime: RuntimeLifetime) {
         reason: fallbackReason, technique, requestedTechnique: plan.technique });
       // Overlap and preroll are planned in outgoing media seconds; the gain
       // envelope runs on the output clock.
-      const overlap = manual ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4)) : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6) / outRate;
+      let overlap = manual ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4)) : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6) / outRate;
+      // An older engine or saved route can still supply a held plan. Use the
+      // structural fade's eight-bar budget when we have to downgrade it here.
+      if (ports.fixedTempo && technique !== plan.technique) {
+        overlap = Math.min(overlap, Math.max(4, 8 * (planBarSeconds(plan.sync) || 2)));
+      }
       const inCue = Math.max(0, Number(plan.in_cue) || 0);
       const preroll = manual ? 0 : Math.min(MAX_PREROLL, inCue / rate);
       const startPosition = Math.max(0, inCue - preroll * rate);

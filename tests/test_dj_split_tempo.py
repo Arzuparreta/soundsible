@@ -9,19 +9,19 @@ import pytest
 
 from shared.dj import timing
 from shared.dj.timing import (MAX_STRETCH, RATE_RAMP_END_LEAD, RATE_RAMP_SECONDS, RATE_STEP,
-                              deck_rates, rate_fits, split_rates)
+                              deck_rates, rate_fits, rate_mode)
 from shared.dj_engine import plan_transition
 from test_dj_sections import measured
 
 
 def split_plan(out, inc):
-    with split_rates(True):
+    with rate_mode('split'):
         return plan_transition(out, inc)
 
 
 @pytest.mark.parametrize('relation', [.857143, .9, .96, 1.0, 1.04, 1.1, 1.166667])
 def test_shared_speeds_hold_the_relation_and_change_each_deck_by_the_same_amount(relation):
-    with split_rates(True):
+    with rate_mode('split'):
         out, inc = deck_rates(relation)
     assert inc / out == pytest.approx(relation, rel=1e-12)
     assert abs(1 - out) == pytest.approx(abs(1 - inc), abs=1e-12)
@@ -31,7 +31,7 @@ def test_shared_speeds_hold_the_relation_and_change_each_deck_by_the_same_amount
 
 
 def test_the_example_pair_meets_at_129_bpm_and_neither_deck_leaves_the_range():
-    with split_rates(True):
+    with rate_mode('split'):
         out, inc = deck_rates(120 / 140)
     assert 120 * out == pytest.approx(140 * inc)
     assert 120 * out == pytest.approx(129.23, abs=.01)
@@ -41,7 +41,7 @@ def test_the_example_pair_meets_at_129_bpm_and_neither_deck_leaves_the_range():
 def test_split_range_keeps_one_speed_step_for_phase_riding():
     limit = MAX_STRETCH - RATE_STEP
     edge = (1 - limit) / (1 + limit)
-    with split_rates(True):
+    with rate_mode('split'):
         assert deck_rates(edge * 1.0001) is not None
         assert deck_rates(edge * .9999) is None
         assert deck_rates((1 + limit) / (1 - limit) * 1.0001) is None
@@ -75,11 +75,41 @@ def test_a_pair_beyond_one_deck_beatmatches_with_both_decks(bpm):
     assert plan['out_rate_ramp'] == {'lead_seconds': RATE_RAMP_SECONDS + RATE_RAMP_END_LEAD,
                                      'seconds': RATE_RAMP_SECONDS}
     assert plan['out_cue'] >= plan['out_rate_ramp']['lead_seconds']
-    with split_rates(True):
+    with rate_mode('split'):
         assert rate_fits(plan) and timing.beatmatch_fits(plan, out, inc)
     # The same plan is never executable by a player moving one deck alone.
     if abs(1 - plan['playback_rate']) > MAX_STRETCH:
         assert not rate_fits({k: v for k, v in plan.items() if k not in {'out_playback_rate', 'out_rate_ramp'}})
+
+
+def test_fixed_tempo_uses_an_eight_bar_plan_even_for_equal_tempi():
+    out = measured()
+    for incoming in (measured(), measured(bpm=132)):
+        with rate_mode('fixed'):
+            fixed = plan_transition(out, incoming)
+        assert fixed['technique'] == 'echo_cut'
+        assert fixed['echo_delay_seconds'] == pytest.approx(.5)
+        assert fixed['overlap_seconds'] <= 16
+        assert fixed['playback_rate'] == 1
+        assert fixed['score'] == 0
+        assert 'out_rate_ramp' not in fixed and 'out_playback_rate' not in fixed
+    assert plan_transition(out, out)['technique'] in timing.BEATMATCH_TECHNIQUES
+
+
+def test_fixed_tempo_routes_do_not_seek_bridges_or_favour_unmeasured_alignment():
+    from shared.dj.routes import order_route, route_to_request
+
+    out = measured()
+    measured_candidate = ({'id': 'known', 'score': 0.9, 'semantic_score': 0.9}, measured())
+    unmeasured_candidate = ({'id': 'cold', 'score': 0.6, 'semantic_score': 0.6}, {'analysed': False})
+
+    def unavailable_bridges():
+        raise AssertionError('fixed tempo should not search for a beatmatched bridge')
+        yield
+
+    with rate_mode('fixed'):
+        assert route_to_request(out, unavailable_bridges(), measured_candidate)[0]['id'] == 'known'
+        assert order_route(out, [unmeasured_candidate, measured_candidate], limit=1)[0]['id'] == 'known'
 
 
 def test_identical_tempi_never_move_the_outgoing_deck():
@@ -117,7 +147,7 @@ def test_without_room_for_the_ramp_only_the_incoming_deck_moves():
 ])
 def test_admission_rejects_deck_speeds_or_ramps_the_players_cannot_execute(change):
     plan = split_plan(measured(), measured(bpm=132))
-    with split_rates(True):
+    with rate_mode('split'):
         assert rate_fits(plan)
         assert not rate_fits({**plan, **change})
 
@@ -147,7 +177,14 @@ def test_measured_aac_pair_is_split_only_for_clients_that_ask(tmp_path):
         legacy = client.post('/api/discovery/music/dj-transition', json=pair).get_json()
         split = client.post('/api/discovery/music/dj-transition', json=pair,
                             headers={'X-Soundsible-Dj-Rates': 'split'}).get_json()
-    assert legacy['measured'] and split['measured']
+        fixed = client.post('/api/discovery/music/dj-transition', json=pair,
+                            headers={'X-Soundsible-Dj-Rates': 'fixed'}).get_json()
+        after = client.post('/api/discovery/music/dj-transition', json=pair).get_json()
+    assert legacy['measured'] and split['measured'] and fixed['measured']
+    assert fixed['transition']['playback_rate'] == 1
+    assert fixed['transition']['technique'] not in timing.BEATMATCH_TECHNIQUES
+    assert fixed['transition']['overlap_seconds'] <= 16
+    assert after['transition'] == legacy['transition']
     assert legacy['transition']['technique'] not in timing.BEATMATCH_TECHNIQUES
     assert 'out_playback_rate' not in legacy['transition']
     plan = split['transition']

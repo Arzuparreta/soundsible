@@ -1990,10 +1990,58 @@ describe('CarPlay interruption recovery', () => {
     handler();
     hide();
     reveal();
-    audioService.unlockAudio();
+    window.dispatchEvent(new Event('pageshow'));
     expect(context.resume).toHaveBeenCalledTimes(1);
     expect(deck.play).toHaveBeenCalledTimes(starts);
     expect(deck.paused).toBe(false);
+    audioService.stop();
+  });
+
+  it('lets a foreground gesture promote a passive resume without restarting the source', async () => {
+    const { audioService, context, deck } = await setup();
+    const handler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
+    context.state = 'interrupted';
+    context.resume.mockClear();
+    context.resume.mockImplementation(() => new Promise<void>(() => {}));
+    const starts = deck.play.mock.calls.length;
+    handler();
+    expect(context.resume).toHaveBeenCalledOnce();
+    audioService.unlockAudio();
+    audioService.unlockAudio();
+    handler();
+    expect(context.resume).toHaveBeenCalledTimes(2);
+    expect(deck.play).toHaveBeenCalledTimes(starts);
+    expect(deck.paused).toBe(false);
+    audioService.stop();
+  });
+
+  it.each(['selection', 'staged', 'retry'] as const)('starts a new context request for %s after Pause', async (action) => {
+    const { audioService, context, deck } = await setup();
+    const handler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
+    const next = created.find(element => element !== deck)!;
+    context.state = 'suspended';
+    context.resume.mockClear();
+    context.resume.mockImplementationOnce(() => new Promise<void>(() => {}));
+    handler();
+    audioService.pause('media_session');
+
+    if (action === 'staged') audioService.stage('/next', 1);
+    if (action === 'retry') next.readyState = 0;
+    const started = action === 'selection' ? audioService.load('/next', 1)
+      : action === 'staged' ? audioService.takeStaged('/next', 1)
+      : audioService.recover('/next', 0, 1, { requestPlayback: true });
+    expect(started).not.toBeNull();
+    expect(context.resume).toHaveBeenCalledTimes(2);
+    if (action === 'retry') {
+      // Context was resumed in the interaction turn, before this event.
+      expect(next.src).toBe('/next');
+      expect(next.paused).toBe(true);
+      next.readyState = 4;
+      next.dispatchEvent(new Event('loadedmetadata'));
+    }
+    await started;
+    expect(context.resume).toHaveBeenCalledTimes(2);
+    expect((action === 'selection' ? deck : next).paused).toBe(false);
     audioService.stop();
   });
 
@@ -2365,7 +2413,7 @@ describe('shared tempo across both decks', () => {
   };
   const inSpeed = split.playback_rate * split.out_playback_rate;
 
-  async function armedAt(position: number, overrides: Partial<typeof split> = {}) {
+  async function armedAt(position: number, overrides: Partial<import('./audio').LiveTransitionPlan> = {}) {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
     module.audioService.unlockAudio();
@@ -2421,6 +2469,30 @@ describe('shared tempo across both decks', () => {
     await advancePair(outgoing, incoming, 12_000);
     expect(handlers.onComplete).toHaveBeenCalledOnce();
     expect(incoming.playbackRate).toBe(1);
+  });
+
+  it('limits old long blends to the measured eight-bar fallback on Apple mobile', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+    const { audioService, outgoing, incoming, handlers } = await armedAt(80, {
+      technique: 'long_blend',
+      overlap_seconds: 48,
+      sync: { out_bar_seconds: 2.5 },
+    });
+    await playOut(outgoing, 108.5);
+    incoming.currentTime = 2 - (110 - outgoing.currentTime);
+    await advancePair(outgoing, incoming, 5_000);
+    expect(audioService.programMixSnapshot().technique).toBe('structural_fade');
+    await advancePair(outgoing, incoming, 17_000);
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an echo cut at normal speed on Apple mobile', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+    const { audioService, outgoing, incoming } = await armedAt(80, {
+      technique: 'echo_cut', playback_rate: 1, out_playback_rate: 1,
+    });
+    expect(audioService.programMixSnapshot().technique).toBe('echo_cut');
+    expect([outgoing.playbackRate, incoming.playbackRate]).toEqual([1, 1]);
   });
 
   it('holds the ramp while the listener pauses, then resumes it from the same speed', async () => {

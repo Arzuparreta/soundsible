@@ -25,6 +25,7 @@ from shared.discovery_intelligence import (
     build_music_recommendations,
     rank_recommendation_rows,
 )
+from shared.dj.timing import fixed_tempo
 from shared.dj_engine import (
     analyse_audio,
     analysis_identity,
@@ -1714,7 +1715,7 @@ def _dj_place_one(data: dict) -> tuple[dict, int]:
     ) if before_queue_id else None
     if before_queue_id and fixed_index is None:
         return ({"error": "before_queue_id is not in the editable route"}), 409
-    bridge_pool = [] if fixed_index is not None else _dj_place_bridge_pool(metadata, data, occupied)
+    bridge_pool = [] if fixed_index is not None or fixed_tempo() else _dj_place_bridge_pool(metadata, data, occupied)
     seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
 
     placement = choose_placement(seed_analysis, route, (target, target_analysis), bridge_pool,

@@ -12,8 +12,8 @@ export interface GraphPorts {
   }>;
   decks: () => HTMLAudioElement[];
   configurePlaybackSession: () => void;
-  reconcilePlatformPlayback: () => void;
-  playbackRequested: boolean;
+  reconcilePlatformPlayback: (interactive?: boolean) => void;
+  readonly playbackRequested: boolean;
   unlockDecks: () => void;
   outputRecovering: boolean;
   resetClockSample: () => void;
@@ -103,7 +103,7 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
   function unlockAudio(): boolean {
     ports.configurePlaybackSession();
     if (graphState !== 'untested') {
-      ports.reconcilePlatformPlayback();
+      ports.reconcilePlatformPlayback(true);
       if (!ports.playbackRequested) return graphState === 'ready';
       ports.unlockDecks();
       return graphState === 'ready';
@@ -230,26 +230,26 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
       /* a context that refuses a one-sample buffer is caught by the probe */
     }
   }
-  let cancelPendingResume: (() => void) | null = null;
-  function resumeContext(newPlaybackIntent = false): void {
+  let pendingResume: { interactive: boolean; finish: (error?: string) => void } | null = null;
+  function cancelContextResume(): void {
+    pendingResume?.finish('resume_cancelled');
+  }
+  function resumeContext(interactive = false): void {
     const context = audioContext;
     if (!ports.playbackRequested || ports.outputRecovering || !context || context.state === 'running' || context.state === 'closed') return;
-    if (cancelPendingResume && !newPlaybackIntent) return;
-    // A new Play after Pause gets its own activation turn and deadline.
-    // A pending automatic resume from before Pause may never have activated output.
-    cancelPendingResume?.();
-    const cancel = () => {
-      lifetime.clearTimeout(deadline);
-      cancelPendingResume = null;
-    };
+    if (pendingResume && (!interactive || pendingResume.interactive)) return;
+    // Give an interaction its own activation turn when a passive resume is
+    // pending. Coalesce more gestures until that interactive attempt settles.
+    pendingResume?.finish('resume_superseded');
     const finish = (error?: string) => {
-      if (cancelPendingResume !== cancel) return;
-      cancel();
+      if (pendingResume?.finish !== finish) return;
+      pendingResume = null;
+      lifetime.clearTimeout(deadline);
       recordPlaybackDiagnostic('context.resume_result', { state: context.state, ...(error && { error }) });
     };
     const deadline = lifetime.setTimeout(() => finish('resume_timeout'), 5000);
-    cancelPendingResume = cancel;
-    recordPlaybackDiagnostic('context.resume_request', { state: context.state });
+    pendingResume = { interactive, finish };
+    recordPlaybackDiagnostic('context.resume_request', { state: context.state, origin: interactive ? 'interaction' : 'automatic' });
     try {
       // Call in the activation turn. Statechange can fire before settlement.
       void context.resume().then(lifetime.guard(() => finish()), lifetime.guard(() => finish('resume_failed')));
@@ -292,7 +292,7 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
   }
   function discardGraph(): void {
     const context = audioContext;
-    cancelPendingResume?.();
+    cancelContextResume();
     const lostBroadcast = ports.broadcastCapture?.kind === 'program';
     ports.releaseBroadcastCapture();
     audioContext = null;
@@ -470,6 +470,7 @@ export function createGraph(ports: GraphPorts, lifetime: RuntimeLifetime) {
     graphReady,
     primeAudioSession,
     resumeContext,
+    cancelContextResume,
     diagnosticOutputTiming,
     get programOutput() {
       return programOutput;

@@ -45,3 +45,17 @@ it('identifies DJ requests on plain HTTP without randomUUID', async () => {
   const headers = fetcher.mock.calls[0][1].headers as Record<string, string>;
   expect(headers['X-Soundsible-Work-Request']).toMatch(/^[a-f0-9-]{36}$/);
 });
+
+it.each([
+  [{ userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 }, 'fixed'],
+  [{ userAgent: 'Macintosh', platform: 'MacIntel', maxTouchPoints: 5 }, 'fixed'],
+  [{ userAgent: 'Macintosh', platform: 'MacIntel', maxTouchPoints: 0 }, 'split'],
+])('advertises the DJ renderer capability for %j', async (browser, mode) => {
+  vi.stubGlobal('navigator', browser);
+  const fetchMock = vi.fn(async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } }));
+  vi.stubGlobal('fetch', fetchMock);
+  await request('/api/discovery/music/dj-transition', { method: 'POST', body: {} });
+  expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+    headers: expect.objectContaining({ 'X-Soundsible-Dj-Rates': mode }),
+  }));
+});

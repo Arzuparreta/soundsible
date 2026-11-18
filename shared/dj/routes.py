@@ -9,7 +9,7 @@ from typing import Any
 
 from .contracts import AnalysisInput, Candidate
 from .transitions import plan_transition
-from .timing import tempo_coordinate, beatmatch_fits
+from .timing import tempo_coordinate, beatmatch_fits, fixed_tempo
 
 def order_continuous_route(
     current_analysis: AnalysisInput,
@@ -117,6 +117,7 @@ def order_route(
     route: list[dict[str, Any]] = []
     previous = current_analysis
     sequence = tuple(source_sequence or ())
+    rank_alignment = not fixed_tempo()
     while remaining and len(route) < limit:
         preferred = sequence[(source_offset + len(route)) % len(sequence)] if sequence else None
         eligible = (
@@ -132,7 +133,7 @@ def order_route(
             relevance = max(0.0, min(1.0, float(item.get("score") or 0.5)))
             transition_quality = (
                 float(transition["score"])
-                if previous.get("analysed", True) and analysis.get("analysed", True)
+                if rank_alignment and previous.get("analysed", True) and analysis.get("analysed", True)
                 else 0.62
             )
             semantic = max(0.0, min(1.0, float(item.get("semantic_score") or 0.5)))
@@ -157,9 +158,12 @@ def route_to_request(
     The currently playing song is position one. A bridge is admitted only when
     it materially improves safety; otherwise the explicit request is next.
     """
-    bridge_rows = list(bridges)[:12]
     requested_item, requested_analysis = requested
-    best_score = float(plan_transition(current_analysis, requested_analysis)["score"])
+    direct = plan_transition(current_analysis, requested_analysis)
+    if fixed_tempo():
+        return [{**requested_item, "analysis": dict(requested_analysis), "transition": direct}]
+    bridge_rows = list(bridges)[:12]
+    best_score = float(direct["score"])
     best: tuple[tuple[dict[str, Any], Mapping[str, Any]], ...] = (requested,)
     max_bridges = max(0, min(4, max_starts - 1))
     # Beam search bounds the four-bridge case while retaining musically strong

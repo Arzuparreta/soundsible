@@ -65,6 +65,9 @@ function createAudioRuntime() {
     get resumeContext() {
       return graph.resumeContext;
     },
+    get cancelContextResume() {
+      return graph.cancelContextResume;
+    },
     get tick() {
       return mixer.tick;
     },
@@ -99,9 +102,6 @@ function createAudioRuntime() {
     },
     get playbackRequested() {
       return transport.playbackRequested;
-    },
-    set playbackRequested(value) {
-      transport.playbackRequested = value;
     },
     get unlockDecks() {
       return transport.unlockDecks;
@@ -227,9 +227,6 @@ function createAudioRuntime() {
     },
     get playbackRequested() {
       return transport.playbackRequested;
-    },
-    set playbackRequested(value) {
-      transport.playbackRequested = value;
     },
     get resumeContext() {
       return graph.resumeContext;

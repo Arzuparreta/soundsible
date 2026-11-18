@@ -13,7 +13,7 @@ from .timing import (
     MAX_STRETCH as _MAX_STRETCH,
     BEATMATCH_TECHNIQUES, PHASE_TOLERANCE_SECONDS, RATE_RAMP_END_LEAD, RATE_RAMP_SECONDS, RATE_STEP,
     deck_rates, deviation, local_period as _local_period, projected_bar, pulse_relations,
-    rate_fits as _rate_fits, metric_sync, split_enabled,
+    rate_fits as _rate_fits, metric_sync, split_enabled, fixed_tempo,
 )
 
 _TEMPO_SCORE_RANGE = 0.08
@@ -200,7 +200,8 @@ def plan_transition(outgoing: AnalysisInput, incoming: AnalysisInput) -> Transit
     steady = all(float(analysis.get("bpm") or 0) > 0
                  and float(analysis.get("tempo_confidence") or 0) > 0.6
                  for analysis in (outgoing, incoming))
-    if steady:
+    # Held mixes can write tempo corrections even when the nominal rate is 1×.
+    if steady and not fixed_tempo():
         technique = "bass_swap" if score >= 0.72 else "filter_blend"
         plan = _transition_plan(outgoing, incoming, technique, 16, score, confidence)
         if _rate_fits(plan):

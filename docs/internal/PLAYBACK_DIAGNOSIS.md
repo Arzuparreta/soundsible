@@ -20,24 +20,29 @@ This was a new occurrence of the rate-write failure measured in
 [DJ verification](dj/VERIFICATION.md). The measured lost progress is
 3.184 s. A single RMS reading cannot give the exact audible duration.
 
-On Apple mobile browsers the mixer now applies the existing structural
-fade fallback before arming a rate-dependent plan. It plays both decks at
-1× for the entire audio runtime because a mix armed in the foreground
-can be underway when the screen locks. Already neutral techniques such
-as echo cuts retain their own execution. This trades tempo alignment for
-steady playback on iOS and iPadOS, including iPad desktop user agents.
-Other runtimes still start with variable-rate support and can disable it
-on measured failure. Mix planning remains shared with Android.
+Apple mobile browsers now advertise fixed tempo to the shared planner.
+The planner uses its eight-bar echo cuts and fades, keeps recommendation
+relevance in the route, and avoids searching for beatmatched bridges.
+A held plan from an older server or route still falls back to a
+structural fade of at most eight bars. Both decks play at 1× for the
+entire audio runtime because a mix armed in the foreground can be
+underway when the screen locks. This trades tempo alignment for steady
+playback on iOS and iPadOS, including iPad desktop user agents. Other
+runtimes start with variable-rate support and can disable it on measured
+failure.
 
 In another capture, the context requested an automatic resume at
 12:55:06.129 while suspended. Media Session Pause followed at 12:55:06.832
 and Play at 12:55:10.681. The source started immediately, but Play issued no
 fresh context request. The earlier attempt timed out at 12:55:11.130.
 The context stayed suspended with the source advancing, until visibility
-returned and the next resume succeeded at 12:55:22.142. A Play that starts
-a new playback intent now supersedes the earlier pending request in the
-same activation turn. An obsolete deadline or promise settlement cannot
-clear the new request or restart a paused source.
+returned and the next resume succeeded at 12:55:22.142. A Pause or Stop
+now retires the outstanding context request. Play, a new selection, a
+prepared handoff after Pause and explicit Retry can request context
+activation immediately. Retry requests it before waiting for source
+metadata. A foreground gesture can replace a pending passive request.
+An obsolete deadline or promise settlement cannot clear the new
+request or restart a paused source.
 
 Two standalone captures began at 12:52:59 and 12:53:26 and played the same
 library track. Both reached a running context and positive deck RMS, at
@@ -56,8 +61,9 @@ at the browser destination and cannot measure samples played by the car.
 
 The fixed-tempo fallback and fresh Play have deterministic regressions.
 The browser regression plays real PCM and checks uninterrupted outgoing
-clicks through the former ramp, both decks at 1× and the completed
-handoff. The next drive can verify physical output and provide the first
+clicks through the former ramp and both decks at 1×. Chromium completes
+the handoff with the same fixture. The next drive can verify physical
+output and provide the first
 capture of the reported distortion with the added timing fields.
 
 ## November 6: desktop songs start fast, then drop out and settle

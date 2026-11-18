@@ -332,13 +332,13 @@ def test_shared_metric_vectors_are_the_actual_server_plans():
     import json
     from pathlib import Path
     from shared.dj_engine import plan_transition
-    from shared.dj.timing import split_rates
+    from shared.dj.timing import rate_mode
     cases = json.loads((Path(__file__).resolve().parents[1] / 'shared/contracts/dj_metric_plans.json').read_text())
     assert {case['transition']['sync']['alignment'] for case in cases} == {'bars', 'beats'}
     assert any(case.get('split') for case in cases)
     for case in cases:
         # `split`: planned for players that move both decks to a shared tempo.
-        with split_rates(case.get('split', False)):
+        with rate_mode('split' if case.get('split') else None):
             assert plan_transition(metric_analysis(**case['outgoing']), metric_analysis(**case['incoming'])) == case['transition'], case['name']
 
 
