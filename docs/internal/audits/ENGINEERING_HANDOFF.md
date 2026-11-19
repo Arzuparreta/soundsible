@@ -363,11 +363,9 @@ chunk from these:
    export no longer duplicates memory, snapshots, fingerprints and exports still
    walk the entire library on every save. The search index
    adds a sorted pass to saves that change search fields or
-   order; tracking in-memory mutations would allow removing that pass and the
-   per-query fingerprint. Batching exports: see the decision above. In ODST the
-   block serialization and the removal of the second model are done;
-   still pending are avoiding walking all the bytes to keep podcasts and
-   the ownership/coordination of the two writers.
+   order; its per-query fingerprint still walks the model. Batching exports:
+   see the decision above. Library HTTP reads and ODST rereads are closed:
+   see "Committed library reads (2026-11-19)" below.
 3. Controlled baseline of listening and concurrent load, client and server:
    closed/paused/NORMAL/DJ/Live, cold/warm, visible/hidden, long sessions,
    latencies, queues, CPU and memory. Still pending; synthetic benchmarks do not
@@ -470,3 +468,22 @@ candidates, re-evaluable recovery and visual execution outside the hub. It conne
 real cancellation of acquisitions to the process budget. The xhigh
 reviews and their fixes are recorded there. It does not enable promotion of
 previews without an equivalence proof and does not claim physical/Pi acceptance.
+
+
+## Committed library reads (2026-11-19)
+
+Closes the read side of pending item 2. Contract, measurements and limits in
+[committed library reads](../performance/committed-library-reads.md).
+
+| Item | Status |
+| --- | --- |
+| Conditional `GET /api/library` fingerprinting the whole model | Closed: answers from the committed public source (one SQLite row) |
+| Two full fingerprints per successful delta | Closed: checks only the rows and headers it sends against committed hashes |
+| ODST reading all of `library.json` (digest, then podcasts) on each download commit | Closed for its own publications: publication-lock generation plus file signature |
+| Coordination of the ODST and Station writers of `<music>/library.json` | Closed: every hold of the shared publication lock advances a generation the pool checks |
+| Search per-query fingerprint, save-side fingerprints, track-edit fingerprints, exports | Still walk the library; unchanged |
+
+Contract change: a conditional request or delta describes the committed
+library. A writer's unsaved in-memory edit no longer makes a client holding
+the committed revision download the full library; it is never labelled with
+a committed revision either. Full responses still serve the live model.

@@ -27,12 +27,15 @@ A delta base retains only the canonical proof, annotation tokens/cursors and
 header hashes in the existing disposable history database. On a supported
 request, the route:
 
-1. Verifies the mutable in-memory model against its committed fingerprint.
+1. Reads the committed public source; it no longer fingerprints the live model
+   (see [committed library reads](committed-library-reads.md)).
 2. Loads bounded changed-key sets since the client's base and resolves current
-   canonical positions. Coalescing preserves the first operation, so a song added
-   and deleted between polls does not produce an invalid removal.
-3. Copies only affected tracks and detached headers. A second fingerprint uses
-   those exact copies, guarding edits during copying and edits not yet saved.
+   canonical positions with their committed row hashes. Coalescing preserves
+   the first operation, so a song added and deleted between polls does not
+   produce an invalid removal.
+3. Copies only affected tracks and detached headers, and checks each copied
+   row against its committed row hash and the headers against the committed
+   header hash. Edits during copying and edits not yet saved fall back.
 4. Annotates only those tracks, rechecks all source cursors, and returns a delta
    only if it is provably smaller than the complete JSON representation.
 
@@ -76,10 +79,10 @@ unsupported models cannot establish a valid optimization proof.
 - The canonical current hash index grows with the library, on disk, rather than
   holding additional metadata in RAM. Normal SQLite/page-cache behavior still
   applies; these bounds do not describe total process or operating-system RAM.
-- Requests still fingerprint the model twice on successful changed responses.
-  They are **not O(number of changed songs)** overall. Removing these scans
-  requires controlling all in-memory mutations. SQL library reloads can still
-  materialize the model when another writer changed it.
+- Requests no longer fingerprint the model: a conditional request reads one
+  committed row and a delta hashes only the rows and headers it sends
+  ([committed library reads](committed-library-reads.md)). SQL library
+  reloads can still materialize the model when another writer changed it.
 - Headers and optional ID order are copied when required; very large playlists
   or order changes therefore need memory proportional to those response fields.
   Canonical saves now pay for hashing and maintaining the proof/index. This is a

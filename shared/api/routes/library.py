@@ -142,6 +142,35 @@ def _annotation_revisions(artwork):
     return artwork.public_revision(), LoudnessStore().public_revision()
 
 
+def _held_revision(lib, user_id, dependencies):
+    """The cached revision that the conditional request already holds, or None."""
+    from shared.api import library_incremental
+    from shared.api.library_revision import fingerprint, validator_key, validators
+    from shared.library_fingerprint import record, recorded
+
+    # A client holding the committed revision is current, whatever a writer
+    # is doing to the live model right now: one SQLite row instead of a pass
+    # over the library.
+    source = library_incremental.committed_source(lib)
+    committed = source["fingerprint"] if source else None
+    candidates = [committed] if committed else []
+    # The live model's own revision, served when it differed from the
+    # committed source (unsaved edits, or a reload that normalized values).
+    # Skip that pass when this model is already known to be the committed
+    # source: it would only repeat the key above.
+    if committed is None or recorded(lib.metadata) != committed:
+        current = fingerprint(lib.metadata)
+        if current == committed:
+            record(lib.metadata, current)
+        else:
+            candidates.append(current)
+    for value in candidates:
+        cached = validators.get(validator_key(user_id, value, dependencies))
+        if cached and request.if_none_match.contains_weak(cached):
+            return cached
+    return None
+
+
 @library_bp.route("/api/library", methods=["GET"])
 def get_library():
     api = _get_api()
@@ -152,34 +181,32 @@ def get_library():
     if not lib.metadata:
         return jsonify({"error": "Library not loaded"}), 404
 
-    from shared.api.library_revision import fingerprint, validators
+    from shared.api.library_revision import fingerprint, validator_key, validators
+    from shared.api import library_incremental
     from shared.artwork import artwork_store
+    from shared.library_fingerprint import record
     from shared.user_context import current_user_id
     from flask import Response
 
     artwork = artwork_store()
     user_id = current_user_id() or ""
     dependencies = None
-    source_fingerprint = None
     try:
         # Empty manifests have no annotation dependencies or lookup cost.
         dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
         if request.if_none_match:
-            source_fingerprint = fingerprint(lib.metadata)
-            key = sha256(repr((user_id, source_fingerprint, dependencies)).encode()).hexdigest()
-            cached = validators.get(key)
-            if cached and request.if_none_match.contains_weak(cached):
-                return _library_response(Response(), cached)
+            held = _held_revision(lib, user_id, dependencies)
+            if held:
+                return _library_response(Response(), held)
     except Exception:
         # An unavailable dependency or unsupported model disables only the
         # shortcut. Loudness remains best effort, just as on the full path.
         dependencies = None
 
-    from shared.api import library_incremental
     if request.args.get("delta") == "1":
         try:
             partial = library_incremental.try_delta(
-                lib, artwork, user_id, request.args.get("since"), dependencies, source_fingerprint)
+                lib, artwork, user_id, request.args.get("since"), dependencies)
             if partial is not None:
                 return partial
         except Exception:
@@ -204,6 +231,9 @@ def get_library():
     if snapshot_fingerprint is not None and loudness_ok is True:
         try:
             incremental_state = library_incremental.prepare(lib, artwork, dependencies, snapshot_fingerprint)
+            if incremental_state is not None:
+                # The copy took no yield: the live model was this source too.
+                record(lib.metadata, snapshot_fingerprint)
         except Exception:
             logger.debug("Canonical public source unavailable", exc_info=True)
     response = None
@@ -230,8 +260,7 @@ def get_library():
             # with either the old or new dependency token.
             current_dependencies = _annotation_revisions(artwork) if payload.get("tracks") else ()
             if current_dependencies == dependencies:
-                key = sha256(repr((user_id, snapshot_fingerprint, dependencies)).encode()).hexdigest()
-                validators.put(key, revision)
+                validators.put(validator_key(user_id, snapshot_fingerprint, dependencies), revision)
         except Exception:
             pass
     if wants_delta and incremental_state is not None:

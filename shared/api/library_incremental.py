@@ -1,4 +1,12 @@
-"""Journal-driven library deltas; only bounded proofs are retained on disk."""
+"""Journal-driven library deltas; only bounded proofs are retained on disk.
+
+A delta is a transition between two committed public sources. It sends rows
+copied from the live model only after checking each one, and the headers,
+against the hashes committed with that source, so it never walks the rest of
+the library. Unsaved in-memory edits are never labelled with a committed
+revision: a copied row or header that differs from its committed hash sends
+the full response instead.
+"""
 from copy import deepcopy
 from hashlib import sha256
 import json
@@ -8,7 +16,7 @@ from flask import current_app
 from flask.json.provider import DefaultJSONProvider
 
 from shared.api import library_deltas as history
-from shared.library_fingerprint import fingerprint, HEADER_FIELDS, TRACK_FIELDS
+from shared.library_fingerprint import HEADER_FIELDS, TRACK_FIELDS, header_digest, public_row_digest
 from shared.database import DatabaseManager
 from shared.loudness import LoudnessStore, annotate_tracks
 from shared.models import LibraryMetadata, Track
@@ -63,12 +71,22 @@ def remember(account, revision, state, headers):
                    '(SELECT rowid FROM incremental_bases ORDER BY created DESC,rowid DESC LIMIT ?)', (MAX_BASES,))
 
 
-def prepare(lib, artwork, dependencies, source_fingerprint):
-    """Tie the actual public model to a committed source and annotation cursors."""
+def committed_source(lib):
+    """The account's committed public source, or None when it is not verified."""
+    db = getattr(lib, 'db', None)
+    return db.public_source() if isinstance(db, DatabaseManager) else None
+
+
+def prepare(lib, artwork, dependencies, model_fingerprint=None):
+    """Tie the committed public source to the current annotation cursors.
+
+    With `model_fingerprint`, only when the caller's detached model is exactly
+    that source, which lets a full response carry the committed revision.
+    """
     if not supported(lib) or dependencies is None:
         return None
     source = lib.db.public_source()
-    if source is None or source['fingerprint'] != source_fingerprint:
+    if source is None or (model_fingerprint is not None and source['fingerprint'] != model_fingerprint):
         return None
     art = artwork.change_state()
     loud = LoudnessStore().change_state()
@@ -90,16 +108,14 @@ def revision_for(account, state):
                                  state['art']['token'], state['loud']['token']))).hexdigest()
 
 
-def try_delta(lib, artwork, account, base_revision, dependencies, source_fingerprint=None):
+def try_delta(lib, artwork, account, base_revision, dependencies):
     if not supported(lib) or not base_revision or len(base_revision) > 128:
         return None
     base = load_base(account, base_revision)
     if base is None:
         return None
-    if source_fingerprint is None:
-        source_fingerprint = fingerprint(lib.metadata)
-    state = prepare(lib, artwork, dependencies, source_fingerprint)
-    if state is None:
+    state = prepare(lib, artwork, dependencies)
+    if state is None or state['source']['headers'] is None:
         return None
     artwork_ids = artwork.changed_tracks(base['art'], state['art'])
     identities = LoudnessStore().changed_identities(base['loud'], state['loud'])
@@ -109,16 +125,20 @@ def try_delta(lib, artwork, account, base_revision, dependencies, source_fingerp
     if affected is None:
         return None
     positions, removed, order = affected
+    tracks = lib.metadata.tracks
     copied = {}
-    for track_id, position in positions.items():
-        track = lib.metadata.tracks[position]
+    for track_id, (position, committed) in positions.items():
+        track = tracks[position] if position < len(tracks) else None
         if type(track) is not Track or track.id != track_id:
             return None
-        copied[position] = track.to_public_dict()
+        row = track.to_public_dict()
+        # The exact detached row we will send, so an edit made while copying,
+        # or one not yet saved, cannot travel under the committed revision.
+        if public_row_digest(row) != committed:
+            return None
+        copied[position] = row
     headers = {name: deepcopy(getattr(lib.metadata, name)) for name in HEADER_FIELDS}
-    # Validate the exact detached rows/headers we will return. Substituting
-    # them also detects mutations during copying, even if the live row reverts.
-    if fingerprint(lib.metadata, public_tracks=copied, public_headers=headers) != state['source']['fingerprint']:
+    if header_digest(headers) != state['source']['headers']:
         return None
     upserts = [copied[position] for position in sorted(copied)]
     if not annotate_tracks(upserts, selected=True):
@@ -136,8 +156,7 @@ def try_delta(lib, artwork, account, base_revision, dependencies, source_fingerp
     if len(response.get_data()) >= len(lib.metadata.tracks) * MIN_TRACK_BYTES:
         return None
     remember(account, delta['revision'], state, headers)
-    from shared.api.library_revision import validators
-    key = sha256(repr((account, state['source']['fingerprint'], dependencies)).encode()).hexdigest()
-    validators.put(key, delta['revision'])
+    from shared.api.library_revision import validator_key, validators
+    validators.put(validator_key(account, state['source']['fingerprint'], dependencies), delta['revision'])
     response.headers['Cache-Control'] = 'private, no-store'
     return response

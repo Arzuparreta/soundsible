@@ -6,6 +6,7 @@ from flask import Flask
 import pytest
 
 from shared.api import library_incremental as incremental
+from shared.api import library_revision as revisions
 from shared.api.library_revision import validators
 from shared.artwork import artwork_store
 from shared.database import DatabaseManager
@@ -108,6 +109,7 @@ def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkey
         patch.setattr(Track, 'to_public_dict', copy)
         patch.setattr(route, 'compact_signature', lambda *_: pytest.fail('full hashing'), raising=False)
         patch.setattr(LoudnessStore, 'measured', lambda _: pytest.fail('full loudness scan'))
+        patch.setattr(revisions, 'fingerprint', lambda _: pytest.fail('full model fingerprint'))
         response = get_delta(client, first)
     assert response.status_code == 200
     delta = response.get_json()
@@ -119,6 +121,7 @@ def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkey
     assert delta['revision'] == full.headers['ETag'][3:-1]
     with monkeypatch.context() as patch:
         patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('warm 304 copied library'))
+        patch.setattr(revisions, 'fingerprint', lambda _: pytest.fail('warm 304 hashed the library'))
         assert client.get('/api/library', headers={'If-None-Match': full.headers['ETag']}).status_code == 304
 
 
@@ -138,12 +141,12 @@ def test_add_delete_between_polls_does_not_remove_an_unknown_id(endpoint):
     assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
 
 
-@pytest.mark.parametrize('change', ['unsaved', 'raw_sql', 'missing_history', 'expired', 'gap', 'bulk', 'empty'])
+@pytest.mark.parametrize('change', ['raw_sql', 'missing_history', 'expired', 'gap', 'bulk', 'empty',
+                                    'proof_without_headers'])
 def test_unprovable_or_large_changes_fall_back(endpoint, change):
     client, lib, _ = endpoint
     first = client.get('/api/library?delta=1')
-    if change == 'unsaved': lib.metadata.tracks[0].title = 'Unsaved'
-    elif change == 'raw_sql':
+    if change == 'raw_sql':
         with lib.db._get_connection() as db:
             db.execute("UPDATE tracks SET title='Outside writer' WHERE id='0'")
             db.commit()
@@ -166,9 +169,63 @@ def test_unprovable_or_large_changes_fall_back(endpoint, change):
     elif change == 'empty':
         lib.metadata.tracks.clear()
         lib.db.replace_library(lib.metadata)
+    elif change == 'proof_without_headers':
+        # A proof committed before header hashes existed, as after an upgrade.
+        lib.metadata.tracks[0].title = 'Changed'
+        lib.db.replace_library(lib.metadata)
+        with lib.db._get_connection() as db:
+            db.execute('UPDATE library_public_source SET headers=NULL')
+            db.commit()
     response = get_delta(client, first)
     assert 'tracks' in response.get_json()
     assert response.get_json() == client.get('/api/library').get_json()
+
+
+def test_unsaved_edits_never_travel_under_a_committed_revision(endpoint, monkeypatch):
+    client, lib, route = endpoint
+    first = client.get('/api/library?delta=1')
+    committed = first.get_json()
+    lib.metadata.tracks[0].title = 'Unsaved'
+    with monkeypatch.context() as patch:
+        # Nothing was committed: the client is current, without a pass over
+        # the live model.
+        patch.setattr(revisions, 'fingerprint', lambda _: pytest.fail('hashed the live model'))
+        assert get_delta(client, first).status_code == 304
+    # A fresh client sees the live model, under its own revision.
+    fresh = client.get('/api/library')
+    assert fresh.get_json()['tracks'][0]['title'] == 'Unsaved'
+    assert fresh.headers['ETag'] != first.headers['ETag']
+    # A committed change elsewhere travels alone, as committed.
+    saved = deepcopy(lib.metadata)
+    saved.tracks[0].title = committed['tracks'][0]['title']
+    saved.tracks[1].title = 'Saved'
+    lib.db.replace_library(saved)
+    lib.metadata.tracks[1].title = 'Saved'
+    delta = get_delta(client, first).get_json()
+    assert delta['kind'] == 'delta'
+    assert [row['id'] for row in delta['upserts']] == ['1']
+    expected = deepcopy(committed)
+    expected['tracks'][1]['title'] = 'Saved'
+    assert apply(committed, delta) == expected
+    # A committed row whose live copy differs is never sent under its hash.
+    saved.tracks[0].title = 'Committed'
+    lib.db.replace_library(saved)
+    response = get_delta(client, first)
+    assert 'tracks' in response.get_json()
+    assert response.get_json()['tracks'][0]['title'] == 'Unsaved'
+
+
+def test_unsaved_header_edit_falls_back_to_the_full_response(endpoint):
+    client, lib, _ = endpoint
+    first = client.get('/api/library?delta=1')
+    saved = deepcopy(lib.metadata)
+    saved.tracks[1].title = 'Saved'
+    lib.db.replace_library(saved)
+    lib.metadata.tracks[1].title = 'Saved'
+    lib.metadata.playlists['List'].append('unsaved')
+    response = get_delta(client, first)
+    assert 'tracks' in response.get_json()
+    assert response.get_json()['playlists']['List'][-1] == 'unsaved'
 
 
 def test_reloaded_model_and_disk_base_work_without_validator_memory(endpoint, monkeypatch):
@@ -426,3 +483,20 @@ def test_legacy_database_migrates_without_claiming_unverified_source(tmp_path):
     loaded = new.load_library_metadata()
     new.replace_library(loaded)
     assert new.public_source()['fingerprint'] == fingerprint(loaded)
+
+
+def test_proof_table_without_header_hashes_upgrades_in_place(tmp_path):
+    path = str(tmp_path / 'previous.db')
+    old = DatabaseManager(path)
+    value = model()
+    old.replace_library(value)
+    proof = old.public_source()['fingerprint']
+    with old._get_connection() as db:
+        db.execute('ALTER TABLE library_public_source DROP COLUMN headers')
+        db.commit()
+    upgraded = DatabaseManager(path)
+    # Still a valid proof for full responses; partial ones wait for a save.
+    assert upgraded.public_source()['fingerprint'] == proof
+    assert upgraded.public_source()['headers'] is None
+    upgraded.replace_library(value)
+    assert upgraded.public_source()['headers'] is not None

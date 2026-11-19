@@ -11,7 +11,12 @@ INVALIDATING_TABLES = ('tracks', 'library_tracks', 'library_state', 'playlists',
 def install(conn):
     conn.execute('CREATE TABLE IF NOT EXISTS library_public_source ('
                  'singleton INTEGER PRIMARY KEY CHECK(singleton=1),valid INTEGER, fingerprint TEXT,ordering INTEGER,ordering_dirty INTEGER DEFAULT 1)')
-    conn.execute("INSERT OR IGNORE INTO library_public_source VALUES (1,0,'',0,1)")
+    if 'headers' not in {row[1] for row in conn.execute('PRAGMA table_info(library_public_source)')}:
+        # Proofs written before this column stay valid for full responses;
+        # partial ones wait for the next canonical save to record it.
+        conn.execute('ALTER TABLE library_public_source ADD COLUMN headers TEXT')
+    conn.execute("INSERT OR IGNORE INTO library_public_source (singleton,valid,fingerprint,ordering,ordering_dirty) "
+                 "VALUES (1,0,'',0,1)")
     conn.execute('CREATE TABLE IF NOT EXISTS library_public_rows (id TEXT PRIMARY KEY,hash BLOB,identity TEXT)')
     conn.execute('CREATE INDEX IF NOT EXISTS library_public_identity ON library_public_rows(identity)')
     install_changes(conn, (('library_public_rows', 'track', 'id'),))
@@ -28,7 +33,8 @@ def install(conn):
 def sync_source(conn, metadata, order_changed):
     # Hash exactly the same bounded encoded rows that populate the index.
     # Re-reading a mutable model afterward could associate the wrong proof.
-    from shared.library_fingerprint import TRACK_FIELDS, HEADER_FIELDS, encoded_values, track_values
+    from shared.library_fingerprint import (TRACK_FIELDS, HEADER_FIELDS, encoded_values, header_digest,
+                                            record, track_values)
     from shared.models import LibraryMetadata, Track
     if type(metadata) is not LibraryMetadata:
         return
@@ -58,15 +64,20 @@ def sync_source(conn, metadata, order_changed):
                 conn.execute('INSERT INTO library_public_rows VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET '
                              'hash=excluded.hash,identity=excluded.identity',
                              (track_id, value, str(values[TRACK_FIELDS.index("file_hash")] or track_id or '')))
-    conn.execute('UPDATE library_public_source SET valid=1,fingerprint=?,ordering=ordering+MAX(ordering_dirty,?),ordering_dirty=0 WHERE singleton=1',
-                 (proof.hexdigest(), int(order_changed)))
+    conn.execute('UPDATE library_public_source SET valid=1,fingerprint=?,headers=?,'
+                 'ordering=ordering+MAX(ordering_dirty,?),ordering_dirty=0 WHERE singleton=1',
+                 (proof.hexdigest(), header_digest(metadata), int(order_changed)))
+    # Readers then need not hash this exact model again to know it. If the
+    # transaction rolls back the hint is merely unused: it never matches a
+    # committed fingerprint that describes other content.
+    record(metadata, proof.hexdigest())
 
 
 def source(conn):
-    row = conn.execute('SELECT valid,fingerprint,ordering FROM library_public_source WHERE singleton=1').fetchone()
+    row = conn.execute('SELECT valid,fingerprint,ordering,headers FROM library_public_source WHERE singleton=1').fetchone()
     if row is None or not row[0]:
         return None
-    return {'fingerprint': row[1], 'ordering': row[2], 'cursor': cursor(conn).to_list()}
+    return {'fingerprint': row[1], 'ordering': row[2], 'headers': row[3], 'cursor': cursor(conn).to_list()}
 
 
 def sync_track_source(conn, metadata, position, changes, previous_values, previous_fingerprint):
@@ -77,7 +88,7 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
     the verified pre-edit source. Both full-model passes remain mandatory.
     Call inside the revision-checked write transaction; errors roll it back.
     """
-    from shared.library_fingerprint import fingerprint, encoded_values, track_values
+    from shared.library_fingerprint import fingerprint, row_digest, track_values
     track = metadata.tracks[position]
     before = track.to_public_dict()
     if any(before[name] != value for name, value in changes.items()):
@@ -86,15 +97,19 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
     if fingerprint(metadata, public_tracks={position: before}) != previous_fingerprint:
         raise ValueError('Track edit requires an unchanged canonical source')
     updated = fingerprint(metadata)
-    values = track_values(track)
-    encoded = encoded_values(values)
     conn.execute('INSERT INTO library_public_rows VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET '
                  'hash=excluded.hash,identity=excluded.identity WHERE hash IS NOT excluded.hash OR identity IS NOT excluded.identity',
-                 (track.id, sha256(encoded).digest(), str(track.file_hash or track.id or '')))
+                 (track.id, row_digest(track_values(track)), str(track.file_hash or track.id or '')))
     conn.execute('UPDATE library_public_source SET valid=1,fingerprint=? WHERE singleton=1', (updated,))
 
 
 def affected(conn, previous, expected, artwork_ids, identities):
+    """Changes from `previous` to the committed `expected` source, or None.
+
+    Returns `(positions, removed, order)`: each affected current track id maps
+    to its committed position and row hash, so a caller can check the rows it
+    sends without hashing the rest of the library.
+    """
     from shared.sqlite_changes import Cursor
     if source(conn) != expected:
         return None
@@ -117,8 +132,10 @@ def affected(conn, previous, expected, artwork_ids, identities):
     keys = list(ids)
     for offset in range(0, len(keys), 500):
         batch = keys[offset:offset + 500]
-        positions.update(conn.execute(
-            f'SELECT track_id,position FROM library_tracks WHERE track_id IN ({",".join("?" for _ in batch)})', batch))
+        positions.update((track_id, (position, digest)) for track_id, position, digest in conn.execute(
+            'SELECT lt.track_id,lt.position,p.hash FROM library_tracks lt '
+            'LEFT JOIN library_public_rows p ON p.id=lt.track_id '
+            f'WHERE lt.track_id IN ({",".join("?" for _ in batch)})', batch))
     removed = [key for key, first in canonical.items() if key not in positions and first != 'INSERT']
     order = ([row[0] for row in conn.execute('SELECT track_id FROM library_tracks ORDER BY position')]
              if previous['ordering'] != expected['ordering'] else None)

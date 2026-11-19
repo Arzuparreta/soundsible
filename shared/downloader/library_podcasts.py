@@ -2,9 +2,8 @@
 
 The full reader decodes/validates each track and immediately discards it. JSON syntax and
 LibraryMetadata.from_json's legacy rejection/default rules remain authoritative;
-no regex extraction, file cache or model copy is retained. A caller can supply
-a publication offset only after verifying the entire published file's digest. Peak memory
-for valid input is one track/header field plus selected podcast data and buffer.
+no regex extraction, file cache or model copy is retained. Peak memory for valid
+input is one track/header field plus selected podcast data and buffer.
 """
 from dataclasses import MISSING, fields
 import json
@@ -101,7 +100,7 @@ class _Reader:
             self.error()
 
 
-def read_podcast_fields(source: TextIO, *, chunk_size: int = 64 * 1024, offset: int | None = None) -> tuple[list, dict]:
+def read_podcast_fields(source: TextIO, *, chunk_size: int = 64 * 1024) -> tuple[list, dict]:
     """Match the old model reader's podcast projection with bounded track work.
 
     Malformed JSON returns empty podcast fields, as LibraryMetadata.from_json
@@ -113,13 +112,6 @@ def read_podcast_fields(source: TextIO, *, chunk_size: int = 64 * 1024, offset: 
     if chunk_size < 1:
         raise ValueError('chunk_size must be positive')
     reader = _Reader(source, chunk_size)
-    if offset is not None:
-        # Only the caller that verified the complete file digest may provide
-        # this offset, recorded while publishing our own canonical JSON.
-        source.seek(offset)
-        if source.read(1) != ',':
-            raise ValueError('Invalid podcast section offset')
-        reader.buffer = '{'
     subscriptions, cache = [], {}
     valid_tracks = True
     version, legacy_version = None, '1'

@@ -66,6 +66,12 @@ not fix lost updates or the read-to-write race. Cross-writer ownership and
 native Windows validation remain separate work. A failed write now leaves the
 previous file (see [ODST saves](odst-save-streaming.md#atomic-replacement)).
 
+**Superseded for the pool's own publications.** The pool no longer reads its
+own file back at all, neither the digest nor the podcast section: see
+[committed library reads](committed-library-reads.md#pool-manifest). The
+offset reader described here was removed. `read_podcast_fields` remains for a
+file somebody else published, without an offset.
+
 Validation: **1,532 Python tests passed**, focused Ruff checks and
 `git diff --check` passed. A small benchmark smoke also verified the additional
 reader hash in its metadata. No frontend code changed.

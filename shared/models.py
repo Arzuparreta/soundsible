@@ -226,7 +226,7 @@ class LibraryMetadata:
         """Serialize portable library metadata to JSON."""
         return json.dumps(self.to_public_dict(), indent=indent)
 
-    def iter_json(self, chunk: int = 128, *, on_section=None) -> Iterator[str]:
+    def iter_json(self, chunk: int = 128) -> Iterator[str]:
         """`to_json()` in pieces: the same text, without the whole document in memory.
 
         Header values are encoded as `to_json()` encodes them. Tracks are encoded
@@ -236,8 +236,6 @@ class LibraryMetadata:
         from shared.library_json import encode_track_block
         tracks = list(self.tracks)
         for index, (key, value) in enumerate(self._public_fields(None).items()):
-            if on_section is not None:
-                on_section(key)
             yield ("{" if index == 0 else ",") + "\n  " + json.dumps(key) + ": "
             if key != "tracks":
                 yield json.dumps(value, indent=2).replace("\n", "\n  ")

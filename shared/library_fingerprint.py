@@ -21,7 +21,7 @@ class _DigestWriter:
         self.digest.update(data)
 
 
-def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None, public_headers=None) -> str:
+def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None) -> str:
     """Same fingerprint for a model and its detached public representation.
 
     Unsupported models disable the shortcut at the caller. The materialized
@@ -47,7 +47,7 @@ def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None, public_
     else:
         if type(metadata) is not LibraryMetadata:
             raise TypeError("Unsupported library model")
-        header = tuple(public_headers[name] if public_headers is not None else getattr(metadata, name) for name in HEADER_FIELDS)
+        header = tuple(getattr(metadata, name) for name in HEADER_FIELDS)
         tracks = metadata.tracks
 
         def values():
@@ -78,3 +78,38 @@ def encoded_values(value):
     encoder.fast = True
     encoder.dump(value)
     return buffer.getvalue()
+
+
+def row_digest(values) -> bytes:
+    """The committed per-track hash (`library_public_rows.hash`) of one row's values."""
+    return sha256(encoded_values(values)).digest()
+
+
+def public_row_digest(row: dict) -> bytes:
+    """`row_digest` of a detached `Track.to_public_dict()` row."""
+    if len(row) != len(TRACK_FIELDS):
+        raise TypeError("Unsupported public track")
+    return row_digest(_public_values(row))
+
+
+def header_digest(headers) -> str:
+    """Hash of the public header fields, from a model or a detached header mapping."""
+    if isinstance(headers, dict):
+        values = tuple(headers[name] for name in HEADER_FIELDS)
+    else:
+        values = tuple(getattr(headers, name) for name in HEADER_FIELDS)
+    return sha256(encoded_values(values)).hexdigest()
+
+
+def record(metadata: LibraryMetadata, value: str) -> None:
+    """Note that `metadata`'s public content had fingerprint `value` just now.
+
+    A hint, never a proof: later in-place edits are not observed. Readers use
+    it only to skip a pass whose answer they already know, never to trust
+    content or to label a response.
+    """
+    metadata._public_fingerprint = value
+
+
+def recorded(metadata) -> str | None:
+    return getattr(metadata, "_public_fingerprint", None)

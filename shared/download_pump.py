@@ -563,7 +563,7 @@ def start_downloader_pump() -> bool:
 def mirror_track_into_pool(track: Track) -> None:
     """
     Keep the download pool's library in sync with the main manifest.
-    Otherwise the next dl.save_library() overwrites library.json with stale titles/artists.
+    Otherwise the next pool commit overwrites library.json with stale titles/artists.
 
     Only while one account owns the music folder's ``library.json``. With
     several, that file is the instance catalog: one person's labels written

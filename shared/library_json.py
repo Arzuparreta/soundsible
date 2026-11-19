@@ -51,35 +51,18 @@ def encode_track_block(tracks, *, flat=None):
 
 
 class LibraryJSONWriter:
-    """An atomic-file fill that hashes the bytes written and locates podcasts.
+    """An atomic-file fill that hashes the bytes it writes.
 
-    The offset is usable only against this exact digest. It points at the
-    comma preceding the final two root fields, never inside a track. Keep it
-    only after publication succeeds; foreign writers use the full reader.
+    The digest is the published file's revision, so the writer that published
+    it need not read it back to know it.
     """
 
     def __init__(self, metadata):
         self.metadata = metadata
         self.digest = sha256()
-        self.podcast_offset = None
-        self.size = 0
 
     def __call__(self, handle):
-        from shared.models import LibraryMetadata, Track
-        trusted = type(self.metadata) is LibraryMetadata and all(type(track) is Track for track in self.metadata.tracks)
-        try:
-            int(self.metadata.version)
-        except (ValueError, TypeError):
-            pass  # These conversion errors default in the full reader.
-        except OverflowError:
-            trusted = False
-
-        def section(key):
-            if trusted and key == 'podcast_subscriptions':
-                self.podcast_offset = self.size
-
-        for piece in self.metadata.iter_json(on_section=section):
+        for piece in self.metadata.iter_json():
             data = piece.replace('\n', os.linesep).encode('utf-8')
             handle.write(data)
             self.digest.update(data)
-            self.size += len(data)
