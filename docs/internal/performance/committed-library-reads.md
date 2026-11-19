@@ -9,7 +9,7 @@ part of it:
 - Every download commit hashed all of the pool's `<music>/library.json` to
   check nobody else had written it, then read its podcast section again.
 
-Both now ask the source of record instead of re-deriving it.
+HTTP reuses what SQLite committed. The pool verifies the file once and avoids a separate podcast read.
 
 ## Library HTTP: answer from the committed source
 
@@ -25,35 +25,31 @@ use) and uses that copy for the stored playlists and `library_state`, for the so
 fingerprint and for the header hash, so an edit to the live model during the
 save cannot make the three disagree.
 
-Every fast path rests on one rule, in `library_incremental.live_fingerprint()`:
-the live model stands for the committed source only once it is **known** to
-be it. `shared.library_fingerprint.record()` keeps on the model object the
-fingerprint it was last proven to have: by the save that committed it (the
-saved model becomes the live one), by a track edit, or by a full response. A
-model reloaded from SQLite has none and pays one pass, recorded; if its values
-differ from the proof (a value normalized on the way into SQLite), it never
-stands for that source, and the requests behave as before this change.
-Saves also write back to the model the one value SQLite overrides, the first
-stored `added_at`, so the proof describes the stored row.
+The hint on the live model is its last observed fingerprint. A canonical save,
+a track edit, or a full response can record it. A model reloaded from SQLite
+has none and pays one verification pass. SQLite can normalize field values
+during the write, so a reloaded model can differ from the proof. The writer
+also carries the first stored `added_at` back to the saved model.
 
-- **Conditional request.** The validator is looked up under the live model's
-  fingerprint: one SQLite row while the model is known to be the committed
-  source, one pass over the library otherwise. A client holding the revision
-  of an unsaved or normalized model still gets its 304.
-- **Delta.** Only from a model known to be the committed source. The journal
-  names the affected tracks; `affected()` returns each one's committed row hash
-  with its position. The route copies those rows and checks each copy, and the
-  copied headers, against the committed hashes. Any mismatch (an edit not yet
-  saved, one racing the copy) sends the full response instead. Nothing else in
-  the model is read.
-- **Full response.** Unchanged: it serves the live model, fingerprints the
-  detached copy, records that fingerprint, and carries the committed revision
-  only when that copy is the committed source.
+- **Conditional request.** A last-observed fingerprint that matches the
+  committed source can revalidate a revision of that source without a new
+  model scan. Otherwise the route fingerprints the live model and can
+  revalidate its own revision. The route shares that result with the delta
+  attempt.
+- **Delta.** Candidate models must have a last-observed fingerprint that
+  matches the source. The journal names the affected tracks and supplies
+  their committed positions and hashes. Every detached row and all detached
+  headers must match their committed hashes before the route labels the
+  response with the committed revision. A mismatch falls back to a full
+  response. The route leaves unrelated rows alone.
+- **Full response.** The route serves the live model, fingerprints the
+  detached copy and records it. The committed revision applies only when
+  that copy matches the committed source.
 
 Annotation dependencies (artwork and loudness tokens) are skipped for an empty
 library, as before. For a conditional request, whether the library is empty
-is the committed source's answer while the live model is that source, never
-what a writer has done to the live list in the meantime.
+comes from SQLite while the last-observed fingerprint matches the committed
+source.
 
 A targeted track edit, once it has proven the headers are the committed ones,
 writes their hash for the new source, so a database upgraded before the hash
@@ -61,17 +57,14 @@ existed regains deltas on its first edit or save.
 
 ### Contract change
 
-A conditional request and a delta describe the **committed** library. An
-in-place edit that has not been saved and that no request has seen yet no
-longer makes every polling client download the full library: they get 304,
-since nothing was committed. Once a request has seen the live model differ
-(a full response, or the pass after a reload), the route answers for that
-live model as before: clients holding its revision get 304, and the others
-get the full response with a content revision. An unsaved edit is never
-labelled with a committed revision, and no delta is built from a model that
-differs from the committed source. Models without a verified committed
-source (no database, a proof invalidated by raw SQL) keep the previous
-behaviour.
+While the model's last-observed fingerprint matches the committed source,
+conditional requests can return 304 during an unsaved edit. A small delta
+can describe the committed source during an unsaved edit to an unrelated
+row. Such an edit does not travel in the delta. Once a request observes a
+different live fingerprint, the route handles it as a separate
+representation. Clients holding its revision can revalidate it and other
+clients get the current contents under a content revision. Models without a
+verified committed source use full comparison as before.
 
 Existing databases gain the `library_public_headers` table on open. Their
 proofs stay valid for 304s and full responses; deltas start after the next
@@ -88,55 +81,29 @@ on single-user instances, the Station's portable export. Both publish under
 file, and must keep the podcast subscriptions and episodes the Station writes
 there.
 
-The directory's publications are now counted: the lock file stores a 64-bit
-generation after its first byte, advanced by every `publish()` and
-`replace_contents()` in any process, even a failed one (a new lock file starts
-counting at a random value). Holding the lock to read writes nothing. The
-pool remembers, as `_seen`, the generation, the manifest's `stat` signature
-(device, inode, size, modification and change times) and its content digest
-as it last observed them; separately, `_manifest_revision` is the digest of
-the file its resident model came from. On the next hold:
+The pool holds the existing directory lock from reading the manifest through
+publishing its update. Its resident model carries the SHA-256 and byte count
+of the file it loaded or wrote. Every commit validates the bytes under the
+lock. The byte count only chooses how to read the file:
 
-- same generation **and** unchanged signature: nothing was published in the
-  directory since and nothing else replaced or rewrote the
-  file, so the remembered digest is the file's. Nothing is read. The model in
-  memory is the file's model, podcasts included, so they are not read either.
-- otherwise: one pass over the file computes its signature (from the open
-  descriptor), its digest and its model together; the model is adopted if the
-  digest is not the one the pool's model came from, and then carries the other
-  writer's podcasts. Before, this case read the file four times (digest,
-  model, digest again, podcasts).
+- A different size takes one combined parse and digest pass. The parsed
+  model already contains the other writer's podcast fields. Adding a track
+  in the Station export usually takes this path.
+- The same size takes a digest pass. A match keeps the resident model and
+  needs neither JSON parsing nor a podcast read. A mismatch rewinds the same
+  descriptor and parses and hashes the changed bytes together.
 
-The signature the pool remembers after publishing is taken by
-`replace_contents()` straight after the rename, before the directory sync, and
-kept only if its device, inode, size and modification time are those of the
-descriptor it wrote; otherwise, or if `stat` fails, the next commit reads the
-file. Any later write by anyone, even one that restores the modification
-time, changes the change time and so the signature. "Not known" is its own
-value, never confused with the digest of a missing file. A generation that
-cannot be read or written leaves the lock working and makes the pool read the
-file; the lock file is unbuffered, so a failed counter write cannot resurface
-when the lock is released. Bookkeeping never fails a publication.
+Cloud sync validates the current digest against the one captured at the start
+of the operation. It selects the podcast fields from the same descriptor
+and leaves its incoming podcasts in place when the file is absent. The pool
+rejects a stale revision before publication. The old publication offset and
+the unused `Downloader.save_library()` were removed.
 
-`replace_snapshot` (cloud sync) keeps the current file's podcasts: from memory
-when the pool's model is the current file, from `read_podcast_fields` when it
-is not, and the snapshot's own when there is no file yet. The offset reader
-and `LibraryJSONWriter.podcast_offset` were removed, and so was `Downloader.save_library()`, which had no production caller.
-
-Limits. Cooperating Soundsible writers are detected exactly. A writer that
-ignores the lock (an editor, a sync tool, an older Soundsible) is detected by
-the signature. It misses an in-place rewrite that keeps the size and both
-timestamps within the file system's timestamp resolution, and one that lands
-in the microseconds between the rename and the `stat` that follows it. Such a
-writer was never fully protected: before, a write landing between the pool's
-digest and its rename, a window as long as serializing the whole manifest,
-was overwritten the same way. Any other publication in the same directory
-makes the pool read the file once more: conservative, never wrong.
-On Windows, `stat` reports the creation time in `st_ctime_ns`. The pool
-checks the file's digest there even for an unchanged signature, and only
-loads the model when that digest differs from the resident model's.
-The counter lives in the directory's lock file because the Station's export
-uses the generic `publish()`; each publication there writes nine bytes to it.
+A writer that finishes an edit before the pool opens the file is visible even
+when it restores timestamps and preserves the byte count. Cooperating
+writers cannot change the file between verification and publication. A
+third-party writer that changes it during that interval is outside the lock
+protocol, as before.
 
 ## Measurements
 
@@ -151,18 +118,18 @@ HTTP, with `LibraryManager.patch_track_metadata` making each title edit:
 
 | Tracks | 304 poll (ms) | Delta after a title edit (ms) |
 | ---: | ---: | ---: |
-| 1,000 | 2.13 → 0.58 | 55.71 → 51.77 |
-| 10,000 | 16.05 → 0.59 | 104.67 → 60.85 |
-| 50,000 | 87.64 → 0.60 | 247.69 → 59.66 |
+| 1,000 | 2.47 → 0.60 | 72.25 → 68.70 |
+| 10,000 | 20.10 → 0.59 | 102.13 → 76.10 |
+| 50,000 | 94.00 → 0.63 | 263.41 → 76.40 |
 
 Pool commits, alone and in the single-account download cycle (the account
 saves and exports into the same file before each commit):
 
 | Tracks | Pool-only commit (ms) | Bytes read | Cycle commit (ms) | Bytes read | Full cycle (ms) |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 67.10 → 75.38 | 1,474,785 → 139 | 83.75 → 75.97 | 5,079,392 → 1,269,957 | 384.63 → 376.90 |
-| 10,000 | 233.76 → 217.10 | 11,071,053 → 147 | 417.19 → 342.20 | 43,464,469 → 10,866,233 | 2,302.00 → 2,219.23 |
-| 50,000 | 882.59 → 858.91 | 53,921,069 → 156 | 2,001.20 → 1,676.04 | 214,864,462 → 53,716,237 | 11,638.46 → 11,371.90 |
+| 1,000 | 108.71 → 98.81 | 1,474,785 → 1,269,849 | 92.17 → 84.49 | 5,079,392 → 1,269,941 | 393.01 → 384.76 |
+| 10,000 | 233.78 → 225.44 | 11,071,053 → 10,866,117 | 408.87 → 361.00 | 43,464,469 → 10,866,217 | 2,360.27 → 2,342.26 |
+| 50,000 | 892.33 → 917.34 | 53,921,069 → 53,716,132 | 1,984.38 → 1,666.79 | 214,864,462 → 53,716,221 | 12,080.17 → 11,750.27 |
 
 - The 304 no longer grows with the library: about 0.6 ms at every size.
 - A one-title delta avoids scanning unrelated tracks. Order changes still
@@ -171,10 +138,11 @@ saves and exports into the same file before each commit):
   (`library_incremental.remember`): a profile at 1,000 tracks puts 65 of 69 ms
   in that commit's sync on this disk. That sync varies by tens of milliseconds
   between runs and can dominate the impact at 1,000 tracks.
-- A pool-only commit reads nothing of the manifest. In the download cycle the
-  commit reads the Station's new file once (the manifest size) instead of
-  four times. Commit time stays dominated by serializing and syncing the whole
-  manifest.
+- A pool-only commit verifies the digest and skips the podcast reread. In
+  the benchmark cycle, the Station adds a track, so the pool reads the changed
+  manifest once instead of four times. Encoding and syncing the portable
+  manifest still dominate the commit. The median pool-only commit at 50,000
+  tracks was 2.8% slower in this run despite skipping the podcast suffix.
 - Bytes read are `rchar`, which counts page-cache hits: physical disk reads
   saved depend on the cache.
 

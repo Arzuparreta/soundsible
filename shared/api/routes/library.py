@@ -143,7 +143,7 @@ def _annotation_revisions(artwork):
 
 
 def _conditional(lib, artwork, user_id):
-    """`(dependencies, held revision or None)` for a conditional request.
+    """The annotation dependencies, held revision and source fingerprint.
 
     Keyed by the live model's fingerprint, which costs one SQLite row while
     the model is known to be the committed source, and a pass over the
@@ -161,7 +161,8 @@ def _conditional(lib, artwork, user_id):
     has_tracks = source["tracks"] if current == committed else bool(lib.metadata.tracks)
     dependencies = _annotation_revisions(artwork) if has_tracks else ()
     cached = validators.get(validator_key(user_id, current, dependencies))
-    return dependencies, cached if cached and request.if_none_match.contains_weak(cached) else None
+    held = cached if cached and request.if_none_match.contains_weak(cached) else None
+    return dependencies, held, current
 
 
 @library_bp.route("/api/library", methods=["GET"])
@@ -184,9 +185,10 @@ def get_library():
     artwork = artwork_store()
     user_id = current_user_id() or ""
     dependencies = None
+    model_fingerprint = None
     try:
         if request.if_none_match:
-            dependencies, held = _conditional(lib, artwork, user_id)
+            dependencies, held, model_fingerprint = _conditional(lib, artwork, user_id)
             if held:
                 return _library_response(Response(), held)
         else:
@@ -200,7 +202,7 @@ def get_library():
     if request.args.get("delta") == "1":
         try:
             partial = library_incremental.try_delta(
-                lib, artwork, user_id, request.args.get("since"), dependencies)
+                lib, artwork, user_id, request.args.get("since"), dependencies, model_fingerprint)
             if partial is not None:
                 return partial
         except Exception:

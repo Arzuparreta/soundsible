@@ -536,9 +536,9 @@ def test_client_holding_a_live_revision_still_gets_its_304(endpoint, monkeypatch
         assert client.get('/api/library', headers={'If-None-Match': live.headers['ETag']}).status_code == 304
 
 
-def test_reloaded_model_whose_values_differ_from_the_proof_is_never_committed(endpoint):
+def test_reloaded_model_whose_values_differ_from_the_proof_is_hashed_once(endpoint, monkeypatch):
     client, lib, _ = endpoint
-    first = client.get('/api/library')
+    first = client.get('/api/library?delta=1')
     # Stored values that the still-valid proof does not describe, as when a
     # save's values are normalized on the way into SQLite.
     with lib.db._get_connection() as db:
@@ -546,9 +546,17 @@ def test_reloaded_model_whose_values_differ_from_the_proof_is_never_committed(en
         db.execute('UPDATE library_public_source SET valid=1')
         db.commit()
     lib.metadata = lib.db.load_library_metadata()
-    response = client.get('/api/library', headers={'If-None-Match': first.headers['ETag']})
+    checked = []
+
+    def counted(metadata):
+        checked.append(metadata)
+        return fingerprint(metadata)
+
+    monkeypatch.setattr(incremental, 'fingerprint', counted)
+    response = get_delta(client, first)
     assert response.status_code == 200
     assert response.get_json()['tracks'][0]['title'] == 'Stored differently'
+    assert checked == [lib.metadata]
 
 
 @pytest.mark.parametrize('pending', ['cleared', 'first_track'])

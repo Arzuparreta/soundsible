@@ -3,10 +3,10 @@
 import json
 import threading
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import Optional
 
 from shared.atomic_file import replace_contents
-from shared.file_revision import HAS_STAT_CHANGE_TIME, publication_lock, read_revision, signature
+from shared.file_revision import FileRevision, publication_lock, read_revision
 from shared.library_lifecycle import LibraryPersistenceError, serialized
 from shared.models import LibraryMetadata
 from shared.library_json import LibraryJSONWriter
@@ -15,16 +15,6 @@ from .cloud_sync import CloudSync
 from .config import DEFAULT_QUALITY, LIBRARY_FILENAME
 from .library_podcasts import read_podcast_fields
 from .youtube_downloader import YouTubeDownloader
-
-_UNKNOWN = object()
-
-
-class _Seen(NamedTuple):
-    """The pool manifest as observed under the publication lock."""
-    generation: Optional[int]
-    signature: Optional[tuple]
-    digest: Optional[bytes]
-
 
 class Downloader:
     """The shared pool every account downloads into.
@@ -51,125 +41,73 @@ class Downloader:
             self.output_dir, cookie_browser=cookie_browser, cookie_file=cookie_file, quality=quality
         )
 
+    @staticmethod
+    def _empty_library():
+        return LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+
     def _load_library(self) -> LibraryMetadata:
-        library, token = self.read_snapshot()
-        self._manifest_revision = token
-        return library
+        with publication_lock(self.library_path):
+            self._manifest, library = self._read_locked()
+        return library if library is not None else self._empty_library()
 
     def read_snapshot(self):
         """An independent model/token for a long operation such as cloud sync."""
-        with publication_lock(self.library_path) as hold:
-            return self._read_locked(hold)
+        with publication_lock(self.library_path):
+            manifest, library = self._read_locked()
+        if manifest is None:
+            return self._empty_library(), None
+        return library, manifest.digest
 
-    # Two different facts are kept, and must not be confused:
-    # - `_manifest_revision`: digest of the file the resident model came from
-    #   (loaded or published by this pool);
-    # - `_seen`: the file as last observed under the lock, whoever wrote it.
-
-    def _read_locked(self, hold):
-        # Model, digest and signature all come from one open descriptor.
-        # Corrupt/unreadable state is not an empty library to overwrite.
-        signature_, token, library = read_revision(
-            self.library_path, lambda text: LibraryMetadata.from_dict(json.load(text)))
-        if library is None:
-            library = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-        self._seen = _Seen(hold.generation, signature_, token)
-        return library, token
-
-    def _unread_revision(self, hold):
-        """The digest last seen, if the file provably has not changed since; else _UNKNOWN.
-
-        Nothing published in this directory since (same generation) rules out
-        cooperating writers (the Station's exports, another pool); an
-        unchanged signature rules out the others.
-        """
-        seen = getattr(self, '_seen', None)
-        if (HAS_STAT_CHANGE_TIME and seen is not None and hold.generation is not None
-                and seen.generation == hold.generation
-                and seen.signature is not None and seen.signature == signature(self.library_path)):
-            return seen.digest
-        return _UNKNOWN
-
-    def _revision_locked(self, hold):
-        """The manifest's content digest, reading its bytes only if they may have changed."""
-        token = self._unread_revision(hold)
-        if token is _UNKNOWN:
-            signature_, token, _ = read_revision(self.library_path)
-            self._seen = _Seen(hold.generation, signature_, token)
-        return token
+    def _read_locked(self, known=None):
+        return read_revision(self.library_path, lambda text: LibraryMetadata.from_dict(json.load(text)), known=known)
 
     @serialized
     def commit_track(self, track) -> None:
         """Add acquired audio to the latest pool manifest, never a stale snapshot."""
-        with self._lock, publication_lock(self.library_path) as hold:
-            current = getattr(self, '_manifest_revision', _UNKNOWN)
-            observed = _UNKNOWN
-            if current is not _UNKNOWN and hasattr(self, 'library'):
-                observed = self._unread_revision(hold) if HAS_STAT_CHANGE_TIME else self._revision_locked(hold)
-            if observed is _UNKNOWN or observed != current:
-                # One pass: hash and parse together, adopting the file unless
-                # it is the one the model came from. Another writer's file,
-                # podcasts included, is then the base; otherwise in-memory
-                # edits are kept.
-                library, token = self._read_locked(hold)
-                if not hasattr(self, 'library') or token != current:
-                    self.library, self._manifest_revision = library, token
-            existing = self.library.get_track_by_hash(track.file_hash)
+        with self._lock, publication_lock(self.library_path):
+            known = getattr(self, '_manifest', None)
+            manifest, library = self._read_locked(known)
+            if library is None:
+                # A matching digest lets us keep the resident model. A removed
+                # file is a new empty manifest, even if we had a model for it.
+                library = getattr(self, 'library', None) if manifest == known else None
+                if library is None:
+                    library = self._empty_library()
+            existing = library.get_track_by_hash(track.file_hash)
             if existing:
-                self.library.remove_track(existing.id)
-            self.library.add_track(track)
-            self._publish_locked(hold)
+                library.remove_track(existing.id)
+            library.add_track(track)
+            self._publish_locked(library)
 
     @serialized
     def replace_snapshot(self, library, expected_revision):
         """Publish a long operation only against the exact snapshot it read.
 
-        Podcast subscriptions and episodes belong to the Station, which writes
-        them into this same file: the current file's are kept. With no file,
-        the snapshot's own stand.
+        Podcast subscriptions and episodes belong to the Station. Read them
+        from the same bytes checked against the expected revision.
         """
-        with self._lock, publication_lock(self.library_path) as hold:
-            current = self._revision_locked(hold)
+        with self._lock, publication_lock(self.library_path):
+            manifest, podcasts = read_revision(self.library_path, self._read_podcasts)
+            current = manifest.digest if manifest is not None else None
             if current != expected_revision:
                 raise LibraryPersistenceError('library_conflict')
-            if current is None:
-                podcasts = None
-            elif current == getattr(self, '_manifest_revision', _UNKNOWN):
-                # The resident model came from the current file: its podcast
-                # fields are the file's.
-                podcasts = self.library.podcast_subscriptions, self.library.podcast_episode_cache
-            else:
-                podcasts = self._disk_podcasts()
             if podcasts is not None:
                 library.podcast_subscriptions, library.podcast_episode_cache = podcasts
-            previous = getattr(self, 'library', None), getattr(self, '_manifest_revision', _UNKNOWN)
-            self.library, self._manifest_revision = library, expected_revision
-            try:
-                self._publish_locked(hold)
-            except BaseException:
-                self.library, self._manifest_revision = previous
-                raise
+            self._publish_locked(library)
 
-    def _disk_podcasts(self):
-        """The file's podcast fields, or None to keep the model's.
-
-        Malformed JSON reads as no podcasts, as the full model reader did; an
-        unreadable file or valid JSON that is not a library keeps the model's.
-        """
+    @staticmethod
+    def _read_podcasts(stream):
         try:
-            with open(self.library_path, encoding="utf-8") as stream:
-                return read_podcast_fields(stream)
-        except Exception:
+            return read_podcast_fields(stream)
+        except (TypeError, OverflowError, UnicodeError):
+            # Valid but unsupported library data keeps the candidate fields.
+            # Syntax errors use the reader's legacy empty podcast defaults.
             return None
 
-    def _publish_locked(self, hold):
-        # Same portable bytes, without a second full JSON document in RAM.
-        # Streamed into a temporary: the Station reads this file meanwhile.
-        writer = LibraryJSONWriter(self.library)
-        published = replace_contents(self.library_path, writer)
-        self._manifest_revision = writer.digest.digest()
-        # Remember the file only if the path named the bytes just written
-        # when they landed (same device, inode, size and modification time);
-        # a later write by anyone changes the signature the next commit sees.
-        self._seen = (_Seen(hold.generation, published, self._manifest_revision)
-                      if published is not None and published[:4] == writer.written else None)
+    def _publish_locked(self, library):
+        # Same portable bytes, encoded in bounded blocks and replaced under
+        # the same directory lock as the Station's export.
+        writer = LibraryJSONWriter(library)
+        replace_contents(self.library_path, writer)
+        self.library = library
+        self._manifest = FileRevision(writer.digest.digest(), writer.size)

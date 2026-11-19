@@ -124,15 +124,19 @@ def revision_for(account, state):
                                  state['art']['token'], state['loud']['token']))).hexdigest()
 
 
-def try_delta(lib, artwork, account, base_revision, dependencies):
+def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerprint=None):
     if not supported(lib) or not base_revision or len(base_revision) > 128:
         return None
     base = load_base(account, base_revision)
     if base is None:
         return None
     state = prepare(lib, artwork, dependencies)
-    if (state is None or state['source']['headers'] is None
-            or live_fingerprint(lib, state['source']['fingerprint']) != state['source']['fingerprint']):
+    if state is None or state['source']['headers'] is None:
+        return None
+    committed = state['source']['fingerprint']
+    if model_fingerprint is None:
+        model_fingerprint = live_fingerprint(lib, committed)
+    if model_fingerprint != committed:
         return None
     artwork_ids = artwork.changed_tracks(base['art'], state['art'])
     identities = LoudnessStore().changed_identities(base['loud'], state['loud'])

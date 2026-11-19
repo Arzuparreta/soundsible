@@ -33,8 +33,8 @@ Small improvements qualify. Timing a helper alone is not acceptance evidence.
   validating reader. Publication failures retain the previous tokens. Music
   libraries with empty podcast fields benefit too. Serialization and one
   full content-hash read remain proportional to library size. *Later
-  superseded:* the pool now skips that read and the podcast suffix for its own
-  publications ([committed library reads](committed-library-reads.md#pool-manifest)).
+  superseded:* the pool verifies the digest and reuses the resident podcasts
+  when it matches ([committed library reads](committed-library-reads.md#pool-manifest)).
 - Local search uses SHA-256 for its proof instead of BLAKE2b. Its persisted
   format token explicitly changes; the same folded rows are checked and
   rehashed once, without refolding. Matching, ranking and candidate SQL do not

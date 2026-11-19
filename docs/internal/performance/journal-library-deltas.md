@@ -79,10 +79,10 @@ unsupported models cannot establish a valid optimization proof.
 - The canonical current hash index grows with the library, on disk, rather than
   holding additional metadata in RAM. Normal SQLite/page-cache behavior still
   applies; these bounds do not describe total process or operating-system RAM.
-- Requests no longer fingerprint the model: a conditional request reads one
-  committed row and a delta hashes only the rows and headers it sends
-  ([committed library reads](committed-library-reads.md)). SQL library
-  reloads can still materialize the model when another writer changed it.
+- When the last-observed model fingerprint matches SQLite, a conditional
+  request can reuse it and a small delta hashes only its rows and headers.
+  New or divergent models still need verification after a reload or save.
+  [Committed library reads](committed-library-reads.md)
 - Headers and optional ID order are copied when required; very large playlists
   or order changes therefore need memory proportional to those response fields.
   Canonical saves now pay for hashing and maintaining the proof/index. This is a
