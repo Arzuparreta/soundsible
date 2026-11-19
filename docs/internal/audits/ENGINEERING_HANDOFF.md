@@ -88,17 +88,12 @@ RSS, energy savings, playback quality or acoustic acceptance.
 - Journals and source hashes live in SQLite, not in resident metadata maps.
   `shared/library_changes.py`, `shared/sqlite_changes.py` and
   `shared/api/library_incremental.py` implement source proofs and selection.
-- Models are still mutable before they are saved. Conditional requests can
-  revalidate the committed representation when the model's verified
-  fingerprint matches it. Deltas additionally verify every detached row they
-  send and all detached headers against the committed hashes
-  (`library_public_rows`, `library_public_headers`). An unrelated unsaved row
-  can coexist with a committed delta, and that row is excluded from the delta.
-  Older sources can verify their headers against a served base for the same
-  fingerprint while they wait for a canonical save to persist the header hash.
-  See [committed library reads](../performance/committed-library-reads.md).
-- ETags of verified canonical sources are opaque dependency tokens,
-  not hashes of the entire JSON. The old path remains for unverified sources.
+- The flat library endpoint answers from committed SQLite state. Conditional
+  requests need the revision and annotation cursors, deltas read only affected
+  rows and changed headers, and full reads use the same SQL projection. Stored
+  credits stay distinct from catalog-derived names. The content-hash fallback
+  remains for unverified sources. See
+  [committed library reads](../performance/committed-library-reads.md).
 - Do not break account isolation, changes during copy/annotation, field
   removal, order, rekeys/aliases, user state or the first `added_at` date.
 - Journals have limits and epochs; if equivalence cannot be proven,
@@ -484,22 +479,18 @@ Closes the read side of pending item 2. Contract, measurements and limits in
 | Item | Status |
 | --- | --- |
 | Conditional `GET /api/library` fingerprinting the whole model | Closed: answers from the committed public source (one SQLite row) |
-| Two full fingerprints per successful delta | Closed: checks only the rows and headers it sends against committed hashes |
+| Two full fingerprints per successful delta | Closed: reads changed rows from SQLite and skips unchanged headers |
 | ODST reading all of `library.json` (digest, then podcasts) on each download commit | The digest still reads the bytes once. A match reuses the resident podcasts. A changed size uses one combined parse and digest. |
 | Coordination of the ODST and Station writers of `<music>/library.json` | The existing directory lock covers the pool read and publication. Cloud replacement verifies its snapshot's digest before reusing its podcasts. A failed download publication leaves the resident model intact. |
 | Search per-query fingerprint, save-side fingerprints, track-edit fingerprints, exports | Still walk the library. Full saves compute the proof alongside the row writes, and track edits share one encoding pass for their two proofs. |
 
-Conditional requests and deltas can answer from the committed representation
-while the verified fingerprint matches it. Full responses serve the live
-model without changing which committed deltas can be served. A delta verifies
-the rows it sends and its header fields.
+The flat library endpoint reads committed SQLite state. Its validator and
+journal are independent of the mutable resident model. A delta reads affected
+rows and headers from the same database snapshot. A new projection requires a
+one-time full response for a client with an older base.
 
-Playlist changes and track removal publish their new membership after SQLite
-commits. A missing-file purge collects its findings before making one filtered
-snapshot. Podcast writes reacquire the current library after fetching RSS
-and publish their candidate after commit. If SQLite normalized legacy track
-fields on reload, a label edit verifies the live model and reads the original
-stored credits before writing. It edits one row when the stored snapshot
-matches the journal and rebuilds the proof otherwise. A reload fingerprints
-its SQLite snapshot once, so warm conditional reads can reuse the loaded
-representation's validator. Deltas still require the journal's exact fingerprint.
+Playlist changes, scans, repairs and track removals publish after SQLite
+commits. A missing-file purge checks storage and filters membership once.
+Podcast writes reacquire the current library after fetching RSS. Label edits
+use the original stored credits when the catalog derived different values
+during reload, editing one row when the raw snapshot matches the journal.

@@ -3,7 +3,7 @@ from shared.sqlite_changes import install_changes, cursor, changes_since, MAX_KE
 
 
 INVALIDATING_TABLES = ('tracks', 'library_tracks', 'library_state', 'playlists',
-                       'playlist_tracks', 'track_id_aliases', 'artists', 'albums', 'track_artists')
+                       'playlist_tracks', 'track_id_aliases', 'artists', 'albums', 'track_artists', 'collection_files')
 
 
 def install(conn):
@@ -31,7 +31,7 @@ def install(conn):
 
 def sync_source(conn, metadata, order_changed, headers, fingerprint):
     """Publish the proof computed while storing the track rows."""
-    from shared.library_fingerprint import header_digest, record
+    from shared.library_fingerprint import header_digest
     from shared.models import LibraryMetadata
 
     conn.execute('DELETE FROM library_public_rows WHERE id NOT IN (SELECT track_id FROM library_tracks)')
@@ -43,7 +43,6 @@ def sync_source(conn, metadata, order_changed, headers, fingerprint):
                  (fingerprint, int(order_changed)))
     conn.execute('INSERT OR REPLACE INTO library_public_headers VALUES (1,?,?)',
                  (fingerprint, header_digest(headers)))
-    record(metadata, fingerprint)
 
 
 def source(conn):
@@ -67,7 +66,7 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
     the same detached values for the edited row and headers.
     Call inside the revision-checked write transaction; errors roll it back.
     """
-    from shared.library_fingerprint import header_digest, public_row_digest, record, track_edit_fingerprints
+    from shared.library_fingerprint import header_digest, public_row_digest, track_edit_fingerprints
     tracks = metadata.tracks
     headers = metadata.public_headers()
     after = tracks[position].to_public_dict()
@@ -84,15 +83,12 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
     # their hash also gives a database upgraded before it had one its deltas.
     conn.execute('INSERT OR REPLACE INTO library_public_headers VALUES (1,?,?)',
                  (updated, header_digest(headers)))
-    record(metadata, updated)
 
 
 def affected(conn, previous, expected, artwork_ids, identities):
     """Changes from `previous` to the committed `expected` source, or None.
 
-    Returns `(positions, removed, order)`: each affected current track id maps
-    to its committed position and row hash, so a caller can check the rows it
-    sends without hashing the rest of the library.
+    Returns `(ids, possibly_removed, order)` for the caller to read in this transaction.
     """
     from shared.sqlite_changes import Cursor
     if source(conn) != expected:
@@ -112,15 +108,7 @@ def affected(conn, previous, expected, artwork_ids, identities):
             return None
     if len(ids) > MAX_KEYS:
         return None
-    positions = {}
-    keys = list(ids)
-    for offset in range(0, len(keys), 500):
-        batch = keys[offset:offset + 500]
-        positions.update((track_id, (position, digest)) for track_id, position, digest in conn.execute(
-            'SELECT lt.track_id,lt.position,p.hash FROM library_tracks lt '
-            'LEFT JOIN library_public_rows p ON p.id=lt.track_id '
-            f'WHERE lt.track_id IN ({",".join("?" for _ in batch)})', batch))
-    removed = [key for key, first in canonical.items() if key not in positions and first != 'INSERT']
+    possibly_removed = [key for key, first in canonical.items() if first != 'INSERT']
     order = ([row[0] for row in conn.execute('SELECT track_id FROM library_tracks ORDER BY position')]
              if previous['ordering'] != expected['ordering'] else None)
-    return positions, removed, order
+    return list(ids), possibly_removed, order

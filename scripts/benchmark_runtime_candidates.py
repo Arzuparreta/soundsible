@@ -79,7 +79,7 @@ def shell(args):
 
 
 def search(args):
-    from scripts.benchmark_runtime_optimizations import fixture
+    from scripts.benchmark_runtime_optimizations import account_fixture
     from shared import library_search
     from shared.user_context import user_context
     from shared import catalog_search as catalog
@@ -87,7 +87,7 @@ def search(args):
     from flask import Flask, jsonify
     results = []
     with tempfile.TemporaryDirectory(prefix='soundsible-search-', dir=ROOT.parent) as directory, user_context('benchmark'):
-        manager, _, _, _ = fixture(Path(directory), args.tracks)
+        manager, _ = account_fixture(Path(directory), args.tracks)
         tracks = catalog.LibraryTracks(manager.metadata.tracks)
         tracks.search_db = manager.db
         app = Flask(__name__)
@@ -156,8 +156,8 @@ def artwork(args):
     from flask import Flask
     import shared.artwork as art
     from shared.api.routes import playback
-    from scripts.benchmark_runtime_optimizations import controls, variant
-    groups = controls(args.reference)
+    from scripts.benchmark_runtime_optimizations import old_methods, variant
+    groups = {'artwork': old_methods(args.reference, 'shared.artwork_variants', 'VariantCache', ['open', 'hit', 'index'])}
     with tempfile.TemporaryDirectory(prefix='soundsible-covers-', dir=ROOT.parent) as directory:
         root = Path(directory)
         store = art.ArtworkStore(root / 'originals', root / 'variants')

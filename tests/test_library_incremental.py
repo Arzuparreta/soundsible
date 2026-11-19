@@ -10,6 +10,7 @@ from shared.api import library_revision as revisions
 from shared.api.library_revision import validators
 from shared.artwork import artwork_store
 from shared.database import DatabaseManager
+from shared.db import library as library_store
 from shared.library_fingerprint import fingerprint
 from shared.loudness import LoudnessStore, LoudnessMeasurement
 from shared.loudness.store import reset_connections, _connect
@@ -97,20 +98,22 @@ def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkey
     elif change == 'loudness_delete': LoudnessStore().forget('0')
     if change in {'title', 'add', 'remove', 'order', 'headers'}:
         lib.db.replace_library(lib.metadata)
-    original = Track.to_public_dict
+    original = library_store._public_track
     copied = []
 
-    def copy(track):
-        copied.append(track.id)
-        return original(track)
+    def copy(row):
+        track = original(row)
+        copied.append(track['id'])
+        return track
 
     with monkeypatch.context() as patch:
-        patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('full snapshot'))
-        patch.setattr(Track, 'to_public_dict', copy)
+        patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('full snapshot'))
+        if change != 'headers':
+            patch.setattr(lib.db, '_public_headers', lambda *_: pytest.fail('unchanged headers read'))
+        patch.setattr(library_store, '_public_track', copy)
         patch.setattr(route, 'compact_signature', lambda *_: pytest.fail('full hashing'), raising=False)
         patch.setattr(LoudnessStore, 'measured', lambda _: pytest.fail('full loudness scan'))
         patch.setattr(revisions, 'fingerprint', lambda _: pytest.fail('full model fingerprint'))
-        patch.setattr(incremental, 'fingerprint', lambda _: pytest.fail('full model fingerprint'))
         response = get_delta(client, first)
     assert response.status_code == 200
     delta = response.get_json()
@@ -121,8 +124,8 @@ def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkey
     assert apply(first.get_json(), delta) == full.get_json()
     assert delta['revision'] == full.headers['ETag'][3:-1]
     with monkeypatch.context() as patch:
-        patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('warm 304 copied library'))
-        patch.setattr(incremental, 'fingerprint', lambda _: pytest.fail('warm 304 hashed the library'))
+        patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('warm 304 copied library'))
+        patch.setattr(revisions, 'fingerprint', lambda _: pytest.fail('warm 304 hashed the library'))
         assert client.get('/api/library', headers={'If-None-Match': full.headers['ETag']}).status_code == 304
 
 
@@ -142,8 +145,7 @@ def test_add_delete_between_polls_does_not_remove_an_unknown_id(endpoint):
     assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
 
 
-@pytest.mark.parametrize('change', ['raw_sql', 'missing_history', 'expired', 'gap', 'bulk', 'empty',
-                                    'proof_without_headers'])
+@pytest.mark.parametrize('change', ['raw_sql', 'missing_history', 'expired', 'gap', 'bulk', 'empty'])
 def test_unprovable_or_large_changes_fall_back(endpoint, change):
     client, lib, _ = endpoint
     first = client.get('/api/library?delta=1')
@@ -151,7 +153,6 @@ def test_unprovable_or_large_changes_fall_back(endpoint, change):
         with lib.db._get_connection() as db:
             db.execute("UPDATE tracks SET title='Outside writer' WHERE id='0'")
             db.commit()
-        lib.metadata = lib.db.load_library_metadata()
     elif change in {'missing_history', 'expired'}:
         with incremental.history.connection() as db:
             if change == 'missing_history': db.execute('DELETE FROM incremental_bases')
@@ -170,73 +171,44 @@ def test_unprovable_or_large_changes_fall_back(endpoint, change):
     elif change == 'empty':
         lib.metadata.tracks.clear()
         lib.db.replace_library(lib.metadata)
-    elif change == 'proof_without_headers':
-        # A proof committed before header hashes existed, as after an upgrade.
-        lib.metadata.tracks[0].title = 'Changed'
-        lib.db.replace_library(lib.metadata)
-        with lib.db._get_connection() as db:
-            db.execute('DELETE FROM library_public_headers')
-            db.commit()
     response = get_delta(client, first)
     assert 'tracks' in response.get_json()
     assert response.get_json() == client.get('/api/library').get_json()
 
 
-def test_unsaved_edits_never_travel_under_a_committed_revision(endpoint, monkeypatch):
+def test_fresh_and_conditional_reads_share_the_committed_library(endpoint, monkeypatch):
     client, lib, _ = endpoint
     first = client.get('/api/library?delta=1')
     lib.metadata.tracks[0].title = 'Unsaved'
     with monkeypatch.context() as patch:
         # Nothing was committed: the client is current, without a pass over
         # the live model.
-        patch.setattr(incremental, 'fingerprint', lambda _: pytest.fail('hashed the live model'))
+        patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('full snapshot'))
         assert get_delta(client, first).status_code == 304
-    # A fresh client sees the live model, under its own revision.
     fresh = client.get('/api/library')
-    assert fresh.get_json()['tracks'][0]['title'] == 'Unsaved'
-    assert fresh.headers['ETag'] != first.headers['ETag']
-    assert client.get('/api/library', headers={'If-None-Match': fresh.headers['ETag']}).status_code == 304
-    # A committed change while the live model differs from it is never sent
-    # as a delta: rows from that model are not the committed ones.
+    assert fresh.get_json() == first.get_json()
+    assert fresh.headers['ETag'] == first.headers['ETag']
     saved = deepcopy(lib.metadata)
     saved.tracks[0].title = first.get_json()['tracks'][0]['title']
     saved.tracks[1].title = 'Saved'
     lib.db.replace_library(saved)
-    lib.metadata.tracks[1].title = 'Saved'
-    response = get_delta(client, first)
-    assert 'tracks' in response.get_json() and response.get_json()['tracks'][0]['title'] == 'Unsaved'
-    # Once saved, the same client gets a delta again.
-    lib.db.replace_library(lib.metadata)
     delta = get_delta(client, first).get_json()
     assert delta['kind'] == 'delta'
+    assert [track['title'] for track in delta['upserts']] == ['Saved']
     assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
 
 
-def test_unsaved_header_edit_falls_back_to_the_full_response(endpoint):
+def test_full_response_ignores_unsaved_headers_after_an_expired_base(endpoint):
     client, lib, _ = endpoint
     first = client.get('/api/library?delta=1')
     saved = deepcopy(lib.metadata)
     saved.tracks[1].title = 'Saved'
     lib.db.replace_library(saved)
-    lib.metadata.tracks[1].title = 'Saved'
     lib.metadata.playlists['List'].append('unsaved')
+    with incremental.history.connection() as db:
+        db.execute('DELETE FROM incremental_bases')
     response = get_delta(client, first)
-    assert 'tracks' in response.get_json()
-    assert response.get_json()['playlists']['List'][-1] == 'unsaved'
-
-
-def test_full_live_response_does_not_change_a_committed_delta(endpoint):
-    client, lib, _ = endpoint
-    first = client.get('/api/library?delta=1')
-    lib.metadata.tracks[0].title = 'Saved'
-    lib.db.replace_library(lib.metadata)
-    lib.metadata.tracks[1].title = 'Unsaved'
-    delta = get_delta(client, first).get_json()
-    live = client.get('/api/library')
-    assert delta['kind'] == 'delta'
-    assert live.get_json()['tracks'][1]['title'] == 'Unsaved'
-    assert get_delta(client, first).get_json() == delta
-    assert client.get('/api/library', headers={'If-None-Match': live.headers['ETag']}).status_code == 304
+    assert response.get_json() == saved.to_public_dict()
 
 
 def test_reloaded_model_and_disk_base_work_without_validator_memory(endpoint, monkeypatch):
@@ -247,7 +219,7 @@ def test_reloaded_model_and_disk_base_work_without_validator_memory(endpoint, mo
     lib.metadata = lib.db.load_library_metadata()
     validators.clear()
     with monkeypatch.context() as patch:
-        patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('full copy after reload'))
+        patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('full copy after reload'))
         response = get_delta(client, first)
     assert response.get_json()['kind'] == 'delta'
     assert apply(first.get_json(), response.get_json()) == client.get('/api/library').get_json()
@@ -298,25 +270,28 @@ def test_failure_or_commit_during_annotation_cannot_send_partial_proof(endpoint,
     assert response.get_json() == client.get('/api/library').get_json()
 
 
-def test_mutation_during_partial_copy_is_detected_even_if_live_model_reverts(endpoint, monkeypatch):
+def test_commit_during_sqlite_delta_read_falls_back_to_latest_snapshot(endpoint, monkeypatch):
     client, lib, _ = endpoint
     first = client.get('/api/library?delta=1')
     lib.metadata.tracks[0].title = 'Saved'
     lib.db.replace_library(lib.metadata)
-    original = Track.to_public_dict
-    calls = []
+    original = library_store._public_track
+    writer = DatabaseManager(str(lib.db.db_path))
+    latest = deepcopy(lib.metadata)
+    latest.tracks[0].title = 'Newer commit'
+    committed = False
 
-    def temporary_copy(track):
-        result = original(track)
-        if not calls:
-            result['title'] = 'Racing transient value'
-        calls.append(track.id)
-        return result
+    def decode(row):
+        nonlocal committed
+        if not committed:
+            committed = True
+            writer.replace_library(latest)
+        return original(row)
 
-    monkeypatch.setattr(Track, 'to_public_dict', temporary_copy)
+    monkeypatch.setattr(library_store, '_public_track', decode)
     response = get_delta(client, first)
     assert 'tracks' in response.get_json()
-    assert response.get_json()['tracks'][0]['title'] == 'Saved'
+    assert response.get_json()['tracks'][0]['title'] == 'Newer commit'
 
 
 def test_fingerprint_ignores_string_and_collection_sharing():
@@ -404,7 +379,7 @@ loudness.loudness_db_path=lambda:Path(sys.argv[4])
 db=DatabaseManager(sys.argv[5])
 lib=SimpleNamespace(db=db,metadata=db.load_library_metadata(),refresh_if_stale=lambda:None)
 library._get_api=lambda:{'get_library':lambda:lib}
-LibraryMetadata.to_public_dict=lambda _:(_ for _ in ()).throw(RuntimeError('full snapshot after restart'))
+db.public_snapshot=lambda:(_ for _ in ()).throw(RuntimeError('full snapshot after restart'))
 app=Flask(__name__)
 app.register_blueprint(library.library_bp)
 with user_context(sys.argv[6]):
@@ -524,15 +499,42 @@ def test_older_library_can_send_annotation_deltas_before_its_first_save(endpoint
     for track_id in ('0', '1'):
         art.bind(track_id, f'cover-{track_id}', 'manual')
         with monkeypatch.context() as patch:
-            patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('full copy on upgrade'))
+            patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('full copy on upgrade'))
             delta = get_delta(client, first).get_json()
         assert delta['kind'] == 'delta' and delta['fields'] == {}
         assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
     assert lib.db.public_source()['headers'] is None
 
-    lib.metadata.settings['unsaved'] = True
-    live = get_delta(client, first).get_json()
-    assert 'tracks' in live and live['settings']['unsaved'] is True
+
+def test_older_writer_can_change_headers_without_a_header_hash(endpoint):
+    client, lib, _ = endpoint
+    first = client.get('/api/library?delta=1')
+    lib.metadata.settings['crossfade'] = 2
+    lib.db.replace_library(lib.metadata)
+    with lib.db._get_connection() as db:
+        db.execute('DELETE FROM library_public_headers')
+    delta = get_delta(client, first).get_json()
+    assert delta['kind'] == 'delta'
+    assert delta['fields'] == {'settings': lib.metadata.settings}
+    assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
+
+
+
+def test_a_previous_response_projection_bootstraps_once(endpoint):
+    client, lib, _ = endpoint
+    old = client.get('/api/library?delta=1')
+    with incremental.history.connection() as db:
+        db.execute("UPDATE incremental_bases SET proof=json_remove(proof,'$.projection')")
+    lib.metadata.tracks[0].title = 'First edit'
+    lib.db.replace_library(lib.metadata)
+    fresh = get_delta(client, old)
+    assert fresh.get_json() == client.get('/api/library').get_json()
+
+    lib.metadata.tracks[0].title = 'Second edit'
+    lib.db.replace_library(lib.metadata)
+    delta = get_delta(client, fresh).get_json()
+    assert delta['kind'] == 'delta'
+    assert apply(fresh.get_json(), delta) == client.get('/api/library').get_json()
 
 
 def test_live_header_edit_during_a_save_is_neither_stored_nor_certified(endpoint, monkeypatch):
@@ -553,10 +555,6 @@ def test_live_header_edit_during_a_save_is_neither_stored_nor_certified(endpoint
     stored = lib.db.load_library_metadata()
     assert 'late' not in stored.settings
     assert lib.db.public_source()['fingerprint'] == fingerprint(stored)
-    # The live header is not the committed one: no delta may carry it.
-    response = get_delta(client, first)
-    assert 'tracks' in response.get_json() and response.get_json()['settings']['late'] is True
-    del lib.metadata.settings['late']
     delta = get_delta(client, first).get_json()
     assert delta['kind'] == 'delta' and 'late' not in delta['fields'].get('settings', {})
     assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
@@ -595,9 +593,6 @@ def test_live_header_edit_during_a_track_patch_cannot_enter_the_delta(endpoint, 
     stored = lib.db.load_library_metadata()
     assert 'late' not in stored.settings and candidate.settings['late'] is True
     assert lib.db.public_source()['fingerprint'] == fingerprint(stored)
-    response = get_delta(client, first).get_json()
-    assert 'tracks' in response and response['settings']['late'] is True
-    del candidate.settings['late']
     delta = get_delta(client, first).get_json()
     assert delta['kind'] == 'delta'
     assert apply(first.get_json(), delta) == stored.to_public_dict()
@@ -629,36 +624,19 @@ def test_track_mutation_after_sql_write_cannot_reuse_the_old_validator(endpoint,
     assert lib.db.public_source()['fingerprint'] == fingerprint(stored)
 
 
-def test_client_holding_a_live_revision_still_gets_its_304(endpoint, monkeypatch):
-    client, lib, _ = endpoint
-    client.get('/api/library?delta=1')
-    lib.metadata.tracks[0].title = 'Unsaved'
-    live = client.get('/api/library')
-    with monkeypatch.context() as patch:
-        patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('full copy for a current client'))
-        assert client.get('/api/library', headers={'If-None-Match': live.headers['ETag']}).status_code == 304
-
-
-@pytest.mark.parametrize(('field', 'portable', 'stored'), [('artists', None, ['Artist']), ('duration', 180.0, 180)])
-def test_reloaded_normalized_model_revalidates_without_hashing_tracks(endpoint, monkeypatch, field, portable, stored):
+@pytest.mark.parametrize(('field', 'portable', 'stored'), [('artists', None, None), ('duration', 180.0, 180)])
+def test_sqlite_projection_stays_the_same_after_a_reload(endpoint, monkeypatch, field, portable, stored):
     client, lib, _ = endpoint
     setattr(lib.metadata.tracks[0], field, portable)
     lib.db.replace_library(lib.metadata)
     first = client.get('/api/library?delta=1')
     lib.metadata = lib.db.load_library_metadata()
-    response = get_delta(client, first)
-    assert response.status_code == 200
-    value = response.get_json()['tracks'][0][field]
+    value = first.get_json()['tracks'][0][field]
     assert value == stored and type(value) is type(stored)
-    assert response.headers['ETag'] != first.headers['ETag']
-
-    def fail(_):
-        pytest.fail('Warm revalidation walked the reloaded model')
-
-    monkeypatch.setattr(incremental, 'fingerprint', fail)
-    monkeypatch.setattr(revisions, 'fingerprint', fail)
+    assert client.get('/api/library').get_json() == first.get_json()
+    monkeypatch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('warm 304 read a snapshot'))
     for _ in range(3):
-        assert get_delta(client, response).status_code == 304
+        assert get_delta(client, first).status_code == 304
 
 
 @pytest.mark.parametrize('pending', ['cleared', 'first_track'])

@@ -1,12 +1,4 @@
-"""Journal-driven library deltas; only bounded proofs are retained on disk.
-
-A delta is a transition between two committed public sources. It sends rows
-copied from the live model only after checking each one, and the headers,
-against the hashes committed with that source, so it never walks the rest of
-the library. Unsaved in-memory edits are never labelled with a committed
-revision: a copied row or header that differs from its committed hash sends
-the full response instead.
-"""
+"""Bounded journal deltas from committed SQLite rows and annotation cursors."""
 from hashlib import sha256
 import json
 import time
@@ -15,27 +7,16 @@ from flask import current_app
 from flask.json.provider import DefaultJSONProvider
 
 from shared.api import library_deltas as history
-from shared.library_fingerprint import TRACK_FIELDS, fingerprint, header_digest, public_row_digest, record, verified_fingerprint
-from shared.database import DatabaseManager
+from shared.library_fingerprint import TRACK_FIELDS
 from shared.loudness import LoudnessStore, annotate_tracks
-from shared.models import LibraryMetadata, Track
 
 MAX_BASES = 256
 MAX_PER_ACCOUNT = 4
 TTL = 86400
+PROJECTION = 'sqlite-library-v1'
 # Every public track has these ASCII keys and at least one byte per JSON value.
 # A delta smaller than this bound is certainly smaller than the full response.
 MIN_TRACK_BYTES = 1 + sum(len(name) + 5 for name in TRACK_FIELDS)
-
-
-def supported(lib):
-    provider = current_app.json
-    return (type(getattr(lib, 'metadata', None)) is LibraryMetadata
-            and bool(lib.metadata.tracks)
-            and isinstance(getattr(lib, 'db', None), DatabaseManager)
-            and type(provider) is DefaultJSONProvider
-            and provider.compact is not False
-            and not (provider.compact is None and current_app.debug))
 
 
 def _table(db):
@@ -59,7 +40,7 @@ def header_digests(headers):
 def remember(account, revision, state, digests):
     if len(account.encode()) > 256:
         return
-    proof = json.dumps({**state, 'headers': digests})
+    proof = json.dumps({**state, 'headers': digests, 'projection': PROJECTION})
     if len(proof.encode()) > 8192:
         return
     with history.connection() as db:
@@ -75,105 +56,49 @@ def remember(account, revision, state, digests):
                    '(SELECT rowid FROM incremental_bases ORDER BY created DESC,rowid DESC LIMIT ?)', (MAX_BASES,))
 
 
-def committed_source(lib):
-    """The account's committed public source, or None when it is not verified."""
-    db = getattr(lib, 'db', None)
-    return db.public_source() if isinstance(db, DatabaseManager) else None
-
-
-def live_fingerprint(metadata, source):
-    """Return the fingerprint and whether it reused the committed hint.
-
-    A read can establish a committed match after a reload. Observing unsaved
-    changes must not replace the hint that another reader uses for a delta.
-    """
-    verified = verified_fingerprint(metadata, source)
-    if verified is not None:
-        return verified, True
-    value = fingerprint(metadata)
-    if source is not None and value == source['fingerprint']:
-        record(metadata, value)
-    return value, False
-
-
-def prepare(lib, artwork, dependencies, model_fingerprint=None):
-    """Tie the committed public source to the current annotation cursors.
-
-    With `model_fingerprint`, only when the caller's detached model is exactly
-    that source, which lets a full response carry the committed revision.
-    """
-    if not supported(lib) or dependencies is None:
+def prepare(source, artwork):
+    """Bind one committed projection to its annotation cursors."""
+    provider = current_app.json
+    if (source is None or type(provider) is not DefaultJSONProvider or provider.compact is False
+            or (provider.compact is None and current_app.debug)):
         return None
-    source = lib.db.public_source()
-    if source is None or (model_fingerprint is not None and source['fingerprint'] != model_fingerprint):
-        return None
-    art = artwork.change_state()
-    loud = LoudnessStore().change_state()
-    if dependencies != ((art['token'], loud['token']) if lib.metadata.tracks else ()):
-        return None
-    state = {'source': source, 'art': art, 'loud': loud}
-    return state
+    return {'source': source, 'art': artwork.change_state() if source['tracks'] else None,
+            'loud': LoudnessStore().change_state() if source['tracks'] else None}
 
 
-def still_current(lib, artwork, state):
-    return (lib.db.public_source() == state['source']
-            and artwork.change_state() == state['art']
-            and LoudnessStore().change_state() == state['loud'])
+def annotations_current(artwork, state):
+    return not state['source']['tracks'] or (
+        artwork.change_state() == state['art'] and LoudnessStore().change_state() == state['loud']
+    )
 
 
 def revision_for(account, state):
-    # Weak ETags are opaque validators, not a promise to hash serialized bytes.
-    return sha256(history.encoded(('library-dependencies', account, state['source']['fingerprint'],
-                                 state['art']['token'], state['loud']['token']))).hexdigest()
+    # A different representation must start a new base, including on upgrade.
+    art, loud = state['art'], state['loud']
+    return sha256(history.encoded((PROJECTION, account, state['source']['revision'], state['source']['fingerprint'],
+                                   art['token'] if art else None, loud['token'] if loud else None))).hexdigest()
 
 
-def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerprint=None):
-    if not supported(lib) or not base_revision or len(base_revision) > 128:
+def try_delta(db, artwork, account, base_revision, state):
+    if not state['source']['tracks'] or not base_revision or len(base_revision) > 128:
         return None
     base = load_base(account, base_revision)
-    if base is None:
-        return None
-    state = prepare(lib, artwork, dependencies)
-    if state is None:
-        return None
-    committed = state['source']['fingerprint']
-    header_hash = state['source']['headers']
-    if header_hash is None and committed != base['source']['fingerprint']:
-        return None
-    if model_fingerprint is None:
-        model_fingerprint, _ = live_fingerprint(lib.metadata, state['source'])
-    if model_fingerprint != committed:
+    if base is None or base.get('projection') != PROJECTION or base['art'] is None:
         return None
     artwork_ids = artwork.changed_tracks(base['art'], state['art'])
     identities = LoudnessStore().changed_identities(base['loud'], state['loud'])
     if artwork_ids is None or identities is None:
         return None
-    affected = lib.db.public_changes(base['source'], state['source'], artwork_ids, identities)
+    affected = db.public_changes(base['source'], state['source'], artwork_ids, identities)
     if affected is None:
         return None
-    positions, removed, order = affected
-    tracks = lib.metadata.tracks
-    copied = {}
-    for track_id, (position, row_hash) in positions.items():
-        track = tracks[position] if position < len(tracks) else None
-        if type(track) is not Track or track.id != track_id:
-            return None
-        row = track.to_public_dict()
-        # The exact detached row we will send, so an edit made while copying,
-        # or one not yet saved, cannot travel under the committed revision.
-        if public_row_digest(row) != row_hash:
-            return None
-        copied[position] = row
-    headers = lib.metadata.public_headers()
-    if header_hash is not None and header_digest(headers) != header_hash:
-        return None
-    digests = header_digests(headers)
-    fields = {name: headers[name] for name, digest in digests.items() if digest != base['headers'].get(name)}
-    # Older engines did not save a header hash. A served base for the same
-    # canonical fingerprint already proves the exact headers the client has.
-    if header_hash is None and fields:
-        return None
-    upserts = [copied[position] for position in sorted(copied)]
+    upserts, removed, order, headers = affected
+    if headers is None:
+        fields, digests = {}, base['headers']
+    else:
+        digests = header_digests(headers)
+        fields = {name: headers[name] for name, digest in digests.items()
+                  if digest != base['headers'].get(name)}
     if not annotate_tracks(upserts, selected=True):
         return None
     artwork.annotate(upserts)
@@ -181,13 +106,11 @@ def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerpr
              'upserts': upserts, 'removed': removed, 'fields': fields}
     if order is not None:
         delta['order'] = order
-    if not still_current(lib, artwork, state):
+    if db.public_source() != state['source'] or not annotations_current(artwork, state):
         return None
     response = current_app.json.response(delta)
-    if len(response.get_data()) >= len(lib.metadata.tracks) * MIN_TRACK_BYTES:
+    if not db.public_track_count_exceeds(len(response.get_data()) // MIN_TRACK_BYTES):
         return None
     remember(account, delta['revision'], state, digests)
-    from shared.api.library_revision import validator_key, validators
-    validators.put(validator_key(account, state['source']['fingerprint'], dependencies), delta['revision'])
     response.headers['Cache-Control'] = 'private, no-store'
     return response

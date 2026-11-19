@@ -324,7 +324,7 @@ class LibraryManager:
     @serialized
     def patch_track_metadata(self, track_id: str, changes: dict) -> bool:
         """Apply only declared fields; update the live model after durable commit."""
-        from shared.library_fingerprint import fingerprint, record, recorded, verified_fingerprint
+        from shared.library_fingerprint import fingerprint
         from shared.library_lifecycle import LibraryPersistenceError
         allowed = {'title', 'artist', 'album', 'album_artist', 'cover_source', 'metadata_modified_by_user'}
         if not changes or not set(changes) <= allowed:
@@ -339,14 +339,16 @@ class LibraryManager:
                 before = fingerprint(metadata) if source and metadata is not None else None
                 use_stored = source is None or before != committed
                 if use_stored:
-                    if source is not None and before != verified_fingerprint(metadata, source):
-                        raise ValueError('Track edit requires an unchanged canonical library')
+                    if source is not None:
+                        projected = self.db.load_library_metadata()
+                        if projected is None or fingerprint(projected) != before:
+                            raise ValueError('Track edit requires an unchanged canonical library')
                     # The loaded view can contain derived catalog credits.
                     # Use the original stored values for the edit and proof.
                     metadata, revision = self.db.load_library_snapshot(project_artists=False)
                     if revision != self._library_revision:
                         raise StaleLibraryWrite(self._library_revision, revision)
-                    before = recorded(metadata)
+                    before = fingerprint(metadata) if metadata is not None else None
                 track = metadata.get_track_by_id(track_id) if metadata else None
                 if track is None:
                     return False
@@ -364,7 +366,6 @@ class LibraryManager:
                 else:
                     for name, value in changes.items():
                         setattr(track, name, value)
-                    record(metadata, recorded(candidate))
                     self._library_revision = revision
             except Exception as exc:
                 self.last_save_error = 'library_conflict' if isinstance(exc, StaleLibraryWrite) else 'library_storage_unavailable'

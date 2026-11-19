@@ -84,7 +84,11 @@ class Downloader:
                 library = resident if manifest == known else None
                 if library is None:
                     library = self._empty_library()
-            existing = library.get_track_by_hash(track.file_hash)
+            # Membership changes discard the indexes, so scan for the one
+            # hash needed by this publication.
+            existing = None
+            if track.file_hash:
+                existing = next((item for item in library.tracks if item.file_hash == track.file_hash), None)
             if library is resident:
                 # Stage membership only. A failed write cannot leave the next
                 # commit with an unpublished track or remove a held track.

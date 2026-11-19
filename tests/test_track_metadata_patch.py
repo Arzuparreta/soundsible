@@ -324,13 +324,6 @@ def test_labels_reach_the_pool_catalog_only_while_one_account_owns_it(monkeypatc
     assert (pool.tracks[0].title == 'A member label') is not shared_pool
 
 
-def test_edit_leaves_the_live_model_proven_for_reads(manager):
-    from shared.library_fingerprint import recorded
-    manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': 'Edited'})
-    # A later conditional request or delta need not hash the model again.
-    assert recorded(manager.metadata) == manager.db.public_source()['fingerprint'] == fingerprint(manager.metadata)
-
-
 def test_edit_gives_an_upgraded_database_its_header_hash(manager):
     with manager.db._get_connection() as conn:
         conn.execute('DELETE FROM library_public_headers')  # As before the upgrade.

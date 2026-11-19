@@ -1,6 +1,7 @@
 """What a client writes back: stars, ratings, plays and playlists."""
 
 import time
+import pytest
 
 from tests.subsonic_support import build, track
 
@@ -194,6 +195,26 @@ def test_create_playlist_builds_response_after_releasing_write_lock(tmp_path, mo
 
     monkeypatch.setattr(subsonic, '_playlist_payload', payload)
     harness.ok('createPlaylist.view', name='Night', songId='tr-t1')
+
+
+@pytest.mark.parametrize(('method', 'params'), [
+    ('createPlaylist.view', {'name': 'Night', 'songId': 'tr-t1'}),
+    ('updatePlaylist.view', {'playlistId': 'Drive', 'name': 'Night'}),
+    ('deletePlaylist.view', {'id': 'Drive'}),
+])
+def test_playlist_notifications_run_after_releasing_write_lock(tmp_path, monkeypatch, method, params):
+    from shared import library_lifecycle
+
+    harness = build(tmp_path, monkeypatch, _library(), playlists={'Drive': ['t1']})
+    notifications = []
+
+    def emit(event):
+        assert not getattr(library_lifecycle._local, 'depth', 0)
+        notifications.append(event)
+
+    monkeypatch.setattr('shared.realtime.emit_to_user', emit)
+    harness.ok(method, **params)
+    assert notifications == ['library_updated']
 
 
 def test_updating_a_playlist_adds_and_removes_by_index(tmp_path, monkeypatch):

@@ -149,139 +149,114 @@ def _held_revision(user_id, fingerprint, dependencies):
     return cached if cached and request.if_none_match.contains_weak(cached) else None
 
 
-def _conditional(lib, artwork, user_id):
-    from shared.api import library_incremental
-
-    metadata = lib.metadata
-    source = library_incremental.committed_source(lib)
-    current, used_hint = library_incremental.live_fingerprint(metadata, source)
-    has_tracks = source["tracks"] if used_hint else bool(metadata.tracks)
-    dependencies = _annotation_revisions(artwork) if has_tracks else ()
-    return dependencies, _held_revision(user_id, current, dependencies), current, used_hint
-
-
 @library_bp.route("/api/library", methods=["GET"])
 def get_library():
-    api = _get_api()
-    lib = api["get_library"]()
-    lib.refresh_if_stale()
-    if not lib.metadata:
-        lib.sync_library()
-    if not lib.metadata:
-        return jsonify({"error": "Library not loaded"}), 404
-
-    from shared.api.library_revision import fingerprint, validator_key, validators
-    from shared.api import library_incremental
-    from shared.artwork import artwork_store
-    from shared.library_fingerprint import record
-    from shared.user_context import current_user_id
     from flask import Response
+    from shared.api import library_incremental
+    from shared.api.library_revision import fingerprint, validator_key, validators
+    from shared.artwork import artwork_store
+    from shared.database import DatabaseManager
+    from shared.user_context import current_user_id
 
+    lib = _get_api()["get_library"]()
     artwork = artwork_store()
     user_id = current_user_id() or ""
-    dependencies = None
-    model_fingerprint = None
-    used_hint = False
-    try:
-        if request.if_none_match:
-            dependencies, held, model_fingerprint, used_hint = _conditional(lib, artwork, user_id)
-            if held:
-                return _library_response(Response(), held)
-        else:
-            # Empty manifests have no annotation dependencies or lookup cost.
-            dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
-    except Exception:
-        # An unavailable dependency or unsupported model disables only the
-        # shortcut. Loudness remains best effort, just as on the full path.
-        dependencies = None
-
-    if request.args.get("delta") == "1":
-        try:
-            partial = library_incremental.try_delta(
-                lib, artwork, user_id, request.args.get("since"), dependencies, model_fingerprint)
-            if partial is not None:
-                return partial
-        except Exception:
-            logger.debug("Incremental library proof unavailable; using full comparison", exc_info=True)
-
-    metadata = lib.metadata
-    if used_hint:
-        # A client may hold a revision of the live, uncommitted content.
-        # Check it only after the committed shortcuts decline the request.
-        try:
-            live = fingerprint(metadata)
-            if live != model_fingerprint:
-                dependencies = _annotation_revisions(artwork) if metadata.tracks else ()
-                held = _held_revision(user_id, live, dependencies)
-                if held:
-                    return _library_response(Response(), held)
-        except Exception:
-            dependencies = None
-    payload = metadata.to_public_dict()
-    snapshot_fingerprint = None
-    if dependencies is not None:
-        try:
-            # Cache under the actual detached content, not the earlier mutable
-            # model. A concurrent metadata edit then cannot mislabel this ETag.
-            snapshot_fingerprint = fingerprint(payload)
-        except Exception:
-            pass
-    loudness_ok = annotate_tracks(payload.get("tracks") or [])
-    artwork.annotate(payload.get("tracks") or [])
     wants_delta = request.args.get("delta") == "1"
     base = request.args.get("since") if wants_delta else None
     if base and len(base) > 128:
         base = None
-    incremental_state = None
-    if snapshot_fingerprint is not None and loudness_ok is True:
+
+    db = getattr(lib, "db", None)
+    payload = state = dependencies = None
+    if isinstance(db, DatabaseManager):
         try:
-            incremental_state = library_incremental.prepare(lib, artwork, dependencies, snapshot_fingerprint)
-            if incremental_state is not None:
-                record(metadata, snapshot_fingerprint)
+            state = library_incremental.prepare(db.public_source(), artwork)
+            if state is not None:
+                revision = library_incremental.revision_for(user_id, state)
+                if request.if_none_match.contains_weak(revision):
+                    return _library_response(Response(), revision)
+                if base:
+                    partial = library_incremental.try_delta(db, artwork, user_id, base, state)
+                    if partial is not None:
+                        return partial
         except Exception:
-            logger.debug("Canonical public source unavailable", exc_info=True)
+            logger.debug("Incremental library read unavailable; using full snapshot", exc_info=True)
+            state = None
+        payload, source = db.public_snapshot()
+        if state is None or state["source"] != source:
+            try:
+                state = library_incremental.prepare(source, artwork)
+            except Exception:
+                state = None
+
+    if payload is None:
+        lib.refresh_if_stale()
+        if not lib.metadata:
+            lib.sync_library()
+            if isinstance(db, DatabaseManager):
+                payload, _ = db.public_snapshot()
+    if payload is None:
+        if not lib.metadata:
+            return jsonify({"error": "Library not loaded"}), 404
+        try:
+            dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
+            if request.if_none_match:
+                held = _held_revision(user_id, fingerprint(lib.metadata), dependencies)
+                if held:
+                    return _library_response(Response(), held)
+        except Exception:
+            dependencies = None
+        payload = lib.metadata.to_public_dict()
+    snapshot_fingerprint = None
+    if dependencies is not None:
+        try:
+            snapshot_fingerprint = fingerprint(payload)
+        except Exception:
+            pass
+    tracks = payload.get("tracks") or []
+    loudness_ok = annotate_tracks(tracks)
+    artwork.annotate(tracks)
+    if state is not None and loudness_ok is True:
+        try:
+            if library_incremental.annotations_current(artwork, state):
+                revision = library_incremental.revision_for(user_id, state)
+                if wants_delta and tracks:
+                    try:
+                        digests = library_incremental.header_digests({k: v for k, v in payload.items() if k != "tracks"})
+                        library_incremental.remember(user_id, revision, state, digests)
+                    except Exception:
+                        logger.debug("Incremental base unavailable; sending full snapshot", exc_info=True)
+                return _library_response(jsonify(payload), revision)
+        except Exception:
+            logger.debug("Annotation state changed; using content validation", exc_info=True)
+
     response = None
     signature = None
-    if incremental_state is not None:
-        # A proven source needs no serialized-body hash or legacy row history.
-        revision = library_incremental.revision_for(user_id, incremental_state)
+    if base:
+        from shared.api.library_serialization import compact_signature
+        signature = compact_signature(payload, user_id)
+    if signature is None:
         response = jsonify(payload)
-        full_size = len(response.get_data())
+        digest = sha256(user_id.encode() + b"\0")
+        digest.update(response.get_data())
+        revision, full_size = digest.hexdigest(), len(response.get_data())
     else:
-        if base:
-            from shared.api.library_serialization import compact_signature
-            signature = compact_signature(payload, user_id)
-        if signature is None:
-            response = jsonify(payload)
-            digest = sha256(user_id.encode() + b"\0")
-            digest.update(response.get_data())
-            revision, full_size = digest.hexdigest(), len(response.get_data())
-        else:
-            revision, full_size = signature
+        revision, full_size = signature
     if snapshot_fingerprint is not None and loudness_ok is True:
         try:
-            # A concurrent annotation commit must never tag a mixed snapshot
-            # with either the old or new dependency token.
-            current_dependencies = _annotation_revisions(artwork) if payload.get("tracks") else ()
+            # Cache only the detached content under an unchanged annotation token.
+            current_dependencies = _annotation_revisions(artwork) if tracks else ()
             if current_dependencies == dependencies:
                 validators.put(validator_key(user_id, snapshot_fingerprint, dependencies), revision)
         except Exception:
             pass
-    if wants_delta and incremental_state is not None:
-        try:
-            digests = library_incremental.header_digests({k: v for k, v in payload.items() if k != 'tracks'})
-            library_incremental.remember(user_id, revision, incremental_state, digests)
-        except Exception:
-            logger.debug("Incremental base unavailable; sending full snapshot", exc_info=True)
-    elif wants_delta:
+    if wants_delta:
         try:
             from shared.api.library_deltas import exchange
             delta = exchange(user_id, revision, payload, base)
             if delta is not None:
                 candidate = jsonify(delta)
                 if len(candidate.get_data()) < full_size:
-                    # A delta is a representation of a transition, not the full
-                    # resource: its target revision is in the body, not ETag.
                     candidate.headers["Cache-Control"] = "private, no-store"
                     return candidate
         except Exception:

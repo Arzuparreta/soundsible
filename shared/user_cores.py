@@ -160,9 +160,9 @@ def ensure_library_metadata():
     """The library and metadata a write is about to change, as they are *now*.
 
     Every caller of this mutates the snapshot it gets back and then saves the
-    whole library from it, so it has to be the current one. Reads already
-    reconcile (`GET /api/library` refreshes before answering); writes used to
-    trust whatever this process last loaded, which is how a playlist could be
+    whole library from it, so it has to be the current one. The flat library
+    read uses SQLite directly. Writes used to trust whatever this process
+    last loaded, which is how a playlist could be
     renamed on one snapshot and a song added to another — the later save
     reverting the earlier change, and the client being told both succeeded.
 

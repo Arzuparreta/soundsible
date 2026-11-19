@@ -27,15 +27,13 @@ A delta base retains only the canonical proof, annotation tokens/cursors and
 header hashes in the existing disposable history database. On a supported
 request, the route:
 
-1. Reads the committed public source; it no longer fingerprints the live model
-   (see [committed library reads](committed-library-reads.md)).
-2. Loads bounded changed-key sets since the client's base and resolves current
-   canonical positions with their committed row hashes. Coalescing preserves
+1. Reads the committed public source and annotation cursors without consulting
+   the resident model. See [committed library reads](committed-library-reads.md).
+2. Loads bounded changed-key sets since the client's base. Coalescing preserves
    the first operation, so a song added and deleted between polls does not
    produce an invalid removal.
-3. Copies only affected tracks and detached headers, and checks each copied
-   row against its committed row hash and the headers against the committed
-   header hash. Edits during copying and edits not yet saved fall back.
+3. Reads affected tracks from the same SQLite snapshot as their journal. It
+   reads headers only when the base and current header proof differ.
 4. Annotates only those tracks, rechecks all source cursors, and returns a delta
    only if it is provably smaller than the complete JSON representation.
 
@@ -51,10 +49,9 @@ For verified canonical sources, weak ETags now hash account-scoped public-source
 and annotation dependency tokens, not serialized JSON bytes. The ETag is still
 an opaque string; full responses and partial responses for the same verified
 state agree. Annotation tokens can conservatively change even for an unrelated
-song. The existing validator cache still contains only short strings and retains
-early 304 behavior. Custom/pretty JSON providers, empty libraries, unverified
-models, annotation failures, missing/expired history, pruned journals and large
-change sets fall back safely. The legacy content-hash path remains available
+song. Warm revalidation takes a fixed number of lookups. Custom or pretty JSON
+providers, unverified sources, annotation failures, missing or expired history,
+pruned journals and large change sets can fall back to a full response. The legacy content-hash path remains available
 for models without a verified canonical source.
 
 The public fingerprint now ignores Python object-sharing topology. Equal strings
@@ -79,17 +76,12 @@ unsupported models cannot establish a valid optimization proof.
 - The canonical current hash index grows with the library, on disk, rather than
   holding additional metadata in RAM. Normal SQLite/page-cache behavior still
   applies; these bounds do not describe total process or operating-system RAM.
-- When the verified model fingerprint matches SQLite, a conditional
-  request can reuse it and a small delta hashes only its rows and headers.
-  New or divergent models still need verification after a reload or save.
-  [Committed library reads](committed-library-reads.md)
-- Headers and optional ID order are copied when required; very large playlists
-  or order changes therefore need memory proportional to those response fields.
-  Canonical saves now pay for hashing and maintaining the proof/index. This is a
-  measured write/read tradeoff, not free optimization.
-- Numeric/string normalization and catalog projection can make a reloaded model
-  differ from an earlier saved model. A mismatch disables partial preparation
-  until a later canonical save; correctness takes precedence over hit rate.
+- Warm revalidation makes no track or header queries. Sparse deltas read the
+  affected rows and skip unchanged headers. Full responses use the same
+  committed SQL projection.
+- Changed headers and the optional ID order take memory proportional to those
+  response fields. Saves maintain the on-disk hashes and bounded journal in
+  the canonical transaction.
 
 ## Validation
 

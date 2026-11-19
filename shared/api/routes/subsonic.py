@@ -30,7 +30,7 @@ from typing import Any, Callable, Optional
 from flask import Blueprint, Response, request, send_file, stream_with_context
 
 from shared.hardening import rate_limit_allows
-from shared.library_lifecycle import coordinated, serialized
+from shared.library_lifecycle import after_release, coordinated, serialized
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
 from shared.security import is_safe_path, request_client_address
 from shared.subsonic import serialize, transcode
@@ -970,7 +970,7 @@ def _save_playlists(lib, metadata):
 
     if not lib._save_metadata(metadata=metadata):
         raise SubsonicError(ERR_GENERIC, "Could not save playlist")
-    emit_to_user("library_updated")
+    after_release(lambda: emit_to_user("library_updated"))
 
 
 @_endpoint("createPlaylist")

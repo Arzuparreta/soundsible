@@ -13,6 +13,7 @@ instance, and a Downloader on that same file.
 - poll_304_ms: a conditional GET /api/library whose ETag is still current.
 - edit_delta_ms: GET /api/library?delta=1 after LibraryManager.patch_track_metadata
   changed one title; every delta is applied and compared with a full response.
+- full_get_ms: the unconditional GET used to check each reconstructed delta.
 - pool_commit_*: Downloader.commit_track when only the pool wrote the file.
 - cycle_commit_*: the pool commit in a steady-state single-account download;
   the account then admits that same track and exports into the shared file.
@@ -94,6 +95,7 @@ def measure(code, count, repeats, scratch):
                 polls.append((time.perf_counter() - started) * 1000)
                 assert response.status_code == 304
             deltas = []
+            fulls = []
             for iteration in range(repeats):
                 # The production label edit, not a whole-library save.
                 assert manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': f'Edited {iteration}'})
@@ -104,11 +106,14 @@ def measure(code, count, repeats, scratch):
                 body = response.get_json()
                 assert body.get('kind') == 'delta', response.status_code
                 accepted = apply(accepted, body)
+                started = time.perf_counter()
                 full = client.get('/api/library')
+                fulls.append((time.perf_counter() - started) * 1000)
                 assert accepted == full.get_json() and body['revision'] == full.headers['ETag'][3:-1]
                 etag = 'W/"' + body['revision'] + '"'
             result.update(poll_304_ms=round(statistics.median(polls), 2),
-                          edit_delta_ms=round(statistics.median(deltas), 2), delta_bytes=len(response.data))
+                          edit_delta_ms=round(statistics.median(deltas), 2), delta_bytes=len(response.data),
+                          full_get_ms=round(statistics.median(fulls), 2))
 
             pool = Downloader.__new__(Downloader)
             pool.library_path = runtime.music_dir / 'library.json'
