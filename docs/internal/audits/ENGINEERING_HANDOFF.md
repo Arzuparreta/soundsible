@@ -89,7 +89,7 @@ RSS, energy savings, playback quality or acoustic acceptance.
   `shared/library_changes.py`, `shared/sqlite_changes.py` and
   `shared/api/library_incremental.py` implement source proofs and selection.
 - Models are still mutable before they are saved. Conditional requests can
-  revalidate the committed representation when the model's last-observed
+  revalidate the committed representation when the model's verified
   fingerprint matches it. Deltas additionally verify every detached row they
   send and all detached headers against the committed hashes
   (`library_public_rows`, `library_public_headers`). An unrelated unsaved row
@@ -488,5 +488,6 @@ Closes the read side of pending item 2. Contract, measurements and limits in
 | Search per-query fingerprint, save-side fingerprints, track-edit fingerprints, exports | Still walk the library; unchanged |
 
 Conditional requests and deltas can answer from the committed representation
-while the last-observed fingerprint matches it. Full responses serve the live
-model. A delta verifies the rows it sends and its header fields.
+while the verified fingerprint matches it. Full responses serve the live
+model without changing which committed deltas can be served. A delta verifies
+the rows it sends and its header fields.

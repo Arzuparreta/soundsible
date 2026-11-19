@@ -79,7 +79,7 @@ unsupported models cannot establish a valid optimization proof.
 - The canonical current hash index grows with the library, on disk, rather than
   holding additional metadata in RAM. Normal SQLite/page-cache behavior still
   applies; these bounds do not describe total process or operating-system RAM.
-- When the last-observed model fingerprint matches SQLite, a conditional
+- When the verified model fingerprint matches SQLite, a conditional
   request can reuse it and a small delta hashes only its rows and headers.
   New or divergent models still need verification after a reload or save.
   [Committed library reads](committed-library-reads.md)

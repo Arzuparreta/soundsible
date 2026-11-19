@@ -357,7 +357,8 @@ class LibraryManager:
                 raise LibraryPersistenceError(self.last_save_error) from exc
             for name, value in changes.items():
                 setattr(track, name, value)
-            # The live model now holds exactly the candidate's public content.
+            # Record the committed fingerprint for journal-backed reads. Their
+            # row and header checks still reject unsaved edits to the model.
             record(self.metadata, recorded(candidate))
             self._library_revision = revision
             after_release(self._export_committed, key=('library-export', id(self)))

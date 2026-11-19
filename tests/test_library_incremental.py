@@ -225,6 +225,20 @@ def test_unsaved_header_edit_falls_back_to_the_full_response(endpoint):
     assert response.get_json()['playlists']['List'][-1] == 'unsaved'
 
 
+def test_full_live_response_does_not_change_a_committed_delta(endpoint):
+    client, lib, _ = endpoint
+    first = client.get('/api/library?delta=1')
+    lib.metadata.tracks[0].title = 'Saved'
+    lib.db.replace_library(lib.metadata)
+    lib.metadata.tracks[1].title = 'Unsaved'
+    delta = get_delta(client, first).get_json()
+    live = client.get('/api/library')
+    assert delta['kind'] == 'delta'
+    assert live.get_json()['tracks'][1]['title'] == 'Unsaved'
+    assert get_delta(client, first).get_json() == delta
+    assert client.get('/api/library', headers={'If-None-Match': live.headers['ETag']}).status_code == 304
+
+
 def test_reloaded_model_and_disk_base_work_without_validator_memory(endpoint, monkeypatch):
     client, lib, _ = endpoint
     first = client.get('/api/library?delta=1')
@@ -524,6 +538,47 @@ def test_live_header_edit_during_a_save_is_neither_stored_nor_certified(endpoint
     delta = get_delta(client, first).get_json()
     assert delta['kind'] == 'delta' and 'late' not in delta['fields'].get('settings', {})
     assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
+
+
+def test_live_header_edit_during_a_track_patch_cannot_enter_the_delta(endpoint, monkeypatch):
+    from contextlib import contextmanager
+    from dataclasses import replace
+    client, lib, _ = endpoint
+    first = client.get('/api/library?delta=1')
+    metadata = lib.metadata
+    source = lib.db.public_source()['fingerprint']
+    updated = replace(metadata.tracks[0], title='Saved')
+    candidate = replace(metadata, tracks=[updated, *metadata.tracks[1:]])
+    original = lib.db._get_connection
+
+    def edit_header(sql):
+        if sql.startswith('UPDATE library_public_source SET valid=1,fingerprint='):
+            metadata.settings['late'] = True
+
+    @contextmanager
+    def traced():
+        with original() as conn:
+            conn.set_trace_callback(edit_header)
+            try:
+                yield conn
+            finally:
+                conn.set_trace_callback(None)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(lib.db, '_get_connection', traced)
+        lib.db.patch_track_metadata(updated.id, {'title': 'Saved'},
+                                    expected_revision=lib.db.get_library_revision(),
+                                    previous_fingerprint=source, metadata=candidate)
+    lib.metadata = candidate
+    stored = lib.db.load_library_metadata()
+    assert 'late' not in stored.settings and candidate.settings['late'] is True
+    assert lib.db.public_source()['fingerprint'] == fingerprint(stored)
+    response = get_delta(client, first).get_json()
+    assert 'tracks' in response and response['settings']['late'] is True
+    del candidate.settings['late']
+    delta = get_delta(client, first).get_json()
+    assert delta['kind'] == 'delta'
+    assert apply(first.get_json(), delta) == stored.to_public_dict()
 
 
 def test_client_holding_a_live_revision_still_gets_its_304(endpoint, monkeypatch):

@@ -97,26 +97,27 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
 
     Substituting only the edited fields proves that the candidate, including
     all other fields of this track, headers and track ordering, derives from
-    the verified pre-edit source. Both full-model passes remain mandatory.
+    the verified pre-edit source. Both proofs and the row/header hashes use
+    the same detached values for the edited row and headers.
     Call inside the revision-checked write transaction; errors roll it back.
     """
-    from shared.library_fingerprint import fingerprint, header_digest, record, row_digest, track_values
-    track = metadata.tracks[position]
-    before = track.to_public_dict()
-    if any(before[name] != value for name, value in changes.items()):
+    from shared.library_fingerprint import header_digest, public_row_digest, record, track_edit_fingerprints
+    tracks = metadata.tracks
+    headers = metadata.public_headers()
+    after = tracks[position].to_public_dict()
+    if any(after[name] != value for name, value in changes.items()):
         raise ValueError('Candidate does not contain the declared edit')
-    before.update(previous_values)
-    if fingerprint(metadata, public_tracks={position: before}) != previous_fingerprint:
+    before, updated = track_edit_fingerprints(headers, tracks, position, after | previous_values, after)
+    if before != previous_fingerprint:
         raise ValueError('Track edit requires an unchanged canonical source')
-    updated = fingerprint(metadata)
     conn.execute('INSERT INTO library_public_rows VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET '
                  'hash=excluded.hash,identity=excluded.identity WHERE hash IS NOT excluded.hash OR identity IS NOT excluded.identity',
-                 (track.id, row_digest(track_values(track)), str(track.file_hash or track.id or '')))
+                 (after['id'], public_row_digest(after), str(after['file_hash'] or after['id'] or '')))
     conn.execute('UPDATE library_public_source SET valid=1,fingerprint=? WHERE singleton=1', (updated,))
     # The check above proved these headers are the committed ones. Writing
     # their hash also gives a database upgraded before it had one its deltas.
     conn.execute('INSERT OR REPLACE INTO library_public_headers VALUES (1,?,?)',
-                 (updated, header_digest(metadata.public_headers())))
+                 (updated, header_digest(headers)))
     record(metadata, updated)
 
 

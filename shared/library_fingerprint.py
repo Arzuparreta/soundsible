@@ -15,12 +15,21 @@ _public_values = itemgetter(*TRACK_FIELDS)
 class _DigestWriter:
     def __init__(self):
         self.digest = sha256()
+        self.previous = None
 
     def write(self, data):
         self.digest.update(data)
+        if self.previous is not None:
+            self.previous.update(data)
 
 
-def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None) -> str:
+def _pickler(writer):
+    encoder = Pickler(writer, protocol=5)
+    encoder.fast = True  # Values, not Python object-sharing topology.
+    return encoder
+
+
+def fingerprint(metadata: LibraryMetadata | dict) -> str:
     """Same fingerprint for a model and its detached public representation.
 
     Unsupported models disable the shortcut at the caller. The materialized
@@ -28,8 +37,7 @@ def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None) -> str:
     cannot associate a validator with different content.
     """
     writer = _DigestWriter()
-    encoder = Pickler(writer, protocol=5)
-    encoder.fast = True  # Values, not Python object-sharing topology.
+    encoder = _pickler(writer)
     if isinstance(metadata, dict):
         if len(metadata) != len(HEADER_FIELDS) + 1:
             raise TypeError("Unsupported public snapshot")
@@ -50,13 +58,7 @@ def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None) -> str:
         tracks = metadata.tracks
 
         def values():
-            for position, track in enumerate(tracks):
-                if public_tracks is not None and position in public_tracks:
-                    row = public_tracks[position]
-                    if len(row) != len(TRACK_FIELDS):
-                        raise TypeError("Unsupported public track")
-                    yield _public_values(row)
-                    continue
+            for track in tracks:
                 if type(track) is not Track:
                     raise TypeError("Unsupported track model")
                 yield track_values(track)
@@ -70,11 +72,31 @@ def fingerprint(metadata: LibraryMetadata | dict, *, public_tracks=None) -> str:
     return writer.digest.hexdigest()
 
 
+def track_edit_fingerprints(headers, tracks, position, before, after):
+    """Fingerprint both sides of an edit using the same bytes for shared rows."""
+    writer = _DigestWriter()
+    encoder = _pickler(writer)
+    encoder.dump((tuple(headers[name] for name in HEADER_FIELDS), len(tracks)))
+    encoder.clear_memo()
+    for index, track in enumerate(tracks):
+        if type(track) is not Track:
+            raise TypeError("Unsupported track model")
+        if index == position:
+            writer.previous = writer.digest.copy()
+            writer.previous.update(encoded_values(_public_values(before)))
+            writer.digest.update(encoded_values(_public_values(after)))
+        else:
+            encoder.dump(track_values(track))
+            encoder.clear_memo()
+    if writer.previous is None:
+        raise ValueError("Track edit changed library membership")
+    return writer.previous.hexdigest(), writer.digest.hexdigest()
+
+
 def encoded_values(value):
     """The same memo-free encoding as fingerprint(), bounded to one row."""
     buffer = BytesIO()
-    encoder = Pickler(buffer, protocol=5)
-    encoder.fast = True
+    encoder = _pickler(buffer)
     encoder.dump(value)
     return buffer.getvalue()
 
@@ -96,12 +118,11 @@ def header_digest(headers: dict) -> str:
     return sha256(encoded_values(tuple(headers[name] for name in HEADER_FIELDS))).hexdigest()
 
 
-def record(metadata: LibraryMetadata, value: str) -> None:
-    """Note that `metadata`'s public content had fingerprint `value` just now.
+def record(metadata: LibraryMetadata, value: str | None) -> None:
+    """Record the fingerprint most recently verified against a commit.
 
-    A hint, never a proof: later in-place edits are not observed. Readers use
-    it only to skip a pass whose answer they already know, never to trust
-    content or to label a response.
+    Later in-place edits can leave this hint intact. A delta still verifies
+    its detached rows and headers against the committed source.
     """
     metadata._public_fingerprint = value
 

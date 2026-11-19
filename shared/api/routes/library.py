@@ -142,27 +142,23 @@ def _annotation_revisions(artwork):
     return artwork.public_revision(), LoudnessStore().public_revision()
 
 
-def _conditional(lib, artwork, user_id):
-    """The annotation dependencies, held revision and source fingerprint.
-
-    Keyed by the live model's fingerprint, which costs one SQLite row while
-    the model is known to be the committed source, and a pass over the
-    library otherwise (an unsaved edit, a reload not yet verified).
-    Annotations matter only with tracks; while the model is the committed
-    source, that source says whether it has any, whatever a writer is doing
-    to the live model.
-    """
-    from shared.api import library_incremental
+def _held_revision(user_id, fingerprint, dependencies):
     from shared.api.library_revision import validator_key, validators
 
+    cached = validators.get(validator_key(user_id, fingerprint, dependencies))
+    return cached if cached and request.if_none_match.contains_weak(cached) else None
+
+
+def _conditional(lib, artwork, user_id):
+    from shared.api import library_incremental
+
+    metadata = lib.metadata
     source = library_incremental.committed_source(lib)
     committed = source["fingerprint"] if source else None
-    current = library_incremental.live_fingerprint(lib, committed)
-    has_tracks = source["tracks"] if current == committed else bool(lib.metadata.tracks)
+    current, used_hint = library_incremental.live_fingerprint(metadata, committed)
+    has_tracks = source["tracks"] if current == committed else bool(metadata.tracks)
     dependencies = _annotation_revisions(artwork) if has_tracks else ()
-    cached = validators.get(validator_key(user_id, current, dependencies))
-    held = cached if cached and request.if_none_match.contains_weak(cached) else None
-    return dependencies, held, current
+    return dependencies, _held_revision(user_id, current, dependencies), current, used_hint
 
 
 @library_bp.route("/api/library", methods=["GET"])
@@ -186,9 +182,10 @@ def get_library():
     user_id = current_user_id() or ""
     dependencies = None
     model_fingerprint = None
+    used_hint = False
     try:
         if request.if_none_match:
-            dependencies, held, model_fingerprint = _conditional(lib, artwork, user_id)
+            dependencies, held, model_fingerprint, used_hint = _conditional(lib, artwork, user_id)
             if held:
                 return _library_response(Response(), held)
         else:
@@ -209,6 +206,18 @@ def get_library():
             logger.debug("Incremental library proof unavailable; using full comparison", exc_info=True)
 
     metadata = lib.metadata
+    if used_hint:
+        # A client may hold a revision of the live, uncommitted content.
+        # Check it only after the committed shortcuts decline the request.
+        try:
+            live = fingerprint(metadata)
+            if live != model_fingerprint:
+                dependencies = _annotation_revisions(artwork) if metadata.tracks else ()
+                held = _held_revision(user_id, live, dependencies)
+                if held:
+                    return _library_response(Response(), held)
+        except Exception:
+            dependencies = None
     payload = metadata.to_public_dict()
     snapshot_fingerprint = None
     if dependencies is not None:
@@ -216,8 +225,6 @@ def get_library():
             # Cache under the actual detached content, not the earlier mutable
             # model. A concurrent metadata edit then cannot mislabel this ETag.
             snapshot_fingerprint = fingerprint(payload)
-            # Record the hint on the model that produced the snapshot.
-            record(metadata, snapshot_fingerprint)
         except Exception:
             pass
     loudness_ok = annotate_tracks(payload.get("tracks") or [])
@@ -230,6 +237,8 @@ def get_library():
     if snapshot_fingerprint is not None and loudness_ok is True:
         try:
             incremental_state = library_incremental.prepare(lib, artwork, dependencies, snapshot_fingerprint)
+            if incremental_state is not None:
+                record(metadata, snapshot_fingerprint)
         except Exception:
             logger.debug("Canonical public source unavailable", exc_info=True)
     response = None

@@ -76,21 +76,18 @@ def committed_source(lib):
     return db.public_source() if isinstance(db, DatabaseManager) else None
 
 
-def live_fingerprint(lib, committed):
-    """The live model's fingerprint, without a pass when it is known to be `committed`.
+def live_fingerprint(metadata, committed):
+    """Return the fingerprint and whether it reused the committed hint.
 
-    The save or edit that committed a source records it on the model it
-    published, and so does every full response; a model reloaded from SQLite
-    pays one pass here, recorded, and only then may stand for the committed
-    source. One whose reloaded values differ from what was proven never does,
-    so a committed revision only ever describes a model this process served.
+    A read can establish a committed match after a reload. Observing unsaved
+    changes must not replace the hint that another reader uses for a delta.
     """
-    metadata = lib.metadata
-    value = recorded(metadata)
-    if committed is None or value != committed:
-        value = fingerprint(metadata)
+    if committed is not None and recorded(metadata) == committed:
+        return committed, True
+    value = fingerprint(metadata)
+    if value == committed:
         record(metadata, value)
-    return value
+    return value, False
 
 
 def prepare(lib, artwork, dependencies, model_fingerprint=None):
@@ -135,7 +132,7 @@ def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerpr
         return None
     committed = state['source']['fingerprint']
     if model_fingerprint is None:
-        model_fingerprint = live_fingerprint(lib, committed)
+        model_fingerprint, _ = live_fingerprint(lib.metadata, committed)
     if model_fingerprint != committed:
         return None
     artwork_ids = artwork.changed_tracks(base['art'], state['art'])
@@ -148,14 +145,14 @@ def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerpr
     positions, removed, order = affected
     tracks = lib.metadata.tracks
     copied = {}
-    for track_id, (position, committed) in positions.items():
+    for track_id, (position, row_hash) in positions.items():
         track = tracks[position] if position < len(tracks) else None
         if type(track) is not Track or track.id != track_id:
             return None
         row = track.to_public_dict()
         # The exact detached row we will send, so an edit made while copying,
         # or one not yet saved, cannot travel under the committed revision.
-        if public_row_digest(row) != committed:
+        if public_row_digest(row) != row_hash:
             return None
         copied[position] = row
     headers = lib.metadata.public_headers()
