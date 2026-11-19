@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 from contextlib import nullcontext
+from copy import deepcopy
+from dataclasses import replace
 from shared.library_lifecycle import after_release, serialized, retire, drain
 from shared.atomic_file import copy_of, publish, text_pieces
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps, merge_podcast_subscriptions
@@ -322,7 +324,6 @@ class LibraryManager:
     @serialized
     def patch_track_metadata(self, track_id: str, changes: dict) -> bool:
         """Apply only declared fields; update the live model after durable commit."""
-        from dataclasses import replace
         from shared.library_fingerprint import fingerprint, record, recorded
         from shared.library_lifecycle import LibraryPersistenceError
         allowed = {'title', 'artist', 'album', 'album_artist', 'cover_source', 'metadata_modified_by_user'}
@@ -738,11 +739,13 @@ class LibraryManager:
             if not self.metadata or not self.metadata.get_track_by_id(track.id):
                 return False
             retire(track, self.provider)
-            self.metadata.remove_track(track.id)
-            for name, ids in self.metadata.playlists.items():
-                self.metadata.playlists[name] = [value for value in ids if value != track.id or track.item_id == value]
-            self.metadata.version += 1
-            if not self._save_metadata():
+            candidate = replace(self.metadata, tracks=self.metadata.tracks.copy(),
+                                playlists=self.metadata.playlists.copy(), settings=deepcopy(self.metadata.settings))
+            candidate.remove_track(track.id)
+            for name, ids in candidate.playlists.items():
+                candidate.playlists[name] = [value for value in ids if value != track.id or track.item_id == value]
+            candidate.version += 1
+            if not self._save_metadata(metadata=candidate):
                 return False
             try:
                 if self.cache:
@@ -763,8 +766,8 @@ class LibraryManager:
             self.refresh_if_stale()
             for track in self.metadata.tracks if self.metadata else []:
                 retire(track, self.provider)
-            self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-            if not self._save_metadata():
+            candidate = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+            if not self._save_metadata(metadata=candidate):
                 return False
             drain(self.provider)
             return True
@@ -779,44 +782,31 @@ class LibraryManager:
         in the current OUTPUT_DIR and, if a cloud provider is configured, in remote storage.
         Returns a summary dict: {"checked": N, "removed": M}.
         """
-        if not self.metadata or not self.metadata.tracks:
+        metadata = self.metadata
+        if not metadata or not metadata.tracks:
             return {"checked": 0, "removed": 0}
 
-        checked = 0
-        removed = 0
-
-        # Work on a copy so we can mutate the original list safely
-        tracks_snapshot = list(self.metadata.tracks)
-
-        for track in tracks_snapshot:
-            checked += 1
-
-            # 1) Check local file via unified resolver
-            local_path = resolve_local_track_path(track)
-
-            # 2) If we have a provider, see if the remote object still exists
-            remote_exists = False
+        missing = []
+        for track in metadata.tracks:
+            if resolve_local_track_path(track):
+                continue
             if self.provider:
                 try:
-                    remote_key = track_storage_key(track)
-                    remote_exists = self.provider.file_exists(remote_key)
+                    if self.provider.file_exists(track_storage_key(track)):
+                        continue
                 except Exception:
-                    # Be conservative: if we can't check, assume it exists to avoid accidental data loss
-                    remote_exists = True
+                    # Keep the track when we cannot verify the remote object.
+                    continue
+            missing.append(track)
 
-            if local_path or remote_exists:
-                continue
+        if missing:
+            removed_ids = {track.id for track in missing}
+            removed_playlist_ids = {track.id for track in missing if track.item_id != track.id}
+            playlists = {name: [pid for pid in ids if pid not in removed_playlist_ids]
+                         for name, ids in metadata.playlists.items()}
+            candidate = replace(metadata, tracks=[track for track in metadata.tracks if track.id not in removed_ids],
+                                playlists=playlists, settings=deepcopy(metadata.settings),
+                                version=metadata.version + 1)
+            self.require_saved(metadata=candidate)
 
-            # At this point, neither a local file nor a known remote object exists – purge metadata entry.
-            self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
-            # Also remove from any playlists
-            for name, playlist in list(self.metadata.playlists.items()):
-                if track.id in playlist:
-                    self.metadata.playlists[name] = [pid for pid in playlist if pid != track.id or track.item_id == pid]
-            removed += 1
-
-        if removed > 0:
-            self.metadata.version += 1
-            self.require_saved()
-
-        return {"checked": checked, "removed": removed}
+        return {"checked": len(metadata.tracks), "removed": len(missing)}

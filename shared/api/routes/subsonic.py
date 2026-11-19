@@ -30,6 +30,7 @@ from typing import Any, Callable, Optional
 from flask import Blueprint, Response, request, send_file, stream_with_context
 
 from shared.hardening import rate_limit_allows
+from shared.library_lifecycle import serialized
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
 from shared.security import is_safe_path, request_client_address
 from shared.subsonic import serialize, transcode
@@ -964,14 +965,16 @@ def get_playlist():
     return {"playlist": _playlist_payload(name, list(playlists[name]), with_songs=True)}
 
 
-def _save_playlists(lib):
+def _save_playlists(lib, metadata):
     from shared.realtime import emit_to_user
 
-    lib._save_metadata()
+    if not lib._save_metadata(metadata=metadata):
+        raise SubsonicError(ERR_GENERIC, "Could not save playlist")
     emit_to_user("library_updated")
 
 
 @_endpoint("createPlaylist")
+@serialized
 def create_playlist():
     lib = _library()
     metadata = lib.metadata
@@ -984,17 +987,19 @@ def create_playlist():
         raise SubsonicError(ERR_MISSING_PARAMETER, "Required parameter 'name' is missing")
 
     track_ids = [serialize.parse_id(raw)[1] for raw in request.values.getlist("songId")]
+    metadata = metadata.copy_for_playlist_edit()
     if existing and existing in metadata.playlists:
         metadata.set_playlist_tracks(existing, track_ids)
         if name != existing:
             metadata.rename_playlist(existing, name)
     else:
         metadata.create_playlist(name, track_ids)
-    _save_playlists(lib)
+    _save_playlists(lib, metadata)
     return {"playlist": _playlist_payload(name, track_ids, with_songs=True)}
 
 
 @_endpoint("updatePlaylist")
+@serialized
 def update_playlist():
     lib = _library()
     metadata = lib.metadata
@@ -1006,6 +1011,7 @@ def update_playlist():
     # Indices are into the list as it was received, so they are applied from the
     # end: removing index 2 first would shift every later index by one.
     removals = sorted((int(value) for value in request.values.getlist("songIndexToRemove")), reverse=True)
+    metadata = metadata.copy_for_playlist_edit()
     for track_id in additions:
         metadata.add_to_playlist(name, track_id)
     for index in removals:
@@ -1017,18 +1023,21 @@ def update_playlist():
     if new_name and new_name != name:
         metadata.rename_playlist(name, new_name)
         name = new_name
-    _save_playlists(lib)
+    _save_playlists(lib, metadata)
     return {}
 
 
 @_endpoint("deletePlaylist")
+@serialized
 def delete_playlist():
     lib = _library()
     metadata = lib.metadata
     name = _required("id")
+    if metadata is not None:
+        metadata = metadata.copy_for_playlist_edit()
     if metadata is None or not metadata.delete_playlist(name):
         raise SubsonicError(ERR_NOT_FOUND)
-    _save_playlists(lib)
+    _save_playlists(lib, metadata)
     return {}
 
 

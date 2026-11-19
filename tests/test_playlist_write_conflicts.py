@@ -202,6 +202,58 @@ def test_a_refused_playlist_write_is_reported_as_a_conflict(client, monkeypatch)
 
     assert response.status_code == 409
     assert response.get_json()["code"] == "library_conflict"
+    assert library.metadata.playlists["Arma Reforger"] == ["tunnel"]
+
+
+def test_fresh_and_conditional_reads_agree_while_a_playlist_is_pending(client, monkeypatch):
+    user_id = ensure_multiuser_layout()['user_id']
+    _seed_library(user_id)
+    first = client.get('/api/library')
+    old_playlists = first.get_json()['playlists']
+    headers = {'If-None-Match': first.headers['ETag']}
+    with user_context(user_id):
+        lib = get_user_core(user_id).library
+    original = lib.db.replace_library
+    observed = []
+
+    def while_committing(metadata, **options):
+        assert 'Pending' in metadata.playlists
+        fresh = client.get('/api/library')
+        assert fresh.get_json()['playlists'] == old_playlists
+        assert client.get('/api/library', headers=headers).status_code == 304
+        observed.append(True)
+        return original(metadata, **options)
+
+    monkeypatch.setattr(lib.db, 'replace_library', while_committing)
+    assert client.post('/api/library/playlists', json={'name': 'Pending'}).status_code == 200
+    assert observed == [True]
+    response = client.get('/api/library', headers=headers)
+    assert response.status_code == 200 and 'Pending' in response.get_json()['playlists']
+
+
+def test_fresh_and_conditional_reads_agree_during_a_missing_track_purge(client, monkeypatch):
+    from player import library
+
+    user_id = ensure_multiuser_layout()['user_id']
+    _seed_library(user_id)
+    first = client.get('/api/library')
+    before = first.get_json()
+    headers = {'If-None-Match': first.headers['ETag']}
+    checked = []
+
+    def check_file(track):
+        checked.append(track.id)
+        if len(checked) == 2:
+            assert client.get('/api/library').get_json() == before
+            assert client.get('/api/library', headers=headers).status_code == 304
+        return None
+
+    monkeypatch.setattr(library, 'resolve_local_track_path', check_file)
+    response = client.post('/api/library/purge-missing')
+    assert response.status_code == 200
+    assert response.get_json()['removed'] == len(checked) == 2
+    fresh = client.get('/api/library', headers=headers)
+    assert fresh.status_code == 200 and fresh.get_json()['tracks'] == []
 
 
 def test_captured_track_edit_rejects_a_newer_membership_without_losing_it(client):

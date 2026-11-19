@@ -82,9 +82,11 @@ class FakeLibrary:
     def get_cover_url(self, _track) -> Optional[str]:
         return None
 
-    def _save_metadata(self) -> bool:
+    def _save_metadata(self, *, metadata=None) -> bool:
         self.saves += 1
-        self.db.sync_from_metadata(self.metadata)
+        candidate = metadata if metadata is not None else self.metadata
+        self.db.sync_from_metadata(candidate)
+        self.metadata = candidate
         return True
 
 

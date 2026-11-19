@@ -14,9 +14,9 @@ instance, and a Downloader on that same file.
 - edit_delta_ms: GET /api/library?delta=1 after LibraryManager.patch_track_metadata
   changed one title; every delta is applied and compared with a full response.
 - pool_commit_*: Downloader.commit_track when only the pool wrote the file.
-- cycle_commit_*: the same commit right after the account saved and exported
-  into that file, as each download does on a single-account instance;
-  cycle_total_ms also includes that save and export.
+- cycle_commit_*: the pool commit in a steady-state single-account download;
+  the account then admits that same track and exports into the shared file.
+  cycle_total_ms includes both steps.
 
 Bytes come from /proc/self/io `rchar`: every read the commit made, page-cache
 hits included.
@@ -114,30 +114,39 @@ def measure(code, count, repeats, scratch):
             pool.library_path = runtime.music_dir / 'library.json'
             pool._lock = threading.Lock()
             pool.library = pool._load_library()   # The Station's export of the account.
-            extra = iter(library(count + 4 * repeats + 2).tracks[count:])
+            extra = iter(library(count + 2 * repeats + 2).tracks[count:])
 
-            def commits(station_exports):
-                times, reads, cycles = [], [], []
-                for _ in range(repeats):
-                    cycle = time.perf_counter()
-                    if station_exports:
-                        # As the download pump does: the account admits the
-                        # previous download and exports into the same file.
-                        manager.metadata.add_track(replace(next(extra)))
-                        assert manager._save_metadata()
-                    before, started = read_bytes(), time.perf_counter()
-                    pool.commit_track(next(extra))
-                    times.append((time.perf_counter() - started) * 1000)
-                    cycles.append((time.perf_counter() - cycle) * 1000)
-                    reads.append(read_bytes() - before)
-                return round(statistics.median(times), 2), statistics.median(reads), round(statistics.median(cycles), 2)
+            def commit(track):
+                before, started = read_bytes(), time.perf_counter()
+                pool.commit_track(track)
+                elapsed = (time.perf_counter() - started) * 1000
+                return elapsed, read_bytes() - before
+
+            def download():
+                cycle = time.perf_counter()
+                track = next(extra)
+                elapsed, reads = commit(track)
+                manager.metadata.add_track(replace(track, item_id=None))
+                assert manager._save_metadata()
+                return elapsed, reads, (time.perf_counter() - cycle) * 1000
 
             pool.commit_track(next(extra))
-            result['pool_commit_ms'], result['pool_commit_read_bytes'], _ = commits(False)
-            (result['cycle_commit_ms'], result['cycle_commit_read_bytes'],
-             result['cycle_total_ms']) = commits(True)
+            times, reads = zip(*(commit(next(extra)) for _ in range(repeats)))
+            result['pool_commit_ms'] = round(statistics.median(times), 2)
+            result['pool_commit_read_bytes'] = statistics.median(reads)
+
+            # Reset to the Station's original track list, then let one complete
+            # download warm the shared manifest before timing the steady state.
+            assert manager._save_metadata()
+            pool.library = pool._load_library()
+            download()
+            times, reads, cycles = zip(*(download() for _ in range(repeats)))
+            result['cycle_commit_ms'] = round(statistics.median(times), 2)
+            result['cycle_commit_read_bytes'] = statistics.median(reads)
+            result['cycle_total_ms'] = round(statistics.median(cycles), 2)
             saved = LibraryMetadata.from_json(pool.library_path.read_text())
             assert saved.podcast_episode_cache == podcasts
+            assert [track.id for track in saved.tracks] == [track.id for track in manager.metadata.tracks]
             result['manifest_bytes'] = pool.library_path.stat().st_size
     return result
 

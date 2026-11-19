@@ -86,7 +86,7 @@ def _commit_playlists(api, lib, metadata):
     will not serve, and the next library sync quietly takes the song away
     again. Say it did not happen, so the client can say so too and retry.
     """
-    if not lib._save_metadata():
+    if not lib._save_metadata(metadata=metadata):
         from shared.library_lifecycle import LibraryPersistenceError
         raise LibraryPersistenceError(getattr(lib, "last_save_error", "library_conflict"))
     api["emit_to_user"]("library_updated")
@@ -903,6 +903,7 @@ def create_playlist():
         return jsonify({"error": "name is required"}), 400
     if name in metadata.playlists:
         return jsonify({"error": "Playlist already exists"}), 409
+    metadata = metadata.copy_for_playlist_edit()
     metadata.create_playlist(name)
     return _commit_playlists(api, lib, metadata)
 
@@ -932,6 +933,7 @@ def reorder_playlists():
             return jsonify(error="Playlist order changed; refresh before editing"), 409
         if not all(isinstance(name, str) for name in order) or len(order) != len(set(order)) or set(order) != set(metadata.playlists):
             return jsonify(error="order must contain every playlist once"), 400
+    metadata = metadata.copy_for_playlist_edit()
     metadata.reorder_playlists(order)
     return _commit_playlists(api, lib, metadata)
 
@@ -957,7 +959,7 @@ def add_track_to_playlist(name):
         entry = _normalise_entry(raw, default_favourite=False) if isinstance(raw, dict) else None
         if entry is None:
             return jsonify(error="entry needs an identity"), 400
-        if not lib._save_metadata(playlist_entry=(name, entry)):
+        if not lib._save_metadata(metadata=metadata.copy_for_playlist_edit(), playlist_entry=(name, entry)):
             from shared.library_lifecycle import LibraryPersistenceError
             raise LibraryPersistenceError(lib.last_save_error)
         api["emit_to_user"]("library_updated")
@@ -968,6 +970,7 @@ def add_track_to_playlist(name):
         return jsonify({"error": "track_id is required"}), 400
     from shared.collection import Collection
     track_id = Collection(lib.db).identify([f'item:{track_id}', f'lib:{track_id}', f'yt:{track_id}']) or track_id
+    metadata = metadata.copy_for_playlist_edit()
     if not metadata.add_to_playlist(name, track_id):
         return jsonify({"error": "Add to playlist failed"}), 500
     return _commit_playlists(api, lib, metadata)
@@ -985,6 +988,7 @@ def remove_track_from_playlist(name, track_id):
         return jsonify({"error": "Library not loaded"}), 404
     if name not in metadata.playlists:
         return jsonify({"error": "Playlist not found"}), 404
+    metadata = metadata.copy_for_playlist_edit()
     if not metadata.remove_from_playlist(name, track_id):
         return jsonify({"error": "Remove from playlist failed"}), 500
     return _commit_playlists(api, lib, metadata)
@@ -1021,6 +1025,7 @@ def update_playlist(name):
         cover = data["cover_track_id"]
         if cover is not None and (not isinstance(cover, str) or (cover.strip() and cover.strip() not in proposed_ids)):
             return jsonify(error="Invalid cover_track_id (not in playlist)"), 400
+    metadata = metadata.copy_for_playlist_edit()
     if "name" in data:
         new_name = (data.get("name") or "").strip()
         if not new_name:
@@ -1062,6 +1067,7 @@ def delete_playlist(name):
     conflict = _playlist_precondition(metadata, name, data)
     if conflict is not None:
         return conflict
+    metadata = metadata.copy_for_playlist_edit()
     if not metadata.delete_playlist(name):
         return jsonify({"error": "Playlist not found"}), 404
     return _commit_playlists(api, lib, metadata)

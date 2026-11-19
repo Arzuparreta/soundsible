@@ -6,7 +6,7 @@ for representing music tracks, library organization, and synchronization.
 """
 
 from copy import deepcopy
-from dataclasses import dataclass, asdict, field, fields
+from dataclasses import dataclass, asdict, field, fields, replace
 from typing import List, Dict, Iterator, Optional, Any
 from enum import Enum
 import json
@@ -454,6 +454,10 @@ class LibraryMetadata:
                 return True
         return False
     
+    def copy_for_playlist_edit(self) -> 'LibraryMetadata':
+        """Detach playlist state until the edited library commits."""
+        return replace(self, playlists=deepcopy(self.playlists), settings=deepcopy(self.settings))
+
     def create_playlist(self, name: str, track_ids: Optional[List[str]] = None) -> None:
         """Create a new playlist."""
         self.playlists[name] = track_ids or []

@@ -73,8 +73,15 @@ current live contents under a content revision, which its holder can
 revalidate separately. Models without a verified committed source use full
 comparison as before.
 
-Subsonic playlist updates now parse the removal indices before applying any
-addition, so malformed input cannot leave an unsaved playlist change behind.
+Playlist endpoints stage the playlist map and settings together, using the
+same commit-then-publish path as acquisitions. Fresh and conditional reads
+both see the previous playlist until the save succeeds. Subsonic updates
+also parse the removal indices before applying any addition.
+
+A purge checks storage before changing membership, then filters the track
+list and playlist references once. It publishes the candidate after the
+canonical save, as do individual deletion and clearing the library. A read
+during the storage checks sees the complete previous library.
 
 Existing databases gain the `library_public_headers` table on open. Their
 proofs stay valid. Until the first save writes a header hash, a served base
@@ -145,18 +152,20 @@ HTTP, with `LibraryManager.patch_track_metadata` making each title edit:
 
 | Tracks | 304 poll (ms) | Delta after a title edit (ms) |
 | ---: | ---: | ---: |
-| 1,000 | 2.64 → 0.88 | 68.41 → 77.18 |
-| 10,000 | 21.44 → 0.63 | 111.65 → 81.16 |
-| 50,000 | 103.28 → 0.66 | 277.02 → 79.09 |
+| 1,000 | 2.95 → 0.64 | 85.49 → 78.40 |
+| 10,000 | 24.31 → 0.61 | 134.94 → 80.17 |
+| 50,000 | 109.98 → 0.68 | 324.47 → 71.80 |
 
-Pool commits, alone and in the single-account download cycle (the account
-saves and exports into the same file before each commit):
+Pool commits, alone and in the single-account download cycle. A cycle begins
+with the pool commit, then adds that same track to the account and exports
+into the shared file. One warm-up cycle gives the first timed pool commit the
+preceding Station export, as in a steady stream of downloads.
 
 | Tracks | Pool-only commit (ms) | Bytes read | Cycle commit (ms) | Bytes read | Full cycle (ms) |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 83.64 → 91.98 | 1,474,785 → 1,269,853 | 108.71 → 118.01 | 5,079,392 → 1,269,945 | 434.08 → 468.24 |
-| 10,000 | 233.75 → 267.12 | 11,071,053 → 10,866,121 | 442.17 → 420.80 | 43,464,469 → 10,866,221 | 2,593.16 → 2,823.11 |
-| 50,000 | 950.64 → 1,009.18 | 53,921,068 → 53,716,133 | 2,309.99 → 2,078.55 | 214,864,461 → 53,716,222 | 13,438.84 → 14,032.09 |
+| 1,000 | 75.39 → 75.32 | 1,474,791 → 1,269,854 | 92.59 → 93.48 | 5,079,402 → 1,269,947 | 434.73 → 435.18 |
+| 10,000 | 241.98 → 267.10 | 11,071,059 → 10,866,122 | 466.72 → 467.43 | 43,464,451 → 10,866,216 | 2,860.53 → 2,960.66 |
+| 50,000 | 1,017.61 → 1,068.10 | 53,921,073 → 53,716,134 | 2,675.62 → 2,110.30 | 214,864,467 → 53,716,224 | 15,347.83 → 14,097.57 |
 
 - The 304 no longer grows with the library: about 0.6 ms at every size.
 - A one-title delta avoids scanning unrelated tracks. Order changes still
@@ -169,9 +178,9 @@ saves and exports into the same file before each commit):
   the benchmark cycle, the Station adds a track, so the pool reads the changed
   manifest once instead of four times. Encoding and syncing the portable
   manifest still dominate the commit. At 50,000 tracks the after-export
-  pool commit was 10% faster in this run. The pool-only commit was 6% slower
-  and the full cycle was 4.4% slower. Full-cycle speed did not improve
-  consistently across runs.
+  pool commit was 21% faster and the full cycle was 8.1% faster in this run.
+  The pool-only commit was 5% slower at that size, and the full cycle was
+  3.5% slower at 10,000 tracks. Sync time varied across runs.
 - Bytes read are `rchar`, which counts page-cache hits: physical disk reads
   saved depend on the cache.
 
