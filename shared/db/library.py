@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
@@ -468,25 +468,36 @@ class LibraryStore:
             return int(row[0]) if row else 0
 
     def load_library_metadata(self) -> Optional[LibraryMetadata]:
-        """Read canonical metadata; coordinate only the one-time upgrade write."""
+        return self.load_library_snapshot()[0]
+
+    def load_library_snapshot(self) -> tuple[Optional[LibraryMetadata], int]:
+        """Read canonical metadata and its revision in the same SQLite snapshot."""
         from shared.collection import library_ready
+        from shared.library_fingerprint import fingerprint, record
         from shared.library_lifecycle import coordinated
         with self._get_connection() as conn:
-            if not library_ready(conn):
-                with coordinated():
-                    conn.execute('BEGIN IMMEDIATE')
-                    result = self._read_library_metadata(conn)
-                    conn.commit()
-                    return result
-            return self._read_library_metadata(conn)
+            upgrade = not library_ready(conn)
+            with coordinated() if upgrade else nullcontext():
+                conn.execute('BEGIN IMMEDIATE' if upgrade else 'BEGIN')
+                metadata, revision = self._read_library_metadata(conn)
+                conn.commit()
+        if metadata is not None:
+            try:
+                record(metadata, fingerprint(metadata), loaded_revision=revision)
+            except RecursionError:
+                # Deeply nested legacy headers can exceed the encoder's limit.
+                # Fingerprinting is optional for a canonical load.
+                pass
+        return metadata, revision
 
-    def _read_library_metadata(self, conn) -> Optional[LibraryMetadata]:
+    def _read_library_metadata(self, conn) -> tuple[Optional[LibraryMetadata], int]:
         conn.row_factory = sqlite3.Row
         state = conn.execute(
             "SELECT * FROM library_state WHERE singleton = 1 AND canonical = 1"
         ).fetchone()
         if state is None:
-            return None
+            return None, 0
+        revision = int(state["revision"])
         tracks = self._rows_to_tracks(conn, conn.execute("""
             SELECT t.* FROM tracks t
             JOIN library_tracks lt ON lt.track_id = t.id
@@ -523,13 +534,14 @@ class LibraryStore:
             changed = previous_playlists != json.dumps(metadata.playlists, sort_keys=True) or previous_settings != json.dumps(metadata.settings, sort_keys=True)
             conn.execute('UPDATE library_state SET revision=revision+?,settings_json=? WHERE singleton=1',
                          (int(changed), json.dumps(metadata.settings)))
+            revision += int(changed)
             conn.execute('UPDATE library_public_source SET valid=0')
-        attach_ids(conn, metadata.tracks)
+            attach_ids(conn, metadata.tracks)
         # Normally rows are already canonical.  This also repairs a stale
         # write from an old client in memory before it reaches the API, and
         # the next save makes that normalization durable.
         metadata.remap_track_ids(self._track_id_aliases(conn), references=False)
-        return metadata
+        return metadata, revision
 
     def backfill_added_at(self, resolver: Optional[Any] = None) -> int:
         """Date the tracks a library from before `added_at` left behind.

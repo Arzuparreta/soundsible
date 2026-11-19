@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
 from shared import download_pump, library_intake, realtime, user_cores
-from shared.library_lifecycle import drain as drain_audio_cleanup
+from shared.library_lifecycle import coordinated, drain as drain_audio_cleanup
 from shared.models import LibraryMetadata
 from shared.orchestrator import orchestrator
 
@@ -51,11 +53,14 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
                 library = core.library
                 if not library.metadata:
                     user_cores.loaded_library()
+                library.refresh_if_stale()
+                metadata = library.metadata
+                revision = library._library_revision
                 mode = "DRY RUN" if dry_run else "LIVE"
                 download_pump.queue_manager_dl.add_log(f"--- Starting library repair ({mode}) ---")
 
                 summary = repair_library(
-                    list(library.metadata.tracks),
+                    list(metadata.tracks),
                     get_output_dir_for_repair(),
                     dry_run=dry_run,
                     limit=limit,
@@ -64,9 +69,12 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
                 )
 
                 if not dry_run and summary["id_map"]:
-                    library.metadata.tracks = summary["tracks"]
-                    library.metadata.version += 1
-                    if not library._save_metadata(id_replacements=summary["id_map"]):
+                    with coordinated():
+                        candidate = replace(metadata, tracks=summary["tracks"], version=metadata.version + 1,
+                                            playlists=metadata.playlists.copy(), settings=deepcopy(metadata.settings))
+                        saved = (library.metadata is metadata and library._library_revision == revision
+                                 and library._save_metadata(metadata=candidate, id_replacements=summary["id_map"]))
+                    if not saved:
                         # The repaired copies are already in the pool under ids
                         # nothing will reference. Cleanup deletes only what no
                         # library points at, so a shared hash is safe.

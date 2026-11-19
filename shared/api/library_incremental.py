@@ -15,7 +15,7 @@ from flask import current_app
 from flask.json.provider import DefaultJSONProvider
 
 from shared.api import library_deltas as history
-from shared.library_fingerprint import TRACK_FIELDS, fingerprint, header_digest, public_row_digest, record, recorded
+from shared.library_fingerprint import TRACK_FIELDS, fingerprint, header_digest, public_row_digest, record, verified_fingerprint
 from shared.database import DatabaseManager
 from shared.loudness import LoudnessStore, annotate_tracks
 from shared.models import LibraryMetadata, Track
@@ -81,16 +81,17 @@ def committed_source(lib):
     return db.public_source() if isinstance(db, DatabaseManager) else None
 
 
-def live_fingerprint(metadata, committed):
+def live_fingerprint(metadata, source):
     """Return the fingerprint and whether it reused the committed hint.
 
     A read can establish a committed match after a reload. Observing unsaved
     changes must not replace the hint that another reader uses for a delta.
     """
-    if committed is not None and recorded(metadata) == committed:
-        return committed, True
+    verified = verified_fingerprint(metadata, source)
+    if verified is not None:
+        return verified, True
     value = fingerprint(metadata)
-    if value == committed:
+    if source is not None and value == source['fingerprint']:
         record(metadata, value)
     return value, False
 
@@ -140,7 +141,7 @@ def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerpr
     if header_hash is None and committed != base['source']['fingerprint']:
         return None
     if model_fingerprint is None:
-        model_fingerprint, _ = live_fingerprint(lib.metadata, committed)
+        model_fingerprint, _ = live_fingerprint(lib.metadata, state['source'])
     if model_fingerprint != committed:
         return None
     artwork_ids = artwork.changed_tracks(base['art'], state['art'])

@@ -47,13 +47,14 @@ def sync_source(conn, metadata, order_changed, headers, fingerprint):
 
 
 def source(conn):
-    row = conn.execute('SELECT s.valid,s.fingerprint,s.ordering,h.hash,EXISTS(SELECT 1 FROM library_tracks) '
+    row = conn.execute('SELECT s.valid,s.fingerprint,s.ordering,h.hash,EXISTS(SELECT 1 FROM library_tracks),l.revision '
                        'FROM library_public_source s '
                        'LEFT JOIN library_public_headers h ON h.fingerprint=s.fingerprint '
-                       'WHERE s.singleton=1').fetchone()
+                       'JOIN library_state l ON l.singleton=s.singleton '
+                       'WHERE s.singleton=1 AND l.canonical=1').fetchone()
     if row is None or not row[0]:
         return None
-    return {'fingerprint': row[1], 'ordering': row[2], 'headers': row[3], 'tracks': bool(row[4]),
+    return {'fingerprint': row[1], 'ordering': row[2], 'headers': row[3], 'tracks': bool(row[4]), 'revision': row[5],
             'cursor': cursor(conn).to_list()}
 
 

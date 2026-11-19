@@ -349,7 +349,7 @@ class LibraryManager:
                     # SQLite can normalize a portable value on reload. Repair
                     # the proof only if the live model equals the saved data.
                     saved = self.db.load_library_metadata()
-                    if saved is None or fingerprint(saved) != before:
+                    if saved is None or recorded(saved) != before:
                         raise ValueError('Track edit requires an unchanged canonical library')
                     metadata = saved
                     track = metadata.get_track_by_id(track_id)
@@ -388,8 +388,7 @@ class LibraryManager:
 
     def _reload_canonical(self):
         try:
-            self.metadata = self.db.load_library_metadata()
-            self._library_revision = self.db.get_library_revision()
+            self.metadata, self._library_revision = self.db.load_library_snapshot()
         except Exception:
             # Do not keep an uncommitted snapshot that a later save could leak.
             self.metadata = None
@@ -410,10 +409,10 @@ class LibraryManager:
 
         # Once migrated, SQLite is authoritative. Sync reloads that snapshot and
         # regenerates portable exports; stale or hand-edited JSON cannot mutate it.
-        canonical = self.db.load_library_metadata()
+        canonical, revision = self.db.load_library_snapshot()
         if canonical is not None:
             self.metadata = canonical
-            self._library_revision = self.db.get_library_revision()
+            self._library_revision = revision
             self._export_metadata(canonical)
             return True
 
@@ -652,7 +651,7 @@ class LibraryManager:
         """Reload metadata when another writer commits a SQLite revision."""
         revision = self.db.get_library_revision()
         if revision != self._library_revision:
-            metadata = self.db.load_library_metadata()
+            metadata, revision = self.db.load_library_snapshot()
             if metadata is not None:
                 self.metadata = metadata
                 self._library_revision = revision

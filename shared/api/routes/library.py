@@ -154,9 +154,8 @@ def _conditional(lib, artwork, user_id):
 
     metadata = lib.metadata
     source = library_incremental.committed_source(lib)
-    committed = source["fingerprint"] if source else None
-    current, used_hint = library_incremental.live_fingerprint(metadata, committed)
-    has_tracks = source["tracks"] if current == committed else bool(metadata.tracks)
+    current, used_hint = library_incremental.live_fingerprint(metadata, source)
+    has_tracks = source["tracks"] if used_hint else bool(metadata.tracks)
     dependencies = _annotation_revisions(artwork) if has_tracks else ()
     return dependencies, _held_revision(user_id, current, dependencies), current, used_hint
 

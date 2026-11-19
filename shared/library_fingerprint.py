@@ -118,14 +118,22 @@ def header_digest(headers: dict) -> str:
     return sha256(encoded_values(tuple(headers[name] for name in HEADER_FIELDS))).hexdigest()
 
 
-def record(metadata: LibraryMetadata, value: str | None) -> None:
+def record(metadata: LibraryMetadata, value: str | None, *, loaded_revision: int | None = None) -> None:
     """Record the fingerprint most recently verified against a commit.
 
     Later in-place edits can leave this hint intact. A delta still verifies
     its detached rows and headers against the committed source.
     """
-    metadata._public_fingerprint = value
+    metadata._public_fingerprint = (value, loaded_revision)
 
 
 def recorded(metadata) -> str | None:
-    return getattr(metadata, "_public_fingerprint", None)
+    return getattr(metadata, "_public_fingerprint", (None, None))[0]
+
+
+def verified_fingerprint(metadata, source) -> str | None:
+    """A loaded snapshot can differ from the journal's pre-normalized values."""
+    value, revision = getattr(metadata, "_public_fingerprint", (None, None))
+    if source is not None and (value == source["fingerprint"] or revision == source["revision"]):
+        return value
+    return None

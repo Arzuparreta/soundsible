@@ -113,11 +113,11 @@ def reconcile_album(lib, items, db):
         updates = {key: changes for key, changes in updates.items() if changes}
         if not updates:
             return []
-        lib.metadata = replace(lib.metadata, tracks=[
+        candidate = replace(lib.metadata, tracks=[
             replace(track, **updates[track.id]) if track.id in updates else track for track in lib.metadata.tracks
         ])
     # _save_metadata takes the non-reentrant model lock itself. The outer
     # lifecycle lock still excludes every canonical writer between these steps.
-    if not lib._save_metadata():
+    if not lib._save_metadata(metadata=candidate):
         raise LibraryPersistenceError(lib.last_save_error)
     return list(updates)

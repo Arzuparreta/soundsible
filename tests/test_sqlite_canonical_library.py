@@ -380,6 +380,29 @@ def test_refresh_uses_sqlite_revision_not_manifest_mtime(monkeypatch):
     assert [track.id for track in second.metadata.tracks] == ["one"]
 
 
+def test_canonical_reload_keeps_rows_headers_and_revision_in_one_snapshot(tmp_path, monkeypatch):
+    path = tmp_path / "library.db"
+    reader = DatabaseManager(str(path))
+    writer = DatabaseManager(str(path))
+    before = _library(_track("before"))
+    after = _library(_track("after"))
+    revision = writer.replace_library(before)
+    convert = reader._rows_to_tracks
+
+    def convert_after_commit(conn, rows):
+        writer.replace_library(after)
+        return convert(conn, rows)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(reader, "_rows_to_tracks", convert_after_commit)
+        restored, loaded_revision = reader.load_library_snapshot()
+    assert restored.to_public_dict() == before.to_public_dict()
+    assert loaded_revision == revision
+    restored, loaded_revision = reader.load_library_snapshot()
+    assert restored.to_public_dict() == after.to_public_dict()
+    assert loaded_revision == revision + 1
+
+
 def test_canonical_libraries_are_isolated_per_user(monkeypatch):
     monkeypatch.setattr("player.library._output_dir_for_library", lambda: None)
     with user_context("alice"):

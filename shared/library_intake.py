@@ -8,6 +8,7 @@ sockets are told.
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from typing import Optional
 
 from shared import library_dates, realtime, user_cores
@@ -59,7 +60,6 @@ def add_tracks_to_user_library(
         return 0
 
     song_keys = [key for key in (song_keys or ()) if isinstance(key, str) and key]
-    from copy import deepcopy
     metadata = deepcopy(lib.metadata)
     holdings = library_dates.Holdings(metadata.tracks, _saved_entries(core))
     added = 0
@@ -168,12 +168,13 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
                     continue
 
                 lib.refresh_if_stale()
-                changed = lib.metadata.remap_track_ids(id_map, references=False)
+                metadata = deepcopy(lib.metadata)
+                changed = metadata.remap_track_ids(id_map, references=False)
                 # The repair caller can already have installed replacement
                 # objects. A no-op model remap is not evidence that the source
                 # association was committed in this account's database.
-                changed |= any(track.id in replacement_ids for track in lib.metadata.tracks)
-                for track in lib.metadata.tracks:
+                changed |= any(track.id in replacement_ids for track in metadata.tracks)
+                for track in metadata.tracks:
                     replacement = (replacements or {}).get(track.id)
                     if replacement:
                         for field in ('file_hash', 'format', 'file_size', 'bitrate', 'local_path'):
@@ -181,8 +182,8 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
                         changed = True
 
                 if changed:
-                    lib.metadata.version += 1
-                    if not lib._save_metadata(id_replacements=id_map):
+                    metadata.version += 1
+                    if not lib._save_metadata(metadata=metadata, id_replacements=id_map):
                         raise RuntimeError("could not persist remapped library")
                     touched[user_id] = 1
 

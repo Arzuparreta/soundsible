@@ -499,5 +499,6 @@ commits. A missing-file purge collects its findings before making one filtered
 snapshot. Podcast writes reacquire the current library after fetching RSS
 and publish their candidate after commit. If SQLite normalized legacy track
 fields on reload, a label edit checks the live model against a fresh SQLite
-snapshot and uses the full writer to refresh the proof. Until a save refreshes
-that proof, HTTP reads still use full comparison for the normalized model.
+snapshot and uses the full writer to refresh the proof. A reload fingerprints
+its SQLite snapshot once, so warm conditional reads can reuse the loaded
+representation's validator. Deltas still require the journal's exact fingerprint.

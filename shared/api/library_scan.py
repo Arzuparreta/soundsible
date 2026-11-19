@@ -211,7 +211,7 @@ class LibraryScanService:
         library = core.library
         latest = library.db.load_library_metadata()
         if latest is None:
-            latest = library.metadata or LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+            latest = deepcopy(library.metadata) if library.metadata else LibraryMetadata(1, [], {}, {})
 
         tracks = list(latest.tracks)
         # What this account already holds, so a file found for a song it saved
@@ -299,10 +299,10 @@ class LibraryScanService:
         if added or updated:
             latest.tracks = tracks
             latest.version += 1
-            library.metadata = latest
             library._library_revision = library.db.replace_library(
                 latest, id_replacements=replacements
             )
+            library.metadata = latest
             library._export_metadata(latest)
             for old_id, new_id in replacements.items():
                 core.favourites.remap_library_id(old_id, new_id)

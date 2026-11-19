@@ -34,10 +34,13 @@ could certify a title changed in memory after it was written to SQLite.
 
 The hint on the live model is the last fingerprint verified against a commit.
 A canonical save, track edit, or a read that verifies a match can record it.
-A model reloaded from SQLite has none and pays a verification pass. SQLite can
-normalize field values during the write, so a reloaded model can differ from
-the proof. The writer also carries the first stored `added_at` back to the
-saved model.
+A model reloaded from SQLite is fingerprinted once and bound to the revision
+read in the same transaction. SQLite can normalize values, such as artist
+credits or integral durations, so the loaded fingerprint can differ from the
+journal's fingerprint. The loaded fingerprint can revalidate its own ETag
+while SQLite still reports that revision. Only an exact match with the journal
+fingerprint can use the journal for deltas. The writer also carries the first
+stored `added_at` back to the saved model.
 
 If the proof differs after a reload, a label edit can use the full writer
 after verifying that the live model matches a fresh SQLite snapshot. This
@@ -83,12 +86,11 @@ current live contents under a content revision, which its holder can
 revalidate separately. Models without a verified committed source use full
 comparison as before.
 
-Playlist endpoints, including legacy imports, stage the playlist map and
-settings together, using the same commit-then-publish path as acquisitions.
-Fresh and conditional reads
-both see the previous playlist until the save succeeds. Subsonic updates
-also parse the removal indices before applying any addition. Subsonic builds
-the playlist creation response after releasing the library write lock.
+Playlist endpoints and migration jobs stage the playlist map and settings
+together, using the same commit-then-publish path as acquisitions. Fresh and
+conditional reads both see the previous playlist until the save succeeds.
+Subsonic updates also parse the removal indices before applying any addition.
+Subsonic builds the playlist creation response after releasing the library write lock.
 
 Podcast requests fetch RSS outside the write lock. A subscription or cache
 update then uses the current library revision and saves a candidate. A
@@ -100,6 +102,8 @@ A purge checks storage before changing membership, then filters the track
 list and playlist references once. It publishes the candidate after the
 canonical save, as do individual deletion and clearing the library. A read
 during the storage checks sees the complete previous library.
+Folder scans, audio repair and catalog reconciliation also publish only
+after the canonical save.
 
 Existing databases gain the `library_public_headers` table on open. Their
 proofs stay valid. Until the first save writes a header hash, a served base
