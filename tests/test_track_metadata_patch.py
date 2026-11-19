@@ -140,6 +140,20 @@ def test_edit_after_new_manager_load(manager, monkeypatch):
     assert other.patch_track_metadata(other.metadata.tracks[0].id, {'title': 'After restart'})
 
 
+@pytest.mark.parametrize('legacy', [{'artists': None}, {'duration': 120.0}])
+def test_edit_repairs_proof_when_reloaded_legacy_values_are_normalized(manager, legacy):
+    track = manager.metadata.tracks[0]
+    for name, value in legacy.items():
+        setattr(track, name, value)
+    assert manager._save_metadata()
+    manager._reload_canonical()
+    assert manager.db.public_source()['fingerprint'] != fingerprint(manager.metadata)
+    assert manager.patch_track_metadata(track.id, {'title': 'After normalization'})
+    stored = manager.db.load_library_metadata()
+    assert stored.get_track_by_id(track.id).title == 'After normalization'
+    assert manager.db.public_source()['fingerprint'] == fingerprint(stored)
+
+
 def test_external_sql_invalidates_proof_and_uses_canonical_fallback(manager):
     track_id = manager.metadata.tracks[0].id
     other_id = manager.metadata.tracks[1].id

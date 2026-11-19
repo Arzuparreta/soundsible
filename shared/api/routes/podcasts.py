@@ -213,7 +213,7 @@ def feed_episodes(feed_id: str):
         # waited; what it found is in the cache now.
         _, metadata = api["ensure_library_metadata"]()
         sub = _subscription_by_id(metadata, feed_id) if metadata else None
-        if not sub or sub.get("rss_url") != rss_url:
+        if not sub or (sub.get("rss_url") or "").strip() != rss_url:
             return jsonify({"error": "Unknown feed"}), 404
         cache = _kept(metadata, feed_id)
         if cache is not None and not refresh and not _due(feed_id):
@@ -247,7 +247,7 @@ def feed_episodes(feed_id: str):
         with coordinated() if needs_save else nullcontext():
             lib, metadata = api["ensure_library_metadata"]()
             sub = _subscription_by_id(metadata, feed_id) if metadata else None
-            if not sub or sub.get("rss_url") != rss_url:
+            if not sub or (sub.get("rss_url") or "").strip() != rss_url:
                 return jsonify({"error": "Unknown feed"}), 404
             current = _kept(metadata, feed_id)
             if current is not None and current != cache:

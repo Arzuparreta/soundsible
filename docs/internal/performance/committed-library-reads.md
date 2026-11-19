@@ -39,6 +39,10 @@ normalize field values during the write, so a reloaded model can differ from
 the proof. The writer also carries the first stored `added_at` back to the
 saved model.
 
+If the proof differs after a reload, a label edit can use the full writer
+after verifying that the live model matches a fresh SQLite snapshot. This
+lets older imports be edited without certifying unrelated unsaved changes.
+
 - **Conditional request.** A verified fingerprint that matches the
   committed source can revalidate a revision of that source without a new
   model scan. Otherwise the route fingerprints the live model and can
@@ -89,6 +93,7 @@ Podcast requests fetch RSS outside the write lock. A subscription or cache
 update then uses the current library revision and saves a candidate. A
 playlist saved during the fetch survives, a pending subscription stays
 invisible until commit, and a refresh cannot recreate an unsubscribed feed.
+URL checks strip surrounding whitespace from older saved feed URLs.
 
 A purge checks storage before changing membership, then filters the track
 list and playlist references once. It publishes the candidate after the

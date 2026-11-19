@@ -204,6 +204,16 @@ def test_opening_a_show_finds_the_episode_published_since_it_was_last_read(clien
     lib.require_saved.assert_called_once()
 
 
+def test_refresh_accepts_a_saved_feed_url_with_surrounding_whitespace(client):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    api, lib = _kept_show(metadata)
+    metadata.podcast_subscriptions[0]['rss_url'] = ' https://example.com/rss\t'
+    response, check = _open(client, api, FeedCheck(FeedPage(NEWER, None), {}), query='?refresh=1')
+    check.assert_called_once_with('https://example.com/rss', None)
+    assert response.status_code == 200
+    assert lib.metadata.podcast_episode_cache['feed']['episodes'][0]['guid'] == 'ep2'
+
+
 def test_refresh_does_not_restore_cache_for_a_show_unfollowed_during_fetch(client):
     from dataclasses import replace
 

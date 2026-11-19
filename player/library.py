@@ -333,34 +333,44 @@ class LibraryManager:
         # External SQL/schema reconciliation may invalidate the proof. Re-read
         # canonical state and use the established full writer for this edit;
         # never certify an unverified mutable model as an incremental source.
-        full_write = self.db.public_source() is None
+        source = self.db.public_source()
+        full_write = source is None
         if full_write:
             self._reload_canonical()
         with self._lock:
-            track = self.metadata.get_track_by_id(track_id) if self.metadata else None
+            metadata = self.metadata
+            track = metadata.get_track_by_id(track_id) if metadata else None
             if track is None:
                 return False
             self.last_save_error = None
-            before = fingerprint(self.metadata)
-            updated = replace(track, **changes)
-            candidate = replace(self.metadata, tracks=[updated if item.id == track_id else item
-                                                       for item in self.metadata.tracks])
             try:
+                before = None if full_write else fingerprint(metadata)
+                if not full_write and before != source['fingerprint']:
+                    # SQLite can normalize a portable value on reload. Repair
+                    # the proof only if the live model equals the saved data.
+                    saved = self.db.load_library_metadata()
+                    if saved is None or fingerprint(saved) != before:
+                        raise ValueError('Track edit requires an unchanged canonical library')
+                    metadata = saved
+                    track = metadata.get_track_by_id(track_id)
+                    full_write = True
+                updated = replace(track, **changes)
+                candidate = replace(metadata, tracks=[updated if item.id == track_id else item
+                                                      for item in metadata.tracks])
                 if full_write:
                     revision = self.db.replace_library(candidate, expected_revision=self._library_revision)
+                    self.metadata = candidate
                 else:
                     revision = self.db.patch_track_metadata(
                         track_id, changes, expected_revision=self._library_revision,
                         previous_fingerprint=before, metadata=candidate)
+                    for name, value in changes.items():
+                        setattr(track, name, value)
+                    record(metadata, recorded(candidate))
             except Exception as exc:
                 self.last_save_error = 'library_conflict' if isinstance(exc, StaleLibraryWrite) else 'library_storage_unavailable'
                 self._reload_canonical()
                 raise LibraryPersistenceError(self.last_save_error) from exc
-            for name, value in changes.items():
-                setattr(track, name, value)
-            # Record the committed fingerprint for journal-backed reads. Their
-            # row and header checks still reject unsaved edits to the model.
-            record(self.metadata, recorded(candidate))
             self._library_revision = revision
             after_release(self._export_committed, key=('library-export', id(self)))
             return True
