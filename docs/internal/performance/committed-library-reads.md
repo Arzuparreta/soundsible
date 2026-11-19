@@ -16,14 +16,20 @@ Both now ask the source of record instead of re-deriving it.
 The account database already commits, with each canonical save, a public
 source (`library_public_source`: a fingerprint of the exact public model it
 saved) and one hash per track (`library_public_rows`). This change adds the
-hash of the public header fields (`library_public_source.headers`) to the same
-proof, in the same transaction.
+hash of the public header fields, in the same transaction, in its own table
+`library_public_headers` keyed by the source fingerprint it belongs to.
+
+A save takes one detached copy of the headers (`public_headers()`) and uses
+that copy for the stored playlists and `library_state`, for the source
+fingerprint and for the header hash, so an edit to the live model during the
+save cannot make the three disagree.
 
 - **Conditional request.** The route reads the committed fingerprint (one
   SQLite row) and looks up the revision cached for it. A client holding that
-  revision gets 304 without the live model being touched. Only when the model
-  is not known to be the committed source does the route also fingerprint it,
-  exactly as before, so a client holding the revision of an unsaved or
+  revision gets 304 without the live model being touched. Only when that
+  fails, and a delta (if asked for) could not be built, and the model is not
+  known to be the committed source, does the route fingerprint the live
+  model, exactly as before, so a client holding the revision of an unsaved or
   normalized model still gets its 304.
 - **Delta.** The journal names the affected tracks; `affected()` now returns
   each one's committed row hash with its position. The route copies those rows
@@ -35,8 +41,8 @@ proof, in the same transaction.
   committed source.
 
 `shared.library_fingerprint.record()` keeps, on the model object, the
-fingerprint it was last proven to have (by the save that committed it, or by
-a full response). It is only ever used to skip a fingerprint whose answer is
+fingerprint it was last proven to have (by the save or track edit that
+committed it, or by a full response). It is only ever used to skip a fingerprint whose answer is
 already known; it never makes a response carry a revision. An in-place edit
 after recording it is caught by the row and header checks above, and costs at
 most a full 200 instead of a 304.
@@ -54,9 +60,12 @@ response. Models without a verified committed source (no database, a proof
 invalidated by raw SQL, a database migrated before its first save) keep the
 previous behaviour, including the live-model fingerprint.
 
-Existing databases gain the `headers` column on open. Their proofs stay valid
-for 304s and full responses; deltas start after the next canonical save
-records the header hash.
+Existing databases gain the `library_public_headers` table on open. Their
+proofs stay valid for 304s and full responses; deltas start after the next
+canonical save records the header hash. The previous engine can still open and
+save such a database: `library_public_source` keeps its columns, and a save by
+that engine leaves the header hash under the old fingerprint, which turns
+deltas off until this engine saves again.
 
 ## Pool manifest
 
@@ -66,33 +75,45 @@ on single-user instances, the Station's portable export. Both publish under
 file, and must keep the podcast subscriptions and episodes the Station writes
 there.
 
-`publication_lock` now counts its holds: the lock file stores a 64-bit
-generation after its first byte, advanced by every outermost hold in any
-process (the counter of a new lock file starts at a random value). The pool
-remembers the generation of its last hold together with the manifest's
-`stat` signature (device, inode, size, modification and change times) and
-content digest. On the next hold:
+The directory's publications are now counted: the lock file stores a 64-bit
+generation after its first byte, advanced by every `publish()` and
+`replace_contents()` in any process, even a failed one (a new lock file starts
+counting at a random value). Holding the lock to read writes nothing. The
+pool remembers, as `_seen`, the generation, the manifest's `stat` signature
+(device, inode, size, modification and change times) and its content digest
+as it last observed them; separately, `_manifest_revision` is the digest of
+the file its resident model came from. On the next hold:
 
-- generation exactly one higher **and** unchanged signature: no cooperating
-  writer held the lock in between and nothing else replaced or rewrote the
+- same generation **and** unchanged signature: nothing was published in the
+  directory since and nothing else replaced or rewrote the
   file, so the remembered digest is the file's. Nothing is read. The model in
   memory is the file's model, podcasts included, so they are not read either.
-- otherwise: the file is hashed as before and, if it changed, reloaded; the
-  reload carries the other writer's podcasts. The second podcast read the
-  previous code did after a reload is gone.
+- otherwise: one pass over the file computes its signature (from the open
+  descriptor), its digest and its model together; the model is adopted if the
+  digest is not the one the pool's model came from, and then carries the other
+  writer's podcasts. Before, this case read the file four times (digest,
+  model, digest again, podcasts).
+
+The signature the pool remembers after publishing is taken after the rename
+and kept only if its device, inode, size and modification time are those of
+the descriptor it wrote; otherwise, or if `stat` fails, the next commit reads
+the file. A generation that cannot be read or written leaves the lock
+working and makes the pool read the file. Bookkeeping never fails a
+publication.
 
 `replace_snapshot` (cloud sync) keeps the current file's podcasts: from memory
 when the pool's model is the current file, from `read_podcast_fields` when it
-is not. The offset reader and `LibraryJSONWriter.podcast_offset` were removed,
+is not, and the snapshot's own when there is no file yet. The offset reader and `LibraryJSONWriter.podcast_offset` were removed,
 and so was `Downloader.save_library()`, which had no production caller.
 
 Limits. Cooperating Soundsible writers are detected exactly. A writer that
 ignores the lock (an editor, a sync tool, an older Soundsible) is detected by
 the signature, which misses only an in-place rewrite that keeps the size and
-both timestamps, or one that lands between the pool's rename and its `stat`.
-Before, a full content hash caught those too. Any other hold of the lock in
-the same directory, even a read, makes the pool hash once more: conservative,
-never wrong.
+both timestamps within the file system's timestamp resolution. Before, a full
+content hash caught that too. Any other hold of the lock in the same
+directory makes the pool read the file once more: conservative, never wrong.
+The counter lives in the directory's lock file because the Station's export
+uses the generic `publish()`; each publication there writes nine bytes to it.
 
 ## Measurements
 
@@ -103,25 +124,39 @@ Medians of five; "before" is `origin/main` at `16a8955b`, run by the same
 benchmark code. Each delta is applied and compared with an unconditional full
 response.
 
-| Tracks | 304 poll (ms) | Delta after a title edit (ms) | Download commit (ms) | Bytes read per commit |
-| ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 2.00 → 0.55 | 80.49 → 58.02 | 83.75 → 75.40 | 1,312,361 → 132 |
-| 10,000 | 14.39 → 0.57 | 117.88 → 64.46 | 242.14 → 234.35 | 9,457,385 → 140 |
-| 50,000 | 80.44 → 0.58 | 250.84 → 72.53 | 775.91 → 750.51 | 45,857,391 → 146 |
+HTTP, with `LibraryManager.patch_track_metadata` making each title edit:
 
-- The 304 no longer grows with the library: 0.55–0.58 ms at every size.
-- The delta's remaining cost is almost all one commit to the delta-history
-  database (`library_incremental.remember`): a profile at 1,000 tracks puts
-  65 of its 69 ms in that commit's sync on this disk, independent of library
-  size. The rest grows with the rows sent, not the library.
-- A download commit no longer reads the manifest it wrote (45.9 MB at 50,000
-  tracks with a 20-feed podcast cache). Its time is still dominated by
-  serializing and syncing the whole manifest, so it falls only 3–10 %.
-  Bytes read are `rchar`, which counts page-cache hits: physical disk reads
+| Tracks | 304 poll (ms) | Delta after a title edit (ms) |
+| ---: | ---: | ---: |
+| 1,000 | 2.20 → 0.58 | 66.58 → 75.14 |
+| 10,000 | 16.92 → 0.59 | 100.14 → 66.44 |
+| 50,000 | 91.80 → 0.61 | 252.72 → 72.36 |
+
+Pool commits, alone and in the single-account download cycle (the account
+saves and exports into the same file before each commit):
+
+| Tracks | Pool-only commit (ms) | Bytes read | Cycle commit (ms) | Bytes read |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 67.63 → 67.08 | 1,474,785 → 139 | 117.09 → 83.76 | 5,079,392 → 1,269,957 |
+| 10,000 | 242.10 → 208.95 | 11,071,053 → 147 | 442.23 → 358.85 | 43,464,469 → 10,866,233 |
+| 50,000 | 959.33 → 859.34 | 53,921,068 → 156 | 1,942.64 → 1,651.37 | 214,864,461 → 53,716,237 |
+
+- The 304 no longer grows with the library: about 0.6 ms at every size.
+- The delta no longer grows with the library either. Almost all of what is
+  left is one commit to the delta-history database
+  (`library_incremental.remember`): a profile at 1,000 tracks puts 65 of 69 ms
+  in that commit's sync on this disk. That sync varies by tens of ms between
+  runs, which is why the 1,000-track median is higher after than before; the
+  work the change removed at that size is three fingerprints of about 1.4 ms.
+- A pool-only commit reads nothing of the manifest. In the download cycle the
+  commit reads the Station's new file once (the manifest size) instead of
+  four times. Commit time stays dominated by serializing and syncing the whole
+  manifest.
+- Bytes read are `rchar`, which counts page-cache hits: physical disk reads
   saved depend on the cache.
 
-What this does not measure: network, compression, playback, the Station's
-own export, physical devices or a Raspberry Pi. Commit times include the
+What this does not measure: network, compression, playback, the time of the
+Station's own save and export, physical devices or a Raspberry Pi. Commit times include the
 manifest's fsync on this disk, which varies between runs.
 
 ## Reproduce

@@ -246,6 +246,10 @@ class LibraryStore:
                         saved.insert(0, {**entry, "item_id": item_id})
                         save_entries(conn, saved)
                     metadata.add_to_playlist(name, item_id)
+                from shared.library_fingerprint import public_headers
+                # One detached copy of the headers is both stored and proven,
+                # whatever happens to the live model meanwhile.
+                headers = public_headers(metadata)
                 replacement_state: Dict[str, sqlite3.Row] = {}
                 # The date the replaced row carried. A rescan or a lossless
                 # upgrade gives one song a new id; without this it would read as
@@ -267,7 +271,7 @@ class LibraryStore:
                         replacement_added_at[new_id] = dated["added_at"]
                 conn.execute("INSERT INTO library_info (key, value) VALUES ('version', ?) "
                              "ON CONFLICT(key) DO UPDATE SET value=excluded.value "
-                             "WHERE library_info.value IS NOT excluded.value", (str(metadata.version),))
+                             "WHERE library_info.value IS NOT excluded.value", (str(headers["version"]),))
                 # Stage only IDs/order, avoiding a full manifest-sized IN list.
                 with staged_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
                                  ((t.id, i) for i, t in enumerate(metadata.tracks))) as incoming:
@@ -311,7 +315,7 @@ class LibraryStore:
 
                 sync_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
                           ((t.id, i) for i, t in enumerate(metadata.tracks)))
-                playlist_map = metadata.playlists if isinstance(metadata.playlists, dict) else {}
+                playlist_map = headers["playlists"] if isinstance(headers["playlists"], dict) else {}
                 sync_rows(conn, 'playlists', ('name', 'position'), ('name',),
                           ((name, i) for i, name in enumerate(playlist_map)))
                 sync_rows(conn, 'playlist_tracks', ('playlist_name', 'position', 'track_id'),
@@ -338,14 +342,14 @@ class LibraryStore:
                         podcast_episode_cache_json=excluded.podcast_episode_cache_json
                 """, (
                     revision,
-                    int(metadata.version),
-                    metadata.last_updated,
-                    json.dumps(metadata.settings, ensure_ascii=False),
-                    json.dumps(metadata.podcast_subscriptions, ensure_ascii=False),
-                    json.dumps(metadata.podcast_episode_cache, ensure_ascii=False),
+                    int(headers["version"]),
+                    headers["last_updated"],
+                    json.dumps(headers["settings"], ensure_ascii=False),
+                    json.dumps(headers["podcast_subscriptions"], ensure_ascii=False),
+                    json.dumps(headers["podcast_episode_cache"], ensure_ascii=False),
                 ))
                 from shared.library_changes import sync_source
-                sync_source(conn, metadata, order_changed)
+                sync_source(conn, metadata, order_changed, headers)
                 from shared import library_search
                 library_search.sync(conn)
                 if operation_id:

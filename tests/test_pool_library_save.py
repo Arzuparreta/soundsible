@@ -241,7 +241,7 @@ def test_own_publication_is_neither_hashed_nor_read_again(tmp_path, monkeypatch)
     target.library.podcast_subscriptions = [{'title': 'Español 東京'}]
     target.library.podcast_episode_cache = {'feed': {'episodes': [{'title': 'One'}]}}
     save(target)
-    monkeypatch.setattr(service, 'revision', lambda _: pytest.fail('hashed its own file'))
+    monkeypatch.setattr(service, 'read_revision', lambda *_: pytest.fail('read its own file'))
     monkeypatch.setattr(service, 'read_podcast_fields', lambda *_: pytest.fail('reread podcasts'))
     for index in range(2):
         target.commit_track(library(259).tracks[257 + index])
@@ -265,7 +265,7 @@ def test_any_other_writer_makes_the_pool_reload_its_file(tmp_path, monkeypatch, 
         # Even a replacement that kept the file's identity, size and times
         # is seen: it took the publication lock, which counts every hold.
         monkeypatch.setattr(service, 'signature', lambda _: 'unchanged')
-        target._known = target._known[0], 'unchanged', target._known[2]
+        target._seen = target._seen._replace(signature='unchanged')
         publish(target.library_path, text_pieces(changed.iter_json()))
     else:
         # A writer that ignores the lock changes the file's signature.
@@ -276,8 +276,7 @@ def test_any_other_writer_makes_the_pool_reload_its_file(tmp_path, monkeypatch, 
     assert saved.podcast_subscriptions == [{'id': 'foreign'}]
 
 
-def test_failed_publication_keeps_the_known_file(tmp_path, monkeypatch):
-    from shared.downloader import service
+def test_failed_publication_keeps_the_previous_file_and_model_revision(tmp_path):
     target = writer(tmp_path, 2)
     save(target)
     old = target._manifest_revision, target.library_path.read_bytes()
@@ -285,41 +284,121 @@ def test_failed_publication_keeps_the_known_file(tmp_path, monkeypatch):
         with pytest.raises(OSError):
             target.commit_track(library(3).tracks[2])
     assert old == (target._manifest_revision, target.library_path.read_bytes())
-    # The file is still the one this pool published: no reread on retry.
-    monkeypatch.setattr(service, 'revision', lambda _: pytest.fail('hashed its own file'))
     target.commit_track(library(4).tracks[3])
     assert target.library_path.read_text() == target.library.to_json()
     assert len(target.library.tracks) == 4
 
 
-def test_publication_generation_counts_every_outermost_hold(tmp_path):
+def test_publication_generation_counts_publications_not_holds(tmp_path):
     import os
     import subprocess
     import sys
+    from shared.atomic_file import publish, text_pieces
     path = tmp_path / 'library.json'
-    with publication_lock(path) as first:
+    with publication_lock(path) as hold:
+        assert hold.generation is None  # Nothing published here yet.
+        publish(path, text_pieces(['{}']))
+        first = hold.generation
         with publication_lock(path) as nested:
-            assert nested == first
-    with publication_lock(path) as second:
-        assert second == (first + 1) % 2**64
-    subprocess.run([sys.executable, '-c', 'import sys\nfrom shared.file_revision import publication_lock\n'
-                    'with publication_lock(sys.argv[1]): pass', str(path)],
+            assert nested is hold
+    with publication_lock(path) as hold:
+        # Reading under the lock writes nothing and changes nothing.
+        assert hold.generation == first
+    subprocess.run([sys.executable, '-c', 'import sys\nfrom pathlib import Path\n'
+                    'from shared.atomic_file import publish, text_pieces\n'
+                    'publish(Path(sys.argv[1]), text_pieces(["[]"]))', str(path)],
                    check=True, env={**os.environ, 'PYTHONPATH': '.'})
-    with publication_lock(path) as third:
-        assert third == (second + 2) % 2**64
+    with publication_lock(path) as hold:
+        assert hold.generation == (first + 1) % 2**64
     (tmp_path / '.soundsible-write.lock').unlink()
-    with publication_lock(path) as recreated:
+    with publication_lock(path) as hold:
+        assert hold.generation is None
+        publish(path, text_pieces(['{}']))
         # A fresh counter starts anywhere, not where the old one stopped.
-        assert recreated != (third + 1) % 2**64
+        assert hold.generation not in (None, (first + 2) % 2**64)
 
 
 def test_publication_digest_includes_windows_newlines(tmp_path, monkeypatch):
+    import os
     from types import SimpleNamespace
     from shared import library_json
     target = writer(tmp_path, 2)
     target.library.podcast_subscriptions = [{'title': '東京😀'}]
     with monkeypatch.context() as scoped:
-        scoped.setattr(library_json, 'os', SimpleNamespace(linesep='\r\n'))
+        scoped.setattr(library_json, 'os', SimpleNamespace(linesep='\r\n', fstat=os.fstat))
         save(target)
     assert b'\r\n' in target.library_path.read_bytes()
     assert target._manifest_revision == revision(target.library_path)
+
+
+def test_writer_landing_after_the_rename_is_not_mistaken_for_the_pool(tmp_path, monkeypatch):
+    from shared import atomic_file
+    target = writer(tmp_path, 2)
+    save(target)
+    external = library(2)
+    external.tracks[0].title = 'External edit'
+    external.podcast_subscriptions = [{'id': 'external'}]
+    original = atomic_file.sync_directory
+
+    def replaced_meanwhile(directory):
+        original(directory)
+        # Same size, written in place, before the pool looks at the file.
+        target.library_path.write_text(external.to_json())
+
+    monkeypatch.setattr(atomic_file, 'sync_directory', replaced_meanwhile)
+    target.commit_track(library(3).tracks[2])
+    monkeypatch.setattr(atomic_file, 'sync_directory', original)
+    target.commit_track(library(4).tracks[3])
+    saved = LibraryMetadata.from_json(target.library_path.read_text())
+    assert saved.tracks[0].title == 'External edit'
+    assert saved.podcast_subscriptions == [{'id': 'external'}]
+
+
+def test_unreadable_signature_after_publication_is_only_a_cache_miss(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from shared import file_revision
+    target = writer(tmp_path, 2)
+    save(target)
+    snapshot, token = target.read_snapshot()
+    snapshot.tracks[0].title = 'Cloud edit'
+
+    def refused(_):
+        raise PermissionError('stat refused')
+
+    monkeypatch.setattr(file_revision, 'os', SimpleNamespace(**{**vars(file_revision.os), 'stat': refused}))
+    assert file_revision.signature(target.library_path) is None
+    target.replace_snapshot(snapshot, token)
+    # Published, and adopted: the bookkeeping failure did not undo it.
+    assert target.library is snapshot and target._seen is None
+    monkeypatch.undo()
+    assert LibraryMetadata.from_json(target.library_path.read_text()).tracks[0].title == 'Cloud edit'
+    target.commit_track(library(3).tracks[2])
+    assert len(LibraryMetadata.from_json(target.library_path.read_text()).tracks) == 3
+
+
+def test_commit_after_a_station_export_reads_the_file_once(tmp_path):
+    from shared.downloader import service
+    from shared.atomic_file import publish, text_pieces
+    target = writer(tmp_path, 2)
+    save(target)
+    station = library(3)
+    station.podcast_subscriptions = [{'id': 'station'}]
+    publish(target.library_path, text_pieces(station.iter_json()))
+    with patch.object(service, 'read_revision', wraps=service.read_revision) as reads:
+        target.commit_track(library(4).tracks[3])
+    assert reads.call_count == 1
+    saved = LibraryMetadata.from_json(target.library_path.read_text())
+    assert len(saved.tracks) == 4 and saved.podcast_subscriptions == [{'id': 'station'}]
+
+
+def test_first_cloud_sync_keeps_the_snapshot_podcasts(tmp_path):
+    target = writer(tmp_path, 0)
+    target.library = target._load_library()  # As at start-up, with no manifest yet.
+    snapshot, token = target.read_snapshot()
+    assert token is None and target._manifest_revision is None
+    snapshot.podcast_subscriptions = [{'id': 'remote'}]
+    snapshot.podcast_episode_cache = {'remote': {'episodes': [{'title': 'One'}]}}
+    target.replace_snapshot(snapshot, token)
+    saved = LibraryMetadata.from_json(target.library_path.read_text())
+    assert saved.podcast_subscriptions == [{'id': 'remote'}]
+    assert saved.podcast_episode_cache == {'remote': {'episodes': [{'title': 'One'}]}}

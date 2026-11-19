@@ -88,9 +88,16 @@ RSS, energy savings, playback quality or acoustic acceptance.
 - Journals and source hashes live in SQLite, not in resident metadata maps.
   `shared/library_changes.py`, `shared/sqlite_changes.py` and
   `shared/api/library_incremental.py` implement source proofs and selection.
-- Models are still mutable before they are saved. Partial requests
-  **still walk the library to check fingerprints**. Do not replace
-  those checks with blind trust in the SQLite revision.
+- Models are still mutable before they are saved. Conditional requests and
+  deltas describe the **committed** source: a 304 trusts the committed
+  fingerprint, and a delta checks each row it sends and the headers against
+  the hashes committed with that source (`library_public_rows`,
+  `library_public_headers`). Never send a copied row or header without that
+  check, and never trust the SQLite revision alone. The live model is still
+  fingerprinted by full responses, and by a conditional request that matched
+  no committed revision and no delta, unless `library_fingerprint.recorded()`
+  already proves it is the committed source
+  ([committed library reads](../performance/committed-library-reads.md)).
 - ETags of verified canonical sources are opaque dependency tokens,
   not hashes of the entire JSON. The old path remains for unverified sources.
 - Do not break account isolation, changes during copy/annotation, field
@@ -479,8 +486,8 @@ Closes the read side of pending item 2. Contract, measurements and limits in
 | --- | --- |
 | Conditional `GET /api/library` fingerprinting the whole model | Closed: answers from the committed public source (one SQLite row) |
 | Two full fingerprints per successful delta | Closed: checks only the rows and headers it sends against committed hashes |
-| ODST reading all of `library.json` (digest, then podcasts) on each download commit | Closed for its own publications: publication-lock generation plus file signature |
-| Coordination of the ODST and Station writers of `<music>/library.json` | Closed: every hold of the shared publication lock advances a generation the pool checks |
+| ODST reading all of `library.json` (digest, then podcasts) on each download commit | Closed for its own publications (nothing read); after another writer's publication, one pass instead of four |
+| Coordination of the ODST and Station writers of `<music>/library.json` | Closed: every publication through `shared.atomic_file` advances a generation the pool checks, with the file signature for writers outside the lock |
 | Search per-query fingerprint, save-side fingerprints, track-edit fingerprints, exports | Still walk the library; unchanged |
 
 Contract change: a conditional request or delta describes the committed

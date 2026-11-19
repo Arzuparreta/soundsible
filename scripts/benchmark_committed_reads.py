@@ -5,12 +5,20 @@ exported copy of another git revision (its code, this benchmark). Temporary
 databases, history, annotation stores and pool manifests live on the
 repository's storage volume. Network, compression and playback are excluded.
 
+Each size runs in a disposable runtime (config, data, cache and music
+directories under one temporary root) with a real LibraryManager whose
+portable export is the music folder's library.json, as on a single-account
+instance, and a Downloader on that same file.
+
 - poll_304_ms: a conditional GET /api/library whose ETag is still current.
-- delta_ms: GET /api/library?delta=1 after one committed title edit; every
-  delta is applied and compared with an unconditional full response.
-- commit_ms / commit_read_bytes: Downloader.commit_track on a pool manifest
-  that only the pool wrote; bytes come from /proc/self/io `rchar`, so they
-  include every read the commit made, not only the manifest's.
+- edit_delta_ms: GET /api/library?delta=1 after LibraryManager.patch_track_metadata
+  changed one title; every delta is applied and compared with a full response.
+- pool_commit_*: Downloader.commit_track when only the pool wrote the file.
+- cycle_commit_*: the same commit right after the account saved and exported
+  into that file, as each download does on a single-account instance.
+
+Bytes come from /proc/self/io `rchar`: every read the commit made, page-cache
+hits included.
 """
 import argparse
 import json
@@ -43,23 +51,11 @@ def apply(body, delta):
 
 def measure(code, count, repeats, scratch):
     sys.path.insert(0, str(code))
-    from types import SimpleNamespace
-    from unittest.mock import patch
+    from dataclasses import replace
     import threading
     from flask import Flask
-    from shared.api import library_deltas as history
-    from shared.api.routes import library as route
-    from shared.artwork import ArtworkStore
-    from shared.database import DatabaseManager
-    from shared.downloader.service import Downloader
-    from shared.loudness.store import reset_connections
-    from shared.models import LibraryMetadata, Track
-    from shared.user_context import user_context
-
-    def track(i):
-        return Track(id=str(i), title=f'Title {i}', artist='Artist', artists=['Artist'], album=f'Album {i // 10}',
-                     duration=180, file_hash=str(i), original_filename=f'{i}.mp3',
-                     file_size=1000, bitrate=320, format='mp3')
+    from scripts.benchmark_library_export import library
+    from shared.runtime import RuntimeConfig, configure_runtime
 
     podcasts = {f'feed-{f}': {'fetched_at': '2026-01-01T00:00:00', 'episodes': [
         {'guid': f'{f}-{e}', 'title': f'Episode {e}', 'description': 'x' * 400} for e in range(20)]}
@@ -67,18 +63,24 @@ def measure(code, count, repeats, scratch):
     result = {'tracks': count}
     with tempfile.TemporaryDirectory(prefix='soundsible-committed-', dir=scratch) as directory:
         root = Path(directory)
-        reset_connections()
-        art = ArtworkStore(root / 'art', root / 'art-cache')
-        with (patch.object(history, 'get_cache_dir', return_value=root / 'history'),
-              patch('shared.artwork.artwork_store', return_value=art),
-              patch('shared.loudness.store.loudness_db_path', return_value=root / 'loudness.db'),
-              user_context('benchmark')):
-            db = DatabaseManager(str(root / 'library.db'))
-            value = LibraryMetadata(1, [track(i) for i in range(count)], {'List': ['0', '1']}, {},
-                                    last_updated='2026-01-01T00:00:00', podcast_episode_cache=podcasts)
-            db.replace_library(value)
-            lib = SimpleNamespace(db=db, metadata=value, refresh_if_stale=lambda: None)
-            route._get_api = lambda: {'get_library': lambda: lib}
+        # A disposable runtime: no lock, database or export outside `root`.
+        runtime = RuntimeConfig.default({f'SOUNDSIBLE_{key.upper()}_DIR': str(root / key)
+                                         for key in ('config', 'data', 'cache', 'log', 'music')})
+        configure_runtime(runtime)
+        from shared.app_config import set_output_dir
+        set_output_dir(runtime.music_dir)
+        from player.library import LibraryManager
+        from shared.api.routes import library as route
+        from shared.downloader.service import Downloader
+        from shared.models import LibraryMetadata
+        from shared.user_context import user_context
+
+        with user_context('benchmark'):
+            manager = LibraryManager(silent=True)
+            manager.metadata = library(count)
+            manager.metadata.podcast_episode_cache = podcasts
+            assert manager._save_metadata()
+            route._get_api = lambda: {'get_library': lambda: manager}
             app = Flask(__name__)
             app.register_blueprint(route.library_bp)
             client = app.test_client()
@@ -92,8 +94,8 @@ def measure(code, count, repeats, scratch):
                 assert response.status_code == 304
             deltas = []
             for iteration in range(repeats):
-                value.tracks[0].title = f'Edited {iteration}'
-                db.replace_library(value)
+                # The production label edit, not a whole-library save.
+                assert manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': f'Edited {iteration}'})
                 started = time.perf_counter()
                 response = client.get('/api/library', query_string={'delta': '1', 'since': etag[3:-1]},
                                       headers={'If-None-Match': etag})
@@ -104,28 +106,35 @@ def measure(code, count, repeats, scratch):
                 full = client.get('/api/library')
                 assert accepted == full.get_json() and body['revision'] == full.headers['ETag'][3:-1]
                 etag = 'W/"' + body['revision'] + '"'
-            result.update(poll_304_ms=round(statistics.median(polls), 2), delta_ms=round(statistics.median(deltas), 2),
-                          delta_bytes=len(response.data))
-            reset_connections()
+            result.update(poll_304_ms=round(statistics.median(polls), 2),
+                          edit_delta_ms=round(statistics.median(deltas), 2), delta_bytes=len(response.data))
 
-        pool = Downloader.__new__(Downloader)
-        pool.library_path = root / 'pool' / 'library.json'
-        pool.library_path.parent.mkdir()
-        pool._lock = threading.Lock()
-        initial = LibraryMetadata(1, [track(i) for i in range(count)], {}, {}, podcast_episode_cache=podcasts)
-        pool.library_path.write_text(initial.to_json())
-        pool.library = pool._load_library()
-        pool.commit_track(track(count))
-        commits, reads = [], []
-        for iteration in range(repeats):
-            before, started = read_bytes(), time.perf_counter()
-            pool.commit_track(track(count + 1 + iteration))
-            commits.append((time.perf_counter() - started) * 1000)
-            reads.append(read_bytes() - before)
-        saved = LibraryMetadata.from_json(pool.library_path.read_text())
-        assert len(saved.tracks) == count + 1 + repeats and saved.podcast_episode_cache == podcasts
-        result.update(commit_ms=round(statistics.median(commits), 2), commit_read_bytes=statistics.median(reads),
-                      manifest_bytes=pool.library_path.stat().st_size)
+            pool = Downloader.__new__(Downloader)
+            pool.library_path = runtime.music_dir / 'library.json'
+            pool._lock = threading.Lock()
+            pool.library = pool._load_library()   # The Station's export of the account.
+            extra = iter(library(count + 4 * repeats + 2).tracks[count:])
+
+            def commits(station_exports):
+                times, reads = [], []
+                for _ in range(repeats):
+                    if station_exports:
+                        # As the download pump does: the account admits the
+                        # previous download and exports into the same file.
+                        manager.metadata.add_track(replace(next(extra)))
+                        assert manager._save_metadata()
+                    before, started = read_bytes(), time.perf_counter()
+                    pool.commit_track(next(extra))
+                    times.append((time.perf_counter() - started) * 1000)
+                    reads.append(read_bytes() - before)
+                return round(statistics.median(times), 2), statistics.median(reads)
+
+            pool.commit_track(next(extra))
+            result['pool_commit_ms'], result['pool_commit_read_bytes'] = commits(False)
+            result['cycle_commit_ms'], result['cycle_commit_read_bytes'] = commits(True)
+            saved = LibraryMetadata.from_json(pool.library_path.read_text())
+            assert saved.podcast_episode_cache == podcasts
+            result['manifest_bytes'] = pool.library_path.stat().st_size
     return result
 
 

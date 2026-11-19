@@ -54,15 +54,21 @@ class LibraryJSONWriter:
     """An atomic-file fill that hashes the bytes it writes.
 
     The digest is the published file's revision, so the writer that published
-    it need not read it back to know it.
+    it need not read it back to know it. `written` is that file's device,
+    inode, size and modification time once every byte reached it, which
+    renaming the file does not change.
     """
 
     def __init__(self, metadata):
         self.metadata = metadata
         self.digest = sha256()
+        self.written = None
 
     def __call__(self, handle):
         for piece in self.metadata.iter_json():
             data = piece.replace('\n', os.linesep).encode('utf-8')
             handle.write(data)
             self.digest.update(data)
+        handle.flush()
+        info = os.fstat(handle.fileno())
+        self.written = info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns

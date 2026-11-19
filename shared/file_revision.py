@@ -1,6 +1,7 @@
 """Cross-process publication lock, its hold generations, and file revisions."""
 from contextlib import contextmanager
 from hashlib import sha256
+import io
 import os
 import errno
 import time
@@ -14,53 +15,105 @@ _local = threading.local()
 
 
 def revision(path):
-    digest = sha256()
-    try:
-        with Path(path).open('rb') as stream:
-            for block in iter(lambda: stream.read(64 * 1024), b''):
-                digest.update(block)
-    except FileNotFoundError:
-        return None
-    return digest.digest()
+    return read_revision(path)[1]
+
+
+def _identity(info):
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
 def signature(path):
-    """Identity, size and timestamps of `path`, or None when it is missing.
+    """Identity, size and timestamps of `path`, or None when it is missing or unreadable.
 
     A replacement gives the path a new inode; an in-place rewrite changes the
     modification and change times.
     """
     try:
-        info = os.stat(path)
-    except FileNotFoundError:
+        return _identity(os.stat(path))
+    except OSError:
         return None
-    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
-def _advance(handle):
-    """Count this hold in the lock file; returns the new generation.
+class _Hashing(io.RawIOBase):
+    def __init__(self, raw):
+        self.raw = raw
+        self.digest = sha256()
 
-    The counter starts at a random value, so a recreated lock file cannot
-    replay generations a writer remembers from the old one.
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        count = self.raw.readinto(buffer)
+        self.digest.update(memoryview(buffer)[:count])
+        return count
+
+
+def read_revision(path, parse=None):
+    """`(signature, digest, parse(text))` of one open file: all three describe the same bytes.
+
+    `parse` receives the file as UTF-8 text; whatever it leaves unread is
+    still hashed. A missing file gives `(None, None, None)` and is not parsed.
     """
-    handle.seek(1)
-    stored = handle.read(8)
-    value = int.from_bytes(stored if len(stored) == 8 else os.urandom(8), 'little')
-    value = (value + 1) % 2**64
-    # The handle appends: cut back to the locked byte, then append the counter.
-    handle.truncate(1)
-    handle.write(value.to_bytes(8, 'little'))
-    handle.flush()
-    return value
+    try:
+        raw = Path(path).open('rb', buffering=0)
+    except FileNotFoundError:
+        return None, None, None
+    with raw:
+        seen = _identity(os.fstat(raw.fileno()))
+        hashing = _Hashing(raw)
+        stream = io.BufferedReader(hashing, 64 * 1024)
+        result = None
+        if parse is not None:
+            text = io.TextIOWrapper(stream, encoding='utf-8')
+            try:
+                result = parse(text)
+            finally:
+                text.detach()  # Leave `stream` open to hash what parse left.
+        while stream.read(64 * 1024):
+            pass
+        return seen, hashing.digest.digest(), result
+
+
+class Hold:
+    """One outermost hold of a directory's publication lock.
+
+    `generation` counts the publications made in the directory, by any
+    process, through `shared.atomic_file`. It is None when the counter cannot
+    be read or written; locking still works then, and a holder comparing
+    generations just cannot rely on it. A new lock file starts counting at a
+    random value, so it cannot replay a generation remembered from an old one.
+    """
+
+    def __init__(self, handle):
+        self._handle = handle
+        try:
+            handle.seek(1)
+            stored = handle.read(8)
+            self.generation = int.from_bytes(stored, 'little') if len(stored) == 8 else None
+        except OSError:
+            self.generation = None
+
+    def published(self):
+        """Count one publication made under this hold."""
+        handle = self._handle
+        try:
+            handle.seek(1)
+            stored = handle.read(8)
+            value = int.from_bytes(stored if len(stored) == 8 else os.urandom(8), 'little')
+            # The handle appends: cut back to the locked byte, then append.
+            handle.truncate(1)
+            handle.write(((value + 1) % 2**64).to_bytes(8, 'little'))
+            handle.flush()
+            self.generation = (value + 1) % 2**64
+        except OSError:
+            self.generation = None
 
 
 @contextmanager
 def publication_lock(path):
     """Exclusive publication rights for every file in `path`'s directory.
 
-    Yields the hold's generation. Every outermost hold, by any process,
-    advances it by one, so a writer whose next hold is its previous generation
-    plus one knows no cooperating writer touched the directory in between.
+    Yields the outermost `Hold`; nested holds on the same thread share it.
     """
     # Lock the directory rather than the replaced inode. Resolve symlinks so
     # two spellings of a local provider destination coordinate as well.
@@ -105,7 +158,7 @@ def publication_lock(path):
                         # an ordinary bounded wait in standalone/native callers.
                         time.sleep(.01)
             try:
-                held[key] = _advance(handle)
+                held[key] = Hold(handle)
                 yield held[key]
             finally:
                 held.pop(key, None)

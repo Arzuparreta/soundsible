@@ -11,12 +11,13 @@ INVALIDATING_TABLES = ('tracks', 'library_tracks', 'library_state', 'playlists',
 def install(conn):
     conn.execute('CREATE TABLE IF NOT EXISTS library_public_source ('
                  'singleton INTEGER PRIMARY KEY CHECK(singleton=1),valid INTEGER, fingerprint TEXT,ordering INTEGER,ordering_dirty INTEGER DEFAULT 1)')
-    if 'headers' not in {row[1] for row in conn.execute('PRAGMA table_info(library_public_source)')}:
-        # Proofs written before this column stay valid for full responses;
-        # partial ones wait for the next canonical save to record it.
-        conn.execute('ALTER TABLE library_public_source ADD COLUMN headers TEXT')
-    conn.execute("INSERT OR IGNORE INTO library_public_source (singleton,valid,fingerprint,ordering,ordering_dirty) "
-                 "VALUES (1,0,'',0,1)")
+    conn.execute("INSERT OR IGNORE INTO library_public_source VALUES (1,0,'',0,1)")
+    # The header hash of the source with that fingerprint. Its own table, so
+    # an older engine opening this database never sees an unexpected column;
+    # one that saves leaves a stale fingerprint here, which disables deltas
+    # until the next save by this engine instead of certifying its headers.
+    conn.execute('CREATE TABLE IF NOT EXISTS library_public_headers ('
+                 'singleton INTEGER PRIMARY KEY CHECK(singleton=1),fingerprint TEXT,hash TEXT)')
     conn.execute('CREATE TABLE IF NOT EXISTS library_public_rows (id TEXT PRIMARY KEY,hash BLOB,identity TEXT)')
     conn.execute('CREATE INDEX IF NOT EXISTS library_public_identity ON library_public_rows(identity)')
     install_changes(conn, (('library_public_rows', 'track', 'id'),))
@@ -30,9 +31,14 @@ def install(conn):
                          f'AFTER {operation} ON {table} BEGIN {mutation} END')
 
 
-def sync_source(conn, metadata, order_changed):
-    # Hash exactly the same bounded encoded rows that populate the index.
-    # Re-reading a mutable model afterward could associate the wrong proof.
+def sync_source(conn, metadata, order_changed, headers):
+    """Prove the committed source inside the caller's write transaction.
+
+    `headers` is the detached `public_headers()` snapshot the caller also
+    persisted, so the proof, the header hash and the stored headers are the
+    same values. Track rows are hashed exactly as they populate the index:
+    re-reading a mutable model afterwards could associate the wrong proof.
+    """
     from shared.library_fingerprint import (TRACK_FIELDS, HEADER_FIELDS, encoded_values, header_digest,
                                             record, track_values)
     from shared.models import LibraryMetadata, Track
@@ -41,7 +47,7 @@ def sync_source(conn, metadata, order_changed):
     count = len(metadata.tracks)
     if conn.execute('SELECT COUNT(*) FROM library_tracks').fetchone()[0] != count:
         return
-    proof = sha256(encoded_values((tuple(getattr(metadata, name) for name in HEADER_FIELDS), count)))
+    proof = sha256(encoded_values((tuple(headers[name] for name in HEADER_FIELDS), count)))
     conn.execute('DELETE FROM library_public_rows WHERE id NOT IN (SELECT track_id FROM library_tracks)')
     for offset in range(0, count, 500):
         batch = metadata.tracks[offset:offset + 500]
@@ -64,9 +70,11 @@ def sync_source(conn, metadata, order_changed):
                 conn.execute('INSERT INTO library_public_rows VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET '
                              'hash=excluded.hash,identity=excluded.identity',
                              (track_id, value, str(values[TRACK_FIELDS.index("file_hash")] or track_id or '')))
-    conn.execute('UPDATE library_public_source SET valid=1,fingerprint=?,headers=?,'
+    conn.execute('UPDATE library_public_source SET valid=1,fingerprint=?,'
                  'ordering=ordering+MAX(ordering_dirty,?),ordering_dirty=0 WHERE singleton=1',
-                 (proof.hexdigest(), header_digest(metadata), int(order_changed)))
+                 (proof.hexdigest(), int(order_changed)))
+    conn.execute('INSERT OR REPLACE INTO library_public_headers VALUES (1,?,?)',
+                 (proof.hexdigest(), header_digest(headers)))
     # Readers then need not hash this exact model again to know it. If the
     # transaction rolls back the hint is merely unused: it never matches a
     # committed fingerprint that describes other content.
@@ -74,7 +82,9 @@ def sync_source(conn, metadata, order_changed):
 
 
 def source(conn):
-    row = conn.execute('SELECT valid,fingerprint,ordering,headers FROM library_public_source WHERE singleton=1').fetchone()
+    row = conn.execute('SELECT s.valid,s.fingerprint,s.ordering,h.hash FROM library_public_source s '
+                       'LEFT JOIN library_public_headers h ON h.fingerprint=s.fingerprint '
+                       'WHERE s.singleton=1').fetchone()
     if row is None or not row[0]:
         return None
     return {'fingerprint': row[1], 'ordering': row[2], 'headers': row[3], 'cursor': cursor(conn).to_list()}
@@ -88,7 +98,7 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
     the verified pre-edit source. Both full-model passes remain mandatory.
     Call inside the revision-checked write transaction; errors roll it back.
     """
-    from shared.library_fingerprint import fingerprint, row_digest, track_values
+    from shared.library_fingerprint import fingerprint, record, row_digest, track_values
     track = metadata.tracks[position]
     before = track.to_public_dict()
     if any(before[name] != value for name, value in changes.items()):
@@ -101,6 +111,9 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
                  'hash=excluded.hash,identity=excluded.identity WHERE hash IS NOT excluded.hash OR identity IS NOT excluded.identity',
                  (track.id, row_digest(track_values(track)), str(track.file_hash or track.id or '')))
     conn.execute('UPDATE library_public_source SET valid=1,fingerprint=? WHERE singleton=1', (updated,))
+    # Headers were proven unchanged above; their hash now names the new source.
+    conn.execute('UPDATE library_public_headers SET fingerprint=? WHERE fingerprint=?', (updated, previous_fingerprint))
+    record(metadata, updated)
 
 
 def affected(conn, previous, expected, artwork_ids, identities):

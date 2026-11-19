@@ -323,7 +323,7 @@ class LibraryManager:
     def patch_track_metadata(self, track_id: str, changes: dict) -> bool:
         """Apply only declared fields; update the live model after durable commit."""
         from dataclasses import replace
-        from shared.library_fingerprint import fingerprint
+        from shared.library_fingerprint import fingerprint, record, recorded
         from shared.library_lifecycle import LibraryPersistenceError
         allowed = {'title', 'artist', 'album', 'album_artist', 'cover_source', 'metadata_modified_by_user'}
         if not changes or not set(changes) <= allowed:
@@ -357,6 +357,8 @@ class LibraryManager:
                 raise LibraryPersistenceError(self.last_save_error) from exc
             for name, value in changes.items():
                 setattr(track, name, value)
+            # The live model now holds exactly the candidate's public content.
+            record(self.metadata, recorded(candidate))
             self._library_revision = revision
             after_release(self._export_committed, key=('library-export', id(self)))
             return True

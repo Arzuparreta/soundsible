@@ -7,7 +7,6 @@ the library. Unsaved in-memory edits are never labelled with a committed
 revision: a copied row or header that differs from its committed hash sends
 the full response instead.
 """
-from copy import deepcopy
 from hashlib import sha256
 import json
 import time
@@ -16,7 +15,7 @@ from flask import current_app
 from flask.json.provider import DefaultJSONProvider
 
 from shared.api import library_deltas as history
-from shared.library_fingerprint import HEADER_FIELDS, TRACK_FIELDS, header_digest, public_row_digest
+from shared.library_fingerprint import TRACK_FIELDS, header_digest, public_headers, public_row_digest
 from shared.database import DatabaseManager
 from shared.loudness import LoudnessStore, annotate_tracks
 from shared.models import LibraryMetadata, Track
@@ -137,7 +136,7 @@ def try_delta(lib, artwork, account, base_revision, dependencies):
         if public_row_digest(row) != committed:
             return None
         copied[position] = row
-    headers = {name: deepcopy(getattr(lib.metadata, name)) for name in HEADER_FIELDS}
+    headers = public_headers(lib.metadata)
     if header_digest(headers) != state['source']['headers']:
         return None
     upserts = [copied[position] for position in sorted(copied)]

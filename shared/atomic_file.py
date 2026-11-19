@@ -19,10 +19,15 @@ def publish(path: Path, fill: Callable[[BinaryIO], None]) -> None:
     Readers see the previous file or the complete new one, never a partial
     write. The temporary is closed before the rename, which Windows requires.
     """
-    with publication_lock(path):
+    with publication_lock(path) as hold:
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-        _fill_and_rename(fd, temporary, path, fill, None)
+        try:
+            _fill_and_rename(fd, temporary, path, fill, None)
+        finally:
+            # Counted even if it failed: a writer comparing generations then
+            # rereads, which is only ever slower.
+            hold.published()
 
 
 def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
@@ -35,8 +40,11 @@ def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
     If the directory refuses a temporary, the file is rewritten in place as
     before rather than not at all.
     """
-    with publication_lock(path):
-        _replace_contents_locked(path, fill)
+    with publication_lock(path) as hold:
+        try:
+            _replace_contents_locked(path, fill)
+        finally:
+            hold.published()
 
 
 def _replace_contents_locked(path, fill):

@@ -98,6 +98,12 @@ phase rows, for this comparison.
 
 ## Reproduction and validation
 
+These harnesses splice reference code into the current modules, so they only run
+against the internals they measured. The library-read and pool changes of
+[committed library reads](committed-library-reads.md) changed those internals:
+run them from a checkout of `16a8955b`
+(`git worktree add ../soundsible-16a8955b 16a8955b`).
+
 ```sh
 venv/bin/python scripts/benchmark_pool_save.py --repeats 5 \
   --output /tmp/odst-save.jsonl

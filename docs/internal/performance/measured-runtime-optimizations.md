@@ -60,6 +60,12 @@ All fixtures use disposable directories. No production service, user library,
 installed sidecar or remote provider is modified. Do not run concurrent test
 suites/builds during measurements.
 
+These harnesses splice reference code into the current modules, so they only run
+against the internals they measured. The library-read and pool changes of
+[committed library reads](committed-library-reads.md) changed those internals:
+run them from a checkout of `16a8955b`
+(`git worktree add ../soundsible-16a8955b 16a8955b`).
+
 ```sh
 venv/bin/python scripts/benchmark_runtime_optimizations.py \
   --sizes 200 1000 10000 50000 --repeats 7 \

@@ -4,6 +4,9 @@ HTTP uses the real library route, SQLite, artwork and loudness stores. Only core
 lookup is bound to the fixture. Saves include SQLite plus both local exports;
 download commits include revision checks, podcast preservation and publication.
 No user data, production engine, network provider or audible playback is used.
+
+Historical: splices reference code into the current modules. Run it from a
+checkout of 16a8955b; later library-read and pool changes moved those internals.
 """
 import argparse
 import ast

@@ -1,4 +1,5 @@
 """Bounded fingerprints of mutable library models; no retained encoded data."""
+from copy import deepcopy
 from dataclasses import fields
 from hashlib import sha256
 from pickle import Pickler
@@ -92,13 +93,14 @@ def public_row_digest(row: dict) -> bytes:
     return row_digest(_public_values(row))
 
 
-def header_digest(headers) -> str:
-    """Hash of the public header fields, from a model or a detached header mapping."""
-    if isinstance(headers, dict):
-        values = tuple(headers[name] for name in HEADER_FIELDS)
-    else:
-        values = tuple(getattr(headers, name) for name in HEADER_FIELDS)
-    return sha256(encoded_values(values)).hexdigest()
+def public_headers(metadata: LibraryMetadata) -> dict:
+    """A detached copy of the public header fields, in `HEADER_FIELDS` order."""
+    return {name: deepcopy(getattr(metadata, name)) for name in HEADER_FIELDS}
+
+
+def header_digest(headers: dict) -> str:
+    """Hash of a `public_headers()` mapping."""
+    return sha256(encoded_values(tuple(headers[name] for name in HEADER_FIELDS))).hexdigest()
 
 
 def record(metadata: LibraryMetadata, value: str) -> None:

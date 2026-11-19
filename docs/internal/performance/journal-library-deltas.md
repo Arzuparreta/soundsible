@@ -109,6 +109,12 @@ cache. Migration leaves existing data usable before any new proof exists.
 
 ## Reproduction and measured results
 
+These harnesses splice reference code into the current modules, so they only run
+against the internals they measured. The library-read and pool changes of
+[committed library reads](committed-library-reads.md) changed those internals:
+run them from a checkout of `16a8955b`
+(`git worktree add ../soundsible-16a8955b 16a8955b`).
+
 ```sh
 venv/bin/python scripts/benchmark_library_journals.py --reference cd2311b --sizes 1000 10000 50000 --repeats 3 --memory
 ```

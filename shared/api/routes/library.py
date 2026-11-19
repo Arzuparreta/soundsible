@@ -142,23 +142,24 @@ def _annotation_revisions(artwork):
     return artwork.public_revision(), LoudnessStore().public_revision()
 
 
-def _held_revision(lib, user_id, dependencies):
-    """The cached revision that the conditional request already holds, or None."""
+def _held_revision(lib, user_id, dependencies, *, live):
+    """The cached revision that the conditional request already holds, or None.
+
+    Without `live`, only the committed source's: one SQLite row, current
+    whatever a writer is doing to the live model right now. With it, also the
+    live model's own revision, served when it differed from the committed
+    source (unsaved edits, or a reload that normalized values). That costs a
+    pass over the library, skipped when this model is already known to be the
+    committed source because it would only repeat the first key.
+    """
     from shared.api import library_incremental
     from shared.api.library_revision import fingerprint, validator_key, validators
     from shared.library_fingerprint import record, recorded
 
-    # A client holding the committed revision is current, whatever a writer
-    # is doing to the live model right now: one SQLite row instead of a pass
-    # over the library.
     source = library_incremental.committed_source(lib)
     committed = source["fingerprint"] if source else None
-    candidates = [committed] if committed else []
-    # The live model's own revision, served when it differed from the
-    # committed source (unsaved edits, or a reload that normalized values).
-    # Skip that pass when this model is already known to be the committed
-    # source: it would only repeat the key above.
-    if committed is None or recorded(lib.metadata) != committed:
+    candidates = [committed] if committed and not live else []
+    if live and (committed is None or recorded(lib.metadata) != committed):
         current = fingerprint(lib.metadata)
         if current == committed:
             record(lib.metadata, current)
@@ -195,7 +196,7 @@ def get_library():
         # Empty manifests have no annotation dependencies or lookup cost.
         dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
         if request.if_none_match:
-            held = _held_revision(lib, user_id, dependencies)
+            held = _held_revision(lib, user_id, dependencies, live=False)
             if held:
                 return _library_response(Response(), held)
     except Exception:
@@ -211,6 +212,15 @@ def get_library():
                 return partial
         except Exception:
             logger.debug("Incremental library proof unavailable; using full comparison", exc_info=True)
+
+    if request.if_none_match and dependencies is not None:
+        # Only now, when no committed answer exists, walk the live model.
+        try:
+            held = _held_revision(lib, user_id, dependencies, live=True)
+            if held:
+                return _library_response(Response(), held)
+        except Exception:
+            dependencies = None
 
     payload = lib.metadata.to_public_dict()
     snapshot_fingerprint = None

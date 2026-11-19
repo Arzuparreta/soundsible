@@ -10,7 +10,7 @@ from shared.api import library_revision as revisions
 from shared.api.library_revision import validators
 from shared.artwork import artwork_store
 from shared.database import DatabaseManager
-from shared.library_fingerprint import fingerprint
+from shared.library_fingerprint import fingerprint, public_headers
 from shared.loudness import LoudnessStore, LoudnessMeasurement
 from shared.loudness.store import reset_connections, _connect
 from shared.models import LibraryMetadata, Track
@@ -174,7 +174,7 @@ def test_unprovable_or_large_changes_fall_back(endpoint, change):
         lib.metadata.tracks[0].title = 'Changed'
         lib.db.replace_library(lib.metadata)
         with lib.db._get_connection() as db:
-            db.execute('UPDATE library_public_source SET headers=NULL')
+            db.execute('DELETE FROM library_public_headers')
             db.commit()
     response = get_delta(client, first)
     assert 'tracks' in response.get_json()
@@ -344,7 +344,7 @@ def test_lightweight_bases_have_count_ttl_and_payload_bounds(endpoint, monkeypat
     account = current_user_id() or ''
     proof = incremental.load_base(account, first.headers['ETag'][3:-1])
     assert proof and 'tracks' not in proof and 'Title 0' not in str(proof)
-    headers = {name: getattr(lib.metadata, name) for name in incremental.HEADER_FIELDS}
+    headers = public_headers(lib.metadata)
     for i in range(8): incremental.remember(account, str(i), proof, headers)
     with incremental.history.connection() as db:
         assert db.execute('SELECT COUNT(*) FROM incremental_bases WHERE account=?', (account,)).fetchone()[0] == 4
@@ -431,8 +431,8 @@ def test_write_failure_rolls_back_journal_and_source(endpoint, monkeypatch):
     before = lib.db.public_source()
     original = changes.sync_source
 
-    def fail_after_journal(conn, metadata, order_changed):
-        original(conn, metadata, order_changed)
+    def fail_after_journal(*args):
+        original(*args)
         raise RuntimeError('failed after journal')
 
     lib.metadata.tracks[0].title = 'Must roll back'
@@ -485,18 +485,45 @@ def test_legacy_database_migrates_without_claiming_unverified_source(tmp_path):
     assert new.public_source()['fingerprint'] == fingerprint(loaded)
 
 
-def test_proof_table_without_header_hashes_upgrades_in_place(tmp_path):
-    path = str(tmp_path / 'previous.db')
-    old = DatabaseManager(path)
+def test_previous_engine_can_open_and_save_an_upgraded_database(tmp_path):
+    path = str(tmp_path / 'upgraded.db')
+    db = DatabaseManager(path)
     value = model()
-    old.replace_library(value)
-    proof = old.public_source()['fingerprint']
-    with old._get_connection() as db:
-        db.execute('ALTER TABLE library_public_source DROP COLUMN headers')
-        db.commit()
-    upgraded = DatabaseManager(path)
-    # Still a valid proof for full responses; partial ones wait for a save.
-    assert upgraded.public_source()['fingerprint'] == proof
-    assert upgraded.public_source()['headers'] is None
-    upgraded.replace_library(value)
-    assert upgraded.public_source()['headers'] is not None
+    db.replace_library(value)
+    with db._get_connection() as conn:
+        # The previous engine's schema statement, verbatim.
+        conn.execute("INSERT OR IGNORE INTO library_public_source VALUES (1,0,'',0,1)")
+        # Its save proves a new source without knowing header hashes.
+        conn.execute("UPDATE library_public_source SET fingerprint='written-by-previous-engine'")
+        conn.commit()
+    # Full responses may use that proof; deltas wait for this engine's save.
+    assert db.public_source()['headers'] is None
+    db.replace_library(value)
+    assert db.public_source()['headers'] is not None
+
+
+def test_live_header_edit_during_a_save_is_neither_stored_nor_certified(endpoint, monkeypatch):
+    import shared.collection as collection
+    client, lib, _ = endpoint
+    first = client.get('/api/library?delta=1')
+    lib.metadata.tracks[0].title = 'Saved'
+    original = collection.project_user_state
+
+    def racing(conn):
+        # The live model changes after the save took its header snapshot.
+        lib.metadata.settings['late'] = True
+        return original(conn)
+
+    monkeypatch.setattr(collection, 'project_user_state', racing)
+    lib.db.replace_library(lib.metadata)
+    monkeypatch.setattr(collection, 'project_user_state', original)
+    stored = lib.db.load_library_metadata()
+    assert 'late' not in stored.settings
+    assert lib.db.public_source()['fingerprint'] == fingerprint(stored)
+    # The live header is not the committed one: no delta may carry it.
+    response = get_delta(client, first)
+    assert 'tracks' in response.get_json() and response.get_json()['settings']['late'] is True
+    del lib.metadata.settings['late']
+    delta = get_delta(client, first).get_json()
+    assert delta['kind'] == 'delta' and 'late' not in delta['fields'].get('settings', {})
+    assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
