@@ -271,9 +271,11 @@ class LibraryStore:
                 conn.execute("INSERT INTO library_info (key, value) VALUES ('version', ?) "
                              "ON CONFLICT(key) DO UPDATE SET value=excluded.value "
                              "WHERE library_info.value IS NOT excluded.value", (str(headers["version"]),))
+                tracks = tuple(metadata.tracks)
+                track_ids = tuple(track.id for track in tracks)
                 # Stage only IDs/order, avoiding a full manifest-sized IN list.
                 with staged_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
-                                 ((t.id, i) for i, t in enumerate(metadata.tracks))) as incoming:
+                                 ((track_id, i) for i, track_id in enumerate(track_ids))) as incoming:
                     catalog_dirty = conn.execute(
                         f'SELECT 1 FROM {incoming} n LEFT JOIN library_tracks l ON l.track_id=n.track_id '
                         'WHERE l.position IS NOT n.position LIMIT 1').fetchone() is not None
@@ -281,7 +283,8 @@ class LibraryStore:
                         f'DELETE FROM tracks WHERE NOT EXISTS (SELECT 1 FROM {incoming} n WHERE n.track_id=tracks.id)').rowcount
                     catalog_dirty |= bool(removed)
                 order_changed = catalog_dirty
-                catalog_dirty |= sync_tracks(conn, metadata.tracks, replacement_added_at)
+                catalog_changes, public_fingerprint = sync_tracks(conn, tracks, track_ids, replacement_added_at, headers)
+                catalog_dirty |= catalog_changes
 
                 for new_id, state in replacement_state.items():
                     conn.execute(
@@ -310,10 +313,10 @@ class LibraryStore:
                 from shared.collection import project_user_state
                 project_user_state(conn)
                 if catalog_dirty:
-                    self._replace_catalog_projection(conn, metadata.tracks)
+                    self._replace_catalog_projection(conn, tracks)
 
                 sync_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
-                          ((t.id, i) for i, t in enumerate(metadata.tracks)))
+                          ((track_id, i) for i, track_id in enumerate(track_ids)))
                 playlist_map = headers["playlists"] if isinstance(headers["playlists"], dict) else {}
                 sync_rows(conn, 'playlists', ('name', 'position'), ('name',),
                           ((name, i) for i, name in enumerate(playlist_map)))
@@ -348,7 +351,7 @@ class LibraryStore:
                     json.dumps(headers["podcast_episode_cache"], ensure_ascii=False),
                 ))
                 from shared.library_changes import sync_source
-                sync_source(conn, metadata, order_changed, headers)
+                sync_source(conn, metadata, order_changed, headers, public_fingerprint)
                 from shared import library_search
                 library_search.sync(conn)
                 if operation_id:

@@ -1,6 +1,4 @@
 """Canonical public-source verification and journals for partial HTTP deltas."""
-from hashlib import sha256
-
 from shared.sqlite_changes import install_changes, cursor, changes_since, MAX_KEYS
 
 
@@ -31,54 +29,21 @@ def install(conn):
                          f'AFTER {operation} ON {table} BEGIN {mutation} END')
 
 
-def sync_source(conn, metadata, order_changed, headers):
-    """Prove the committed source inside the caller's write transaction.
+def sync_source(conn, metadata, order_changed, headers, fingerprint):
+    """Publish the proof computed while storing the track rows."""
+    from shared.library_fingerprint import header_digest, record
+    from shared.models import LibraryMetadata
 
-    `headers` is the detached `public_headers()` snapshot the caller also
-    persisted, so the proof, the header hash and the stored headers are the
-    same values. Track rows are hashed exactly as they populate the index:
-    re-reading a mutable model afterwards could associate the wrong proof.
-    """
-    from shared.library_fingerprint import (TRACK_FIELDS, HEADER_FIELDS, encoded_values, header_digest,
-                                            record, track_values)
-    from shared.models import LibraryMetadata, Track
-    if type(metadata) is not LibraryMetadata:
-        return
-    count = len(metadata.tracks)
-    if conn.execute('SELECT COUNT(*) FROM library_tracks').fetchone()[0] != count:
-        return
-    proof = sha256(encoded_values((tuple(headers[name] for name in HEADER_FIELDS), count)))
     conn.execute('DELETE FROM library_public_rows WHERE id NOT IN (SELECT track_id FROM library_tracks)')
-    for offset in range(0, count, 500):
-        batch = metadata.tracks[offset:offset + 500]
-        stored = {row[0]: (row[1], row[2]) for row in conn.execute(
-            'SELECT lt.track_id,lt.position,p.hash FROM library_tracks lt '
-            'LEFT JOIN library_public_rows p ON p.id=lt.track_id '
-            f'WHERE lt.track_id IN ({",".join("?" for _ in batch)})', [t.id for t in batch])}
-        for position, track in enumerate(batch, offset):
-            track_id = track.id
-            previous = stored.get(track_id)
-            if type(track) is not Track or previous is None or previous[0] != position:
-                return
-            values = track_values(track)
-            if values[TRACK_FIELDS.index("id")] != track_id:
-                return
-            encoded = encoded_values(values)
-            proof.update(encoded)
-            value = sha256(encoded).digest()
-            if previous[1] != value:
-                conn.execute('INSERT INTO library_public_rows VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET '
-                             'hash=excluded.hash,identity=excluded.identity',
-                             (track_id, value, str(values[TRACK_FIELDS.index("file_hash")] or track_id or '')))
+    if type(metadata) is not LibraryMetadata or fingerprint is None:
+        conn.execute('UPDATE library_public_source SET valid=0 WHERE singleton=1')
+        return
     conn.execute('UPDATE library_public_source SET valid=1,fingerprint=?,'
                  'ordering=ordering+MAX(ordering_dirty,?),ordering_dirty=0 WHERE singleton=1',
-                 (proof.hexdigest(), int(order_changed)))
+                 (fingerprint, int(order_changed)))
     conn.execute('INSERT OR REPLACE INTO library_public_headers VALUES (1,?,?)',
-                 (proof.hexdigest(), header_digest(headers)))
-    # Readers then need not hash this exact model again to know it. If the
-    # transaction rolls back the hint is merely unused: it never matches a
-    # committed fingerprint that describes other content.
-    record(metadata, proof.hexdigest())
+                 (fingerprint, header_digest(headers)))
+    record(metadata, fingerprint)
 
 
 def source(conn):

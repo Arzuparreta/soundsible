@@ -96,7 +96,8 @@ class Downloader:
                 library.add_track(track)
                 self._publish_locked(library)
             except BaseException:
-                track.added_at = added_at
+                if getattr(self, 'library', None) is not library:
+                    track.added_at = added_at
                 raise
 
     @serialized
@@ -119,6 +120,9 @@ class Downloader:
         # Same portable bytes, encoded in bounded blocks and replaced under
         # the same directory lock as the Station's export.
         writer = LibraryJSONWriter(library)
-        replace_contents(self.library_path, writer)
-        self.library = library
-        self._manifest = FileRevision(writer.digest.digest(), writer.size)
+
+        def published():
+            self.library = library
+            self._manifest = FileRevision(writer.digest.digest(), writer.size)
+
+        replace_contents(self.library_path, writer, on_replace=published)

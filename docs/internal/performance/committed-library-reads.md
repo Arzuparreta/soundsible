@@ -26,6 +26,12 @@ use) and uses that copy for the stored playlists and `library_state`, for the so
 fingerprint and for the header hash, so an edit to the live model during the
 save cannot make the three disagree.
 
+The full writer captures each track's values once in its existing SQLite
+batch. It computes the public fingerprint and journal row hash from those
+values and uses them to bind the SQL write. The batch fetches the saved row
+and its public hash together. This removes the later query and scan that
+could certify a title changed in memory after it was written to SQLite.
+
 The hint on the live model is the last fingerprint verified against a commit.
 A canonical save, track edit, or a read that verifies a match can record it.
 A model reloaded from SQLite has none and pays a verification pass. SQLite can
@@ -125,8 +131,10 @@ separate podcast parser, its publication offset and the unused
 
 A download commit stages membership changes in a shallow list copy only
 when reusing the resident model. It publishes that model after the file
-replacement succeeds. A failed rename therefore cannot leave either a
-pending addition or a replacement in the next unrelated commit.
+replacement succeeds and before the directory sync can yield. A failed
+rename cannot leave a pending addition or replacement in the next unrelated
+commit. If the task is cancelled during the directory sync, the in-memory
+model already reflects the renamed file.
 
 A writer that finishes an edit before the pool opens the file is visible even
 when it restores timestamps and preserves the byte count. Cooperating
@@ -152,9 +160,9 @@ HTTP, with `LibraryManager.patch_track_metadata` making each title edit:
 
 | Tracks | 304 poll (ms) | Delta after a title edit (ms) |
 | ---: | ---: | ---: |
-| 1,000 | 2.95 → 0.64 | 85.49 → 78.40 |
-| 10,000 | 24.31 → 0.61 | 134.94 → 80.17 |
-| 50,000 | 109.98 → 0.68 | 324.47 → 71.80 |
+| 1,000 | 3.37 → 0.81 | 94.65 → 88.77 |
+| 10,000 | 23.28 → 0.78 | 112.98 → 76.75 |
+| 50,000 | 108.66 → 0.80 | 302.76 → 73.72 |
 
 Pool commits, alone and in the single-account download cycle. A cycle begins
 with the pool commit, then adds that same track to the account and exports
@@ -163,9 +171,9 @@ preceding Station export, as in a steady stream of downloads.
 
 | Tracks | Pool-only commit (ms) | Bytes read | Cycle commit (ms) | Bytes read | Full cycle (ms) |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 75.39 → 75.32 | 1,474,791 → 1,269,854 | 92.59 → 93.48 | 5,079,402 → 1,269,947 | 434.73 → 435.18 |
-| 10,000 | 241.98 → 267.10 | 11,071,059 → 10,866,122 | 466.72 → 467.43 | 43,464,451 → 10,866,216 | 2,860.53 → 2,960.66 |
-| 50,000 | 1,017.61 → 1,068.10 | 53,921,073 → 53,716,134 | 2,675.62 → 2,110.30 | 214,864,467 → 53,716,224 | 15,347.83 → 14,097.57 |
+| 1,000 | 83.71 → 75.38 | 1,474,785 → 1,269,849 | 100.35 → 85.04 | 5,079,396 → 1,269,942 | 434.73 → 410.21 |
+| 10,000 | 242.33 → 250.37 | 11,071,053 → 10,866,116 | 467.15 → 412.57 | 43,464,445 → 10,866,211 | 2,802.56 → 2,777.08 |
+| 50,000 | 1,017.37 → 997.16 | 53,921,065 → 53,716,132 | 2,251.03 → 2,018.68 | 214,864,459 → 53,716,222 | 14,164.79 → 14,114.18 |
 
 - The 304 no longer grows with the library: about 0.6 ms at every size.
 - A one-title delta avoids scanning unrelated tracks. Order changes still
@@ -177,10 +185,8 @@ preceding Station export, as in a steady stream of downloads.
 - A pool-only commit verifies the digest and skips the podcast reread. In
   the benchmark cycle, the Station adds a track, so the pool reads the changed
   manifest once instead of four times. Encoding and syncing the portable
-  manifest still dominate the commit. At 50,000 tracks the after-export
-  pool commit was 21% faster and the full cycle was 8.1% faster in this run.
-  The pool-only commit was 5% slower at that size, and the full cycle was
-  3.5% slower at 10,000 tracks. Sync time varied across runs.
+  manifest still dominate the commit. The full-cycle and pool-only timings
+  include storage and sync costs, which varied across runs.
 - Bytes read are `rchar`, which counts page-cache hits: physical disk reads
   saved depend on the cache.
 

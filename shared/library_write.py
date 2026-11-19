@@ -1,6 +1,12 @@
 """Transaction-local synchronization helpers; no retained metadata caches."""
 from contextlib import contextmanager
+from copy import deepcopy
+from hashlib import sha256
 import json
+from operator import attrgetter, itemgetter
+
+from shared.library_fingerprint import HEADER_FIELDS, TRACK_FIELDS, encoded_values
+from shared.models import Track
 
 
 @contextmanager
@@ -64,21 +70,16 @@ TRACK_COLUMNS = (
 )
 
 
-def track_values(track, replacement_added_at):
-    values = []
-    for column in TRACK_COLUMNS:
-        if column == 'artists_json':
-            value = json.dumps(track.artists, ensure_ascii=False) if track.artists is not None else None
-        elif column == 'added_at':
-            value = replacement_added_at.get(track.id) or track.added_at
-        else:
-            value = getattr(track, column)
-        values.append(value)
-    return values
+_TRACK_ATTRIBUTES = tuple('artists' if column == 'artists_json' else column for column in TRACK_COLUMNS) + ('item_id',)
+_snapshot_track = attrgetter(*_TRACK_ATTRIBUTES)
+_public_values = itemgetter(*(_TRACK_ATTRIBUTES.index(field) for field in TRACK_FIELDS))
+_ARTISTS = _TRACK_ATTRIBUTES.index('artists')
+_ADDED_AT = _TRACK_ATTRIBUTES.index('added_at')
+_FILE_HASH = _TRACK_ATTRIBUTES.index('file_hash')
 
 
-def sync_tracks(conn, tracks, replacement_added_at):
-    """Read existing rows in batches; unchanged tracks never reach UPDATE."""
+def sync_tracks(conn, tracks, track_ids, replacement_added_at, headers):
+    """Persist and hash each track from one observation of its values."""
     columns = ','.join(TRACK_COLUMNS)
     assignments = ','.join(f'{c}=excluded.{c}' for c in TRACK_COLUMNS[1:-1])
     assignments += ',added_at=COALESCE(tracks.added_at,excluded.added_at)'
@@ -86,20 +87,44 @@ def sync_tracks(conn, tracks, replacement_added_at):
                  f'ON CONFLICT(id) DO UPDATE SET {assignments}')
     catalog_indexes = [TRACK_COLUMNS.index(c) for c in CATALOG_COLUMNS]
     dirty = False
+    verified = True
+    proof = sha256(encoded_values((tuple(headers[name] for name in HEADER_FIELDS), len(tracks))))
     for offset in range(0, len(tracks), 500):
         batch = tracks[offset:offset + 500]
-        existing = {row[0]: tuple(row) for row in conn.execute(
-            f'SELECT {columns} FROM tracks WHERE id IN ({",".join("?" for _ in batch)})', [t.id for t in batch])}
-        for track in batch:
-            incoming = track_values(track, replacement_added_at)
-            old = existing.get(track.id)
+        keys = track_ids[offset:offset + 500]
+        existing = {row[0]: (tuple(row[:-1]), row[-1]) for row in conn.execute(
+            f'SELECT t.{columns.replace(",", ",t.")},p.hash FROM tracks t '
+            'LEFT JOIN library_public_rows p ON p.id=t.id '
+            f'WHERE t.id IN ({",".join("?" for _ in keys)})', keys)}
+        for track, track_id in zip(batch, keys):
+            values = list(_snapshot_track(track))
+            if values[0] != track_id:
+                raise ValueError('Track identity changed during the library save')
+            old, old_hash = existing.get(track_id, (None, None))
+            added_at = replacement_added_at.get(track_id) or values[_ADDED_AT]
             if old is not None:
                 # The first stored date wins, even if the incoming date differs.
-                incoming[-1] = old[-1] if old[-1] is not None else incoming[-1]
-            # The model being saved carries the date actually stored, so the
-            # proof computed from it describes the committed row.
-            track.added_at = incoming[-1]
-            if old != tuple(incoming):
+                added_at = old[_ADDED_AT] if old[_ADDED_AT] is not None else added_at
+            track.added_at = values[_ADDED_AT] = added_at
+            artists = values[_ARTISTS]
+            if type(artists) is list and all(type(name) is str for name in artists):
+                artists = artists.copy()
+            elif artists is not None:
+                artists = deepcopy(artists)
+            values[_ARTISTS] = artists
+            if type(track) is Track:
+                encoded = encoded_values(_public_values(values))
+                proof.update(encoded)
+                row_hash = sha256(encoded).digest()
+                if row_hash != old_hash:
+                    conn.execute('INSERT INTO library_public_rows VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET '
+                                 'hash=excluded.hash,identity=excluded.identity',
+                                 (track_id, row_hash, str(values[_FILE_HASH] or track_id or '')))
+            else:
+                verified = False
+            values[_ARTISTS] = json.dumps(artists, ensure_ascii=False) if artists is not None else None
+            incoming = tuple(values[:-1])  # item_id is stored in collection_files.
+            if old != incoming:
                 dirty |= old is None or any(old[i] != incoming[i] for i in catalog_indexes)
                 conn.execute(statement, incoming)
-    return dirty
+    return dirty, proof.hexdigest() if verified else None

@@ -283,6 +283,33 @@ def test_publication_digest_includes_windows_newlines(tmp_path, monkeypatch):
     assert target._manifest.digest == revision(target.library_path)
 
 
+def test_pool_memory_follows_rename_even_if_directory_sync_is_cancelled(tmp_path, monkeypatch):
+    import gevent
+    from gevent.event import Event
+    from shared import atomic_file
+
+    target = writer(tmp_path, 1)
+    save(target)
+    syncing = Event()
+    finish = Event()
+    track = library(2).tracks[1]
+    track.added_at = None
+
+    def sync_directory(_):
+        syncing.set()
+        finish.wait()
+
+    monkeypatch.setattr(atomic_file, 'sync_directory', sync_directory)
+    job = gevent.spawn(target.commit_track, track)
+    try:
+        assert syncing.wait(timeout=5), 'writer did not reach directory sync'
+    finally:
+        job.kill()
+    assert target.library_path.read_text() == target.library.to_json()
+    assert target.library.tracks[-1] is track and track.added_at is not None
+    assert target._manifest.digest == revision(target.library_path)
+
+
 def test_writer_landing_after_the_rename_is_not_mistaken_for_the_pool(tmp_path, monkeypatch):
     from shared import atomic_file
     target = writer(tmp_path, 2)

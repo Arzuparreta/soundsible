@@ -603,6 +603,32 @@ def test_live_header_edit_during_a_track_patch_cannot_enter_the_delta(endpoint, 
     assert apply(first.get_json(), delta) == stored.to_public_dict()
 
 
+def test_track_mutation_after_sql_write_cannot_reuse_the_old_validator(endpoint, monkeypatch):
+    from shared import library_changes
+    client, lib, _ = endpoint
+    first = client.get('/api/library')
+    track = lib.metadata.tracks[0]
+    previous = track.title
+    track.title = 'Saved title'
+    original = library_changes.sync_source
+
+    def changed_after_write(*args):
+        track.title = previous
+        try:
+            return original(*args)
+        finally:
+            track.title = 'Saved title'
+
+    monkeypatch.setattr(library_changes, 'sync_source', changed_after_write)
+    lib.db.replace_library(lib.metadata)
+    stored = lib.db.load_library_metadata()
+    assert stored.tracks[0].title == 'Saved title'
+    response = client.get('/api/library', headers={'If-None-Match': first.headers['ETag']})
+    assert response.status_code == 200
+    assert response.get_json()['tracks'][0]['title'] == 'Saved title'
+    assert lib.db.public_source()['fingerprint'] == fingerprint(stored)
+
+
 def test_client_holding_a_live_revision_still_gets_its_304(endpoint, monkeypatch):
     client, lib, _ = endpoint
     client.get('/api/library?delta=1')
