@@ -145,8 +145,9 @@ def favourite_library_ids(user_id: Optional[str] = None) -> list:
 
 
 # Note: Helpers (used by blueprints)
-def get_track_by_id(lib, track_id: str) -> Optional[Track]:
-    """Resolve track by ID: metadata first, then DB fallback. Single place for consistency."""
+def get_track_by_id(lib: LibraryManager, track_id: str) -> Optional[Track]:
+    """Resolve a track against the account's current library revision."""
+    lib.refresh_if_stale()
     if lib.metadata:
         track = lib.metadata.get_track_by_id(track_id)
         if track:

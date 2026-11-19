@@ -21,6 +21,11 @@ come from the catalog, with the same fallback to stored credits as the
 library loader. The flat response retains the display artist. SQLite supplies
 normalized scalar values the same way before and after a restart.
 
+Playback and other routes that resolve a track through the resident library
+check its revision at lookup. This picks up a moved local path or removed
+track after another writer commits. A matching revision keeps the indexed
+in-memory lookup, while the flat library read needs no model reload.
+
 - **Conditional request.** A weak ETag combines the account, public projection,
   track and credit proofs, order, and artwork and loudness tokens. A matching
   ETag needs a fixed number of lookups and bypasses track and header queries.
