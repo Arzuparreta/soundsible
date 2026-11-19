@@ -205,7 +205,11 @@ def test_a_refused_playlist_write_is_reported_as_a_conflict(client, monkeypatch)
     assert library.metadata.playlists["Arma Reforger"] == ["tunnel"]
 
 
-def test_fresh_and_conditional_reads_agree_while_a_playlist_is_pending(client, monkeypatch):
+@pytest.mark.parametrize(('path', 'body'), [
+    ('/api/library/playlists', {'name': 'Pending'}),
+    ('/api/migration/import-playlist', {'name': 'Pending', 'track_ids': ['tunnel']}),
+])
+def test_fresh_and_conditional_reads_agree_while_a_playlist_is_pending(client, monkeypatch, path, body):
     user_id = ensure_multiuser_layout()['user_id']
     _seed_library(user_id)
     first = client.get('/api/library')
@@ -225,7 +229,7 @@ def test_fresh_and_conditional_reads_agree_while_a_playlist_is_pending(client, m
         return original(metadata, **options)
 
     monkeypatch.setattr(lib.db, 'replace_library', while_committing)
-    assert client.post('/api/library/playlists', json={'name': 'Pending'}).status_code == 200
+    assert client.post(path, json=body).status_code == 200
     assert observed == [True]
     response = client.get('/api/library', headers=headers)
     assert response.status_code == 200 and 'Pending' in response.get_json()['playlists']

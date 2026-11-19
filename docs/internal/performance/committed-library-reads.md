@@ -83,8 +83,9 @@ current live contents under a content revision, which its holder can
 revalidate separately. Models without a verified committed source use full
 comparison as before.
 
-Playlist endpoints stage the playlist map and settings together, using the
-same commit-then-publish path as acquisitions. Fresh and conditional reads
+Playlist endpoints, including legacy imports, stage the playlist map and
+settings together, using the same commit-then-publish path as acquisitions.
+Fresh and conditional reads
 both see the previous playlist until the save succeeds. Subsonic updates
 also parse the removal indices before applying any addition. Subsonic builds
 the playlist creation response after releasing the library write lock.
