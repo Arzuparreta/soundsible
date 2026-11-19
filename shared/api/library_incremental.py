@@ -1,6 +1,7 @@
 """Bounded journal deltas from committed SQLite rows and annotation cursors."""
 from hashlib import sha256
 import json
+import sqlite3
 import time
 
 from flask import current_app
@@ -13,7 +14,7 @@ from shared.loudness import LoudnessStore, annotate_tracks
 MAX_BASES = 256
 MAX_PER_ACCOUNT = 4
 TTL = 86400
-PROJECTION = 'sqlite-catalog'
+PROJECTION = 'sqlite-catalog-v2'
 # Every public track has these ASCII keys and at least one byte per JSON value.
 # A delta smaller than this bound is certainly smaller than the full response.
 MIN_TRACK_BYTES = 1 + sum(len(name) + 5 for name in TRACK_FIELDS)
@@ -25,11 +26,13 @@ def _table(db):
 
 
 def load_base(account, revision):
-    with history.connection() as db:
-        _table(db)
-        row = db.execute('SELECT proof FROM incremental_bases WHERE account=? AND revision=? AND created>=?',
-                         (account, revision, time.time() - TTL)).fetchone()
-        return json.loads(row[0]) if row else None
+    try:
+        with history.connection(read_only=True) as db:
+            row = db.execute('SELECT proof FROM incremental_bases WHERE account=? AND revision=? AND created>=?',
+                             (account, revision, time.time() - TTL)).fetchone()
+            return json.loads(row[0]) if row else None
+    except sqlite3.OperationalError:
+        return None
 
 
 def header_digests(headers):
@@ -58,9 +61,7 @@ def remember(account, revision, state, digests):
 
 def prepare(source, artwork):
     """Bind one committed projection to its annotation cursors."""
-    provider = current_app.json
-    if (source is None or type(provider) is not DefaultJSONProvider or provider.compact is False
-            or (provider.compact is None and current_app.debug)):
+    if source is None or type(current_app.json) is not DefaultJSONProvider:
         return None
     return {'source': source, 'art': artwork.change_state() if source['tracks'] else None,
             'loud': LoudnessStore().change_state() if source['tracks'] else None}
@@ -77,8 +78,8 @@ def revision_for(account, state):
     # projection dependencies select an HTTP representation.
     art, loud = state['art'], state['loud']
     source = state['source']
-    return sha256(history.encoded((PROJECTION, account, source['fingerprint'], source['cursor'][:2],
-                                   source['credits'][:2], source['ordering'],
+    return sha256(history.encoded((PROJECTION, account, source['fingerprint'], source['cursor'][3],
+                                   source['credits'][3], source['ordering'],
                                    art['token'] if art else None, loud['token'] if loud else None))).hexdigest()
 
 

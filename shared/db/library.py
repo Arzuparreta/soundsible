@@ -502,7 +502,7 @@ class LibraryStore:
                 present = {track['id'] for track in upserts}
                 removed = [key for key in possibly_removed if key not in present]
                 headers = None
-                if not (previous.get('revision') == expected['revision']
+                if not (previous['fingerprint'] == expected['fingerprint']
                         or expected['headers'] is not None and previous.get('headers') == expected['headers']):
                     headers = self._public_headers(conn)
                 return upserts, removed, order, headers

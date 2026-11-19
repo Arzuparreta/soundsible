@@ -84,6 +84,7 @@ class ArtworkStore:
             from shared.sqlite_changes import install_changes
             install_changes(db, (('refs', 'track', 'track_id'), ('overrides', 'track', 'track_id'), ('objects', 'object', 'hash')))
             db.execute('CREATE INDEX IF NOT EXISTS refs_hash ON refs(hash)')
+            db.execute('CREATE INDEX IF NOT EXISTS overrides_hash ON overrides(hash, track_id)')
 
     @property
     def variants(self):
@@ -110,9 +111,11 @@ class ArtworkStore:
             objects = [key for kind, key, operation in events if kind == 'object']
             for offset in range(0, len(objects), 500):
                 batch = objects[offset:offset + 500]
+                placeholders = ",".join("?" for _ in batch)
                 ids.update(row[0] for row in db.execute(
-                    f'SELECT track_id FROM refs WHERE hash IN ({",".join("?" for _ in batch)}) LIMIT ?',
-                    [*batch, MAX_KEYS + 1]))
+                    f'SELECT track_id FROM refs WHERE hash IN ({placeholders}) '
+                    f'UNION SELECT track_id FROM overrides WHERE hash IN ({placeholders}) LIMIT ?',
+                    [*batch, *batch, MAX_KEYS + 1]))
                 if len(ids) > MAX_KEYS:
                     return None
             return ids

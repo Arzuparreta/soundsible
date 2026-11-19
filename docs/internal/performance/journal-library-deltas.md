@@ -64,8 +64,10 @@ unsupported models cannot establish a valid optimization proof.
 
 - Each journal retains at most 10,255 events (10,000 plus a pruning interval).
   Event keys are limited to 512 UTF-8 bytes; larger keys record a gap requiring
-  full fallback. Epochs distinguish recreated stores. Journals store keys and
-  operations, never track metadata bodies.
+  full fallback. Epochs distinguish recreated stores. An anchor per retained
+  event distinguishes histories that fork after a restore. Journals store
+  keys, operations and anchors. The delta base lookup uses a read-only
+  connection to the history database.
 - A request admits at most 2,000 changed keys. Large artwork-object fanout and
   shared loudness identities also respect this bound.
 - Lightweight bases retain four per account, 256 globally, for at most 24 hours;

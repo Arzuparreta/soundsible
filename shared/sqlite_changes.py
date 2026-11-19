@@ -10,9 +10,10 @@ class Cursor:
     epoch: str
     seq: int
     floor: int
+    anchor: str | None = None
 
     def to_list(self):
-        return [self.epoch, self.seq, self.floor]
+        return [self.epoch, self.seq, self.floor, self.anchor]
 
     @classmethod
     def parse(cls, value):
@@ -20,7 +21,11 @@ class Cursor:
 
 
 def cursor(conn, *, journal='public_changes'):
-    return Cursor(*conn.execute(f'SELECT epoch,seq,floor FROM {journal}_state WHERE singleton=1').fetchone())
+    return Cursor(*conn.execute(f'''
+        SELECT s.epoch,s.seq,s.floor,CASE WHEN s.seq=0 THEN s.epoch ELSE a.token END
+        FROM {journal}_state s LEFT JOIN {journal}_anchors a ON a.seq=s.seq
+        WHERE s.singleton=1
+    ''').fetchone())
 
 
 def install_changes(conn, sources, *, journal='public_changes'):
@@ -37,6 +42,25 @@ def install_changes(conn, sources, *, journal='public_changes'):
     conn.execute(f'INSERT OR IGNORE INTO {journal}_state VALUES (1,lower(hex(randomblob(16))),0,0)')
     conn.execute(f'CREATE TABLE IF NOT EXISTS {journal} ('
                  'seq INTEGER PRIMARY KEY,kind TEXT,key TEXT,operation TEXT)')
+    # Copied databases can independently reach the same sequence. An anchor
+    # at the client's sequence distinguishes the retained history on each
+    # branch. Auxiliary triggers preserve the event schema for older writers.
+    conn.execute(f'CREATE TABLE IF NOT EXISTS {journal}_anchors (seq INTEGER PRIMARY KEY,token TEXT NOT NULL)')
+    conn.execute(f'''
+        INSERT OR IGNORE INTO {journal}_anchors
+        SELECT e.seq,lower(hex(randomblob(16))) FROM {journal}_state s
+        JOIN {journal} e ON e.seq=s.seq WHERE s.singleton=1
+    ''')
+    conn.execute(f'''
+        CREATE TRIGGER IF NOT EXISTS anchor_{journal}_insert AFTER INSERT ON {journal} BEGIN
+            INSERT OR REPLACE INTO {journal}_anchors VALUES (NEW.seq,lower(hex(randomblob(16))));
+        END
+    ''')
+    conn.execute(f'''
+        CREATE TRIGGER IF NOT EXISTS anchor_{journal}_delete AFTER DELETE ON {journal} BEGIN
+            DELETE FROM {journal}_anchors WHERE seq=OLD.seq;
+        END
+    ''')
     for table, kind, key in sources:
         if not all(name.isidentifier() for name in (table, kind, key)):
             raise ValueError('Journal names must be internal identifiers')
@@ -72,8 +96,15 @@ def changes_since(conn, previous, expected, *, journal='public_changes'):
     Call inside a read transaction; the cursor check and events share a snapshot.
     """
     now = cursor(conn, journal=journal)
-    if now != expected or previous.epoch != now.epoch or not now.floor <= previous.seq <= now.seq:
+    if (now != expected or previous.epoch != now.epoch or previous.anchor is None
+            or not now.floor <= previous.seq <= now.seq):
         return None
+    if previous.seq == now.seq:
+        return [] if previous.anchor == now.anchor else None
+    if previous.seq:
+        row = conn.execute(f'SELECT token FROM {journal}_anchors WHERE seq=?', (previous.seq,)).fetchone()
+        if row is None or previous.anchor != row[0]:
+            return None
     rows = conn.execute(f'''
         SELECT c.kind,c.key,c.operation FROM {journal} c
         JOIN (SELECT MIN(seq) AS seq FROM {journal} WHERE seq>?

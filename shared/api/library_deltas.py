@@ -21,8 +21,15 @@ def digest(value):
 
 
 @contextmanager
-def connection():
+def connection(*, read_only=False):
     path = get_cache_dir() / 'library-deltas.sqlite3'
+    if read_only:
+        db = sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True, timeout=0.1)
+        try:
+            yield db
+        finally:
+            db.close()
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path, timeout=0.1)
     try:

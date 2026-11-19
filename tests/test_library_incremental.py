@@ -128,13 +128,65 @@ def test_unverified_library_read_resolves_stale_aliases(endpoint):
     assert first == lib.db.load_library_metadata().to_public_dict()
 
 
+@pytest.mark.parametrize('change', ['settings', 'order', 'rows'])
+def test_delta_after_a_restored_database_diverges_from_its_backup(endpoint, tmp_path, change):
+    from contextlib import closing
+    import sqlite3
+
+    client, lib, _ = endpoint
+    target = tmp_path / 'restored.db'
+    with lib.db._get_connection() as original, closing(sqlite3.connect(target)) as copied:
+        original.backup(copied)
+    restored_db = DatabaseManager(str(target))
+    restored = restored_db.load_library_metadata()
+    if change == 'settings':
+        lib.metadata.settings['crossfade'] = 1
+        restored.settings['crossfade'] = 2
+    elif change == 'order':
+        lib.metadata.tracks.reverse()
+        restored.tracks[:] = restored.tracks[1:] + restored.tracks[:1]
+    else:
+        lib.metadata.tracks[0].title = 'Edited on first branch'
+        restored.tracks[1].title = 'Edited on second branch'
+
+    lib.db.replace_library(lib.metadata)
+    old = client.get('/api/library?delta=1')
+    restored_db.replace_library(restored)
+    assert restored_db.get_library_revision() == lib.db.get_library_revision()
+    lib.db = restored_db
+    if change == 'rows':
+        # The restored branch can even advance beyond the served cursor.
+        restored.tracks[2].title = 'Second change on restored branch'
+        restored_db.replace_library(restored)
+    response = get_delta(client, old)
+    full = client.get('/api/library')
+    assert response.status_code == 200
+    body = response.get_json()
+    if change == 'rows':
+        assert body == full.get_json()
+    else:
+        assert body['kind'] == 'delta'
+        assert apply(old.get_json(), body) == full.get_json()
+        assert body['revision'] == full.get_etag()[0]
+
+
+def test_debug_json_can_revalidate_without_reading_the_library(endpoint, monkeypatch):
+    client, lib, _ = endpoint
+    client.application.debug = True
+    first = client.get('/api/library')
+    monkeypatch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('debug 304 read the full library'))
+    assert client.get('/api/library', headers={'If-None-Match': first.headers['ETag']}).status_code == 304
+
+
 @pytest.mark.parametrize('change', ['title', 'add', 'remove', 'order', 'headers', 'artwork', 'dimensions',
-                                   'artwork_delete', 'loudness', 'loudness_delete', 'shared_hash'])
+                                   'override_dimensions', 'artwork_delete', 'loudness', 'loudness_delete', 'shared_hash'])
 def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkeypatch, change):
     client, lib, route = endpoint
     art = artwork_store()
     if change in {'artwork_delete', 'dimensions'}:
         art.bind('0', 'cover', 'manual')
+    if change == 'override_dimensions':
+        art.bind_override('0', 'cover', 'manual')
     if change == 'loudness_delete':
         LoudnessStore().put('0', 'stamp', LoudnessMeasurement(-12, -1, 4))
     if change == 'shared_hash':
@@ -153,7 +205,7 @@ def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkey
         lib.metadata.settings = {}
         lib.metadata.podcast_episode_cache = {'feed': {'episodes': []}}
     elif change == 'artwork': art.bind('0', 'cover', 'manual')
-    elif change == 'dimensions':
+    elif change in {'dimensions', 'override_dimensions'}:
         with art.connect() as db:
             db.execute("INSERT INTO objects VALUES ('cover',800,600,'jpeg',1)")
     elif change == 'artwork_delete':
@@ -379,6 +431,8 @@ def test_journal_is_bounded_and_rejects_pruned_or_recreated_bases(tmp_path):
         db.executemany('INSERT INTO items VALUES (?,?)', ((str(i), 'v') for i in range(MAX_EVENTS + 700)))
         current = cursor(db)
         assert db.execute('SELECT COUNT(*) FROM public_changes').fetchone()[0] <= MAX_EVENTS + 255
+        assert db.execute('SELECT COUNT(*) FROM public_changes_anchors').fetchone() == db.execute(
+            'SELECT COUNT(*) FROM public_changes').fetchone()
         assert changes_since(db, start, current) is None
         db.execute('UPDATE public_changes_state SET epoch=lower(hex(randomblob(16)))')
         assert changes_since(db, current, cursor(db)) is None
@@ -409,6 +463,16 @@ def test_lightweight_bases_have_count_ttl_and_payload_bounds(endpoint, monkeypat
     incremental.remember('new', 'new', proof, digests)
     with incremental.history.connection() as db:
         assert db.execute('SELECT COUNT(*) FROM incremental_bases').fetchone()[0] == 1
+
+
+def test_loading_a_saved_delta_base_does_not_take_the_write_lock(endpoint):
+    from shared.user_context import current_user_id
+
+    client, _, _ = endpoint
+    first = client.get('/api/library?delta=1')
+    with incremental.history.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        assert incremental.load_base(current_user_id() or '', first.get_etag()[0]) is not None
 
 
 def test_partial_delta_survives_a_fresh_process(endpoint):

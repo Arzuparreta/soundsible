@@ -33,7 +33,10 @@ in-memory lookup, while the flat library read needs no model reload.
 - **Delta.** Read the journal and changed rows from the same SQLite snapshot.
   An unchanged header hash skips playlists, settings and podcast fields
   entirely. When headers changed, compare their field hashes against the
-  client's base. Only changed tracks are annotated. Recheck source and
+  client's base. Each journal validates the client cursor's retained anchor.
+  If a restored database diverges from the history the client saw, it sends
+  a full response. An order token distinguishes independent changes to
+  membership or order. Only changed tracks are annotated. Recheck source and
   annotation cursors before returning a delta. Order changes include the
   complete ID order. A size check visits at most as many IDs as the delta can
   account for under a conservative minimum track size.
@@ -68,7 +71,9 @@ Existing SQLite libraries keep their track journal and gain a separate credit
 journal, the optional table of header hashes and the track position index.
 The credit journal also tracks shared display-name changes that affect
 multiple tracks. Older engines can still read and save the same database.
-The flat SQLite projection uses a new ETag namespace. A client holding a pre-upgrade base
+Journal anchors and order tokens use auxiliary tables maintained by triggers.
+Older writers keep the same event and source schemas. The flat SQLite
+projection uses a new ETag namespace. A client holding a pre-upgrade base
 bootstraps once from a full response, then receives small deltas without any
 library save. When a header hash is absent, the reader can take committed
 headers from the same SQLite snapshot as the changed rows and skip them when

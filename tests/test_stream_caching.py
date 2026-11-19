@@ -75,7 +75,8 @@ def test_a_stream_carries_something_to_revalidate_against(client, downloaded_tra
     assert response.headers.get("Accept-Ranges") == "bytes"
 
 
-def test_library_poll_and_stream_see_a_path_committed_by_another_manager(client, tmp_path, monkeypatch):
+@pytest.mark.parametrize('removed', [False, True])
+def test_library_poll_and_stream_see_changes_committed_by_another_manager(client, tmp_path, monkeypatch, removed):
     from player.library import LibraryManager
     from shared.models import LibraryMetadata, Track
     from shared.path_resolver import register_scan_roots
@@ -98,17 +99,26 @@ def test_library_poll_and_stream_see_a_path_committed_by_another_manager(client,
         reader.require_saved(metadata=LibraryMetadata(1, [track], {}, {}))
         writer = LibraryManager(silent=True)
         assert writer.sync_library(silent=True)
-        writer.metadata.tracks[0].title = "After"
-        writer.metadata.tracks[0].local_path = str(after)
+        if removed:
+            writer.metadata.tracks.clear()
+        else:
+            writer.metadata.tracks[0].title = "After"
+            writer.metadata.tracks[0].local_path = str(after)
         writer.require_saved()
 
-    before.unlink()
-    assert client.get("/api/library").get_json()["tracks"][0]["title"] == "After"
+    if not removed:
+        before.unlink()
+    tracks = client.get("/api/library").get_json()["tracks"]
+    assert [track["title"] for track in tracks] == ([] if removed else ["After"])
     assert reader.metadata.tracks[0].local_path == str(before)
     stream = client.get("/api/static/stream/scanned", headers={"Range": "bytes=0-5"})
     try:
-        assert stream.status_code == 206
-        assert stream.data == b"Second"
+        if removed:
+            assert before.exists()
+            assert stream.status_code == 404
+        else:
+            assert stream.status_code == 206
+            assert stream.data == b"Second"
     finally:
         stream.close()
 
