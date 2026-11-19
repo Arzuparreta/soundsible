@@ -4,6 +4,7 @@ from shared.sqlite_changes import install_changes, cursor, changes_since, MAX_KE
 
 INVALIDATING_TABLES = ('tracks', 'library_tracks', 'library_state', 'playlists',
                        'playlist_tracks', 'track_id_aliases', 'artists', 'albums', 'track_artists', 'collection_files')
+CATALOG_JOURNAL = 'library_credit_changes'
 
 
 def install(conn):
@@ -19,6 +20,9 @@ def install(conn):
     conn.execute('CREATE TABLE IF NOT EXISTS library_public_rows (id TEXT PRIMARY KEY,hash BLOB,identity TEXT)')
     conn.execute('CREATE INDEX IF NOT EXISTS library_public_identity ON library_public_rows(identity)')
     install_changes(conn, (('library_public_rows', 'track', 'id'),))
+    # Older engines read the original journal as exclusively track events.
+    install_changes(conn, (('track_artists', 'credit', 'track_id'), ('artists', 'artist', 'id')),
+                    journal=CATALOG_JOURNAL)
     for table in INVALIDATING_TABLES:
         for operation in ('INSERT', 'UPDATE', 'DELETE'):
             mutation = ('UPDATE library_public_source SET valid=0,ordering_dirty=1 '
@@ -54,7 +58,7 @@ def source(conn):
     if row is None or not row[0]:
         return None
     return {'fingerprint': row[1], 'ordering': row[2], 'headers': row[3], 'tracks': bool(row[4]), 'revision': row[5],
-            'cursor': cursor(conn).to_list()}
+            'cursor': cursor(conn).to_list(), 'credits': cursor(conn, journal=CATALOG_JOURNAL).to_list()}
 
 
 def sync_track_source(conn, metadata, position, changes, previous_values, previous_fingerprint):
@@ -94,10 +98,20 @@ def affected(conn, previous, expected, artwork_ids, identities):
     if source(conn) != expected:
         return None
     events = changes_since(conn, Cursor.parse(previous['cursor']), Cursor.parse(expected['cursor']))
-    if events is None:
+    credits = changes_since(conn, Cursor.parse(previous['credits']), Cursor.parse(expected['credits']),
+                           journal=CATALOG_JOURNAL)
+    if events is None or credits is None:
         return None
     canonical = {key: operation for kind, key, operation in events}
-    ids = set(canonical) | set(artwork_ids)
+    ids = set(canonical) | set(artwork_ids) | {key for kind, key, _ in credits if kind == 'credit'}
+    artists = [key for kind, key, _ in credits if kind == 'artist']
+    for offset in range(0, len(artists), 500):
+        batch = artists[offset:offset + 500]
+        ids.update(row[0] for row in conn.execute(
+            f'SELECT DISTINCT track_id FROM track_artists WHERE artist_id IN ({",".join("?" for _ in batch)}) LIMIT ?',
+            [*batch, MAX_KEYS + 1]))
+        if len(ids) > MAX_KEYS:
+            return None
     identities = list(identities)
     for offset in range(0, len(identities), 500):
         batch = identities[offset:offset + 500]

@@ -63,6 +63,71 @@ def get_delta(client, base):
                       headers={'If-None-Match': base.headers['ETag']})
 
 
+def test_unchanged_saves_keep_the_validator_and_delta_bases(endpoint, monkeypatch):
+    client, lib, _ = endpoint
+    first = client.get('/api/library?delta=1')
+    lib.metadata.tracks[0].title = 'Saved'
+    lib.db.replace_library(lib.metadata)
+    fast_client = client.get('/api/library?delta=1')
+    with monkeypatch.context() as patch:
+        patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('unchanged save caused a full GET'))
+        for _ in range(5):
+            lib.db.replace_library(lib.metadata)
+            assert get_delta(client, fast_client).status_code == 304
+        delta = get_delta(client, first).get_json()
+    assert apply(first.get_json(), delta) == fast_client.get_json()
+
+
+@pytest.mark.parametrize('external', [False, True])
+def test_unverified_warm_validator_observes_sqlite_writes(endpoint, monkeypatch, external):
+    from contextlib import closing
+    import sqlite3
+
+    client, lib, _ = endpoint
+
+    def edit(title):
+        connection = closing(sqlite3.connect(lib.db.db_path)) if external else lib.db._get_connection()
+        with connection as conn:
+            conn.execute("UPDATE tracks SET title=? WHERE id='0'", (title,))
+            conn.commit()
+
+    edit('Unverified title')
+    first = client.get('/api/library')
+    assert first.get_json()['tracks'][0]['title'] == 'Unverified title'
+    headers = {'If-None-Match': first.headers['ETag']}
+    with monkeypatch.context() as patch:
+        patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('warm fallback read a full snapshot'))
+        assert client.get('/api/library', headers=headers).status_code == 304
+    edit('New unverified title')
+    second = client.get('/api/library', headers=headers)
+    assert second.status_code == 200 and second.get_json()['tracks'][0]['title'] == 'New unverified title'
+
+
+def test_projected_artist_changes_reach_other_tracks_in_the_delta(endpoint):
+    client, lib, _ = endpoint
+    lib.metadata.tracks[0].artists = ['Alpha', 'alpha', ' Guest ', 42]
+    lib.metadata.tracks[1].artists = ['alpha']
+    lib.db.replace_library(lib.metadata)
+    first = client.get('/api/library?delta=1')
+    assert first.get_json()['tracks'][0]['artists'] == ['Alpha', 'Guest', '42']
+    assert first.get_json()['tracks'][1]['artists'] == ['Alpha']
+
+    lib.metadata.tracks[0].artists = ['Other']
+    lib.db.replace_library(lib.metadata)
+    delta = get_delta(client, first).get_json()
+    assert [track['artists'] for track in delta['upserts']] == [['Other'], ['alpha']]
+    assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
+
+
+def test_unverified_library_read_resolves_stale_aliases(endpoint):
+    client, lib, _ = endpoint
+    with lib.db._get_connection() as db:
+        db.execute("INSERT INTO track_id_aliases VALUES ('0','Resolved')")
+    first = client.get('/api/library').get_json()
+    assert (first['tracks'][0]['id'], first['tracks'][0]['file_hash']) == ('Resolved', 'Resolved')
+    assert first == lib.db.load_library_metadata().to_public_dict()
+
+
 @pytest.mark.parametrize('change', ['title', 'add', 'remove', 'order', 'headers', 'artwork', 'dimensions',
                                    'artwork_delete', 'loudness', 'loudness_delete', 'shared_hash'])
 def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkeypatch, change):
@@ -624,7 +689,7 @@ def test_track_mutation_after_sql_write_cannot_reuse_the_old_validator(endpoint,
     assert lib.db.public_source()['fingerprint'] == fingerprint(stored)
 
 
-@pytest.mark.parametrize(('field', 'portable', 'stored'), [('artists', None, None), ('duration', 180.0, 180)])
+@pytest.mark.parametrize(('field', 'portable', 'stored'), [('artists', None, ['Artist']), ('duration', 180.0, 180)])
 def test_sqlite_projection_stays_the_same_after_a_reload(endpoint, monkeypatch, field, portable, stored):
     client, lib, _ = endpoint
     setattr(lib.metadata.tracks[0], field, portable)

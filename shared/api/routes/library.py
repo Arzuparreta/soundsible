@@ -167,10 +167,11 @@ def get_library():
         base = None
 
     db = getattr(lib, "db", None)
-    payload = state = dependencies = None
+    payload = state = dependencies = stamp = None
     if isinstance(db, DatabaseManager):
         try:
-            state = library_incremental.prepare(db.public_source(), artwork)
+            source, read_stamp, has_tracks = db.public_read_state()
+            state = library_incremental.prepare(source, artwork)
             if state is not None:
                 revision = library_incremental.revision_for(user_id, state)
                 if request.if_none_match.contains_weak(revision):
@@ -179,10 +180,15 @@ def get_library():
                     partial = library_incremental.try_delta(db, artwork, user_id, base, state)
                     if partial is not None:
                         return partial
+            elif read_stamp is not None and request.if_none_match:
+                dependencies_now = _annotation_revisions(artwork) if has_tracks else ()
+                held = _held_revision(user_id, read_stamp, dependencies_now)
+                if held:
+                    return _library_response(Response(), held)
         except Exception:
             logger.debug("Incremental library read unavailable; using full snapshot", exc_info=True)
             state = None
-        payload, source = db.public_snapshot()
+        payload, source, stamp = db.public_snapshot()
         if state is None or state["source"] != source:
             try:
                 state = library_incremental.prepare(source, artwork)
@@ -194,7 +200,7 @@ def get_library():
         if not lib.metadata:
             lib.sync_library()
             if isinstance(db, DatabaseManager):
-                payload, _ = db.public_snapshot()
+                payload, _, stamp = db.public_snapshot()
     if payload is None:
         if not lib.metadata:
             return jsonify({"error": "Library not loaded"}), 404
@@ -207,8 +213,13 @@ def get_library():
         except Exception:
             dependencies = None
         payload = lib.metadata.to_public_dict()
-    snapshot_fingerprint = None
-    if dependencies is not None:
+    snapshot_fingerprint = stamp
+    if stamp is not None:
+        try:
+            dependencies = _annotation_revisions(artwork) if payload["tracks"] else ()
+        except Exception:
+            dependencies = None
+    elif dependencies is not None:
         try:
             snapshot_fingerprint = fingerprint(payload)
         except Exception:
@@ -242,7 +253,7 @@ def get_library():
         revision, full_size = digest.hexdigest(), len(response.get_data())
     else:
         revision, full_size = signature
-    if snapshot_fingerprint is not None and loudness_ok is True:
+    if dependencies is not None and snapshot_fingerprint is not None and loudness_ok is True:
         try:
             # Cache only the detached content under an unchanged annotation token.
             current_dependencies = _annotation_revisions(artwork) if tracks else ()

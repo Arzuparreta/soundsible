@@ -24,10 +24,14 @@ from shared.db.catalog import MUSIC_ONLY
 
 logger = logging.getLogger(__name__)
 
-# Public SQL projection. Use the stored performer credits and attach musical
-# item IDs in the same query as the track values.
+# Use the catalog's ordered performer display names, with the same fallback
+# to stored credits as CatalogQueries._row_to_track.
+_PUBLIC_ARTISTS = """COALESCE((SELECT json_group_array(name) FROM (
+    SELECT a.name FROM track_artists ta JOIN artists a ON a.id=ta.artist_id
+    WHERE ta.track_id=t.id ORDER BY ta.position
+) HAVING COUNT(*) > 0),t.artists_json)"""
 _PUBLIC_TRACK_SELECT = ','.join(
-    't.artists_json' if field == 'artists' else 'f.item_id' if field == 'item_id' else f't.{field}'
+    _PUBLIC_ARTISTS if field == 'artists' else 'f.item_id' if field == 'item_id' else f't.{field}'
     for field in TRACK_FIELDS
 )
 _PUBLIC_TRACK_FROM = (' FROM library_tracks l JOIN tracks t ON t.id=l.track_id '
@@ -445,13 +449,21 @@ class LibraryStore:
             return bool(row and row[0])
 
     def public_source(self):
+        return self.public_read_state()[0]
+
+    def public_read_state(self):
+        """Read the journal proof or a cache stamp for an unverified database."""
         from shared.library_changes import source
         with self._get_connection() as conn:
             conn.execute('BEGIN')
             try:
-                return source(conn)
+                proof = source(conn)
+                if proof is not None:
+                    return proof, None, proof['tracks']
+                tracks = conn.execute('SELECT 1 FROM library_tracks LIMIT 1').fetchone() is not None
             finally:
                 conn.rollback()
+            return None, conn.read_stamp, tracks
 
     @contextmanager
     def library_search_candidates(self, tracks, q_folded: str, q_tokens: frozenset):
@@ -498,19 +510,28 @@ class LibraryStore:
                 conn.rollback()
 
     def public_snapshot(self):
-        """Return a detached flat library and the proof from that same commit."""
+        """Return detached public values and their journal proof or read stamp."""
         from shared.library_changes import source
         with self._get_connection() as conn:
+            before = conn.read_stamp
             conn.execute('BEGIN')
             try:
                 headers = self._public_headers(conn)
                 if headers is None:
-                    return None, None
+                    return None, None, None
                 headers['tracks'] = [_public_track(row) for row in conn.execute(
                     f'SELECT {_PUBLIC_TRACK_SELECT}{_PUBLIC_TRACK_FROM} ORDER BY l.position')]
-                return headers, source(conn)
+                proof = source(conn)
+                if proof is None:
+                    aliases = self._track_id_aliases(conn)
+                    if aliases:
+                        for track in headers['tracks']:
+                            track['id'] = aliases.get(track['id'], track['id'])
+                            track['file_hash'] = aliases.get(track['file_hash'], track['file_hash'])
             finally:
                 conn.rollback()
+            stamp = before if proof is None and before == conn.read_stamp else None
+            return headers, proof, stamp
 
     def public_track_count_exceeds(self, limit: int) -> bool:
         """Check a size lower bound without counting the entire library."""

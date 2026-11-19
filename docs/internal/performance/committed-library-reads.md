@@ -16,15 +16,15 @@ avoids a separate podcast read.
 
 The flat `GET /api/library` representation comes from the canonical SQLite
 tables. Fresh, conditional and delta requests see committed tracks and header
-fields, including during an in-memory edit or a save. The catalog keeps its own
-projection of artist names. The flat response exposes the stored structured
-credits, including null for legacy tracks without credits, and the original
-display artist. SQLite supplies normalized scalar values the same way before
-and after a restart.
+fields, including during an in-memory edit or a save. Ordered performer names
+come from the catalog, with the same fallback to stored credits as the
+library loader. The flat response retains the display artist. SQLite supplies
+normalized scalar values the same way before and after a restart.
 
 - **Conditional request.** A weak ETag combines the account, public projection,
-  SQLite revision and proof, and artwork and loudness tokens. A matching ETag
-  needs a fixed number of lookups and bypasses track and header queries.
+  track and credit proofs, order, and artwork and loudness tokens. A matching
+  ETag needs a fixed number of lookups and bypasses track and header queries.
+  An unchanged write keeps the same ETag and client delta bases.
 - **Delta.** Read the journal and changed rows from the same SQLite snapshot.
   An unchanged header hash skips playlists, settings and podcast fields
   entirely. When headers changed, compare their field hashes against the
@@ -37,7 +37,9 @@ and after a restart.
   of a delta when annotation tokens stay current. Missing or expired
   bases, pruned journals, and large changes can require a full response.
   Unverified SQL state and annotation errors fall back to content validators.
-  Annotation tokens are skipped for empty libraries.
+  A connection-scoped SQLite stamp can revalidate a recently rendered
+  unverified response. A write on that connection or an external commit
+  changes the stamp. Annotation tokens are skipped for empty libraries.
 
 The public-source and per-track hashes still commit with the saved values.
 The batch writer hashes the same captured track values it binds to SQL and
@@ -57,9 +59,11 @@ references once.
 
 ### Upgrades
 
-Existing SQLite libraries keep their journals and gain the optional table of
-header hashes and the track position index. An older writer can still read and save them. The flat SQLite
-projection uses a new ETag namespace. A client holding a pre-upgrade base
+Existing SQLite libraries keep their track journal and gain a separate credit
+journal, the optional table of header hashes and the track position index.
+The credit journal also tracks shared display-name changes that affect
+multiple tracks. Older engines can still read and save the same database.
+The flat SQLite projection uses a new ETag namespace. A client holding a pre-upgrade base
 bootstraps once from a full response, then receives small deltas without any
 library save. When a header hash is absent, the reader can take committed
 headers from the same SQLite snapshot as the changed rows and skip them when
@@ -112,9 +116,11 @@ protocol, as before.
 `scripts/benchmark_committed_reads.py --reference origin/main --sizes 1000
 10000 50000 --repeats 5`, run on 2026-11-19 on the development machine
 (Python 3.14, repository storage volume), [raw results](committed-library-reads-results.jsonl).
-The table shows medians of five. The reference is `origin/main` at
-`16a8955b`. Both trees use the same benchmark code, which applies each delta
-and compares the result with an unconditional full response.
+The tables record medians of five at `843b1a2f`, before restoring catalog
+performer normalization in the SQLite projection. The reference is
+`origin/main` at `16a8955b`. Both trees use the same benchmark code, which
+applies each delta and compares the result with an unconditional full
+response.
 
 The HTTP numbers cover `/api/library`. Once the stock web client bootstraps
 the collection, its recurring refresh uses `/api/library/collection`, which
@@ -155,6 +161,12 @@ preceding Station export, as in a steady stream of downloads.
   include storage and sync costs, which varied across runs.
 - Bytes read are `rchar`, which counts page-cache hits: physical disk reads
   saved depend on the cache.
+
+A three-repeat follow-up with the catalog-credit query at 10,000 tracks
+measured 21.74 to 0.65 ms for a warm 304 and 150.88 to 153.35 ms for the
+full GET. The one-title delta took 190.27 to 184.28 ms in that run, with
+slower history sync on both trees. The full GET includes an indexed credit
+lookup per row. A small delta runs those lookups only for its upserts.
 
 The full cycle includes the Station's save and export and the pool commit.
 Commit times include the manifest's fsync on this disk, which varies between

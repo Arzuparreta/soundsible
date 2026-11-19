@@ -13,7 +13,7 @@ from shared.loudness import LoudnessStore, annotate_tracks
 MAX_BASES = 256
 MAX_PER_ACCOUNT = 4
 TTL = 86400
-PROJECTION = 'sqlite-library-v1'
+PROJECTION = 'sqlite-catalog'
 # Every public track has these ASCII keys and at least one byte per JSON value.
 # A delta smaller than this bound is certainly smaller than the full response.
 MIN_TRACK_BYTES = 1 + sum(len(name) + 5 for name in TRACK_FIELDS)
@@ -73,9 +73,12 @@ def annotations_current(artwork, state):
 
 
 def revision_for(account, state):
-    # A different representation must start a new base, including on upgrade.
+    # The write revision advances on no-op saves. Only content, ordering and
+    # projection dependencies select an HTTP representation.
     art, loud = state['art'], state['loud']
-    return sha256(history.encoded((PROJECTION, account, state['source']['revision'], state['source']['fingerprint'],
+    source = state['source']
+    return sha256(history.encoded((PROJECTION, account, source['fingerprint'], source['cursor'][:2],
+                                   source['credits'][:2], source['ordering'],
                                    art['token'] if art else None, loud['token'] if loud else None))).hexdigest()
 
 

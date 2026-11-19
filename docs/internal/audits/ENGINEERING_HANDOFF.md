@@ -90,8 +90,8 @@ RSS, energy savings, playback quality or acoustic acceptance.
   `shared/api/library_incremental.py` implement source proofs and selection.
 - The flat library endpoint answers from committed SQLite state. Conditional
   requests need the revision and annotation cursors, deltas read only affected
-  rows and changed headers, and full reads use the same SQL projection. Stored
-  credits stay distinct from catalog-derived names. The content-hash fallback
+  rows, normalized catalog credits and changed headers, and full reads use
+  the same SQL projection. The content-hash fallback
   remains for unverified sources. See
   [committed library reads](../performance/committed-library-reads.md).
 - Do not break account isolation, changes during copy/annotation, field

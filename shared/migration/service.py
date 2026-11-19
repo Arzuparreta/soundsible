@@ -176,10 +176,11 @@ class MigrationRunner:
             existing_names.add(target)
             names[playlist.source_id] = target
             changed = True
-        if changed:
-            lib.require_saved(metadata=candidate)
+        # Record the chosen names first. A retry can then create a missing
+        # target or reuse the one a previous attempt already committed.
         self.store.set_playlist_names(self.job_id, names)
         if changed:
+            lib.require_saved(metadata=candidate)
             after_release(self._emit_library_updated)
 
     def _process_track(self, source_key: str, source: SourceTrack, row: dict[str, Any]) -> None:
