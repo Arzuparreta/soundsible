@@ -51,10 +51,15 @@ def load_base(account, revision):
         return json.loads(row[0]) if row else None
 
 
-def remember(account, revision, state, headers):
+def header_digests(headers):
+    """Digest each rendered field for comparison with a client's saved base."""
+    return {key: history.digest(value).hex() for key, value in headers.items()}
+
+
+def remember(account, revision, state, digests):
     if len(account.encode()) > 256:
         return
-    proof = json.dumps({**state, 'headers': {key: history.digest(value).hex() for key, value in headers.items()}})
+    proof = json.dumps({**state, 'headers': digests})
     if len(proof.encode()) > 8192:
         return
     with history.connection() as db:
@@ -128,9 +133,12 @@ def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerpr
     if base is None:
         return None
     state = prepare(lib, artwork, dependencies)
-    if state is None or state['source']['headers'] is None:
+    if state is None:
         return None
     committed = state['source']['fingerprint']
+    header_hash = state['source']['headers']
+    if header_hash is None and committed != base['source']['fingerprint']:
+        return None
     if model_fingerprint is None:
         model_fingerprint, _ = live_fingerprint(lib.metadata, committed)
     if model_fingerprint != committed:
@@ -156,16 +164,20 @@ def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerpr
             return None
         copied[position] = row
     headers = lib.metadata.public_headers()
-    if header_digest(headers) != state['source']['headers']:
+    if header_hash is not None and header_digest(headers) != header_hash:
+        return None
+    digests = header_digests(headers)
+    fields = {name: headers[name] for name, digest in digests.items() if digest != base['headers'].get(name)}
+    # Older engines did not save a header hash. A served base for the same
+    # canonical fingerprint already proves the exact headers the client has.
+    if header_hash is None and fields:
         return None
     upserts = [copied[position] for position in sorted(copied)]
     if not annotate_tracks(upserts, selected=True):
         return None
     artwork.annotate(upserts)
     delta = {'kind': 'delta', 'base_revision': base_revision, 'revision': revision_for(account, state),
-             'upserts': upserts, 'removed': removed,
-             'fields': {name: value for name, value in headers.items()
-                        if history.digest(value).hex() != base['headers'].get(name)}}
+             'upserts': upserts, 'removed': removed, 'fields': fields}
     if order is not None:
         delta['order'] = order
     if not still_current(lib, artwork, state):
@@ -173,7 +185,7 @@ def try_delta(lib, artwork, account, base_revision, dependencies, model_fingerpr
     response = current_app.json.response(delta)
     if len(response.get_data()) >= len(lib.metadata.tracks) * MIN_TRACK_BYTES:
         return None
-    remember(account, delta['revision'], state, headers)
+    remember(account, delta['revision'], state, digests)
     from shared.api.library_revision import validator_key, validators
     validators.put(validator_key(account, state['source']['fingerprint'], dependencies), delta['revision'])
     response.headers['Cache-Control'] = 'private, no-store'

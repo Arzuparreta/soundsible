@@ -270,8 +270,8 @@ def get_library():
             pass
     if wants_delta and incremental_state is not None:
         try:
-            library_incremental.remember(user_id, revision, incremental_state,
-                                         {k: v for k, v in payload.items() if k != 'tracks'})
+            digests = library_incremental.header_digests({k: v for k, v in payload.items() if k != 'tracks'})
+            library_incremental.remember(user_id, revision, incremental_state, digests)
         except Exception:
             logger.debug("Incremental base unavailable; sending full snapshot", exc_info=True)
     elif wants_delta:

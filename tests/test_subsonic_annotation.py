@@ -190,6 +190,15 @@ def test_updating_a_playlist_adds_and_removes_by_index(tmp_path, monkeypatch):
     assert harness.library.metadata.playlists["Drive"] == ["t2", "t3"]
 
 
+def test_invalid_playlist_removal_leaves_pending_additions_unapplied(tmp_path, monkeypatch):
+    harness = build(tmp_path, monkeypatch, _library(), playlists={"Drive": ["t1", "t2"]})
+    response = harness.json("updatePlaylist", playlistId="Drive", songIdToAdd="tr-t3",
+                            songIndexToRemove="invalid")
+    assert response["status"] == "failed"
+    assert harness.library.metadata.playlists["Drive"] == ["t1", "t2"]
+    assert harness.library.saves == 0
+
+
 def test_removing_several_indices_removes_the_songs_the_client_meant(tmp_path, monkeypatch):
     """Indices point into the list as received, so they are applied from the end."""
     harness = build(tmp_path, monkeypatch, _library(), playlists={"Drive": ["t1", "t2", "t3"]})

@@ -1002,11 +1002,13 @@ def update_playlist():
     if metadata is None or name not in metadata.playlists:
         raise SubsonicError(ERR_NOT_FOUND)
 
-    for raw in request.values.getlist("songIdToAdd"):
-        metadata.add_to_playlist(name, serialize.parse_id(raw)[1])
+    additions = [serialize.parse_id(raw)[1] for raw in request.values.getlist("songIdToAdd")]
     # Indices are into the list as it was received, so they are applied from the
     # end: removing index 2 first would shift every later index by one.
-    for index in sorted((int(value) for value in request.values.getlist("songIndexToRemove")), reverse=True):
+    removals = sorted((int(value) for value in request.values.getlist("songIndexToRemove")), reverse=True)
+    for track_id in additions:
+        metadata.add_to_playlist(name, track_id)
+    for index in removals:
         ids = metadata.playlists.get(name) or []
         if 0 <= index < len(ids):
             metadata.remove_from_playlist(name, ids[index])

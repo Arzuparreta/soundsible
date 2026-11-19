@@ -94,6 +94,8 @@ RSS, energy savings, playback quality or acoustic acceptance.
   send and all detached headers against the committed hashes
   (`library_public_rows`, `library_public_headers`). An unrelated unsaved row
   can coexist with a committed delta, and that row is excluded from the delta.
+  Older sources can verify their headers against a served base for the same
+  fingerprint while they wait for a canonical save to persist the header hash.
   See [committed library reads](../performance/committed-library-reads.md).
 - ETags of verified canonical sources are opaque dependency tokens,
   not hashes of the entire JSON. The old path remains for unverified sources.

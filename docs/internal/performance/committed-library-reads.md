@@ -60,7 +60,8 @@ the pre-edit and post-edit fingerprints in one traversal, encoding shared
 rows once and feeding the same bytes to both digests. The verified pre-edit
 fingerprint binds the shared bytes to the prior commit. The same detached
 headers and row supply the new committed hashes. This also gives a database
-upgraded before the header hash existed its deltas on the next edit or save.
+upgraded before the header hash existed a persisted hash on the next edit or
+save.
 
 ### Contract change
 
@@ -72,12 +73,20 @@ current live contents under a content revision, which its holder can
 revalidate separately. Models without a verified committed source use full
 comparison as before.
 
+Subsonic playlist updates now parse the removal indices before applying any
+addition, so malformed input cannot leave an unsaved playlist change behind.
+
 Existing databases gain the `library_public_headers` table on open. Their
-proofs stay valid for 304s and full responses; deltas start after the next
-canonical save records the header hash. The previous engine can still open and
-save such a database: `library_public_source` keeps its columns, and a save by
-that engine leaves the header hash under the old fingerprint, which turns
-deltas off until this engine saves again.
+proofs stay valid. Until the first save writes a header hash, a served base
+for the same canonical fingerprint proves the client's headers. The route
+compares the detached fields with that base, so artwork and loudness changes
+can still use small deltas. A base from a different canonical fingerprint
+falls back to one full snapshot. The previous engine can still open and save
+such a database because `library_public_source` retains its columns.
+
+On a disposable 1,000-track database created by the base version, an artwork
+change before any new save returned a 1,108-byte delta. The same probe on
+`23cf30f3` returned a 779,456-byte full snapshot.
 
 ## Pool manifest
 
@@ -124,25 +133,30 @@ protocol, as before.
 10000 50000 --repeats 5`, run on 2026-11-19 on the development machine
 (Python 3.14, repository storage volume), [raw results](committed-library-reads-results.jsonl).
 Medians of five; "before" is `origin/main` at `16a8955b`, run by the same
-benchmark code. The HTTP and pool results below were recorded on `8ac8e3b5`.
-Each delta is applied and compared with an unconditional full response.
+benchmark code. Each delta is applied and compared with an unconditional full
+response.
+
+The HTTP numbers cover `/api/library`. Once the stock web client bootstraps
+the collection, its recurring refresh uses `/api/library/collection`, which
+already has revision-based 304s. The download-pool measurements are
+independent of the client.
 
 HTTP, with `LibraryManager.patch_track_metadata` making each title edit:
 
 | Tracks | 304 poll (ms) | Delta after a title edit (ms) |
 | ---: | ---: | ---: |
-| 1,000 | 2.47 → 0.60 | 72.25 → 68.70 |
-| 10,000 | 20.10 → 0.59 | 102.13 → 76.10 |
-| 50,000 | 94.00 → 0.63 | 263.41 → 76.40 |
+| 1,000 | 2.64 → 0.88 | 68.41 → 77.18 |
+| 10,000 | 21.44 → 0.63 | 111.65 → 81.16 |
+| 50,000 | 103.28 → 0.66 | 277.02 → 79.09 |
 
 Pool commits, alone and in the single-account download cycle (the account
 saves and exports into the same file before each commit):
 
 | Tracks | Pool-only commit (ms) | Bytes read | Cycle commit (ms) | Bytes read | Full cycle (ms) |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 108.71 → 98.81 | 1,474,785 → 1,269,849 | 92.17 → 84.49 | 5,079,392 → 1,269,941 | 393.01 → 384.76 |
-| 10,000 | 233.78 → 225.44 | 11,071,053 → 10,866,117 | 408.87 → 361.00 | 43,464,469 → 10,866,217 | 2,360.27 → 2,342.26 |
-| 50,000 | 892.33 → 917.34 | 53,921,069 → 53,716,132 | 1,984.38 → 1,666.79 | 214,864,462 → 53,716,221 | 12,080.17 → 11,750.27 |
+| 1,000 | 83.64 → 91.98 | 1,474,785 → 1,269,853 | 108.71 → 118.01 | 5,079,392 → 1,269,945 | 434.08 → 468.24 |
+| 10,000 | 233.75 → 267.12 | 11,071,053 → 10,866,121 | 442.17 → 420.80 | 43,464,469 → 10,866,221 | 2,593.16 → 2,823.11 |
+| 50,000 | 950.64 → 1,009.18 | 53,921,068 → 53,716,133 | 2,309.99 → 2,078.55 | 214,864,461 → 53,716,222 | 13,438.84 → 14,032.09 |
 
 - The 304 no longer grows with the library: about 0.6 ms at every size.
 - A one-title delta avoids scanning unrelated tracks. Order changes still
@@ -154,8 +168,10 @@ saves and exports into the same file before each commit):
 - A pool-only commit verifies the digest and skips the podcast reread. In
   the benchmark cycle, the Station adds a track, so the pool reads the changed
   manifest once instead of four times. Encoding and syncing the portable
-  manifest still dominate the commit. The median pool-only commit at 50,000
-  tracks was 2.8% slower in this run despite skipping the podcast suffix.
+  manifest still dominate the commit. At 50,000 tracks the after-export
+  pool commit was 10% faster in this run. The pool-only commit was 6% slower
+  and the full cycle was 4.4% slower. Full-cycle speed did not improve
+  consistently across runs.
 - Bytes read are `rchar`, which counts page-cache hits: physical disk reads
   saved depend on the cache.
 

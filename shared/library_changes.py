@@ -14,8 +14,8 @@ def install(conn):
     conn.execute("INSERT OR IGNORE INTO library_public_source VALUES (1,0,'',0,1)")
     # The header hash of the source with that fingerprint. Its own table, so
     # an older engine opening this database never sees an unexpected column;
-    # one that saves leaves a stale fingerprint here, which disables deltas
-    # until the next save by this engine instead of certifying its headers.
+    # one that saves leaves a stale fingerprint here. The reader can still
+    # verify headers against a served base of the same canonical fingerprint.
     conn.execute('CREATE TABLE IF NOT EXISTS library_public_headers ('
                  'singleton INTEGER PRIMARY KEY CHECK(singleton=1),fingerprint TEXT,hash TEXT)')
     conn.execute('CREATE TABLE IF NOT EXISTS library_public_rows (id TEXT PRIMARY KEY,hash BLOB,identity TEXT)')

@@ -355,18 +355,18 @@ def test_lightweight_bases_have_count_ttl_and_payload_bounds(endpoint, monkeypat
     account = current_user_id() or ''
     proof = incremental.load_base(account, first.headers['ETag'][3:-1])
     assert proof and 'tracks' not in proof and 'Title 0' not in str(proof)
-    headers = lib.metadata.public_headers()
-    for i in range(8): incremental.remember(account, str(i), proof, headers)
+    digests = incremental.header_digests(lib.metadata.public_headers())
+    for i in range(8): incremental.remember(account, str(i), proof, digests)
     with incremental.history.connection() as db:
         assert db.execute('SELECT COUNT(*) FROM incremental_bases WHERE account=?', (account,)).fetchone()[0] == 4
         assert db.execute('SELECT MAX(length(proof)) FROM incremental_bases').fetchone()[0] < 8192
     monkeypatch.setattr(incremental, 'MAX_BASES', 5)
-    for i in range(8): incremental.remember(f'account-{i}', 'base', proof, headers)
+    for i in range(8): incremental.remember(f'account-{i}', 'base', proof, digests)
     with incremental.history.connection() as db:
         assert db.execute('SELECT COUNT(*) FROM incremental_bases').fetchone()[0] == 5
         db.execute('UPDATE incremental_bases SET created=0')
     assert incremental.load_base('account-7', 'base') is None
-    incremental.remember('new', 'new', proof, headers)
+    incremental.remember('new', 'new', proof, digests)
     with incremental.history.connection() as db:
         assert db.execute('SELECT COUNT(*) FROM incremental_bases').fetchone()[0] == 1
 
@@ -507,10 +507,32 @@ def test_previous_engine_can_open_and_save_an_upgraded_database(tmp_path):
         # Its save proves a new source without knowing header hashes.
         conn.execute("UPDATE library_public_source SET fingerprint='written-by-previous-engine'")
         conn.commit()
-    # Full responses may use that proof; deltas wait for this engine's save.
+    # The new engine accepts a same-source base or proves the headers on save.
     assert db.public_source()['headers'] is None
     db.replace_library(value)
     assert db.public_source()['headers'] is not None
+
+
+def test_older_library_can_send_annotation_deltas_before_its_first_save(endpoint, monkeypatch):
+    client, lib, _ = endpoint
+    with lib.db._get_connection() as conn:
+        conn.execute('DELETE FROM library_public_headers')
+        conn.commit()
+    lib.metadata = lib.db.load_library_metadata()
+    first = client.get('/api/library?delta=1')
+    art = artwork_store()
+    for track_id in ('0', '1'):
+        art.bind(track_id, f'cover-{track_id}', 'manual')
+        with monkeypatch.context() as patch:
+            patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('full copy on upgrade'))
+            delta = get_delta(client, first).get_json()
+        assert delta['kind'] == 'delta' and delta['fields'] == {}
+        assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
+    assert lib.db.public_source()['headers'] is None
+
+    lib.metadata.settings['unsaved'] = True
+    live = get_delta(client, first).get_json()
+    assert 'tracks' in live and live['settings']['unsaved'] is True
 
 
 def test_live_header_edit_during_a_save_is_neither_stored_nor_certified(endpoint, monkeypatch):
