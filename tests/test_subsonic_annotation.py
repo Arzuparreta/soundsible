@@ -180,6 +180,22 @@ def test_creating_a_playlist_writes_it_to_the_manifest(tmp_path, monkeypatch):
     assert harness.library.saves == 1
 
 
+def test_create_playlist_builds_response_after_releasing_write_lock(tmp_path, monkeypatch):
+    from shared import library_lifecycle
+    from shared.api.routes import subsonic
+
+    harness = build(tmp_path, monkeypatch, _library())
+    original = subsonic._playlist_payload
+
+    def payload(*args, **kwargs):
+        assert harness.db.load_library_metadata().playlists['Night'] == ['t1']
+        assert not getattr(library_lifecycle._local, 'depth', 0)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(subsonic, '_playlist_payload', payload)
+    harness.ok('createPlaylist.view', name='Night', songId='tr-t1')
+
+
 def test_updating_a_playlist_adds_and_removes_by_index(tmp_path, monkeypatch):
     harness = build(tmp_path, monkeypatch, _library(), playlists={"Drive": ["t1", "t2"]})
     response = harness.client.get(

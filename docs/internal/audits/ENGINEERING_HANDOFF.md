@@ -496,6 +496,8 @@ the rows it sends and its header fields.
 
 Playlist changes and track removal publish their new membership after SQLite
 commits. A missing-file purge collects its findings before making one filtered
-snapshot. Track edits after reloading a legacy import can still fail when
-SQLite normalizes public field types. This predates these read changes and
-also keeps the read path on full comparison when the proof differs.
+snapshot. Podcast writes reacquire the current library after fetching RSS
+and publish their candidate after commit. Track edits after reloading a
+legacy import can still fail when SQLite normalizes public field types.
+This predates these read changes and also keeps the read path on full
+comparison when the proof differs.

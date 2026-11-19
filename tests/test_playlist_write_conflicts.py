@@ -256,6 +256,44 @@ def test_fresh_and_conditional_reads_agree_during_a_missing_track_purge(client, 
     assert fresh.status_code == 200 and fresh.get_json()['tracks'] == []
 
 
+def test_subscribing_preserves_the_playlist_saved_during_its_feed_fetch(client, monkeypatch):
+    from shared.api.routes import podcasts
+    from shared.podcast_rss import FeedCheck, FeedPage
+
+    user_id = ensure_multiuser_layout()['user_id']
+    _seed_library(user_id)
+    with user_context(user_id):
+        lib = get_user_core(user_id).library
+    original = lib.db.replace_library
+    compared = []
+
+    def before_commit(metadata, **options):
+        if metadata.podcast_subscriptions:
+            fresh = client.get('/api/library')
+            assert fresh.get_json()['podcast_subscriptions'] == []
+            assert client.get('/api/library', headers={'If-None-Match': fresh.headers['ETag']}).status_code == 304
+            compared.append(True)
+        return original(metadata, **options)
+
+    def fetch(_):
+        assert client.post('/api/library/playlists', json={'name': 'During fetch'}).status_code == 200
+        feed = b'<rss version="2.0"><channel><title>Fixture show</title></channel></rss>'
+        return FeedCheck(FeedPage(feed, None), {})
+
+    monkeypatch.setattr(lib.db, 'replace_library', before_commit)
+    monkeypatch.setattr(podcasts, 'assert_safe_http_url', lambda _: None)
+    monkeypatch.setattr(podcasts, 'check_feed', fetch)
+    response = client.post('/api/podcasts/subscribe', json={'rss_url': 'https://example.test/feed'})
+    assert response.status_code == 200
+    sub = response.get_json()['subscription']
+    saved = lib.db.load_library_metadata()
+    assert 'During fetch' in saved.playlists
+    assert saved.podcast_subscriptions == [sub]
+    assert sub['id'] in saved.podcast_episode_cache
+    assert client.get('/api/library').get_json()['podcast_subscriptions'] == [sub]
+    assert compared == [True]
+
+
 def test_captured_track_edit_rejects_a_newer_membership_without_losing_it(client):
     user_id = ensure_multiuser_layout()["user_id"]
     _seed_library(user_id)

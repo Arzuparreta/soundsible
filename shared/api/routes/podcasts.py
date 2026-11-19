@@ -9,12 +9,15 @@ import logging
 import threading
 import time
 import uuid
+from contextlib import nullcontext
+from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
 import requests
 from flask import Blueprint, Response, jsonify, request, send_file, stream_with_context
 
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
+from shared.library_lifecycle import coordinated
 from shared.models import LibraryMetadata, PodcastSubscription
 from shared.podcast_preview_token import decode_enclosure_stream_token, mint_enclosure_stream_token
 from shared.podcast_rss import FeedCheck, assert_safe_http_url, check_feed, fetch_feed_body, parse_feed
@@ -110,8 +113,7 @@ def list_subscriptions():
 @rate_limit("podcasts_subscribe", limit=40, window_sec=60)
 def subscribe():
     api = _get_api()
-    lib, metadata = api["ensure_library_metadata"]()
-    if not metadata:
+    if not api["ensure_library_metadata"]()[1]:
         return jsonify({"error": "Library not loaded"}), 404
     data = request.get_json(silent=True) or {}
     rss_url = (data.get("rss_url") or "").strip()
@@ -147,12 +149,18 @@ def subscribe():
         itunes_collection_id=itunes_id or None,
     ).to_dict()
 
-    # Dedupe by rss_url
-    metadata.podcast_subscriptions = [s for s in metadata.podcast_subscriptions if isinstance(s, dict) and s.get("rss_url") != rss_url]
-    metadata.podcast_subscriptions.append(sub)
-    metadata.podcast_episode_cache[subscription_id] = _cached_episodes(eps, looked.page.next, looked, show["image_url"])
+    cached = _cached_episodes(eps, looked.page.next, looked, show["image_url"])
+    with coordinated():
+        # Fetching the feed can yield to another writer. Edit the model at the
+        # current revision, and publish the subscription and its cache together.
+        lib, metadata = api["ensure_library_metadata"]()
+        if not metadata:
+            return jsonify({"error": "Library not loaded"}), 404
+        subscriptions = [value for value in metadata.podcast_subscriptions
+                         if isinstance(value, dict) and value.get("rss_url") != rss_url]
+        lib.require_saved(metadata=replace(metadata, podcast_subscriptions=[*subscriptions, sub],
+                                           podcast_episode_cache={**metadata.podcast_episode_cache, subscription_id: cached}))
     _checked[subscription_id] = time.monotonic()
-    lib.require_saved()
     api["emit_to_user"]("library_updated")
     return jsonify({"status": "success", "subscription": sub})
 
@@ -162,18 +170,18 @@ def subscribe():
 @rate_limit("podcasts_unsub", limit=40, window_sec=60)
 def unsubscribe(feed_id: str):
     api = _get_api()
-    lib, metadata = api["ensure_library_metadata"]()
-    if not metadata:
-        return jsonify({"error": "Library not loaded"}), 404
-    before = len(metadata.podcast_subscriptions)
-    metadata.podcast_subscriptions = [
-        s for s in metadata.podcast_subscriptions if not (isinstance(s, dict) and s.get("id") == feed_id)
-    ]
-    if len(metadata.podcast_subscriptions) == before:
-        return jsonify({"error": "Not found"}), 404
-    metadata.podcast_episode_cache.pop(feed_id, None)
+    with coordinated():
+        lib, metadata = api["ensure_library_metadata"]()
+        if not metadata:
+            return jsonify({"error": "Library not loaded"}), 404
+        if _subscription_by_id(metadata, feed_id) is None:
+            return jsonify({"error": "Not found"}), 404
+        subscriptions = [sub for sub in metadata.podcast_subscriptions
+                         if not (isinstance(sub, dict) and sub.get("id") == feed_id)]
+        cached = metadata.podcast_episode_cache.copy()
+        cached.pop(feed_id, None)
+        lib.require_saved(metadata=replace(metadata, podcast_subscriptions=subscriptions, podcast_episode_cache=cached))
     _checked.pop(feed_id, None)
-    lib.require_saved()
     api["emit_to_user"]("library_updated")
     return jsonify({"status": "success"})
 
@@ -182,7 +190,7 @@ def unsubscribe(feed_id: str):
 @rate_limit("podcasts_episodes", limit=120, window_sec=60)
 def feed_episodes(feed_id: str):
     api = _get_api()
-    lib, metadata = api["ensure_library_metadata"]()
+    _, metadata = api["ensure_library_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     sub = _subscription_by_id(metadata, feed_id)
@@ -203,6 +211,10 @@ def feed_episodes(feed_id: str):
     with _fetch_lock:
         # Another request for the same show may have looked while this one
         # waited; what it found is in the cache now.
+        _, metadata = api["ensure_library_metadata"]()
+        sub = _subscription_by_id(metadata, feed_id) if metadata else None
+        if not sub or sub.get("rss_url") != rss_url:
+            return jsonify({"error": "Unknown feed"}), 404
         cache = _kept(metadata, feed_id)
         if cache is not None and not refresh and not _due(feed_id):
             return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
@@ -219,20 +231,40 @@ def feed_episodes(feed_id: str):
                 return jsonify({"error": str(e)}), 502
             _checked[feed_id] = time.monotonic()
             return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
+        unchanged = looked.page is None or (cache is not None and not stale and _digest(looked.page.xml) == cache.get("digest"))
+        if unchanged:
+            if cache is None:
+                return jsonify({"error": "Feed has no cached episodes"}), 502
+            episodes, next_after = cache["episodes"], cache.get("next")
+            updated_cache = {**cache, "validators": looked.validators}
+        else:
+            show, episodes = parse_feed(looked.page.xml, rss_url)
+            next_after = looked.page.next
+            updated_cache = _cached_episodes(episodes, next_after, looked, show["image_url"])
+
+        artwork_changed = False
+        needs_save = updated_cache != cache
+        with coordinated() if needs_save else nullcontext():
+            lib, metadata = api["ensure_library_metadata"]()
+            sub = _subscription_by_id(metadata, feed_id) if metadata else None
+            if not sub or sub.get("rss_url") != rss_url:
+                return jsonify({"error": "Unknown feed"}), 404
+            current = _kept(metadata, feed_id)
+            if current is not None and current != cache:
+                return _episodes_answer(feed_id, sub, current["episodes"], current.get("next"), changed=True)
+            if needs_save:
+                subscriptions = metadata.podcast_subscriptions
+                if not unchanged:
+                    old_sub, sub = sub, sub.copy()
+                    artwork_changed = _adopt_show_image(sub, show)
+                    if artwork_changed:
+                        subscriptions = [sub if value is old_sub else value for value in subscriptions]
+                lib.require_saved(metadata=replace(metadata, podcast_subscriptions=subscriptions,
+                                                   podcast_episode_cache={**metadata.podcast_episode_cache, feed_id: updated_cache}))
         _checked[feed_id] = time.monotonic()
-        if looked.page is None or (cache is not None and not stale and _digest(looked.page.xml) == cache.get("digest")):
-            if cache.get("validators") != looked.validators:
-                cache["validators"] = looked.validators
-                lib.require_saved()
-            return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
-        show, episodes = parse_feed(looked.page.xml, rss_url)
-        next_after = looked.page.next
-        metadata.podcast_episode_cache[feed_id] = _cached_episodes(episodes, next_after, looked, show["image_url"])
-        artwork_changed = _adopt_show_image(sub, show)
-        lib.require_saved()
     if artwork_changed:
         api["emit_to_user"]("library_updated")
-    return _episodes_answer(feed_id, sub, episodes, next_after, changed=True)
+    return _episodes_answer(feed_id, sub, episodes, next_after, changed=not unchanged)
 
 
 def _kept(metadata: LibraryMetadata, feed_id: str) -> Optional[Dict[str, Any]]:

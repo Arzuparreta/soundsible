@@ -82,7 +82,13 @@ comparison as before.
 Playlist endpoints stage the playlist map and settings together, using the
 same commit-then-publish path as acquisitions. Fresh and conditional reads
 both see the previous playlist until the save succeeds. Subsonic updates
-also parse the removal indices before applying any addition.
+also parse the removal indices before applying any addition. Subsonic builds
+the playlist creation response after releasing the library write lock.
+
+Podcast requests fetch RSS outside the write lock. A subscription or cache
+update then uses the current library revision and saves a candidate. A
+playlist saved during the fetch survives, a pending subscription stays
+invisible until commit, and a refresh cannot recreate an unsubscribed feed.
 
 A purge checks storage before changing membership, then filters the track
 list and playlist references once. It publishes the candidate after the

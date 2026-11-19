@@ -30,7 +30,7 @@ from typing import Any, Callable, Optional
 from flask import Blueprint, Response, request, send_file, stream_with_context
 
 from shared.hardening import rate_limit_allows
-from shared.library_lifecycle import serialized
+from shared.library_lifecycle import coordinated, serialized
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
 from shared.security import is_safe_path, request_client_address
 from shared.subsonic import serialize, transcode
@@ -974,27 +974,25 @@ def _save_playlists(lib, metadata):
 
 
 @_endpoint("createPlaylist")
-@serialized
 def create_playlist():
-    lib = _library()
-    metadata = lib.metadata
-    if metadata is None:
-        raise SubsonicError(ERR_GENERIC, "Library not loaded")
-
     existing = (_param("playlistId") or "").strip()
     name = (_param("name") or "").strip() or existing
     if not name:
         raise SubsonicError(ERR_MISSING_PARAMETER, "Required parameter 'name' is missing")
 
     track_ids = [serialize.parse_id(raw)[1] for raw in request.values.getlist("songId")]
-    metadata = metadata.copy_for_playlist_edit()
-    if existing and existing in metadata.playlists:
-        metadata.set_playlist_tracks(existing, track_ids)
-        if name != existing:
-            metadata.rename_playlist(existing, name)
-    else:
-        metadata.create_playlist(name, track_ids)
-    _save_playlists(lib, metadata)
+    with coordinated():
+        lib = _library()
+        if lib.metadata is None:
+            raise SubsonicError(ERR_GENERIC, "Library not loaded")
+        metadata = lib.metadata.copy_for_playlist_edit()
+        if existing and existing in metadata.playlists:
+            metadata.set_playlist_tracks(existing, track_ids)
+            if name != existing:
+                metadata.rename_playlist(existing, name)
+        else:
+            metadata.create_playlist(name, track_ids)
+        _save_playlists(lib, metadata)
     return {"playlist": _playlist_payload(name, track_ids, with_songs=True)}
 
 
