@@ -9,7 +9,8 @@ part of it:
 - Every download commit hashed all of the pool's `<music>/library.json` to
   check nobody else had written it, then read its podcast section again.
 
-HTTP reuses what SQLite committed. The pool verifies the file once and avoids a separate podcast read.
+HTTP reuses what SQLite committed. The pool verifies the file contents and
+avoids a separate podcast read.
 
 ## Library HTTP: answer from the committed source
 
@@ -98,11 +99,18 @@ lock. The byte count only chooses how to read the file:
   needs neither JSON parsing nor a podcast read. A mismatch rewinds the same
   descriptor and parses and hashes the changed bytes together.
 
-Cloud sync validates the current digest against the one captured at the start
-of the operation. It selects the podcast fields from the same descriptor
-and leaves its incoming podcasts in place when the file is absent. The pool
-rejects a stale revision before publication. The old publication offset and
-the unused `Downloader.save_library()` were removed.
+Cloud sync captures the digest and detached podcast fields when it opens its
+initial snapshot. On return it verifies the current file's digest before
+publication, then uses the captured podcasts. It keeps the incoming podcasts
+if the original file was absent. Replacement needs no JSON parse at this
+stage, even when a stale file now contains malformed JSON. This removes the
+separate podcast parser, its publication offset and the unused
+`Downloader.save_library()`.
+
+A download commit stages membership changes in a shallow list copy only
+when reusing the resident model. It publishes that model after the file
+replacement succeeds. A failed rename therefore cannot leave either a
+pending addition or a replacement in the next unrelated commit.
 
 A writer that finishes an edit before the pool opens the file is visible even
 when it restores timestamps and preserves the byte count. Cooperating
@@ -163,10 +171,16 @@ including portable exports. The samples overlapped. The proof improvement is
 one shared encoding pass inside the transaction; the pre-edit validation and
 portable export still traverse the library.
 
+A separate cloud conflict probe opened a 50,000-track snapshot, rewrote one
+title in the portable file, then attempted the stale replacement five times.
+Median time under the replacement path was 28.0 ms on the base, 331.8 ms on
+`8ac8e3b5` with parsing before verification, and 27.6 ms with digest-only
+verification. Each attempt returned 409 and preserved the changed file.
+
 ## Reproduce
 
 ```sh
 venv/bin/python scripts/benchmark_committed_reads.py --reference origin/main
 venv/bin/python -m pytest -q tests/test_library_incremental.py tests/test_library_revision.py \
-  tests/test_pool_library_save.py tests/test_pool_podcast_reader.py
+  tests/test_pool_library_save.py tests/test_api_sync_task.py
 ```

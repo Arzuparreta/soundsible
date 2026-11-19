@@ -484,7 +484,7 @@ Closes the read side of pending item 2. Contract, measurements and limits in
 | Conditional `GET /api/library` fingerprinting the whole model | Closed: answers from the committed public source (one SQLite row) |
 | Two full fingerprints per successful delta | Closed: checks only the rows and headers it sends against committed hashes |
 | ODST reading all of `library.json` (digest, then podcasts) on each download commit | The digest still reads the bytes once. A match reuses the resident podcasts. A changed size uses one combined parse and digest. |
-| Coordination of the ODST and Station writers of `<music>/library.json` | The existing directory lock covers the pool read and publication. Cloud replacements compare the content digest under that lock. |
+| Coordination of the ODST and Station writers of `<music>/library.json` | The existing directory lock covers the pool read and publication. Cloud replacement verifies its snapshot's digest before reusing its podcasts. A failed download publication leaves the resident model intact. |
 | Search per-query fingerprint, save-side fingerprints, track-edit fingerprints, exports | Still walk the library; unchanged |
 
 Conditional requests and deltas can answer from the committed representation

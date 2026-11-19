@@ -40,16 +40,12 @@ class _HashingReader(io.RawIOBase):
     def __init__(self, raw):
         self.raw = raw
         self.digest = sha256()
-        self.eof = False
 
     def readable(self):
         return True
 
     def readinto(self, buffer):
-        if self.eof:
-            return 0
         count = self.raw.readinto(buffer)
-        self.eof = count == 0
         self.digest.update(memoryview(buffer)[:count])
         return count
 
@@ -57,6 +53,7 @@ class _HashingReader(io.RawIOBase):
 def read_revision(path, parse, *, known: FileRevision | None = None):
     """Return the revision and parsed value from one file descriptor.
 
+    The parser consumes the complete text stream, as json.load does.
     When the digest matches `known`, return that revision and no parsed value.
     Size is only a hint to skip a hash-only pass when the bytes must differ.
     When absent, return neither a revision nor a parsed value.
@@ -73,9 +70,6 @@ def read_revision(path, parse, *, known: FileRevision | None = None):
         hashing = _HashingReader(raw)
         with io.TextIOWrapper(io.BufferedReader(hashing, 64 * 1024), encoding='utf-8') as text:
             value = parse(text)
-            # Some parsers can return before EOF (e.g. malformed podcasts).
-            while text.buffer.read(64 * 1024):
-                pass
             return FileRevision(hashing.digest.digest(), raw.tell()), value
 
 

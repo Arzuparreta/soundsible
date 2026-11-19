@@ -1,4 +1,5 @@
 """The download pool's library.json writer: streamed, and never visible half-written."""
+import os
 import threading
 from unittest.mock import patch
 
@@ -18,9 +19,10 @@ def writer(tmp_path, count=129):
     return target
 
 
-def save(target, expected=None):
+def save(target):
     """Publish the writer's own model against the file as it is now."""
-    target.replace_snapshot(target.library, revision(target.library_path) if expected is None else expected)
+    _, expected = target.read_snapshot()
+    target.replace_snapshot(target.library, expected)
 
 
 @pytest.mark.parametrize('count', [0, 1, 128, 129, 257])
@@ -48,16 +50,6 @@ def test_preserves_disk_podcasts_but_keeps_current_tracks_and_settings(tmp_path)
     assert target.library_path.read_text() == target.library.to_json()
 
 
-def test_corrupt_disk_matches_legacy_empty_podcast_defaults(tmp_path):
-    target = writer(tmp_path)
-    target.library.podcast_episode_cache = {'feed': []}
-    target.library_path.write_text('{invalid')
-    save(target)
-    assert target.library.podcast_subscriptions == []
-    assert target.library.podcast_episode_cache == {}
-    assert target.library_path.read_text() == target.library.to_json()
-
-
 def temporaries(tmp_path):
     return [p.name for p in tmp_path.iterdir() if p.name.startswith('.library.json.')]
 
@@ -65,7 +57,7 @@ def temporaries(tmp_path):
 def test_keeps_symlink_and_permissions(tmp_path):
     target = writer(tmp_path)
     actual = tmp_path / 'actual.json'
-    actual.write_text('old')
+    actual.write_text(library(1).to_json())
     actual.chmod(0o640)
     target.library_path.symlink_to(actual)
     save(target)
@@ -77,11 +69,12 @@ def test_keeps_symlink_and_permissions(tmp_path):
 
 def test_write_error_keeps_previous_file_and_releases_lock(tmp_path):
     target = writer(tmp_path)
-    target.library_path.write_text('previous')
+    previous = library(1).to_json()
+    target.library_path.write_text(previous)
     with patch('shared.atomic_file.os.fsync', side_effect=OSError('disk full')):
         with pytest.raises(OSError, match='disk full'):
             save(target)
-    assert target.library_path.read_text() == 'previous'
+    assert target.library_path.read_text() == previous
     assert not temporaries(tmp_path)
     assert target._lock.acquire(blocking=False)
     target._lock.release()
@@ -96,12 +89,13 @@ def test_encoding_failure_propagates_and_allows_next_save(tmp_path):
         yield '{'
         raise ValueError('encoding failed')
 
-    target.library_path.write_text('previous')
+    previous = library(1).to_json()
+    target.library_path.write_text(previous)
     with patch.object(LibraryMetadata, 'iter_json', broken):
         with pytest.raises(ValueError, match='encoding failed'):
             save(target)
     # A reader never sees the '{' that was already written.
-    assert target.library_path.read_text() == 'previous'
+    assert target.library_path.read_text() == previous
     assert not temporaries(tmp_path)
     save(target)
     assert target.library_path.read_text() == target.library.to_json()
@@ -132,24 +126,20 @@ def test_temporary_failure_propagates_without_losing_lock(tmp_path):
     target._lock.release()
 
 
-def test_model_invalid_tracks_retain_memory_podcasts(tmp_path):
-    target = writer(tmp_path)
-    target.library.podcast_subscriptions = [{'id': 'memory'}]
-    target.library.podcast_episode_cache = {'memory': [1]}
-    target.library_path.write_text('{"tracks":[{}],"podcast_subscriptions":[{"id":"disk"}]}')
-    save(target)
-    assert target.library.podcast_subscriptions == [{'id': 'memory'}]
-    assert target.library.podcast_episode_cache == {'memory': [1]}
-
-
-def test_save_reads_podcasts_without_reconstructing_disk_tracks(tmp_path):
+def test_cloud_replacement_uses_detached_disk_podcasts_without_parsing_again(tmp_path):
+    from shared.downloader import service
     target = writer(tmp_path)
     disk = library(257)
     disk.podcast_subscriptions = [{'id': 'disk'}]
+    disk.podcast_episode_cache = {'disk': {'episodes': [{'title': 'Episode'}]}}
     target.library_path.write_text(disk.to_json())
-    with patch.object(LibraryMetadata, 'from_json', side_effect=AssertionError('model reconstruction')):
-        save(target)
-    assert target.library.podcast_subscriptions == [{'id': 'disk'}]
+    snapshot, token = target.read_snapshot()
+    snapshot.podcast_subscriptions[0]['id'] = 'changed during sync'
+    snapshot.podcast_episode_cache.clear()
+    with patch.object(service, 'read_revision', side_effect=AssertionError('parsed more than once')):
+        target.replace_snapshot(target.library, token)
+    assert target.library.podcast_subscriptions == disk.podcast_subscriptions
+    assert target.library.podcast_episode_cache == disk.podcast_episode_cache
     assert len(target.library.tracks) == 129
 
 
@@ -157,13 +147,14 @@ def test_stale_snapshot_refuses_to_erase_station_edit(tmp_path):
     from shared.library_lifecycle import LibraryPersistenceError
     target = writer(tmp_path, 2)
     save(target)
+    _, token = target.read_snapshot()
     # A separate Station writer edits the file after the pool loaded its model.
     changed = library(2)
     changed.tracks[0].title = 'Station edit'
     from shared.atomic_file import publish, text_pieces
     publish(target.library_path, text_pieces(changed.iter_json()))
     with pytest.raises(LibraryPersistenceError) as error:
-        save(target, target._manifest.digest)
+        target.replace_snapshot(target.library, token)
     assert error.value.status == 409
     assert LibraryMetadata.from_json(target.library_path.read_text()).tracks[0].title == 'Station edit'
     # A targeted acquisition reloads the current pool before adding its result.
@@ -260,17 +251,24 @@ def test_any_other_writer_makes_the_pool_reload_its_file(tmp_path, writer_kind):
     assert saved.podcast_subscriptions == [{'id': 'foreign'}]
 
 
-def test_failed_publication_keeps_the_previous_file_and_model_revision(tmp_path):
+@pytest.mark.parametrize('replacement', [False, True])
+def test_failed_publication_keeps_disk_and_resident_library(tmp_path, replacement):
+    from dataclasses import replace
     target = writer(tmp_path, 2)
     save(target)
-    old = target._manifest.digest, target.library_path.read_bytes()
+    old = target._manifest, target.library_path.read_bytes()
+    original = target.library.tracks[0] if replacement else library(3).tracks[2]
+    failed = replace(original, title='Failed edit', added_at=None)
     with patch('shared.atomic_file.os.replace', side_effect=OSError('rename failed')):
         with pytest.raises(OSError):
-            target.commit_track(library(3).tracks[2])
-    assert old == (target._manifest.digest, target.library_path.read_bytes())
+            target.commit_track(failed)
+    assert old == (target._manifest, target.library_path.read_bytes())
+    assert target.library.to_json().encode() == old[1]
+    assert failed.added_at is None
     target.commit_track(library(4).tracks[3])
-    assert target.library_path.read_text() == target.library.to_json()
-    assert len(target.library.tracks) == 4
+    saved = LibraryMetadata.from_json(target.library_path.read_text())
+    assert [track.id for track in saved.tracks] == [track.id for track in library(2).tracks] + [library(4).tracks[3].id]
+    assert 'Failed edit' not in [track.title for track in saved.tracks]
 
 
 def test_publication_digest_includes_windows_newlines(tmp_path, monkeypatch):
@@ -400,3 +398,44 @@ def test_cloud_replacement_rejects_rewrite_with_indistinguishable_stat(tmp_path,
             target.replace_snapshot(snapshot, token)
     assert error.value.status == 409
     assert target.library_path.read_bytes() == edited
+
+
+def test_cloud_conflict_checks_digest_before_attempting_to_parse(tmp_path):
+    from shared.downloader import service
+    from shared.library_lifecycle import LibraryPersistenceError
+    target = writer(tmp_path, 1)
+    save(target)
+    snapshot, token = target.read_snapshot()
+    changed = b'{"tracks":[' + b'1' * 5000 + b']}'
+    target.library_path.write_bytes(changed)
+    with patch.object(service, 'read_revision', side_effect=AssertionError('parsed a stale file')):
+        with pytest.raises(LibraryPersistenceError) as error:
+            target.replace_snapshot(snapshot, token)
+    assert error.value.status == 409
+    assert target.library_path.read_bytes() == changed
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Windows can deny replacement while the file is open')
+def test_snapshot_model_and_digest_come_from_the_same_open_file(tmp_path, monkeypatch):
+    from shared.downloader import service
+    from shared.library_lifecycle import LibraryPersistenceError
+    target = writer(tmp_path, 1)
+    save(target)
+    original_digest = revision(target.library_path)
+    changed = tmp_path / 'replacement.json'
+    changed.write_text(library(2).to_json())
+    load = service.json.load
+
+    def replace_during_load(stream):
+        changed.replace(target.library_path)
+        return load(stream)
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(service.json, 'load', replace_during_load)
+        snapshot, token = target.read_snapshot()
+    assert token.digest == original_digest
+    assert len(snapshot.tracks) == 1
+    with pytest.raises(LibraryPersistenceError) as error:
+        target.replace_snapshot(snapshot, token)
+    assert error.value.status == 409
+    assert len(LibraryMetadata.from_json(target.library_path.read_text()).tracks) == 2

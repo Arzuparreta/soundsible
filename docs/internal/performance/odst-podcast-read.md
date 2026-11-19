@@ -68,8 +68,9 @@ previous file (see [ODST saves](odst-save-streaming.md#atomic-replacement)).
 
 **Superseded for download commits.** The pool verifies the file's digest and
 reuses its resident podcasts on a match. A changed file supplies its podcasts
-when the pool loads it. Cloud replacement still uses `read_podcast_fields`,
-combined with digest verification. [Committed library reads](committed-library-reads.md#pool-manifest)
+when the pool loads it. Cloud replacement verifies the file against an initial
+snapshot that already carries its podcast fields. The old parser and its
+tests are available at the historical checkout used below. [Committed library reads](committed-library-reads.md#pool-manifest)
 
 Validation: **1,532 Python tests passed**, focused Ruff checks and
 `git diff --check` passed. A small benchmark smoke also verified the additional
