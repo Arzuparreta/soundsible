@@ -1,6 +1,6 @@
 """Publish a file whole or not at all, without holding its content in memory."""
 import io
-from shared.file_revision import publication_lock
+from shared.file_revision import publication_lock, signature
 import os
 from pathlib import Path
 import secrets
@@ -30,7 +30,7 @@ def publish(path: Path, fill: Callable[[BinaryIO], None]) -> None:
             hold.published()
 
 
-def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
+def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> Optional[tuple]:
     """`publish` for a file other people's setups point at.
 
     Where an in-place rewrite used to be, readers now see the previous file or
@@ -39,10 +39,13 @@ def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
     the umask default as `open(path, "w")` gave it. Owner and inode do change.
     If the directory refuses a temporary, the file is rewritten in place as
     before rather than not at all.
+
+    Returns the published file's `signature()`, taken as soon as it is in
+    place, or None if it could not be taken.
     """
     with publication_lock(path) as hold:
         try:
-            _replace_contents_locked(path, fill)
+            return _replace_contents_locked(path, fill)
         finally:
             hold.published()
 
@@ -59,8 +62,8 @@ def _replace_contents_locked(path, fill):
     except PermissionError:
         with open(target, "wb") as handle:
             fill(handle)
-        return
-    _fill_and_rename(fd, temporary, target, fill, mode)
+        return signature(target)
+    return _fill_and_rename(fd, temporary, target, fill, mode)
 
 
 def _create_beside(path: Path) -> Tuple[int, str]:
@@ -130,7 +133,7 @@ def sync_directory(directory: Path) -> None:
 
 
 def _fill_and_rename(fd: int, temporary: str, path: Path,
-                     fill: Callable[[BinaryIO], None], mode: Optional[int]) -> None:
+                     fill: Callable[[BinaryIO], None], mode: Optional[int]) -> Optional[tuple]:
     try:
         with os.fdopen(fd, "wb") as handle:
             fill(handle)
@@ -139,7 +142,10 @@ def _fill_and_rename(fd: int, temporary: str, path: Path,
         if mode is not None:
             os.chmod(temporary, mode)
         os.replace(temporary, path)
+        # Before the directory sync, the slow step another writer could use.
+        published = signature(path)
         sync_directory(path.parent)
+        return published
     except BaseException:
         try:
             os.unlink(temporary)

@@ -246,10 +246,9 @@ class LibraryStore:
                         saved.insert(0, {**entry, "item_id": item_id})
                         save_entries(conn, saved)
                     metadata.add_to_playlist(name, item_id)
-                from shared.library_fingerprint import public_headers
                 # One detached copy of the headers is both stored and proven,
                 # whatever happens to the live model meanwhile.
-                headers = public_headers(metadata)
+                headers = metadata.public_headers()
                 replacement_state: Dict[str, sqlite3.Row] = {}
                 # The date the replaced row carried. A rescan or a lossless
                 # upgrade gives one song a new id; without this it would read as

@@ -96,6 +96,9 @@ def sync_tracks(conn, tracks, replacement_added_at):
             if old is not None:
                 # The first stored date wins, even if the incoming date differs.
                 incoming[-1] = old[-1] if old[-1] is not None else incoming[-1]
+            # The model being saved carries the date actually stored, so the
+            # proof computed from it describes the committed row.
+            track.added_at = incoming[-1]
             if old != tuple(incoming):
                 dirty |= old is None or any(old[i] != incoming[i] for i in catalog_indexes)
                 conn.execute(statement, incoming)

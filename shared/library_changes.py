@@ -82,12 +82,14 @@ def sync_source(conn, metadata, order_changed, headers):
 
 
 def source(conn):
-    row = conn.execute('SELECT s.valid,s.fingerprint,s.ordering,h.hash FROM library_public_source s '
+    row = conn.execute('SELECT s.valid,s.fingerprint,s.ordering,h.hash,EXISTS(SELECT 1 FROM library_tracks) '
+                       'FROM library_public_source s '
                        'LEFT JOIN library_public_headers h ON h.fingerprint=s.fingerprint '
                        'WHERE s.singleton=1').fetchone()
     if row is None or not row[0]:
         return None
-    return {'fingerprint': row[1], 'ordering': row[2], 'headers': row[3], 'cursor': cursor(conn).to_list()}
+    return {'fingerprint': row[1], 'ordering': row[2], 'headers': row[3], 'tracks': bool(row[4]),
+            'cursor': cursor(conn).to_list()}
 
 
 def sync_track_source(conn, metadata, position, changes, previous_values, previous_fingerprint):
@@ -98,7 +100,7 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
     the verified pre-edit source. Both full-model passes remain mandatory.
     Call inside the revision-checked write transaction; errors roll it back.
     """
-    from shared.library_fingerprint import fingerprint, record, row_digest, track_values
+    from shared.library_fingerprint import fingerprint, header_digest, record, row_digest, track_values
     track = metadata.tracks[position]
     before = track.to_public_dict()
     if any(before[name] != value for name, value in changes.items()):
@@ -111,8 +113,10 @@ def sync_track_source(conn, metadata, position, changes, previous_values, previo
                  'hash=excluded.hash,identity=excluded.identity WHERE hash IS NOT excluded.hash OR identity IS NOT excluded.identity',
                  (track.id, row_digest(track_values(track)), str(track.file_hash or track.id or '')))
     conn.execute('UPDATE library_public_source SET valid=1,fingerprint=? WHERE singleton=1', (updated,))
-    # Headers were proven unchanged above; their hash now names the new source.
-    conn.execute('UPDATE library_public_headers SET fingerprint=? WHERE fingerprint=?', (updated, previous_fingerprint))
+    # The check above proved these headers are the committed ones. Writing
+    # their hash also gives a database upgraded before it had one its deltas.
+    conn.execute('INSERT OR REPLACE INTO library_public_headers VALUES (1,?,?)',
+                 (updated, header_digest(metadata.public_headers())))
     record(metadata, updated)
 
 

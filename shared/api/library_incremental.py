@@ -15,7 +15,7 @@ from flask import current_app
 from flask.json.provider import DefaultJSONProvider
 
 from shared.api import library_deltas as history
-from shared.library_fingerprint import TRACK_FIELDS, header_digest, public_headers, public_row_digest
+from shared.library_fingerprint import TRACK_FIELDS, fingerprint, header_digest, public_row_digest, record, recorded
 from shared.database import DatabaseManager
 from shared.loudness import LoudnessStore, annotate_tracks
 from shared.models import LibraryMetadata, Track
@@ -76,6 +76,23 @@ def committed_source(lib):
     return db.public_source() if isinstance(db, DatabaseManager) else None
 
 
+def live_fingerprint(lib, committed):
+    """The live model's fingerprint, without a pass when it is known to be `committed`.
+
+    The save or edit that committed a source records it on the model it
+    published, and so does every full response; a model reloaded from SQLite
+    pays one pass here, recorded, and only then may stand for the committed
+    source. One whose reloaded values differ from what was proven never does,
+    so a committed revision only ever describes a model this process served.
+    """
+    metadata = lib.metadata
+    value = recorded(metadata)
+    if committed is None or value != committed:
+        value = fingerprint(metadata)
+        record(metadata, value)
+    return value
+
+
 def prepare(lib, artwork, dependencies, model_fingerprint=None):
     """Tie the committed public source to the current annotation cursors.
 
@@ -114,7 +131,8 @@ def try_delta(lib, artwork, account, base_revision, dependencies):
     if base is None:
         return None
     state = prepare(lib, artwork, dependencies)
-    if state is None or state['source']['headers'] is None:
+    if (state is None or state['source']['headers'] is None
+            or live_fingerprint(lib, state['source']['fingerprint']) != state['source']['fingerprint']):
         return None
     artwork_ids = artwork.changed_tracks(base['art'], state['art'])
     identities = LoudnessStore().changed_identities(base['loud'], state['loud'])
@@ -136,7 +154,7 @@ def try_delta(lib, artwork, account, base_revision, dependencies):
         if public_row_digest(row) != committed:
             return None
         copied[position] = row
-    headers = public_headers(lib.metadata)
+    headers = lib.metadata.public_headers()
     if header_digest(headers) != state['source']['headers']:
         return None
     upserts = [copied[position] for position in sorted(copied)]

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 from shared.atomic_file import replace_contents
-from shared.file_revision import publication_lock, read_revision, signature
+from shared.file_revision import HAS_STAT_CHANGE_TIME, publication_lock, read_revision, signature
 from shared.library_lifecycle import LibraryPersistenceError, serialized
 from shared.models import LibraryMetadata
 from shared.library_json import LibraryJSONWriter
@@ -77,22 +77,23 @@ class Downloader:
         return library, token
 
     def _unread_revision(self, hold):
-        """The digest last seen, if the file provably has not changed since; else None.
+        """The digest last seen, if the file provably has not changed since; else _UNKNOWN.
 
         Nothing published in this directory since (same generation) rules out
         cooperating writers (the Station's exports, another pool); an
         unchanged signature rules out the others.
         """
         seen = getattr(self, '_seen', None)
-        if (seen is not None and hold.generation is not None and seen.generation == hold.generation
+        if (HAS_STAT_CHANGE_TIME and seen is not None and hold.generation is not None
+                and seen.generation == hold.generation
                 and seen.signature is not None and seen.signature == signature(self.library_path)):
             return seen.digest
-        return None
+        return _UNKNOWN
 
     def _revision_locked(self, hold):
         """The manifest's content digest, reading its bytes only if they may have changed."""
         token = self._unread_revision(hold)
-        if token is None:
+        if token is _UNKNOWN:
             signature_, token, _ = read_revision(self.library_path)
             self._seen = _Seen(hold.generation, signature_, token)
         return token
@@ -102,7 +103,10 @@ class Downloader:
         """Add acquired audio to the latest pool manifest, never a stale snapshot."""
         with self._lock, publication_lock(self.library_path) as hold:
             current = getattr(self, '_manifest_revision', _UNKNOWN)
-            if not hasattr(self, 'library') or self._unread_revision(hold) != current:
+            observed = _UNKNOWN
+            if current is not _UNKNOWN and hasattr(self, 'library'):
+                observed = self._unread_revision(hold) if HAS_STAT_CHANGE_TIME else self._revision_locked(hold)
+            if observed is _UNKNOWN or observed != current:
                 # One pass: hash and parse together, adopting the file unless
                 # it is the one the model came from. Another writer's file,
                 # podcasts included, is then the base; otherwise in-memory
@@ -162,11 +166,10 @@ class Downloader:
         # Same portable bytes, without a second full JSON document in RAM.
         # Streamed into a temporary: the Station reads this file meanwhile.
         writer = LibraryJSONWriter(self.library)
-        replace_contents(self.library_path, writer)
+        published = replace_contents(self.library_path, writer)
         self._manifest_revision = writer.digest.digest()
-        # Remember the file only while the path still names the bytes just
-        # written: a writer that replaced or rewrote it since the rename makes
-        # the next commit read it instead.
-        observed = signature(self.library_path)
-        self._seen = (_Seen(hold.generation, observed, self._manifest_revision)
-                      if observed is not None and observed[:4] == writer.written else None)
+        # Remember the file only if the path named the bytes just written
+        # when they landed (same device, inode, size and modification time);
+        # a later write by anyone changes the signature the next commit sees.
+        self._seen = (_Seen(hold.generation, published, self._manifest_revision)
+                      if published is not None and published[:4] == writer.written else None)

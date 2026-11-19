@@ -1,15 +1,13 @@
 """Bounded fingerprints of mutable library models; no retained encoded data."""
-from copy import deepcopy
 from dataclasses import fields
 from hashlib import sha256
 from pickle import Pickler
 from io import BytesIO
 from operator import attrgetter, itemgetter
 
-from shared.models import LibraryMetadata, Track
+from shared.models import PUBLIC_HEADER_FIELDS as HEADER_FIELDS, LibraryMetadata, Track
 
 TRACK_FIELDS = tuple(f.name for f in fields(Track) if f.name not in {"local_path", "local_mtime_ns"})
-HEADER_FIELDS = ("version", "playlists", "settings", "last_updated", "podcast_subscriptions", "podcast_episode_cache")
 track_values = attrgetter(*TRACK_FIELDS)
 _public_values = itemgetter(*TRACK_FIELDS)
 
@@ -93,13 +91,8 @@ def public_row_digest(row: dict) -> bytes:
     return row_digest(_public_values(row))
 
 
-def public_headers(metadata: LibraryMetadata) -> dict:
-    """A detached copy of the public header fields, in `HEADER_FIELDS` order."""
-    return {name: deepcopy(getattr(metadata, name)) for name in HEADER_FIELDS}
-
-
 def header_digest(headers: dict) -> str:
-    """Hash of a `public_headers()` mapping."""
+    """Hash of a `LibraryMetadata.public_headers()` mapping."""
     return sha256(encoded_values(tuple(headers[name] for name in HEADER_FIELDS))).hexdigest()
 
 

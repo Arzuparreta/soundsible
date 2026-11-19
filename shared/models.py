@@ -134,6 +134,8 @@ class Track:
 
 
 _TRACK_FIELDS = frozenset(item.name for item in fields(Track))
+PUBLIC_HEADER_FIELDS = ("version", "playlists", "settings", "last_updated",
+                        "podcast_subscriptions", "podcast_episode_cache")
 _PUBLIC_TRACK_FIELDS = tuple(item.name for item in fields(Track)
                              if item.name not in {"local_path", "local_mtime_ns"})
 
@@ -210,17 +212,25 @@ class LibraryMetadata:
         """
         return self._public_fields([track.to_public_dict() for track in self.tracks])
 
-    def _public_fields(self, tracks: Any) -> Dict[str, Any]:
-        # One definition of the public keys and their order, for both encoders.
+    def public_headers(self) -> Dict[str, Any]:
+        """Detached public fields other than tracks, in `PUBLIC_HEADER_FIELDS` order.
+
+        The one projection every consumer uses: responses, exports, the
+        canonical save and its proofs.
+        """
         return {
             "version": self.version,
-            "tracks": tracks,
             "playlists": deepcopy(self.playlists),
             "settings": deepcopy(self.settings),
             "last_updated": self.last_updated,
             "podcast_subscriptions": deepcopy(list(self.podcast_subscriptions)),
             "podcast_episode_cache": deepcopy(dict(self.podcast_episode_cache)),
         }
+
+    def _public_fields(self, tracks: Any) -> Dict[str, Any]:
+        # The public keys in document order: tracks come second.
+        version, *rest = self.public_headers().items()
+        return dict([version, ("tracks", tracks), *rest])
 
     def to_json(self, indent: int = 2) -> str:
         """Serialize portable library metadata to JSON."""

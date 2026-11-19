@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from shared.downloader.service import Downloader
-from shared.file_revision import publication_lock, revision
+from shared.file_revision import HAS_STAT_CHANGE_TIME, publication_lock, revision
 from shared.models import LibraryMetadata
 from scripts.benchmark_library_export import library
 
@@ -235,6 +235,7 @@ def test_unchanged_manifest_does_not_rebuild_the_resident_library(tmp_path, monk
     assert len(target.library.tracks) == 2
 
 
+@pytest.mark.skipif(not HAS_STAT_CHANGE_TIME, reason='Fast path requires POSIX change time')
 def test_own_publication_is_neither_hashed_nor_read_again(tmp_path, monkeypatch):
     from shared.downloader import service
     target = writer(tmp_path, 257)
@@ -376,6 +377,7 @@ def test_unreadable_signature_after_publication_is_only_a_cache_miss(tmp_path, m
     assert len(LibraryMetadata.from_json(target.library_path.read_text()).tracks) == 3
 
 
+@pytest.mark.skipif(not HAS_STAT_CHANGE_TIME, reason='Fast path requires POSIX change time')
 def test_commit_after_a_station_export_reads_the_file_once(tmp_path):
     from shared.downloader import service
     from shared.atomic_file import publish, text_pieces
@@ -402,3 +404,77 @@ def test_first_cloud_sync_keeps_the_snapshot_podcasts(tmp_path):
     saved = LibraryMetadata.from_json(target.library_path.read_text())
     assert saved.podcast_subscriptions == [{'id': 'remote'}]
     assert saved.podcast_episode_cache == {'remote': {'episodes': [{'title': 'One'}]}}
+
+
+def test_pools_started_before_the_manifest_exists_keep_each_others_tracks(tmp_path):
+    first, second = writer(tmp_path, 0), writer(tmp_path, 0)
+    first.library, second.library = first._load_library(), second._load_library()
+    assert first._manifest_revision is None and second._manifest_revision is None
+    first.commit_track(library(2).tracks[0])
+    second.commit_track(library(2).tracks[1])
+    saved = LibraryMetadata.from_json((tmp_path / 'library.json').read_text())
+    assert [track.id for track in saved.tracks] == [track.id for track in library(2).tracks]
+
+
+def test_same_size_rewrite_with_restored_mtime_after_publication_is_seen(tmp_path, monkeypatch):
+    import os
+    from shared import atomic_file
+    target = writer(tmp_path, 2)
+    save(target)
+    original = atomic_file.sync_directory
+
+    def edited_in_place(directory):
+        # Equal length, written in place, modification time put back.
+        before = os.stat(target.library_path)
+        text = target.library_path.read_text()
+        target.library_path.write_text(text.replace('"Song 0', '"Edit 0', 1))
+        os.utime(target.library_path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        original(directory)
+
+    monkeypatch.setattr(atomic_file, 'sync_directory', edited_in_place)
+    target.commit_track(library(3).tracks[2])
+    monkeypatch.setattr(atomic_file, 'sync_directory', original)
+    target.commit_track(library(4).tracks[3])
+    saved = LibraryMetadata.from_json(target.library_path.read_text())
+    assert saved.tracks[0].title.startswith('Edit 0')
+
+
+def test_without_stat_change_time_a_matching_signature_does_not_skip_the_digest(tmp_path, monkeypatch):
+    from shared.downloader import service
+    target = writer(tmp_path, 2)
+    save(target)
+    seen = target._seen.signature
+    monkeypatch.setattr(service, 'HAS_STAT_CHANGE_TIME', False)
+    monkeypatch.setattr(service, 'signature', lambda _: seen)
+
+    # On Windows the stat fields can all match after an in-place rewrite.
+    original = target.library_path.read_bytes()
+    edited = original.replace(b'"Song 0', b'"Edit 0', 1)
+    assert edited != original
+    target.library_path.write_bytes(edited)
+    target.commit_track(library(3).tracks[2])
+
+    saved = LibraryMetadata.from_json(target.library_path.read_text())
+    assert saved.tracks[0].title.startswith('Edit 0')
+
+
+@pytest.mark.skipif(not HAS_STAT_CHANGE_TIME, reason='Fast path requires POSIX change time')
+def test_failed_generation_write_never_fails_the_publication(tmp_path, monkeypatch):
+    import errno
+    from shared import file_revision
+    from shared.downloader import service
+    target = writer(tmp_path, 2)
+    save(target)
+
+    def full(*_):
+        raise OSError(errno.ENOSPC, 'No space left on device')
+
+    monkeypatch.setattr(file_revision, '_store', full)
+    target.commit_track(library(3).tracks[2])
+    assert target._seen.generation is None
+    monkeypatch.undo()
+    assert LibraryMetadata.from_json(target.library_path.read_text()).tracks[-1].id == library(3).tracks[2].id
+    # Unknown generation: the next commit reads the file rather than trust it.
+    with patch.object(service, 'read_revision', wraps=service.read_revision) as reads:
+        target.commit_track(library(4).tracks[3])
+    assert reads.call_count == 1

@@ -15,7 +15,8 @@ instance, and a Downloader on that same file.
   changed one title; every delta is applied and compared with a full response.
 - pool_commit_*: Downloader.commit_track when only the pool wrote the file.
 - cycle_commit_*: the same commit right after the account saved and exported
-  into that file, as each download does on a single-account instance.
+  into that file, as each download does on a single-account instance;
+  cycle_total_ms also includes that save and export.
 
 Bytes come from /proc/self/io `rchar`: every read the commit made, page-cache
 hits included.
@@ -116,8 +117,9 @@ def measure(code, count, repeats, scratch):
             extra = iter(library(count + 4 * repeats + 2).tracks[count:])
 
             def commits(station_exports):
-                times, reads = [], []
+                times, reads, cycles = [], [], []
                 for _ in range(repeats):
+                    cycle = time.perf_counter()
                     if station_exports:
                         # As the download pump does: the account admits the
                         # previous download and exports into the same file.
@@ -126,12 +128,14 @@ def measure(code, count, repeats, scratch):
                     before, started = read_bytes(), time.perf_counter()
                     pool.commit_track(next(extra))
                     times.append((time.perf_counter() - started) * 1000)
+                    cycles.append((time.perf_counter() - cycle) * 1000)
                     reads.append(read_bytes() - before)
-                return round(statistics.median(times), 2), statistics.median(reads)
+                return round(statistics.median(times), 2), statistics.median(reads), round(statistics.median(cycles), 2)
 
             pool.commit_track(next(extra))
-            result['pool_commit_ms'], result['pool_commit_read_bytes'] = commits(False)
-            result['cycle_commit_ms'], result['cycle_commit_read_bytes'] = commits(True)
+            result['pool_commit_ms'], result['pool_commit_read_bytes'], _ = commits(False)
+            (result['cycle_commit_ms'], result['cycle_commit_read_bytes'],
+             result['cycle_total_ms']) = commits(True)
             saved = LibraryMetadata.from_json(pool.library_path.read_text())
             assert saved.podcast_episode_cache == podcasts
             result['manifest_bytes'] = pool.library_path.stat().st_size

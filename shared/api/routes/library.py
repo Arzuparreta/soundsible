@@ -142,34 +142,26 @@ def _annotation_revisions(artwork):
     return artwork.public_revision(), LoudnessStore().public_revision()
 
 
-def _held_revision(lib, user_id, dependencies, *, live):
-    """The cached revision that the conditional request already holds, or None.
+def _conditional(lib, artwork, user_id):
+    """`(dependencies, held revision or None)` for a conditional request.
 
-    Without `live`, only the committed source's: one SQLite row, current
-    whatever a writer is doing to the live model right now. With it, also the
-    live model's own revision, served when it differed from the committed
-    source (unsaved edits, or a reload that normalized values). That costs a
-    pass over the library, skipped when this model is already known to be the
-    committed source because it would only repeat the first key.
+    Keyed by the live model's fingerprint, which costs one SQLite row while
+    the model is known to be the committed source, and a pass over the
+    library otherwise (an unsaved edit, a reload not yet verified).
+    Annotations matter only with tracks; while the model is the committed
+    source, that source says whether it has any, whatever a writer is doing
+    to the live model.
     """
     from shared.api import library_incremental
-    from shared.api.library_revision import fingerprint, validator_key, validators
-    from shared.library_fingerprint import record, recorded
+    from shared.api.library_revision import validator_key, validators
 
     source = library_incremental.committed_source(lib)
     committed = source["fingerprint"] if source else None
-    candidates = [committed] if committed and not live else []
-    if live and (committed is None or recorded(lib.metadata) != committed):
-        current = fingerprint(lib.metadata)
-        if current == committed:
-            record(lib.metadata, current)
-        else:
-            candidates.append(current)
-    for value in candidates:
-        cached = validators.get(validator_key(user_id, value, dependencies))
-        if cached and request.if_none_match.contains_weak(cached):
-            return cached
-    return None
+    current = library_incremental.live_fingerprint(lib, committed)
+    has_tracks = source["tracks"] if current == committed else bool(lib.metadata.tracks)
+    dependencies = _annotation_revisions(artwork) if has_tracks else ()
+    cached = validators.get(validator_key(user_id, current, dependencies))
+    return dependencies, cached if cached and request.if_none_match.contains_weak(cached) else None
 
 
 @library_bp.route("/api/library", methods=["GET"])
@@ -193,12 +185,13 @@ def get_library():
     user_id = current_user_id() or ""
     dependencies = None
     try:
-        # Empty manifests have no annotation dependencies or lookup cost.
-        dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
         if request.if_none_match:
-            held = _held_revision(lib, user_id, dependencies, live=False)
+            dependencies, held = _conditional(lib, artwork, user_id)
             if held:
                 return _library_response(Response(), held)
+        else:
+            # Empty manifests have no annotation dependencies or lookup cost.
+            dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
     except Exception:
         # An unavailable dependency or unsupported model disables only the
         # shortcut. Loudness remains best effort, just as on the full path.
@@ -213,22 +206,16 @@ def get_library():
         except Exception:
             logger.debug("Incremental library proof unavailable; using full comparison", exc_info=True)
 
-    if request.if_none_match and dependencies is not None:
-        # Only now, when no committed answer exists, walk the live model.
-        try:
-            held = _held_revision(lib, user_id, dependencies, live=True)
-            if held:
-                return _library_response(Response(), held)
-        except Exception:
-            dependencies = None
-
-    payload = lib.metadata.to_public_dict()
+    metadata = lib.metadata
+    payload = metadata.to_public_dict()
     snapshot_fingerprint = None
     if dependencies is not None:
         try:
             # Cache under the actual detached content, not the earlier mutable
             # model. A concurrent metadata edit then cannot mislabel this ETag.
             snapshot_fingerprint = fingerprint(payload)
+            # Record the hint on the model that produced the snapshot.
+            record(metadata, snapshot_fingerprint)
         except Exception:
             pass
     loudness_ok = annotate_tracks(payload.get("tracks") or [])
@@ -241,9 +228,6 @@ def get_library():
     if snapshot_fingerprint is not None and loudness_ok is True:
         try:
             incremental_state = library_incremental.prepare(lib, artwork, dependencies, snapshot_fingerprint)
-            if incremental_state is not None:
-                # The copy took no yield: the live model was this source too.
-                record(lib.metadata, snapshot_fingerprint)
         except Exception:
             logger.debug("Canonical public source unavailable", exc_info=True)
     response = None

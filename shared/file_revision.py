@@ -12,6 +12,9 @@ import weakref
 _guard = threading.Lock()
 _locks = weakref.WeakValueDictionary()
 _local = threading.local()
+# Windows's st_ctime is creation time, so it cannot detect a rewrite that
+# preserves the file size and restores its modification time.
+HAS_STAT_CHANGE_TIME = os.name != 'nt'
 
 
 def revision(path):
@@ -94,19 +97,25 @@ class Hold:
             self.generation = None
 
     def published(self):
-        """Count one publication made under this hold."""
+        """Count one publication made under this hold. Never raises."""
         handle = self._handle
         try:
             handle.seek(1)
             stored = handle.read(8)
-            value = int.from_bytes(stored if len(stored) == 8 else os.urandom(8), 'little')
-            # The handle appends: cut back to the locked byte, then append.
-            handle.truncate(1)
-            handle.write(((value + 1) % 2**64).to_bytes(8, 'little'))
-            handle.flush()
-            self.generation = (value + 1) % 2**64
+            value = (int.from_bytes(stored if len(stored) == 8 else os.urandom(8), 'little') + 1) % 2**64
+            _store(handle, value)
+            self.generation = value
         except OSError:
+            # Whatever reached the file, it is not a generation anyone saw.
             self.generation = None
+
+
+def _store(handle, value):
+    # The handle is unbuffered and appends: nothing is left for close() to
+    # retry, and cutting back to the locked byte puts the counter after it.
+    handle.truncate(1)
+    if handle.write(value.to_bytes(8, 'little')) != 8:
+        raise OSError('Short write of the publication generation')
 
 
 @contextmanager
@@ -132,7 +141,7 @@ def publication_lock(path):
             yield held[key]
             return
         parent.mkdir(parents=True, exist_ok=True)
-        with (parent / '.soundsible-write.lock').open('a+b') as handle:
+        with (parent / '.soundsible-write.lock').open('a+b', buffering=0) as handle:
             if handle.tell() == 0:
                 handle.write(b'0')
                 handle.flush()

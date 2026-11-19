@@ -10,7 +10,7 @@ from shared.api import library_revision as revisions
 from shared.api.library_revision import validators
 from shared.artwork import artwork_store
 from shared.database import DatabaseManager
-from shared.library_fingerprint import fingerprint, public_headers
+from shared.library_fingerprint import fingerprint
 from shared.loudness import LoudnessStore, LoudnessMeasurement
 from shared.loudness.store import reset_connections, _connect
 from shared.models import LibraryMetadata, Track
@@ -110,6 +110,7 @@ def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkey
         patch.setattr(route, 'compact_signature', lambda *_: pytest.fail('full hashing'), raising=False)
         patch.setattr(LoudnessStore, 'measured', lambda _: pytest.fail('full loudness scan'))
         patch.setattr(revisions, 'fingerprint', lambda _: pytest.fail('full model fingerprint'))
+        patch.setattr(incremental, 'fingerprint', lambda _: pytest.fail('full model fingerprint'))
         response = get_delta(client, first)
     assert response.status_code == 200
     delta = response.get_json()
@@ -121,7 +122,7 @@ def test_partial_delta_equals_full_and_only_copies_changed_rows(endpoint, monkey
     assert delta['revision'] == full.headers['ETag'][3:-1]
     with monkeypatch.context() as patch:
         patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('warm 304 copied library'))
-        patch.setattr(revisions, 'fingerprint', lambda _: pytest.fail('warm 304 hashed the library'))
+        patch.setattr(incremental, 'fingerprint', lambda _: pytest.fail('warm 304 hashed the library'))
         assert client.get('/api/library', headers={'If-None-Match': full.headers['ETag']}).status_code == 304
 
 
@@ -182,37 +183,33 @@ def test_unprovable_or_large_changes_fall_back(endpoint, change):
 
 
 def test_unsaved_edits_never_travel_under_a_committed_revision(endpoint, monkeypatch):
-    client, lib, route = endpoint
+    client, lib, _ = endpoint
     first = client.get('/api/library?delta=1')
-    committed = first.get_json()
     lib.metadata.tracks[0].title = 'Unsaved'
     with monkeypatch.context() as patch:
         # Nothing was committed: the client is current, without a pass over
         # the live model.
-        patch.setattr(revisions, 'fingerprint', lambda _: pytest.fail('hashed the live model'))
+        patch.setattr(incremental, 'fingerprint', lambda _: pytest.fail('hashed the live model'))
         assert get_delta(client, first).status_code == 304
     # A fresh client sees the live model, under its own revision.
     fresh = client.get('/api/library')
     assert fresh.get_json()['tracks'][0]['title'] == 'Unsaved'
     assert fresh.headers['ETag'] != first.headers['ETag']
-    # A committed change elsewhere travels alone, as committed.
+    assert client.get('/api/library', headers={'If-None-Match': fresh.headers['ETag']}).status_code == 304
+    # A committed change while the live model differs from it is never sent
+    # as a delta: rows from that model are not the committed ones.
     saved = deepcopy(lib.metadata)
-    saved.tracks[0].title = committed['tracks'][0]['title']
+    saved.tracks[0].title = first.get_json()['tracks'][0]['title']
     saved.tracks[1].title = 'Saved'
     lib.db.replace_library(saved)
     lib.metadata.tracks[1].title = 'Saved'
+    response = get_delta(client, first)
+    assert 'tracks' in response.get_json() and response.get_json()['tracks'][0]['title'] == 'Unsaved'
+    # Once saved, the same client gets a delta again.
+    lib.db.replace_library(lib.metadata)
     delta = get_delta(client, first).get_json()
     assert delta['kind'] == 'delta'
-    assert [row['id'] for row in delta['upserts']] == ['1']
-    expected = deepcopy(committed)
-    expected['tracks'][1]['title'] = 'Saved'
-    assert apply(committed, delta) == expected
-    # A committed row whose live copy differs is never sent under its hash.
-    saved.tracks[0].title = 'Committed'
-    lib.db.replace_library(saved)
-    response = get_delta(client, first)
-    assert 'tracks' in response.get_json()
-    assert response.get_json()['tracks'][0]['title'] == 'Unsaved'
+    assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
 
 
 def test_unsaved_header_edit_falls_back_to_the_full_response(endpoint):
@@ -344,7 +341,7 @@ def test_lightweight_bases_have_count_ttl_and_payload_bounds(endpoint, monkeypat
     account = current_user_id() or ''
     proof = incremental.load_base(account, first.headers['ETag'][3:-1])
     assert proof and 'tracks' not in proof and 'Title 0' not in str(proof)
-    headers = public_headers(lib.metadata)
+    headers = lib.metadata.public_headers()
     for i in range(8): incremental.remember(account, str(i), proof, headers)
     with incremental.history.connection() as db:
         assert db.execute('SELECT COUNT(*) FROM incremental_bases WHERE account=?', (account,)).fetchone()[0] == 4
@@ -527,3 +524,55 @@ def test_live_header_edit_during_a_save_is_neither_stored_nor_certified(endpoint
     delta = get_delta(client, first).get_json()
     assert delta['kind'] == 'delta' and 'late' not in delta['fields'].get('settings', {})
     assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
+
+
+def test_client_holding_a_live_revision_still_gets_its_304(endpoint, monkeypatch):
+    client, lib, _ = endpoint
+    client.get('/api/library?delta=1')
+    lib.metadata.tracks[0].title = 'Unsaved'
+    live = client.get('/api/library')
+    with monkeypatch.context() as patch:
+        patch.setattr(LibraryMetadata, 'to_public_dict', lambda _: pytest.fail('full copy for a current client'))
+        assert client.get('/api/library', headers={'If-None-Match': live.headers['ETag']}).status_code == 304
+
+
+def test_reloaded_model_whose_values_differ_from_the_proof_is_never_committed(endpoint):
+    client, lib, _ = endpoint
+    first = client.get('/api/library')
+    # Stored values that the still-valid proof does not describe, as when a
+    # save's values are normalized on the way into SQLite.
+    with lib.db._get_connection() as db:
+        db.execute("UPDATE tracks SET title='Stored differently' WHERE id='0'")
+        db.execute('UPDATE library_public_source SET valid=1')
+        db.commit()
+    lib.metadata = lib.db.load_library_metadata()
+    response = client.get('/api/library', headers={'If-None-Match': first.headers['ETag']})
+    assert response.status_code == 200
+    assert response.get_json()['tracks'][0]['title'] == 'Stored differently'
+
+
+@pytest.mark.parametrize('pending', ['cleared', 'first_track'])
+def test_committed_revalidation_ignores_whether_the_live_model_is_empty(endpoint, pending):
+    client, lib, _ = endpoint
+    if pending == 'first_track':
+        lib.metadata.tracks.clear()
+        lib.db.replace_library(lib.metadata)
+    first = client.get('/api/library')
+    if pending == 'cleared':
+        lib.metadata.tracks.clear()
+    else:
+        lib.metadata.tracks.append(model(1).tracks[0])
+    # Nothing was committed: the committed holder stays current.
+    assert client.get('/api/library', headers={'If-None-Match': first.headers['ETag']}).status_code == 304
+
+
+def test_saved_model_carries_the_date_sqlite_keeps(endpoint):
+    client, lib, _ = endpoint
+    lib.metadata.tracks[0].added_at = '2020-01-01T00:00:00'
+    lib.db.replace_library(lib.metadata)
+    legacy = deepcopy(lib.metadata)
+    legacy.tracks[0].added_at = None  # As a manifest from before dates.
+    lib.db.replace_library(legacy)
+    assert legacy.tracks[0].added_at == '2020-01-01T00:00:00'
+    stored = lib.db.load_library_metadata()
+    assert lib.db.public_source()['fingerprint'] == fingerprint(stored) == fingerprint(legacy)
