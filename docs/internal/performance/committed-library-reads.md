@@ -42,9 +42,13 @@ while SQLite still reports that revision. Only an exact match with the journal
 fingerprint can use the journal for deltas. The writer also carries the first
 stored `added_at` back to the saved model.
 
-If the proof differs after a reload, a label edit can use the full writer
-after verifying that the live model matches a fresh SQLite snapshot. This
-lets older imports be edited without certifying unrelated unsaved changes.
+If the proof differs after a reload, a label edit first verifies the live
+model against the fingerprint recorded with the SQLite revision. It then
+uses the original stored credits, so inferred catalog names never become
+credits in SQLite as a side effect of the edit. If the stored snapshot
+matches the journal, the writer updates only the declared row. The full
+writer can rebuild the proof when stored values still differ from it,
+for example when SQLite converted an integral duration to an integer.
 
 - **Conditional request.** A verified fingerprint that matches the
   committed source can revalidate a revision of that source without a new

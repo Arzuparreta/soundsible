@@ -60,7 +60,12 @@ def test_failed_edit_never_leaks_into_live_model(manager, monkeypatch):
     assert manager.db.load_library_metadata().tracks[0].title == before.tracks[0].title
 
 
-def test_undeclared_unsaved_changes_are_not_committed(manager):
+@pytest.mark.parametrize('reloaded', [False, True])
+def test_undeclared_unsaved_changes_are_not_committed(manager, reloaded):
+    if reloaded:
+        manager.metadata.tracks[0].artists = None
+        assert manager._save_metadata()
+        manager._reload_canonical()
     manager.metadata.tracks[1].title = 'Unrelated dirty edit'
     with pytest.raises(LibraryPersistenceError):
         manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': 'Declared'})
@@ -151,7 +156,29 @@ def test_edit_repairs_proof_when_reloaded_legacy_values_are_normalized(manager, 
     assert manager.patch_track_metadata(track.id, {'title': 'After normalization'})
     stored = manager.db.load_library_metadata()
     assert stored.get_track_by_id(track.id).title == 'After normalization'
-    assert manager.db.public_source()['fingerprint'] == fingerprint(stored)
+    flat, _ = manager.db.load_library_snapshot(project_artists=False)
+    assert manager.db.public_source()['fingerprint'] == fingerprint(flat)
+
+
+def test_legacy_artist_edit_updates_only_the_declared_track(manager, monkeypatch):
+    from shared.sqlite_changes import Cursor, changes_since
+
+    for track in manager.metadata.tracks:
+        track.artists = None
+    track_id = manager.metadata.tracks[0].id
+    assert manager._save_metadata()
+    manager._reload_canonical()
+    assert manager.metadata.tracks[0].artists == ['Artist 0']
+    previous = Cursor.parse(manager.db.public_source()['cursor'])
+    monkeypatch.setattr(manager.db, 'replace_library', lambda *a, **k: pytest.fail('whole-library write'))
+
+    assert manager.patch_track_metadata(track_id, {'artist': 'New artist'})
+    assert manager.metadata.get_track_by_id(track_id).artists == ['New artist']
+    assert manager.metadata.tracks[1].artists == ['Artist 0']
+    current = Cursor.parse(manager.db.public_source()['cursor'])
+    with manager.db._get_connection() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM tracks WHERE artists_json IS NOT NULL').fetchone()[0] == 0
+        assert changes_since(conn, previous, current) == [('track', track_id, 'UPDATE')]
 
 
 def test_external_sql_invalidates_proof_and_uses_canonical_fallback(manager):

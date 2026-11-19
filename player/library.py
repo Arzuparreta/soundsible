@@ -324,54 +324,52 @@ class LibraryManager:
     @serialized
     def patch_track_metadata(self, track_id: str, changes: dict) -> bool:
         """Apply only declared fields; update the live model after durable commit."""
-        from shared.library_fingerprint import fingerprint, record, recorded
+        from shared.library_fingerprint import fingerprint, record, recorded, verified_fingerprint
         from shared.library_lifecycle import LibraryPersistenceError
         allowed = {'title', 'artist', 'album', 'album_artist', 'cover_source', 'metadata_modified_by_user'}
         if not changes or not set(changes) <= allowed:
             raise ValueError('Unsupported track metadata edit')
         self.refresh_if_stale()
-        # External SQL/schema reconciliation may invalidate the proof. Re-read
-        # canonical state and use the established full writer for this edit;
-        # never certify an unverified mutable model as an incremental source.
-        source = self.db.public_source()
-        full_write = source is None
-        if full_write:
-            self._reload_canonical()
         with self._lock:
             metadata = self.metadata
-            track = metadata.get_track_by_id(track_id) if metadata else None
-            if track is None:
-                return False
             self.last_save_error = None
             try:
-                before = None if full_write else fingerprint(metadata)
-                if not full_write and before != source['fingerprint']:
-                    # SQLite can normalize a portable value on reload. Repair
-                    # the proof only if the live model equals the saved data.
-                    saved = self.db.load_library_metadata()
-                    if saved is None or recorded(saved) != before:
+                source = self.db.public_source()
+                committed = source['fingerprint'] if source else None
+                before = fingerprint(metadata) if source and metadata is not None else None
+                use_stored = source is None or before != committed
+                if use_stored:
+                    if source is not None and before != verified_fingerprint(metadata, source):
                         raise ValueError('Track edit requires an unchanged canonical library')
-                    metadata = saved
-                    track = metadata.get_track_by_id(track_id)
-                    full_write = True
+                    # The loaded view can contain derived catalog credits.
+                    # Use the original stored values for the edit and proof.
+                    metadata, revision = self.db.load_library_snapshot(project_artists=False)
+                    if revision != self._library_revision:
+                        raise StaleLibraryWrite(self._library_revision, revision)
+                    before = recorded(metadata)
+                track = metadata.get_track_by_id(track_id) if metadata else None
+                if track is None:
+                    return False
                 updated = replace(track, **changes)
                 candidate = replace(metadata, tracks=[updated if item.id == track_id else item
                                                       for item in metadata.tracks])
-                if full_write:
+                if source is None or before != committed:
                     revision = self.db.replace_library(candidate, expected_revision=self._library_revision)
-                    self.metadata = candidate
                 else:
                     revision = self.db.patch_track_metadata(
                         track_id, changes, expected_revision=self._library_revision,
                         previous_fingerprint=before, metadata=candidate)
+                if use_stored:
+                    self._reload_canonical()
+                else:
                     for name, value in changes.items():
                         setattr(track, name, value)
                     record(metadata, recorded(candidate))
+                    self._library_revision = revision
             except Exception as exc:
                 self.last_save_error = 'library_conflict' if isinstance(exc, StaleLibraryWrite) else 'library_storage_unavailable'
                 self._reload_canonical()
                 raise LibraryPersistenceError(self.last_save_error) from exc
-            self._library_revision = revision
             after_release(self._export_committed, key=('library-export', id(self)))
             return True
 

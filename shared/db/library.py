@@ -470,8 +470,8 @@ class LibraryStore:
     def load_library_metadata(self) -> Optional[LibraryMetadata]:
         return self.load_library_snapshot()[0]
 
-    def load_library_snapshot(self) -> tuple[Optional[LibraryMetadata], int]:
-        """Read canonical metadata and its revision in the same SQLite snapshot."""
+    def load_library_snapshot(self, *, project_artists: bool = True) -> tuple[Optional[LibraryMetadata], int]:
+        """Read one SQLite revision, with raw credits available to writers."""
         from shared.collection import library_ready
         from shared.library_fingerprint import fingerprint, record
         from shared.library_lifecycle import coordinated
@@ -479,7 +479,7 @@ class LibraryStore:
             upgrade = not library_ready(conn)
             with coordinated() if upgrade else nullcontext():
                 conn.execute('BEGIN IMMEDIATE' if upgrade else 'BEGIN')
-                metadata, revision = self._read_library_metadata(conn)
+                metadata, revision = self._read_library_metadata(conn, project_artists=project_artists)
                 conn.commit()
         if metadata is not None:
             try:
@@ -490,7 +490,9 @@ class LibraryStore:
                 pass
         return metadata, revision
 
-    def _read_library_metadata(self, conn) -> tuple[Optional[LibraryMetadata], int]:
+    def _read_library_metadata(self, conn, *, project_artists: bool) -> tuple[Optional[LibraryMetadata], int]:
+        from shared.collection import library_ready, sync as sync_collection, attach_ids
+
         conn.row_factory = sqlite3.Row
         state = conn.execute(
             "SELECT * FROM library_state WHERE singleton = 1 AND canonical = 1"
@@ -498,11 +500,15 @@ class LibraryStore:
         if state is None:
             return None, 0
         revision = int(state["revision"])
-        tracks = self._rows_to_tracks(conn, conn.execute("""
+        rows = conn.execute("""
             SELECT t.* FROM tracks t
             JOIN library_tracks lt ON lt.track_id = t.id
             ORDER BY lt.position
-        """).fetchall())
+        """).fetchall()
+        if project_artists:
+            tracks = self._rows_to_tracks(conn, rows)
+        else:
+            tracks = attach_ids(conn, [self._flat_track_from_row(row) for row in rows])
         playlist_rows = conn.execute("""
             SELECT p.name, pt.track_id
             FROM playlists p
@@ -523,7 +529,6 @@ class LibraryStore:
             podcast_subscriptions=json.loads(state["podcast_subscriptions_json"]),
             podcast_episode_cache=json.loads(state["podcast_episode_cache_json"]),
         )
-        from shared.collection import library_ready, sync as sync_collection, attach_ids
         if not library_ready(conn):
             previous_playlists = json.dumps(metadata.playlists, sort_keys=True)
             previous_settings = json.dumps(metadata.settings, sort_keys=True)
