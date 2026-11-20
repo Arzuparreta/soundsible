@@ -375,17 +375,14 @@ class LibraryManager:
                     revision = self.db.patch_track_metadata(
                         track_id, changes, expected_revision=self._library_revision,
                         previous_fingerprint=before, metadata=candidate)
-                if source is None:
+                if source is None or (use_stored and bool({'artist', 'album', 'album_artist'} & changes.keys())):
                     self._reload_canonical()
                 elif use_stored:
                     live_track = live.get_track_by_id(track_id)
                     if live_track is None:
                         self._reload_canonical()
                     else:
-                        live_changes = dict(changes)
-                        if 'artist' in changes:
-                            live_changes['artists'] = self.db.track_projected_artists(track_id, updated.artists)
-                        published = replace(live_track, **live_changes)
+                        published = replace(live_track, **changes)
                         self.metadata = replace(live, tracks=[
                             published if item.id == track_id else item for item in live.tracks
                         ])

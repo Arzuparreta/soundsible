@@ -29,7 +29,7 @@ def load_base(account, revision):
             row = db.execute('SELECT proof FROM incremental_bases WHERE account=? AND revision=? AND created>=?',
                              (account, revision, time.time() - TTL)).fetchone()
             return json.loads(row[0]) if row else None
-    except sqlite3.OperationalError:
+    except sqlite3.DatabaseError:
         return None
 
 

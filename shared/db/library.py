@@ -591,13 +591,17 @@ class LibraryStore:
     def load_library_metadata(self) -> Optional[LibraryMetadata]:
         return self.load_library_snapshot()[0]
 
+    def _needs_collection_upgrade(self) -> bool:
+        from shared.collection import library_ready
+        with self._get_connection() as conn:
+            return not library_ready(conn)
+
     def load_library_snapshot(self, *, project_artists: bool = True) -> tuple[Optional[LibraryMetadata], int]:
         """Read one SQLite revision, with raw credits available to writers."""
-        from shared.collection import library_ready
         from shared.library_lifecycle import coordinated
-        with self._get_connection() as conn:
-            upgrade = not library_ready(conn)
-            with coordinated() if upgrade else nullcontext():
+        upgrade = self._needs_collection_upgrade()
+        with coordinated() if upgrade else nullcontext():
+            with self._get_connection() as conn:
                 conn.execute('BEGIN IMMEDIATE' if upgrade else 'BEGIN')
                 metadata, revision = self._read_library_metadata(conn, project_artists=project_artists)
                 conn.commit()
@@ -606,12 +610,11 @@ class LibraryStore:
     def load_stored_and_projected_fingerprint(self) -> tuple[Optional[LibraryMetadata], int, Optional[str]]:
         """Read raw stored rows and compute the projected fingerprint in one snapshot."""
         from dataclasses import replace
-        from shared.collection import library_ready
         from shared.library_fingerprint import fingerprint
         from shared.library_lifecycle import coordinated
-        with self._get_connection() as conn:
-            upgrade = not library_ready(conn)
-            with coordinated() if upgrade else nullcontext():
+        upgrade = self._needs_collection_upgrade()
+        with coordinated() if upgrade else nullcontext():
+            with self._get_connection() as conn:
                 conn.execute('BEGIN IMMEDIATE' if upgrade else 'BEGIN')
                 stored, revision = self._read_library_metadata(conn, project_artists=False)
                 if stored is None:
@@ -624,12 +627,6 @@ class LibraryStore:
             for track in stored.tracks
         ]
         return stored, revision, fingerprint(replace(stored, tracks=projected_tracks))
-
-    def track_projected_artists(self, track_id: str, fallback: Optional[List[str]] = None) -> Optional[List[str]]:
-        """Read one track's projected catalog artist credits."""
-        with self._get_connection() as conn:
-            credits = self._artist_names_by_track(conn, [track_id]).get(track_id)
-            return credits or fallback
 
     def _read_library_metadata(self, conn, *, project_artists: bool) -> tuple[Optional[LibraryMetadata], int]:
         from shared.collection import library_ready, sync as sync_collection, attach_ids

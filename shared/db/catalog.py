@@ -403,17 +403,19 @@ class CatalogQueries:
     def _artist_names_by_track(conn, track_ids: list[str]) -> Dict[str, List[str]]:
         if not track_ids:
             return {}
-        placeholders = ",".join("?" for _ in track_ids)
-        rows = conn.execute(f"""
-            SELECT ta.track_id, ar.name
-            FROM track_artists ta
-            JOIN artists ar ON ar.id = ta.artist_id
-            WHERE ta.track_id IN ({placeholders})
-            ORDER BY ta.track_id, ta.position
-        """, track_ids).fetchall()
         result: Dict[str, List[str]] = {}
-        for row in rows:
-            result.setdefault(str(row["track_id"]), []).append(str(row["name"]))
+        for offset in range(0, len(track_ids), 500):
+            batch = track_ids[offset:offset + 500]
+            placeholders = ",".join("?" for _ in batch)
+            rows = conn.execute(f"""
+                SELECT ta.track_id, ar.name
+                FROM track_artists ta
+                JOIN artists ar ON ar.id = ta.artist_id
+                WHERE ta.track_id IN ({placeholders})
+                ORDER BY ta.track_id, ta.position
+            """, batch).fetchall()
+            for row in rows:
+                result.setdefault(str(row["track_id"]), []).append(str(row["name"]))
         return result
 
     def _rows_to_tracks(self, conn, rows: list[sqlite3.Row]) -> List[Track]:

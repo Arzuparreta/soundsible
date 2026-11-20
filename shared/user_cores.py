@@ -43,7 +43,8 @@ def _build_user_core(user_id: str) -> _UserCore:
     library.sync_library(silent=True)
 
     def library_held_since(keys):
-        # Read at call time: the manager swaps `metadata` on every reload.
+        # Refresh and read at call time: flat library reads do not reload `metadata`.
+        library.refresh_if_stale()
         metadata = library.metadata
         return library_dates.held_since(keys, metadata.tracks if metadata else ())
 

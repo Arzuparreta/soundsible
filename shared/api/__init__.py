@@ -234,13 +234,14 @@ def _bind_request_user():
     if user_tokens is None:
         user_tokens = []
         g._soundsible_user_tokens = user_tokens
+    user_tokens.append(None)
     user_id = _resolve_request_user_id()
 
     if user_id is None and instance_requires_login() and not _api_request_is_public():
-        user_tokens.append(None)
         return jsonify({"error": "Authentication required", "code": "login_required"}), 401
 
-    user_tokens.append(bind_user(user_id) if user_id else None)
+    if user_id:
+        user_tokens[-1] = bind_user(user_id)
     return None
 
 

@@ -355,3 +355,32 @@ def test_legacy_artist_edit_avoids_redundant_full_reloads(manager, monkeypatch):
     monkeypatch.setattr(manager, '_reload_canonical', lambda *a, **k: pytest.fail('redundant post-commit reload'))
     assert manager.patch_track_metadata(track_id, {'title': 'Single load edit'})
     assert manager.metadata.get_track_by_id(track_id).title == 'Single load edit'
+
+
+@pytest.mark.parametrize('edit', [{'artist': 'Bob'}, {'album_artist': 'Alice'}])
+def test_catalog_display_change_keeps_live_model_aligned_for_subsequent_edits(manager, edit):
+    t0, t1 = manager.metadata.tracks[:2]
+    if 'artist' in edit:
+        t0.artist, t0.artists = 'Alice', None
+        t1.artist, t1.artists = 'alice', None
+    else:
+        t0.artist, t0.album_artist, t0.artists = 'alice', None, None
+    assert manager._save_metadata()
+    manager._reload_canonical()
+    assert manager.patch_track_metadata(t0.id, edit)
+    # A subsequent non-catalog edit must see the updated catalog display names.
+    assert manager.patch_track_metadata(t0.id, {'title': 'Second edit succeeds'})
+    stored = manager.db.load_library_metadata()
+    assert stored.get_track_by_id(t0.id).title == 'Second edit succeeds'
+    assert [t.artists for t in manager.metadata.tracks[:2]] == [t.artists for t in stored.tracks[:2]]
+
+
+def test_artist_names_by_track_chunks_large_batches(tmp_path):
+    from shared.database import DatabaseManager
+
+    db = DatabaseManager(str(tmp_path / 'chunked.db'))
+    meta = library(1100)
+    db.replace_library(meta)
+    with db._get_connection() as conn:
+        credits = db._artist_names_by_track(conn, [track.id for track in meta.tracks])
+    assert len(credits) == 1100

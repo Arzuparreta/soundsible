@@ -20,17 +20,7 @@ def digest(value):
     return sha256(encoded(value)).digest()
 
 
-@contextmanager
-def connection(*, read_only=False):
-    path = get_cache_dir() / 'library-deltas.sqlite3'
-    if read_only:
-        db = sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True, timeout=0.1)
-        try:
-            yield db
-        finally:
-            db.close()
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
+def _open_write_db(path):
     db = sqlite3.connect(path, timeout=0.1)
     try:
         path.chmod(0o600)
@@ -66,6 +56,36 @@ def connection(*, read_only=False):
                     PRIMARY KEY(account, revision));
                 COMMIT;
             ''')
+        return db
+    except BaseException:
+        db.close()
+        raise
+
+
+@contextmanager
+def connection(*, read_only=False):
+    path = get_cache_dir() / 'library-deltas.sqlite3'
+    if read_only:
+        db = sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True, timeout=0.1)
+        try:
+            yield db
+        finally:
+            db.close()
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        db = _open_write_db(path)
+    except sqlite3.DatabaseError as exc:
+        if isinstance(exc, sqlite3.OperationalError):
+            raise
+        # Disposable cache corrupted (e.g., power loss under synchronous=OFF): recreate cleanly.
+        for suffix in ('', '-wal', '-shm'):
+            try:
+                path.with_name(path.name + suffix).unlink(missing_ok=True)
+            except OSError:
+                pass
+        db = _open_write_db(path)
+    try:
         with db:
             yield db
     finally:
