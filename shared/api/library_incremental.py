@@ -23,11 +23,6 @@ PROJECTION = 'sqlite-catalog-v2'
 MIN_TRACK_BYTES = 1 + sum(len(name) + 5 for name in TRACK_FIELDS)
 
 
-def _table(db):
-    db.execute('CREATE TABLE IF NOT EXISTS incremental_bases ('
-               'account TEXT,revision TEXT,created REAL,proof TEXT,PRIMARY KEY(account,revision))')
-
-
 def load_base(account, revision):
     try:
         with history.connection(read_only=True) as db:
@@ -51,7 +46,6 @@ def remember(account, revision, state, digests):
         return
     with history.connection() as db:
         db.execute('BEGIN IMMEDIATE')
-        _table(db)
         db.execute('DELETE FROM incremental_bases WHERE created<?', (time.time() - TTL,))
         db.execute('INSERT INTO incremental_bases VALUES (?,?,?,?) ON CONFLICT(account,revision) '
                    'DO UPDATE SET created=excluded.created,proof=excluded.proof', (account, revision, time.time(), proof))

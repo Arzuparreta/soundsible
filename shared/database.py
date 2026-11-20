@@ -88,7 +88,7 @@ class ConnectionPool:
     def __init__(self, factory, max_size: int):
         self._factory = factory
         self._max_size = max_size
-        self._idle: "queue.Queue" = queue.Queue()
+        self._idle: "queue.LifoQueue" = queue.LifoQueue()
         self._created = 0
         self._available = threading.Condition()
 

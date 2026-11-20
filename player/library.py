@@ -221,32 +221,34 @@ class LibraryManager:
         with self._export_lock:
             started = time.perf_counter()
             source: Optional[Path] = None
-            with hold or nullcontext():
-                if metadata is None:
+            # Published metadata snapshots are never mutated in place by writers,
+            # so hold the lock only long enough to capture the current reference.
+            if metadata is None:
+                with hold or nullcontext():
                     metadata = self.metadata
-                if metadata is None:
-                    return
-                for path in destinations:
-                    key = str(path)
-                    try:
-                        if source is None:
-                            self._atomic_write(path, text_pieces(metadata.iter_json()))
-                            source = path
-                        else:
-                            self._atomic_write(path, copy_of(source))
-                        self._unwritable_paths.discard(key)
-                    except OSError as exc:
-                        if key not in self._unwritable_paths:
-                            self._log(f"Library export not writable, skipping {path}: {exc}")
-                        self._unwritable_paths.add(key)
-                if self.provider and source is None and not shared_pool:
-                    # Nothing local to copy from, so the provider serializes the
-                    # live library itself. Only reachable when the config dir is
-                    # unwritable, where the SQLite commit would not have landed.
-                    try:
-                        self.provider.save_library(metadata)
-                    except Exception as exc:
-                        self._log(f"Remote library export failed: {exc}")
+            if metadata is None:
+                return
+            for path in destinations:
+                key = str(path)
+                try:
+                    if source is None:
+                        self._atomic_write(path, text_pieces(metadata.iter_json()))
+                        source = path
+                    else:
+                        self._atomic_write(path, copy_of(source))
+                    self._unwritable_paths.discard(key)
+                except OSError as exc:
+                    if key not in self._unwritable_paths:
+                        self._log(f"Library export not writable, skipping {path}: {exc}")
+                    self._unwritable_paths.add(key)
+            if self.provider and source is None and not shared_pool:
+                # Nothing local to copy from, so the provider serializes the
+                # live library itself. Only reachable when the config dir is
+                # unwritable, where the SQLite commit would not have landed.
+                try:
+                    self.provider.save_library(metadata)
+                except Exception as exc:
+                    self._log(f"Remote library export failed: {exc}")
 
             if self.provider:
                 try:
@@ -331,7 +333,7 @@ class LibraryManager:
 
     @serialized
     def patch_track_metadata(self, track_id: str, changes: dict) -> bool:
-        """Apply only declared fields; update the live model after durable commit."""
+        """Apply only declared fields; publish a detached snapshot after durable commit."""
         from shared.library_fingerprint import fingerprint
         from shared.library_lifecycle import LibraryPersistenceError
         allowed = {'title', 'artist', 'album', 'album_artist', 'cover_source', 'metadata_modified_by_user'}
@@ -339,21 +341,25 @@ class LibraryManager:
             raise ValueError('Unsupported track metadata edit')
         self.refresh_if_stale()
         with self._lock:
-            metadata = self.metadata
+            live = self.metadata
+            if live is None:
+                return False
+            metadata = live
             self.last_save_error = None
             try:
                 source = self.db.public_source()
                 committed = source['fingerprint'] if source else None
-                before = fingerprint(metadata) if source and metadata is not None else None
+                before = fingerprint(live) if source else None
                 use_stored = source is None or before != committed
                 if use_stored:
                     if source is not None:
-                        projected = self.db.load_library_metadata()
-                        if projected is None or fingerprint(projected) != before:
+                        # The loaded view can carry derived catalog credits; read raw
+                        # rows and verify the live projected model in one SQLite pass.
+                        metadata, revision, projected_fp = self.db.load_stored_and_projected_fingerprint()
+                        if metadata is None or projected_fp != before:
                             raise ValueError('Track edit requires an unchanged canonical library')
-                    # The loaded view can contain derived catalog credits.
-                    # Use the original stored values for the edit and proof.
-                    metadata, revision = self.db.load_library_snapshot(project_artists=False)
+                    else:
+                        metadata, revision = self.db.load_library_snapshot(project_artists=False)
                     if revision != self._library_revision:
                         raise StaleLibraryWrite(self._library_revision, revision)
                     before = fingerprint(metadata) if metadata is not None else None
@@ -369,11 +375,23 @@ class LibraryManager:
                     revision = self.db.patch_track_metadata(
                         track_id, changes, expected_revision=self._library_revision,
                         previous_fingerprint=before, metadata=candidate)
-                if use_stored:
+                if source is None:
                     self._reload_canonical()
+                elif use_stored:
+                    live_track = live.get_track_by_id(track_id)
+                    if live_track is None:
+                        self._reload_canonical()
+                    else:
+                        live_changes = dict(changes)
+                        if 'artist' in changes:
+                            live_changes['artists'] = self.db.track_projected_artists(track_id, updated.artists)
+                        published = replace(live_track, **live_changes)
+                        self.metadata = replace(live, tracks=[
+                            published if item.id == track_id else item for item in live.tracks
+                        ])
+                        self._library_revision = revision
                 else:
-                    for name, value in changes.items():
-                        setattr(track, name, value)
+                    self.metadata = candidate
                     self._library_revision = revision
             except Exception as exc:
                 self.last_save_error = 'library_conflict' if isinstance(exc, StaleLibraryWrite) else 'library_storage_unavailable'
@@ -396,7 +414,8 @@ class LibraryManager:
     def _publish_snapshot(self, metadata: LibraryMetadata, revision: int, *, allow_equal: bool = False) -> bool:
         """Atomically install a committed snapshot if it does not move backwards."""
         with coordinated(), self._lock:
-            if revision > self._library_revision or (allow_equal and revision >= self._library_revision):
+            if (revision > self._library_revision
+                    or ((allow_equal or self.metadata is None) and revision >= self._library_revision)):
                 self.metadata = metadata
                 self._library_revision = revision
                 return True
@@ -664,11 +683,13 @@ class LibraryManager:
         return None
 
     def refresh_if_stale(self):
-        """Reload metadata when another writer commits a SQLite revision."""
-        if self.db.get_library_revision() == self._library_revision:
+        """Reload metadata when another writer commits a SQLite revision or metadata is unloaded."""
+        if self.metadata is not None and self.db.get_library_revision() == self._library_revision:
             return False
         metadata, revision = self.db.load_library_snapshot()
-        if metadata is None or revision <= self._library_revision:
+        if metadata is None:
+            return False
+        if self.metadata is not None and revision <= self._library_revision:
             return False
         # The same lock protects a writer from copying the model through saving
         # it. A refresh cannot change the expected revision of a staged write.

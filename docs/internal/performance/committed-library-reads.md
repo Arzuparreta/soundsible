@@ -45,17 +45,22 @@ edit and prevents a delayed reader from replacing a newer commit.
   complete ID order. A size check visits at most as many IDs as the delta can
   account for under a conservative minimum track size.
   Artwork, artist-credit, and loudness-identity fan-out queries each cap their
-  indexed scan before deduplication. A locked or unavailable delta-base cache
-  still delivers an already-verified delta rather than falling back to a full
+  indexed scan before deduplication. The delta-base cache uses WAL mode with
+  one-time schema initialization, and a locked or unavailable cache still
+  delivers an already-verified delta rather than falling back to a full
   snapshot.
 - **Full response.** A single SQLite snapshot supplies headers and tracks
-  with item IDs in index order. It shares the SQL projection and validator
-  of a delta when annotation tokens stay current. Missing or expired
+  with item IDs in index order, running the one-time collection migration first
+  if a pre-collection canonical database has not yet been upgraded. Unconditional
+  requests skip the conditional/delta pre-check. It shares the SQL projection
+  and validator of a delta when annotation tokens stay current, including on
+  cold-boot migration via `sync_library()`. Missing or expired
   bases, pruned journals, and large changes can require a full response.
   Unverified SQL state and annotation errors fall back to content validators.
-  A connection-scoped SQLite stamp can revalidate a recently rendered
-  unverified response. A write on that connection or an external commit
-  changes the stamp. Annotation tokens are skipped for empty libraries.
+  A connection-scoped SQLite stamp (reused via LIFO pool checkout) can
+  revalidate a recently rendered unverified response. A write on that
+  connection or an external commit changes the stamp. Annotation tokens are
+  skipped for empty libraries.
 
 The public-source and per-track hashes still commit with the saved values.
 The batch writer hashes the same captured track values it binds to SQL and

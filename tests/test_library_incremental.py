@@ -856,3 +856,71 @@ def test_artist_fanout_caps_database_work_before_deduplicating(tmp_path, artist_
     with closing(sqlite3.connect(db.db_path)) as conn:
         conn.set_progress_handler(lambda: 1, 35000)
         assert library_changes.affected(conn, before, after, (), ()) is None
+
+
+def test_direct_read_migrates_pre_collection_canonical_database(endpoint):
+    from shared.collection import library_ready
+
+    client, lib, _ = endpoint
+    with lib.db._get_connection() as conn:
+        conn.execute('DELETE FROM collection_migrations')
+        conn.execute('DELETE FROM collection_files')
+        conn.execute('DELETE FROM collection_state')
+        conn.execute("UPDATE library_public_source SET valid=0 WHERE singleton=1")
+        conn.commit()
+
+    response = client.get('/api/library')
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body['tracks'][0]['item_id'] is not None
+    with lib.db._get_connection() as conn:
+        assert library_ready(conn) is True
+
+
+def test_cold_boot_delta_registers_incremental_base_after_sync_library(monkeypatch):
+    from player.library import LibraryManager
+    from shared.api.routes import library as route
+
+    validators.clear()
+    reset_connections()
+    manager = LibraryManager(silent=True)
+    monkeypatch.setattr(manager, '_export_committed', lambda: None)
+    monkeypatch.setattr(manager, '_is_cache_likely_stale', lambda *a, **k: False)
+    manager.manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manager.manifest_path.write_text(model(25).to_json(), encoding='utf-8')
+    assert manager.db.has_canonical_library() is False
+    monkeypatch.setattr(route, '_get_api', lambda: {'get_library': lambda: manager})
+    app = Flask(__name__)
+    app.register_blueprint(route.library_bp)
+    client = app.test_client()
+
+    first = client.get('/api/library?delta=1')
+    assert first.status_code == 200
+    etag = first.headers['ETag']
+    assert client.get('/api/library?delta=1', headers={'If-None-Match': etag}).status_code == 304
+    assert manager.patch_track_metadata('0', {'title': 'Cold boot edit'})
+    delta_resp = get_delta(client, first)
+    assert delta_resp.status_code == 200
+    delta = delta_resp.get_json()
+    assert delta['kind'] == 'delta'
+    assert apply(first.get_json(), delta) == client.get('/api/library').get_json()
+
+
+def test_unverified_read_stamp_hits_with_multiple_idle_pool_connections(endpoint, monkeypatch):
+    client, lib, _ = endpoint
+    # Warm two idle pooled connections so FIFO rotation would miss every poll.
+    first_conn = lib.db._pool.acquire()
+    second_conn = lib.db._pool.acquire()
+    lib.db._pool.release(first_conn)
+    lib.db._pool.release(second_conn)
+    assert lib.db.pool_stats()['idle'] == 2
+
+    with lib.db._get_connection() as conn:
+        conn.execute("UPDATE tracks SET title='Unverified pooled' WHERE id='0'")
+        conn.commit()
+    first = client.get('/api/library')
+    headers = {'If-None-Match': first.headers['ETag']}
+    with monkeypatch.context() as patch:
+        patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('pooled 304 missed validator cache'))
+        for _ in range(4):
+            assert client.get('/api/library', headers=headers).status_code == 304

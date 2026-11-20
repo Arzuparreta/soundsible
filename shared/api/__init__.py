@@ -222,16 +222,25 @@ def _bind_request_user():
     from shared.users import instance_requires_login
 
     # Opened before anything reads: resolving the caller is itself one of the
-    # repeat readers this scope exists to collapse.
-    g._soundsible_scope_token = request_scope.begin()
-    g._soundsible_user_token = None
+    # repeat readers this scope exists to collapse. Track stacks so nested test
+    # client calls on the same thread cannot overwrite outer teardown tokens.
+    scope_tokens = getattr(g, "_soundsible_scope_tokens", None)
+    if scope_tokens is None:
+        scope_tokens = []
+        g._soundsible_scope_tokens = scope_tokens
+    scope_tokens.append(request_scope.begin())
+
+    user_tokens = getattr(g, "_soundsible_user_tokens", None)
+    if user_tokens is None:
+        user_tokens = []
+        g._soundsible_user_tokens = user_tokens
     user_id = _resolve_request_user_id()
 
     if user_id is None and instance_requires_login() and not _api_request_is_public():
+        user_tokens.append(None)
         return jsonify({"error": "Authentication required", "code": "login_required"}), 401
 
-    if user_id:
-        g._soundsible_user_token = bind_user(user_id)
+    user_tokens.append(bind_user(user_id) if user_id else None)
     return None
 
 
@@ -239,15 +248,15 @@ def _bind_request_user():
 def _unbind_request_user(_exc=None):
     from shared.user_context import unbind_user
 
-    token = getattr(g, "_soundsible_user_token", None)
-    if token is not None:
-        unbind_user(token)
-        g._soundsible_user_token = None
+    user_tokens = getattr(g, "_soundsible_user_tokens", None)
+    if user_tokens:
+        token = user_tokens.pop()
+        if token is not None:
+            unbind_user(token)
 
-    scope_token = getattr(g, "_soundsible_scope_token", None)
-    if scope_token is not None:
-        request_scope.end(scope_token)
-        g._soundsible_scope_token = None
+    scope_tokens = getattr(g, "_soundsible_scope_tokens", None)
+    if scope_tokens:
+        request_scope.end(scope_tokens.pop())
 
 
 @socketio.on('playback_register')

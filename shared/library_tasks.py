@@ -73,7 +73,11 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
                         candidate = replace(metadata, tracks=summary["tracks"], version=metadata.version + 1,
                                             playlists=metadata.playlists.copy(), settings=deepcopy(metadata.settings))
                         saved = (library.metadata is metadata and library._library_revision == revision
-                                 and library._save_metadata(metadata=candidate, id_replacements=summary["id_map"]))
+                                 and library._save_metadata(
+                                     metadata=candidate,
+                                     id_replacements=summary["id_map"],
+                                     expected_revision=revision,
+                                 ))
                     if not saved:
                         # The repaired copies are already in the pool under ids
                         # nothing will reference. Cleanup deletes only what no

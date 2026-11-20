@@ -301,11 +301,18 @@ class LibraryScanService:
             latest.tracks = tracks
             latest.version += 1
             with coordinated():
-                library._library_revision = library.db.replace_library(
-                    latest, id_replacements=replacements, expected_revision=revision
-                )
-                library.metadata = latest
-                after_release(library._export_committed)
+                if hasattr(library, "_save_metadata"):
+                    library.require_saved(
+                        metadata=latest,
+                        id_replacements=replacements,
+                        expected_revision=revision,
+                    )
+                else:
+                    library._library_revision = library.db.replace_library(
+                        latest, id_replacements=replacements, expected_revision=revision
+                    )
+                    library.metadata = latest
+                    after_release(library._export_committed, key=('library-export', id(library)))
                 for old_id, new_id in replacements.items():
                     core.favourites.remap_library_id(old_id, new_id)
 

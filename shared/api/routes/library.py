@@ -149,98 +149,51 @@ def _held_revision(user_id, fingerprint, dependencies):
     return cached if cached and request.if_none_match.contains_weak(cached) else None
 
 
-@library_bp.route("/api/library", methods=["GET"])
-def get_library():
+def _try_fast_library_response(db, artwork, user_id, base):
+    """Answer conditional 304s or verified journal deltas without loading all tracks."""
     from flask import Response
     from shared.api import library_incremental
-    from shared.api.library_revision import fingerprint, validator_key, validators
-    from shared.artwork import artwork_store
-    from shared.database import DatabaseManager
-    from shared.user_context import current_user_id
 
-    lib = _get_api()["get_library"]()
-    artwork = artwork_store()
-    user_id = current_user_id() or ""
-    wants_delta = request.args.get("delta") == "1"
-    base = request.args.get("since") if wants_delta else None
-    if base and len(base) > 128:
-        base = None
+    try:
+        source, read_stamp, has_tracks = db.public_read_state()
+        state = library_incremental.prepare(source, artwork)
+        if state is not None:
+            revision = library_incremental.revision_for(user_id, state)
+            if request.if_none_match.contains_weak(revision):
+                return _library_response(Response(), revision), state
+            if base:
+                partial = library_incremental.try_delta(db, artwork, user_id, base, state)
+                if partial is not None:
+                    return partial, state
+        elif read_stamp is not None and request.if_none_match:
+            dependencies_now = _annotation_revisions(artwork) if has_tracks else ()
+            held = _held_revision(user_id, read_stamp, dependencies_now)
+            if held:
+                return _library_response(Response(), held), None
+        return None, state
+    except Exception:
+        logger.debug("Incremental library read unavailable; using full snapshot", exc_info=True)
+        return None, None
 
-    db = getattr(lib, "db", None)
-    payload = state = dependencies = stamp = None
-    if isinstance(db, DatabaseManager):
-        try:
-            source, read_stamp, has_tracks = db.public_read_state()
-            state = library_incremental.prepare(source, artwork)
-            if state is not None:
-                revision = library_incremental.revision_for(user_id, state)
-                if request.if_none_match.contains_weak(revision):
-                    return _library_response(Response(), revision)
-                if base:
-                    partial = library_incremental.try_delta(db, artwork, user_id, base, state)
-                    if partial is not None:
-                        return partial
-            elif read_stamp is not None and request.if_none_match:
-                dependencies_now = _annotation_revisions(artwork) if has_tracks else ()
-                held = _held_revision(user_id, read_stamp, dependencies_now)
-                if held:
-                    return _library_response(Response(), held)
-        except Exception:
-            logger.debug("Incremental library read unavailable; using full snapshot", exc_info=True)
-            state = None
-        payload, source, stamp = db.public_snapshot()
-        if state is None or state["source"] != source:
-            try:
-                state = library_incremental.prepare(source, artwork)
-            except Exception:
-                state = None
 
-    if payload is None:
-        lib.refresh_if_stale()
-        if not lib.metadata:
-            lib.sync_library()
-            if isinstance(db, DatabaseManager):
-                payload, _, stamp = db.public_snapshot()
-    if payload is None:
-        if not lib.metadata:
-            return jsonify({"error": "Library not loaded"}), 404
-        try:
-            dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
-            if request.if_none_match:
-                held = _held_revision(user_id, fingerprint(lib.metadata), dependencies)
-                if held:
-                    return _library_response(Response(), held)
-        except Exception:
-            dependencies = None
-        payload = lib.metadata.to_public_dict()
-    snapshot_fingerprint = stamp
-    if stamp is not None:
-        try:
-            dependencies = _annotation_revisions(artwork) if payload["tracks"] else ()
-        except Exception:
-            dependencies = None
-    elif dependencies is not None:
-        try:
-            snapshot_fingerprint = fingerprint(payload)
-        except Exception:
-            pass
+def _prepare_incremental_state(source, artwork, previous=None):
+    from shared.api import library_incremental
+
+    if previous is not None and previous["source"] == source:
+        return previous
+    try:
+        return library_incremental.prepare(source, artwork)
+    except Exception:
+        return None
+
+
+def _finalize_content_library_response(
+    payload, user_id, artwork, base, wants_delta, dependencies, snapshot_fingerprint, loudness_ok
+):
+    """Serve content-hashed ETag validation and legacy row-hash deltas when journal proofs cannot."""
+    from shared.api.library_revision import validator_key, validators
+
     tracks = payload.get("tracks") or []
-    loudness_ok = annotate_tracks(tracks)
-    artwork.annotate(tracks)
-    if state is not None and loudness_ok is True:
-        try:
-            if library_incremental.annotations_current(artwork, state):
-                revision = library_incremental.revision_for(user_id, state)
-                if wants_delta and tracks:
-                    try:
-                        digests = library_incremental.header_digests({k: v for k, v in payload.items() if k != "tracks"})
-                        library_incremental.remember(user_id, revision, state, digests)
-                    except Exception:
-                        logger.debug("Incremental base unavailable; sending full snapshot", exc_info=True)
-                return _library_response(jsonify(payload), revision)
-        except Exception:
-            logger.debug("Annotation state changed; using content validation", exc_info=True)
-
     response = None
     signature = None
     if base:
@@ -275,6 +228,88 @@ def get_library():
     if response is None:
         response = jsonify(payload)
     return _library_response(response, revision)
+
+
+@library_bp.route("/api/library", methods=["GET"])
+def get_library():
+    from flask import Response
+    from shared.api import library_incremental
+    from shared.api.library_revision import fingerprint
+    from shared.artwork import artwork_store
+    from shared.database import DatabaseManager
+    from shared.user_context import current_user_id
+
+    lib = _get_api()["get_library"]()
+    artwork = artwork_store()
+    user_id = current_user_id() or ""
+    wants_delta = request.args.get("delta") == "1"
+    base = request.args.get("since") if wants_delta else None
+    if base and len(base) > 128:
+        base = None
+
+    db = getattr(lib, "db", None)
+    payload = state = dependencies = stamp = None
+    if isinstance(db, DatabaseManager):
+        if request.if_none_match or base:
+            fast_response, state = _try_fast_library_response(db, artwork, user_id, base)
+            if fast_response is not None:
+                return fast_response
+        payload, source, stamp = db.public_snapshot()
+        state = _prepare_incremental_state(source, artwork, state)
+
+    if payload is None:
+        lib.refresh_if_stale()
+        if not lib.metadata:
+            lib.sync_library()
+            if isinstance(db, DatabaseManager):
+                payload, source, stamp = db.public_snapshot()
+                state = _prepare_incremental_state(source, artwork)
+
+    if payload is None:
+        if not lib.metadata:
+            return jsonify({"error": "Library not loaded"}), 404
+        try:
+            dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
+            if request.if_none_match:
+                held = _held_revision(user_id, fingerprint(lib.metadata), dependencies)
+                if held:
+                    return _library_response(Response(), held)
+        except Exception:
+            dependencies = None
+        payload = lib.metadata.to_public_dict()
+
+    snapshot_fingerprint = stamp
+    if stamp is not None:
+        try:
+            dependencies = _annotation_revisions(artwork) if payload["tracks"] else ()
+        except Exception:
+            dependencies = None
+    elif dependencies is not None:
+        try:
+            snapshot_fingerprint = fingerprint(payload)
+        except Exception:
+            pass
+
+    tracks = payload.get("tracks") or []
+    loudness_ok = annotate_tracks(tracks)
+    artwork.annotate(tracks)
+    if state is not None and loudness_ok is True:
+        try:
+            if library_incremental.annotations_current(artwork, state):
+                revision = library_incremental.revision_for(user_id, state)
+                if wants_delta and tracks:
+                    try:
+                        digests = library_incremental.header_digests({k: v for k, v in payload.items() if k != "tracks"})
+                        library_incremental.remember(user_id, revision, state, digests)
+                    except Exception:
+                        logger.debug("Incremental base unavailable; sending full snapshot", exc_info=True)
+                return _library_response(jsonify(payload), revision)
+        except Exception:
+            logger.debug("Annotation state changed; using content validation", exc_info=True)
+
+    return _finalize_content_library_response(
+        payload, user_id, artwork, base, wants_delta, dependencies, snapshot_fingerprint, loudness_ok
+    )
 
 
 @library_bp.route("/api/library/youtube-ids", methods=["GET"])

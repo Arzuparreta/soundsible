@@ -453,17 +453,29 @@ class LibraryStore:
 
     def public_read_state(self):
         """Read the journal proof or a cache stamp for an unverified database."""
+        from shared.collection import library_ready
         from shared.library_changes import source
-        with self._get_connection() as conn:
-            conn.execute('BEGIN')
-            try:
-                proof = source(conn)
-                if proof is not None:
-                    return proof, None, proof['tracks']
-                tracks = conn.execute('SELECT 1 FROM library_tracks LIMIT 1').fetchone() is not None
-            finally:
-                conn.rollback()
-            return None, conn.read_stamp, tracks
+        for _ in range(2):
+            needs_upgrade = False
+            with self._get_connection() as conn:
+                conn.execute('BEGIN')
+                try:
+                    canonical = conn.execute(
+                        "SELECT 1 FROM library_state WHERE singleton = 1 AND canonical = 1"
+                    ).fetchone()
+                    if canonical is not None and not library_ready(conn):
+                        needs_upgrade = True
+                    else:
+                        proof = source(conn)
+                        if proof is not None:
+                            return proof, None, proof['tracks']
+                        tracks = conn.execute('SELECT 1 FROM library_tracks LIMIT 1').fetchone() is not None
+                finally:
+                    conn.rollback()
+                if not needs_upgrade:
+                    return None, conn.read_stamp, tracks
+            self.load_library_snapshot()
+        return None, None, False
 
     @contextmanager
     def library_search_candidates(self, tracks, q_folded: str, q_tokens: frozenset):
@@ -511,27 +523,36 @@ class LibraryStore:
 
     def public_snapshot(self):
         """Return detached public values and their journal proof or read stamp."""
+        from shared.collection import library_ready
         from shared.library_changes import source
-        with self._get_connection() as conn:
-            before = conn.read_stamp
-            conn.execute('BEGIN')
-            try:
-                headers = self._public_headers(conn)
-                if headers is None:
-                    return None, None, None
-                headers['tracks'] = [_public_track(row) for row in conn.execute(
-                    f'SELECT {_PUBLIC_TRACK_SELECT}{_PUBLIC_TRACK_FROM} ORDER BY l.position')]
-                proof = source(conn)
-                if proof is None:
-                    aliases = self._track_id_aliases(conn)
-                    if aliases:
-                        for track in headers['tracks']:
-                            track['id'] = aliases.get(track['id'], track['id'])
-                            track['file_hash'] = aliases.get(track['file_hash'], track['file_hash'])
-            finally:
-                conn.rollback()
-            stamp = before if proof is None and before == conn.read_stamp else None
-            return headers, proof, stamp
+        for _ in range(2):
+            needs_upgrade = False
+            with self._get_connection() as conn:
+                before = conn.read_stamp
+                conn.execute('BEGIN')
+                try:
+                    headers = self._public_headers(conn)
+                    if headers is None:
+                        return None, None, None
+                    if not library_ready(conn):
+                        needs_upgrade = True
+                    else:
+                        headers['tracks'] = [_public_track(row) for row in conn.execute(
+                            f'SELECT {_PUBLIC_TRACK_SELECT}{_PUBLIC_TRACK_FROM} ORDER BY l.position')]
+                        proof = source(conn)
+                        if proof is None:
+                            aliases = self._track_id_aliases(conn)
+                            if aliases:
+                                for track in headers['tracks']:
+                                    track['id'] = aliases.get(track['id'], track['id'])
+                                    track['file_hash'] = aliases.get(track['file_hash'], track['file_hash'])
+                finally:
+                    conn.rollback()
+                if not needs_upgrade:
+                    stamp = before if proof is None and before == conn.read_stamp else None
+                    return headers, proof, stamp
+            self.load_library_snapshot()
+        return None, None, None
 
     def public_track_count_exceeds(self, limit: int) -> bool:
         """Check a size lower bound without counting the entire library."""
@@ -581,6 +602,34 @@ class LibraryStore:
                 metadata, revision = self._read_library_metadata(conn, project_artists=project_artists)
                 conn.commit()
         return metadata, revision
+
+    def load_stored_and_projected_fingerprint(self) -> tuple[Optional[LibraryMetadata], int, Optional[str]]:
+        """Read raw stored rows and compute the projected fingerprint in one snapshot."""
+        from dataclasses import replace
+        from shared.collection import library_ready
+        from shared.library_fingerprint import fingerprint
+        from shared.library_lifecycle import coordinated
+        with self._get_connection() as conn:
+            upgrade = not library_ready(conn)
+            with coordinated() if upgrade else nullcontext():
+                conn.execute('BEGIN IMMEDIATE' if upgrade else 'BEGIN')
+                stored, revision = self._read_library_metadata(conn, project_artists=False)
+                if stored is None:
+                    conn.commit()
+                    return None, 0, None
+                credits = self._artist_names_by_track(conn, [track.id for track in stored.tracks])
+                conn.commit()
+        projected_tracks = [
+            replace(track, artists=credits[track.id]) if credits.get(track.id) else track
+            for track in stored.tracks
+        ]
+        return stored, revision, fingerprint(replace(stored, tracks=projected_tracks))
+
+    def track_projected_artists(self, track_id: str, fallback: Optional[List[str]] = None) -> Optional[List[str]]:
+        """Read one track's projected catalog artist credits."""
+        with self._get_connection() as conn:
+            credits = self._artist_names_by_track(conn, [track_id]).get(track_id)
+            return credits or fallback
 
     def _read_library_metadata(self, conn, *, project_artists: bool) -> tuple[Optional[LibraryMetadata], int]:
         from shared.collection import library_ready, sync as sync_collection, attach_ids

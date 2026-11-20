@@ -205,6 +205,27 @@ def test_a_refused_playlist_write_is_reported_as_a_conflict(client, monkeypatch)
     assert library.metadata.playlists["Arma Reforger"] == ["tunnel"]
 
 
+def _run_in_thread(fn):
+    import threading
+
+    result = []
+    errors = []
+
+    def target():
+        try:
+            result.append(fn())
+        except BaseException as exc:
+            errors.append(exc)
+
+    worker = threading.Thread(target=target)
+    worker.start()
+    worker.join(timeout=10)
+    assert not worker.is_alive(), "concurrent test request timed out"
+    if errors:
+        raise errors[0]
+    return result[0]
+
+
 @pytest.mark.parametrize(('path', 'body'), [
     ('/api/library/playlists', {'name': 'Pending'}),
     ('/api/migration/import-playlist', {'name': 'Pending', 'track_ids': ['tunnel']}),
@@ -222,9 +243,14 @@ def test_fresh_and_conditional_reads_agree_while_a_playlist_is_pending(client, m
 
     def while_committing(metadata, **options):
         assert 'Pending' in metadata.playlists
-        fresh = client.get('/api/library')
-        assert fresh.get_json()['playlists'] == old_playlists
-        assert client.get('/api/library', headers=headers).status_code == 304
+
+        def read_concurrently():
+            concurrent = client.application.test_client()
+            fresh = concurrent.get('/api/library')
+            assert fresh.get_json()['playlists'] == old_playlists
+            assert concurrent.get('/api/library', headers=headers).status_code == 304
+
+        _run_in_thread(read_concurrently)
         observed.append(True)
         return original(metadata, **options)
 
@@ -248,8 +274,12 @@ def test_fresh_and_conditional_reads_agree_during_a_missing_track_purge(client, 
     def check_file(track):
         checked.append(track.id)
         if len(checked) == 2:
-            assert client.get('/api/library').get_json() == before
-            assert client.get('/api/library', headers=headers).status_code == 304
+            def read_concurrently():
+                concurrent = client.application.test_client()
+                assert concurrent.get('/api/library').get_json() == before
+                assert concurrent.get('/api/library', headers=headers).status_code == 304
+
+            _run_in_thread(read_concurrently)
         return None
 
     monkeypatch.setattr(library, 'resolve_local_track_path', check_file)
@@ -273,14 +303,22 @@ def test_subscribing_preserves_the_playlist_saved_during_its_feed_fetch(client, 
 
     def before_commit(metadata, **options):
         if metadata.podcast_subscriptions:
-            fresh = client.get('/api/library')
-            assert fresh.get_json()['podcast_subscriptions'] == []
-            assert client.get('/api/library', headers={'If-None-Match': fresh.headers['ETag']}).status_code == 304
+            def read_concurrently():
+                concurrent = client.application.test_client()
+                fresh = concurrent.get('/api/library')
+                assert fresh.get_json()['podcast_subscriptions'] == []
+                assert concurrent.get('/api/library', headers={'If-None-Match': fresh.headers['ETag']}).status_code == 304
+
+            _run_in_thread(read_concurrently)
             compared.append(True)
         return original(metadata, **options)
 
     def fetch(_):
-        assert client.post('/api/library/playlists', json={'name': 'During fetch'}).status_code == 200
+        def create_concurrently():
+            concurrent = client.application.test_client()
+            assert concurrent.post('/api/library/playlists', json={'name': 'During fetch'}).status_code == 200
+
+        _run_in_thread(create_concurrently)
         feed = b'<rss version="2.0"><channel><title>Fixture show</title></channel></rss>'
         return FeedCheck(FeedPage(feed, None), {})
 

@@ -96,8 +96,8 @@ def changes_since(conn, previous, expected, *, journal='public_changes'):
     Call inside a read transaction; the cursor check and events share a snapshot.
     """
     now = cursor(conn, journal=journal)
-    if (now != expected or previous.epoch != now.epoch or previous.anchor is None
-            or not now.floor <= previous.seq <= now.seq):
+    in_window = (previous.seq == 0 and now.floor == 0) or (now.floor < previous.seq <= now.seq)
+    if now != expected or previous.epoch != now.epoch or previous.anchor is None or not in_window:
         return None
     if previous.seq == now.seq:
         return [] if previous.anchor == now.anchor else None

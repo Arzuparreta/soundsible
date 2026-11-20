@@ -331,3 +331,27 @@ def test_edit_gives_an_upgraded_database_its_header_hash(manager):
     assert manager.db.public_source()['headers'] is None
     manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': 'Edited'})
     assert manager.db.public_source()['headers'] is not None
+
+
+def test_edit_succeeds_when_manager_metadata_is_unloaded(manager, monkeypatch):
+    fresh = LibraryManager(silent=True)
+    monkeypatch.setattr(fresh, '_export_committed', lambda: None)
+    assert fresh.metadata is None
+    assert fresh._library_revision == fresh.db.get_library_revision()
+    track_id = manager.metadata.tracks[0].id
+    assert fresh.patch_track_metadata(track_id, {'title': 'Edited from unloaded'})
+    assert fresh.metadata is not None
+    assert fresh.metadata.get_track_by_id(track_id).title == 'Edited from unloaded'
+    assert fresh.db.load_library_metadata().get_track_by_id(track_id).title == 'Edited from unloaded'
+
+
+def test_legacy_artist_edit_avoids_redundant_full_reloads(manager, monkeypatch):
+    for track in manager.metadata.tracks:
+        track.artists = None
+    track_id = manager.metadata.tracks[0].id
+    assert manager._save_metadata()
+    manager._reload_canonical()
+    monkeypatch.setattr(manager.db, 'load_library_metadata', lambda *a, **k: pytest.fail('redundant projected reload'))
+    monkeypatch.setattr(manager, '_reload_canonical', lambda *a, **k: pytest.fail('redundant post-commit reload'))
+    assert manager.patch_track_metadata(track_id, {'title': 'Single load edit'})
+    assert manager.metadata.get_track_by_id(track_id).title == 'Single load edit'
