@@ -94,6 +94,9 @@ RSS, energy savings, playback quality or acoustic acceptance.
   the same SQL projection. The content-hash fallback
   remains for unverified sources. See
   [committed library reads](../performance/committed-library-reads.md).
+- Published model reloads share the lifecycle lock with staged edits. The
+  revision is rechecked at publication so a delayed reader cannot replace a
+  newer commit or advance the revision of a candidate already being saved.
 - Do not break account isolation, changes during copy/annotation, field
   removal, order, rekeys/aliases, user state or the first `added_at` date.
 - Journals have limits and epochs; if equivalence cannot be proven,

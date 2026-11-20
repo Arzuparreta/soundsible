@@ -793,3 +793,66 @@ def test_saved_model_carries_the_date_sqlite_keeps(endpoint):
     assert legacy.tracks[0].added_at == '2020-01-01T00:00:00'
     stored = lib.db.load_library_metadata()
     assert lib.db.public_source()['fingerprint'] == fingerprint(stored) == fingerprint(legacy)
+
+
+def test_locked_history_cache_still_delivers_a_verified_delta(endpoint, monkeypatch):
+    from contextlib import closing
+    import sqlite3
+    from shared.runtime import get_cache_dir
+
+    client, lib, _ = endpoint
+    first = client.get('/api/library?delta=1')
+    lib.metadata.tracks[0].title = 'Locked cache edit'
+    lib.db.replace_library(lib.metadata)
+    expected = lib.db.load_library_metadata().to_public_dict()
+
+    cache_path = get_cache_dir() / 'library-deltas.sqlite3'
+    with closing(sqlite3.connect(cache_path, isolation_level=None)) as locker:
+        locker.execute('BEGIN IMMEDIATE')
+        try:
+            with monkeypatch.context() as patch:
+                patch.setattr(lib.db, 'public_snapshot', lambda: pytest.fail('locked cache caused full fallback'))
+                response = get_delta(client, first)
+        finally:
+            locker.execute('ROLLBACK')
+
+    assert response.status_code == 200
+    assert response.headers['Cache-Control'] == 'private, no-store'
+    delta = response.get_json()
+    assert delta['kind'] == 'delta'
+    assert apply(first.get_json(), delta) == expected
+
+
+@pytest.mark.parametrize('artist_count', [1, 2])
+def test_artist_fanout_caps_database_work_before_deduplicating(tmp_path, artist_count):
+    from contextlib import closing
+    import sqlite3
+    from shared import library_changes
+
+    db = DatabaseManager(str(tmp_path / 'library.db'))
+    db.replace_library(model(1))
+    with db._get_connection() as conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO tracks(id, title, artist, album) VALUES (?, 'T', 'Shared', 'A')",
+            ((f't{i}',) for i in range(10000)),
+        )
+        for index in range(artist_count):
+            artist_id = f'shared-{index}'
+            conn.execute(
+                "INSERT OR IGNORE INTO artists(id, name, name_key) VALUES (?, ?, ?)",
+                (artist_id, f'Shared {index}', f'shared {index}'),
+            )
+            conn.executemany(
+                "INSERT OR IGNORE INTO track_artists(track_id, artist_id, position) VALUES (?, ?, ?)",
+                ((f't{i}', artist_id, index) for i in range(10000)),
+            )
+        conn.execute("UPDATE library_public_source SET valid=1 WHERE singleton=1")
+        before = library_changes.source(conn)
+        for index in range(artist_count):
+            conn.execute("UPDATE artists SET name=? WHERE id=?", (f'Renamed {index}', f'shared-{index}'))
+        conn.execute("UPDATE library_public_source SET valid=1 WHERE singleton=1")
+        after = library_changes.source(conn)
+
+    with closing(sqlite3.connect(db.db_path)) as conn:
+        conn.set_progress_handler(lambda: 1, 35000)
+        assert library_changes.affected(conn, before, after, (), ()) is None

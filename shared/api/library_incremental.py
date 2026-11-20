@@ -1,6 +1,7 @@
 """Bounded journal deltas from committed SQLite rows and annotation cursors."""
 from hashlib import sha256
 import json
+import logging
 import sqlite3
 import time
 
@@ -10,6 +11,8 @@ from flask.json.provider import DefaultJSONProvider
 from shared.api import library_deltas as history
 from shared.library_fingerprint import TRACK_FIELDS
 from shared.loudness import LoudnessStore, annotate_tracks
+
+logger = logging.getLogger(__name__)
 
 MAX_BASES = 256
 MAX_PER_ACCOUNT = 4
@@ -115,6 +118,9 @@ def try_delta(db, artwork, account, base_revision, state):
     response = current_app.json.response(delta)
     if not db.public_track_count_exceeds(len(response.get_data()) // MIN_TRACK_BYTES):
         return None
-    remember(account, delta['revision'], state, digests)
+    try:
+        remember(account, delta['revision'], state, digests)
+    except Exception:
+        logger.debug('Incremental base unavailable; returning verified delta', exc_info=True)
     response.headers['Cache-Control'] = 'private, no-store'
     return response

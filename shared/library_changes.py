@@ -117,17 +117,23 @@ def affected(conn, previous, expected, artwork_ids, identities):
     artists = [key for kind, key, _ in credits if kind == 'artist']
     for offset in range(0, len(artists), 500):
         batch = artists[offset:offset + 500]
-        ids.update(row[0] for row in conn.execute(
-            f'SELECT DISTINCT track_id FROM track_artists WHERE artist_id IN ({",".join("?" for _ in batch)}) LIMIT ?',
-            [*batch, MAX_KEYS + 1]))
+        rows = conn.execute(
+            f'SELECT track_id FROM track_artists WHERE artist_id IN ({",".join("?" for _ in batch)}) LIMIT ?',
+            [*batch, MAX_KEYS + 1]).fetchall()
+        if len(rows) > MAX_KEYS:
+            return None
+        ids.update(row[0] for row in rows)
         if len(ids) > MAX_KEYS:
             return None
     identities = list(identities)
     for offset in range(0, len(identities), 500):
         batch = identities[offset:offset + 500]
-        ids.update(row[0] for row in conn.execute(
+        rows = conn.execute(
             f'SELECT id FROM library_public_rows WHERE identity IN ({",".join("?" for _ in batch)}) LIMIT ?',
-            [*batch, MAX_KEYS + 1]))
+            [*batch, MAX_KEYS + 1]).fetchall()
+        if len(rows) > MAX_KEYS:
+            return None
+        ids.update(row[0] for row in rows)
         if len(ids) > MAX_KEYS:
             return None
     if len(ids) > MAX_KEYS:

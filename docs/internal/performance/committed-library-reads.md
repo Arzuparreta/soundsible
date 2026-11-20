@@ -26,6 +26,9 @@ check its revision at lookup. This picks up a moved local path or removed
 track after another writer commits. A matching revision keeps the indexed
 in-memory lookup. Favourites also check the revision before resolving file
 membership. The flat library read needs no model reload.
+Reloads take the lifecycle lock only when publishing a newer snapshot. This
+keeps the resident model and revision stable between staging and saving an
+edit and prevents a delayed reader from replacing a newer commit.
 
 - **Conditional request.** A weak ETag combines the account, public projection,
   track and credit proofs, order, and artwork and loudness tokens. A matching
@@ -41,6 +44,10 @@ membership. The flat library read needs no model reload.
   annotation cursors before returning a delta. Order changes include the
   complete ID order. A size check visits at most as many IDs as the delta can
   account for under a conservative minimum track size.
+  Artwork, artist-credit, and loudness-identity fan-out queries each cap their
+  indexed scan before deduplication. A locked or unavailable delta-base cache
+  still delivers an already-verified delta rather than falling back to a full
+  snapshot.
 - **Full response.** A single SQLite snapshot supplies headers and tracks
   with item IDs in index order. It shares the SQL projection and validator
   of a delta when annotation tokens stay current. Missing or expired

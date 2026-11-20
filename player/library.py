@@ -13,7 +13,7 @@ from typing import Callable, Dict, List, Optional
 from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import replace
-from shared.library_lifecycle import after_release, serialized, retire, drain
+from shared.library_lifecycle import after_release, coordinated, serialized, retire, drain
 from shared.atomic_file import copy_of, publish, text_pieces
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps, merge_podcast_subscriptions
 from shared.constants import LIBRARY_METADATA_FILENAME
@@ -273,7 +273,15 @@ class LibraryManager:
                             (time.perf_counter() - started) * 1000)
 
     @serialized
-    def _save_metadata(self, *, metadata=None, id_replacements: Optional[Dict[str, str]] = None, operation_id=None, playlist_entry=None) -> bool:
+    def _save_metadata(
+        self,
+        *,
+        metadata=None,
+        id_replacements: Optional[Dict[str, str]] = None,
+        operation_id=None,
+        playlist_entry=None,
+        expected_revision: Optional[int] = None,
+    ) -> bool:
         """
         Commit the canonical SQLite snapshot, then refresh portable exports.
 
@@ -295,7 +303,7 @@ class LibraryManager:
                 self._library_revision = self.db.replace_library(
                     candidate,
                     id_replacements=id_replacements,
-                    expected_revision=self._library_revision,
+                    expected_revision=self._library_revision if expected_revision is None else expected_revision,
                     **({"operation_id": operation_id} if operation_id else {}),
                     **({"playlist_entry": playlist_entry} if playlist_entry is not None else {}),
                 )
@@ -385,6 +393,15 @@ class LibraryManager:
             from shared.library_lifecycle import LibraryPersistenceError
             raise LibraryPersistenceError(getattr(self, 'last_save_error', None))
 
+    def _publish_snapshot(self, metadata: LibraryMetadata, revision: int, *, allow_equal: bool = False) -> bool:
+        """Atomically install a committed snapshot if it does not move backwards."""
+        with coordinated(), self._lock:
+            if revision > self._library_revision or (allow_equal and revision >= self._library_revision):
+                self.metadata = metadata
+                self._library_revision = revision
+                return True
+        return False
+
     def _reload_canonical(self):
         try:
             self.metadata, self._library_revision = self.db.load_library_snapshot()
@@ -410,9 +427,9 @@ class LibraryManager:
         # regenerates portable exports; stale or hand-edited JSON cannot mutate it.
         canonical, revision = self.db.load_library_snapshot()
         if canonical is not None:
-            self.metadata = canonical
-            self._library_revision = revision
-            self._export_metadata(canonical)
+            with coordinated():
+                self._publish_snapshot(canonical, revision, allow_equal=True)
+                after_release(self._export_committed, key=('library-export', id(self)))
             return True
 
         # A per-user manifest is the authoritative legacy source: it names this
@@ -648,14 +665,14 @@ class LibraryManager:
 
     def refresh_if_stale(self):
         """Reload metadata when another writer commits a SQLite revision."""
-        revision = self.db.get_library_revision()
-        if revision != self._library_revision:
-            metadata, revision = self.db.load_library_snapshot()
-            if metadata is not None:
-                self.metadata = metadata
-                self._library_revision = revision
-                return True
-        return False
+        if self.db.get_library_revision() == self._library_revision:
+            return False
+        metadata, revision = self.db.load_library_snapshot()
+        if metadata is None or revision <= self._library_revision:
+            return False
+        # The same lock protects a writer from copying the model through saving
+        # it. A refresh cannot change the expected revision of a staged write.
+        return self._publish_snapshot(metadata, revision)
 
     def _is_cache_likely_stale(self, metadata: Optional[LibraryMetadata] = None) -> bool:
         """
@@ -790,6 +807,7 @@ class LibraryManager:
         in the current OUTPUT_DIR and, if a cloud provider is configured, in remote storage.
         Returns a summary dict: {"checked": N, "removed": M}.
         """
+        self.refresh_if_stale()
         metadata = self.metadata
         if not metadata or not metadata.tracks:
             return {"checked": 0, "removed": 0}

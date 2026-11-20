@@ -380,6 +380,34 @@ def test_refresh_uses_sqlite_revision_not_manifest_mtime(monkeypatch):
     assert [track.id for track in second.metadata.tracks] == ["one"]
 
 
+@pytest.mark.parametrize("read", ["refresh_if_stale", "sync_library"])
+def test_delayed_reload_keeps_a_newer_committed_playlist(monkeypatch, read):
+    manager = LibraryManager(silent=True)
+    monkeypatch.setattr(manager, "_export_committed", lambda: None)
+    manager.require_saved(metadata=_library(_track("one")))
+    other = DatabaseManager(str(manager.db.db_path))
+    latest = other.load_library_metadata()
+    latest.create_playlist("External")
+    other.replace_library(latest)
+
+    load = manager.db.load_library_snapshot
+
+    def load_before_commit():
+        snapshot = load()
+        with monkeypatch.context() as patch:
+            patch.setattr(manager.db, "load_library_snapshot", load)
+            assert manager.refresh_if_stale()
+        staged = manager.metadata.copy_for_playlist_edit()
+        staged.create_playlist("Newer")
+        manager.require_saved(metadata=staged)
+        return snapshot
+
+    monkeypatch.setattr(manager.db, "load_library_snapshot", load_before_commit)
+    getattr(manager, read)()
+    assert manager._library_revision == manager.db.get_library_revision()
+    assert set(manager.metadata.playlists) == {"Later", "Empty", "External", "Newer"}
+
+
 def test_canonical_reload_keeps_rows_headers_and_revision_in_one_snapshot(tmp_path, monkeypatch):
     path = tmp_path / "library.db"
     reader = DatabaseManager(str(path))

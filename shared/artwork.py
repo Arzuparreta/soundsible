@@ -112,12 +112,17 @@ class ArtworkStore:
             for offset in range(0, len(objects), 500):
                 batch = objects[offset:offset + 500]
                 placeholders = ",".join("?" for _ in batch)
-                ids.update(row[0] for row in db.execute(
-                    f'SELECT track_id FROM refs WHERE hash IN ({placeholders}) '
-                    f'UNION SELECT track_id FROM overrides WHERE hash IN ({placeholders}) LIMIT ?',
-                    [*batch, *batch, MAX_KEYS + 1]))
-                if len(ids) > MAX_KEYS:
-                    return None
+                # Limit each indexed scan before deduplicating. Several
+                # account overrides can refer to the same track and object.
+                for table in ('refs', 'overrides'):
+                    rows = db.execute(
+                        f'SELECT track_id FROM {table} WHERE hash IN ({placeholders}) LIMIT ?',
+                        [*batch, MAX_KEYS + 1]).fetchall()
+                    if len(rows) > MAX_KEYS:
+                        return None
+                    ids.update(row[0] for row in rows)
+                    if len(ids) > MAX_KEYS:
+                        return None
             return ids
 
     def public_revision(self) -> str:
