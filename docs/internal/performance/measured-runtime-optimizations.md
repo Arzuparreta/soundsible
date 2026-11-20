@@ -32,7 +32,9 @@ Small improvements qualify. Timing a helper alone is not acceptance evidence.
   Foreign files, restarts, invalid models and changed digests use the full
   validating reader. Publication failures retain the previous tokens. Music
   libraries with empty podcast fields benefit too. Serialization and one
-  full content-hash read remain proportional to library size.
+  full content-hash read remain proportional to library size. *Later
+  superseded:* the pool verifies the digest and reuses the resident podcasts
+  when it matches ([committed library reads](committed-library-reads.md#pool-manifest)).
 - Local search uses SHA-256 for its proof instead of BLAKE2b. Its persisted
   format token explicitly changes; the same folded rows are checked and
   rehashed once, without refolding. Matching, ranking and candidate SQL do not
@@ -57,6 +59,12 @@ Small improvements qualify. Timing a helper alone is not acceptance evidence.
 All fixtures use disposable directories. No production service, user library,
 installed sidecar or remote provider is modified. Do not run concurrent test
 suites/builds during measurements.
+
+These harnesses splice reference code into the current modules, so they only run
+against the internals they measured. The library-read and pool changes of
+[committed library reads](committed-library-reads.md) changed those internals:
+run them from a checkout of `16a8955b`
+(`git worktree add ../soundsible-16a8955b 16a8955b`).
 
 ```sh
 venv/bin/python scripts/benchmark_runtime_optimizations.py \

@@ -3,8 +3,11 @@ from __future__ import annotations
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
+from shared.library_lifecycle import after_release, serialized
 from shared.migration.match import AUTO_ACCEPT_THRESHOLD, LibraryMatcher
 from shared.migration.models import SourceTrack
 from shared.migration.store import MigrationStore
@@ -143,19 +146,30 @@ class MigrationRunner:
             lib.sync_library(silent=True)
         return lib
 
+    @serialized
     def _ensure_target_playlists(self, job: dict[str, Any]) -> None:
         lib = self._library()
+        lib.refresh_if_stale()
         metadata = lib.metadata
         if not metadata:
             raise RuntimeError("Library metadata is unavailable")
+        plan = self.store.playlist_plan(self.job_id)
+        uncommitted = set()
+        if plan is not None:
+            operation, planned_names, uncommitted = plan
+            if lib.db.has_library_operation(operation):
+                self.store.set_playlist_names(self.job_id, planned_names)
+                return
         selected_ids = set(job["selection"].get("playlist_ids") or [])
         names = dict(job.get("playlist_names") or {})
         existing_names = set(metadata.playlists)
-        changed = False
+        candidate = replace(metadata, playlists=metadata.playlists.copy(), settings=deepcopy(metadata.settings))
+        creating = set()
         for playlist in self.manifest.playlists:
             if playlist.source_id not in selected_ids or playlist.is_favourites:
                 continue
-            if playlist.source_id in names and names[playlist.source_id] in metadata.playlists:
+            if (playlist.source_id not in uncommitted
+                    and names.get(playlist.source_id) in candidate.playlists):
                 continue
             base = names.get(playlist.source_id) or playlist.name
             target = base
@@ -166,14 +180,18 @@ class MigrationRunner:
                 while target in existing_names:
                     target = f"{base} ({suffix} {index})"
                     index += 1
-            metadata.create_playlist(target, [])
+            candidate.create_playlist(target, [])
             existing_names.add(target)
             names[playlist.source_id] = target
-            changed = True
+            creating.add(playlist.source_id)
+        if creating:
+            # Record preparation separately from the job's active destinations.
+            # Publication and the operation receipt commit in the same library
+            # transaction, so a retry can distinguish a new playlist from a collision.
+            operation = self.store.plan_playlist_creation(self.job_id, names, creating)
+            lib.require_saved(metadata=candidate, operation_id=operation)
+            after_release(self._emit_library_updated)
         self.store.set_playlist_names(self.job_id, names)
-        if changed:
-            lib._save_metadata()
-            self._emit_library_updated()
 
     def _process_track(self, source_key: str, source: SourceTrack, row: dict[str, Any]) -> None:
         selected = row.get("selected") or {}
@@ -335,6 +353,7 @@ class MigrationRunner:
             except Exception as exc:
                 logger.warning("Could not favourite migrated track %s: %s", track_id, exc)
 
+    @serialized
     def _sync_playlists(self) -> None:
         job = self.store.get_job(self.job_id)
         names = job.get("playlist_names") or {}
@@ -345,20 +364,23 @@ class MigrationRunner:
             if track["matched_track_id"] and track["state"] in {"existing", "completed"}
         }
         lib = self._library()
-        if not lib.metadata:
+        lib.refresh_if_stale()
+        metadata = lib.metadata
+        if not metadata:
             return
+        candidate = replace(metadata, playlists=metadata.playlists.copy(), settings=deepcopy(metadata.settings))
         changed = False
         for playlist in self.manifest.playlists:
             target = names.get(playlist.source_id)
-            if playlist.source_id not in selected_ids or not target or target not in lib.metadata.playlists:
+            if playlist.source_id not in selected_ids or not target or target not in candidate.playlists:
                 continue
             ordered = [resolved[key] for key in playlist.track_keys if key in resolved]
-            if lib.metadata.playlists[target] != ordered:
-                lib.metadata.set_playlist_tracks(target, ordered)
+            if candidate.playlists[target] != ordered:
+                candidate.set_playlist_tracks(target, ordered)
                 changed = True
         if changed:
-            lib._save_metadata()
-            self._emit_library_updated()
+            lib.require_saved(metadata=candidate)
+            after_release(self._emit_library_updated)
 
     def _emit_library_updated(self) -> None:
         try:

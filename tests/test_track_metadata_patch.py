@@ -60,7 +60,12 @@ def test_failed_edit_never_leaks_into_live_model(manager, monkeypatch):
     assert manager.db.load_library_metadata().tracks[0].title == before.tracks[0].title
 
 
-def test_undeclared_unsaved_changes_are_not_committed(manager):
+@pytest.mark.parametrize('reloaded', [False, True])
+def test_undeclared_unsaved_changes_are_not_committed(manager, reloaded):
+    if reloaded:
+        manager.metadata.tracks[0].artists = None
+        assert manager._save_metadata()
+        manager._reload_canonical()
     manager.metadata.tracks[1].title = 'Unrelated dirty edit'
     with pytest.raises(LibraryPersistenceError):
         manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': 'Declared'})
@@ -138,6 +143,42 @@ def test_edit_after_new_manager_load(manager, monkeypatch):
     other._reload_canonical()
     monkeypatch.setattr(other, '_export_committed', lambda: None)
     assert other.patch_track_metadata(other.metadata.tracks[0].id, {'title': 'After restart'})
+
+
+@pytest.mark.parametrize('legacy', [{'artists': None}, {'duration': 120.0}])
+def test_edit_repairs_proof_when_reloaded_legacy_values_are_normalized(manager, legacy):
+    track = manager.metadata.tracks[0]
+    for name, value in legacy.items():
+        setattr(track, name, value)
+    assert manager._save_metadata()
+    manager._reload_canonical()
+    assert manager.db.public_source()['fingerprint'] != fingerprint(manager.metadata)
+    assert manager.patch_track_metadata(track.id, {'title': 'After normalization'})
+    stored = manager.db.load_library_metadata()
+    assert stored.get_track_by_id(track.id).title == 'After normalization'
+    flat, _ = manager.db.load_library_snapshot(project_artists=False)
+    assert manager.db.public_source()['fingerprint'] == fingerprint(flat)
+
+
+def test_legacy_artist_edit_updates_only_the_declared_track(manager, monkeypatch):
+    from shared.sqlite_changes import Cursor, changes_since
+
+    for track in manager.metadata.tracks:
+        track.artists = None
+    track_id = manager.metadata.tracks[0].id
+    assert manager._save_metadata()
+    manager._reload_canonical()
+    assert manager.metadata.tracks[0].artists == ['Artist 0']
+    previous = Cursor.parse(manager.db.public_source()['cursor'])
+    monkeypatch.setattr(manager.db, 'replace_library', lambda *a, **k: pytest.fail('whole-library write'))
+
+    assert manager.patch_track_metadata(track_id, {'artist': 'New artist'})
+    assert manager.metadata.get_track_by_id(track_id).artists == ['New artist']
+    assert manager.metadata.tracks[1].artists == ['Artist 0']
+    current = Cursor.parse(manager.db.public_source()['cursor'])
+    with manager.db._get_connection() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM tracks WHERE artists_json IS NOT NULL').fetchone()[0] == 0
+        assert changes_since(conn, previous, current) == [('track', track_id, 'UPDATE')]
 
 
 def test_external_sql_invalidates_proof_and_uses_canonical_fallback(manager):
@@ -281,3 +322,65 @@ def test_labels_reach_the_pool_catalog_only_while_one_account_owns_it(monkeypatc
     download_pump.mirror_track_into_pool(edited)
 
     assert (pool.tracks[0].title == 'A member label') is not shared_pool
+
+
+def test_edit_gives_an_upgraded_database_its_header_hash(manager):
+    with manager.db._get_connection() as conn:
+        conn.execute('DELETE FROM library_public_headers')  # As before the upgrade.
+        conn.commit()
+    assert manager.db.public_source()['headers'] is None
+    manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': 'Edited'})
+    assert manager.db.public_source()['headers'] is not None
+
+
+def test_edit_succeeds_when_manager_metadata_is_unloaded(manager, monkeypatch):
+    fresh = LibraryManager(silent=True)
+    monkeypatch.setattr(fresh, '_export_committed', lambda: None)
+    assert fresh.metadata is None
+    assert fresh._library_revision == fresh.db.get_library_revision()
+    track_id = manager.metadata.tracks[0].id
+    assert fresh.patch_track_metadata(track_id, {'title': 'Edited from unloaded'})
+    assert fresh.metadata is not None
+    assert fresh.metadata.get_track_by_id(track_id).title == 'Edited from unloaded'
+    assert fresh.db.load_library_metadata().get_track_by_id(track_id).title == 'Edited from unloaded'
+
+
+def test_legacy_artist_edit_avoids_redundant_full_reloads(manager, monkeypatch):
+    for track in manager.metadata.tracks:
+        track.artists = None
+    track_id = manager.metadata.tracks[0].id
+    assert manager._save_metadata()
+    manager._reload_canonical()
+    monkeypatch.setattr(manager.db, 'load_library_metadata', lambda *a, **k: pytest.fail('redundant projected reload'))
+    monkeypatch.setattr(manager, '_reload_canonical', lambda *a, **k: pytest.fail('redundant post-commit reload'))
+    assert manager.patch_track_metadata(track_id, {'title': 'Single load edit'})
+    assert manager.metadata.get_track_by_id(track_id).title == 'Single load edit'
+
+
+@pytest.mark.parametrize('edit', [{'artist': 'Bob'}, {'album_artist': 'Alice'}])
+def test_catalog_display_change_keeps_live_model_aligned_for_subsequent_edits(manager, edit):
+    t0, t1 = manager.metadata.tracks[:2]
+    if 'artist' in edit:
+        t0.artist, t0.artists = 'Alice', None
+        t1.artist, t1.artists = 'alice', None
+    else:
+        t0.artist, t0.album_artist, t0.artists = 'alice', None, None
+    assert manager._save_metadata()
+    manager._reload_canonical()
+    assert manager.patch_track_metadata(t0.id, edit)
+    # A subsequent non-catalog edit must see the updated catalog display names.
+    assert manager.patch_track_metadata(t0.id, {'title': 'Second edit succeeds'})
+    stored = manager.db.load_library_metadata()
+    assert stored.get_track_by_id(t0.id).title == 'Second edit succeeds'
+    assert [t.artists for t in manager.metadata.tracks[:2]] == [t.artists for t in stored.tracks[:2]]
+
+
+def test_artist_names_by_track_chunks_large_batches(tmp_path):
+    from shared.database import DatabaseManager
+
+    db = DatabaseManager(str(tmp_path / 'chunked.db'))
+    meta = library(1100)
+    db.replace_library(meta)
+    with db._get_connection() as conn:
+        credits = db._artist_names_by_track(conn, [track.id for track in meta.tracks])
+    assert len(credits) == 1100

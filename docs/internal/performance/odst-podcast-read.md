@@ -66,11 +66,23 @@ not fix lost updates or the read-to-write race. Cross-writer ownership and
 native Windows validation remain separate work. A failed write now leaves the
 previous file (see [ODST saves](odst-save-streaming.md#atomic-replacement)).
 
+**Superseded for download commits.** The pool verifies the file's digest and
+reuses its resident podcasts on a match. A changed file supplies its podcasts
+when the pool loads it. Cloud replacement verifies the file against an initial
+snapshot that already carries its podcast fields. The old parser and its
+tests are available at the historical checkout used below. [Committed library reads](committed-library-reads.md#pool-manifest)
+
 Validation: **1,532 Python tests passed**, focused Ruff checks and
 `git diff --check` passed. A small benchmark smoke also verified the additional
 reader hash in its metadata. No frontend code changed.
 
 ## Reproduce
+
+These harnesses splice reference code into the current modules, so they only run
+against the internals they measured. The library-read and pool changes of
+[committed library reads](committed-library-reads.md) changed those internals:
+run them from a checkout of `16a8955b`
+(`git worktree add ../soundsible-16a8955b 16a8955b`).
 
 ```sh
 venv/bin/python scripts/benchmark_pool_save.py --reference f5a5a8a \

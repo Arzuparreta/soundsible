@@ -4,6 +4,9 @@ HTTP uses the real library route, SQLite, artwork and loudness stores. Only core
 lookup is bound to the fixture. Saves include SQLite plus both local exports;
 download commits include revision checks, podcast preservation and publication.
 No user data, production engine, network provider or audible playback is used.
+
+Historical: splices reference code into the current modules. Run it from a
+checkout of 16a8955b; later library-read and pool changes moved those internals.
 """
 import argparse
 import ast
@@ -80,11 +83,12 @@ def variant(groups, label):
         from shared.api import library_revision, library_incremental
         from shared import library_fingerprint
         stack.enter_context(patch.object(library_revision, 'fingerprint', library_fingerprint.fingerprint))
-        stack.enter_context(patch.object(library_incremental, 'fingerprint', library_fingerprint.fingerprint))
+        if hasattr(library_incremental, 'fingerprint'):
+            stack.enter_context(patch.object(library_incremental, 'fingerprint', library_fingerprint.fingerprint))
         yield
 
 
-def fixture(root, count):
+def account_fixture(root, count):
     from scripts.benchmark_library_export import library
     from shared.runtime import RuntimeConfig, configure_runtime
     from shared.app_config import set_output_dir
@@ -93,19 +97,27 @@ def fixture(root, count):
     configure_runtime(runtime)
     set_output_dir(runtime.music_dir)
     from player.library import LibraryManager
-    from shared.downloader.service import Downloader
-    from shared.api.routes import library as route
-    from flask import Flask
     manager = LibraryManager(silent=True)
     manager.metadata = library(count)
     assert manager._save_metadata()
+    return manager, runtime
+
+
+def fixture(root, count):
+    from scripts.benchmark_library_export import library
+    from shared.downloader.service import Downloader
+    from shared.api.routes import library as route
+    from flask import Flask
+    manager, runtime = account_fixture(root, count)
     pool = Downloader.__new__(Downloader)
     pool._lock = threading.Lock()
     pool.library_path = root / 'pool' / 'library.json'
     pool.library = library(count)
     pool.library.podcast_subscriptions = [{'id': 'feed', 'title': 'Podcast'}]
     pool.library.podcast_episode_cache = {'feed': {'episodes': [{'title': 'Episode'}]}}
-    pool.save_library()
+    pool.library_path.parent.mkdir(parents=True, exist_ok=True)
+    pool.library_path.write_text(pool.library.to_json(), encoding='utf-8')
+    pool.library = pool._load_library()
     app = Flask(__name__)
     app.register_blueprint(route.library_bp)
     return manager, pool, app.test_client(), runtime

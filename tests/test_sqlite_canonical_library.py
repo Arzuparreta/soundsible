@@ -380,6 +380,57 @@ def test_refresh_uses_sqlite_revision_not_manifest_mtime(monkeypatch):
     assert [track.id for track in second.metadata.tracks] == ["one"]
 
 
+@pytest.mark.parametrize("read", ["refresh_if_stale", "sync_library"])
+def test_delayed_reload_keeps_a_newer_committed_playlist(monkeypatch, read):
+    manager = LibraryManager(silent=True)
+    monkeypatch.setattr(manager, "_export_committed", lambda: None)
+    manager.require_saved(metadata=_library(_track("one")))
+    other = DatabaseManager(str(manager.db.db_path))
+    latest = other.load_library_metadata()
+    latest.create_playlist("External")
+    other.replace_library(latest)
+
+    load = manager.db.load_library_snapshot
+
+    def load_before_commit():
+        snapshot = load()
+        with monkeypatch.context() as patch:
+            patch.setattr(manager.db, "load_library_snapshot", load)
+            assert manager.refresh_if_stale()
+        staged = manager.metadata.copy_for_playlist_edit()
+        staged.create_playlist("Newer")
+        manager.require_saved(metadata=staged)
+        return snapshot
+
+    monkeypatch.setattr(manager.db, "load_library_snapshot", load_before_commit)
+    getattr(manager, read)()
+    assert manager._library_revision == manager.db.get_library_revision()
+    assert set(manager.metadata.playlists) == {"Later", "Empty", "External", "Newer"}
+
+
+def test_canonical_reload_keeps_rows_headers_and_revision_in_one_snapshot(tmp_path, monkeypatch):
+    path = tmp_path / "library.db"
+    reader = DatabaseManager(str(path))
+    writer = DatabaseManager(str(path))
+    before = _library(_track("before"))
+    after = _library(_track("after"))
+    revision = writer.replace_library(before)
+    convert = reader._rows_to_tracks
+
+    def convert_after_commit(conn, rows):
+        writer.replace_library(after)
+        return convert(conn, rows)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(reader, "_rows_to_tracks", convert_after_commit)
+        restored, loaded_revision = reader.load_library_snapshot()
+    assert restored.to_public_dict() == before.to_public_dict()
+    assert loaded_revision == revision
+    restored, loaded_revision = reader.load_library_snapshot()
+    assert restored.to_public_dict() == after.to_public_dict()
+    assert loaded_revision == revision + 1
+
+
 def test_canonical_libraries_are_isolated_per_user(monkeypatch):
     monkeypatch.setattr("player.library._output_dir_for_library", lambda: None)
     with user_context("alice"):

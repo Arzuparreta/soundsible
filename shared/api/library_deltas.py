@@ -20,34 +20,72 @@ def digest(value):
     return sha256(encoded(value)).digest()
 
 
-@contextmanager
-def connection():
-    path = get_cache_dir() / 'library-deltas.sqlite3'
-    path.parent.mkdir(parents=True, exist_ok=True)
+def _open_write_db(path):
     db = sqlite3.connect(path, timeout=0.1)
     try:
         path.chmod(0o600)
         db.execute('PRAGMA foreign_keys=ON')
-        db.execute('PRAGMA synchronous=NORMAL')
+        if (db.execute('PRAGMA journal_mode').fetchone() or ('',))[0].lower() != 'wal':
+            try:
+                db.execute('PRAGMA journal_mode=WAL')
+            except sqlite3.OperationalError:
+                pass
+        db.execute('PRAGMA synchronous=OFF')
         db.execute('PRAGMA cache_size=-512')
         db.execute('PRAGMA temp_store=FILE')
         db.execute('PRAGMA temp.cache_size=-512')
         page_size = db.execute('PRAGMA page_size').fetchone()[0]
         db.execute(f'PRAGMA max_page_count={MAX_BYTES // page_size}')
-        db.executescript('''
-            BEGIN IMMEDIATE;
-            CREATE TABLE IF NOT EXISTS revisions (
-                id INTEGER PRIMARY KEY, account TEXT, revision TEXT, created REAL, bytes INTEGER,
-                UNIQUE(account, revision));
-            CREATE TABLE IF NOT EXISTS rows (
-                revision_id INTEGER REFERENCES revisions(id) ON DELETE CASCADE, position INTEGER, id TEXT, hash BLOB,
-                PRIMARY KEY(revision_id, id));
-            CREATE INDEX IF NOT EXISTS rows_order ON rows(revision_id, position);
-            CREATE TABLE IF NOT EXISTS headers (
-                revision_id INTEGER REFERENCES revisions(id) ON DELETE CASCADE, name TEXT, hash BLOB,
-                PRIMARY KEY(revision_id, name));
-            COMMIT;
-        ''')
+        if db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='incremental_bases'"
+        ).fetchone() is None:
+            db.executescript('''
+                BEGIN IMMEDIATE;
+                CREATE TABLE IF NOT EXISTS revisions (
+                    id INTEGER PRIMARY KEY, account TEXT, revision TEXT, created REAL, bytes INTEGER,
+                    UNIQUE(account, revision));
+                CREATE TABLE IF NOT EXISTS rows (
+                    revision_id INTEGER REFERENCES revisions(id) ON DELETE CASCADE, position INTEGER, id TEXT, hash BLOB,
+                    PRIMARY KEY(revision_id, id));
+                CREATE INDEX IF NOT EXISTS rows_order ON rows(revision_id, position);
+                CREATE TABLE IF NOT EXISTS headers (
+                    revision_id INTEGER REFERENCES revisions(id) ON DELETE CASCADE, name TEXT, hash BLOB,
+                    PRIMARY KEY(revision_id, name));
+                CREATE TABLE IF NOT EXISTS incremental_bases (
+                    account TEXT, revision TEXT, created REAL, proof TEXT,
+                    PRIMARY KEY(account, revision));
+                COMMIT;
+            ''')
+        return db
+    except BaseException:
+        db.close()
+        raise
+
+
+@contextmanager
+def connection(*, read_only=False):
+    path = get_cache_dir() / 'library-deltas.sqlite3'
+    if read_only:
+        db = sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True, timeout=0.1)
+        try:
+            yield db
+        finally:
+            db.close()
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        db = _open_write_db(path)
+    except sqlite3.DatabaseError as exc:
+        if isinstance(exc, sqlite3.OperationalError):
+            raise
+        # Disposable cache corrupted (e.g., power loss under synchronous=OFF): recreate cleanly.
+        for suffix in ('', '-wal', '-shm'):
+            try:
+                path.with_name(path.name + suffix).unlink(missing_ok=True)
+            except OSError:
+                pass
+        db = _open_write_db(path)
+    try:
         with db:
             yield db
     finally:

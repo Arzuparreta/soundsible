@@ -1,6 +1,8 @@
 """Cross-process publication lock and bounded fingerprints for portable files."""
 from contextlib import contextmanager
+from dataclasses import dataclass
 from hashlib import sha256
+import io
 import os
 import errno
 import time
@@ -13,15 +15,62 @@ _locks = weakref.WeakValueDictionary()
 _local = threading.local()
 
 
-def revision(path):
+def _digest(stream):
     digest = sha256()
+    for block in iter(lambda: stream.read(64 * 1024), b''):
+        digest.update(block)
+    return digest.digest()
+
+
+def revision(path):
     try:
         with Path(path).open('rb') as stream:
-            for block in iter(lambda: stream.read(64 * 1024), b''):
-                digest.update(block)
+            return _digest(stream)
     except FileNotFoundError:
         return None
-    return digest.digest()
+
+
+@dataclass(frozen=True)
+class FileRevision:
+    digest: bytes
+    size: int
+
+
+class _HashingReader(io.RawIOBase):
+    def __init__(self, raw):
+        self.raw = raw
+        self.digest = sha256()
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        count = self.raw.readinto(buffer)
+        self.digest.update(memoryview(buffer)[:count])
+        return count
+
+
+def read_revision(path, parse, *, known: FileRevision | None = None):
+    """Return the revision and parsed value from one file descriptor.
+
+    The parser consumes the complete text stream, as json.load does.
+    When the digest matches `known`, return that revision and no parsed value.
+    Size is only a hint to skip a hash-only pass when the bytes must differ.
+    When absent, return neither a revision nor a parsed value.
+    """
+    try:
+        raw = Path(path).open('rb', buffering=0)
+    except FileNotFoundError:
+        return None, None
+    with raw:
+        if known is not None and known.size == os.fstat(raw.fileno()).st_size:
+            if _digest(raw) == known.digest:
+                return known, None
+            raw.seek(0)
+        hashing = _HashingReader(raw)
+        with io.TextIOWrapper(io.BufferedReader(hashing, 64 * 1024), encoding='utf-8') as text:
+            value = parse(text)
+            return FileRevision(hashing.digest.digest(), raw.tell()), value
 
 
 @contextmanager

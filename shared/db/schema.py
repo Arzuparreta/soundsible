@@ -567,6 +567,10 @@ class SchemaMixin:
             CREATE INDEX IF NOT EXISTS idx_tracks_album_sort
             ON tracks (album, album_artist, artist, track_number)
         """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_library_tracks_position
+            ON library_tracks (position, track_id)
+        """)
 
     @staticmethod
     def _create_catalog_tables(conn):

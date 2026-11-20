@@ -28,6 +28,36 @@ def picture(size=(480, 360), color='red'):
     return output.getvalue()
 
 
+@pytest.mark.parametrize('overrides', [False, True])
+def test_artwork_delta_caps_database_work_before_deduplicating(monkeypatch, overrides):
+    from contextlib import contextmanager
+
+    art = artwork_store()
+    connect = art.connect
+    with connect() as db:
+        db.execute("INSERT INTO objects VALUES ('shared',200,200,'png',10)")
+        if overrides:
+            db.executemany("INSERT INTO overrides VALUES (?,'song','shared','manual',1)",
+                           ((str(i),) for i in range(10000)))
+        else:
+            db.executemany("INSERT INTO refs(track_id,hash,source) VALUES (?,'shared','manual')",
+                           ((str(i),) for i in range(10000)))
+
+    before = art.change_state()
+    with connect() as db:
+        db.execute("UPDATE objects SET width=300 WHERE hash='shared'")
+    after = art.change_state()
+
+    @contextmanager
+    def bounded():
+        with connect() as db:
+            db.set_progress_handler(lambda: 1, 35000)
+            yield db
+
+    monkeypatch.setattr(art, 'connect', bounded)
+    assert art.changed_tracks(before, after) is None
+
+
 def test_search_uses_existing_candidates_without_network_and_ignores_alternate_frames():
     rows = {'thumbnails': [{'url': URL, 'width': 720, 'height': 404},
                            {'url': URL.replace('maxresdefault', '1'), 'width': 1920, 'height': 1080},

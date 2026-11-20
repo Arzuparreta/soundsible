@@ -3,6 +3,9 @@
 Temporary databases live on the repository storage volume. Annotation stores
 are real (initially empty). SQL loading, network, compression and audio are not
 measured. Python peaks exclude the already-loaded library and native SQLite.
+
+Historical: splices reference code into the current modules. Run it from a
+checkout of 16a8955b; later library-read and pool changes moved those internals.
 """
 import argparse
 import ast

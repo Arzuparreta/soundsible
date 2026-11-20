@@ -43,7 +43,8 @@ def _build_user_core(user_id: str) -> _UserCore:
     library.sync_library(silent=True)
 
     def library_held_since(keys):
-        # Read at call time: the manager swaps `metadata` on every reload.
+        # Refresh and read at call time: flat library reads do not reload `metadata`.
+        library.refresh_if_stale()
         metadata = library.metadata
         return library_dates.held_since(keys, metadata.tracks if metadata else ())
 
@@ -117,7 +118,8 @@ def favourite_library_ids(user_id: Optional[str] = None) -> list:
     if favourites is None:
         return []
 
-    metadata = getattr(core.library, "metadata", None)
+    core.library.refresh_if_stale()
+    metadata = core.library.metadata
     tracks = getattr(metadata, "tracks", None) or []
     owned = set()
     by_youtube = {}
@@ -145,8 +147,9 @@ def favourite_library_ids(user_id: Optional[str] = None) -> list:
 
 
 # Note: Helpers (used by blueprints)
-def get_track_by_id(lib, track_id: str) -> Optional[Track]:
-    """Resolve track by ID: metadata first, then DB fallback. Single place for consistency."""
+def get_track_by_id(lib: LibraryManager, track_id: str) -> Optional[Track]:
+    """Resolve a track against the account's current library revision."""
+    lib.refresh_if_stale()
     if lib.metadata:
         track = lib.metadata.get_track_by_id(track_id)
         if track:
@@ -160,9 +163,9 @@ def ensure_library_metadata():
     """The library and metadata a write is about to change, as they are *now*.
 
     Every caller of this mutates the snapshot it gets back and then saves the
-    whole library from it, so it has to be the current one. Reads already
-    reconcile (`GET /api/library` refreshes before answering); writes used to
-    trust whatever this process last loaded, which is how a playlist could be
+    whole library from it, so it has to be the current one. The flat library
+    read uses SQLite directly. Writes used to trust whatever this process
+    last loaded, which is how a playlist could be
     renamed on one snapshot and a song added to another — the later save
     reverting the earlier change, and the client being told both succeeded.
 

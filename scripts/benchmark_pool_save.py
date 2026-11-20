@@ -3,6 +3,9 @@
 Existing --library is read-only. Timings exclude tracing; allocation peaks are
 separate runs. Phase timing includes read, reconstruction, encoding and writes;
 these are application calls, not physical disk latency or durability evidence.
+
+Historical: splices reference code into the current modules. Run it from a
+checkout of 16a8955b; later library-read and pool changes moved those internals.
 """
 import argparse
 import ast

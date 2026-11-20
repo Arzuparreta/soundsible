@@ -27,12 +27,13 @@ A delta base retains only the canonical proof, annotation tokens/cursors and
 header hashes in the existing disposable history database. On a supported
 request, the route:
 
-1. Verifies the mutable in-memory model against its committed fingerprint.
-2. Loads bounded changed-key sets since the client's base and resolves current
-   canonical positions. Coalescing preserves the first operation, so a song added
-   and deleted between polls does not produce an invalid removal.
-3. Copies only affected tracks and detached headers. A second fingerprint uses
-   those exact copies, guarding edits during copying and edits not yet saved.
+1. Reads the committed public source and annotation cursors without consulting
+   the resident model. See [committed library reads](committed-library-reads.md).
+2. Loads bounded changed-key sets since the client's base. Coalescing preserves
+   the first operation, so a song added and deleted between polls does not
+   produce an invalid removal.
+3. Reads affected tracks from the same SQLite snapshot as their journal. It
+   reads headers only when the base and current header proof differ.
 4. Annotates only those tracks, rechecks all source cursors, and returns a delta
    only if it is provably smaller than the complete JSON representation.
 
@@ -48,10 +49,9 @@ For verified canonical sources, weak ETags now hash account-scoped public-source
 and annotation dependency tokens, not serialized JSON bytes. The ETag is still
 an opaque string; full responses and partial responses for the same verified
 state agree. Annotation tokens can conservatively change even for an unrelated
-song. The existing validator cache still contains only short strings and retains
-early 304 behavior. Custom/pretty JSON providers, empty libraries, unverified
-models, annotation failures, missing/expired history, pruned journals and large
-change sets fall back safely. The legacy content-hash path remains available
+song. Warm revalidation takes a fixed number of lookups. Custom or pretty JSON
+providers, unverified sources, annotation failures, missing or expired history,
+pruned journals and large change sets can fall back to a full response. The legacy content-hash path remains available
 for models without a verified canonical source.
 
 The public fingerprint now ignores Python object-sharing topology. Equal strings
@@ -64,8 +64,10 @@ unsupported models cannot establish a valid optimization proof.
 
 - Each journal retains at most 10,255 events (10,000 plus a pruning interval).
   Event keys are limited to 512 UTF-8 bytes; larger keys record a gap requiring
-  full fallback. Epochs distinguish recreated stores. Journals store keys and
-  operations, never track metadata bodies.
+  full fallback. Epochs distinguish recreated stores. An anchor per retained
+  event distinguishes histories that fork after a restore. Journals store
+  keys, operations and anchors. The delta base lookup uses a read-only
+  connection to the history database.
 - A request admits at most 2,000 changed keys. Large artwork-object fanout and
   shared loudness identities also respect this bound.
 - Lightweight bases retain four per account, 256 globally, for at most 24 hours;
@@ -76,17 +78,12 @@ unsupported models cannot establish a valid optimization proof.
 - The canonical current hash index grows with the library, on disk, rather than
   holding additional metadata in RAM. Normal SQLite/page-cache behavior still
   applies; these bounds do not describe total process or operating-system RAM.
-- Requests still fingerprint the model twice on successful changed responses.
-  They are **not O(number of changed songs)** overall. Removing these scans
-  requires controlling all in-memory mutations. SQL library reloads can still
-  materialize the model when another writer changed it.
-- Headers and optional ID order are copied when required; very large playlists
-  or order changes therefore need memory proportional to those response fields.
-  Canonical saves now pay for hashing and maintaining the proof/index. This is a
-  measured write/read tradeoff, not free optimization.
-- Numeric/string normalization and catalog projection can make a reloaded model
-  differ from an earlier saved model. A mismatch disables partial preparation
-  until a later canonical save; correctness takes precedence over hit rate.
+- Warm revalidation makes no track or header queries. Sparse deltas read the
+  affected rows and skip unchanged headers. Full responses use the same
+  committed SQL projection.
+- Changed headers and the optional ID order take memory proportional to those
+  response fields. Saves maintain the on-disk hashes and bounded journal in
+  the canonical transaction.
 
 ## Validation
 
@@ -105,6 +102,12 @@ concurrent annotation/library commits and a fresh subprocess with no memory
 cache. Migration leaves existing data usable before any new proof exists.
 
 ## Reproduction and measured results
+
+These harnesses splice reference code into the current modules, so they only run
+against the internals they measured. The library-read and pool changes of
+[committed library reads](committed-library-reads.md) changed those internals:
+run them from a checkout of `16a8955b`
+(`git worktree add ../soundsible-16a8955b 16a8955b`).
 
 ```sh
 venv/bin/python scripts/benchmark_library_journals.py --reference cd2311b --sizes 1000 10000 50000 --repeats 3 --memory

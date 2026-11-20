@@ -6,7 +6,7 @@ for representing music tracks, library organization, and synchronization.
 """
 
 from copy import deepcopy
-from dataclasses import dataclass, asdict, field, fields
+from dataclasses import dataclass, asdict, field, fields, replace
 from typing import List, Dict, Iterator, Optional, Any
 from enum import Enum
 import json
@@ -134,6 +134,8 @@ class Track:
 
 
 _TRACK_FIELDS = frozenset(item.name for item in fields(Track))
+PUBLIC_HEADER_FIELDS = ("version", "playlists", "settings", "last_updated",
+                        "podcast_subscriptions", "podcast_episode_cache")
 _PUBLIC_TRACK_FIELDS = tuple(item.name for item in fields(Track)
                              if item.name not in {"local_path", "local_mtime_ns"})
 
@@ -210,11 +212,14 @@ class LibraryMetadata:
         """
         return self._public_fields([track.to_public_dict() for track in self.tracks])
 
-    def _public_fields(self, tracks: Any) -> Dict[str, Any]:
-        # One definition of the public keys and their order, for both encoders.
+    def public_headers(self) -> Dict[str, Any]:
+        """Detached public fields other than tracks, in `PUBLIC_HEADER_FIELDS` order.
+
+        The one projection every consumer uses: responses, exports, the
+        canonical save and its proofs.
+        """
         return {
             "version": self.version,
-            "tracks": tracks,
             "playlists": deepcopy(self.playlists),
             "settings": deepcopy(self.settings),
             "last_updated": self.last_updated,
@@ -222,11 +227,16 @@ class LibraryMetadata:
             "podcast_episode_cache": deepcopy(dict(self.podcast_episode_cache)),
         }
 
+    def _public_fields(self, tracks: Any) -> Dict[str, Any]:
+        # The public keys in document order: tracks come second.
+        version, *rest = self.public_headers().items()
+        return dict([version, ("tracks", tracks), *rest])
+
     def to_json(self, indent: int = 2) -> str:
         """Serialize portable library metadata to JSON."""
         return json.dumps(self.to_public_dict(), indent=indent)
 
-    def iter_json(self, chunk: int = 128, *, on_section=None) -> Iterator[str]:
+    def iter_json(self, chunk: int = 128) -> Iterator[str]:
         """`to_json()` in pieces: the same text, without the whole document in memory.
 
         Header values are encoded as `to_json()` encodes them. Tracks are encoded
@@ -236,8 +246,6 @@ class LibraryMetadata:
         from shared.library_json import encode_track_block
         tracks = list(self.tracks)
         for index, (key, value) in enumerate(self._public_fields(None).items()):
-            if on_section is not None:
-                on_section(key)
             yield ("{" if index == 0 else ",") + "\n  " + json.dumps(key) + ": "
             if key != "tracks":
                 yield json.dumps(value, indent=2).replace("\n", "\n  ")
@@ -446,6 +454,10 @@ class LibraryMetadata:
                 return True
         return False
     
+    def copy_for_playlist_edit(self) -> 'LibraryMetadata':
+        """Detach playlist state until the edited library commits."""
+        return replace(self, playlists=deepcopy(self.playlists), settings=deepcopy(self.settings))
+
     def create_playlist(self, name: str, track_ids: Optional[List[str]] = None) -> None:
         """Create a new playlist."""
         self.playlists[name] = track_ids or []

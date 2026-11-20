@@ -84,6 +84,7 @@ class ArtworkStore:
             from shared.sqlite_changes import install_changes
             install_changes(db, (('refs', 'track', 'track_id'), ('overrides', 'track', 'track_id'), ('objects', 'object', 'hash')))
             db.execute('CREATE INDEX IF NOT EXISTS refs_hash ON refs(hash)')
+            db.execute('CREATE INDEX IF NOT EXISTS overrides_hash ON overrides(hash, track_id)')
 
     @property
     def variants(self):
@@ -110,11 +111,18 @@ class ArtworkStore:
             objects = [key for kind, key, operation in events if kind == 'object']
             for offset in range(0, len(objects), 500):
                 batch = objects[offset:offset + 500]
-                ids.update(row[0] for row in db.execute(
-                    f'SELECT track_id FROM refs WHERE hash IN ({",".join("?" for _ in batch)}) LIMIT ?',
-                    [*batch, MAX_KEYS + 1]))
-                if len(ids) > MAX_KEYS:
-                    return None
+                placeholders = ",".join("?" for _ in batch)
+                # Limit each indexed scan before deduplicating. Several
+                # account overrides can refer to the same track and object.
+                for table in ('refs', 'overrides'):
+                    rows = db.execute(
+                        f'SELECT track_id FROM {table} WHERE hash IN ({placeholders}) LIMIT ?',
+                        [*batch, MAX_KEYS + 1]).fetchall()
+                    if len(rows) > MAX_KEYS:
+                        return None
+                    ids.update(row[0] for row in rows)
+                    if len(ids) > MAX_KEYS:
+                        return None
             return ids
 
     def public_revision(self) -> str:

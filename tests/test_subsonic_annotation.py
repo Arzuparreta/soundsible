@@ -1,6 +1,7 @@
 """What a client writes back: stars, ratings, plays and playlists."""
 
 import time
+import pytest
 
 from tests.subsonic_support import build, track
 
@@ -180,6 +181,42 @@ def test_creating_a_playlist_writes_it_to_the_manifest(tmp_path, monkeypatch):
     assert harness.library.saves == 1
 
 
+def test_create_playlist_builds_response_after_releasing_write_lock(tmp_path, monkeypatch):
+    from shared import library_lifecycle
+    from shared.api.routes import subsonic
+
+    harness = build(tmp_path, monkeypatch, _library())
+    original = subsonic._playlist_payload
+
+    def payload(*args, **kwargs):
+        assert harness.db.load_library_metadata().playlists['Night'] == ['t1']
+        assert not getattr(library_lifecycle._local, 'depth', 0)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(subsonic, '_playlist_payload', payload)
+    harness.ok('createPlaylist.view', name='Night', songId='tr-t1')
+
+
+@pytest.mark.parametrize(('method', 'params'), [
+    ('createPlaylist.view', {'name': 'Night', 'songId': 'tr-t1'}),
+    ('updatePlaylist.view', {'playlistId': 'Drive', 'name': 'Night'}),
+    ('deletePlaylist.view', {'id': 'Drive'}),
+])
+def test_playlist_notifications_run_after_releasing_write_lock(tmp_path, monkeypatch, method, params):
+    from shared import library_lifecycle
+
+    harness = build(tmp_path, monkeypatch, _library(), playlists={'Drive': ['t1']})
+    notifications = []
+
+    def emit(event):
+        assert not getattr(library_lifecycle._local, 'depth', 0)
+        notifications.append(event)
+
+    monkeypatch.setattr('shared.realtime.emit_to_user', emit)
+    harness.ok(method, **params)
+    assert notifications == ['library_updated']
+
+
 def test_updating_a_playlist_adds_and_removes_by_index(tmp_path, monkeypatch):
     harness = build(tmp_path, monkeypatch, _library(), playlists={"Drive": ["t1", "t2"]})
     response = harness.client.get(
@@ -188,6 +225,15 @@ def test_updating_a_playlist_adds_and_removes_by_index(tmp_path, monkeypatch):
     )
     assert response.status_code == 200
     assert harness.library.metadata.playlists["Drive"] == ["t2", "t3"]
+
+
+def test_invalid_playlist_removal_leaves_pending_additions_unapplied(tmp_path, monkeypatch):
+    harness = build(tmp_path, monkeypatch, _library(), playlists={"Drive": ["t1", "t2"]})
+    response = harness.json("updatePlaylist", playlistId="Drive", songIdToAdd="tr-t3",
+                            songIndexToRemove="invalid")
+    assert response["status"] == "failed"
+    assert harness.library.metadata.playlists["Drive"] == ["t1", "t2"]
+    assert harness.library.saves == 0
 
 
 def test_removing_several_indices_removes_the_songs_the_client_meant(tmp_path, monkeypatch):

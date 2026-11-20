@@ -171,7 +171,6 @@ def test_migration_import_playlist_writes_metadata(tmp_path):
     mock_lib = MagicMock()
     mock_lib.metadata = meta
     mock_lib.refresh_if_stale = MagicMock()
-    mock_lib._save_metadata = MagicMock()
 
     with patch("shared.api.routes.migration._loaded_library", return_value=mock_lib):
         with patch("shared.realtime.socketio") as sio:
@@ -181,9 +180,10 @@ def test_migration_import_playlist_writes_metadata(tmp_path):
                 headers={"Authorization": f"Bearer {write_tok}"},
             )
     assert res.status_code == 200
-    assert "Imported" in meta.playlists
-    assert meta.playlists["Imported"] == [a.id, b.id]
-    mock_lib._save_metadata.assert_called_once()
+    assert "Imported" not in meta.playlists
+    assert res.get_json()["playlists"]["Imported"] == [a.id, b.id]
+    mock_lib.require_saved.assert_called_once()
+    assert mock_lib.require_saved.call_args.kwargs["metadata"].playlists["Imported"] == [a.id, b.id]
     sio.emit.assert_called_once()
 
 
@@ -201,7 +201,6 @@ def test_migration_import_playlist_logs_batch_id(tmp_path):
     mock_lib = MagicMock()
     mock_lib.metadata = meta
     mock_lib.refresh_if_stale = MagicMock()
-    mock_lib._save_metadata = MagicMock()
 
     bid = "batch-test-uuid"
 

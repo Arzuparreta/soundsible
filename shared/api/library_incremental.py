@@ -1,58 +1,51 @@
-"""Journal-driven library deltas; only bounded proofs are retained on disk."""
-from copy import deepcopy
+"""Bounded journal deltas from committed SQLite rows and annotation cursors."""
 from hashlib import sha256
 import json
+import logging
+import sqlite3
 import time
 
 from flask import current_app
 from flask.json.provider import DefaultJSONProvider
 
 from shared.api import library_deltas as history
-from shared.library_fingerprint import fingerprint, HEADER_FIELDS, TRACK_FIELDS
-from shared.database import DatabaseManager
+from shared.library_fingerprint import TRACK_FIELDS
 from shared.loudness import LoudnessStore, annotate_tracks
-from shared.models import LibraryMetadata, Track
+
+logger = logging.getLogger(__name__)
 
 MAX_BASES = 256
 MAX_PER_ACCOUNT = 4
 TTL = 86400
+PROJECTION = 'sqlite-catalog-v2'
 # Every public track has these ASCII keys and at least one byte per JSON value.
 # A delta smaller than this bound is certainly smaller than the full response.
 MIN_TRACK_BYTES = 1 + sum(len(name) + 5 for name in TRACK_FIELDS)
 
 
-def supported(lib):
-    provider = current_app.json
-    return (type(getattr(lib, 'metadata', None)) is LibraryMetadata
-            and bool(lib.metadata.tracks)
-            and isinstance(getattr(lib, 'db', None), DatabaseManager)
-            and type(provider) is DefaultJSONProvider
-            and provider.compact is not False
-            and not (provider.compact is None and current_app.debug))
-
-
-def _table(db):
-    db.execute('CREATE TABLE IF NOT EXISTS incremental_bases ('
-               'account TEXT,revision TEXT,created REAL,proof TEXT,PRIMARY KEY(account,revision))')
-
-
 def load_base(account, revision):
-    with history.connection() as db:
-        _table(db)
-        row = db.execute('SELECT proof FROM incremental_bases WHERE account=? AND revision=? AND created>=?',
-                         (account, revision, time.time() - TTL)).fetchone()
-        return json.loads(row[0]) if row else None
+    try:
+        with history.connection(read_only=True) as db:
+            row = db.execute('SELECT proof FROM incremental_bases WHERE account=? AND revision=? AND created>=?',
+                             (account, revision, time.time() - TTL)).fetchone()
+            return json.loads(row[0]) if row else None
+    except sqlite3.DatabaseError:
+        return None
 
 
-def remember(account, revision, state, headers):
+def header_digests(headers):
+    """Digest each rendered field for comparison with a client's saved base."""
+    return {key: history.digest(value).hex() for key, value in headers.items()}
+
+
+def remember(account, revision, state, digests):
     if len(account.encode()) > 256:
         return
-    proof = json.dumps({**state, 'headers': {key: history.digest(value).hex() for key, value in headers.items()}})
+    proof = json.dumps({**state, 'headers': digests, 'projection': PROJECTION})
     if len(proof.encode()) > 8192:
         return
     with history.connection() as db:
         db.execute('BEGIN IMMEDIATE')
-        _table(db)
         db.execute('DELETE FROM incremental_bases WHERE created<?', (time.time() - TTL,))
         db.execute('INSERT INTO incremental_bases VALUES (?,?,?,?) ON CONFLICT(account,revision) '
                    'DO UPDATE SET created=excluded.created,proof=excluded.proof', (account, revision, time.time(), proof))
@@ -63,81 +56,65 @@ def remember(account, revision, state, headers):
                    '(SELECT rowid FROM incremental_bases ORDER BY created DESC,rowid DESC LIMIT ?)', (MAX_BASES,))
 
 
-def prepare(lib, artwork, dependencies, source_fingerprint):
-    """Tie the actual public model to a committed source and annotation cursors."""
-    if not supported(lib) or dependencies is None:
+def prepare(source, artwork):
+    """Bind one committed projection to its annotation cursors."""
+    if source is None or type(current_app.json) is not DefaultJSONProvider:
         return None
-    source = lib.db.public_source()
-    if source is None or source['fingerprint'] != source_fingerprint:
-        return None
-    art = artwork.change_state()
-    loud = LoudnessStore().change_state()
-    if dependencies != ((art['token'], loud['token']) if lib.metadata.tracks else ()):
-        return None
-    state = {'source': source, 'art': art, 'loud': loud}
-    return state
+    return {'source': source, 'art': artwork.change_state() if source['tracks'] else None,
+            'loud': LoudnessStore().change_state() if source['tracks'] else None}
 
 
-def still_current(lib, artwork, state):
-    return (lib.db.public_source() == state['source']
-            and artwork.change_state() == state['art']
-            and LoudnessStore().change_state() == state['loud'])
+def annotations_current(artwork, state):
+    return not state['source']['tracks'] or (
+        artwork.change_state() == state['art'] and LoudnessStore().change_state() == state['loud']
+    )
 
 
 def revision_for(account, state):
-    # Weak ETags are opaque validators, not a promise to hash serialized bytes.
-    return sha256(history.encoded(('library-dependencies', account, state['source']['fingerprint'],
-                                 state['art']['token'], state['loud']['token']))).hexdigest()
+    # The write revision advances on no-op saves. Only content, ordering and
+    # projection dependencies select an HTTP representation.
+    art, loud = state['art'], state['loud']
+    source = state['source']
+    return sha256(history.encoded((PROJECTION, account, source['fingerprint'], source['cursor'][3],
+                                   source['credits'][3], source['ordering'],
+                                   art['token'] if art else None, loud['token'] if loud else None))).hexdigest()
 
 
-def try_delta(lib, artwork, account, base_revision, dependencies, source_fingerprint=None):
-    if not supported(lib) or not base_revision or len(base_revision) > 128:
+def try_delta(db, artwork, account, base_revision, state):
+    if not state['source']['tracks'] or not base_revision or len(base_revision) > 128:
         return None
     base = load_base(account, base_revision)
-    if base is None:
-        return None
-    if source_fingerprint is None:
-        source_fingerprint = fingerprint(lib.metadata)
-    state = prepare(lib, artwork, dependencies, source_fingerprint)
-    if state is None:
+    if base is None or base.get('projection') != PROJECTION or base['art'] is None:
         return None
     artwork_ids = artwork.changed_tracks(base['art'], state['art'])
     identities = LoudnessStore().changed_identities(base['loud'], state['loud'])
     if artwork_ids is None or identities is None:
         return None
-    affected = lib.db.public_changes(base['source'], state['source'], artwork_ids, identities)
+    affected = db.public_changes(base['source'], state['source'], artwork_ids, identities)
     if affected is None:
         return None
-    positions, removed, order = affected
-    copied = {}
-    for track_id, position in positions.items():
-        track = lib.metadata.tracks[position]
-        if type(track) is not Track or track.id != track_id:
-            return None
-        copied[position] = track.to_public_dict()
-    headers = {name: deepcopy(getattr(lib.metadata, name)) for name in HEADER_FIELDS}
-    # Validate the exact detached rows/headers we will return. Substituting
-    # them also detects mutations during copying, even if the live row reverts.
-    if fingerprint(lib.metadata, public_tracks=copied, public_headers=headers) != state['source']['fingerprint']:
-        return None
-    upserts = [copied[position] for position in sorted(copied)]
+    upserts, removed, order, headers = affected
+    if headers is None:
+        fields, digests = {}, base['headers']
+    else:
+        digests = header_digests(headers)
+        fields = {name: headers[name] for name, digest in digests.items()
+                  if digest != base['headers'].get(name)}
     if not annotate_tracks(upserts, selected=True):
         return None
     artwork.annotate(upserts)
     delta = {'kind': 'delta', 'base_revision': base_revision, 'revision': revision_for(account, state),
-             'upserts': upserts, 'removed': removed,
-             'fields': {name: value for name, value in headers.items()
-                        if history.digest(value).hex() != base['headers'].get(name)}}
+             'upserts': upserts, 'removed': removed, 'fields': fields}
     if order is not None:
         delta['order'] = order
-    if not still_current(lib, artwork, state):
+    if db.public_source() != state['source'] or not annotations_current(artwork, state):
         return None
     response = current_app.json.response(delta)
-    if len(response.get_data()) >= len(lib.metadata.tracks) * MIN_TRACK_BYTES:
+    if not db.public_track_count_exceeds(len(response.get_data()) // MIN_TRACK_BYTES):
         return None
-    remember(account, delta['revision'], state, headers)
-    from shared.api.library_revision import validators
-    key = sha256(repr((account, state['source']['fingerprint'], dependencies)).encode()).hexdigest()
-    validators.put(key, delta['revision'])
+    try:
+        remember(account, delta['revision'], state, digests)
+    except Exception:
+        logger.debug('Incremental base unavailable; returning verified delta', exc_info=True)
     response.headers['Cache-Control'] = 'private, no-store'
     return response

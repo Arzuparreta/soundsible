@@ -88,11 +88,15 @@ RSS, energy savings, playback quality or acoustic acceptance.
 - Journals and source hashes live in SQLite, not in resident metadata maps.
   `shared/library_changes.py`, `shared/sqlite_changes.py` and
   `shared/api/library_incremental.py` implement source proofs and selection.
-- Models are still mutable before they are saved. Partial requests
-  **still walk the library to check fingerprints**. Do not replace
-  those checks with blind trust in the SQLite revision.
-- ETags of verified canonical sources are opaque dependency tokens,
-  not hashes of the entire JSON. The old path remains for unverified sources.
+- The flat library endpoint answers from committed SQLite state. Conditional
+  requests need the revision and annotation cursors, deltas read only affected
+  rows, normalized catalog credits and changed headers, and full reads use
+  the same SQL projection. The content-hash fallback
+  remains for unverified sources. See
+  [committed library reads](../performance/committed-library-reads.md).
+- Published model reloads share the lifecycle lock with staged edits. The
+  revision is rechecked at publication so a delayed reader cannot replace a
+  newer commit or advance the revision of a candidate already being saved.
 - Do not break account isolation, changes during copy/annotation, field
   removal, order, rekeys/aliases, user state or the first `added_at` date.
 - Journals have limits and epochs; if equivalence cannot be proven,
@@ -363,11 +367,9 @@ chunk from these:
    export no longer duplicates memory, snapshots, fingerprints and exports still
    walk the entire library on every save. The search index
    adds a sorted pass to saves that change search fields or
-   order; tracking in-memory mutations would allow removing that pass and the
-   per-query fingerprint. Batching exports: see the decision above. In ODST the
-   block serialization and the removal of the second model are done;
-   still pending are avoiding walking all the bytes to keep podcasts and
-   the ownership/coordination of the two writers.
+   order; its per-query fingerprint still walks the model. Batching exports:
+   see the decision above. Library HTTP reads and ODST podcast rereads:
+   see "Committed library reads (2026-11-19)" below.
 3. Controlled baseline of listening and concurrent load, client and server:
    closed/paused/NORMAL/DJ/Live, cold/warm, visible/hidden, long sessions,
    latencies, queues, CPU and memory. Still pending; synthetic benchmarks do not
@@ -470,3 +472,28 @@ candidates, re-evaluable recovery and visual execution outside the hub. It conne
 real cancellation of acquisitions to the process budget. The xhigh
 reviews and their fixes are recorded there. It does not enable promotion of
 previews without an equivalence proof and does not claim physical/Pi acceptance.
+
+
+## Committed library reads (2026-11-19)
+
+Closes the read side of pending item 2. Contract, measurements and limits in
+[committed library reads](../performance/committed-library-reads.md).
+
+| Item | Status |
+| --- | --- |
+| Conditional `GET /api/library` fingerprinting the whole model | Closed: answers from the committed public source (one SQLite row) |
+| Two full fingerprints per successful delta | Closed: reads changed rows from SQLite and skips unchanged headers |
+| ODST reading all of `library.json` (digest, then podcasts) on each download commit | The digest still reads the bytes once. A match reuses the resident podcasts. A changed size uses one combined parse and digest. |
+| Coordination of the ODST and Station writers of `<music>/library.json` | The existing directory lock covers the pool read and publication. Cloud replacement verifies its snapshot's digest before reusing its podcasts. A failed download publication leaves the resident model intact. |
+| Search per-query fingerprint, save-side fingerprints, track-edit fingerprints, exports | Still walk the library. Full saves compute the proof alongside the row writes, and track edits share one encoding pass for their two proofs. |
+
+The flat library endpoint reads committed SQLite state. Its validator and
+journal are independent of the mutable resident model. A delta reads affected
+rows and headers from the same database snapshot. A new projection requires a
+one-time full response for a client with an older base.
+
+Playlist changes, scans, repairs and track removals publish after SQLite
+commits. A missing-file purge checks storage and filters membership once.
+Podcast writes reacquire the current library after fetching RSS. Label edits
+use the original stored credits when the catalog derived different values
+during reload, editing one row when the raw snapshot matches the journal.

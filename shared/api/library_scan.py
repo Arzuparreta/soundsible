@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from setup_tool.scanner import LibraryScanner, ScanResult
 from shared import library_dates
+from shared.library_lifecycle import after_release, coordinated
 from shared.orchestrator import orchestrator
 from shared.models import LibraryMetadata, Track
 from shared.path_resolver import configured_scan_roots, path_within_roots, register_scan_roots
@@ -209,9 +210,9 @@ class LibraryScanService:
     @classmethod
     def _merge_result(cls, core: Any, result: ScanResult) -> tuple[dict[str, int], list[Track]]:
         library = core.library
-        latest = library.db.load_library_metadata()
+        latest, revision = library.db.load_library_snapshot()
         if latest is None:
-            latest = library.metadata or LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+            latest = deepcopy(library.metadata) if library.metadata else LibraryMetadata(1, [], {}, {})
 
         tracks = list(latest.tracks)
         # What this account already holds, so a file found for a song it saved
@@ -299,13 +300,21 @@ class LibraryScanService:
         if added or updated:
             latest.tracks = tracks
             latest.version += 1
-            library.metadata = latest
-            library._library_revision = library.db.replace_library(
-                latest, id_replacements=replacements
-            )
-            library._export_metadata(latest)
-            for old_id, new_id in replacements.items():
-                core.favourites.remap_library_id(old_id, new_id)
+            with coordinated():
+                if hasattr(library, "_save_metadata"):
+                    library.require_saved(
+                        metadata=latest,
+                        id_replacements=replacements,
+                        expected_revision=revision,
+                    )
+                else:
+                    library._library_revision = library.db.replace_library(
+                        latest, id_replacements=replacements, expected_revision=revision
+                    )
+                    library.metadata = latest
+                    after_release(library._export_committed, key=('library-export', id(library)))
+                for old_id, new_id in replacements.items():
+                    core.favourites.remap_library_id(old_id, new_id)
 
         return {"added": added, "updated": updated, "unchanged": unchanged}, prewarm
 

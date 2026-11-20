@@ -2,21 +2,27 @@
 
 import json
 import threading
+from copy import deepcopy
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
 from shared.atomic_file import replace_contents
-from shared.file_revision import publication_lock, revision
+from shared.file_revision import FileRevision, publication_lock, read_revision, revision
 from shared.library_lifecycle import LibraryPersistenceError, serialized
 from shared.models import LibraryMetadata
 from shared.library_json import LibraryJSONWriter
 
 from .cloud_sync import CloudSync
 from .config import DEFAULT_QUALITY, LIBRARY_FILENAME
-from .library_podcasts import read_podcast_fields
 from .youtube_downloader import YouTubeDownloader
 
-_UNREAD = object()
+
+@dataclass(frozen=True)
+class _SnapshotRevision:
+    digest: bytes
+    subscriptions: list
+    episodes: dict
 
 
 class Downloader:
@@ -44,77 +50,83 @@ class Downloader:
             self.output_dir, cookie_browser=cookie_browser, cookie_file=cookie_file, quality=quality
         )
 
-    def _load_library(self) -> LibraryMetadata:
-        library, token = self.read_snapshot()
-        self._manifest_revision = token
-        return library
+    @staticmethod
+    def _empty_library():
+        return LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
 
-    def read_snapshot(self):
-        """An independent model/token for a long operation such as cloud sync."""
+    def _load_library(self) -> LibraryMetadata:
         with publication_lock(self.library_path):
-            if self.library_path.exists():
-                # Corrupt/unreadable state is not an empty library to overwrite.
-                with self.library_path.open(encoding="utf-8") as stream:
-                    library = LibraryMetadata.from_dict(json.load(stream))
-            else:
-                library = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-            return library, revision(self.library_path)
+            self._manifest, library = self._read_locked()
+        return library if library is not None else self._empty_library()
+
+    def read_snapshot(self) -> tuple[LibraryMetadata, _SnapshotRevision | None]:
+        """Read the editable model and the revision's detached podcast fields."""
+        with publication_lock(self.library_path):
+            manifest, library = self._read_locked()
+        if manifest is None:
+            return self._empty_library(), None
+        return library, _SnapshotRevision(manifest.digest, deepcopy(library.podcast_subscriptions),
+                                          deepcopy(library.podcast_episode_cache))
+
+    def _read_locked(self, known=None):
+        return read_revision(self.library_path, lambda text: LibraryMetadata.from_dict(json.load(text)), known=known)
 
     @serialized
     def commit_track(self, track) -> None:
         """Add acquired audio to the latest pool manifest, never a stale snapshot."""
         with self._lock, publication_lock(self.library_path):
-            current = revision(self.library_path)
-            if (not hasattr(self, 'library') or
-                    current != getattr(self, '_manifest_revision', object())):
-                self.library = self._load_library()
-                current = self._manifest_revision
-            existing = self.library.get_track_by_hash(track.file_hash)
+            known = getattr(self, '_manifest', None)
+            resident = getattr(self, 'library', None)
+            manifest, library = self._read_locked(known)
+            if library is None:
+                # A matching digest lets us keep the resident model. A removed
+                # file is a new empty manifest, even if we had a model for it.
+                library = resident if manifest == known else None
+                if library is None:
+                    library = self._empty_library()
+            # Membership changes discard the indexes, so scan for the one
+            # hash needed by this publication.
+            existing = None
+            if track.file_hash:
+                existing = next((item for item in library.tracks if item.file_hash == track.file_hash), None)
+            if library is resident:
+                # Stage membership only. A failed write cannot leave the next
+                # commit with an unpublished track or remove a held track.
+                library = replace(library, tracks=library.tracks.copy())
             if existing:
-                self.library.remove_track(existing.id)
-            self.library.add_track(track)
-            self._save_library_locked(current=current)
-
-    @serialized
-    def replace_snapshot(self, library, expected_revision):
-        """Publish a long operation only against the exact snapshot it read."""
-        with self._lock, publication_lock(self.library_path):
-            current = revision(self.library_path)
-            if current != expected_revision:
-                raise LibraryPersistenceError('library_conflict')
-            previous = self.library, self._manifest_revision
-            self.library, self._manifest_revision = library, expected_revision
+                library.remove_track(existing.id)
+            added_at = track.added_at
             try:
-                self._save_library_locked(current=current)
+                library.add_track(track)
+                self._publish_locked(library)
             except BaseException:
-                self.library, self._manifest_revision = previous
+                if getattr(self, 'library', None) is not library:
+                    track.added_at = added_at
                 raise
 
     @serialized
-    def save_library(self) -> None:
-        with self._lock, publication_lock(self.library_path):
-            self._save_library_locked()
+    def replace_snapshot(self, library: LibraryMetadata, expected_revision: _SnapshotRevision | None) -> None:
+        """Publish a long operation only against the exact snapshot it read.
 
-    def _save_library_locked(self, *, current=_UNREAD):
-        if current is _UNREAD:
-            current = revision(self.library_path)
-        if hasattr(self, "_manifest_revision") and current != self._manifest_revision:
-            raise LibraryPersistenceError("library_conflict")
-        # Preserve podcast subscription metadata written by the Station API (same library.json).
-        if self.library_path.exists():
-            try:
-                with open(self.library_path, "r") as rf:
-                    offset = (getattr(self, '_podcast_offset', None)
-                              if current == getattr(self, '_podcast_revision', None) else None)
-                    subscriptions, cache = read_podcast_fields(rf, offset=offset)
-                self.library.podcast_subscriptions = subscriptions
-                self.library.podcast_episode_cache = cache
-            except Exception:
-                pass
-        # Same portable bytes, without a second full JSON document in RAM.
-        # Streamed into a temporary: the Station reads this file meanwhile.
-        writer = LibraryJSONWriter(self.library)
-        replace_contents(self.library_path, writer)
-        self._manifest_revision = writer.digest.digest()
-        self._podcast_revision = self._manifest_revision
-        self._podcast_offset = writer.podcast_offset
+        The verified revision makes the podcast fields captured at the start
+        authoritative. An absent manifest keeps the incoming podcast fields.
+        """
+        with self._lock, publication_lock(self.library_path):
+            expected = expected_revision.digest if expected_revision is not None else None
+            if revision(self.library_path) != expected:
+                raise LibraryPersistenceError('library_conflict')
+            if expected_revision is not None:
+                library = replace(library, podcast_subscriptions=deepcopy(expected_revision.subscriptions),
+                                  podcast_episode_cache=deepcopy(expected_revision.episodes))
+            self._publish_locked(library)
+
+    def _publish_locked(self, library):
+        # Same portable bytes, encoded in bounded blocks and replaced under
+        # the same directory lock as the Station's export.
+        writer = LibraryJSONWriter(library)
+
+        def published():
+            self.library = library
+            self._manifest = FileRevision(writer.digest.digest(), writer.size)
+
+        replace_contents(self.library_path, writer, on_replace=published)

@@ -4,6 +4,8 @@ import wave
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from setup_tool.scanner import LibraryScanner, ScanResult, ScannedFile
 from shared.api.library_scan import LibraryScanService
 from shared.database import DatabaseManager
@@ -121,7 +123,7 @@ def test_changed_file_rekeys_references_and_user_state(tmp_path):
             db=db,
             metadata=metadata,
             _library_revision=1,
-            _export_metadata=lambda _payload: None,
+            _export_committed=lambda: None,
         ),
         favourites=SimpleNamespace(
             remap_library_id=lambda old_id, new_id: remapped.append((old_id, new_id)),
@@ -161,7 +163,7 @@ def test_a_scanned_collection_is_dated_from_its_own_files(tmp_path):
     db.replace_library(metadata)
     core = SimpleNamespace(
         library=SimpleNamespace(
-            db=db, metadata=metadata, _library_revision=1, _export_metadata=lambda _payload: None
+            db=db, metadata=metadata, _library_revision=1, _export_committed=lambda: None
         ),
         favourites=SimpleNamespace(remap_library_id=lambda old_id, new_id: None, get_entries=lambda: []),
     )
@@ -171,6 +173,32 @@ def test_a_scanned_collection_is_dated_from_its_own_files(tmp_path):
     )
 
     assert db.load_library_metadata().tracks[0].added_at.startswith("2025-07-02")
+
+
+def test_scan_cannot_overwrite_a_playlist_renamed_after_its_snapshot(tmp_path):
+    from shared.database import StaleLibraryWrite
+
+    path = tmp_path / "library.db"
+    db = DatabaseManager(str(path))
+    writer = DatabaseManager(str(path))
+    metadata = LibraryMetadata(1, [], {"Original": []}, {})
+    db.replace_library(metadata)
+    song = tmp_path / "new.mp3"
+    song.write_bytes(b"new track")
+    track = _track("new", song, mtime=song.stat().st_mtime_ns, size=song.stat().st_size)
+
+    def rename_playlist():
+        latest = writer.load_library_metadata()
+        latest.rename_playlist("Original", "Renamed")
+        writer.replace_library(latest)
+        return []
+
+    core = SimpleNamespace(library=SimpleNamespace(db=db, metadata=metadata),
+                           favourites=SimpleNamespace(get_entries=rename_playlist))
+    with pytest.raises(StaleLibraryWrite):
+        LibraryScanService._merge_result(core, ScanResult(files=[ScannedFile(str(song), track)]))
+    assert db.load_library_metadata().playlists == {"Renamed": []}
+    assert db.load_library_metadata().tracks == []
 
 
 def test_scanned_path_must_stay_inside_registered_root(tmp_path, monkeypatch):

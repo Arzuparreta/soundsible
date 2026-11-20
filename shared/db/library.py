@@ -10,18 +10,40 @@ import json
 import logging
 import os
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
 from shared.library_dates import parse as _parse_timestamp
 from shared.library_lifecycle import serialized
+from shared.library_fingerprint import TRACK_FIELDS
 from shared.library_write import disk_staging, staged_rows, sync_rows, sync_tracks
 from shared.time_utils import UTC
 
 from shared.db.catalog import MUSIC_ONLY
 
 logger = logging.getLogger(__name__)
+
+# Use the catalog's ordered performer display names, with the same fallback
+# to stored credits as CatalogQueries._row_to_track.
+_PUBLIC_ARTISTS = """COALESCE((SELECT json_group_array(name) FROM (
+    SELECT a.name FROM track_artists ta JOIN artists a ON a.id=ta.artist_id
+    WHERE ta.track_id=t.id ORDER BY ta.position
+) HAVING COUNT(*) > 0),t.artists_json)"""
+_PUBLIC_TRACK_SELECT = ','.join(
+    _PUBLIC_ARTISTS if field == 'artists' else 'f.item_id' if field == 'item_id' else f't.{field}'
+    for field in TRACK_FIELDS
+)
+_PUBLIC_TRACK_FROM = (' FROM library_tracks l JOIN tracks t ON t.id=l.track_id '
+                      'LEFT JOIN collection_files f ON f.file_id=l.track_id')
+
+
+def _public_track(row):
+    track = dict(zip(TRACK_FIELDS, row))
+    for field in ('is_local', 'metadata_modified_by_user', 'is_compilation'):
+        track[field] = bool(track[field])
+    track['artists'] = json.loads(track['artists']) if track['artists'] else None
+    return track
 
 
 class StaleLibraryWrite(RuntimeError):
@@ -246,6 +268,9 @@ class LibraryStore:
                         saved.insert(0, {**entry, "item_id": item_id})
                         save_entries(conn, saved)
                     metadata.add_to_playlist(name, item_id)
+                # One detached copy of the headers is both stored and proven,
+                # whatever happens to the live model meanwhile.
+                headers = metadata.public_headers()
                 replacement_state: Dict[str, sqlite3.Row] = {}
                 # The date the replaced row carried. A rescan or a lossless
                 # upgrade gives one song a new id; without this it would read as
@@ -267,10 +292,12 @@ class LibraryStore:
                         replacement_added_at[new_id] = dated["added_at"]
                 conn.execute("INSERT INTO library_info (key, value) VALUES ('version', ?) "
                              "ON CONFLICT(key) DO UPDATE SET value=excluded.value "
-                             "WHERE library_info.value IS NOT excluded.value", (str(metadata.version),))
+                             "WHERE library_info.value IS NOT excluded.value", (str(headers["version"]),))
+                tracks = tuple(metadata.tracks)
+                track_ids = tuple(track.id for track in tracks)
                 # Stage only IDs/order, avoiding a full manifest-sized IN list.
                 with staged_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
-                                 ((t.id, i) for i, t in enumerate(metadata.tracks))) as incoming:
+                                 ((track_id, i) for i, track_id in enumerate(track_ids))) as incoming:
                     catalog_dirty = conn.execute(
                         f'SELECT 1 FROM {incoming} n LEFT JOIN library_tracks l ON l.track_id=n.track_id '
                         'WHERE l.position IS NOT n.position LIMIT 1').fetchone() is not None
@@ -278,7 +305,8 @@ class LibraryStore:
                         f'DELETE FROM tracks WHERE NOT EXISTS (SELECT 1 FROM {incoming} n WHERE n.track_id=tracks.id)').rowcount
                     catalog_dirty |= bool(removed)
                 order_changed = catalog_dirty
-                catalog_dirty |= sync_tracks(conn, metadata.tracks, replacement_added_at)
+                catalog_changes, public_fingerprint = sync_tracks(conn, tracks, track_ids, replacement_added_at, headers)
+                catalog_dirty |= catalog_changes
 
                 for new_id, state in replacement_state.items():
                     conn.execute(
@@ -307,11 +335,11 @@ class LibraryStore:
                 from shared.collection import project_user_state
                 project_user_state(conn)
                 if catalog_dirty:
-                    self._replace_catalog_projection(conn, metadata.tracks)
+                    self._replace_catalog_projection(conn, tracks)
 
                 sync_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
-                          ((t.id, i) for i, t in enumerate(metadata.tracks)))
-                playlist_map = metadata.playlists if isinstance(metadata.playlists, dict) else {}
+                          ((track_id, i) for i, track_id in enumerate(track_ids)))
+                playlist_map = headers["playlists"] if isinstance(headers["playlists"], dict) else {}
                 sync_rows(conn, 'playlists', ('name', 'position'), ('name',),
                           ((name, i) for i, name in enumerate(playlist_map)))
                 sync_rows(conn, 'playlist_tracks', ('playlist_name', 'position', 'track_id'),
@@ -338,14 +366,14 @@ class LibraryStore:
                         podcast_episode_cache_json=excluded.podcast_episode_cache_json
                 """, (
                     revision,
-                    int(metadata.version),
-                    metadata.last_updated,
-                    json.dumps(metadata.settings, ensure_ascii=False),
-                    json.dumps(metadata.podcast_subscriptions, ensure_ascii=False),
-                    json.dumps(metadata.podcast_episode_cache, ensure_ascii=False),
+                    int(headers["version"]),
+                    headers["last_updated"],
+                    json.dumps(headers["settings"], ensure_ascii=False),
+                    json.dumps(headers["podcast_subscriptions"], ensure_ascii=False),
+                    json.dumps(headers["podcast_episode_cache"], ensure_ascii=False),
                 ))
                 from shared.library_changes import sync_source
-                sync_source(conn, metadata, order_changed)
+                sync_source(conn, metadata, order_changed, headers, public_fingerprint)
                 from shared import library_search
                 library_search.sync(conn)
                 if operation_id:
@@ -421,13 +449,33 @@ class LibraryStore:
             return bool(row and row[0])
 
     def public_source(self):
+        return self.public_read_state()[0]
+
+    def public_read_state(self):
+        """Read the journal proof or a cache stamp for an unverified database."""
+        from shared.collection import library_ready
         from shared.library_changes import source
-        with self._get_connection() as conn:
-            conn.execute('BEGIN')
-            try:
-                return source(conn)
-            finally:
-                conn.rollback()
+        for _ in range(2):
+            needs_upgrade = False
+            with self._get_connection() as conn:
+                conn.execute('BEGIN')
+                try:
+                    canonical = conn.execute(
+                        "SELECT 1 FROM library_state WHERE singleton = 1 AND canonical = 1"
+                    ).fetchone()
+                    if canonical is not None and not library_ready(conn):
+                        needs_upgrade = True
+                    else:
+                        proof = source(conn)
+                        if proof is not None:
+                            return proof, None, proof['tracks']
+                        tracks = conn.execute('SELECT 1 FROM library_tracks LIMIT 1').fetchone() is not None
+                finally:
+                    conn.rollback()
+                if not needs_upgrade:
+                    return None, conn.read_stamp, tracks
+            self.load_library_snapshot()
+        return None, None, False
 
     @contextmanager
     def library_search_candidates(self, tracks, q_folded: str, q_tokens: frozenset):
@@ -446,13 +494,92 @@ class LibraryStore:
                 conn.rollback()
 
     def public_changes(self, previous, expected, artwork_ids, identities):
+        """Read the journal and its affected public rows in one SQLite snapshot."""
         from shared.library_changes import affected
         with self._get_connection() as conn:
             conn.execute('BEGIN')
             try:
-                return affected(conn, previous, expected, artwork_ids, identities)
+                changes = affected(conn, previous, expected, artwork_ids, identities)
+                if changes is None:
+                    return None
+                ids, possibly_removed, order = changes
+                ordered = []
+                for offset in range(0, len(ids), 500):
+                    batch = ids[offset:offset + 500]
+                    ordered.extend(conn.execute(
+                        f'SELECT l.position,{_PUBLIC_TRACK_SELECT}{_PUBLIC_TRACK_FROM} '
+                        f'WHERE l.track_id IN ({",".join("?" for _ in batch)})', batch))
+                ordered.sort(key=lambda row: row[0])
+                upserts = [_public_track(row[1:]) for row in ordered]
+                present = {track['id'] for track in upserts}
+                removed = [key for key in possibly_removed if key not in present]
+                headers = None
+                if not (previous['fingerprint'] == expected['fingerprint']
+                        or expected['headers'] is not None and previous.get('headers') == expected['headers']):
+                    headers = self._public_headers(conn)
+                return upserts, removed, order, headers
             finally:
                 conn.rollback()
+
+    def public_snapshot(self):
+        """Return detached public values and their journal proof or read stamp."""
+        from shared.collection import library_ready
+        from shared.library_changes import source
+        for _ in range(2):
+            needs_upgrade = False
+            with self._get_connection() as conn:
+                before = conn.read_stamp
+                conn.execute('BEGIN')
+                try:
+                    headers = self._public_headers(conn)
+                    if headers is None:
+                        return None, None, None
+                    if not library_ready(conn):
+                        needs_upgrade = True
+                    else:
+                        headers['tracks'] = [_public_track(row) for row in conn.execute(
+                            f'SELECT {_PUBLIC_TRACK_SELECT}{_PUBLIC_TRACK_FROM} ORDER BY l.position')]
+                        proof = source(conn)
+                        if proof is None:
+                            aliases = self._track_id_aliases(conn)
+                            if aliases:
+                                for track in headers['tracks']:
+                                    track['id'] = aliases.get(track['id'], track['id'])
+                                    track['file_hash'] = aliases.get(track['file_hash'], track['file_hash'])
+                finally:
+                    conn.rollback()
+                if not needs_upgrade:
+                    stamp = before if proof is None and before == conn.read_stamp else None
+                    return headers, proof, stamp
+            self.load_library_snapshot()
+        return None, None, None
+
+    def public_track_count_exceeds(self, limit: int) -> bool:
+        """Check a size lower bound without counting the entire library."""
+        with self._get_connection() as conn:
+            return conn.execute('SELECT 1 FROM library_tracks LIMIT 1 OFFSET ?', (limit,)).fetchone() is not None
+
+    @staticmethod
+    def _public_headers(conn, state=None):
+        if state is None:
+            state = conn.execute(
+                'SELECT version,last_updated,settings_json,podcast_subscriptions_json,podcast_episode_cache_json '
+                'FROM library_state WHERE singleton=1 AND canonical=1').fetchone()
+            if state is None:
+                return None
+        playlists = {}
+        for name, track_id in conn.execute("""
+            SELECT p.name, pt.track_id
+            FROM playlists p LEFT JOIN playlist_tracks pt ON pt.playlist_name = p.name
+            ORDER BY p.position, pt.position
+        """):
+            ids = playlists.setdefault(str(name), [])
+            if track_id is not None:
+                ids.append(str(track_id))
+        version, last_updated, settings, subscriptions, cache = state
+        return {'version': int(version), 'last_updated': str(last_updated), 'playlists': playlists,
+                'settings': json.loads(settings), 'podcast_subscriptions': json.loads(subscriptions),
+                'podcast_episode_cache': json.loads(cache)}
 
     def get_library_revision(self) -> int:
         with self._get_connection() as conn:
@@ -462,51 +589,69 @@ class LibraryStore:
             return int(row[0]) if row else 0
 
     def load_library_metadata(self) -> Optional[LibraryMetadata]:
-        """Read canonical metadata; coordinate only the one-time upgrade write."""
-        from shared.collection import library_ready
-        from shared.library_lifecycle import coordinated
-        with self._get_connection() as conn:
-            if not library_ready(conn):
-                with coordinated():
-                    conn.execute('BEGIN IMMEDIATE')
-                    result = self._read_library_metadata(conn)
-                    conn.commit()
-                    return result
-            return self._read_library_metadata(conn)
+        return self.load_library_snapshot()[0]
 
-    def _read_library_metadata(self, conn) -> Optional[LibraryMetadata]:
+    def _needs_collection_upgrade(self) -> bool:
+        from shared.collection import library_ready
+        with self._get_connection() as conn:
+            return not library_ready(conn)
+
+    def load_library_snapshot(self, *, project_artists: bool = True) -> tuple[Optional[LibraryMetadata], int]:
+        """Read one SQLite revision, with raw credits available to writers."""
+        from shared.library_lifecycle import coordinated
+        upgrade = self._needs_collection_upgrade()
+        with coordinated() if upgrade else nullcontext():
+            with self._get_connection() as conn:
+                conn.execute('BEGIN IMMEDIATE' if upgrade else 'BEGIN')
+                metadata, revision = self._read_library_metadata(conn, project_artists=project_artists)
+                conn.commit()
+        return metadata, revision
+
+    def load_stored_and_projected_fingerprint(self) -> tuple[Optional[LibraryMetadata], int, Optional[str]]:
+        """Read raw stored rows and compute the projected fingerprint in one snapshot."""
+        from dataclasses import replace
+        from shared.library_fingerprint import fingerprint
+        from shared.library_lifecycle import coordinated
+        upgrade = self._needs_collection_upgrade()
+        with coordinated() if upgrade else nullcontext():
+            with self._get_connection() as conn:
+                conn.execute('BEGIN IMMEDIATE' if upgrade else 'BEGIN')
+                stored, revision = self._read_library_metadata(conn, project_artists=False)
+                if stored is None:
+                    conn.commit()
+                    return None, 0, None
+                credits = self._artist_names_by_track(conn, [track.id for track in stored.tracks])
+                conn.commit()
+        projected_tracks = [
+            replace(track, artists=credits[track.id]) if credits.get(track.id) else track
+            for track in stored.tracks
+        ]
+        return stored, revision, fingerprint(replace(stored, tracks=projected_tracks))
+
+    def _read_library_metadata(self, conn, *, project_artists: bool) -> tuple[Optional[LibraryMetadata], int]:
+        from shared.collection import library_ready, sync as sync_collection, attach_ids
+
         conn.row_factory = sqlite3.Row
         state = conn.execute(
             "SELECT * FROM library_state WHERE singleton = 1 AND canonical = 1"
         ).fetchone()
         if state is None:
-            return None
-        tracks = self._rows_to_tracks(conn, conn.execute("""
+            return None, 0
+        revision = int(state["revision"])
+        rows = conn.execute("""
             SELECT t.* FROM tracks t
             JOIN library_tracks lt ON lt.track_id = t.id
             ORDER BY lt.position
-        """).fetchall())
-        playlist_rows = conn.execute("""
-            SELECT p.name, pt.track_id
-            FROM playlists p
-            LEFT JOIN playlist_tracks pt ON pt.playlist_name = p.name
-            ORDER BY p.position, pt.position
         """).fetchall()
-        playlists: Dict[str, List[str]] = {}
-        for row in playlist_rows:
-            playlists.setdefault(str(row["name"]), [])
-            if row["track_id"] is not None:
-                playlists[str(row["name"])].append(str(row["track_id"]))
-        metadata = LibraryMetadata(
-            version=int(state["version"]),
-            tracks=tracks,
-            playlists=playlists,
-            settings=json.loads(state["settings_json"]),
-            last_updated=str(state["last_updated"]),
-            podcast_subscriptions=json.loads(state["podcast_subscriptions_json"]),
-            podcast_episode_cache=json.loads(state["podcast_episode_cache_json"]),
-        )
-        from shared.collection import library_ready, sync as sync_collection, attach_ids
+        if project_artists:
+            tracks = self._rows_to_tracks(conn, rows)
+        else:
+            tracks = attach_ids(conn, [self._flat_track_from_row(row) for row in rows])
+        header_fields = self._public_headers(conn, (
+            state['version'], state['last_updated'], state['settings_json'],
+            state['podcast_subscriptions_json'], state['podcast_episode_cache_json'],
+        ))
+        metadata = LibraryMetadata(tracks=tracks, **header_fields)
         if not library_ready(conn):
             previous_playlists = json.dumps(metadata.playlists, sort_keys=True)
             previous_settings = json.dumps(metadata.settings, sort_keys=True)
@@ -517,13 +662,14 @@ class LibraryStore:
             changed = previous_playlists != json.dumps(metadata.playlists, sort_keys=True) or previous_settings != json.dumps(metadata.settings, sort_keys=True)
             conn.execute('UPDATE library_state SET revision=revision+?,settings_json=? WHERE singleton=1',
                          (int(changed), json.dumps(metadata.settings)))
+            revision += int(changed)
             conn.execute('UPDATE library_public_source SET valid=0')
-        attach_ids(conn, metadata.tracks)
+            attach_ids(conn, metadata.tracks)
         # Normally rows are already canonical.  This also repairs a stale
         # write from an old client in memory before it reaches the API, and
         # the next save makes that normalization durable.
         metadata.remap_track_ids(self._track_id_aliases(conn), references=False)
-        return metadata
+        return metadata, revision
 
     def backfill_added_at(self, resolver: Optional[Any] = None) -> int:
         """Date the tracks a library from before `added_at` left behind.

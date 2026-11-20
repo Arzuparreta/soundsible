@@ -9,6 +9,7 @@ from typing import Any, List
 from flask import Blueprint, jsonify, request
 
 from shared.hardening import SCOPE_LIBRARY_READ, SCOPE_LIBRARY_WRITE, rate_limit, require_scope
+from shared.library_lifecycle import coordinated
 from shared.migration import LibraryMatcher, ParseError, parse_export, parse_upload
 from shared.migration.match import match_sources_to_library, migration_stats
 from shared.migration.store import MigrationStore
@@ -319,21 +320,20 @@ def migration_import_playlist():
     if not cleaned:
         return jsonify({"error": "No valid track IDs"}), 400
 
-    lib = _loaded_library()
-    if not lib.metadata:
-        return jsonify({"error": "Library not loaded"}), 409
+    with coordinated():
+        lib = _loaded_library()
+        metadata = lib.metadata
+        if not metadata:
+            return jsonify({"error": "Library not loaded"}), 409
+        if name in metadata.playlists:
+            return jsonify({"error": "Playlist already exists", "playlist_name": name}), 409
+        missing = [tid for tid in cleaned if not metadata.get_track_by_id(tid)]
+        if missing:
+            return jsonify({"error": "Unknown track IDs", "missing": missing[:50]}), 400
 
-    if name in lib.metadata.playlists:
-        return jsonify({"error": "Playlist already exists", "playlist_name": name}), 409
-
-    missing = [tid for tid in cleaned if not lib.metadata.get_track_by_id(tid)]
-    if missing:
-        return jsonify({"error": "Unknown track IDs", "missing": missing[:50]}), 400
-
-    lib.metadata.create_playlist(name, track_ids=[])
-    for tid in cleaned:
-        lib.metadata.add_to_playlist(name, tid)
-    lib._save_metadata()
+        metadata = metadata.copy_for_playlist_edit()
+        metadata.create_playlist(name, track_ids=list(dict.fromkeys(cleaned)))
+        lib.require_saved(metadata=metadata)
 
     from shared.realtime import emit_to_user
 
@@ -354,8 +354,8 @@ def migration_import_playlist():
             "status": "success",
             "playlist_name": name,
             "track_count": len(cleaned),
-            "playlists": lib.metadata.playlists,
-            "settings": lib.metadata.settings,
+            "playlists": metadata.playlists,
+            "settings": metadata.settings,
         }
     )
 

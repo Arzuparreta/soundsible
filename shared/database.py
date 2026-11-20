@@ -11,6 +11,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Optional
+from uuid import uuid4
 from shared.runtime import get_config_dir
 
 from shared.db.schema import (  # noqa: F401  # re-exported for callers of shared.database
@@ -87,7 +88,7 @@ class ConnectionPool:
     def __init__(self, factory, max_size: int):
         self._factory = factory
         self._max_size = max_size
-        self._idle: "queue.Queue" = queue.Queue()
+        self._idle: "queue.LifoQueue" = queue.LifoQueue()
         self._created = 0
         self._available = threading.Condition()
 
@@ -137,6 +138,15 @@ class ConnectionPool:
             "idle": self._idle.qsize(),
             "max_size": self._max_size,
         }
+class _DatabaseConnection(sqlite3.Connection):
+    @property
+    def read_stamp(self):
+        """Connection-scoped cache key that observes local and external commits."""
+        if not hasattr(self, '_read_identity'):
+            self._read_identity = uuid4().hex
+        return self._read_identity, self.total_changes, self.execute('PRAGMA data_version').fetchone()[0]
+
+
 class DatabaseManager(
     SchemaMixin,
     LibraryStore,
@@ -173,7 +183,8 @@ class DatabaseManager(
         self._init_db()
 
     def _open_connection(self):
-        conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000, check_same_thread=False,
+                               factory=_DatabaseConnection)
         try:
             # busy_timeout first: switching journal mode can need a write lock.
             conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")

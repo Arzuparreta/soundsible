@@ -81,16 +81,22 @@ def test_browse_reports_an_unreachable_feed(client):
     assert resp.status_code == 502
 
 
+def _podcast_library(metadata):
+    lib = MagicMock(metadata=metadata)
+    lib.require_saved.side_effect = lambda *, metadata: setattr(lib, 'metadata', metadata)
+    api = {"ensure_library_metadata": lambda: (lib, lib.metadata), "socketio": None, "emit_to_user": MagicMock()}
+    return api, lib
+
+
 def test_subscribing_records_what_the_feed_says_about_the_show(client):
-    lib = MagicMock()
-    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    api = {"ensure_library_metadata": lambda: (lib, metadata), "socketio": None, "emit_to_user": MagicMock()}
+    api, lib = _podcast_library(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     with patch.object(podcasts, "_get_api", return_value=api), \
             patch("shared.hardening.get_request_auth_context", return_value={"kind": "owner"}), \
             patch.object(podcasts, "check_feed", return_value=FeedCheck(FeedPage(FEED, None), {"etag": '"v1"'})):
         resp = client.post("/api/podcasts/subscribe", json={"rss_url": "https://example.com/rss"})
     assert resp.status_code == 200
     sub = resp.get_json()["subscription"]
+    metadata = lib.metadata
     assert (sub["title"], sub["author"], sub["image_url"]) == ("My Show", "Host Name", "https://cdn.example.com/show.jpg")
     assert metadata.podcast_subscriptions == [sub]
     assert [e["guid"] for e in metadata.podcast_episode_cache[sub["id"]]["episodes"]] == ["ep1"]
@@ -100,9 +106,7 @@ def test_subscribing_records_what_the_feed_says_about_the_show(client):
 
 
 def test_subscribing_keeps_the_feeds_artwork_over_a_directory_thumbnail(client):
-    lib = MagicMock()
-    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    api = {"ensure_library_metadata": lambda: (lib, metadata), "socketio": None, "emit_to_user": MagicMock()}
+    api, _ = _podcast_library(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     thumbnail = "https://is1-ssl.mzstatic.com/image/thumb/x.jpg/100x100bb.png"
     with patch.object(podcasts, "_get_api", return_value=api), \
             patch("shared.hardening.get_request_auth_context", return_value={"kind": "owner"}), \
@@ -125,19 +129,20 @@ def test_subscribing_keeps_the_feeds_artwork_over_a_directory_thumbnail(client):
 
 def _followed(metadata):
     metadata.podcast_subscriptions = [{"id": "feed", "title": "My Show", "rss_url": "https://example.com/rss"}]
-    return {"ensure_library_metadata": lambda: (MagicMock(), metadata), "socketio": None, "emit_to_user": MagicMock()}
+    return _podcast_library(metadata)
 
 
 def test_a_followed_show_remembers_where_its_feed_goes_on(client):
     # The cached list is what the page shows at once, so it still offers the
     # rest the fresh one did.
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    with patch.object(podcasts, "_get_api", return_value=_followed(metadata)), \
+    api, lib = _followed(metadata)
+    with patch.object(podcasts, "_get_api", return_value=api), \
             patch.object(podcasts, "check_feed", return_value=FeedCheck(FeedPage(FEED, 1292), {})) as fetch:
         fresh = client.get("/api/podcasts/feeds/feed/episodes").get_json()
         cached = client.get("/api/podcasts/feeds/feed/episodes?cached=1").get_json()
     fetch.assert_called_once_with("https://example.com/rss", None)
-    assert metadata.podcast_episode_cache["feed"]["next"] == 1292
+    assert lib.metadata.podcast_episode_cache["feed"]["next"] == 1292
     for body in (fresh, cached):
         assert [e["guid"] for e in body["episodes"]] == ["ep1"]
         assert body["next"] == 1292
@@ -153,7 +158,8 @@ def test_a_followed_show_offers_what_its_cache_leaves_out(client):
     )
     feed = FEED.replace(b"</channel>", items.encode() + b"</channel>")
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-    with patch.object(podcasts, "_get_api", return_value=_followed(metadata)), \
+    api, _ = _followed(metadata)
+    with patch.object(podcasts, "_get_api", return_value=api), \
             patch.object(podcasts, "check_feed", return_value=FeedCheck(FeedPage(feed, None), {})):
         fresh = client.get("/api/podcasts/feeds/feed/episodes").get_json()
         cached = client.get("/api/podcasts/feeds/feed/episodes?cached=1").get_json()
@@ -175,10 +181,7 @@ def _kept_show(metadata, feed=FEED, validators=None):
     looked = FeedCheck(FeedPage(feed, None), validators or {})
     show, episodes = podcasts.parse_feed(feed, "https://example.com/rss")
     metadata.podcast_episode_cache["feed"] = podcasts._cached_episodes(episodes, None, looked, show["image_url"])
-    lib = MagicMock()
-    api = _followed(metadata)
-    api["ensure_library_metadata"] = lambda: (lib, metadata)
-    return api, lib
+    return _followed(metadata)
 
 
 def _open(client, api, looked=None, query="", error=None):
@@ -197,8 +200,34 @@ def test_opening_a_show_finds_the_episode_published_since_it_was_last_read(clien
     check.assert_called_once_with("https://example.com/rss", {"etag": '"v1"'})
     assert [e["guid"] for e in body["episodes"]] == ["ep2", "ep1"]
     assert body["changed"] is True
-    assert metadata.podcast_episode_cache["feed"]["validators"] == {"etag": '"v2"'}
+    assert lib.metadata.podcast_episode_cache["feed"]["validators"] == {"etag": '"v2"'}
     lib.require_saved.assert_called_once()
+
+
+def test_refresh_accepts_a_saved_feed_url_with_surrounding_whitespace(client):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    api, lib = _kept_show(metadata)
+    metadata.podcast_subscriptions[0]['rss_url'] = ' https://example.com/rss\t'
+    response, check = _open(client, api, FeedCheck(FeedPage(NEWER, None), {}), query='?refresh=1')
+    check.assert_called_once_with('https://example.com/rss', None)
+    assert response.status_code == 200
+    assert lib.metadata.podcast_episode_cache['feed']['episodes'][0]['guid'] == 'ep2'
+
+
+def test_refresh_does_not_restore_cache_for_a_show_unfollowed_during_fetch(client):
+    from dataclasses import replace
+
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    api, lib = _kept_show(metadata)
+
+    def fetch(*_):
+        lib.metadata = replace(metadata, podcast_subscriptions=[], podcast_episode_cache={})
+        return FeedCheck(FeedPage(NEWER, None), {})
+
+    resp, _ = _open(client, api, error=fetch)
+    assert resp.status_code == 404
+    assert lib.metadata.podcast_subscriptions == [] and lib.metadata.podcast_episode_cache == {}
+    lib.require_saved.assert_not_called()
 
 
 def test_a_feed_that_has_not_changed_costs_no_parse_and_no_write(client):
@@ -276,7 +305,7 @@ def test_a_show_followed_with_a_thumbnail_takes_the_feeds_artwork_on_its_next_re
     resp, check = _open(client, api, FeedCheck(FeedPage(FEED, None), {"etag": '"v1"'}))
     check.assert_called_once_with("https://example.com/rss", None)
     assert resp.get_json()["subscription"]["image_url"] == "https://cdn.example.com/show.jpg"
-    assert metadata.podcast_episode_cache["feed"]["show_image"] == "https://cdn.example.com/show.jpg"
+    assert lib.metadata.podcast_episode_cache["feed"]["show_image"] == "https://cdn.example.com/show.jpg"
     api["emit_to_user"].assert_called_once_with("library_updated")
     lib.require_saved.assert_called_once()
     # From then on an unchanged feed is an unchanged feed again.

@@ -25,7 +25,7 @@ def publish(path: Path, fill: Callable[[BinaryIO], None]) -> None:
         _fill_and_rename(fd, temporary, path, fill, None)
 
 
-def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
+def replace_contents(path: Path, fill: Callable[[BinaryIO], None], *, on_replace: Optional[Callable[[], None]] = None) -> None:
     """`publish` for a file other people's setups point at.
 
     Where an in-place rewrite used to be, readers now see the previous file or
@@ -34,12 +34,15 @@ def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
     the umask default as `open(path, "w")` gave it. Owner and inode do change.
     If the directory refuses a temporary, the file is rewritten in place as
     before rather than not at all.
+
+    `on_replace` runs under the lock as soon as the bytes are visible, before
+    the directory sync can yield. The callback must not block or raise.
     """
     with publication_lock(path):
-        _replace_contents_locked(path, fill)
+        _replace_contents_locked(path, fill, on_replace)
 
 
-def _replace_contents_locked(path, fill):
+def _replace_contents_locked(path, fill, on_replace):
     target = path.resolve()
     try:
         mode: Optional[int] = stat.S_IMODE(target.stat().st_mode)
@@ -51,8 +54,10 @@ def _replace_contents_locked(path, fill):
     except PermissionError:
         with open(target, "wb") as handle:
             fill(handle)
+        if on_replace is not None:
+            on_replace()
         return
-    _fill_and_rename(fd, temporary, target, fill, mode)
+    _fill_and_rename(fd, temporary, target, fill, mode, on_replace)
 
 
 def _create_beside(path: Path) -> Tuple[int, str]:
@@ -122,7 +127,8 @@ def sync_directory(directory: Path) -> None:
 
 
 def _fill_and_rename(fd: int, temporary: str, path: Path,
-                     fill: Callable[[BinaryIO], None], mode: Optional[int]) -> None:
+                     fill: Callable[[BinaryIO], None], mode: Optional[int],
+                     on_replace: Optional[Callable[[], None]] = None) -> None:
     try:
         with os.fdopen(fd, "wb") as handle:
             fill(handle)
@@ -131,6 +137,8 @@ def _fill_and_rename(fd: int, temporary: str, path: Path,
         if mode is not None:
             os.chmod(temporary, mode)
         os.replace(temporary, path)
+        if on_replace is not None:
+            on_replace()
         sync_directory(path.parent)
     except BaseException:
         try:

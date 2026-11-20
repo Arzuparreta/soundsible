@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 from flask import Flask
 
+import pytest
+
 from shared.api.routes.migration import migration_bp
 from shared.database import instance_db
 from shared.hardening import SCOPE_LIBRARY_READ
@@ -196,6 +198,47 @@ def test_runner_preserves_playlist_order_and_maps_liked_songs(tmp_path):
     assert completed["state"] == "completed"
     assert core.library.metadata.playlists[target_name] == [second.id, first.id]
     assert core.favourites.is_favourite(first.id)
+
+
+@pytest.mark.parametrize('fault', ['finish', 'library', 'collision'])
+def test_retrying_playlist_creation_uses_one_target(tmp_path, monkeypatch, fault):
+    manifest = MigrationManifest(
+        provider='apple_music',
+        source_name='Export',
+        tracks={'song': SourceTrack('Song', 'Artist')},
+        playlists=[SourcePlaylist('mix', 'Road Mix', ['song'])],
+    )
+    path = tmp_path / 'retry.sqlite3'
+    store = MigrationStore(path)
+    job, _ = store.create_job(manifest, [{'source_key': 'song', 'confidence': 0, 'auto_accept': False}])
+    job = store.configure(job['id'], include_library=False, playlist_ids=['mix'])
+    lib = user_cores.get_user_core(TEST_USER_ID).library
+    runner = MigrationRunner(store, job['id'], TEST_USER_ID)
+
+    def fail(*args, **kwargs):
+        raise OSError('Injected write failure')
+
+    with monkeypatch.context() as patch:
+        if fault == 'finish':
+            patch.setattr(store, 'set_playlist_names', fail)
+        else:
+            patch.setattr(lib, 'require_saved', fail)
+        with pytest.raises(OSError, match='Injected'):
+            runner._ensure_target_playlists(job)
+    assert ('Road Mix' in lib.db.load_library_metadata().playlists) == (fault == 'finish')
+    if fault == 'collision':
+        lib.require_saved(metadata=LibraryMetadata(1, [_track(1)], {'Road Mix': ['track-1']}, {}))
+
+    store = MigrationStore(path)
+    retry = MigrationRunner(store, job['id'], TEST_USER_ID)
+    retry._ensure_target_playlists(store.get_job(job['id']))
+    stored = lib.db.load_library_metadata()
+    if fault == 'collision':
+        assert store.get_job(job['id'])['playlist_names'] == {'mix': 'Road Mix (Apple Music)'}
+        assert stored.playlists == {'Road Mix': ['track-1'], 'Road Mix (Apple Music)': []}
+    else:
+        assert store.get_job(job['id'])['playlist_names'] == {'mix': 'Road Mix'}
+        assert list(stored.playlists) == ['Road Mix']
 
 
 def test_runner_auto_downloads_only_high_confidence_and_stops_for_review(tmp_path):

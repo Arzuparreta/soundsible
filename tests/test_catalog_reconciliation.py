@@ -137,6 +137,19 @@ def test_failed_commit_keeps_previous_canonical_state(lib, cached, monkeypatch):
     assert lib.db.get_track('audio-hash').album == ''
 
 
+def test_repaired_metadata_is_visible_only_after_commit(lib, cached, monkeypatch):
+    real_save = lib.db.replace_library
+
+    def save(candidate, **kwargs):
+        assert not lib.metadata.tracks[0].album
+        assert candidate.tracks[0].album == profile()['title']
+        return real_save(candidate, **kwargs)
+
+    monkeypatch.setattr(lib.db, 'replace_library', save)
+    assert reconcile_album(lib, profile()['tracklist'], cached) == ['audio-hash']
+    assert lib.metadata.tracks[0].album == profile()['title']
+
+
 def test_stale_commit_is_reported_as_conflict(lib, cached, monkeypatch):
     monkeypatch.setattr(lib.db, 'replace_library', Mock(side_effect=StaleLibraryWrite(1, 2)))
     with pytest.raises(LibraryPersistenceError) as error:

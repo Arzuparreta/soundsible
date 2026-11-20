@@ -101,7 +101,8 @@ def test_failed_pragma_closes_new_connection(tmp_path, monkeypatch):
             raise KeyboardInterrupt("configuration cancelled")
 
     def connect(*args, **kwargs):
-        conn = real_connect(*args, **kwargs, factory=BrokenPragma)
+        kwargs["factory"] = BrokenPragma
+        conn = real_connect(*args, **kwargs)
         opened.append(conn)
         return conn
 
