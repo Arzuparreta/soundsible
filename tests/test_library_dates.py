@@ -339,7 +339,7 @@ def test_a_scanned_file_of_a_saved_song_keeps_the_save(tmp_path):
     db.replace_library(metadata)
     core = SimpleNamespace(
         library=SimpleNamespace(db=db, metadata=metadata, _library_revision=1,
-                                _export_metadata=lambda _payload: None),
+                                _export_committed=lambda: None),
         favourites=SimpleNamespace(
             remap_library_id=lambda old_id, new_id: None,
             get_entries=lambda: [{"keys": ["isrc:USUM71100001", "deezer:42"], "added_at": SAVED_ON}],

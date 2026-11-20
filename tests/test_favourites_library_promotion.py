@@ -54,6 +54,25 @@ def test_downloading_a_hearted_song_gives_its_entry_the_library_key(api):
     assert entries[0]["title"] == "I Follow Rivers", "the snapshot survives promotion"
 
 
+def test_favourites_drop_file_membership_removed_by_another_writer(api):
+    from shared.database import DatabaseManager
+
+    assert library_intake.add_tracks_to_user_library([_track("removed")]) == 1
+    core = user_cores.get_user_core(TEST_USER_ID)
+    core.favourites.add("removed")
+    client = api.app.test_client()
+    assert client.get("/api/library/favourites").get_json() == ["removed"]
+
+    writer = DatabaseManager(str(core.library.db.db_path))
+    latest = writer.load_library_metadata()
+    latest.tracks.clear()
+    writer.replace_library(latest)
+
+    assert client.get("/api/library").get_json()["tracks"] == []
+    assert client.get("/api/library/favourites").get_json() == []
+    assert any(library_key("removed") in entry["keys"] for entry in core.favourites.get_favourite_entries())
+
+
 def test_downloading_a_saved_song_keeps_the_day_it_was_saved(api):
     """Downloading gives a song a file, not a place in the library — it has had
     one since it was saved. Dating it "now" would push a song you have owned for

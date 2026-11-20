@@ -153,15 +153,23 @@ class MigrationRunner:
         metadata = lib.metadata
         if not metadata:
             raise RuntimeError("Library metadata is unavailable")
+        plan = self.store.playlist_plan(self.job_id)
+        uncommitted = set()
+        if plan is not None:
+            operation, planned_names, uncommitted = plan
+            if lib.db.has_library_operation(operation):
+                self.store.set_playlist_names(self.job_id, planned_names)
+                return
         selected_ids = set(job["selection"].get("playlist_ids") or [])
         names = dict(job.get("playlist_names") or {})
         existing_names = set(metadata.playlists)
         candidate = replace(metadata, playlists=metadata.playlists.copy(), settings=deepcopy(metadata.settings))
-        changed = False
+        creating = set()
         for playlist in self.manifest.playlists:
             if playlist.source_id not in selected_ids or playlist.is_favourites:
                 continue
-            if playlist.source_id in names and names[playlist.source_id] in candidate.playlists:
+            if (playlist.source_id not in uncommitted
+                    and names.get(playlist.source_id) in candidate.playlists):
                 continue
             base = names.get(playlist.source_id) or playlist.name
             target = base
@@ -175,13 +183,15 @@ class MigrationRunner:
             candidate.create_playlist(target, [])
             existing_names.add(target)
             names[playlist.source_id] = target
-            changed = True
-        # Record the chosen names first. A retry can then create a missing
-        # target or reuse the one a previous attempt already committed.
-        self.store.set_playlist_names(self.job_id, names)
-        if changed:
-            lib.require_saved(metadata=candidate)
+            creating.add(playlist.source_id)
+        if creating:
+            # Record preparation separately from the job's active destinations.
+            # Publication and the operation receipt commit in the same library
+            # transaction, so a retry can distinguish a new playlist from a collision.
+            operation = self.store.plan_playlist_creation(self.job_id, names, creating)
+            lib.require_saved(metadata=candidate, operation_id=operation)
             after_release(self._emit_library_updated)
+        self.store.set_playlist_names(self.job_id, names)
 
     def _process_track(self, source_key: str, source: SourceTrack, row: dict[str, Any]) -> None:
         selected = row.get("selected") or {}

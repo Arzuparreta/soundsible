@@ -110,6 +110,12 @@ class MigrationStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_migration_tracks_job_state
                     ON migration_tracks(job_id, state);
+                CREATE TABLE IF NOT EXISTS migration_playlist_plans (
+                    job_id TEXT PRIMARY KEY REFERENCES migration_jobs(id) ON DELETE CASCADE,
+                    operation_id TEXT NOT NULL,
+                    names_json TEXT NOT NULL,
+                    created_sources_json TEXT NOT NULL
+                );
                 """
             )
 
@@ -327,6 +333,7 @@ class MigrationStore:
                 """,
                 (json.dumps(selection), json.dumps(names, ensure_ascii=False), now, job_id),
             )
+            db.execute("DELETE FROM migration_playlist_plans WHERE job_id = ?", (job_id,))
         return self.get_job(job_id)
 
     def set_job_state(self, job_id: str, state: str, error: str | None = None) -> None:
@@ -348,6 +355,26 @@ class MigrationStore:
             )
             if result.rowcount == 0:
                 raise KeyError(job_id)
+            db.execute("DELETE FROM migration_playlist_plans WHERE job_id = ?", (job_id,))
+
+    def playlist_plan(self, job_id: str) -> tuple[str, dict[str, str], set[str]] | None:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT operation_id,names_json,created_sources_json FROM migration_playlist_plans WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return row[0], json.loads(row[1]), set(json.loads(row[2]))
+
+    def plan_playlist_creation(self, job_id: str, names: dict[str, str], creating: set[str]) -> str:
+        operation = f"migration-playlists:{job_id}:{uuid.uuid4().hex}"
+        with self._lock, self._connect() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO migration_playlist_plans VALUES (?,?,?,?)",
+                (job_id, operation, json.dumps(names, ensure_ascii=False), json.dumps(sorted(creating))),
+            )
+        return operation
 
     def job_state(self, job_id: str) -> str:
         return str(self._job_row(job_id)["state"])

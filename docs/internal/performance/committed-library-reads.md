@@ -24,7 +24,8 @@ normalized scalar values the same way before and after a restart.
 Playback and other routes that resolve a track through the resident library
 check its revision at lookup. This picks up a moved local path or removed
 track after another writer commits. A matching revision keeps the indexed
-in-memory lookup, while the flat library read needs no model reload.
+in-memory lookup. Favourites also check the revision before resolving file
+membership. The flat library read needs no model reload.
 
 - **Conditional request.** A weak ETag combines the account, public projection,
   track and credit proofs, order, and artwork and loudness tokens. A matching
@@ -64,6 +65,12 @@ and refresh cannot recreate an unsubscribed feed. Subsonic builds its playlist
 response and sends its notifications outside the global write lock. A purge
 checks storage before changing membership and filters the tracks and playlist
 references once.
+
+Folder scans bind the merged result to the revision they read so a concurrent
+playlist edit survives a scan conflict. Migration jobs keep proposed playlist
+names separate from active targets until SQLite commits the playlists and the
+operation receipt together. A retry can recover a committed target or choose
+an available name if a personal playlist appeared after a failed attempt.
 
 ### Upgrades
 

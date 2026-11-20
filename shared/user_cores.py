@@ -117,7 +117,8 @@ def favourite_library_ids(user_id: Optional[str] = None) -> list:
     if favourites is None:
         return []
 
-    metadata = getattr(core.library, "metadata", None)
+    core.library.refresh_if_stale()
+    metadata = core.library.metadata
     tracks = getattr(metadata, "tracks", None) or []
     owned = set()
     by_youtube = {}

@@ -200,7 +200,7 @@ def test_runner_preserves_playlist_order_and_maps_liked_songs(tmp_path):
     assert core.favourites.is_favourite(first.id)
 
 
-@pytest.mark.parametrize('fault', ['mapping', 'library'])
+@pytest.mark.parametrize('fault', ['finish', 'library', 'collision'])
 def test_retrying_playlist_creation_uses_one_target(tmp_path, monkeypatch, fault):
     manifest = MigrationManifest(
         provider='apple_music',
@@ -219,19 +219,26 @@ def test_retrying_playlist_creation_uses_one_target(tmp_path, monkeypatch, fault
         raise OSError('Injected write failure')
 
     with monkeypatch.context() as patch:
-        if fault == 'mapping':
+        if fault == 'finish':
             patch.setattr(store, 'set_playlist_names', fail)
         else:
             patch.setattr(lib, 'require_saved', fail)
         with pytest.raises(OSError, match='Injected'):
             runner._ensure_target_playlists(job)
-    assert 'Road Mix' not in lib.db.load_library_metadata().playlists
+    assert ('Road Mix' in lib.db.load_library_metadata().playlists) == (fault == 'finish')
+    if fault == 'collision':
+        lib.require_saved(metadata=LibraryMetadata(1, [_track(1)], {'Road Mix': ['track-1']}, {}))
 
     store = MigrationStore(path)
     retry = MigrationRunner(store, job['id'], TEST_USER_ID)
     retry._ensure_target_playlists(store.get_job(job['id']))
-    assert store.get_job(job['id'])['playlist_names'] == {'mix': 'Road Mix'}
-    assert list(lib.db.load_library_metadata().playlists) == ['Road Mix']
+    stored = lib.db.load_library_metadata()
+    if fault == 'collision':
+        assert store.get_job(job['id'])['playlist_names'] == {'mix': 'Road Mix (Apple Music)'}
+        assert stored.playlists == {'Road Mix': ['track-1'], 'Road Mix (Apple Music)': []}
+    else:
+        assert store.get_job(job['id'])['playlist_names'] == {'mix': 'Road Mix'}
+        assert list(stored.playlists) == ['Road Mix']
 
 
 def test_runner_auto_downloads_only_high_confidence_and_stops_for_review(tmp_path):
