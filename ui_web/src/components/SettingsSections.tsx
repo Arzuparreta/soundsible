@@ -10,6 +10,7 @@ import { AutoplaySettingsView } from './AutoplaySettingsView';
 import { createSignal, onMount, Show, type JSX } from 'solid-js';
 import { state, actions } from '../stores';
 import { api } from '../lib/api';
+import { resetDiscoveryFeed } from '../lib/discoveryFeedStore';
 import { t } from '../lib/i18n';
 import { linkReading, refreshLinkReading } from '../lib/linkQuality';
 import { toast } from '../lib/toast';
@@ -215,6 +216,7 @@ function PlaybackSection() {
     setLearning(next);
     try {
       await api.setDiscoveryLearning(next);
+      resetDiscoveryFeed();
     } catch {
       setLearning(!next);
       toast.error(t('settings.toast.notSaved'));
@@ -231,6 +233,7 @@ function PlaybackSection() {
     if (!ok) return;
     try {
       await api.resetDiscoveryProfile();
+      resetDiscoveryFeed();
       toast.success(t('settings.resetLearningDone'));
     } catch {
       toast.error(t('settings.toast.notSaved'));

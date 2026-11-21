@@ -586,7 +586,6 @@ async function loadStore(
   }));
   vi.doMock('../lib/socket', () => ({
     createSocket,
-    dispatchDiscoverSeed: vi.fn(),
   }));
 
   const store = await import('./index');

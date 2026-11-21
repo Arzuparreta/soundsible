@@ -60,19 +60,40 @@ _DISCOVERY_FEED_CACHE: dict[str, tuple[float, float, dict]] = {}
 _DISCOVERY_FEED_TTL_SEC = 180
 _DISCOVERY_FEED_STALE_SEC = 3600
 _DISCOVERY_FEED_INFLIGHT: set[str] = set()
+_DISCOVERY_FEED_DIRTY: set[str] = set()
 _DISCOVERY_FEED_LOCK = threading.Lock()
 _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
+
+
+def _invalidate_personalized_cache_for_user(user_id: str | None) -> list[tuple[str, int]]:
+    feed_prefix = f"discovery-feed-v4:{user_id or '-'}:"
+    now = time.time()
+    entries: list[tuple[str, int]] = []
+    seen: set[str] = set()
+    with _DISCOVERY_FEED_LOCK:
+        matching_cache = [key for key in _DISCOVERY_FEED_CACHE if key.startswith(feed_prefix)]
+        matching_inflight = [key for key in _DISCOVERY_FEED_INFLIGHT if key.startswith(feed_prefix)]
+        for key in matching_cache:
+            _, stale_until, body = _DISCOVERY_FEED_CACHE[key]
+            _DISCOVERY_FEED_CACHE[key] = (0, max(stale_until, now + _DISCOVERY_FEED_STALE_SEC), body)
+        for key in matching_inflight:
+            _DISCOVERY_FEED_DIRTY.add(key)
+        for key in (*matching_cache, *matching_inflight):
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                limit = int(key.rsplit(":", 1)[1])
+            except (IndexError, ValueError):
+                limit = 10
+            entries.append((key, limit))
+    return entries
 
 
 def _invalidate_personalized_cache() -> None:
     from shared.user_context import current_user_id
 
-    feed_prefix = f"discovery-feed-v4:{current_user_id() or '-'}:"
-    now = time.time()
-    with _DISCOVERY_FEED_LOCK:
-        for key in [key for key in _DISCOVERY_FEED_CACHE if key.startswith(feed_prefix)]:
-            _, stale_until, body = _DISCOVERY_FEED_CACHE[key]
-            _DISCOVERY_FEED_CACHE[key] = (0, max(stale_until, now + _DISCOVERY_FEED_STALE_SEC), body)
+    _invalidate_personalized_cache_for_user(current_user_id())
 
 
 def _podcast_row_from_itunes_search(r: dict) -> dict | None:

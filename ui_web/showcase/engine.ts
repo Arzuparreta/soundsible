@@ -31,7 +31,6 @@ export const track = (title: string): CatalogTrack => {
 
 const QUIET = new Set([
   '/api/catalog/resolve',
-  '/api/discover/feed',
   '/api/discovery/music/recently-saved',
   '/api/discovery/podcasts/recommendations',
   '/api/playback/play-timing',
