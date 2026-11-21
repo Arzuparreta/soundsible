@@ -65,16 +65,29 @@ _DISCOVERY_FEED_LOCK = threading.Lock()
 _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
 
 
-def _invalidate_personalized_cache_for_user(user_id: str | None) -> list[tuple[str, int]]:
+def _is_cold_feed(body: dict) -> bool:
+    if not isinstance(body, dict):
+        return False
+    if body.get("needs_seed"):
+        return True
+    browse_sections = body.get("browse_sections")
+    if isinstance(browse_sections, list) and browse_sections:
+        return all(isinstance(sec, dict) and bool(sec.get("popular")) for sec in browse_sections)
+    return False
+
+
+def _invalidate_personalized_cache_for_user_detailed(user_id: str | None) -> list[tuple[str, int, bool]]:
     feed_prefix = f"discovery-feed-v4:{user_id or '-'}:"
     now = time.time()
-    entries: list[tuple[str, int]] = []
+    entries: list[tuple[str, int, bool]] = []
     seen: set[str] = set()
     with _DISCOVERY_FEED_LOCK:
         matching_cache = [key for key in _DISCOVERY_FEED_CACHE if key.startswith(feed_prefix)]
         matching_inflight = [key for key in _DISCOVERY_FEED_INFLIGHT if key.startswith(feed_prefix)]
+        cold_by_key: dict[str, bool] = {}
         for key in matching_cache:
             _, stale_until, body = _DISCOVERY_FEED_CACHE[key]
+            cold_by_key[key] = _is_cold_feed(body)
             _DISCOVERY_FEED_CACHE[key] = (0, max(stale_until, now + _DISCOVERY_FEED_STALE_SEC), body)
         for key in matching_inflight:
             _DISCOVERY_FEED_DIRTY.add(key)
@@ -86,8 +99,15 @@ def _invalidate_personalized_cache_for_user(user_id: str | None) -> list[tuple[s
                 limit = int(key.rsplit(":", 1)[1])
             except (IndexError, ValueError):
                 limit = 10
-            entries.append((key, limit))
+            entries.append((key, limit, cold_by_key.get(key, False)))
     return entries
+
+
+def _invalidate_personalized_cache_for_user(user_id: str | None) -> list[tuple[str, int]]:
+    return [
+        (key, limit)
+        for key, limit, _ in _invalidate_personalized_cache_for_user_detailed(user_id)
+    ]
 
 
 def _invalidate_personalized_cache() -> None:

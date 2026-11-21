@@ -721,6 +721,37 @@ describe('Search route', () => {
     suggestion.blur();
     expect(screen.queryByRole('button', { name: 'rare bootleg live' })).not.toBeInTheDocument();
   });
+
+  it('emits music_search_played for active search plays and not for Discover home plays', async () => {
+    apiMock.getDiscoveryMusicFeed.mockResolvedValue({
+      items: [{ id: 'deezer:1', title: 'Home Song', artist: 'Home Artist', source: 'deezer', external_ids: { deezer_id: '1' } }],
+      browse_sections: [],
+    });
+    apiMock.resolveCatalogItem.mockResolvedValue({ video_id: 'vid11111111' });
+    apiMock.searchCatalog.mockResolvedValue({
+      items: [{ id: 'deezer:track:9', type: 'track', source: 'deezer', title: 'Search Song', artist: 'Search Artist', album: 'Search Album', duration: 200, external_ids: { deezer_id: '9' } }],
+      sections: [{ id: 'songs', layout: 'rows', item_ids: ['deezer:track:9'], total: 1 }],
+    });
+
+    render(() => <Search />);
+    fireEvent.click(await screen.findByText('Home Song'));
+    expect(apiMock.emitDiscoveryEvent).not.toHaveBeenCalled();
+
+    fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'search artist' } });
+    await vi.advanceTimersByTimeAsync(230);
+    fireEvent.click(await screen.findByText('Search Song'));
+
+    await waitFor(() => expect(apiMock.emitDiscoveryEvent).toHaveBeenCalledWith(
+      'music_search_played',
+      expect.objectContaining({
+        media_type: 'music_track',
+        title: 'Search Song',
+        artist: 'Search Artist',
+        album: 'Search Album',
+        source: 'search',
+      }),
+    ));
+  });
 });
 
 // Navigation behavior is covered by the router integration and browser tests.

@@ -20,7 +20,7 @@ import {
 } from '../lib/discoveryFeedStore';
 import { prefetchPreviews } from '../lib/prefetch';
 import { catalogPreviewId, itemArtist } from '../lib/catalogItem';
-import { discoveryHasVisible, resolveDiscoveryTrackShelves } from '../lib/searchDiscovery';
+import { discoveryHasVisible, isColdDiscoveryFeed, resolveDiscoveryTrackShelves } from '../lib/searchDiscovery';
 import { catalogDestination } from '../lib/musicNavigation';
 import { navigateBackOr } from '../lib/scrollHistory';
 import { MusicLink } from './MusicLinks';
@@ -87,6 +87,7 @@ export function SearchDiscovery(props: {
   });
   // What the listener is looking at: the opened section alone, or the home.
   const hasVisibleContent = () => discoveryHasVisible(sections(), trackShelves(), expanded());
+  const cold = () => isColdDiscoveryFeed(discoveryFeed(), sections(), trackShelves());
 
   onMount(() => {
     const release = retainDiscoveryFeed();
@@ -142,7 +143,7 @@ export function SearchDiscovery(props: {
   onCleanup(() => { disposed = true; props.onRefreshControl?.(null); });
 
   return <SearchDiscoveryView sections={sections()} trackShelves={trackShelves()} expanded={expanded()}
-    loading={discoveryLoading()} error={discoveryError()} preparing={!!discoveryFeed().revalidating}
+    loading={discoveryLoading()} error={discoveryError()} preparing={!!discoveryFeed().revalidating} cold={cold()}
     onBack={() => navigateBackOr(navigate, '/search')}
     onRetry={() => { setSnapshot(null); refreshDiscoveryFeed({ resetLoading: true }); }}
     renderMore={(section, link) => <MusicLink path={`/search?browse=${encodeURIComponent(section)}`} label={link.label} class={link.class}>{link.children}</MusicLink>}

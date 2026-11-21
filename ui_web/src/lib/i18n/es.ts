@@ -44,6 +44,9 @@ export const es: Dict = {
     "options": "Opciones"
 },
   searchHome: {
+    "newReleases": "Novedades",
+    "badgeNew": "Nuevo",
+    "coldHint": "Busca o reproduce cualquier artista, o guarda lo que te guste: Descubrir se adapta automáticamente.",
     "artists": "Artistas por descubrir",
     "albums": "Álbumes para ti",
     "songs": "Canciones que te pueden gustar",

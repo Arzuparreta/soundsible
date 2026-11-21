@@ -853,6 +853,12 @@ def toggle_favourite():
     # Other devices on this account would otherwise not see the change until a
     # full library sync — every other mutating route here already emits.
     api["emit_to_user"]("favourites_updated")
+    try:
+        from shared.api.routes.discovery_feed import notify_discovery_signal
+
+        notify_discovery_signal(always_refresh=bool(is_fav))
+    except Exception:
+        logger.debug("Discovery feed notify failed after favourite toggle", exc_info=True)
     return jsonify({"status": "success", "is_favourite": is_fav, "is_fav": is_fav})
 
 
@@ -1135,4 +1141,10 @@ def update_saved_entity():
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
     emit_to_user('saved_entities_updated')
+    try:
+        from shared.api.routes.discovery_feed import notify_discovery_signal
+
+        notify_discovery_signal(always_refresh=True)
+    except Exception:
+        logger.debug("Discovery feed notify failed after saved entity update", exc_info=True)
     return jsonify({'entities': entries})

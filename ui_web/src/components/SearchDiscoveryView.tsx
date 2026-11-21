@@ -3,6 +3,7 @@ import type { DiscoveryBrowseItem, DiscoveryBrowseSection } from '../lib/api';
 import type { CatalogItem } from '../types/music';
 import { t } from '../lib/i18n';
 import {
+  discoveryBrowseSectionTitle,
   discoveryEntityReason,
   discoveryEntitySubtitle,
   discoveryHasVisible,
@@ -24,7 +25,7 @@ const SONGS_PREVIEW = 5;
 /** Layout is shared; navigation, collection status and playback belong to its runtime. */
 export function SearchDiscoveryView(props: {
   sections: DiscoveryBrowseSection[]; trackShelves: DiscoveryTrackShelf[]; expanded?: string;
-  loading: boolean; error: boolean; preparing: boolean;
+  loading: boolean; error: boolean; preparing: boolean; cold?: boolean;
   onBack: () => void; onRetry: () => void;
   renderMore: (section: string, link: DiscoveryLink) => JSX.Element;
   renderEntity: (item: DiscoveryBrowseItem, link: DiscoveryLink) => JSX.Element;
@@ -50,11 +51,9 @@ export function SearchDiscoveryView(props: {
   // Judged by what this view draws: an opened section is empty when it is,
   // whatever the rest of the feed holds.
   const hasVisible = () => discoveryHasVisible(props.sections, props.trackShelves, props.expanded);
-  const title = (id: string, popular = false) => id === 'artists'
-    ? t(popular ? 'searchHome.popularArtists' : 'searchHome.artists')
-    : id === 'albums' ? t(popular ? 'searchHome.popularAlbums' : 'searchHome.albums') : t('searchHome.songs');
+  const title = (id: string, popular = false) => discoveryBrowseSectionTitle(id, popular);
   const more = (id: string, name: string) => <span data-discovery-more={id}>{props.renderMore(id, { label: `${t('searchHome.seeAll')}: ${name}`, class: styles.more, children: t('searchHome.seeAll') })}</span>;
-  const isEntityExpanded = () => props.expanded === 'artists' || props.expanded === 'albums';
+  const isEntityExpanded = () => props.expanded === 'new_releases' || props.expanded === 'artists' || props.expanded === 'albums';
   return <div ref={root} class={styles.home} data-testid="search-discovery">
     <Show when={props.expanded}><button class={styles.back} type="button" onClick={props.onBack}>
       <ChevronIcon direction="left" />{t('searchHome.back')}
@@ -64,8 +63,11 @@ export function SearchDiscoveryView(props: {
         <Show when={!isEntityExpanded()} fallback={<SkeletonCards count={8} shape={props.expanded === 'artists' ? 'round' : 'square'} />}><SkeletonRows count={8} compact /></Show>
       </Show>
     </Show>
+    <Show when={props.cold && !props.expanded && !props.loading && !props.error && !props.preparing && hasVisible()}>
+      <p class={styles.coldHint} role="note">{t('searchHome.coldHint')}</p>
+    </Show>
     <For each={sections()}>{section => <DiscoveryEntitySection title={title(section.id, section.popular)} items={section.items}
-      round={section.id === 'artists'} expanded={!!props.expanded}
+      round={section.id === 'artists'} isNewReleases={section.id === 'new_releases'} expanded={!!props.expanded}
       more={!props.expanded && section.items.length > 2 ? more(section.id, title(section.id, section.popular)) : undefined}
       renderEntity={props.renderEntity} renderStatus={props.renderStatus} />}</For>
     <For each={trackShelves()}>{shelf => {
@@ -101,7 +103,7 @@ function DiscoverySection(props: { title: string; subtitle?: string; actions?: J
 }
 
 function DiscoveryEntitySection(props: {
-  title: string; items: DiscoveryBrowseItem[]; round: boolean; expanded: boolean; more?: JSX.Element;
+  title: string; items: DiscoveryBrowseItem[]; round: boolean; isNewReleases?: boolean; expanded: boolean; more?: JSX.Element;
   renderEntity: (item: DiscoveryBrowseItem, link: DiscoveryLink) => JSX.Element;
   renderStatus: (item: DiscoveryBrowseItem) => JSX.Element;
 }) {
@@ -128,10 +130,13 @@ function DiscoveryEntitySection(props: {
   </>}>
     <div ref={rail} onScroll={update} class={props.expanded ? styles.grid : styles.rail}>
       <For each={props.items}>{item => props.renderEntity(item, { label: item.title, class: styles.entity, children: <>
-        <span classList={{ [styles.cover]: true, [styles.round]: props.round }}><CoverImage src={item.cover} /></span>
+        <span classList={{ [styles.cover]: true, [styles.round]: props.round }}>
+          <CoverImage src={item.cover} />
+          <Show when={props.isNewReleases && item.is_new}><span class={styles.newBadge}>{t('searchHome.badgeNew')}</span></Show>
+        </span>
         <span class={styles.meta}>
           <span class={styles.name}>{item.title}</span>
-          <Show when={discoveryEntitySubtitle(item, props.round)}>{subtitle => <span class={styles.subtitle}>{subtitle()}</span>}</Show>
+          <Show when={discoveryEntitySubtitle(item, props.round, { showReleaseDate: props.isNewReleases })}>{subtitle => <span class={styles.subtitle}>{subtitle()}</span>}</Show>
           <Show when={discoveryEntityReason(item, props.round)}>{reason => <span class={styles.reason}>{reason()}</span>}</Show>
           {props.renderStatus(item)}
         </span>

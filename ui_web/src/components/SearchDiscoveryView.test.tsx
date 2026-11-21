@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { setLocale } from '../lib/i18n';
 import { SearchDiscoveryView } from './SearchDiscoveryView';
-import { resolveDiscoveryTrackShelves, type DiscoveryTrackShelf } from '../lib/searchDiscovery';
+import { formatDiscoveryReleaseDate, isColdDiscoveryFeed, resolveDiscoveryTrackShelves, type DiscoveryTrackShelf } from '../lib/searchDiscovery';
 import type { CatalogItem } from '../types/music';
 import type { DiscoveryBrowseSection } from '../lib/api';
 afterEach(cleanup);
@@ -224,4 +224,84 @@ it('formats single and ep subtitles locally without rendering an inline refresh 
   await setLocale('es');
   expect(view.getByText('Marea · Sencillo')).toBeTruthy();
   await setLocale('en');
+});
+
+it('renders new_releases with New badge, localized release dates, expansion, and focus restoration', async () => {
+  await setLocale('en');
+  const now = new Date(Date.UTC(2026, 10, 22));
+  expect(formatDiscoveryReleaseDate('2026-11-18', now)).toBeTruthy();
+  expect(formatDiscoveryReleaseDate('2025-12-10', now)).toContain('2025');
+  expect(formatDiscoveryReleaseDate('2026-02-31', now)).toBe('');
+
+  const [expanded, setExpanded] = createSignal<string | undefined>();
+  const browse: DiscoveryBrowseSection[] = [
+    {
+      id: 'new_releases',
+      popular: false,
+      items: [
+        { id: 'album:1', title: 'Fresh EP', artist: 'Marea', type: 'album', source: 'deezer', record_type: 'ep', release_date: '2026-11-18', is_new: true },
+        { id: 'album:2', title: 'Season Single', artist: 'Robe', type: 'album', source: 'deezer', record_type: 'single', release_date: '2026-09-10', is_new: false },
+        { id: 'album:3', title: 'Latest LP', artist: 'Extremoduro', type: 'album', source: 'deezer', record_type: 'album', release_date: '2026-08-05', is_new: false },
+      ],
+    },
+    {
+      id: 'artists',
+      popular: false,
+      items: [{ id: 'artist:1', title: 'Platero y Tú', type: 'artist', source: 'deezer' }],
+    },
+  ];
+
+  const view = render(() => <SearchDiscoveryView sections={browse} trackShelves={[]} expanded={expanded()}
+    loading={false} error={false} preparing={false} onBack={() => setExpanded(undefined)} onRetry={vi.fn()}
+    renderMore={(id, link) => <button aria-label={link.label} onClick={() => setExpanded(id)}>{link.children}</button>}
+    renderEntity={(_, link) => <button class={link.class} aria-label={link.label}>{link.children}</button>}
+    renderStatus={noop} renderSong={noop} />);
+
+  const region = view.getByRole('region', { name: 'New releases' });
+  expect(region).toBeTruthy();
+  expect(view.getAllByText('New')).toHaveLength(1);
+  expect(view.getByText(`Marea · EP · ${formatDiscoveryReleaseDate('2026-11-18')}`)).toBeTruthy();
+  expect(view.getByText(`Robe · Single · ${formatDiscoveryReleaseDate('2026-09-10')}`)).toBeTruthy();
+  expect(view.getByText(`Extremoduro · ${formatDiscoveryReleaseDate('2026-08-05')}`)).toBeTruthy();
+
+  await setLocale('es');
+  await waitFor(() => expect(view.getByRole('region', { name: 'Novedades' })).toBeTruthy());
+  expect(view.getByText('Nuevo')).toBeTruthy();
+  await setLocale('en');
+
+  const more = view.getByRole('button', { name: 'See all: New releases' });
+  more.focus();
+  fireEvent.click(more);
+  await waitFor(() => expect(view.getByRole('heading', { name: 'New releases' })).toHaveFocus());
+  expect(view.queryByRole('region', { name: 'Artists to discover' })).toBeNull();
+
+  fireEvent.click(view.getByRole('button', { name: 'Back to Discover' }));
+  await waitFor(() => expect(view.getByRole('button', { name: 'See all: New releases' })).toHaveFocus());
+});
+
+it('shows the passive cold-start hint only on an unexpanded cold popular feed', async () => {
+  await setLocale('en');
+  const popularSections: DiscoveryBrowseSection[] = [
+    { id: 'artists', popular: true, items: [{ id: 'artist:1', title: 'Popular', type: 'artist', source: 'deezer' }] },
+  ];
+  expect(isColdDiscoveryFeed({ needs_seed: true }, popularSections, [])).toBe(true);
+  expect(isColdDiscoveryFeed({ needs_seed: false }, popularSections, [])).toBe(false);
+
+  const [cold, setCold] = createSignal(true);
+  const [expanded, setExpanded] = createSignal<string | undefined>();
+  const [preparing, setPreparing] = createSignal(false);
+  const view = render(() => <SearchDiscoveryView sections={popularSections} trackShelves={[]} expanded={expanded()}
+    loading={false} error={false} preparing={preparing()} cold={cold()} onBack={vi.fn()} onRetry={vi.fn()}
+    renderMore={noop} renderEntity={(_, link) => <button class={link.class}>{link.children}</button>}
+    renderStatus={noop} renderSong={noop} />);
+
+  expect(view.getByRole('note')).toHaveTextContent('Discover adapts automatically');
+  setExpanded('artists');
+  expect(view.queryByRole('note')).toBeNull();
+  setExpanded(undefined);
+  setPreparing(true);
+  expect(view.queryByRole('note')).toBeNull();
+  setPreparing(false);
+  setCold(false);
+  expect(view.queryByRole('note')).toBeNull();
 });

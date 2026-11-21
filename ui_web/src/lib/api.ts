@@ -224,10 +224,11 @@ export interface DiscoveryBrowseItem extends CatalogItem {
   reason_artist?: string;
   record_type?: string;
   release_date?: string;
+  is_new?: boolean;
 }
 
 export interface DiscoveryBrowseSection {
-  id: 'artists' | 'albums';
+  id: 'new_releases' | 'artists' | 'albums';
   popular: boolean;
   items: DiscoveryBrowseItem[];
 }

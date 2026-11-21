@@ -44,6 +44,9 @@ export const zh: Dict = {
     "options": "选项"
 },
   searchHome: {
+    "newReleases": "最新发行",
+    "badgeNew": "新",
+    "coldHint": "搜索、播放任意艺人或收藏喜欢的内容，发现页会自动为你调整。",
     "artists": "发现艺人",
     "albums": "为你推荐的专辑",
     "songs": "你可能喜欢的歌曲",

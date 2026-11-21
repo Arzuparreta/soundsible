@@ -41,16 +41,28 @@ def scrobble_status():
     return _for_account(lambda service, user_id: None)
 
 
+def _notify_discovery(user_id: str) -> None:
+    try:
+        from shared.api.routes.discovery_feed import notify_discovery_signal
+
+        notify_discovery_signal(user_id, always_refresh=False)
+    except Exception:
+        pass
+
+
 @scrobble_bp.route("/api/scrobble/listenbrainz", methods=["PUT"])
 @rate_limit("scrobble_connect", limit=10, window_sec=60)
 def scrobble_connect_listenbrainz():
     data = request.get_json(silent=True) or {}
     admin = request_is_admin_user()
-    return _for_account(
-        lambda service, user_id: service.connect_listenbrainz(
+
+    def _connect(service, user_id):
+        service.connect_listenbrainz(
             user_id, data.get("token"), data.get("server"), admin=admin
         )
-    )
+        _notify_discovery(user_id)
+
+    return _for_account(_connect)
 
 
 @scrobble_bp.route("/api/scrobble/maloja", methods=["PUT"])
@@ -58,9 +70,12 @@ def scrobble_connect_listenbrainz():
 def scrobble_connect_maloja():
     data = request.get_json(silent=True) or {}
     admin = request_is_admin_user()
-    return _for_account(
-        lambda service, user_id: service.connect_maloja(user_id, data.get("server"), data.get("token"), admin=admin)
-    )
+
+    def _connect(service, user_id):
+        service.connect_maloja(user_id, data.get("server"), data.get("token"), admin=admin)
+        _notify_discovery(user_id)
+
+    return _for_account(_connect)
 
 
 @scrobble_bp.route("/api/scrobble/lastfm/authorize", methods=["POST"])
@@ -80,7 +95,11 @@ def scrobble_lastfm_authorize():
 @scrobble_bp.route("/api/scrobble/lastfm/complete", methods=["POST"])
 @rate_limit("scrobble_lastfm_complete", limit=60, window_sec=60)
 def scrobble_lastfm_complete():
-    return _for_account(lambda service, user_id: service.lastfm_complete(user_id))
+    def _complete(service, user_id):
+        service.lastfm_complete(user_id)
+        _notify_discovery(user_id)
+
+    return _for_account(_complete)
 
 
 @scrobble_bp.route("/api/scrobble/lastfm/app", methods=["PUT"])

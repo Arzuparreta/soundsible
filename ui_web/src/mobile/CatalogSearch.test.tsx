@@ -6,8 +6,8 @@ import type { CatalogItem, CatalogSearchResponse, SavedEntry, Track } from '../t
 import CatalogSearch from './CatalogSearch';
 import { dispatchNavigationBack } from './backNavigation';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
-const mocks = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn(), save: vi.fn(), menu: vi.fn(), feed: vi.fn(), artist: vi.fn(), album: vi.fn(), albumJob: vi.fn(), artistJob: vi.fn(), request: vi.fn(), toastAction: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), toastLoading: vi.fn() }));
-vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { searchCatalog: mocks.search, resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save, getDiscoveryMusicFeed: mocks.feed, getArtistProfile: mocks.artist, getAlbumProfile: mocks.album, getAlbumDownload: mocks.albumJob, getArtistDownload: mocks.artistJob } }));
+const mocks = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn(), save: vi.fn(), menu: vi.fn(), feed: vi.fn(), emitDiscoveryEvent: vi.fn(), artist: vi.fn(), album: vi.fn(), albumJob: vi.fn(), artistJob: vi.fn(), request: vi.fn(), toastAction: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), toastLoading: vi.fn() }));
+vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { searchCatalog: mocks.search, resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save, getDiscoveryMusicFeed: mocks.feed, emitDiscoveryEvent: mocks.emitDiscoveryEvent, getArtistProfile: mocks.artist, getAlbumProfile: mocks.album, getAlbumDownload: mocks.albumJob, getArtistDownload: mocks.artistJob } }));
 vi.mock('../lib/http', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/http')>();
   return { ...actual, request: mocks.request };
@@ -19,7 +19,7 @@ vi.mock('../lib/contextMenu', () => ({ openContextMenu: mocks.menu }));
 const row: CatalogItem = { id: 'deezer:track:1', title: 'Song', artist: 'Artist', source: 'deezer', type: 'track', duration: 120, external_ids: { deezer_id: '1' } };
 const result = (items: CatalogItem[]): CatalogSearchResponse => ({ query: 'song', items, sections: [] });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
-beforeEach(() => { cleanup(); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); setLocale('en'); vi.clearAllMocks(); mocks.search.mockResolvedValue(result([row])); mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' }); mocks.save.mockResolvedValue(undefined); mocks.feed.mockResolvedValue({}); mocks.albumJob.mockResolvedValue({ job: null }); mocks.artistJob.mockResolvedValue({ job: null }); mocks.artist.mockResolvedValue({ name: 'Artist', resolved: true, candidates: [], top_tracks: [], albums: [], singles_eps: [], related_artists: [], in_library: false, cached: false }); mocks.album.mockResolvedValue({ title: 'Album', artist: 'Artist', cover: '', tracklist: [], resolved: true, in_library: false, cached: false }); });
+beforeEach(() => { cleanup(); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); setLocale('en'); vi.clearAllMocks(); mocks.search.mockResolvedValue(result([row])); mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' }); mocks.save.mockResolvedValue(undefined); mocks.feed.mockResolvedValue({}); mocks.emitDiscoveryEvent.mockResolvedValue({ status: 'recorded', recorded: true }); mocks.albumJob.mockResolvedValue({ job: null }); mocks.artistJob.mockResolvedValue({ job: null }); mocks.artist.mockResolvedValue({ name: 'Artist', resolved: true, candidates: [], top_tracks: [], albums: [], singles_eps: [], related_artists: [], in_library: false, cached: false }); mocks.album.mockResolvedValue({ title: 'Album', artist: 'Artist', cover: '', tracklist: [], resolved: true, in_library: false, cached: false }); });
 it('executes an owned recent query and removes it reactively without creating playback', async () => {
   localStorage.clear();
   const history = createSearchHistoryStorage(key => `native-member:${key}`);
@@ -235,4 +235,24 @@ it('renders the Discover refresh control beside the Android search bar and hides
 
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
   expect(view.queryByRole('button', { name: 'Refresh' })).toBeNull();
+});
+
+it('shows the passive cold-start hint on Android and emits music_search_played on search playback', async () => {
+  mocks.feed.mockResolvedValue({
+    needs_seed: true,
+    browse_sections: [{ id: 'artists', popular: true, items: [{ id: 'artist:1', title: 'Popular', type: 'artist', source: 'deezer' }] }],
+  });
+  const play = vi.fn().mockResolvedValue(undefined);
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={play} onChanged={vi.fn()} />);
+
+  await waitFor(() => expect(view.getByRole('note')).toBeTruthy());
+  expect(mocks.emitDiscoveryEvent).not.toHaveBeenCalled();
+
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.click(view.container.querySelector('[data-row-main]')!);
+  expect(mocks.emitDiscoveryEvent).toHaveBeenCalledWith(
+    'music_search_played',
+    expect.objectContaining({ title: 'Song', artist: 'Artist', source: 'search' }),
+  );
 });

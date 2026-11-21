@@ -41,6 +41,7 @@ DEFAULT_SETTINGS = {
 
 POSITIVE_LISTENING_EVENTS = {
     "music_played_30s",
+    "music_search_played",
     "music_saved_to_library",
     "music_favourited",
     "music_added_to_playlist",
@@ -56,6 +57,7 @@ POSITIVE_LISTENING_EVENTS = {
 
 _POSITIVE_WEIGHTS = {
     "music_played_30s": 1.0,
+    "music_search_played": 0.6,
     "music_saved_to_library": 2.5,
     "music_favourited": 2.0,
     "music_added_to_playlist": 2.0,

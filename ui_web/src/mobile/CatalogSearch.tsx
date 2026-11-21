@@ -13,7 +13,7 @@ import { registerNativeBack } from './backNavigation';
 import { catalogEntityBookmark, catalogEntityDestination, catalogEntityHeld, catalogEntityHoldings } from '../lib/catalogEntity';
 import { sameEntity, type SavedEntity } from '../lib/savedEntityIdentity';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import { discoveryHasVisible } from '../lib/searchDiscovery';
+import { discoveryHasVisible, isColdDiscoveryFeed } from '../lib/searchDiscovery';
 import { SearchDiscoveryView } from '../components/SearchDiscoveryView';
 import { CatalogCollectionStatusView } from '../components/CatalogCollectionStatusView';
 import { openContextMenu } from '../lib/contextMenu';
@@ -134,12 +134,32 @@ export default function CatalogSearch(props: {
     onCleanup(() => { clearTimeout(timer); controller.abort(); });
   }));
   onCleanup(() => { disposed = true; searchEpoch++; });
+  function emitSearchPlayed(item: CatalogItem) {
+    if (query().trim().length < 2) return;
+    const artist = itemArtist(item);
+    if (!artist || !item.title) return;
+    const youtubeId = item.external_ids?.youtube_id ? String(item.external_ids.youtube_id) : undefined;
+    void api.emitDiscoveryEvent?.('music_search_played', {
+      media_type: 'music_track',
+      track_id: item.track_id || undefined,
+      title: item.title,
+      artist,
+      album: item.album,
+      youtube_id: youtubeId,
+      source: 'search',
+    })?.catch(() => {});
+  }
   function menu(item: CatalogItem, event?: MenuEvent) {
     const resolved = trackFor(item);
     const generation = props.generation;
     const search = searchEpoch, route = navigation;
     const saved = isSaved(item);
-    const run = (purpose: 'play' | 'save' | 'remove' | 'acquire' | 'radio') => { if (generation === props.generation && search === searchEpoch && route === navigation && !disposed) void act(item, purpose); };
+    const run = (purpose: 'play' | 'save' | 'remove' | 'acquire' | 'radio') => {
+      if (generation === props.generation && search === searchEpoch && route === navigation && !disposed) {
+        if (purpose === 'play') emitSearchPlayed(item);
+        void act(item, purpose);
+      }
+    };
     const current = () => generation === props.generation && !disposed && !props.disconnected;
     const feedback = nativeFeedbackActions(catalogFeedback(item), current, {
       onDismissed: () => setDismissed(prev => { const next = new Set(prev); next.add(item.id); return next; }),
@@ -182,8 +202,9 @@ export default function CatalogSearch(props: {
     return <MusicListRowView playback title={item.title} subtitle={itemArtist(item)} seed={item.id}
       cover={track()?.source !== 'preview' && track() ? coverUrl(track()!.id, 'thumb') : item.cover}
       active={Boolean(track() && (props.isActive ? props.isActive(track()!) : props.activeId === track()!.id))} busy={pending() === item.id}
-      disabled={props.disconnected} onActivate={() => void act(item, 'play')} onMenu={event => menu(item, event)} />;
+      disabled={props.disconnected} onActivate={() => { emitSearchPlayed(item); void act(item, 'play'); }} onMenu={event => menu(item, event)} />;
   };
+  const cold = () => isColdDiscoveryFeed(feed.feed(), feed.sections(), visibleTrackShelves());
   return <section class={styles.library} data-testid="android-catalog-search">
     <div style={{ display: entity() ? 'none' : undefined }}>
     <div class={styles.searchTools}>
@@ -220,7 +241,7 @@ export default function CatalogSearch(props: {
         : songRow(item)}</For>
     </Show>
     <Show when={!query().trim() && !props.disconnected}><SearchDiscoveryView sections={feed.sections()} trackShelves={visibleTrackShelves()} expanded={expanded()}
-      loading={feed.loading()} error={feed.error()} preparing={!!feed.feed().revalidating}
+      loading={feed.loading()} error={feed.error()} preparing={!!feed.feed().revalidating} cold={cold()}
       onBack={backSection} onRetry={refreshFeed}
       renderMore={(section, link) => <button type="button" class={link.class} aria-label={link.label} onClick={() => openSection(section)}>{link.children}</button>}
       renderEntity={(item, link) => { const tap = createResponsiveTap({ onTap: () => { const path = catalogEntityDestination(item); if (path) openEntity(path); }, onLongPress: () => entityMenu(item) });

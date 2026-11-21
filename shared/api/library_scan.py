@@ -163,6 +163,12 @@ class LibraryScanService:
                 )
                 if summary["added"] or summary["updated"]:
                     emit_to_user("library_updated", user_id=user_id)
+                    try:
+                        from shared.api.routes.discovery_feed import notify_discovery_signal
+
+                        notify_discovery_signal(user_id, always_refresh=False)
+                    except Exception:
+                        logger.debug("Could not notify discovery feed after library scan", exc_info=True)
                     # Fire-and-forget: extract covers for what just landed so
                     # they're already cached by the time the library is opened,
                     # instead of the first row's own request paying for it.

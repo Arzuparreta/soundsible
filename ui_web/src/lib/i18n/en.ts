@@ -43,6 +43,9 @@ export const en = {
     "options": "Options"
 },
   searchHome: {
+    "newReleases": "New releases",
+    "badgeNew": "New",
+    "coldHint": "Search or play any artist, or save what you like — Discover adapts automatically.",
     "artists": "Artists to discover",
     "albums": "Albums for you",
     "songs": "Songs you might like",
