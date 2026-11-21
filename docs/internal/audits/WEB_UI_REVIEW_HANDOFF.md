@@ -248,7 +248,7 @@ Two things that cost time in step 1:
 | 7 P4 + A2 (+ A3) | #467 | Done |
 | 8 Design system (U2, U3, U6, U7; U4 decision) | #468 | Done |
 | 9 P6, X1–X3 (+ remaining A1/DJ activity) | #469 | Done (baseline for this follow-up) |
-| ThinkPad X270 follow-up (scroll, artwork, player/DJ compositing) | Pending PR | Complete locally; gated by CI checks and merge |
+| ThinkPad X270 follow-up (scroll, artwork, player/DJ compositing) | #480 | Complete locally; gated by CI checks and merge |
 
 ## Evidence kept outside the repository
 
