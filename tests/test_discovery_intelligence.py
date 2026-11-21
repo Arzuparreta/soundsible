@@ -6,6 +6,8 @@ import pytest
 from shared.database import user_db
 from shared.discovery_intelligence import (
     ListeningRollup,
+    _build_rediscover_section,
+    _parse_iso_timestamp,
     build_music_recommendations,
     build_podcast_recommendations,
     compose_discovery_feed,
@@ -391,8 +393,8 @@ def test_rediscover_prefers_dormant_high_affinity_and_skips_recent_low_rated_and
     podcast_ep = _track("pod-1", "Podcast Episode", "Host")
     podcast_ep.media_kind = "podcast_episode"
 
-    # Enough extra filler tracks beyond limit=3 to verify section items aren't truncated away.
-    fillers = [_track(f"filler-{i}", f"Filler {i}", f"Filler Artist {i}") for i in range(6)]
+    # Enough extra filler tracks to confirm production limit=24 preserves dormant-fav in Rediscover.
+    fillers = [_track(f"filler-{i}", f"Filler {i}", f"Filler Artist {i}") for i in range(12)]
     all_tracks = [unplayed_plain, recent_fav, low_rated, podcast_ep, dormant_fav, *fillers]
 
     metadata = LibraryMetadata(
@@ -412,8 +414,8 @@ def test_rediscover_prefers_dormant_high_affinity_and_skips_recent_low_rated_and
     db.record_track_play("filler-0", now - 2 * 86400)
     result = build_music_recommendations(
         metadata,
-        favourite_ids=["recent-fav", "filler-1", "filler-2", "dormant-fav"],
-        limit=3,
+        favourite_ids=["dormant-fav", "recent-fav", *(f"filler-{i}" for i in range(1, 10))],
+        limit=24,
     )
 
     rediscover = next(s for s in result["sections"] if s["id"] == "rediscover")
@@ -426,7 +428,65 @@ def test_rediscover_prefers_dormant_high_affinity_and_skips_recent_low_rated_and
 
     composed = compose_discovery_feed(result, max_sections=6, section_size=8)
     composed_rediscover = next(s for s in composed["sections"] if s["id"] == "rediscover")
-    assert "music:dormant-fav" in composed_rediscover["item_ids"]
+    assert composed_rediscover["item_ids"][0] == "music:dormant-fav"
+    assert "preserve_order" not in composed_rediscover
+
+
+def test_rediscover_respects_learning_opt_out_cooldown_boundary_and_artist_cap(tmp_path, monkeypatch):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    now = 2_000_000_000
+    monkeypatch.setattr("shared.discovery_intelligence.time.time", lambda: now)
+
+    tracks = [
+        _track("too-recent", "Played 13d Ago", "Artist A"),
+        _track("exact-14d", "Played 14d Ago", "Artist A"),
+        _track("same-artist-2", "Artist A Two", "Artist A"),
+        _track("same-artist-3", "Artist A Three", "Artist A"),
+        _track("other", "Other Track", "Artist B"),
+    ]
+    metadata = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})
+    db = user_db()
+    db.replace_library(metadata)
+    db.record_track_play("too-recent", now - 13 * 86400)
+    db.record_track_play("exact-14d", now - 14 * 86400)
+    db.record_track_play("other", now - 20 * 86400)
+
+    # Fewer than 3 played tracks returns None
+    assert _build_rediscover_section(tracks, ListeningRollup(played_track_ids={"too-recent", "exact-14d"}), track_states={}) is None
+
+    rollup = ListeningRollup(played_track_ids={"too-recent", "exact-14d", "other"})
+    section = _build_rediscover_section(
+        tracks,
+        rollup,
+        track_states={
+            "too-recent": {"play_count": 2, "last_played_at": now - (14 * 86400 - 1), "rating": 5},
+            "exact-14d": {"play_count": 2, "last_played_at": now - 14 * 86400, "rating": 5},
+            "same-artist-2": {"play_count": 2, "last_played_at": now - 30 * 86400, "rating": 4},
+            "same-artist-3": {"play_count": 2, "last_played_at": now - 40 * 86400, "rating": 4},
+            "other": {"play_count": 1, "last_played_at": now - 20 * 86400},
+        },
+    )
+    assert section is not None
+    assert "music:too-recent" not in section["item_ids"]
+    assert "music:exact-14d" in section["item_ids"]
+    artist_a_items = [iid for iid in section["item_ids"] if iid in {"music:exact-14d", "music:same-artist-2", "music:same-artist-3"}]
+    assert len(artist_a_items) == 2
+
+    save_discovery_settings({"learning_enabled": False})
+    disabled = build_music_recommendations(metadata, favourite_ids=[], limit=10)
+    assert all(s["id"] != "rediscover" for s in disabled["sections"])
+
+
+def test_parse_iso_timestamp_handles_utc_offsets_and_invalid_values():
+    z_upper = _parse_iso_timestamp("2026-01-01T00:00:00Z")
+    z_lower = _parse_iso_timestamp("2026-01-01T00:00:00z")
+    naive = _parse_iso_timestamp("2026-01-01T00:00:00")
+    offset = _parse_iso_timestamp("2026-01-01T02:00:00+02:00")
+    assert z_upper is not None
+    assert z_upper == z_lower == naive == offset
+    assert _parse_iso_timestamp("not-a-timestamp") is None
+    assert _parse_iso_timestamp("") is None
 
 
 def test_podcast_rollup_boosts_recently_played_show(tmp_path):

@@ -8,6 +8,7 @@ background.
 
 from __future__ import annotations
 
+import hashlib
 from itertools import zip_longest
 import logging
 import re
@@ -49,7 +50,7 @@ logger = logging.getLogger(__name__)
 _norm_music_key = identity_key
 
 
-def _deezer_json(path: str, params: dict | None = None, ttl_sec: int = _DEEZER_TRACK_CACHE_TTL_SEC) -> dict:
+def _deezer_json(path: str, params: dict | None = None, ttl_sec: int | None = None) -> dict:
     """The cache behind this used to be a module-level dict that never evicted —
     one entry per artist name ever searched, for the life of the process — and
     it did not single-flight, so N concurrent identical requests each hit
@@ -57,13 +58,32 @@ def _deezer_json(path: str, params: dict | None = None, ttl_sec: int = _DEEZER_T
     return deezer.get(path, params, ttl_sec=ttl_sec)
 
 
+def _row_artist_name(row: dict, fallback: str = "") -> str:
+    artist_field = row.get("artist")
+    if isinstance(artist_field, dict):
+        name = artist_field.get("name")
+    elif isinstance(artist_field, str):
+        name = artist_field
+    else:
+        name = ""
+    return str(name or fallback).strip()
+
+
+def _section_slug(prefix: str, text: str) -> str:
+    folded = fold_text(text)
+    slug = re.sub(r"[^a-z0-9]+", "_", folded).strip("_")[:44]
+    if slug and all(ord(ch) < 128 for ch in folded):
+        return f"{prefix}_{slug}"
+    digest = hashlib.sha1(text.strip().casefold().encode("utf-8")).hexdigest()[:8]
+    return f"{prefix}_{slug}_{digest}" if slug else f"{prefix}_{digest}"
+
+
 def _deezer_track_to_feed_item(row: dict, *, source: str, reason: str, reason_code: str, in_library: bool) -> dict | None:
     if not isinstance(row, dict):
         return None
     deezer_id = row.get("id")
     title = (row.get("title_short") or row.get("title") or "").strip()
-    artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
-    artist = (artist_row.get("name") or row.get("artist") or "").strip()
+    artist = _row_artist_name(row)
     if not deezer_id or not title or not artist:
         return None
     album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
@@ -117,8 +137,8 @@ def _append_external_items(
             break
         if not isinstance(row, dict):
             continue
-        artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
-        key = _norm_music_key(row.get("title_short") or row.get("title"), artist_row.get("name") or row.get("artist"))
+        row_artist = _row_artist_name(row)
+        key = _norm_music_key(row.get("title_short") or row.get("title"), row_artist)
         item = _deezer_track_to_feed_item(
             row,
             source=source,
@@ -203,18 +223,23 @@ def _top_taste_artists(metadata, fav_ids: list[str], limit: int = _MAX_PERSONALI
     return [display[key] for key in ranked[:limit] if display.get(key)]
 
 
-def _resolve_deezer_artist_id(artist_name: str, *, allow_approximate: bool = False) -> str | None:
+def _resolve_deezer_artist_id(
+    artist_name: str,
+    *,
+    allow_approximate: bool = False,
+    search_limit: int = 8,
+) -> str | None:
     """Resolve an artist name to a Deezer artist id, folding diacritics and ranking by fans."""
-    search = _deezer_json("search/artist", {"q": artist_name, "limit": 8}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+    wanted = fold_text(artist_name)
+    if not wanted:
+        return None
+    search = _deezer_json("search/artist", {"q": artist_name, "limit": search_limit})
     rows = [
         row
         for row in (search.get("data") if isinstance(search.get("data"), list) else [])
         if isinstance(row, dict) and row.get("id") and (row.get("name") or "").strip()
     ]
     if not rows:
-        return None
-    wanted = fold_text(artist_name)
-    if not wanted:
         return None
     exact = [row for row in rows if fold_text(row.get("name")) == wanted]
     if exact:
@@ -228,10 +253,10 @@ def _resolve_deezer_artist_id(artist_name: str, *, allow_approximate: bool = Fal
 def _deezer_artist_top_rows(artist_name: str, limit: int) -> list[dict]:
     """The artist's top tracks, found through a plain artist search: Deezer's
     `artist:"…"` field syntax stopped answering in October 2026."""
-    artist_id = _resolve_deezer_artist_id(artist_name, allow_approximate=True)
+    artist_id = _resolve_deezer_artist_id(artist_name, allow_approximate=True, search_limit=8)
     if not artist_id:
         return []
-    top = _deezer_json(f"artist/{artist_id}/top", {"limit": max(limit, 12)}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+    top = _deezer_json(f"artist/{artist_id}/top", {"limit": max(limit, 12)})
     top_rows = top.get("data") if isinstance(top.get("data"), list) else []
     return top_rows[:limit]
 
@@ -241,13 +266,20 @@ def _deezer_related_artist_rows(
     limit: int,
     *,
     local_keys: set[str] | None = None,
+    exclude_ids: set[str] | None = None,
+    used_related_artists: set[str] | None = None,
+    deadline: float | None = None,
     per_artist: int = 2,
 ) -> list[dict]:
     """Top tracks from artists related to `artist_name`, round-robin interleaved."""
-    seed_id = _resolve_deezer_artist_id(artist_name, allow_approximate=False)
+    if deadline is not None and time.monotonic() >= deadline:
+        return []
+    seed_id = _resolve_deezer_artist_id(artist_name, allow_approximate=False, search_limit=5)
     if not seed_id:
         return []
-    rel = _deezer_json(f"artist/{seed_id}/related", {"limit": 10}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+    if deadline is not None and time.monotonic() >= deadline:
+        return []
+    rel = _deezer_json(f"artist/{seed_id}/related", {"limit": 10})
     rel_rows = rel.get("data") if isinstance(rel.get("data"), list) else []
     seed_folded = fold_text(artist_name)
     related_artists: list[tuple[str, str]] = []
@@ -263,19 +295,29 @@ def _deezer_related_artist_rows(
             continue
         seen_artists.add(rel_id)
         related_artists.append((rel_id, rel_name))
-        if len(related_artists) >= 5:
-            break
     if not related_artists:
         return []
 
+    if used_related_artists:
+        fresh = [pair for pair in related_artists if pair[0] not in used_related_artists]
+        reused = [pair for pair in related_artists if pair[0] in used_related_artists]
+        related_artists = fresh + reused
+
     pools: list[list[dict]] = []
+    fetched = 0
     for rel_id, rel_name in related_artists:
+        if fetched >= 6 or (len(pools) >= 5 and sum(len(p) for p in pools) >= limit):
+            break
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+        fetched += 1
         try:
             top = _deezer_json(
                 f"artist/{rel_id}/top",
                 {"limit": max(per_artist * 4, 8)},
-                ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC,
             )
+        except deezer.DeezerQuotaError:
+            raise
         except Exception as exc:
             logger.info("Discovery music feed: related artist %s (%s) unavailable: %s", rel_name, rel_id, exc)
             continue
@@ -285,14 +327,24 @@ def _deezer_related_artist_rows(
             if not isinstance(row, dict):
                 continue
             track_id = row.get("id")
-            title = (row.get("title_short") or row.get("title") or "").strip()
+            full_title = (row.get("title") or "").strip()
+            short_title = (row.get("title_short") or "").strip()
+            title = short_title or full_title
             artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
-            row_artist = (artist_row.get("name") or row.get("artist") or rel_name).strip()
+            if str(artist_row.get("id") or "").strip() == seed_id:
+                continue
+            row_artist = _row_artist_name(row, fallback=rel_name)
             if not track_id or not title or not row_artist:
                 continue
             if fold_text(row_artist) == seed_folded:
                 continue
-            if local_keys and _norm_music_key(title, row_artist) in local_keys:
+            if exclude_ids and f"deezer:{track_id}" in exclude_ids:
+                continue
+            if local_keys and any(
+                _norm_music_key(candidate, row_artist) in local_keys
+                for candidate in (full_title, short_title)
+                if candidate
+            ):
                 continue
             if not isinstance(row.get("artist"), dict) or not artist_row.get("name"):
                 row = {**row, "artist": {"id": rel_id, "name": row_artist}}
@@ -301,6 +353,8 @@ def _deezer_related_artist_rows(
                 break
         if pool:
             pools.append(pool)
+            if used_related_artists is not None:
+                used_related_artists.add(rel_id)
 
     out: list[dict] = []
     seen_track_ids: set[str] = set()
@@ -328,21 +382,31 @@ def _append_personalized_artist_sections(
     seen: set[str],
     limit: int,
 ) -> None:
+    deadline = time.monotonic() + 12.0
+    used_related_artists: set[str] = set()
     added = 0
     for artist in _top_taste_artists(metadata, fav_ids):
+        if time.monotonic() >= deadline:
+            break
         try:
             rows = _deezer_related_artist_rows(
                 artist,
                 max(12, min(18, limit)),
                 local_keys=local_keys,
+                exclude_ids=seen,
+                used_related_artists=used_related_artists,
+                deadline=deadline,
             )
+        except deezer.DeezerQuotaError:
+            logger.info("Discovery music feed: Deezer quota reached; skipping remaining seeds")
+            break
         except Exception as exc:
             logger.info("Discovery music feed: personalized seed %s unavailable: %s", artist, exc)
             continue
         sec = _append_external_items(
             items,
             rows,
-            section_id=f"because_you_listen_{re.sub(r'[^a-z0-9]+', '_', artist.casefold()).strip('_')[:44]}",
+            section_id=_section_slug("because_you_listen", artist),
             title=f"More like {artist}",
             reason=f"Similar to {artist}.",
             section_reason=f"Similar artists to {artist} based on your listening and library.",

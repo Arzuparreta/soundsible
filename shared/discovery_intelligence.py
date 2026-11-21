@@ -771,7 +771,7 @@ def _parse_iso_timestamp(value: Any) -> float | None:
     text = _clean_str(value, 64)
     if not text:
         return None
-    if text.endswith("Z"):
+    if text[-1:] in ("Z", "z"):
         text = text[:-1] + "+00:00"
     try:
         dt = datetime.fromisoformat(text)
@@ -783,6 +783,8 @@ def _parse_iso_timestamp(value: Any) -> float | None:
 
 
 def _load_track_user_states() -> dict[str, dict[str, Any]]:
+    if not load_discovery_settings().get("learning_enabled", True):
+        return {}
     try:
         return user_db().get_all_track_user_states()
     except Exception:
@@ -847,7 +849,10 @@ def _build_rediscover_section(
             affinity += 0.5
         if plays > 0:
             affinity += min(2.5, math.log1p(plays) * 0.9)
-        pl_count = playlist_counts.get(track.id, 0)
+        item_id = getattr(track, "item_id", None)
+        pl_count = playlist_counts.get(track.id, 0) + (
+            playlist_counts.get(str(item_id), 0) if item_id and str(item_id) != track.id else 0
+        )
         if pl_count > 0:
             affinity += min(2.0, pl_count * 1.0)
         artist_norm = _norm(track.album_artist or track.artist)
@@ -915,6 +920,7 @@ def _build_rediscover_section(
         "reason": "Tracks in your library you haven't played in a while.",
         "reason_key": "rediscover",
         "item_ids": rediscover_ids,
+        "preserve_order": True,
     }
 
 
@@ -1027,6 +1033,10 @@ def build_music_recommendations(
         items=items,
     )
     if rediscover:
+        reserved = set(rediscover["item_ids"][:10])
+        filtered_main = [item_id for item_id in sections[0]["item_ids"] if item_id not in reserved]
+        if filtered_main:
+            sections[0]["item_ids"] = filtered_main
         sections.append(rediscover)
 
     playlist_sections = _build_playlist_sections(tracks, by_id, playlists, rollup, seen, items)
@@ -1074,6 +1084,7 @@ def compose_discovery_feed(
         if not isinstance(raw_section, dict):
             continue
         section = dict(raw_section)
+        preserve_order = bool(section.pop("preserve_order", False))
         ids = [
             str(item_id)
             for item_id in section.get("item_ids") or []
@@ -1082,7 +1093,8 @@ def compose_discovery_feed(
         if not ids:
             continue
 
-        ids.sort(key=lambda item_id: -float(item_by_id[item_id].get("score") or 0))
+        if not preserve_order:
+            ids.sort(key=lambda item_id: -float(item_by_id[item_id].get("score") or 0))
         artist_counts: dict[str, int] = {}
         diversified: list[str] = []
         for item_id in ids:

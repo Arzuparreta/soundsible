@@ -146,7 +146,7 @@ it('renders localized structured track shelves with reasons and expands dynamic 
   expect(view.getByRole('region', { name: 'Explore from Jesucristo García' })).toBeTruthy();
   expect(view.getByText('Connections from your listening graph')).toBeTruthy();
   expect(view.getByRole('region', { name: 'Rediscover' })).toBeTruthy();
-  expect(view.getByText("Favourites from your library you haven't played lately")).toBeTruthy();
+  expect(view.getByText("Tracks from your library you haven't played lately")).toBeTruthy();
   expect(view.getByRole('region', { name: 'From Road Trip' })).toBeTruthy();
   expect(view.getByText('Tracks from your playlist')).toBeTruthy();
   expect(view.getByRole('region', { name: 'Custom Picks' })).toBeTruthy();

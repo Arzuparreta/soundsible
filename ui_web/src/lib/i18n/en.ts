@@ -56,7 +56,7 @@ export const en = {
     "fromPlaylist": "From {playlist}",
     "reasonMoreLike": "Similar artists based on your listening",
     "reasonExploreFrom": "Connections from your listening graph",
-    "reasonRediscover": "Favourites from your library you haven't played lately",
+    "reasonRediscover": "Tracks from your library you haven't played lately",
     "reasonMadeForLibrary": "From your favourites, playlists, and library",
     "reasonFromPlaylist": "Tracks from your playlist",
     "seeAll": "See all",

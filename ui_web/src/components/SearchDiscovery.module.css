@@ -6,7 +6,7 @@
 
 .heading { display: flex; align-items: center; gap: var(--space-md); min-height: var(--pill-h); }
 .headingText { display: flex; flex: 1; flex-direction: column; gap: var(--space-2xs); min-width: 0; }
-.heading h2 { margin: 0; font-size: var(--text-h2); font-weight: var(--fw-bold); line-height: 1.2; letter-spacing: -0.02em; text-wrap: balance; }
+.heading h2 { margin: 0; font-size: var(--text-h2); font-weight: var(--fw-bold); line-height: 1.2; letter-spacing: -0.02em; text-wrap: balance; overflow-wrap: anywhere; }
 .sectionReason { margin: 0; color: var(--ink-secondary); font-size: var(--text-caption); line-height: 1.4; }
 .actions { display: flex; flex: none; align-items: center; gap: var(--space-xs); }
 .actions:empty { display: none; }

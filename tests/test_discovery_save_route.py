@@ -645,6 +645,94 @@ def test_more_like_folds_diacritics_skips_owned_and_never_falls_back_to_seed_art
         assert _disc_feed._deezer_related_artist_rows("Blue Oyster Cult", 10) == []
 
 
+def test_more_like_handles_missing_artist_name_owned_full_title_quota_and_non_latin_slugs(tmp_path):
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("fav-1", "First Light", "宇多田ヒカル"),
+            _track("fav-2", "Gruppa Krovi", "Кино"),
+            _track("fav-3", "El Mal Querer", "Rosalía"),
+            _track("owned-remaster", "Track One (Remastered)", "Rel Alpha"),
+        ],
+        playlists={},
+        settings={},
+    )
+
+    def fake_deezer(path, params=None, ttl_sec=None):
+        q = (params or {}).get("q", "")
+        if path == "search/artist":
+            if q == "宇多田ヒカル":
+                return {"data": [{"id": 100, "name": "宇多田ヒカル", "nb_fan": 90000}]}
+            if q == "Кино":
+                return {"data": [{"id": 200, "name": "Кино", "nb_fan": 80000}]}
+            if q == "Rosalía":
+                return {"data": [{"id": 300, "name": "Rosalía", "nb_fan": 95000}]}
+            return {"data": []}
+        if path.endswith("/related"):
+            aid = path.split("/")[1]
+            # Share Rel Alpha (101) across seeds while offering distinct Rel Beta/Gamma so seed 2 isn't starved
+            return {
+                "data": [
+                    {"id": 101, "name": "Rel Alpha"},
+                    {"id": int(aid) + 2, "name": f"Rel Distinct {aid}"},
+                ]
+            }
+        if path == "artist/101/top":
+            return {
+                "data": [
+                    # Owned by full `title` even though `title_short` drops `(Remastered)`
+                    {"id": 700, "title": "Track One (Remastered)", "title_short": "Track One", "artist": {"id": 101, "name": "Rel Alpha"}},
+                    # Same seed id leak (artist dict id matches seed_id)
+                    {"id": 701, "title": "Seed Collab", "artist": {"id": 100, "name": "Someone Else"}},
+                    # Artist dict missing "name" — must fall back cleanly to rel_name without AttributeError
+                    {"id": 702, "title": "Fresh Alpha", "artist": {"id": 101}},
+                ]
+            }
+        if path.startswith("artist/") and path.endswith("/top"):
+            aid = path.split("/")[1]
+            return {
+                "data": [
+                    {"id": int(aid) * 10 + 1, "title": f"Distinct Cut {aid}", "artist": {"id": int(aid), "name": f"Rel Distinct {int(aid) - 2}"}},
+                ]
+            }
+        return {"data": []}
+
+    with patch.object(_disc_feed, "_deezer_json", side_effect=fake_deezer):
+        body = _disc_routes._build_music_feed(metadata, ["fav-1", "fav-2", "fav-3"], limit=12)
+
+    section_ids = [s["id"] for s in body["sections"] if s.get("section_type") == "deezer_taste_artist"]
+    assert len(section_ids) == 3
+    assert len(set(section_ids)) == 3
+    assert all(sid.startswith("because_you_listen_") for sid in section_ids)
+    assert "because_you_listen_rosalia" in section_ids
+    assert all(item["id"] != "deezer:700" for item in body["items"])
+    sec_utada = next(s for s in body["sections"] if s.get("title_params") == {"artist": "宇多田ヒカル"})
+    sec_kino = next(s for s in body["sections"] if s.get("title_params") == {"artist": "Кино"})
+    assert "deezer:701" not in sec_utada["item_ids"]
+    assert sec_kino["item_ids"][0] == "deezer:2021"
+    assert any(item["id"] == "deezer:702" and item["artist"] == "Rel Alpha" for item in body["items"])
+
+    # Quota exhaustion must short-circuit immediately without retrying subsequent seeds/artists.
+    calls = []
+
+    def quota_fail(path, params=None, ttl_sec=None):
+        calls.append(path)
+        if path == "search/artist":
+            return {"data": [{"id": 100, "name": (params or {}).get("q")}]}
+        if path == "artist/100/related":
+            return {"data": [{"id": 101, "name": "Rel 1"}, {"id": 102, "name": "Rel 2"}]}
+        raise deezer.DeezerQuotaError(path)
+
+    items, sections = [], []
+    with patch.object(_disc_feed, "_deezer_json", side_effect=quota_fail):
+        _disc_feed._append_personalized_artist_sections(
+            items, sections, metadata=metadata, fav_ids=["fav-1", "fav-2"], local_keys=set(), seen=set(), limit=10
+        )
+    assert calls == ["search/artist", "artist/100/related", "artist/101/top"]
+    assert sections == []
+
+
 # ─── confirm_video_id path ────────────────────────────────────────────────────
 
 def test_save_confirm_video_id_queues_directly(tmp_path):

@@ -14,7 +14,19 @@ export function createNativeDiscoveryFeed(props: {
   const [loading, setLoading] = createSignal(false), [error, setError] = createSignal(false);
   const sections = createMemo(() => (feed().browse_sections ?? []).map(section => ({ ...section, items: prioritizeCatalogItems(section.items, props.known) })));
   const trackShelves = createMemo(() => resolveDiscoveryTrackShelves(feed(), items => prioritizeCatalogItems(items, props.known)));
-  const songs = createMemo(() => trackShelves().flatMap(shelf => shelf.items).slice(0, 10));
+  const songs = createMemo(() => {
+    const out: CatalogItem[] = [];
+    const seen = new Set<string>();
+    for (const shelf of trackShelves()) {
+      for (const item of shelf.items) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        out.push(item);
+        if (out.length >= 10) return out;
+      }
+    }
+    return out;
+  });
   const hasContent = () => discoveryHasVisible(sections(), trackShelves());
   const hasVisibleContent = () => discoveryHasVisible(sections(), trackShelves(), props.expanded());
   let request: AbortController | undefined, timer: ReturnType<typeof setTimeout> | undefined;
