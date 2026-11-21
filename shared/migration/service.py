@@ -390,7 +390,7 @@ class MigrationRunner:
         except Exception:
             logger.debug("Could not emit migration library update", exc_info=True)
         try:
-            from shared.api.routes.discovery_feed import notify_discovery_signal
+            from shared.discovery_signals import notify_discovery_signal
 
             notify_discovery_signal(self.user_id, always_refresh=False)
         except Exception:

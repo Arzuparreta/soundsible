@@ -14,6 +14,7 @@ from shared.api.routes import discovery_feed
 from shared.api.routes.library import library_bp
 from shared.api.routes.scrobble import scrobble_bp
 from shared.discovery_intelligence import load_listening_event_rollups
+import shared.discovery_signals as discovery_signals_mod
 from shared.hardening import _reset_rate_limits_for_tests
 import shared.hardening as hardening_mod
 import shared.realtime as realtime_mod
@@ -238,3 +239,39 @@ def test_saved_entity_and_favourite_and_scrobble_connect_wake_cached_feed(monkey
         r3 = client.put("/api/scrobble/listenbrainz", json={"token": "lb-ok"})
         assert r3.status_code == 200
         assert ("discovery_feed_ready", "alice") in emitted
+
+
+def test_discovery_signals_bridge_forwards_and_handles_missing_handler(monkeypatch):
+    monkeypatch.setattr(
+        discovery_feed,
+        "_get_api",
+        lambda: {
+            "get_library": lambda: SimpleNamespace(metadata=SimpleNamespace(tracks=[], playlists={}), refresh_if_stale=lambda: None),
+            "favourite_library_ids": lambda: [],
+            "emit_to_user": lambda *a, **kw: None,
+        },
+    )
+    monkeypatch.setattr(discovery_feed, "_DISCOVERY_FEED_EXECUTOR", _InlineExecutor())
+    monkeypatch.setattr(
+        discovery_feed,
+        "_build_discovery_feed_body",
+        lambda limit, **kw: {"generated_at": 777, "browse_sections": [{"id": "artists", "popular": False, "items": []}], "needs_seed": False},
+    )
+
+    cache_key = "discovery-feed-v4:alice:10"
+    with discovery_common._DISCOVERY_FEED_LOCK:
+        discovery_common._DISCOVERY_FEED_CACHE[cache_key] = (
+            time.time() + 180,
+            time.time() + 3600,
+            {"needs_seed": True, "browse_sections": []},
+        )
+
+    assert discovery_signals_mod.notify_discovery_signal("alice", always_refresh=False) is True
+    with discovery_common._DISCOVERY_FEED_LOCK:
+        assert discovery_common._DISCOVERY_FEED_CACHE[cache_key][2]["generated_at"] == 777
+
+    try:
+        discovery_signals_mod.register_discovery_signal_handler(None)
+        assert discovery_signals_mod.notify_discovery_signal("alice", always_refresh=True) is False
+    finally:
+        discovery_signals_mod.register_discovery_signal_handler(discovery_feed._dispatch_discovery_signal)

@@ -164,7 +164,7 @@ class LibraryScanService:
                 if summary["added"] or summary["updated"]:
                     emit_to_user("library_updated", user_id=user_id)
                     try:
-                        from shared.api.routes.discovery_feed import notify_discovery_signal
+                        from shared.discovery_signals import notify_discovery_signal
 
                         notify_discovery_signal(user_id, always_refresh=False)
                     except Exception:

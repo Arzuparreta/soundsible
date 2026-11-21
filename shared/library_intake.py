@@ -89,7 +89,7 @@ def add_tracks_to_user_library(
             realtime.emit_to_user('favourites_updated', user_id=target)
         if added:
             try:
-                from shared.api.routes.discovery_feed import notify_discovery_signal
+                from shared.discovery_signals import notify_discovery_signal
 
                 notify_discovery_signal(target, always_refresh=False)
             except Exception:

@@ -854,7 +854,7 @@ def toggle_favourite():
     # full library sync — every other mutating route here already emits.
     api["emit_to_user"]("favourites_updated")
     try:
-        from shared.api.routes.discovery_feed import notify_discovery_signal
+        from shared.discovery_signals import notify_discovery_signal
 
         notify_discovery_signal(always_refresh=bool(is_fav))
     except Exception:
@@ -1142,7 +1142,7 @@ def update_saved_entity():
         return jsonify({'error': str(exc)}), 400
     emit_to_user('saved_entities_updated')
     try:
-        from shared.api.routes.discovery_feed import notify_discovery_signal
+        from shared.discovery_signals import notify_discovery_signal
 
         notify_discovery_signal(always_refresh=True)
     except Exception:

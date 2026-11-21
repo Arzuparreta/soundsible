@@ -31,6 +31,7 @@ from shared.discovery_seeds import (
     select_release_seed_artists,
     select_taste_artists,
 )
+from shared.discovery_signals import register_discovery_signal_handler
 from shared.hardening import rate_limit
 from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
@@ -721,6 +722,17 @@ def notify_discovery_signal(user_id: str | None = None, *, always_refresh: bool 
         except Exception as exc:
             logger.debug("Discovery signal refresh failed for %s: %s", cache_key, exc)
     return scheduled
+
+
+def _dispatch_discovery_signal(
+    user_id: str | None = None,
+    *,
+    always_refresh: bool = False,
+) -> bool:
+    return notify_discovery_signal(user_id, always_refresh=always_refresh)
+
+
+register_discovery_signal_handler(_dispatch_discovery_signal)
 
 
 @discovery_bp.route("/api/discovery/music/feed", methods=["GET"])
