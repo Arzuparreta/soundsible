@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="branding/logo-app.png" alt="" width="96">
-
 # Soundsible
 
-**A self-hosted music player. Search online music, keep a library, listen on any device.**
+<img src="branding/logo-app-rounded.png" alt="" width="96">
+
+**Free, self-hosted music experience with everything baked on a single service**
 
 [Install](#install) · [Devices](#devices) · [FAQ](#faq) · [Documentation](#documentation) · [Website](https://arzuparreta.github.io/soundsible.github.io)
 
