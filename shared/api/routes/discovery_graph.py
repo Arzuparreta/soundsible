@@ -38,6 +38,9 @@ _discover_inflight_lock = threading.RLock()
 #: (account, request_id, seed_track_id). A request that joins an expansion
 #: already running is told when it lands, like the one that started it.
 _discover_subscribers: dict[str, list[tuple[str | None, str, str]]] = {}
+#: video_id → accounts that triggered a background warm/feed expansion without
+#: a named request_id waiter, so cache completion refreshes all affected feeds.
+_discover_refresh_users: dict[str, set[str | None]] = {}
 
 
 def _get_discover_executor() -> ThreadPoolExecutor:
@@ -117,6 +120,7 @@ def _expand_seed(video_id: str, user_id: str | None) -> None:
         # arriving after this sees no expansion in flight and starts its own.
         _discover_inflight.pop(video_id, None)
         waiting = _discover_subscribers.pop(video_id, [])
+        refresh_users = _discover_refresh_users.pop(video_id, set())
     emit = _get_api()["emit_to_user"]
     for subscriber, request_id, seed_track_id in waiting:
         # One account's failure must not leave the others waiting: each is
@@ -141,13 +145,14 @@ def _expand_seed(video_id: str, user_id: str | None) -> None:
     if results:
         users: list[str | None] = []
         seen_users: set[str | None] = set()
-        for subscriber, _request_id, _seed_track_id in waiting:
-            uid = subscriber or user_id
+        for uid in [
+            *(subscriber or user_id for subscriber, _request_id, _seed_track_id in waiting),
+            *refresh_users,
+            user_id,
+        ]:
             if uid not in seen_users:
                 seen_users.add(uid)
                 users.append(uid)
-        if not users:
-            users = [user_id]
         try:
             from shared.api.routes.discovery_common import _invalidate_personalized_cache_for_user
             from shared.api.routes.discovery_feed import _schedule_discovery_feed_refresh
@@ -169,6 +174,7 @@ def _schedule_expand(video_id: str, request_id: str | None = None, seed_track_id
     with _discover_inflight_lock:
         if request_id and seed_track_id:
             _discover_subscribers.setdefault(video_id, []).append((user_id, request_id, seed_track_id))
+        _discover_refresh_users.setdefault(video_id, set()).add(user_id)
         existing = _discover_inflight.get(video_id)
         if existing is not None and not existing.done():
             return
@@ -211,13 +217,18 @@ def discover_feed():
         if not seed_ids:
             return jsonify({"request_id": "", "ready": [], "pending": []}), 400
     else:
-        from shared.discovery_seeds import select_graph_seed_tracks
+        from shared.discovery_seeds import record_recent_graph_seeds, select_graph_seed_tracks
         from shared.user_context import current_user_id
 
         api = _get_api()
         lib = api["get_library"]()
+        try:
+            lib.refresh_if_stale()
+        except Exception:
+            pass
         metadata = getattr(lib, "metadata", None)
         fav_ids = list(api["favourite_library_ids"]())
+        uid = current_user_id()
         seed_ids = (
             [
                 t.id
@@ -225,7 +236,7 @@ def discover_feed():
                     metadata,
                     fav_ids,
                     limit=5,
-                    user_id=current_user_id(),
+                    user_id=uid,
                     rotate=True,
                 )
             ]
@@ -234,6 +245,7 @@ def discover_feed():
         )
         if not seed_ids:
             return jsonify({"request_id": str(uuid.uuid4()), "ready": [], "pending": []})
+        record_recent_graph_seeds(uid, seed_ids)
     seed_ids = seed_ids[:20]  # cap
     limit = min(50, max(1, request.args.get("limit", _DISCOVER_RECS_PER_SEED, type=int)))
     request_id = str(uuid.uuid4())
@@ -331,6 +343,10 @@ def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:
 
     api = _get_api()
     lib = api["get_library"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
     metadata = getattr(lib, "metadata", None)
     if not metadata or not metadata.tracks:
         return []

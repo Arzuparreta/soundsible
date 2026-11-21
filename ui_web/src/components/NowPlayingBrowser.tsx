@@ -878,6 +878,11 @@ function RootView(props: {
   onQueue: (item: CatalogItem) => void;
 }) {
   const busy = () => discoveryLoading() || discoveryRefreshing();
+  const autoRowWithoutMenu = (item: CatalogItem): Omit<AutoRowProps, 'onMenu'> => {
+    const row = { ...props.autoRow(item) };
+    delete row.onMenu;
+    return row;
+  };
   return (
     <div class={styles.body} data-browser-body>
       <section>
@@ -894,7 +899,6 @@ function RootView(props: {
         <Show when={!discoveryLoading() || discoveryExploreItems().length > 0} fallback={<SkeletonRows count={6} />}>
           <For each={discoveryExploreItems()}>
             {(item) => {
-              const playable = playableTrack(item);
               const recommendation = item.raw?.recommendation as RecommendationContext | undefined;
               return (
                 <BrowserTrackRow
@@ -908,12 +912,12 @@ function RootView(props: {
                   resolving={props.resolving.has(item.id)}
                   onPlay={() => props.onTrack(item)}
                   onQueue={() => props.onQueue(item)}
-                  {...props.autoRow(item)}
+                  {...autoRowWithoutMenu(item)}
                   onMenu={props.canOpenRowMenu
                     ? (event) => openEntryMenu(savedFromCatalogItem(item), {
                         item,
                         music: catalogMusic(item),
-                        track: playable ?? undefined,
+                        track: playableTrack(item) ?? undefined,
                         recommendation,
                         onNotInterested: () => dismissDiscoveryItem(item.id),
                         onUndoNotInterested: () => restoreDiscoveryItem(item.id),

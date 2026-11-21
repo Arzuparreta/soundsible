@@ -19,6 +19,7 @@ import { dispatchDiscoveryFeedReady } from './discoveryEvents';
 import { clearSearchCache } from './searchCache';
 import {
   discoveryBrowseSections,
+  discoveryError,
   discoveryExploreItems,
   discoveryFeed,
   discoveryLoading,
@@ -184,5 +185,136 @@ describe('discoveryFeedStore', () => {
     await vi.advanceTimersByTimeAsync(20_000);
     dispatchDiscoveryFeedReady({ limit: 10 });
     expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears discoveryRefreshing when an in-flight refresh aborts on last consumer release and reloads on return', async () => {
+    let resolveRefresh!: (value: unknown) => void;
+    mocks.getDiscoveryMusicFeed
+      .mockResolvedValueOnce({
+        sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:1'] }],
+        items: [{ id: 'deezer:1', type: 'track', source: 'deezer', title: 'Initial', artist: 'A' }],
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:2'] }],
+        items: [{ id: 'deezer:2', type: 'track', source: 'deezer', title: 'Reloaded', artist: 'B' }],
+      });
+
+    const release = retainDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryLoading()).toBe(false));
+
+    refreshDiscoveryFeed();
+    expect(discoveryRefreshing()).toBe(true);
+    const refreshSignal = mocks.getDiscoveryMusicFeed.mock.calls[1][0] as AbortSignal;
+
+    // Aborting on navigation/unmount must stop the spinner and clear cache so
+    // returning within the 60s cache window triggers a fresh load.
+    release();
+    expect(refreshSignal.aborted).toBe(true);
+    expect(discoveryRefreshing()).toBe(false);
+    resolveRefresh({});
+
+    const releaseAgain = retainDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:2']));
+    expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(3);
+    releaseAgain();
+  });
+
+  it('resets revalidation attempt budget after settling and fails after 4 consecutive revalidations', async () => {
+    const release = retainDiscoveryFeed();
+    // Complete 5 separate settled cycles in one session: attempts must reset each time.
+    for (let i = 0; i < 5; i += 1) {
+      mocks.getDiscoveryMusicFeed
+        .mockResolvedValueOnce({
+          revalidating: true,
+          generated_at: i * 10 + 1,
+          sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:1'] }],
+          items: [{ id: 'deezer:1', type: 'track', source: 'deezer', title: 'Stale', artist: 'A' }],
+        })
+        .mockResolvedValueOnce({
+          revalidating: false,
+          generated_at: i * 10 + 2,
+          sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:1'] }],
+          items: [{ id: 'deezer:1', type: 'track', source: 'deezer', title: 'Fresh', artist: 'A' }],
+        });
+      refreshDiscoveryFeed();
+      await vi.waitFor(() => expect(discoveryRefreshing()).toBe(true));
+      dispatchDiscoveryFeedReady({ limit: 10, generated_at: i * 10 + 2 });
+      await vi.waitFor(() => expect(discoveryRefreshing()).toBe(false));
+      expect(discoveryError()).toBe(false);
+    }
+
+    // Now exhaust MAX_REVALIDATE_ATTEMPTS (4) consecutively within one cycle.
+    mocks.getDiscoveryMusicFeed.mockResolvedValue({
+      revalidating: true,
+      generated_at: 999,
+      sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:1'] }],
+      items: [{ id: 'deezer:1', type: 'track', source: 'deezer', title: 'Stuck', artist: 'A' }],
+    });
+    refreshDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryRefreshing()).toBe(true));
+    for (let step = 0; step < 4; step += 1) {
+      await vi.advanceTimersByTimeAsync(15_000);
+    }
+    await vi.waitFor(() => expect(discoveryError()).toBe(true));
+    expect(discoveryRefreshing()).toBe(false);
+    release();
+  });
+
+  it('reloads an already-settled active feed when discovery_feed_ready carries a newer generated_at', async () => {
+    mocks.getDiscoveryMusicFeed
+      .mockResolvedValueOnce({
+        revalidating: false,
+        generated_at: 100,
+        sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:1'] }],
+        items: [{ id: 'deezer:1', type: 'track', source: 'deezer', title: 'Before Graph', artist: 'A' }],
+      })
+      .mockResolvedValueOnce({
+        revalidating: false,
+        generated_at: 200,
+        sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:2'] }],
+        items: [{ id: 'deezer:2', type: 'track', source: 'deezer', title: 'After Graph', artist: 'B' }],
+      });
+
+    const release = retainDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1']));
+
+    // Same timestamp is ignored when already settled.
+    dispatchDiscoveryFeedReady({ limit: 10, generated_at: 100 });
+    expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(1);
+
+    // Newer server timestamp triggers reload and cache invalidation.
+    dispatchDiscoveryFeedReady({ limit: 10, generated_at: 200 });
+    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:2']));
+    expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(2);
+    release();
+  });
+
+  it('ignores stale release callbacks after resetDiscoveryFeed and invalidates cache on restore', async () => {
+    mocks.getDiscoveryMusicFeed.mockResolvedValue({
+      sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:1'] }],
+      items: [{ id: 'deezer:1', type: 'track', source: 'deezer', title: 'One', artist: 'A' }],
+    });
+
+    const staleRelease = retainDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryLoading()).toBe(false));
+
+    resetDiscoveryFeed();
+    const freshRelease = retainDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryLoading()).toBe(false));
+
+    // Pre-reset closure must not decrement or abort post-reset active consumers.
+    staleRelease();
+    expect(discoveryError()).toBe(false);
+
+    // Calling restoreDiscoveryItem invalidates search cache so subsequent fresh retains reload if needed.
+    restoreDiscoveryItem('deezer:1');
+    expect(localStorage.length).toBe(0);
+    freshRelease();
   });
 });

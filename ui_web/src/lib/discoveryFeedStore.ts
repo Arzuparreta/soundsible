@@ -26,19 +26,23 @@ let epoch = 0;
 let inflight: Promise<void> | undefined;
 let inflightRefresh = false;
 let listeningPush = false;
-let activeConsumers = 0;
+let activeConsumers = new Set<symbol>();
 let hasRetainedConsumer = false;
 
 function attachPushListener(): void {
   if (listeningPush) return;
   listeningPush = true;
-  onDiscoveryFeedReady(() => {
-    if (hasRetainedConsumer && activeConsumers === 0) {
-      clearSearchCache(CACHE);
+  onDiscoveryFeedReady((data) => {
+    clearSearchCache(CACHE);
+    if (hasRetainedConsumer && activeConsumers.size === 0) {
       return;
     }
     if (!activeKey) return;
-    if (feed().revalidating || refreshing() || !Object.keys(feed()).length) {
+    const current = feed();
+    const incomingTs = typeof data.generated_at === 'number' ? data.generated_at : undefined;
+    const currentTs = typeof current.generated_at === 'number' ? current.generated_at : undefined;
+    const newer = incomingTs !== undefined && (currentTs === undefined || incomingTs > currentTs);
+    if (current.revalidating || refreshing() || !Object.keys(current).length || newer) {
       clearTimeout(timer);
       void load(false, true);
     }
@@ -94,7 +98,10 @@ async function load(refresh = false, force = false): Promise<void> {
       setError(!!next.browse_error || !!next.error);
       if (next.revalidating) {
         setRefreshing(true);
-        if (hasRetainedConsumer && activeConsumers === 0) return;
+        if (hasRetainedConsumer && activeConsumers.size === 0) {
+          setRefreshing(false);
+          return;
+        }
         if (attempts++ < MAX_REVALIDATE_ATTEMPTS) {
           timer = setTimeout(() => void load(false, true), REVALIDATE_FALLBACK_MS);
         } else {
@@ -102,6 +109,7 @@ async function load(refresh = false, force = false): Promise<void> {
           setRefreshing(false);
         }
       } else {
+        attempts = 0;
         setRefreshing(false);
       }
     } catch {
@@ -206,21 +214,20 @@ export const discoveryTrackShelves = trackShelves;
 export const discoveryExploreItems = exploreItems;
 
 export function retainDiscoveryFeed(): () => void {
+  const token = Symbol('discovery-feed-consumer');
   hasRetainedConsumer = true;
-  activeConsumers += 1;
+  activeConsumers.add(token);
   ensureDiscoveryFeed();
-  let released = false;
   return () => {
-    if (released) return;
-    released = true;
-    activeConsumers = Math.max(0, activeConsumers - 1);
-    if (activeConsumers === 0) {
+    if (!activeConsumers.delete(token)) return;
+    if (activeConsumers.size === 0) {
       clearTimeout(timer);
       timer = undefined;
       controller?.abort();
       controller = undefined;
       inflight = undefined;
       inflightRefresh = false;
+      setRefreshing(false);
     }
   };
 }
@@ -240,6 +247,7 @@ export function refreshDiscoveryFeed(options?: { resetLoading?: boolean }): void
   attempts = 0;
   setDismissed(new Set<string>());
   setError(false);
+  clearSearchCache(CACHE);
   if (options?.resetLoading) setLoading(true);
   void load(true, true);
 }
@@ -260,6 +268,7 @@ export function restoreDiscoveryItem(id: string): void {
     next.delete(id);
     return next;
   });
+  clearSearchCache(CACHE);
 }
 
 export function resetDiscoveryFeed(): void {
@@ -272,7 +281,7 @@ export function resetDiscoveryFeed(): void {
   inflightRefresh = false;
   activeKey = '';
   attempts = 0;
-  activeConsumers = 0;
+  activeConsumers.clear();
   hasRetainedConsumer = false;
   clearSearchCache(CACHE);
   setDismissed(new Set<string>());

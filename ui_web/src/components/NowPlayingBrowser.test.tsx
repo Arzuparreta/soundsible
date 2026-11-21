@@ -209,6 +209,7 @@ describe('NowPlayingBrowser', () => {
         title: 'Node Song',
         artist: 'Node Artist',
         external_ids: { youtube_id: 'node-1' },
+        raw: { id: 'node-1' },
       }];
       storeMock.state.favorites = ['local-1'];
       render(() => <NowPlayingBrowser purpose={purpose} onClose={vi.fn()} />);
@@ -234,6 +235,26 @@ describe('NowPlayingBrowser', () => {
     },
   );
 
+  it.each(['auto-reference', 'auto-change'] as const)(
+    'suppresses Explore row menus in %s mode',
+    (purpose) => {
+      exploreMock.items = [{
+        id: 'youtube:node-1',
+        type: 'track',
+        source: 'youtube',
+        title: 'Node Song',
+        artist: 'Node Artist',
+        external_ids: { youtube_id: 'node-1' },
+        raw: { id: 'node-1' },
+      }];
+      render(() => <NowPlayingBrowser purpose={purpose} onClose={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Explore' }));
+      expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+      expect(rowClaimsMenu(/Node Song/)).toBe(false);
+    },
+  );
+
   it('keeps normal browser row actions visible', () => {
     exploreMock.items = [{
       id: 'youtube:node-1',
@@ -242,6 +263,7 @@ describe('NowPlayingBrowser', () => {
       title: 'Node Song',
       artist: 'Node Artist',
       external_ids: { youtube_id: 'node-1' },
+      raw: { id: 'node-1' },
     }];
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 
@@ -249,6 +271,10 @@ describe('NowPlayingBrowser', () => {
     expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
     expect(rowClaimsMenu(/Local Song/)).toBe(true);
     expect(screen.queryByRole('button', { name: /to the route$/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }));
+    expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
+    expect(rowClaimsMenu(/Node Song/)).toBe(true);
   });
 
   it('refreshes Explore from the unified feed and wires recommendation menu callbacks', () => {

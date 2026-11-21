@@ -38,6 +38,7 @@ from shared.text_utils import fold_text, identity_key
 from .discovery_bp import discovery_bp
 from .discovery_common import (
     _DISCOVERY_FEED_CACHE,
+    _DISCOVERY_FEED_DIRTY,
     _DISCOVERY_FEED_EXECUTOR,
     _DISCOVERY_FEED_INFLIGHT,
     _DISCOVERY_FEED_LOCK,
@@ -614,8 +615,10 @@ def _refresh_discovery_feed_cache(
     limit: int,
     *,
     rotate: bool = False,
+    _followup: bool = False,
 ) -> None:
     payload: dict = {"limit": limit}
+    rerun = False
     try:
         from shared.user_context import user_context
 
@@ -629,8 +632,10 @@ def _refresh_discovery_feed_cache(
                 for section in previous[2].get("browse_sections", []):
                     current_sections.setdefault(section["id"], section)
                 body["browse_sections"] = [current_sections[key] for key in ("artists", "albums") if key in current_sections]
+            dirty = not _followup and cache_key in _DISCOVERY_FEED_DIRTY
+            expires_at = 0 if dirty else now + (5 if body.get("browse_error") else _DISCOVERY_FEED_TTL_SEC)
             _DISCOVERY_FEED_CACHE[cache_key] = (
-                now + (5 if body.get("browse_error") else _DISCOVERY_FEED_TTL_SEC),
+                expires_at,
                 now + _DISCOVERY_FEED_STALE_SEC,
                 dict(body),
             )
@@ -644,13 +649,32 @@ def _refresh_discovery_feed_cache(
         payload = {"limit": limit, "error": True}
     finally:
         with _DISCOVERY_FEED_LOCK:
-            _DISCOVERY_FEED_INFLIGHT.discard(cache_key)
+            if not _followup and cache_key in _DISCOVERY_FEED_DIRTY:
+                _DISCOVERY_FEED_DIRTY.discard(cache_key)
+                rerun = True
+            else:
+                _DISCOVERY_FEED_INFLIGHT.discard(cache_key)
+                _DISCOVERY_FEED_DIRTY.discard(cache_key)
         emit = _get_api().get("emit_to_user")
         if callable(emit):
             try:
                 emit("discovery_feed_ready", payload, user_id=user_id)
             except Exception as exc:
                 logger.debug("Discovery feed ready emit failed: %s", exc)
+        if rerun:
+            try:
+                _DISCOVERY_FEED_EXECUTOR.submit(
+                    _refresh_discovery_feed_cache,
+                    cache_key,
+                    user_id,
+                    limit,
+                    rotate=False,
+                    _followup=True,
+                )
+            except Exception as exc:
+                with _DISCOVERY_FEED_LOCK:
+                    _DISCOVERY_FEED_INFLIGHT.discard(cache_key)
+                logger.warning("Discovery feed followup submit failed: %s", exc)
 
 
 def _schedule_discovery_feed_refresh(
@@ -662,9 +686,16 @@ def _schedule_discovery_feed_refresh(
 ) -> bool:
     with _DISCOVERY_FEED_LOCK:
         if cache_key in _DISCOVERY_FEED_INFLIGHT:
+            _DISCOVERY_FEED_DIRTY.add(cache_key)
             return False
         _DISCOVERY_FEED_INFLIGHT.add(cache_key)
-    _DISCOVERY_FEED_EXECUTOR.submit(_refresh_discovery_feed_cache, cache_key, user_id, limit, rotate=rotate)
+        _DISCOVERY_FEED_DIRTY.discard(cache_key)
+    try:
+        _DISCOVERY_FEED_EXECUTOR.submit(_refresh_discovery_feed_cache, cache_key, user_id, limit, rotate=rotate)
+    except Exception:
+        with _DISCOVERY_FEED_LOCK:
+            _DISCOVERY_FEED_INFLIGHT.discard(cache_key)
+        raise
     return True
 
 

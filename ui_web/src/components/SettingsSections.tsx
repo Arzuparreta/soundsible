@@ -216,6 +216,7 @@ function PlaybackSection() {
     setLearning(next);
     try {
       await api.setDiscoveryLearning(next);
+      resetDiscoveryFeed();
     } catch {
       setLearning(!next);
       toast.error(t('settings.toast.notSaved'));
