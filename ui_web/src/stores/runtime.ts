@@ -3,6 +3,7 @@ import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { syncSavedEntities } from "../lib/savedEntities";
 import { user } from "../lib/session";
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from "../lib/socket";
+import { dispatchDiscoveryFeedReady, type DiscoveryFeedReadyEvent } from "../lib/discoveryEvents";
 import { api, type RemotePlaybackState } from "../lib/api";
 import { audioService, onProgramEvent, setProgramTransportReporter, type ProgramMediaEventName, type ProgramPlaybackSnapshot } from "../lib/audio";
 import { ProgramMediaSession, type MediaSessionSyncReason } from "../lib/mediaSession";
@@ -509,6 +510,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       seed_track_id: string;
       recs: unknown[];
     })));
+    socket.on('discovery_feed_ready', lifetime.guard(data => dispatchDiscoveryFeedReady((data ?? {}) as DiscoveryFeedReadyEvent)));
 
     // ── Remote control: this device acts on commands from another device. ──
     socket.on('playback_stop_requested', lifetime.guard(() => {

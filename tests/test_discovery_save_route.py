@@ -1143,6 +1143,71 @@ def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
     assert _make_app().test_client().get("/api/home").status_code == 404
 
 
+def test_discovery_feed_refresh_rotates_seeds_and_emits_ready_after_clearing_inflight(tmp_path):
+    from concurrent.futures import Future
+    from shared.discovery_seeds import clear_recent_seeds
+
+    _make_runtime(tmp_path)
+    _disc_routes._DISCOVERY_FEED_CACHE.clear()
+    _disc_routes._DISCOVERY_FEED_INFLIGHT.clear()
+    clear_recent_seeds(clear_all=True)
+
+    tracks = [
+        _track(f"t{i}", f"Song {i}", f"Artist {i}")
+        for i in range(1, 9)
+    ]
+    metadata = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})
+    emitted = []
+    seen_inflight_during_emit = []
+
+    def fake_emit(event, payload, *, user_id=None):
+        seen_inflight_during_emit.append("discovery-feed-v4:-:6" in _disc_feed._DISCOVERY_FEED_INFLIGHT)
+        emitted.append((event, payload, user_id))
+
+    api = {
+        "get_library": MagicMock(return_value=_FakeLibrary(metadata)),
+        "favourite_library_ids": MagicMock(return_value=["t1", "t2", "t3", "t4", "t5"]),
+        "emit_to_user": fake_emit,
+    }
+
+    picked_artists = []
+
+    def fake_deezer_json(path, params=None, ttl_sec=None):
+        if path == "search/artist":
+            picked_artists.append(params["q"])
+        return {"data": []}
+
+    class _SyncExecutor:
+        def submit(self, fn, *args, **kwargs):
+            fn(*args, **kwargs)
+            fut = Future()
+            fut.set_result(None)
+            return fut
+
+    try:
+        with patch.object(_disc_feed, "_get_api", return_value=api), \
+             patch.object(_disc_feed, "_deezer_json", side_effect=fake_deezer_json), \
+             patch("shared.discovery_browse.build_browse_sections", return_value={"browse_sections": [], "browse_error": False}), \
+             patch.object(_disc_feed, "_DISCOVERY_FEED_EXECUTOR", _SyncExecutor()):
+            client = _make_app().test_client()
+            first = client.get("/api/discovery/music/feed?limit=6")
+            assert first.status_code == 200
+            first_batch = list(picked_artists)
+            picked_artists.clear()
+
+            refreshed = client.get("/api/discovery/music/feed?limit=6&refresh=1")
+            assert refreshed.status_code == 200
+            second_batch = list(picked_artists)
+
+        assert len(first_batch) == 5
+        assert len(second_batch) == 5
+        assert set(first_batch) != set(second_batch)
+        assert any(event == "discovery_feed_ready" for event, _, _ in emitted)
+        assert seen_inflight_during_emit and all(flag is False for flag in seen_inflight_during_emit)
+    finally:
+        clear_recent_seeds(clear_all=True)
+
+
 def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
     # Planning runs while the listener is nudging a control. It may read what
     # has already been measured and it may queue work, but a decode inside the

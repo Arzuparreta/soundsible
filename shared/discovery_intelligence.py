@@ -542,6 +542,12 @@ def undo_discovery_feedback(event_id: str) -> bool:
 def reset_discovery_profile() -> None:
     """Clear the bound account's aggregate, audit rows, and listening log."""
     request_scope.invalidate("listening_rollup:")
+    try:
+        from shared.discovery_seeds import clear_recent_seeds
+
+        clear_recent_seeds()
+    except Exception:
+        pass
     user_db().clear_discovery_signals()
     for path in _listening_events_paths():
         try:

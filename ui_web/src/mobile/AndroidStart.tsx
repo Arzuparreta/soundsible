@@ -38,6 +38,7 @@ import { nativeShareTrack } from './share';
 import { createIncomingTrack } from './incoming';
 import IncomingSong from './IncomingSong';
 import { engine, useEngine, watchEngine } from './engine';
+import { dispatchDiscoveryFeedReady } from '../lib/discoveryEvents';
 import NativeDownloads from './Downloads';
 import NativeMigrate from './Migrate';
 import { attachNativeBack } from './back';
@@ -255,6 +256,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       if (current !== epoch || !user()) return;
       if (event === 'connect') { setEventsOnline(true); void sync(); }
       else if (event === 'disconnect' || event === 'connect_error') setEventsOnline(false);
+      else if (event === 'discovery_feed_ready') dispatchDiscoveryFeedReady({});
       else void sync();
     });
     if (current !== epoch) stop(); else cancelEvents = stop;

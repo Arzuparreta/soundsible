@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js';
 import { cleanup, render, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DiscoveryMusicFeed } from '../lib/api';
+import { dispatchDiscoveryFeedReady } from '../lib/discoveryEvents';
 import { createNativeDiscoveryFeed } from './discoveryFeed';
 const song = (id: string): DiscoveryMusicFeed => ({ items: [{ id, title: id, artist: 'Artist', track_id: id }] });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
@@ -38,11 +39,11 @@ it('bounds revalidation and surfaces exhaustion instead of polling indefinitely'
   const fetchFeed = vi.fn().mockResolvedValue({ ...song('ready'), revalidating: true });
   let state!: ReturnType<typeof createNativeDiscoveryFeed>;
   render(() => { state = createNativeDiscoveryFeed({ generation: () => 1, disconnected: () => false, expanded: () => undefined, known: () => false }, fetchFeed); return null; });
-  await vi.advanceTimersByTimeAsync(65000);
-  expect(fetchFeed).toHaveBeenCalledTimes(13);
+  await vi.advanceTimersByTimeAsync(75000);
+  expect(fetchFeed).toHaveBeenCalledTimes(5);
   expect(state.error()).toBe(true);
   await vi.advanceTimersByTimeAsync(60000);
-  expect(fetchFeed).toHaveBeenCalledTimes(13);
+  expect(fetchFeed).toHaveBeenCalledTimes(5);
 });
 it('fills an empty expanded section on retry even when another section already has content', async () => {
   const [expanded, setExpanded] = createSignal<string | undefined>();
@@ -84,4 +85,23 @@ it('resolves structured sections into trackShelves and keeps an expanded dynamic
   state.retry();
   await waitFor(() => expect(state.loading()).toBe(false));
   expect(state.trackShelves()[0]?.items[0]?.title).toBe('Original Pick');
+});
+
+it('reloads immediately on discovery_feed_ready push and supports explicit refresh', async () => {
+  const fetchFeed = vi.fn()
+    .mockResolvedValueOnce({ ...song('initial'), revalidating: true })
+    .mockResolvedValueOnce(song('pushed'))
+    .mockResolvedValueOnce(song('refreshed'));
+  let state!: ReturnType<typeof createNativeDiscoveryFeed>;
+  render(() => { state = createNativeDiscoveryFeed({ generation: () => 1, disconnected: () => false, expanded: () => undefined, known: () => false }, fetchFeed); return null; });
+  await waitFor(() => expect(state.songs()[0]?.title).toBe('initial'));
+  expect(state.refreshing()).toBe(true);
+
+  dispatchDiscoveryFeedReady({ limit: 10 });
+  await waitFor(() => expect(state.songs()[0]?.title).toBe('pushed'));
+  expect(state.refreshing()).toBe(false);
+
+  state.refresh();
+  await waitFor(() => expect(state.songs()[0]?.title).toBe('refreshed'));
+  expect(fetchFeed.mock.calls.at(-1)?.[1]).toBe(true);
 });

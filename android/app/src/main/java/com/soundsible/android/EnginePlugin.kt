@@ -125,7 +125,8 @@ class EnginePlugin : Plugin() {
             val next = IO.socket(selectedOrigin, options)
             socket = next
             listOf(Socket.EVENT_CONNECT, Socket.EVENT_DISCONNECT, Socket.EVENT_CONNECT_ERROR,
-                "library_updated", "saved_entities_updated", "favourites_updated", "downloader_update").forEach { event ->
+                "library_updated", "saved_entities_updated", "favourites_updated", "downloader_update",
+                "discovery_feed_ready").forEach { event ->
                 next.on(event) {
                     if (epoch == connection.generation && socket === next) {
                         // Socket.IO calls back on its own thread; listeners live on Capacitor's.
