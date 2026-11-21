@@ -65,3 +65,23 @@ it('pauses hidden browsing and restores the same valid feed without reordering o
   setPaused(true); setPaused(false);
   expect(state.songs()[0].title).toBe('stable'); expect(fetchFeed).toHaveBeenCalledTimes(1);
 });
+
+it('resolves structured sections into trackShelves and keeps an expanded dynamic shelf stable across revalidation', async () => {
+  const [expanded, setExpanded] = createSignal<string | undefined>();
+  const initial: DiscoveryMusicFeed = {
+    sections: [{ id: 'because_you_listen_queen', title: 'More like Queen', title_key: 'more_like', title_params: { artist: 'Queen' }, item_ids: ['deezer:1'] }],
+    items: [{ id: 'deezer:1', title: 'Original Pick', artist: 'Sparks' }],
+  };
+  const updated: DiscoveryMusicFeed = {
+    sections: [{ id: 'because_you_listen_queen', title: 'More like Queen', title_key: 'more_like', title_params: { artist: 'Queen' }, item_ids: ['deezer:2'] }],
+    items: [{ id: 'deezer:2', title: 'Updated Pick', artist: 'Mott the Hoople' }],
+  };
+  const fetchFeed = vi.fn().mockResolvedValueOnce(initial).mockResolvedValue(updated);
+  let state!: ReturnType<typeof createNativeDiscoveryFeed>;
+  render(() => { state = createNativeDiscoveryFeed({ generation: () => 1, disconnected: () => false, expanded, known: () => false }, fetchFeed); return null; });
+  await waitFor(() => expect(state.trackShelves()[0]?.items[0]?.title).toBe('Original Pick'));
+  setExpanded('because_you_listen_queen');
+  state.retry();
+  await waitFor(() => expect(state.loading()).toBe(false));
+  expect(state.trackShelves()[0]?.items[0]?.title).toBe('Original Pick');
+});

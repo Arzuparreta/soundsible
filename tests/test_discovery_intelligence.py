@@ -378,6 +378,57 @@ def test_rollup_adds_rediscover_section(tmp_path):
     assert "music:t4" in rediscover["item_ids"]
 
 
+def test_rediscover_prefers_dormant_high_affinity_and_skips_recent_low_rated_and_podcasts(tmp_path, monkeypatch):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    now = 2_000_000_000
+    monkeypatch.setattr("shared.discovery_intelligence.time.time", lambda: now)
+
+    dormant_fav = _track("dormant-fav", "Dormant Favourite", "Artist A")
+    recent_fav = _track("recent-fav", "Recent Favourite", "Artist B")
+    low_rated = _track("low-rated", "Skipped Forever", "Artist C")
+    unplayed_plain = _track("plain", "Random Unplayed", "Artist D")
+    podcast_ep = _track("pod-1", "Podcast Episode", "Host")
+    podcast_ep.media_kind = "podcast_episode"
+
+    # Enough extra filler tracks beyond limit=3 to verify section items aren't truncated away.
+    fillers = [_track(f"filler-{i}", f"Filler {i}", f"Filler Artist {i}") for i in range(6)]
+    all_tracks = [unplayed_plain, recent_fav, low_rated, podcast_ep, dormant_fav, *fillers]
+
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=all_tracks,
+        playlists={"Classics": ["dormant-fav"]},
+        settings={},
+    )
+    db = user_db()
+    db.replace_library(metadata)
+    db.record_track_play("dormant-fav", now - 60 * 86400)
+    db.record_track_play("dormant-fav", now - 59 * 86400)
+    db.set_track_rating("dormant-fav", 5)
+    db.record_track_play("recent-fav", now - 3 * 86400)
+    db.record_track_play("low-rated", now - 90 * 86400)
+    db.set_track_rating("low-rated", 1)
+    db.record_track_play("filler-0", now - 2 * 86400)
+    result = build_music_recommendations(
+        metadata,
+        favourite_ids=["recent-fav", "filler-1", "filler-2", "dormant-fav"],
+        limit=3,
+    )
+
+    rediscover = next(s for s in result["sections"] if s["id"] == "rediscover")
+    assert rediscover["reason_key"] == "rediscover"
+    assert rediscover["item_ids"][0] == "music:dormant-fav"
+    assert "music:recent-fav" not in rediscover["item_ids"]
+    assert "music:low-rated" not in rediscover["item_ids"]
+    assert "music:pod-1" not in rediscover["item_ids"]
+    assert "music:dormant-fav" in {item["id"] for item in result["items"]}
+
+    composed = compose_discovery_feed(result, max_sections=6, section_size=8)
+    composed_rediscover = next(s for s in composed["sections"] if s["id"] == "rediscover")
+    assert "music:dormant-fav" in composed_rediscover["item_ids"]
+
+
 def test_podcast_rollup_boosts_recently_played_show(tmp_path):
     runtime = _make_runtime(tmp_path)
     init_telemetry(runtime)

@@ -29,6 +29,7 @@ test('home has distinct entities, bounded songs, working sections and restoratio
   const albums = home.getByRole('region', { name: 'Álbumes para ti' });
   await expect(artists).toBeVisible();
   await expect(albums).toBeVisible();
+  await expect(artists.getByText('Similar a Extremoduro').first()).toBeVisible();
   await expect(home.getByText(/^Canción recomendada /)).toHaveCount(5);
   await expect(page.getByRole('searchbox')).not.toBeFocused();
   const artist = artists.getByRole('link', { name: 'Artista recomendado 1', exact: true });
@@ -130,6 +131,90 @@ test('discovery home exposes accessible section and navigation controls', async 
   await page.goto('/player/#/search');
   await expect(page.locator('#startup-screen')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Artistas por descubrir' })).toBeVisible();
+  const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
+  expect(audit.violations).toEqual([]);
+});
+
+test('renders structured backend shelves with localized reasons and expands dynamic shelves cleanly', async ({ page }) => {
+  await page.route('**/api/discovery/music/feed?**', (route) => route.fulfill({
+    json: {
+      browse_sections: sections,
+      sections: [
+        {
+          id: 'because_you_listen_extremoduro',
+          title: 'More like Extremoduro',
+          title_key: 'more_like',
+          title_params: { artist: 'Extremoduro' },
+          reason: 'Similar artists to Extremoduro based on your listening and library.',
+          reason_key: 'because_listen',
+          reason_params: { artist: 'Extremoduro' },
+          item_ids: Array.from({ length: 7 }, (_, i) => `deezer:${300 + i}`),
+        },
+        {
+          id: 'rediscover',
+          title: 'Rediscover',
+          title_key: 'rediscover',
+          reason: "Tracks in your library you haven't played in a while.",
+          reason_key: 'rediscover',
+          item_ids: ['music:library-track-1', 'music:library-track-2'],
+        },
+        {
+          id: 'explore_from_seed',
+          title: 'Explore from Jesucristo García',
+          title_key: 'explore_from',
+          title_params: { title: 'Jesucristo García' },
+          reason_key: 'explore_connections',
+          item_ids: ['youtube:vid01'],
+        },
+      ],
+      items: [
+        ...Array.from({ length: 7 }, (_, i) => ({
+          id: `deezer:${300 + i}`,
+          title: `Tema similar ${i + 1}`,
+          artist: `Banda relacionada ${i + 1}`,
+          cover: artwork(i + 2),
+          duration: 210,
+        })),
+        { id: 'music:library-track-1', track_id: 'library-track-1', title: 'Joya olvidada 1', artist: 'Artista 1', cover: artwork(4) },
+        { id: 'music:library-track-2', track_id: 'library-track-2', title: 'Joya olvidada 2', artist: 'Artista 2', cover: artwork(5) },
+        { id: 'youtube:vid01', title: 'Conexión directa', artist: 'Marea', external_ids: { youtube_id: 'vid00000001' }, cover: artwork(6) },
+      ],
+    },
+  }));
+
+  await page.goto('/player/#/search');
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  const home = page.getByTestId('search-discovery');
+
+  const moreLike = home.getByRole('region', { name: 'Más como Extremoduro' });
+  await expect(moreLike).toBeVisible();
+  await expect(moreLike.getByText('Artistas similares según lo que escuchas')).toBeVisible();
+  await expect(moreLike.getByText(/^Tema similar /)).toHaveCount(5);
+
+  const rediscover = home.getByRole('region', { name: 'Redescubrir' });
+  await expect(rediscover).toBeVisible();
+  await expect(rediscover.getByText('Temas de tu biblioteca que hace tiempo que no escuchas')).toBeVisible();
+
+  const exploreFrom = home.getByRole('region', { name: 'Explorar desde Jesucristo García' });
+  await expect(exploreFrom).toBeVisible();
+  await expect(exploreFrom.getByText('Conexiones de tu grafo musical')).toBeVisible();
+
+  const scroll = page.locator('[data-primary-scroll]').first();
+  const moreLink = moreLike.getByRole('link', { name: 'Ver todos: Más como Extremoduro' });
+  await moreLink.scrollIntoViewIfNeeded();
+  const offset = await scroll.evaluate(el => el.scrollTop);
+  await moreLink.click();
+
+  await expect(page).toHaveURL(/browse=because_you_listen_extremoduro/);
+  await expect(home.getByRole('heading', { name: 'Más como Extremoduro' })).toBeFocused();
+  await expect(home.getByText(/^Tema similar /)).toHaveCount(7);
+  await expect(home.getByRole('region', { name: 'Redescubrir' })).toHaveCount(0);
+
+  await home.getByRole('button', { name: 'Volver a Descubrir' }).click();
+  await expect(rediscover).toBeVisible();
+  await expect(moreLike.getByRole('link', { name: 'Ver todos: Más como Extremoduro' })).toBeFocused();
+  await expect.poll(() => scroll.evaluate(el => el.scrollTop)).toBeCloseTo(offset, -1);
+
   const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
   expect(audit.violations).toEqual([]);
 });

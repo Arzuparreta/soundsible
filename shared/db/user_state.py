@@ -39,18 +39,32 @@ class TrackUserState:
         """
         if not track_ids:
             return {}
-        placeholders = ",".join("?" for _ in track_ids)
+        found: Dict[str, Dict[str, Any]] = {}
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute(f"""
-                SELECT track_id, play_count, rating, last_played_at
-                FROM track_user_state WHERE track_id IN ({placeholders})
-            """, tuple(track_ids)).fetchall()
-            found = {str(row["track_id"]): dict(row) for row in rows}
+            for offset in range(0, len(track_ids), 500):
+                batch = track_ids[offset:offset + 500]
+                placeholders = ",".join("?" for _ in batch)
+                rows = conn.execute(f"""
+                    SELECT track_id, play_count, rating, last_played_at
+                    FROM track_user_state WHERE track_id IN ({placeholders})
+                """, tuple(batch)).fetchall()
+                for row in rows:
+                    found[str(row["track_id"])] = dict(row)
         return {
             track_id: found.get(track_id, {"play_count": 0, "rating": None, "last_played_at": None})
             for track_id in track_ids
         }
+
+    def get_all_track_user_states(self) -> Dict[str, Dict[str, Any]]:
+        """Play count, rating and last-played for every track with recorded state."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT track_id, play_count, rating, last_played_at
+                FROM track_user_state
+            """).fetchall()
+            return {str(row["track_id"]): dict(row) for row in rows}
 
     def set_track_rating(self, track_id: str, rating: Optional[int]) -> bool:
         if rating is not None and (not isinstance(rating, int) or isinstance(rating, bool) or not 1 <= rating <= 5):

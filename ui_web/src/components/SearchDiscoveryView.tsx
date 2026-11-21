@@ -2,7 +2,13 @@ import { createEffect, createSignal, createUniqueId, For, on, onCleanup, onMount
 import type { DiscoveryBrowseItem, DiscoveryBrowseSection } from '../lib/api';
 import type { CatalogItem } from '../types/music';
 import { t } from '../lib/i18n';
-import { discoveryHasVisible } from '../lib/searchDiscovery';
+import {
+  discoveryEntityReason,
+  discoveryHasVisible,
+  discoveryShelfReason,
+  discoveryShelfTitle,
+  type DiscoveryTrackShelf,
+} from '../lib/searchDiscovery';
 import { CoverImage } from './CoverImage';
 import { SkeletonCards, SkeletonRows } from './Skeleton';
 import styles from './SearchDiscovery.module.css';
@@ -11,12 +17,12 @@ export interface DiscoveryLink {
   label: string; class: string; children: JSX.Element;
 }
 
-/** How many songs the home shows before "See all" opens the whole list. */
+/** How many songs a track shelf shows before "See all" opens the whole list. */
 const SONGS_PREVIEW = 5;
 
 /** Layout is shared; navigation, collection status and playback belong to its runtime. */
 export function SearchDiscoveryView(props: {
-  sections: DiscoveryBrowseSection[]; songs: CatalogItem[]; expanded?: string;
+  sections: DiscoveryBrowseSection[]; trackShelves: DiscoveryTrackShelf[]; expanded?: string;
   loading: boolean; error: boolean; preparing: boolean;
   onBack: () => void; onRetry: () => void;
   renderMore: (section: string, link: DiscoveryLink) => JSX.Element;
@@ -39,31 +45,36 @@ export function SearchDiscoveryView(props: {
     });
   }, { defer: true }));
   const sections = () => props.sections.filter(section => section.items.length && (!props.expanded || props.expanded === section.id));
-  const showSongs = () => props.songs.length > 0 && (!props.expanded || props.expanded === 'songs');
+  const trackShelves = () => props.trackShelves.filter(shelf => shelf.items.length && (!props.expanded || props.expanded === shelf.id));
   // Judged by what this view draws: an opened section is empty when it is,
   // whatever the rest of the feed holds.
-  const hasVisible = () => discoveryHasVisible(props.sections, props.songs, props.expanded);
+  const hasVisible = () => discoveryHasVisible(props.sections, props.trackShelves, props.expanded);
   const title = (id: string, popular = false) => id === 'artists'
     ? t(popular ? 'searchHome.popularArtists' : 'searchHome.artists')
     : id === 'albums' ? t(popular ? 'searchHome.popularAlbums' : 'searchHome.albums') : t('searchHome.songs');
   const more = (id: string, name: string) => <span data-discovery-more={id}>{props.renderMore(id, { label: `${t('searchHome.seeAll')}: ${name}`, class: styles.more, children: t('searchHome.seeAll') })}</span>;
+  const isEntityExpanded = () => props.expanded === 'artists' || props.expanded === 'albums';
   return <div ref={root} class={styles.home} data-testid="search-discovery">
     <Show when={props.expanded}><button class={styles.back} type="button" onClick={props.onBack}>
       <ChevronIcon direction="left" />{t('searchHome.back')}
     </button></Show>
     <Show when={props.loading && !hasVisible()}>
       <Show when={props.expanded} fallback={<><SkeletonCards count={3} shape="round" /><SkeletonCards count={3} /><SkeletonRows count={5} compact /></>}>
-        <Show when={props.expanded === 'songs'} fallback={<SkeletonCards count={8} shape={props.expanded === 'artists' ? 'round' : 'square'} />}><SkeletonRows count={8} compact /></Show>
+        <Show when={!isEntityExpanded()} fallback={<SkeletonCards count={8} shape={props.expanded === 'artists' ? 'round' : 'square'} />}><SkeletonRows count={8} compact /></Show>
       </Show>
     </Show>
     <For each={sections()}>{section => <DiscoveryEntitySection title={title(section.id, section.popular)} items={section.items}
       round={section.id === 'artists'} expanded={!!props.expanded}
       more={!props.expanded && section.items.length > 2 ? more(section.id, title(section.id, section.popular)) : undefined}
       renderEntity={props.renderEntity} renderStatus={props.renderStatus} />}</For>
-    <Show when={showSongs()}><DiscoverySection title={title('songs')}
-      actions={!props.expanded && props.songs.length > SONGS_PREVIEW ? more('songs', title('songs')) : undefined}>
-      <div class={styles.songs}><For each={props.expanded ? props.songs : props.songs.slice(0, SONGS_PREVIEW)}>{props.renderSong}</For></div>
-    </DiscoverySection></Show>
+    <For each={trackShelves()}>{shelf => {
+      const shelfTitle = () => discoveryShelfTitle(shelf);
+      const shelfReason = () => discoveryShelfReason(shelf);
+      return <DiscoverySection title={shelfTitle()} subtitle={shelfReason() || undefined}
+        actions={!props.expanded && shelf.items.length > SONGS_PREVIEW ? more(shelf.id, shelfTitle()) : undefined}>
+        <div class={styles.songs}><For each={props.expanded ? shelf.items : shelf.items.slice(0, SONGS_PREVIEW)}>{props.renderSong}</For></div>
+      </DiscoverySection>;
+    }}</For>
     <Show when={!props.loading && !hasVisible() && !props.error}>
       <p class={styles.notice} role="status">{t(props.preparing ? 'searchHome.preparing' : props.expanded ? 'searchHome.sectionEmpty' : 'searchHome.empty')}</p>
     </Show>
@@ -74,11 +85,14 @@ export function SearchDiscoveryView(props: {
 }
 
 /** A titled block: heading on the left, its own commands on the right. */
-function DiscoverySection(props: { title: string; actions?: JSX.Element; children: JSX.Element }) {
+function DiscoverySection(props: { title: string; subtitle?: string; actions?: JSX.Element; children: JSX.Element }) {
   const id = createUniqueId();
   return <section class={styles.section} aria-labelledby={id}>
     <div class={styles.heading}>
-      <h2 id={id} tabindex="-1">{props.title}</h2>
+      <div class={styles.headingText}>
+        <h2 id={id} tabindex="-1">{props.title}</h2>
+        <Show when={props.subtitle}><p class={styles.sectionReason}>{props.subtitle}</p></Show>
+      </div>
       <div class={styles.actions}>{props.actions}</div>
     </div>
     {props.children}
@@ -117,6 +131,7 @@ function DiscoveryEntitySection(props: {
         <span class={styles.meta}>
           <span class={styles.name}>{item.title}</span>
           <Show when={!props.round && item.artist}><span class={styles.subtitle}>{item.artist}</span></Show>
+          <Show when={discoveryEntityReason(item, props.round)}>{reason => <span class={styles.reason}>{reason()}</span>}</Show>
           {props.renderStatus(item)}
         </span>
       </> })}</For>

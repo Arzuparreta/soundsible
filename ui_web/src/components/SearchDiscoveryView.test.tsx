@@ -3,16 +3,18 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { setLocale } from '../lib/i18n';
 import { SearchDiscoveryView } from './SearchDiscoveryView';
+import { resolveDiscoveryTrackShelves, type DiscoveryTrackShelf } from '../lib/searchDiscovery';
 import type { CatalogItem } from '../types/music';
 import type { DiscoveryBrowseSection } from '../lib/api';
 afterEach(cleanup);
 const songs: CatalogItem[] = Array.from({ length: 10 }, (_, index) => ({ id: `song:${index}`, title: `Song ${index}`, source: 'library', type: 'library_track' }));
+const flatSongsShelf = (items: CatalogItem[]): DiscoveryTrackShelf[] => items.length ? [{ id: 'songs', title: '', titleKey: 'songs', items }] : [];
 it('keeps songs bounded on home and delegates section, entity and playback actions independently', () => {
   setLocale('en');
   const [expanded, setExpanded] = createSignal<string | undefined>();
   const openEntity = vi.fn(), play = vi.fn(), back = vi.fn();
   const view = render(() => <SearchDiscoveryView sections={[{ id: 'artists', popular: false, items: [{ id: 'artist:1', title: 'Artist', type: 'artist', source: 'deezer' }] }]}
-    songs={songs} expanded={expanded()} loading={false} error={false} preparing={false} onBack={back} onRetry={vi.fn()}
+    trackShelves={flatSongsShelf(songs)} expanded={expanded()} loading={false} error={false} preparing={false} onBack={back} onRetry={vi.fn()}
     renderMore={(section, link) => <button aria-label={link.label} onClick={() => setExpanded(section)}>{link.children}</button>}
     renderEntity={(item, link) => <button aria-label={link.label} onClick={() => openEntity(item)}>{link.children}</button>}
     renderStatus={() => null} renderSong={item => <button onClick={() => play(item)}>{item.title}</button>} />);
@@ -27,7 +29,7 @@ it('keeps songs bounded on home and delegates section, entity and playback actio
 });
 it('keeps partial content visible and delegates retry without pretending that playback succeeded', () => {
   setLocale('en'); const retry = vi.fn();
-  const view = render(() => <SearchDiscoveryView sections={[]} songs={[songs[0]]} loading={false} error preparing={false}
+  const view = render(() => <SearchDiscoveryView sections={[]} trackShelves={flatSongsShelf([songs[0]])} loading={false} error preparing={false}
     onBack={vi.fn()} onRetry={retry} renderMore={() => null} renderEntity={() => null} renderStatus={() => null}
     renderSong={item => <span>{item.title}</span>} />);
   expect(view.getByText('Song 0')).toBeTruthy();
@@ -38,7 +40,7 @@ const noop = () => null;
 const albums: DiscoveryBrowseSection = { id: 'albums', popular: false, items: [{ id: 'album:1', title: 'Album', type: 'album', source: 'deezer', artist: 'Band' }] };
 const emptyArtists: DiscoveryBrowseSection = { id: 'artists', popular: false, items: [] };
 function renderView(props: { expanded?: string; loading?: boolean; preparing?: boolean; error?: boolean }) {
-  return render(() => <SearchDiscoveryView sections={[emptyArtists, albums]} songs={[]} expanded={props.expanded}
+  return render(() => <SearchDiscoveryView sections={[emptyArtists, albums]} trackShelves={[]} expanded={props.expanded}
     loading={!!props.loading} error={!!props.error} preparing={!!props.preparing} onBack={vi.fn()} onRetry={vi.fn()}
     renderMore={noop} renderEntity={(_, link) => <button class={link.class} aria-label={link.label}>{link.children}</button>}
     renderStatus={noop} renderSong={noop} />);
@@ -67,7 +69,7 @@ it('keeps focus on the expanded heading and returns it to the same See all link'
   setLocale('en');
   const [expanded, setExpanded] = createSignal<string | undefined>();
   const section = { ...albums, items: Array.from({ length: 3 }, (_, i) => ({ ...albums.items[0], id: `album:${i}` })) };
-  const view = render(() => <SearchDiscoveryView sections={[section]} songs={[]} expanded={expanded()}
+  const view = render(() => <SearchDiscoveryView sections={[section]} trackShelves={[]} expanded={expanded()}
     loading={false} error={false} preparing={false} onBack={() => setExpanded(undefined)} onRetry={vi.fn()}
     renderMore={(id, link) => <button aria-label={link.label} onClick={() => setExpanded(id)}>{link.children}</button>}
     renderEntity={noop} renderStatus={noop} renderSong={noop} />);
@@ -77,4 +79,122 @@ it('keeps focus on the expanded heading and returns it to the same See all link'
   await waitFor(() => expect(view.getByRole('heading', { name: 'Albums for you' })).toHaveFocus());
   fireEvent.click(view.getByRole('button', { name: 'Back to Discover' }));
   await waitFor(() => expect(view.getByRole('button', { name: 'See all: Albums for you' })).toHaveFocus());
+});
+
+it('renders localized structured track shelves with reasons and expands dynamic shelves', async () => {
+  await setLocale('en');
+  const shelves = resolveDiscoveryTrackShelves({
+    sections: [
+      {
+        id: 'because_you_listen_extremoduro',
+        title: 'More like Extremoduro',
+        title_key: 'more_like',
+        title_params: { artist: 'Extremoduro' },
+        reason: 'Fallback text',
+        reason_key: 'because_listen',
+        reason_params: { artist: 'Extremoduro' },
+        item_ids: Array.from({ length: 7 }, (_, i) => `rel:${i}`),
+      },
+      {
+        id: 'explore_from_seed',
+        title: 'Explore from Seed',
+        title_key: 'explore_from',
+        title_params: { title: 'Jesucristo García' },
+        reason_key: 'explore_connections',
+        item_ids: ['rel:0', 'graph:1'],
+      },
+      {
+        id: 'rediscover',
+        title: 'Rediscover',
+        title_key: 'rediscover',
+        reason_key: 'rediscover',
+        item_ids: ['lib:1'],
+      },
+      {
+        id: 'from_playlist_road',
+        title: 'Road Trip',
+        title_key: 'from_playlist',
+        title_params: { playlist: 'Road Trip' },
+        reason_key: 'from_playlist',
+        item_ids: ['lib:2'],
+      },
+      {
+        id: 'custom_shelf',
+        title: 'Custom Picks',
+        reason: 'Curated locally.',
+        item_ids: ['lib:3'],
+      },
+    ],
+    items: [
+      ...Array.from({ length: 7 }, (_, i) => ({ id: `rel:${i}`, title: `Related ${i}`, artist: `Band ${i}` })),
+      { id: 'graph:1', title: 'Graph Track', artist: 'Graph Band' },
+      { id: 'lib:1', track_id: 't1', title: 'Old Gem', artist: 'Archive' },
+      { id: 'lib:2', track_id: 't2', title: 'Playlist Track', artist: 'Road Band' },
+      { id: 'lib:3', track_id: 't3', title: 'Custom Track', artist: 'Custom Band' },
+    ],
+  }, items => [...items]);
+
+  const [expanded, setExpanded] = createSignal<string | undefined>();
+  const view = render(() => <SearchDiscoveryView sections={[]} trackShelves={shelves} expanded={expanded()}
+    loading={false} error={false} preparing={false} onBack={() => setExpanded(undefined)} onRetry={vi.fn()}
+    renderMore={(id, link) => <button aria-label={link.label} onClick={() => setExpanded(id)}>{link.children}</button>}
+    renderEntity={noop} renderStatus={noop}
+    renderSong={item => <button>{item.title}</button>} />);
+
+  expect(view.getByRole('region', { name: 'More like Extremoduro' })).toBeTruthy();
+  expect(view.getByText('Similar artists based on your listening')).toBeTruthy();
+  expect(view.getByRole('region', { name: 'Explore from Jesucristo García' })).toBeTruthy();
+  expect(view.getByText('Connections from your listening graph')).toBeTruthy();
+  expect(view.getByRole('region', { name: 'Rediscover' })).toBeTruthy();
+  expect(view.getByText("Favourites from your library you haven't played lately")).toBeTruthy();
+  expect(view.getByRole('region', { name: 'From Road Trip' })).toBeTruthy();
+  expect(view.getByText('Tracks from your playlist')).toBeTruthy();
+  expect(view.getByRole('region', { name: 'Custom Picks' })).toBeTruthy();
+  expect(view.getByText('Curated locally.')).toBeTruthy();
+
+  expect(view.queryByRole('button', { name: 'Related 6' })).toBeNull();
+  const more = view.getByRole('button', { name: 'See all: More like Extremoduro' });
+  more.focus();
+  fireEvent.click(more);
+
+  await waitFor(() => expect(view.getByRole('heading', { name: 'More like Extremoduro' })).toHaveFocus());
+  expect(view.getByRole('button', { name: 'Related 6' })).toBeTruthy();
+  expect(view.queryByRole('region', { name: 'Rediscover' })).toBeNull();
+
+  await setLocale('es');
+  await waitFor(() => expect(view.getByRole('heading', { name: 'Más como Extremoduro' })).toBeTruthy());
+  expect(view.getByText('Artistas similares según lo que escuchas')).toBeTruthy();
+
+  fireEvent.click(view.getByRole('button', { name: 'Volver a Descubrir' }));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Ver todos: Más como Extremoduro' })).toHaveFocus());
+  await setLocale('en');
+});
+
+it('shows entity reason attribution while omitting empty or self-redundant reasons', async () => {
+  await setLocale('en');
+  const browse: DiscoveryBrowseSection[] = [
+    {
+      id: 'artists',
+      popular: false,
+      items: [
+        { id: 'artist:1', title: 'Marea', type: 'artist', source: 'deezer', reason_artist: 'Extremoduro' },
+        { id: 'artist:2', title: 'Extremoduro', type: 'artist', source: 'deezer', reason_artist: 'Extremoduro' },
+        { id: 'artist:3', title: 'Robe', type: 'artist', source: 'deezer', reason_artist: '' },
+      ],
+    },
+    {
+      id: 'albums',
+      popular: false,
+      items: [
+        { id: 'album:1', title: 'Besos de perro', artist: 'Marea', type: 'album', source: 'deezer', reason_artist: 'Extremoduro' },
+        { id: 'album:2', title: 'Agila', artist: 'Extremoduro', type: 'album', source: 'deezer', reason_artist: 'Extremoduro' },
+      ],
+    },
+  ];
+  const view = render(() => <SearchDiscoveryView sections={browse} trackShelves={[]}
+    loading={false} error={false} preparing={false} onBack={vi.fn()} onRetry={vi.fn()}
+    renderMore={noop} renderEntity={(_, link) => <button class={link.class} aria-label={link.label}>{link.children}</button>}
+    renderStatus={noop} renderSong={noop} />);
+
+  expect(view.getAllByText('Similar to Extremoduro')).toHaveLength(2);
 });

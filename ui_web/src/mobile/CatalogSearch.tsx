@@ -180,7 +180,7 @@ export default function CatalogSearch(props: {
           onActivate={() => { const path = catalogEntityDestination(item); if (path) openEntity(path); }} onMenu={event => entityMenu(item, event)} />
         : songRow(item)}</For>
     </Show>
-    <Show when={!query().trim() && !props.disconnected}><SearchDiscoveryView sections={feed.sections()} songs={feed.songs()} expanded={expanded()}
+    <Show when={!query().trim() && !props.disconnected}><SearchDiscoveryView sections={feed.sections()} trackShelves={feed.trackShelves()} expanded={expanded()}
       loading={feed.loading()} error={feed.error()} preparing={!!feed.feed().revalidating}
       onBack={backSection} onRetry={feed.retry}
       renderMore={(section, link) => <button type="button" class={link.class} aria-label={link.label} onClick={() => openSection(section)}>{link.children}</button>}

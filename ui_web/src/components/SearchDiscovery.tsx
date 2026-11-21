@@ -6,7 +6,7 @@ import { useNavigate } from '@solidjs/router';
 import { api, type DiscoveryMusicFeed } from '../lib/api';
 import { userKey } from '../lib/session';
 import { readSearchCache, writeSearchCache } from '../lib/searchCache';
-import { discoveryCatalogItem, discoveryHasVisible } from '../lib/searchDiscovery';
+import { discoveryHasVisible, resolveDiscoveryTrackShelves } from '../lib/searchDiscovery';
 import { catalogDestination } from '../lib/musicNavigation';
 import { navigateBackOr } from '../lib/scrollHistory';
 import { MusicLink } from './MusicLinks';
@@ -35,10 +35,10 @@ export function SearchDiscovery(props: {
   let disposed = false;
   let attempts = 0;
   const sections = createMemo(() => (feed().browse_sections ?? []).map(section => ({ ...section, items: prioritizeDiscoveries(section.items) })));
-  const songs = createMemo(() => prioritizeDiscoveries((feed().items ?? []).map(discoveryCatalogItem)).slice(0, 10));
-  const expanded = () => ['artists', 'albums', 'songs'].includes(props.section ?? '') ? props.section : undefined;
+  const trackShelves = createMemo(() => resolveDiscoveryTrackShelves(feed(), prioritizeDiscoveries));
+  const expanded = () => props.section?.trim() || undefined;
   // What the listener is looking at: the opened section alone, or the home.
-  const hasVisibleContent = () => discoveryHasVisible(sections(), songs(), expanded());
+  const hasVisibleContent = () => discoveryHasVisible(sections(), trackShelves(), expanded());
 
   async function load(refresh = false) {
     clearTimeout(timer);
@@ -66,11 +66,11 @@ export function SearchDiscovery(props: {
   createEffect(() => props.onReady(!loading() || hasVisibleContent()));
   onCleanup(() => { disposed = true; controller?.abort(); clearTimeout(timer); });
 
-  return <SearchDiscoveryView sections={sections()} songs={songs()} expanded={expanded()}
+  return <SearchDiscoveryView sections={sections()} trackShelves={trackShelves()} expanded={expanded()}
     loading={loading()} error={error()} preparing={!!feed().revalidating}
     onBack={() => navigateBackOr(navigate, '/search')}
     onRetry={() => { attempts = 0; setLoading(true); setError(false); void load(true); }}
-    renderMore={(section, link) => <MusicLink path={`/search?browse=${section}`} label={link.label} class={link.class}>{link.children}</MusicLink>}
+    renderMore={(section, link) => <MusicLink path={`/search?browse=${encodeURIComponent(section)}`} label={link.label} class={link.class}>{link.children}</MusicLink>}
     renderEntity={(item, link) => <MusicLink path={catalogDestination(item)!} class={link.class} label={link.label} onMenu={event => openCatalogEntityMenu(item, event)}>{link.children}</MusicLink>}
     renderStatus={item => <CatalogCollectionStatus item={item} />}
     renderSong={item => <CatalogResultRow showLibraryStatus item={item} active={isPlayingItem(item)} saving={props.saving.has(item.id)}
