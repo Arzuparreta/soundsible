@@ -2,12 +2,6 @@
    come from the browse tokens (tokens.css); the fallbacks only matter where a
    host has not loaded them. */
 .home { display: flex; flex-direction: column; gap: var(--space-2xl); min-width: 0; padding: var(--space-sm) 0 var(--space-xl); }
-.toolbar { display: flex; justify-content: flex-end; margin-bottom: calc(-1 * var(--space-lg)); }
-.refresh { display: inline-flex; align-items: center; gap: var(--space-xs); min-height: var(--pill-h); padding: 0 var(--space-md); color: var(--ink-secondary); font: inherit; font-size: var(--text-label); font-weight: var(--fw-semibold); background: var(--bg-raised); border: 1px solid var(--hairline); border-radius: var(--radius-full); cursor: pointer; transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out); }
-.refresh:disabled { opacity: 0.6; cursor: default; }
-.refresh svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
-.spinning { animation: discovery-spin 0.8s linear infinite; }
-@keyframes discovery-spin { to { transform: rotate(360deg); } }
 .section { position: relative; display: flex; flex-direction: column; gap: var(--space-md); min-width: 0; }
 
 .heading { display: flex; align-items: center; gap: var(--space-md); min-height: var(--pill-h); }
@@ -51,12 +45,12 @@
 
 @media (hover: hover) and (pointer: fine) {
   .controls { display: flex; }
-  .controls button:not(:disabled):hover, .more:hover, .back:hover, .refresh:not(:disabled):hover { color: var(--ink-primary); background: var(--bg-hover); }
+  .controls button:not(:disabled):hover, .more:hover, .back:hover { color: var(--ink-primary); background: var(--bg-hover); }
   .home .entity:hover .name { text-decoration: underline; }
   .home .entity:hover .cover { box-shadow: var(--shadow-2); }
 }
 
-@media (prefers-reduced-motion: reduce) { .rail { scroll-behavior: auto; } .spinning { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .rail { scroll-behavior: auto; } }
 
 @media (hover: none), (pointer: coarse) {
   .rail {

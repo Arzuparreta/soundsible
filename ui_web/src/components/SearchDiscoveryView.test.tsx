@@ -199,9 +199,8 @@ it('shows entity reason attribution while omitting empty or self-redundant reaso
   expect(view.getAllByText('Similar to Extremoduro')).toHaveLength(2);
 });
 
-it('shows the refresh control on home, disables while refreshing, and formats single/ep subtitles', async () => {
+it('formats single and ep subtitles locally without rendering an inline refresh row above shelves', async () => {
   await setLocale('en');
-  const onRefresh = vi.fn();
   const browse: DiscoveryBrowseSection[] = [
     {
       id: 'albums',
@@ -212,27 +211,17 @@ it('shows the refresh control on home, disables while refreshing, and formats si
       ],
     },
   ];
-  const [refreshing, setRefreshing] = createSignal(false);
-  const [expanded, setExpanded] = createSignal<string | undefined>();
-  const view = render(() => <SearchDiscoveryView sections={browse} trackShelves={[]} expanded={expanded()}
-    loading={false} error={false} preparing={false} refreshing={refreshing()} onRefresh={onRefresh}
+  const view = render(() => <SearchDiscoveryView sections={browse} trackShelves={[]} expanded={undefined}
+    loading={false} error={false} preparing={false}
     onBack={vi.fn()} onRetry={vi.fn()} renderMore={noop}
     renderEntity={(_, link) => <button class={link.class} aria-label={link.label}>{link.children}</button>}
     renderStatus={noop} renderSong={noop} />);
 
   expect(view.getByText('Marea · Single')).toBeTruthy();
   expect(view.getByText('Extremoduro · EP')).toBeTruthy();
-  const refreshBtn = view.getByRole('button', { name: 'Refresh' });
-  fireEvent.click(refreshBtn);
-  expect(onRefresh).toHaveBeenCalledTimes(1);
-
-  setRefreshing(true);
-  expect(view.getByRole('button', { name: 'Refresh' })).toBeDisabled();
+  expect(view.queryByRole('button', { name: /Refresh|Actualizar/ })).toBeNull();
 
   await setLocale('es');
   expect(view.getByText('Marea · Sencillo')).toBeTruthy();
-
-  setExpanded('albums');
-  expect(view.queryByRole('button', { name: /Refresh|Actualizar/ })).toBeNull();
   await setLocale('en');
 });

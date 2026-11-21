@@ -663,3 +663,66 @@ def test_podcast_country_persists_without_changing_music_settings(tmp_path):
     assert saved['podcast_country'] == 'es'
     assert load_discovery_settings()['podcast_country'] == 'es'
     assert {k: v for k, v in saved.items() if k != 'podcast_country'} == {k: v for k, v in original.items() if k != 'podcast_country'}
+
+
+def test_rank_recommendation_rows_preserves_canonical_deezer_and_library_identities(tmp_path):
+    _make_runtime(tmp_path)
+    deezer_row = {
+        "id": "deezer:300",
+        "title": "Deezer Song",
+        "artist": "Artist One",
+        "source": "deezer",
+        "external_ids": {"deezer_id": "300"},
+    }
+    library_row = {
+        "id": "lib-1",
+        "track_id": "lib-1",
+        "title": "Library Song",
+        "artist": "Artist Two",
+        "source": "library",
+    }
+    youtube_row = {
+        "id": "dQw4w9WgXcQ",
+        "video_id": "dQw4w9WgXcQ",
+        "title": "Video Song",
+        "artist": "Artist Three",
+        "source": "youtube",
+    }
+    ranked = rank_recommendation_rows([deezer_row, library_row, youtube_row], source="discover")
+    by_title = {row["title"]: row["recommendation_identity"] for row in ranked}
+    assert by_title["Deezer Song"] == "music:deezer:300"
+    assert by_title["Library Song"] == "music:track:lib-1"
+    assert by_title["Video Song"] == "music:youtube:dqw4w9wgxcq"
+
+
+def test_not_interested_deezer_feedback_demotes_deezer_recommendation_row(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    disliked = {
+        "id": "deezer:300",
+        "title": "Skipped Song",
+        "artist": "Artist One",
+        "source": "deezer",
+        "external_ids": {"deezer_id": "300"},
+        "score": 1.0,
+    }
+    kept = {
+        "id": "deezer:301",
+        "title": "Kept Song",
+        "artist": "Artist Two",
+        "source": "deezer",
+        "external_ids": {"deezer_id": "301"},
+        "score": 1.0,
+    }
+    event_id = record_not_interested({
+        "media_type": "music_track",
+        "title": "Skipped Song",
+        "artist": "Artist One",
+        "deezer_id": "300",
+        "source": "discover",
+    })
+    assert event_id
+    ranked = rank_recommendation_rows([disliked, kept], source="discover")
+    assert [row["id"] for row in ranked] == ["deezer:301", "deezer:300"]
+    assert ranked[1]["score"] < ranked[0]["score"]
+    assert recommendation_multiplier("music:deezer:300") < 1.0

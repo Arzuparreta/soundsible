@@ -118,12 +118,12 @@ test('keyboard exploration and song playback retain their own actions', async ({
   await page.goBack();
   await home.getByRole('link', { name: 'Ver todos: Canciones que te pueden gustar' }).click();
   await expect(home.getByText(/^Canción recomendada /)).toHaveCount(10);
-  await home.getByRole('button', { name: /^Canción recomendada 1(?: —|$)/ }).click();
+  await home.getByRole('button', { name: 'Canción recomendada 1 — Artista 1' }).or(home.getByRole('button', { name: /^Canción recomendada 1(?: —|$)/ })).click();
   await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 1');
-  if (info.project.name.includes('mobile')) {
-    await home.getByRole('button', { name: 'Más opciones: Canción recomendada 1', exact: true }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-  }
+  await home.getByRole('button', { name: 'Más opciones: Canción recomendada 1', exact: true }).click();
+  const menu = page.getByRole(info.project.name.includes('mobile') ? 'dialog' : 'menu');
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
 });
 
 
@@ -286,12 +286,139 @@ test('refresh control triggers rotation request and labels singles and EPs', asy
   await expect(home.getByText('Marea · Sencillo')).toBeVisible();
   await expect(home.getByText('Extremoduro · EP')).toBeVisible();
   await expect(home.getByText('Tema inicial')).toBeVisible();
+  await expect(home.getByRole('button', { name: 'Actualizar' })).toHaveCount(0);
 
-  await home.getByRole('button', { name: 'Actualizar' }).click();
+  const isMobile = test.info().project.name.includes('mobile');
+  const headerScope = isMobile ? page.locator('[data-app-bar]') : page.locator('main header');
+  const refresh = headerScope.getByRole('button', { name: 'Actualizar' });
+  await expect(refresh).toBeVisible();
+  if (!isMobile) {
+    const heading = headerScope.getByRole('heading', { level: 1, name: 'Descubrir' });
+    const [hb, rb] = await Promise.all([heading.boundingBox(), refresh.boundingBox()]);
+    expect(hb).not.toBeNull();
+    expect(rb).not.toBeNull();
+    expect(Math.abs((rb!.y + rb!.height / 2) - (hb!.y + hb!.height / 2))).toBeLessThan(24);
+  }
+
+  await refresh.click();
   await expect(home.getByText('Nuevo sencillo')).toBeVisible();
   await expect(home.getByText('Tema rotado')).toBeVisible();
   expect(urls.some(u => u.includes('refresh=1'))).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  const audit = await new AxeBuilder({ page }).include('main').analyze();
+  expect(audit.violations).toEqual([]);
+});
+
+test('unresolved Deezer Discover rows expose reason, immediate dismissal with Undo, and Start Radio', async ({ page }, info) => {
+  const feedbackPayloads: Array<Record<string, unknown>> = [];
+  let undoCount = 0;
+  let resolveCount = 0;
+  let radioPlanned = 0;
+
+  await page.route('**/api/discovery/feedback', async (route) => {
+    feedbackPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ json: { recorded: true, event_id: 'ev-deezer-300' } });
+  });
+  await page.route('**/api/discovery/feedback/ev-deezer-300', async (route) => {
+    if (route.request().method() === 'DELETE') undoCount += 1;
+    await route.fulfill({ json: { undone: true } });
+  });
+  await page.route('**/api/catalog/resolve', async (route) => {
+    resolveCount += 1;
+    await route.fulfill({ json: { video_id: 'rad11111111', title: 'Canción Deezer', artist: 'Platero y Tú' } });
+  });
+  await page.route('**/api/discovery/music/plan', async (route) => {
+    radioPlanned += 1;
+    await route.fulfill({
+      json: {
+        items: [{ id: 'mix-1', title: 'Tema de radio', artist: 'Marea', video_id: 'mix11111111', duration: 200 }],
+        plan: {},
+        transitions: [],
+      },
+    });
+  });
+  await page.route('**/api/discovery/music/feed?**', (route) =>
+    route.fulfill({
+      json: {
+        sections: [
+          {
+            id: 'more_like_extremoduro',
+            title: 'More like Extremoduro',
+            title_key: 'more_like',
+            title_params: { artist: 'Extremoduro' },
+            item_ids: ['deezer:300', 'deezer:301'],
+          },
+        ],
+        items: [
+          {
+            id: 'deezer:300',
+            title: 'Canción Deezer',
+            artist: 'Platero y Tú',
+            source: 'deezer',
+            cover: artwork(1),
+            duration: 215,
+            external_ids: { deezer_id: '300', isrc: 'ES12345' },
+            recommendation_identity: 'music:deezer:300',
+            reason: 'Conexión de tu grafo musical',
+            reason_code: 'library_graph',
+          },
+          {
+            id: 'deezer:301',
+            title: 'Canción vecina',
+            artist: 'Fito & Fitipaldis',
+            source: 'deezer',
+            cover: artwork(2),
+            duration: 205,
+            external_ids: { deezer_id: '301' },
+            recommendation_identity: 'music:deezer:301',
+            reason: 'Conexión de tu grafo musical',
+            reason_code: 'library_graph',
+          },
+        ],
+      },
+    }),
+  );
+
+  await page.goto('/player/#/search');
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  const home = page.getByTestId('search-discovery');
+  const firstRowTitle = home.getByText('Canción Deezer', { exact: true });
+  await expect(firstRowTitle).toBeVisible();
+
+  const itemRole = info.project.name.includes('mobile') ? 'button' : 'menuitem';
+  const menuContainerRole = info.project.name.includes('mobile') ? 'dialog' : 'menu';
+
+  await home.getByRole('button', { name: 'Más opciones: Canción Deezer', exact: true }).click();
+  const menu = page.getByRole(menuContainerRole);
+  await expect(menu).toBeVisible();
+  await expect(menu.getByText('Conexión de tu grafo musical')).toBeVisible();
+  await expect(menu.getByRole(itemRole, { name: 'Iniciar radio' })).toBeVisible();
+  await menu.getByRole(itemRole, { name: 'No me interesa' }).click();
+
+  await expect(firstRowTitle).toHaveCount(0);
+  expect(feedbackPayloads).toHaveLength(1);
+  expect(feedbackPayloads[0]).toMatchObject({
+    feedback: 'not_interested',
+    item: {
+      media_type: 'music_track',
+      deezer_id: '300',
+      isrc: 'ES12345',
+      title: 'Canción Deezer',
+      artist: 'Platero y Tú',
+    },
+  });
+
+  await page.getByRole('button', { name: 'Deshacer' }).click();
+  await expect(firstRowTitle).toBeVisible();
+  expect(undoCount).toBe(1);
+
+  await home.getByRole('button', { name: 'Más opciones: Canción Deezer', exact: true }).click();
+  const reopened = page.getByRole(menuContainerRole);
+  const preRadioResolveCount = resolveCount;
+  await reopened.getByRole(itemRole, { name: 'Iniciar radio' }).click();
+  await expect.poll(() => resolveCount - preRadioResolveCount).toBe(1);
+  await expect.poll(() => radioPlanned).toBeGreaterThanOrEqual(1);
 
   const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
   expect(audit.violations).toEqual([]);

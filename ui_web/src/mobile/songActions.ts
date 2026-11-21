@@ -21,9 +21,20 @@ export function catalogFeedback(item: CatalogItem): { recommendation: Recommenda
   const recommendation = item.raw?.recommendation as RecommendationContext | undefined;
   if (!recommendation?.identity) return null;
   const youtube = item.raw?.youtube_id ?? item.external_ids?.youtube_id;
+  const deezerRaw = item.external_ids?.deezer_id ?? item.raw?.deezer_id;
+  const deezerId = typeof deezerRaw === 'string' && deezerRaw
+    ? deezerRaw
+    : typeof deezerRaw === 'number'
+      ? String(deezerRaw)
+      : undefined;
+  const isrcRaw = item.external_ids?.isrc ?? item.raw?.isrc;
+  const isrc = typeof isrcRaw === 'string' && isrcRaw ? isrcRaw : undefined;
   return { recommendation, item: {
     media_type: 'music_track', track_id: item.track_id, title: item.title, artist: item.artist,
-    youtube_id: typeof youtube === 'string' ? youtube : undefined, source: recommendation.source,
+    youtube_id: typeof youtube === 'string' ? youtube : undefined,
+    ...(deezerId ? { deezer_id: deezerId } : {}),
+    ...(isrc ? { isrc } : {}),
+    source: recommendation.source,
   } };
 }
 
@@ -36,7 +47,11 @@ export function podcastFeedback(show: PodcastSearchResult): Feedback | null {
 }
 
 type Feedback = { recommendation: { reason?: string }; item: Record<string, unknown> };
-export function nativeFeedbackActions(feedback: Feedback | null, current: () => boolean): MenuAction[] {
+export function nativeFeedbackActions(
+  feedback: Feedback | null,
+  current: () => boolean,
+  hooks?: { onDismissed?: () => void; onUndone?: () => void },
+): MenuAction[] {
   if (!feedback) return [];
   return [
     ...(feedback.recommendation.reason ? [{ label: feedback.recommendation.reason, disabled: true, onSelect: () => {} }] : []),
@@ -46,9 +61,14 @@ export function nativeFeedbackActions(feedback: Feedback | null, current: () => 
         method: 'POST', body: { feedback: 'not_interested', item: feedback.item }, timeoutMs: 5000,
       }).then(result => {
         if (!current() || !result.recorded || !result.event_id) return;
+        hooks?.onDismissed?.();
         const event = result.event_id;
         toast.action(t('trackActions.feedbackSaved'), t('common.undo'), () => {
-          if (current()) void request(`/api/discovery/feedback/${encodeURIComponent(event)}`, { method: 'DELETE', timeoutMs: 5000 }).catch(() => {});
+          if (current()) {
+            void request(`/api/discovery/feedback/${encodeURIComponent(event)}`, { method: 'DELETE', timeoutMs: 5000 })
+              .then(() => { if (current()) hooks?.onUndone?.(); })
+              .catch(() => {});
+          }
         });
       }).catch(() => { if (current()) toast.error(t('trackActions.feedbackFailed')); });
     } },

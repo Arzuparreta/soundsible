@@ -501,6 +501,7 @@ def record_not_interested(payload: dict[str, Any]) -> str:
             "artist",
             "youtube_id",
             "deezer_id",
+            "isrc",
             "podcast_feed_id",
             "podcast_episode_id",
             "podcast_show_title",
@@ -601,14 +602,19 @@ def rank_recommendation_rows(
         row = dict(raw)
         identity = _clean_str(row.get("recommendation_identity"), 500)
         if not identity:
+            external_ids = row.get("external_ids") if isinstance(row.get("external_ids"), dict) else {}
             identity_payload = dict(row)
+            for ext_key in ("youtube_id", "deezer_id", "isrc"):
+                if not identity_payload.get(ext_key) and external_ids.get(ext_key):
+                    identity_payload[ext_key] = external_ids[ext_key]
+            is_podcast = str(identity_payload.get("media_type") or "").startswith("podcast")
             if (
-                not identity_payload.get("youtube_id")
-                and not str(identity_payload.get("media_type") or "").startswith("podcast")
+                not is_podcast
+                and not any(identity_payload.get(key) for key in ("youtube_id", "track_id", "deezer_id", "isrc"))
             ):
-                identity_payload["youtube_id"] = (
-                    identity_payload.get("video_id") or identity_payload.get("id")
-                )
+                raw_id = str(identity_payload.get("video_id") or identity_payload.get("id") or "").strip()
+                if raw_id and ":" not in raw_id:
+                    identity_payload["youtube_id"] = raw_id
             identity, _ = canonical_identity(identity_payload)
         base = float(row.get("score") or max(0.001, 1.0 - index * 0.01))
         row["recommendation_identity"] = identity

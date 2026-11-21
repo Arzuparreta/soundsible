@@ -523,6 +523,51 @@
   font-size: var(--text-label);
 }
 
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--pill-h);
+  padding: 0 var(--space-md);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+
+.refresh:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.refresh svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  flex: none;
+}
+
+.spinning {
+  animation: search-spin 0.8s linear infinite;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .refresh:not(:disabled):hover {
+    color: var(--ink-primary);
+    background: var(--bg-hover);
+  }
+}
+
+@keyframes search-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes search-pop {
   from {
     opacity: 0;
@@ -534,5 +579,8 @@
   .loadingBar::after {
     animation: none;
     width: 100%;
+  }
+  .spinning {
+    animation: none;
   }
 }

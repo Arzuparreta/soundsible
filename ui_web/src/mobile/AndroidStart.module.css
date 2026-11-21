@@ -27,3 +27,10 @@
 .collectionHeading { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .collectionHeading h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .library .menuTrigger { flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ink-primary); font-size: 24px; border-radius: var(--radius-sm); }
+.searchTools { display: flex; align-items: center; gap: var(--space-xs); }
+.refreshBtn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: var(--control-h); height: var(--control-h); padding: 0; border: 1px solid var(--hairline); border-radius: var(--radius-full); background: var(--bg-raised); color: var(--ink-secondary); cursor: pointer; }
+.refreshBtn:disabled { opacity: 0.6; cursor: default; }
+.refreshBtn svg { width: var(--icon-sm); height: var(--icon-sm); }
+.spinning { animation: android-spin 0.8s linear infinite; }
+@keyframes android-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinning { animation: none; } }

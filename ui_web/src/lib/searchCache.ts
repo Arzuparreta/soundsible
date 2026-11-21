@@ -44,8 +44,9 @@ export function readSearchCache<T>(namespace: string, query: string): T | null {
  * navigation, so a suite that does not reset this reads the previous test's
  * answer and never calls the API it is asserting on.
  */
-export function clearSearchCache(): void {
-  buckets.clear();
+export function clearSearchCache(namespace?: string): void {
+  if (namespace) buckets.delete(namespace);
+  else buckets.clear();
 }
 
 export function writeSearchCache<T>(namespace: string, query: string, value: T): void {

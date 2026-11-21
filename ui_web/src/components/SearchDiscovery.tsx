@@ -8,7 +8,7 @@ import { onDiscoveryFeedReady } from '../lib/discoveryEvents';
 import { prefetchPreviews } from '../lib/prefetch';
 import { catalogPreviewId, itemArtist } from '../lib/catalogItem';
 import { userKey } from '../lib/session';
-import { readSearchCache, writeSearchCache } from '../lib/searchCache';
+import { clearSearchCache, readSearchCache, writeSearchCache } from '../lib/searchCache';
 import { discoveryHasVisible, resolveDiscoveryTrackShelves } from '../lib/searchDiscovery';
 import { catalogDestination } from '../lib/musicNavigation';
 import { navigateBackOr } from '../lib/scrollHistory';
@@ -25,6 +25,7 @@ const MAX_REVALIDATE_ATTEMPTS = 4;
 export function SearchDiscovery(props: {
   section?: string;
   onReady: (ready: boolean) => void;
+  onRefreshControl?: (control: { canRefresh: boolean; refreshing: boolean; refresh: () => void } | null) => void;
   onPlay: (item: CatalogItem) => void;
   onSave: (item: CatalogItem) => void;
   saving: Set<string>;
@@ -36,12 +37,20 @@ export function SearchDiscovery(props: {
   const [loading, setLoading] = createSignal(!cached);
   const [refreshing, setRefreshing] = createSignal(false);
   const [error, setError] = createSignal(false);
+  const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
   let controller: AbortController | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
   let attempts = 0;
   const sections = createMemo(() => (feed().browse_sections ?? []).map(section => ({ ...section, items: prioritizeDiscoveries(section.items) })));
-  const trackShelves = createMemo(() => resolveDiscoveryTrackShelves(feed(), prioritizeDiscoveries));
+  const trackShelves = createMemo(() => {
+    const hidden = dismissed();
+    const shelves = resolveDiscoveryTrackShelves(feed(), prioritizeDiscoveries);
+    if (!hidden.size) return shelves;
+    return shelves
+      .map(shelf => ({ ...shelf, items: shelf.items.filter(item => !hidden.has(item.id)) }))
+      .filter(shelf => shelf.items.length > 0);
+  });
   const expanded = () => props.section?.trim() || undefined;
   // What the listener is looking at: the opened section alone, or the home.
   const hasVisibleContent = () => discoveryHasVisible(sections(), trackShelves(), expanded());
@@ -121,17 +130,41 @@ export function SearchDiscovery(props: {
     });
   });
 
-  onCleanup(() => { disposed = true; stopPush(); controller?.abort(); clearTimeout(timer); });
+  const refresh = () => {
+    attempts = 0;
+    setDismissed(new Set<string>());
+    setError(false);
+    void load(true);
+  };
+  createEffect(() => {
+    props.onRefreshControl?.({
+      canRefresh: !expanded() && hasVisibleContent(),
+      refreshing: refreshing() || !!feed().revalidating || loading(),
+      refresh,
+    });
+  });
+
+  onCleanup(() => { disposed = true; stopPush(); controller?.abort(); clearTimeout(timer); props.onRefreshControl?.(null); });
 
   return <SearchDiscoveryView sections={sections()} trackShelves={trackShelves()} expanded={expanded()}
     loading={loading()} error={error()} preparing={!!feed().revalidating}
-    refreshing={refreshing() || !!feed().revalidating}
     onBack={() => navigateBackOr(navigate, '/search')}
-    onRetry={() => { attempts = 0; setLoading(true); setError(false); void load(true); }}
-    onRefresh={() => { attempts = 0; setError(false); void load(true); }}
+    onRetry={() => { attempts = 0; setDismissed(new Set<string>()); setLoading(true); setError(false); void load(true); }}
     renderMore={(section, link) => <MusicLink path={`/search?browse=${encodeURIComponent(section)}`} label={link.label} class={link.class}>{link.children}</MusicLink>}
     renderEntity={(item, link) => <MusicLink path={catalogDestination(item)!} class={link.class} label={link.label} onMenu={event => openCatalogEntityMenu(item, event)}>{link.children}</MusicLink>}
     renderStatus={item => <CatalogCollectionStatus item={item} />}
     renderSong={item => <CatalogResultRow showLibraryStatus item={item} active={isPlayingItem(item)} saving={props.saving.has(item.id)}
-      onPlay={() => props.onPlay(item)} onDownload={() => props.onSave(item)} />} />;
+      onPlay={() => props.onPlay(item)} onDownload={() => props.onSave(item)}
+      onNotInterested={() => {
+        setDismissed(prev => { const next = new Set(prev); next.add(item.id); return next; });
+        clearSearchCache(CACHE);
+      }}
+      onUndoNotInterested={() => {
+        setDismissed(prev => {
+          if (!prev.has(item.id)) return prev;
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
+      }} />} />;
 }

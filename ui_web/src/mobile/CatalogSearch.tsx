@@ -13,11 +13,14 @@ import { registerNativeBack } from './backNavigation';
 import { catalogEntityBookmark, catalogEntityDestination, catalogEntityHeld, catalogEntityHoldings } from '../lib/catalogEntity';
 import { sameEntity, type SavedEntity } from '../lib/savedEntityIdentity';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { discoveryHasVisible } from '../lib/searchDiscovery';
 import { SearchDiscoveryView } from '../components/SearchDiscoveryView';
 import { CatalogCollectionStatusView } from '../components/CatalogCollectionStatusView';
 import { openContextMenu } from '../lib/contextMenu';
 import { t } from '../lib/i18n';
 import { coverUrl } from '../lib/media';
+import { IconButton } from '../design/Control';
+import { RefreshIcon } from '../components/icons';
 import { SearchField } from '../components/SearchField';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { EmptyState } from '../components/EmptyState';
@@ -33,6 +36,7 @@ export default function CatalogSearch(props: {
   offlineMenuActions?: (tracks: Track[]) => MenuAction[];
   onResolvedMenu?: (track: Track, event?: MenuEvent, actions?: MenuAction[]) => void;
   onPlayOnDevice?: (track: Track) => void;
+  onStartRadio?: (track: Track) => Promise<void>;
   savedEntities?: SavedEntity[]; onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void;
   onPlayCollection?: (tracks: Track[], index: number) => Promise<void>;
   activeId?: string; isActive?: (track: Track) => boolean; onAcquire?: (track: Track) => Promise<void>; onPlay: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
@@ -47,9 +51,10 @@ export default function CatalogSearch(props: {
   const [retry, setRetry] = createSignal(0);
   const catalog = createNativeCatalogActions({ generation: () => props.generation, tracks: () => props.tracks,
     saved: () => props.saved, disconnected: () => props.disconnected, onPlay: props.onPlay,
-    onAcquire: props.onAcquire, onChanged: props.onChanged, onPlayCollection: props.onPlayCollection });
+    onStartRadio: props.onStartRadio, onAcquire: props.onAcquire, onChanged: props.onChanged, onPlayCollection: props.onPlayCollection });
   const { pending, trackFor, isSaved, act } = catalog;
   const [expanded, setExpanded] = createSignal<string | undefined>();
+  const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
   const [entities, setEntities] = createSignal<{ subject: NativeEntitySubject; returnScroll: number }[]>([]);
   const entity = () => entities().at(-1);
   const holdings = createMemo(() => catalogEntityHoldings(props.tracks));
@@ -57,6 +62,15 @@ export default function CatalogSearch(props: {
   const known = (item: CatalogItem) => item.type === 'artist' || item.type === 'album' ? entitySaved(item) || catalogEntityHeld(item, holdings()) : isSaved(item) || !!trackFor(item) && trackFor(item)?.source !== 'preview';
   const feed = createNativeDiscoveryFeed({ generation: () => props.generation, disconnected: () => props.disconnected,
     paused: () => !!query().trim() || !!entity(), expanded, known });
+  const visibleTrackShelves = createMemo(() => {
+    const hidden = dismissed();
+    const shelves = feed.trackShelves();
+    if (!hidden.size) return shelves;
+    return shelves
+      .map(shelf => ({ ...shelf, items: shelf.items.filter(item => !hidden.has(item.id)) }))
+      .filter(shelf => shelf.items.length > 0);
+  });
+  const refreshFeed = () => { setDismissed(new Set<string>()); feed.refresh(); };
   let navigation = 0;
   let restorePosition: number | undefined;
   let sectionPosition = 0;
@@ -103,7 +117,7 @@ export default function CatalogSearch(props: {
   let account = props.generation;
   createEffect(on(() => [query().trim(), props.generation, props.disconnected, retry()] as const, ([term, generation, disconnected]) => {
     const epoch = ++searchEpoch;
-    if (account !== generation) { navigation++; setEntities([]); setExpanded(undefined); }
+    if (account !== generation) { navigation++; setEntities([]); setExpanded(undefined); setDismissed(new Set<string>()); }
     catalog.reset(account !== generation); account = generation;
     const controller = new AbortController();
     setRows([]); setError(''); setPartial(false); setLoading(Boolean(term && !disconnected));
@@ -125,9 +139,17 @@ export default function CatalogSearch(props: {
     const generation = props.generation;
     const search = searchEpoch, route = navigation;
     const saved = isSaved(item);
-    const run = (purpose: 'play' | 'save' | 'remove' | 'acquire') => { if (generation === props.generation && search === searchEpoch && route === navigation && !disposed) void act(item, purpose); };
+    const run = (purpose: 'play' | 'save' | 'remove' | 'acquire' | 'radio') => { if (generation === props.generation && search === searchEpoch && route === navigation && !disposed) void act(item, purpose); };
     const current = () => generation === props.generation && !disposed && !props.disconnected;
-    const feedback = nativeFeedbackActions(catalogFeedback(item), current);
+    const feedback = nativeFeedbackActions(catalogFeedback(item), current, {
+      onDismissed: () => setDismissed(prev => { const next = new Set(prev); next.add(item.id); return next; }),
+      onUndone: () => setDismissed(prev => {
+        if (!prev.has(item.id)) return prev;
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      }),
+    });
     if (resolved && props.onResolvedMenu) {
       if (resolved.source === 'preview') props.onResolvedMenu(resolved, event, [
         { label: t('common.play'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('play') },
@@ -137,8 +159,12 @@ export default function CatalogSearch(props: {
       else props.onResolvedMenu(resolved, event, feedback);
       return;
     }
+    const radioActions: MenuAction[] = props.onStartRadio && item.title && itemArtist(item)
+      ? [{ label: t('trackActions.startRadio'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('radio') }]
+      : [];
     openContextMenu({ title: item.title, actions: [
       { label: t('common.play'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('play') },
+      ...radioActions,
       ...(props.onPlayOnDevice && item.title && itemArtist(item) ? [{ label: t('trackActions.playOnDevice'), disabled: props.disconnected,
         onSelect: () => { if (current()) props.onPlayOnDevice!(savedToTrack(savedFromCatalogItem(item), new Map())!); } }] : []),
       { label: t(saved ? 'collection.unsave' : 'collection.save'), selected: saved, disabled: props.disconnected || pending() === item.id, onSelect: () => run(saved ? 'remove' : 'save') },
@@ -160,7 +186,20 @@ export default function CatalogSearch(props: {
   };
   return <section class={styles.library} data-testid="android-catalog-search">
     <div style={{ display: entity() ? 'none' : undefined }}>
-    <SearchField value={query()} placeholder={t('search.placeholder')} onInput={setQuery} />
+    <div class={styles.searchTools}>
+      <SearchField value={query()} placeholder={t('search.placeholder')} onInput={setQuery} />
+      <Show when={!query().trim() && !expanded() && !props.disconnected && discoveryHasVisible(feed.sections(), visibleTrackShelves())}>
+        <IconButton
+          class={styles.refreshBtn}
+          label={t('searchHome.refresh')}
+          disabled={feed.refreshing() || feed.loading()}
+          aria-busy={feed.refreshing() ? 'true' : undefined}
+          onClick={refreshFeed}
+        >
+          <RefreshIcon class={feed.refreshing() ? styles.spinning : undefined} />
+        </IconButton>
+      </Show>
+    </div>
     <Show when={!query().trim() && props.history?.load('music').length}>
       <section aria-label={t('search.recentsSection')}>
         <h2>{t('search.recentsSection')}</h2>
@@ -180,9 +219,9 @@ export default function CatalogSearch(props: {
           onActivate={() => { const path = catalogEntityDestination(item); if (path) openEntity(path); }} onMenu={event => entityMenu(item, event)} />
         : songRow(item)}</For>
     </Show>
-    <Show when={!query().trim() && !props.disconnected}><SearchDiscoveryView sections={feed.sections()} trackShelves={feed.trackShelves()} expanded={expanded()}
+    <Show when={!query().trim() && !props.disconnected}><SearchDiscoveryView sections={feed.sections()} trackShelves={visibleTrackShelves()} expanded={expanded()}
       loading={feed.loading()} error={feed.error()} preparing={!!feed.feed().revalidating}
-      refreshing={feed.refreshing()} onBack={backSection} onRetry={feed.retry} onRefresh={feed.refresh}
+      onBack={backSection} onRetry={refreshFeed}
       renderMore={(section, link) => <button type="button" class={link.class} aria-label={link.label} onClick={() => openSection(section)}>{link.children}</button>}
       renderEntity={(item, link) => { const tap = createResponsiveTap({ onTap: () => { const path = catalogEntityDestination(item); if (path) openEntity(path); }, onLongPress: () => entityMenu(item) });
         return <button type="button" class={link.class} aria-label={link.label} {...tap} onContextMenu={event => { event.preventDefault(); entityMenu(item, event); }}>{link.children}</button>; }}

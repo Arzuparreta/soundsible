@@ -1,11 +1,14 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import type { MusicMetadata } from '../lib/musicNavigation';
-import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
+import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys, state } from '../stores';
+import { resolveCatalogTrack } from '../lib/catalogItem';
 import { savedToTrack, savedVideoId } from '../lib/saved';
+import { api } from '../lib/api';
+import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import { openContextMenu } from '../lib/contextMenu';
-import type { SavedEntry, Track } from '../types/music';
-import { buildTrackMenu, musicLinkActions } from './trackActions';
+import type { CatalogItem, RecommendationContext, SavedEntry, Track } from '../types/music';
+import { buildTrackMenu, musicLinkActions, sendDiscoveryNotInterested } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import type { MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
@@ -13,11 +16,75 @@ import { openPlayOnDevice } from './DeviceSheet';
 import type { ContextTrack } from '../lib/playbackQueue';
 
 export interface EntryMenuContext {
+  item?: CatalogItem;
   track?: Track;
   music?: MusicMetadata;
+  recommendation?: RecommendationContext;
   onDownload?: () => void;
   onRadio?: () => void;
+  onNotInterested?: () => void;
+  onUndoNotInterested?: () => void;
   busy?: boolean;
+}
+
+function catalogFeedbackPayload(entry: SavedEntry, ctx: EntryMenuContext): Record<string, unknown> {
+  const item = ctx.item;
+  const extDeezer = item?.external_ids?.deezer_id;
+  const keyDeezer = entry.keys.find((key) => key.startsWith('deezer:'))?.slice(7);
+  const deezerId = typeof extDeezer === 'string' && extDeezer
+    ? extDeezer
+    : typeof extDeezer === 'number'
+      ? String(extDeezer)
+      : keyDeezer;
+  const extYoutube = item?.external_ids?.youtube_id;
+  const youtubeId = typeof extYoutube === 'string' && extYoutube
+    ? extYoutube
+    : savedVideoId(entry) ?? undefined;
+  const extIsrc = item?.external_ids?.isrc;
+  const isrc = typeof extIsrc === 'string' && extIsrc ? extIsrc : undefined;
+  return {
+    media_type: 'music_track',
+    track_id: item?.track_id ?? undefined,
+    title: item?.title ?? entry.title,
+    artist: item ? (item.artist || item.subtitle || entry.artist) : entry.artist,
+    youtube_id: youtubeId,
+    deezer_id: deezerId,
+    isrc,
+    source: ctx.recommendation?.source,
+  };
+}
+
+async function startCatalogRadio(entry: SavedEntry, item?: CatalogItem): Promise<void> {
+  try {
+    let track: Track | null = null;
+    if (item) {
+      track = await resolveCatalogTrack(item);
+    } else if (entry.title && entry.artist) {
+      const resolved = await api.resolveCatalogItem({
+        artist: entry.artist,
+        title: entry.title,
+        duration: entry.duration,
+      });
+      if (resolved.video_id) {
+        const base = savedToTrack(entry, new Map());
+        if (base) {
+          track = {
+            ...base,
+            id: resolved.video_id,
+            item_id: resolved.item_id ?? base.item_id,
+            originKeys: [...new Set([...entry.keys, `yt:${resolved.video_id}`])],
+          };
+        }
+      }
+    }
+    if (!track) {
+      toast.error(t('search.noPreview'));
+      return;
+    }
+    await actions.startRadio(track);
+  } catch {
+    toast.error(t('search.noPreview'));
+  }
 }
 
 /** Collection operations use the original saved keys, including unresolved
@@ -26,7 +93,10 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
   const owned = ownedTrackForKeys(entry.keys);
   const saved = Boolean(owned) || isSavedKeys(entry.keys);
   const downloading = ctx.busy || isDownloadingKeys(entry.keys);
-  const track = owned ?? ctx.track ?? (savedVideoId(entry) ? savedToTrack(entry, new Map()) : null);
+  const baseTrack = owned ?? ctx.track ?? (savedVideoId(entry) ? savedToTrack(entry, new Map()) : null);
+  const track = baseTrack
+    ? (!baseTrack.recommendation && ctx.recommendation ? { ...baseTrack, recommendation: ctx.recommendation } : baseTrack)
+    : null;
   const list: MenuAction[] = [];
   if (saved) list.push({
     icon: menuIcons.heart(),
@@ -39,7 +109,14 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     label: t(downloading ? 'collection.downloading' : 'collection.download'), disabled: downloading,
     onSelect: () => { if (ctx.onDownload) ctx.onDownload(); else void actions.downloadSaved(entry); },
   });
-  if (track) list.push(...buildTrackMenu(track, { collection: false, onAddToPlaylist: openPlaylistPicker, music: ctx.music, onPlayOnDevice: openPlayOnDevice }));
+  if (track) list.push(...buildTrackMenu(track, {
+    collection: false,
+    onAddToPlaylist: openPlaylistPicker,
+    music: ctx.music,
+    onPlayOnDevice: openPlayOnDevice,
+    onNotInterested: ctx.onNotInterested,
+    onUndoNotInterested: ctx.onUndoNotInterested,
+  }));
   if (!track && entry.title && entry.artist) {
     const pending: ContextTrack = {
       ...savedToTrack(entry, new Map())!,
@@ -52,6 +129,30 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     const radio = list.findIndex((action) => action.label === t('trackActions.startRadio') || action.label === t('modeChange.startRadio'));
     const action = { icon: menuIcons.radio(), label: t('trackActions.startRadio'), onSelect: ctx.onRadio };
     if (radio >= 0) list[radio] = action; else list.push(action);
+  } else if (!track && entry.title && entry.artist) {
+    list.push({
+      icon: menuIcons.radio(),
+      label: t(state.autoMode?.active ? 'modeChange.startRadio' : 'trackActions.startRadio'),
+      onSelect: () => void startCatalogRadio(entry, ctx.item),
+    });
+  }
+  if (!track && ctx.recommendation) {
+    if (ctx.recommendation.reason) {
+      list.push({
+        icon: menuIcons.info(),
+        label: ctx.recommendation.reason,
+        disabled: true,
+        onSelect: () => {},
+      });
+    }
+    list.push({
+      icon: menuIcons.feedback(),
+      label: t('trackActions.notInterested'),
+      onSelect: () => void sendDiscoveryNotInterested(catalogFeedbackPayload(entry, ctx), {
+        onDismissed: ctx.onNotInterested,
+        onUndone: ctx.onUndoNotInterested,
+      }),
+    });
   }
   if (saved && !owned) list.push({ icon: menuIcons.remove(), label: t('collection.unsave'), danger: true, onSelect: () => actions.toggleSaved(entry) });
   return list;

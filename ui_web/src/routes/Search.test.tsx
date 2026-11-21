@@ -570,11 +570,11 @@ describe('Search route', () => {
 
     expect(await screen.findByText('Shared with you')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Shared title — Shared artist')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Direct Video/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Direct Video' })).toBeInTheDocument();
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
     expect(apiMock.searchYouTube).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: /Direct Video/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Direct Video' }));
     expect(storeMock.playTrack).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'dQw4w9WgXcQ', source: 'preview' }),
     );
@@ -599,7 +599,7 @@ describe('Search route', () => {
     window.location.hash = `#/search?shared=${encoded}`;
 
     render(() => <Search />);
-    fireEvent.click(await screen.findByRole('button', { name: /My local title/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'My local title' }));
 
     expect(apiMock.peekYouTube).not.toHaveBeenCalled();
     expect(storeMock.playTrack).toHaveBeenCalledWith(
@@ -629,6 +629,34 @@ describe('Search route', () => {
     shellMock.desktop = true;
     render(() => <Search />);
     expect(screen.getByRole('heading', { level: 1, name: 'Discover' })).toBeInTheDocument();
+  });
+
+  it('places the Discover refresh control in the top header line on desktop and hides it while searching', async () => {
+    shellMock.desktop = true;
+    apiMock.getDiscoveryMusicFeed
+      .mockResolvedValueOnce({
+        items: [{ id: 'deezer:1', title: 'Initial Pick', artist: 'Artist', source: 'deezer' }],
+        browse_sections: [],
+      })
+      .mockResolvedValueOnce({
+        items: [{ id: 'deezer:2', title: 'Rotated Pick', artist: 'Artist Two', source: 'deezer' }],
+        browse_sections: [],
+      });
+
+    render(() => <Search />);
+    expect(await screen.findByText('Initial Pick')).toBeInTheDocument();
+
+    const header = screen.getByRole('banner');
+    const refreshBtn = within(header).getByRole('button', { name: 'Refresh' });
+    expect(within(screen.getByTestId('search-discovery')).queryByRole('button', { name: 'Refresh' })).toBeNull();
+
+    fireEvent.click(refreshBtn);
+    expect(await screen.findByText('Rotated Pick')).toBeInTheDocument();
+    expect(apiMock.getDiscoveryMusicFeed).toHaveBeenCalledTimes(2);
+    expect(apiMock.getDiscoveryMusicFeed.mock.calls[1][1]).toBe(true);
+
+    fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'platero' } });
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
   });
 
   it('explains an empty filter from its own results and returns to all of them', async () => {
