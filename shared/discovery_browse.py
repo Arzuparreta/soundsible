@@ -6,6 +6,9 @@ from itertools import zip_longest
 import time
 
 from shared.providers import deezer
+from shared.text_utils import fold_text
+
+_ALLOWED_RECORD_TYPES = {"album", "ep", "single"}
 
 
 def build_browse_sections(seed_names: list[str], limit: int = 10) -> dict:
@@ -51,9 +54,15 @@ def build_browse_sections(seed_names: list[str], limit: int = 10) -> dict:
                   if (item := artist_item(row))]]
     else:
         for name in seed_names[:5]:
-            matches = rows("search/artist", {"q": name, "limit": 5})
-            # A homonym or an approximate search hit must not become a taste seed.
-            match = next((r for r in matches if str(r.get("name") or "").casefold() == name.casefold()), None)
+            matches = rows("search/artist", {"q": name, "limit": 8})
+            wanted = fold_text(name)
+            if not wanted:
+                continue
+            # A homonym or an approximate search hit must not become a taste seed;
+            # fold diacritics and break exact-match ties by fan count.
+            exact = [r for r in matches if fold_text(r.get("name")) == wanted]
+            exact.sort(key=lambda r: int(r.get("nb_fan") or 0), reverse=True)
+            match = exact[0] if exact else None
             seed = artist_item(match) if match else None
             if not seed or any(s["id"] == seed["id"] for s in seeds):
                 continue
@@ -84,7 +93,8 @@ def build_browse_sections(seed_names: list[str], limit: int = 10) -> dict:
             album_pools.append([
                 {**r, "artist": {"id": aid, "name": owner["title"]},
                  "reason_artist": owner.get("reason_artist") or owner["title"]}
-                for r in releases if r.get("record_type") == "album"
+                for r in releases
+                if (str(r.get("record_type") or "").strip().casefold() or "album") in _ALLOWED_RECORD_TYPES
             ])
 
     albums: list[dict] = []
@@ -98,15 +108,18 @@ def build_browse_sections(seed_names: list[str], limit: int = 10) -> dict:
             owner = row.get("artist") if isinstance(row.get("artist"), dict) else {}
             owner_id, name = str(owner.get("id") or ""), str(owner.get("name") or "").strip()
             title = str(row.get("title") or "").strip()
+            rtype = str(row.get("record_type") or "").strip().casefold()
             if (not aid.isdigit() or not owner_id.isdigit() or not name or not title
                     or aid in seen_albums or per_artist[owner_id] >= 2
-                    or row.get("record_type") in ("single", "ep")):
+                    or (rtype and rtype not in _ALLOWED_RECORD_TYPES)):
                 continue
             seen_albums.add(aid)
             per_artist[owner_id] += 1
             albums.append({"id": f"deezer:album:{aid}", "type": "album", "source": "deezer",
                            "title": title, "artist": name, "subtitle": name,
                            "cover": deezer.image(row, "cover"),
+                           "record_type": rtype or "album",
+                           "release_date": str(row.get("release_date") or "").strip(),
                            "external_ids": {"deezer_album_id": aid, "deezer_artist_id": owner_id},
                            "reason_artist": row.get("reason_artist", "")})
     return {"browse_sections": [

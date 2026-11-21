@@ -437,10 +437,10 @@ describe('Search route', () => {
     render(() => <Search />);
     await vi.advanceTimersByTimeAsync(0);
     expect(screen.getByText('Finding artists and albums for you…')).toBeInTheDocument();
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(15000);
     expect(screen.getByRole('heading', { name: 'Popular albums' })).toBeInTheDocument();
     expect(screen.getByText('Popular Album')).toBeInTheDocument();
-    await vi.advanceTimersByTimeAsync(15000);
+    await vi.advanceTimersByTimeAsync(30000);
     expect(apiMock.getDiscoveryMusicFeed).toHaveBeenCalledTimes(2);
   });
 
@@ -448,7 +448,7 @@ describe('Search route', () => {
     apiMock.getDiscoveryMusicFeed.mockResolvedValueOnce({ items: [{ id: 'song:1', title: 'Available Song', artist: 'Artist' }], revalidating: true })
       .mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ items: [] });
     render(() => <Search />);
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(15000);
     expect(screen.getByText('Available Song')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(apiMock.getDiscoveryMusicFeed).toHaveBeenLastCalledWith(expect.any(AbortSignal), true);

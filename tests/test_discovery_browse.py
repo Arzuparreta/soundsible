@@ -18,7 +18,10 @@ def test_personalized_entities_are_interleaved_unique_and_navigable(monkeypatch)
             return {"data": [artist(10 + aid), artist(99), artist(aid), artist(20 + aid)]}
         if path.endswith("/albums"):
             aid = int(path.split('/')[1])
-            return {"data": [{"id": aid * 100 + i, "title": f"Album {i}", "record_type": "single" if i == 0 else "album"} for i in range(5)]}
+            return {"data": [
+                {"id": aid * 100 + i, "title": f"Album {i}", "record_type": "single" if i == 0 else ("compile" if i == 4 else "album"), "release_date": f"2026-0{i + 1}-01"}
+                for i in range(5)
+            ]}
         raise AssertionError(path)
     monkeypatch.setattr(deezer, 'get', get)
     body = build_browse_sections(['Artist 1', 'Artist 2'])
@@ -31,8 +34,31 @@ def test_personalized_entities_are_interleaved_unique_and_navigable(monkeypatch)
     counts = Counter(r['external_ids']['deezer_artist_id'] for r in albums['items'])
     assert max(counts.values()) == 2
     assert all(r['external_ids']['deezer_album_id'] for r in albums['items'])
-    assert not any(r['title'] == 'Album 0' for r in albums['items'])
+    assert any(r['title'] == 'Album 0' and r['record_type'] == 'single' and r['release_date'] == '2026-01-01' for r in albums['items'])
+    assert not any(r['title'] == 'Album 4' for r in albums['items'])
     assert not body['browse_error']
+
+
+def test_diacritic_folded_artist_resolution_prefers_highest_fan_count(monkeypatch):
+    def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            return {"data": [
+                {"id": 10, "name": "Blue Oyster Cult", "nb_fan": 12, "picture_big": "https://image.test/10"},
+                {"id": 20, "name": "Blue Öyster Cult", "nb_fan": 500000, "picture_big": "https://image.test/20"},
+            ]}
+        if path == "artist/20/related":
+            return {"data": [artist(21, "Thin Lizzy")]}
+        if path.endswith("/albums"):
+            return {"data": [{"id": 300, "title": "Release EP", "record_type": "ep", "release_date": "2026-10-01"}]}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(deezer, "get", get)
+    body = build_browse_sections(["Blue Oyster Cult"])
+    artists, albums = body["browse_sections"]
+    assert artists["items"][0]["title"] == "Thin Lizzy"
+    assert artists["items"][0]["reason_artist"] == "Blue Oyster Cult"
+    assert albums["items"][0]["record_type"] == "ep"
+    assert albums["items"][0]["release_date"] == "2026-10-01"
 
 
 def test_cold_start_uses_popular_entities_without_personalized_reasons(monkeypatch):

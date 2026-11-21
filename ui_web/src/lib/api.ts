@@ -222,6 +222,8 @@ export interface DiscoveryFeedSection {
 
 export interface DiscoveryBrowseItem extends CatalogItem {
   reason_artist?: string;
+  record_type?: string;
+  release_date?: string;
 }
 
 export interface DiscoveryBrowseSection {

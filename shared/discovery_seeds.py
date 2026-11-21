@@ -1,0 +1,206 @@
+"""Shared discovery seed selection and per-user rotation memory."""
+
+from __future__ import annotations
+
+from collections import OrderedDict
+import threading
+
+from shared.discovery_intelligence import load_listening_event_rollups
+from shared.text_utils import fold_text
+from shared.user_context import current_user_id
+
+_MAX_TRACKED_USERS = 128
+_MAX_RECENT_TASTE_SEEDS = 10
+_MAX_RECENT_GRAPH_SEEDS = 12
+_DEFAULT_ROTATION_PENALTY = 0.02
+
+_SEED_LOCK = threading.Lock()
+_RECENT_TASTE_SEEDS: OrderedDict[str, list[str]] = OrderedDict()
+_RECENT_GRAPH_SEEDS: OrderedDict[str, list[str]] = OrderedDict()
+
+
+def _scope_key(user_id: str | None) -> str:
+    resolved = user_id if user_id is not None else current_user_id()
+    return str(resolved or "__default__")
+
+
+def _get_recent(store: OrderedDict[str, list[str]], user_id: str | None) -> set[str]:
+    scope = _scope_key(user_id)
+    with _SEED_LOCK:
+        values = store.get(scope)
+        if not values:
+            return set()
+        store.move_to_end(scope)
+        return set(values)
+
+
+def _record_recent(
+    store: OrderedDict[str, list[str]],
+    user_id: str | None,
+    entries: list[str],
+    max_entries: int,
+) -> None:
+    cleaned = [entry for entry in dict.fromkeys(entries) if entry]
+    if not cleaned:
+        return
+    scope = _scope_key(user_id)
+    with _SEED_LOCK:
+        existing = store.get(scope, [])
+        merged = [*cleaned, *[item for item in existing if item not in cleaned]][:max_entries]
+        store[scope] = merged
+        store.move_to_end(scope)
+        while len(store) > _MAX_TRACKED_USERS:
+            store.popitem(last=False)
+
+
+def record_recent_taste_seeds(user_id: str | None, artists: list[str]) -> None:
+    """Remember recently used artist seeds (stored as diacritic-folded keys)."""
+    _record_recent(
+        _RECENT_TASTE_SEEDS,
+        user_id,
+        [fold_text(name) for name in artists if fold_text(name)],
+        _MAX_RECENT_TASTE_SEEDS,
+    )
+
+
+def record_recent_graph_seeds(user_id: str | None, track_ids: list[str]) -> None:
+    """Remember recently used library track seeds for graph/feed rotation."""
+    _record_recent(
+        _RECENT_GRAPH_SEEDS,
+        user_id,
+        [str(track_id).strip() for track_id in track_ids if str(track_id).strip()],
+        _MAX_RECENT_GRAPH_SEEDS,
+    )
+
+
+def clear_recent_seeds(user_id: str | None = None, *, clear_all: bool = False) -> None:
+    """Clear seed rotation history for one account or all tracked accounts."""
+    with _SEED_LOCK:
+        if clear_all:
+            _RECENT_TASTE_SEEDS.clear()
+            _RECENT_GRAPH_SEEDS.clear()
+            return
+        scope = _scope_key(user_id)
+        _RECENT_TASTE_SEEDS.pop(scope, None)
+        _RECENT_GRAPH_SEEDS.pop(scope, None)
+
+
+def select_taste_artists(
+    metadata,
+    fav_ids: list[str],
+    limit: int = 5,
+    *,
+    user_id: str | None = None,
+    rotate: bool = False,
+    penalty: float = _DEFAULT_ROTATION_PENALTY,
+) -> list[str]:
+    """Rank taste seed artists across favourites, playlists, library, and listens."""
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    rollup = load_listening_event_rollups()
+    by_id = {track.id: track for track in tracks}
+    scores: dict[str, float] = {}
+    display: dict[str, str] = {}
+
+    def add_artist(raw: object, score: float, *, title_fallback: bool = False) -> None:
+        name = str(raw or "").strip()
+        key = fold_text(name)
+        if not key:
+            return
+        scores[key] = scores.get(key, 0.0) + score
+        display.setdefault(key, name.title() if title_fallback else name)
+
+    for idx, tid in enumerate(fav_ids):
+        track = by_id.get(str(tid))
+        if track:
+            add_artist(track.album_artist or track.artist, 9.0 - min(idx, 8) * 0.35)
+
+    playlists = metadata.playlists if metadata and isinstance(metadata.playlists, dict) else {}
+    playlist_track_ids: set[str] = set()
+    for ids in playlists.values():
+        if isinstance(ids, list):
+            playlist_track_ids.update(str(x) for x in ids)
+    for tid in playlist_track_ids:
+        track = by_id.get(tid)
+        if track:
+            add_artist(track.album_artist or track.artist, 3.0)
+
+    artist_counts: dict[str, int] = {}
+    for track in tracks:
+        name = str(track.album_artist or track.artist or "").strip()
+        key = fold_text(name)
+        if not key:
+            continue
+        artist_counts[key] = artist_counts.get(key, 0) + 1
+        display.setdefault(key, name)
+    for key, count in artist_counts.items():
+        scores[key] = scores.get(key, 0.0) + min(8.0, count * 1.4)
+
+    for raw_key, count in rollup.artist_plays.items():
+        add_artist(raw_key, min(12.0, count * 2.0), title_fallback=True)
+    for raw_key, count in rollup.artist_saves.items():
+        add_artist(raw_key, min(10.0, count * 3.0), title_fallback=True)
+
+    if rotate:
+        recent = _get_recent(_RECENT_TASTE_SEEDS, user_id)
+        for key in recent:
+            if key in scores:
+                scores[key] *= penalty
+
+    ranked = sorted(scores, key=lambda key: scores[key], reverse=True)
+    return [display[key] for key in ranked[:limit] if display.get(key)]
+
+
+def select_graph_seed_tracks(
+    metadata,
+    fav_ids: list[str],
+    limit: int = 8,
+    *,
+    user_id: str | None = None,
+    rotate: bool = False,
+    require_youtube_id: bool = False,
+    penalty: float = _DEFAULT_ROTATION_PENALTY,
+) -> list:
+    """Rank non-podcast library tracks as graph expansion seeds with soft rotation."""
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    if not tracks:
+        return []
+
+    rollup = load_listening_event_rollups()
+    recent_artists = {fold_text(name) for name in rollup.recent_artists if fold_text(name)}
+    recent_seeds = _get_recent(_RECENT_GRAPH_SEEDS, user_id) if rotate else set()
+    fav_order = {str(tid): idx for idx, tid in enumerate(fav_ids)}
+
+    # Sort newest first with stable original order tiebreak before scoring.
+    indexed = sorted(
+        enumerate(tracks),
+        key=lambda pair: (str(getattr(pair[1], "added_at", None) or ""), pair[0]),
+        reverse=True,
+    )
+
+    scored: list[tuple[float, int, object]] = []
+    for recency_rank, (_, track) in enumerate(indexed):
+        if getattr(track, "media_kind", None) == "podcast_episode":
+            continue
+        if require_youtube_id and not str(getattr(track, "youtube_id", "") or "").strip():
+            continue
+        if not require_youtube_id and (
+            not str(getattr(track, "artist", "") or "").strip()
+            or not str(getattr(track, "title", "") or "").strip()
+        ):
+            continue
+
+        score = 1.0 / (1.0 + recency_rank * 0.05)
+        tid = str(getattr(track, "id", "") or "")
+        if tid in fav_order:
+            score += 2.0 + max(0.0, 0.2 - fav_order[tid] * 0.01)
+        artist_key = fold_text(
+            getattr(track, "album_artist", None) or getattr(track, "artist", None)
+        )
+        if artist_key and artist_key in recent_artists:
+            score += 1.0
+        if rotate and tid in recent_seeds:
+            score *= penalty
+        scored.append((score, recency_rank, track))
+
+    scored.sort(key=lambda entry: (-entry[0], entry[1]))
+    return [track for _, _, track in scored[:limit]]

@@ -24,6 +24,12 @@ from shared.discovery_intelligence import (
     load_discovery_settings,
     rank_recommendation_rows,
 )
+from shared.discovery_seeds import (
+    record_recent_graph_seeds,
+    record_recent_taste_seeds,
+    select_graph_seed_tracks,
+    select_taste_artists,
+)
 from shared.hardening import rate_limit
 from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
@@ -170,56 +176,14 @@ def _append_external_items(
     return section
 
 
-def _top_taste_artists(metadata, fav_ids: list[str], limit: int = _MAX_PERSONALIZED_SEEDS) -> list[str]:
-    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
-    rollup = load_listening_event_rollups()
-    by_id = {t.id: t for t in tracks}
-    scores: dict[str, float] = {}
-    display: dict[str, str] = {}
-
-    def add_artist(raw: object, score: float) -> None:
-        name = str(raw or "").strip()
-        key = name.casefold()
-        if not key:
-            return
-        scores[key] = scores.get(key, 0.0) + score
-        display.setdefault(key, name)
-
-    for idx, tid in enumerate(fav_ids):
-        track = by_id.get(str(tid))
-        if track:
-            add_artist(track.album_artist or track.artist, 9.0 - min(idx, 8) * 0.35)
-
-    playlists = metadata.playlists if metadata and isinstance(metadata.playlists, dict) else {}
-    playlist_track_ids: set[str] = set()
-    for ids in playlists.values():
-        if isinstance(ids, list):
-            playlist_track_ids.update(str(x) for x in ids)
-    for tid in playlist_track_ids:
-        track = by_id.get(tid)
-        if track:
-            add_artist(track.album_artist or track.artist, 3.0)
-
-    artist_counts: dict[str, int] = {}
-    for track in tracks:
-        name = track.album_artist or track.artist
-        key = str(name or "").strip().casefold()
-        if not key:
-            continue
-        artist_counts[key] = artist_counts.get(key, 0) + 1
-        display.setdefault(key, str(name).strip())
-    for key, count in artist_counts.items():
-        scores[key] = scores.get(key, 0.0) + min(8.0, count * 1.4)
-
-    for key, count in rollup.artist_plays.items():
-        scores[key] = scores.get(key, 0.0) + min(12.0, count * 2.0)
-        display.setdefault(key, key.title())
-    for key, count in rollup.artist_saves.items():
-        scores[key] = scores.get(key, 0.0) + min(10.0, count * 3.0)
-        display.setdefault(key, key.title())
-
-    ranked = sorted(scores, key=lambda key: scores[key], reverse=True)
-    return [display[key] for key in ranked[:limit] if display.get(key)]
+def _top_taste_artists(
+    metadata,
+    fav_ids: list[str],
+    limit: int = _MAX_PERSONALIZED_SEEDS,
+    *,
+    rotate: bool = False,
+) -> list[str]:
+    return select_taste_artists(metadata, fav_ids, limit=limit, rotate=rotate)
 
 
 def _resolve_deezer_artist_id(
@@ -380,11 +344,14 @@ def _append_personalized_artist_sections(
     local_keys: set[str],
     seen: set[str],
     limit: int,
+    taste_seeds: list[str] | None = None,
+    rotate: bool = False,
 ) -> None:
     deadline = time.monotonic() + 12.0
     used_related_artists: set[str] = set()
     added = 0
-    for artist in _top_taste_artists(metadata, fav_ids):
+    artists = taste_seeds if taste_seeds is not None else _top_taste_artists(metadata, fav_ids, rotate=rotate)
+    for artist in artists:
         if time.monotonic() >= deadline:
             break
         try:
@@ -431,7 +398,14 @@ def _local_library_keys(metadata) -> set[str]:
     return {_norm_music_key(t.title, t.artist or t.album_artist) for t in tracks}
 
 
-def _build_music_feed(metadata, fav_ids: list[str], limit: int) -> dict:
+def _build_music_feed(
+    metadata,
+    fav_ids: list[str],
+    limit: int,
+    *,
+    taste_seeds: list[str] | None = None,
+    rotate: bool = False,
+) -> dict:
     local_recs = build_music_recommendations(metadata, fav_ids, limit=limit)
     local_keys = _local_library_keys(metadata)
     items: list[dict] = []
@@ -446,6 +420,8 @@ def _build_music_feed(metadata, fav_ids: list[str], limit: int) -> dict:
         local_keys=local_keys,
         seen=seen,
         limit=limit,
+        taste_seeds=taste_seeds,
+        rotate=rotate,
     )
 
     if sections:
@@ -475,6 +451,9 @@ def _cached_related_feed_candidates(
     items: list[dict],
     sections: list[dict],
     limit: int,
+    rotate: bool = False,
+    user_id: str | None = None,
+    record_seeds: bool = False,
 ) -> None:
     """Add cached YouTube graph candidates without blocking feed consumers.
 
@@ -483,46 +462,26 @@ def _cached_related_feed_candidates(
     tracks = list(metadata.tracks if metadata and metadata.tracks else [])
     if not tracks:
         return
-    by_id = {track.id: track for track in tracks}
-    rollup = load_listening_event_rollups()
     local_video_ids = {
         str(getattr(track, "youtube_id", "") or "")
         for track in tracks
         if getattr(track, "youtube_id", None)
     }
-    # Newest first: a seed is a guess at what the listener is into now, and the
-    # songs they added most recently are the best one the library holds. Ordered
-    # by the day each joined rather than by manifest position, which a rescan or
-    # a re-keyed id can move.
-    newest_first = sorted(tracks, key=lambda track: track.added_at or "", reverse=True)
-    seeds: list = []
-    seen_seed_ids: set[str] = set()
-
-    def add_seed(track) -> None:
-        video = str(getattr(track, "youtube_id", "") or "")
-        if not video or track.id in seen_seed_ids:
-            return
-        seen_seed_ids.add(track.id)
-        seeds.append(track)
-
-    for track_id in fav_ids:
-        track = by_id.get(str(track_id))
-        if track:
-            add_seed(track)
-    for artist in rollup.recent_artists:
-        for track in newest_first:
-            if str(track.artist or track.album_artist or "").strip().casefold() == artist:
-                add_seed(track)
-                break
-    for track in newest_first:
-        add_seed(track)
-        if len(seeds) >= 8:
-            break
+    seeds = select_graph_seed_tracks(
+        metadata,
+        fav_ids,
+        limit=8,
+        user_id=user_id,
+        rotate=rotate,
+        require_youtube_id=True,
+    )
 
     known_ids = {str(item.get("id")) for item in items}
     added_sections = 0
     scheduled_misses = 0
     seed_batch = seeds[:6]
+    if record_seeds and seed_batch:
+        record_recent_graph_seeds(user_id, [seed.id for seed in seed_batch])
     # One query for the whole batch instead of one per seed.
     cached_mixes = instance_db().get_related_mixes(
         str(getattr(seed, "youtube_id", "") or "") for seed in seed_batch
@@ -589,7 +548,14 @@ def _cached_related_feed_candidates(
             break
 
 
-def _build_discovery_feed_body(limit: int, *, include_external: bool = True) -> dict:
+def _build_discovery_feed_body(
+    limit: int,
+    *,
+    include_external: bool = True,
+    rotate: bool = False,
+) -> dict:
+    from shared.user_context import current_user_id
+
     api = _get_api()
     lib = api["get_library"]()
     try:
@@ -598,8 +564,17 @@ def _build_discovery_feed_body(limit: int, *, include_external: bool = True) -> 
         pass
     metadata = getattr(lib, "metadata", None)
     fav_ids = api["favourite_library_ids"]()
+    user_id = current_user_id()
+    taste_seeds: list[str] | None = None
     if include_external:
-        feed = _build_music_feed(metadata, fav_ids, max(36, limit * 4))
+        taste_seeds = _top_taste_artists(metadata, fav_ids, rotate=rotate)
+        feed = _build_music_feed(
+            metadata,
+            fav_ids,
+            max(36, limit * 4),
+            taste_seeds=taste_seeds,
+            rotate=rotate,
+        )
     else:
         feed = build_music_recommendations(metadata, fav_ids, limit=max(24, limit * 3))
     if not feed["sections"]:
@@ -612,6 +587,9 @@ def _build_discovery_feed_body(limit: int, *, include_external: bool = True) -> 
         items=feed["items"],
         sections=feed["sections"],
         limit=limit,
+        rotate=rotate,
+        user_id=user_id,
+        record_seeds=include_external,
     )
     body = compose_discovery_feed(
         feed,
@@ -623,16 +601,26 @@ def _build_discovery_feed_body(limit: int, *, include_external: bool = True) -> 
     if include_external:
         from shared.discovery_browse import build_browse_sections
 
-        body.update(build_browse_sections(_top_taste_artists(metadata, fav_ids), min(limit, 10)))
+        seeds = taste_seeds if taste_seeds is not None else _top_taste_artists(metadata, fav_ids, rotate=rotate)
+        body.update(build_browse_sections(seeds, min(limit, 10)))
+        if seeds:
+            record_recent_taste_seeds(user_id, seeds)
     return body
 
 
-def _refresh_discovery_feed_cache(cache_key: str, user_id: str | None, limit: int) -> None:
+def _refresh_discovery_feed_cache(
+    cache_key: str,
+    user_id: str | None,
+    limit: int,
+    *,
+    rotate: bool = False,
+) -> None:
+    payload: dict = {"limit": limit}
     try:
         from shared.user_context import user_context
 
         with user_context(user_id):
-            body = _build_discovery_feed_body(limit, include_external=True)
+            body = _build_discovery_feed_body(limit, include_external=True, rotate=rotate)
         now = time.time()
         with _DISCOVERY_FEED_LOCK:
             previous = _DISCOVERY_FEED_CACHE.get(cache_key)
@@ -646,19 +634,37 @@ def _refresh_discovery_feed_cache(cache_key: str, user_id: str | None, limit: in
                 now + _DISCOVERY_FEED_STALE_SEC,
                 dict(body),
             )
+        payload = {
+            "limit": limit,
+            "generated_at": body.get("generated_at"),
+            "browse_error": bool(body.get("browse_error")),
+        }
     except Exception as exc:
         logger.warning("Discovery feed refresh failed: %s", exc)
+        payload = {"limit": limit, "error": True}
     finally:
         with _DISCOVERY_FEED_LOCK:
             _DISCOVERY_FEED_INFLIGHT.discard(cache_key)
+        emit = _get_api().get("emit_to_user")
+        if callable(emit):
+            try:
+                emit("discovery_feed_ready", payload, user_id=user_id)
+            except Exception as exc:
+                logger.debug("Discovery feed ready emit failed: %s", exc)
 
 
-def _schedule_discovery_feed_refresh(cache_key: str, user_id: str | None, limit: int) -> bool:
+def _schedule_discovery_feed_refresh(
+    cache_key: str,
+    user_id: str | None,
+    limit: int,
+    *,
+    rotate: bool = False,
+) -> bool:
     with _DISCOVERY_FEED_LOCK:
         if cache_key in _DISCOVERY_FEED_INFLIGHT:
             return False
         _DISCOVERY_FEED_INFLIGHT.add(cache_key)
-    _DISCOVERY_FEED_EXECUTOR.submit(_refresh_discovery_feed_cache, cache_key, user_id, limit)
+    _DISCOVERY_FEED_EXECUTOR.submit(_refresh_discovery_feed_cache, cache_key, user_id, limit, rotate=rotate)
     return True
 
 
@@ -672,15 +678,21 @@ def discovery_music_feed():
     user_id = current_user_id()
     cache_key = f"discovery-feed-v4:{user_id or '-'}:{limit}"
     now = time.time()
+    refresh_requested = request.args.get("refresh") == "1"
     with _DISCOVERY_FEED_LOCK:
         cached = _DISCOVERY_FEED_CACHE.get(cache_key)
         refreshing = cache_key in _DISCOVERY_FEED_INFLIGHT
-    if cached and cached[0] > now and request.args.get("refresh") != "1":
+    if cached and cached[0] > now and not refresh_requested:
         body = dict(cached[2])
         body.update({"cached": True, "stale": False, "revalidating": refreshing})
         return jsonify(body)
-    if cached and cached[1] > now:
-        revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit) or refreshing
+    if cached and (cached[1] > now or refresh_requested):
+        revalidating = _schedule_discovery_feed_refresh(
+            cache_key,
+            user_id,
+            limit,
+            rotate=True,
+        ) or refreshing
         body = dict(cached[2])
         body.update({"cached": True, "stale": True, "revalidating": revalidating})
         return jsonify(body)
@@ -713,6 +725,11 @@ def discovery_music_feed():
             now + _DISCOVERY_FEED_STALE_SEC,
             dict(body),
         )
-    revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit) or refreshing
+    revalidating = _schedule_discovery_feed_refresh(
+        cache_key,
+        user_id,
+        limit,
+        rotate=refresh_requested,
+    ) or refreshing
     body.update({"cached": False, "stale": False, "revalidating": revalidating})
     return jsonify(body)

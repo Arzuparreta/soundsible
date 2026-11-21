@@ -130,6 +130,17 @@ export function discoveryEntityReason(item: DiscoveryBrowseItem, round: boolean)
   return t('searchHome.similarTo', { artist: reason });
 }
 
+export function discoveryEntitySubtitle(item: DiscoveryBrowseItem, round: boolean): string {
+  if (round) return '';
+  const recordType = item.record_type?.trim().toLowerCase();
+  const typeLabel = recordType === 'single'
+    ? t('searchHome.recordTypeSingle')
+    : recordType === 'ep'
+      ? t('searchHome.recordTypeEp')
+      : '';
+  return [item.artist?.trim() ?? '', typeLabel].filter(Boolean).join(' · ');
+}
+
 /** Preserve playable identities and recommendation feedback across the shared row. */
 export function discoveryCatalogItem(item: DiscoveryFeedItem): CatalogItem {
   const video = item.external_ids?.youtube_id;

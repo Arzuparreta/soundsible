@@ -1,6 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { apiOrigin } from './config';
 import type { DeviceRegistration } from './api';
+import type { DiscoveryFeedReadyEvent } from './discoveryEvents';
 
 /** Server → client events (mirrors the legacy connection.js contract). */
 export interface ServerToClientEvents {
@@ -14,6 +15,7 @@ export interface ServerToClientEvents {
   downloader_log: (data: unknown) => void;
   downloader_update: (data: unknown) => void;
   discover_seed_ready: (data: { request_id: string; seed_track_id: string; recs: unknown[] }) => void;
+  discovery_feed_ready: (data: DiscoveryFeedReadyEvent) => void;
   playback_stop_requested: () => void;
   playback_start_requested: (data: { state?: { position_sec?: number }; track?: Record<string, unknown> }) => void;
   playback_next_requested: () => void;

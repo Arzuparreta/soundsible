@@ -218,3 +218,81 @@ test('renders structured backend shelves with localized reasons and expands dyna
   const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
   expect(audit.violations).toEqual([]);
 });
+
+test('refresh control triggers rotation request and labels singles and EPs', async ({ page }) => {
+  const urls: string[] = [];
+  let refreshed = false;
+  await page.route('**/api/discovery/music/feed?**', (route) => {
+    const url = route.request().url();
+    urls.push(url);
+    if (url.includes('refresh=1')) refreshed = true;
+    return route.fulfill({
+      json: {
+        browse_sections: [
+          {
+            id: 'albums',
+            popular: false,
+            items: [
+              {
+                id: 'album:single',
+                type: 'album',
+                source: 'deezer',
+                title: refreshed ? 'Nuevo sencillo' : 'Primer sencillo',
+                artist: 'Marea',
+                record_type: 'single',
+                cover: artwork(1),
+                external_ids: { deezer_album_id: '201', deezer_artist_id: '1' },
+              },
+              {
+                id: 'album:ep',
+                type: 'album',
+                source: 'deezer',
+                title: 'Sesión EP',
+                artist: 'Extremoduro',
+                record_type: 'ep',
+                cover: artwork(2),
+                external_ids: { deezer_album_id: '202', deezer_artist_id: '2' },
+              },
+            ],
+          },
+        ],
+        sections: [
+          {
+            id: 'because_you_listen_marea',
+            title: 'More like Marea',
+            title_key: 'more_like',
+            title_params: { artist: 'Marea' },
+            reason_key: 'because_listen',
+            reason_params: { artist: 'Marea' },
+            item_ids: ['deezer:501'],
+          },
+        ],
+        items: [
+          {
+            id: 'deezer:501',
+            title: refreshed ? 'Tema rotado' : 'Tema inicial',
+            artist: 'Platero y Tú',
+            cover: artwork(3),
+            duration: 210,
+          },
+        ],
+      },
+    });
+  });
+
+  await page.goto('/player/#/search');
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  const home = page.getByTestId('search-discovery');
+  await expect(home.getByText('Marea · Sencillo')).toBeVisible();
+  await expect(home.getByText('Extremoduro · EP')).toBeVisible();
+  await expect(home.getByText('Tema inicial')).toBeVisible();
+
+  await home.getByRole('button', { name: 'Actualizar' }).click();
+  await expect(home.getByText('Nuevo sencillo')).toBeVisible();
+  await expect(home.getByText('Tema rotado')).toBeVisible();
+  expect(urls.some(u => u.includes('refresh=1'))).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
+  expect(audit.violations).toEqual([]);
+});

@@ -4,11 +4,14 @@ import type { CatalogItem } from '../types/music';
 import { t } from '../lib/i18n';
 import {
   discoveryEntityReason,
+  discoveryEntitySubtitle,
   discoveryHasVisible,
   discoveryShelfReason,
   discoveryShelfTitle,
   type DiscoveryTrackShelf,
 } from '../lib/searchDiscovery';
+import { Control } from '../design/Control';
+import { RefreshIcon } from './icons';
 import { CoverImage } from './CoverImage';
 import { SkeletonCards, SkeletonRows } from './Skeleton';
 import styles from './SearchDiscovery.module.css';
@@ -24,7 +27,8 @@ const SONGS_PREVIEW = 5;
 export function SearchDiscoveryView(props: {
   sections: DiscoveryBrowseSection[]; trackShelves: DiscoveryTrackShelf[]; expanded?: string;
   loading: boolean; error: boolean; preparing: boolean;
-  onBack: () => void; onRetry: () => void;
+  refreshing?: boolean;
+  onBack: () => void; onRetry: () => void; onRefresh?: () => void;
   renderMore: (section: string, link: DiscoveryLink) => JSX.Element;
   renderEntity: (item: DiscoveryBrowseItem, link: DiscoveryLink) => JSX.Element;
   renderStatus: (item: DiscoveryBrowseItem) => JSX.Element;
@@ -58,6 +62,19 @@ export function SearchDiscoveryView(props: {
     <Show when={props.expanded}><button class={styles.back} type="button" onClick={props.onBack}>
       <ChevronIcon direction="left" />{t('searchHome.back')}
     </button></Show>
+    <Show when={!props.expanded && props.onRefresh && hasVisible()}>
+      <div class={styles.toolbar}>
+        <Control
+          class={styles.refresh}
+          disabled={props.refreshing || props.loading}
+          aria-busy={props.refreshing ? 'true' : undefined}
+          onClick={props.onRefresh}
+        >
+          <RefreshIcon class={props.refreshing ? styles.spinning : undefined} />
+          <span>{t('searchHome.refresh')}</span>
+        </Control>
+      </div>
+    </Show>
     <Show when={props.loading && !hasVisible()}>
       <Show when={props.expanded} fallback={<><SkeletonCards count={3} shape="round" /><SkeletonCards count={3} /><SkeletonRows count={5} compact /></>}>
         <Show when={!isEntityExpanded()} fallback={<SkeletonCards count={8} shape={props.expanded === 'artists' ? 'round' : 'square'} />}><SkeletonRows count={8} compact /></Show>
@@ -130,7 +147,7 @@ function DiscoveryEntitySection(props: {
         <span classList={{ [styles.cover]: true, [styles.round]: props.round }}><CoverImage src={item.cover} /></span>
         <span class={styles.meta}>
           <span class={styles.name}>{item.title}</span>
-          <Show when={!props.round && item.artist}><span class={styles.subtitle}>{item.artist}</span></Show>
+          <Show when={discoveryEntitySubtitle(item, props.round)}>{subtitle => <span class={styles.subtitle}>{subtitle()}</span>}</Show>
           <Show when={discoveryEntityReason(item, props.round)}>{reason => <span class={styles.reason}>{reason()}</span>}</Show>
           {props.renderStatus(item)}
         </span>
