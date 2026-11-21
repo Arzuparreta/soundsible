@@ -6,8 +6,17 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from android_live_fixture import relay_peer_diagnostics
+from android_live_fixture import mediamtx_config, relay_peer_diagnostics
 import android as android_script
+
+
+def test_mediamtx_fixture_binds_loopback_and_advertises_only_emulator_host(tmp_path):
+    config = mediamtx_config(tmp_path)
+    assert "webrtcAddress: 127.0.0.1:28889\n" in config
+    assert "webrtcLocalUDPAddress: 127.0.0.1:28189\n" in config
+    assert "webrtcLocalTCPAddress: 127.0.0.1:28189\n" in config
+    assert "webrtcIPsFromInterfaces: false\n" in config
+    assert "webrtcAdditionalHosts: [10.0.2.2]\n" in config
 
 
 def test_relay_diagnostics_preserve_counters_without_credentials():
