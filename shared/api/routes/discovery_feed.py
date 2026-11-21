@@ -31,7 +31,6 @@ from shared.text_utils import fold_text, identity_key
 
 from .discovery_bp import discovery_bp
 from .discovery_common import (
-    _DEEZER_TRACK_CACHE_TTL_SEC,
     _DISCOVERY_FEED_CACHE,
     _DISCOVERY_FEED_EXECUTOR,
     _DISCOVERY_FEED_INFLIGHT,
