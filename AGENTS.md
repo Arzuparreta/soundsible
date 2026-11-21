@@ -17,6 +17,11 @@
   before working on web UI rendering performance, lists and scrolling, rows,
   menus or the design system, and update its status table when an item closes.
 
+- Discovery, recommendations and music sources: read
+  `docs/internal/discovery/HANDOFF.md` before working on the Discover surface,
+  recommendation ranking/sources, or discovery UI/flows, and update its status
+  table, decision log and iteration log when items change or close.
+
 - Documentation has two audiences, kept in two places. `docs/*.md` (directly in
   `docs/`, no subfolders) are user guides: installing, configuring and using
   Soundsible. The Soundsible website publishes exactly these files, and the
