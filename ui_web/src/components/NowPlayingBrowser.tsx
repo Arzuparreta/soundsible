@@ -10,7 +10,7 @@ import { ArtistLinks, MusicLink } from './MusicLinks';
 import { albumMusic, albumDestination, catalogDestination, catalogMusic, libraryTrackMusic, navigateMusic, type MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
-import { savedFromTrack, savedFromCatalogItem } from '../lib/saved';
+import { createActivityMemo } from '../lib/activityMemo';
 import type { SavedEntry } from '../types/music';
 import {
   createEffect,
@@ -65,7 +65,6 @@ import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { openActionMenu } from './ActionMenu';
 import { CollectionRows } from './CollectionView';
-import { createActivityMemo } from '../lib/activityMemo';
 import { pageVisible } from '../lib/pageVisibility';
 import { SkeletonRows } from './Skeleton';
 import { toast } from '../lib/toast';
@@ -220,13 +219,13 @@ export function NowPlayingBrowser(props: {
   createEffect(() => { if (active() && currentView().kind === 'root') ensureNodeFeed(); });
   const libraryTracks = createActivityMemo(active, () =>
     sortTracks(filterTracks(musicLibrary(), libraryFilter()), librarySort(), new Set(favouriteLibraryIds())),
-    []);
-  const favourites = createActivityMemo(active, () => favouriteTracks().filter((track) => !isPodcastTrack(track)), []);
-  const libraryArtists = createActivityMemo(active, () => catalogArtists(state.catalog.artists), []);
+    [], () => [musicLibrary(), libraryFilter(), librarySort(), favouriteLibraryIds()]);
+  const favourites = createActivityMemo(active, () => favouriteTracks().filter((track) => !isPodcastTrack(track)), [], () => [favouriteTracks()]);
+  const libraryArtists = createActivityMemo(active, () => catalogArtists(state.catalog.artists), [], () => [state.catalog.artists]);
   const localResults = createActivityMemo(() => active() && scope() === 'library' && !!query().trim(),
-    () => searchLibrary(libraryTracks(), libraryArtists(), query()), []);
+    () => searchLibrary(libraryTracks(), libraryArtists(), query()), [], () => [libraryTracks(), libraryArtists(), query()]);
   const [searchAlbums, { refetch: refetchSearchAlbums }] = createResource(() => active() && scope() === 'library' && query().trim() ? state.catalog.revision : false, () => api.getLibraryAlbums());
-  const localAlbums = createActivityMemo(active, () => (searchAlbums() ?? []).filter((album) => normalizeLibraryQuery(`${album.title} ${album.album_artist}`).includes(normalizeLibraryQuery(query()))), []);
+  const localAlbums = createActivityMemo(active, () => (searchAlbums() ?? []).filter((album) => normalizeLibraryQuery(`${album.title} ${album.album_artist}`).includes(normalizeLibraryQuery(query()))), [], () => [searchAlbums(), query()]);
   const globalSearching = createMemo(() => scope() !== 'library' && query().trim().length >= 2);
   const localSearching = createMemo(() => scope() === 'library' && query().trim().length > 0);
   // The panel used to render entities first and then songs, while the Search
@@ -236,7 +235,7 @@ export function NowPlayingBrowser(props: {
   const matchingPlaylists = createActivityMemo(active, () => {
     const q = normalizeLibraryQuery(query());
     return q ? Object.keys(state.playlists).filter((name) => normalizeLibraryQuery(name).includes(q)) : [];
-  }, []);
+  }, [], () => [query(), ...Object.keys(state.playlists)]);
   const topResult = createMemo(() => filter() === 'all' ? topResultItem(resolved()) : null);
   const panelSections = createMemo<ResolvedSection[]>(() => {
     const sections = resolved().filter((row) => row.id !== 'top');
@@ -253,11 +252,11 @@ export function NowPlayingBrowser(props: {
     resetContentError = undefined;
     reset?.();
   });
-  const playlistNames = createActivityMemo(active, () => Object.keys(state.playlists), []);
-  const byId = createActivityMemo(active, () => collectionIndex(musicLibrary()), new Map<string, Track>());
+  const playlistNames = createActivityMemo(active, () => Object.keys(state.playlists), [], () => Object.keys(state.playlists));
+  const byId = createActivityMemo(active, () => collectionIndex(musicLibrary()), new Map<string, Track>(), () => [musicLibrary()]);
   const savePosition = () => {
     const body = panelEl?.querySelector<HTMLElement>('[data-browser-body]');
-    if (body && props.active !== false && !restoringScroll) navigation.update({ scroll: body.scrollTop });
+    if (body && props.active !== false && !restoringScroll) navigation.setScroll(body.scrollTop);
   };
   const push = (view: BrowserView, _returnToSearch = false) => {
     savePosition();
@@ -469,8 +468,6 @@ export function NowPlayingBrowser(props: {
     const track = item ? playableTrack(item) : (target as Track | null);
     const auto = Boolean(props.purpose?.startsWith('auto-'));
     return {
-      entry: item ? savedFromCatalogItem(item) : track ? savedFromTrack(track) : undefined,
-      favouritesKnown: !query().trim() && currentView().kind === 'favourites',
       variant: auto ? 'auto' : 'browse',
       primaryLabel: referenceMode() ? sourceLabel() : auto ? t('musicExplorer.request') : undefined,
       // The verb alone on the button. Inside the session browser "to the
@@ -482,7 +479,6 @@ export function NowPlayingBrowser(props: {
         : undefined,
       onMenu: target && !referenceMode() && !routeMode() ? (event) => item ? void useItem(item, (resolved) => openTrackActions(resolved, event, catalogMusic(item))) : openTrackActions(target as Track, event) : undefined,
       track: track ?? undefined,
-      onCarryTrack: referenceMode() || routeMode() ? undefined : props.onCarryTrack,
     };
   };
 
@@ -514,6 +510,11 @@ export function NowPlayingBrowser(props: {
     const view = currentView(); const q = query(); const type = filter(); const active = props.active !== false;
     if (!active || !panelEl) return;
     const offset = untrack(() => navigation.current().scroll);
+    if (offset <= 0) {
+      restoringScroll = false;
+      void view; void q; void type;
+      return;
+    }
     restoringScroll = true;
     let frame = 0;
     // A list that is already where it belongs is done, whatever else changes in
@@ -564,23 +565,35 @@ export function NowPlayingBrowser(props: {
 
   createEffect(() => { if (active() && currentView().kind === 'bookmarks') void syncSavedEntities(); });
 
+  const inAutoSession = () => Boolean(props.purpose?.startsWith('auto-'));
+  const rowVariant = () => inAutoSession() ? 'auto' : 'browse';
+  const rowPrimaryLabel = () => referenceMode() ? sourceLabel() : inAutoSession() ? t('musicExplorer.request') : undefined;
+  const rowPrimaryShort = () => referenceMode() || !inAutoSession() ? undefined : t('musicExplorer.requestShort');
+  const canOpenRowMenu = () => !referenceMode() && !routeMode();
+
   /** A row of a bounded list is reused for the next track (CollectionRows),
    * so the track arrives as an accessor and is read where it is used. */
   const renderTrack = (
     track: () => Track,
     onPlay: () => void,
-    onQueue: () => void = () => actions.enqueue(track()),
+    _onQueue: () => void = () => actions.enqueue(track()),
   ) => (
     <BrowserTrackRow
       title={track().title}
-      subtitle={track().artist} music={libraryTrackMusic(track())}
+      subtitle={track().artist}
+      music={libraryTrackMusic(track())}
       cover={trackCoverUrl(track(), 'thumb')}
       seed={track().id}
       active={isPlayingTrack(track())}
-      queued={isQueuedTrack(track())}
+      queued={false}
       onPlay={inAuto() ? () => placeTrack(track()) : onPlay}
-      onQueue={onQueue}
-      {...autoRow(track())}
+      onQueue={_onQueue}
+      variant={rowVariant()}
+      primaryLabel={rowPrimaryLabel()}
+      primaryShort={rowPrimaryShort()}
+      onAddToRoute={inAutoSession() ? () => placeTrack(track()) : undefined}
+      onMenu={canOpenRowMenu() ? (event) => openTrackActions(track(), event) : undefined}
+      track={track()}
     />
   );
 
@@ -596,9 +609,9 @@ export function NowPlayingBrowser(props: {
       ref={(element) => {
         panelEl = element;
         const saveScroll = (event: Event) => {
-          if (!restoringScroll && props.active !== false && (event.target as HTMLElement).hasAttribute('data-browser-body')) navigation.update({ scroll: (event.target as HTMLElement).scrollTop });
+          if (!restoringScroll && props.active !== false && (event.target as HTMLElement).hasAttribute('data-browser-body')) navigation.setScroll((event.target as HTMLElement).scrollTop);
         };
-        element.addEventListener('scroll', saveScroll, true);
+        element.addEventListener('scroll', saveScroll, { capture: true, passive: true });
         onCleanup(() => element.removeEventListener('scroll', saveScroll, true));
       }}
       class={styles.panel}
@@ -901,7 +914,7 @@ function LibraryView(props: {
   // because a full library used to build every row up front. A signal, not a
   // plain ref: the rows render inside this element, so they are created before
   // it is assigned and have to react when it appears.
-  const sortedAlbums = createActivityMemo(() => props.active, () => collateAlbums(albums() ?? [], albumSort()), []);
+  const sortedAlbums = createActivityMemo(() => props.active, () => collateAlbums(albums() ?? [], albumSort()), [], () => [albums(), albumSort()]);
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} classList={{ [styles.songScroll]: libraryTab() === 'songs' && props.tracks.length > 0 }} data-browser-body ref={setScrollRef}>
@@ -976,7 +989,7 @@ function LibraryArtistView(props: {
     musicLibrary().filter((track) =>
       artistKey(track.artist) === artistKey(props.name) || artistKey(track.album_artist) === artistKey(props.name),
     ),
-    []);
+    [], () => [props.artistId, catalog(), musicLibrary(), props.name]);
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} data-browser-body ref={setScrollRef}>
@@ -1005,7 +1018,7 @@ function LibraryAlbumView(props: {
   inAuto: boolean;
 }) {
   const [album] = createResource(() => props.active && props.view.albumId, (id) => api.getLibraryAlbum(id));
-  const tracks = createActivityMemo(() => props.active, () => tracksByIds(album()?.track_ids ?? []), []);
+  const tracks = createActivityMemo(() => props.active, () => tracksByIds(album()?.track_ids ?? []), [], () => [album()]);
   return <Show when={!album.loading} fallback={<SkeletonRows count={8} />}>
     <TrackCollectionView title={props.view.name} tracks={tracks()} empty={t('album.empty')}
       context={{

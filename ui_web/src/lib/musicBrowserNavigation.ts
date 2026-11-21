@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { createSignal, untrack } from 'solid-js';
 
 export type BrowserSection = 'library' | 'favourites' | 'playlists' | 'bookmarks' | 'root';
 export type BrowserView =
@@ -21,11 +21,27 @@ const frame = (view: BrowserView): BrowserFrame => ({ view, query: '', scope: 'g
 const initial = () => ({ library: [frame({ kind: 'library' })], favourites: [frame({ kind: 'favourites' })], playlists: [frame({ kind: 'playlists' })], bookmarks: [frame({ kind: 'bookmarks' })], root: [frame({ kind: 'root' })] });
 const [sections, setSections] = createSignal(initial());
 const [section, setSection] = createSignal<BrowserSection>('library');
+
+function isScrollOnlyPatch(patch: Partial<BrowserFrame>): patch is { scroll: number } {
+  const keys = Object.keys(patch);
+  return keys.length === 1 && keys[0] === 'scroll' && typeof patch.scroll === 'number';
+}
+
 export const musicBrowserNavigation = {
   section,
   stack: () => sections()[section()],
   current: () => sections()[section()].at(-1)!,
+  setScroll(scroll: number) {
+    untrack(() => {
+      const top = sections()[section()].at(-1);
+      if (top) top.scroll = scroll;
+    });
+  },
   update(patch: Partial<BrowserFrame>) {
+    if (isScrollOnlyPatch(patch)) {
+      this.setScroll(patch.scroll);
+      return;
+    }
     setSections((all) => ({ ...all, [section()]: [...all[section()].slice(0, -1), { ...all[section()].at(-1)!, ...patch }] }));
   },
   push(view: BrowserView) { setSections((all) => ({ ...all, [section()]: [...all[section()], frame(view)] })); },

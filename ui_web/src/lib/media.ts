@@ -39,7 +39,19 @@ const artworkFields = (track: ArtworkMetadata): ArtworkMetadata => ({
   id: track.id, artwork_revision: track.artwork_revision, artwork_width: track.artwork_width,
   artwork_height: track.artwork_height, artwork_scope: track.artwork_scope,
 });
+const MAX_URL_CACHE = 2048;
+const coverUrlCache = new Map<string, string>();
+const candidatesCache = new Map<string, string | undefined>();
+
+function rememberUrl<V>(cache: Map<string, V>, key: string, value: V): V {
+  if (cache.size >= MAX_URL_CACHE) cache.delete(cache.keys().next().value!);
+  cache.set(key, value);
+  return value;
+}
+
 export function registerArtworkMetadata(tracks: ArtworkMetadata[]): void {
+  coverUrlCache.clear();
+  candidatesCache.clear();
   setArtworkMetadata(reconcile(Object.fromEntries(tracks.map(track => [track.id, artworkFields(track)]))));
   if (!tracks.length) { setPreviewArtwork({}); previewFallbacks.clear(); rejectedPreviews.clear(); }
 }
@@ -47,6 +59,8 @@ export function registerArtworkMetadata(tracks: ArtworkMetadata[]): void {
 /** Apply accepted delta metadata without rebuilding entries for every track. */
 export function patchArtworkMetadata(tracks: ArtworkMetadata[], removed: string[]): void {
   if (!tracks.length && !removed.length) return;
+  coverUrlCache.clear();
+  candidatesCache.clear();
   batch(() => {
     for (const id of removed) setArtworkMetadata(id, undefined!);
     for (const track of tracks) setArtworkMetadata(track.id, reconcile(artworkFields(track)));
@@ -55,17 +69,20 @@ export function patchArtworkMetadata(tracks: ArtworkMetadata[], removed: string[
 
 export function artworkCandidates(src?: string | null): string | undefined {
   if (!src) return undefined;
+  const origin = mediaOrigin();
+  const cacheKey = `${origin}|${src}`;
+  if (candidatesCache.has(cacheKey)) return candidatesCache.get(cacheKey);
   const podcast = podcastArtworkCandidates(src);
-  if (podcast) return podcast;
-  const base = `${mediaOrigin()}/api/static/cover/`;
-  if (!src.startsWith(base)) return undefined;
+  if (podcast) return rememberUrl(candidatesCache, cacheKey, podcast);
+  const base = `${origin}/api/static/cover/`;
+  if (!src.startsWith(base)) return rememberUrl(candidatesCache, cacheKey, undefined);
   const [identity, query = ''] = src.slice(base.length).split('?');
   const id = decodeURIComponent(identity);
   const meta = artworkMetadata[id];
   const cap = meta?.artwork_width && meta?.artwork_height
     ? Math.min(meta.artwork_width, meta.artwork_height) : 1280;
   const seen = new Set<number>();
-  return [160, 320, 640, 960, 1280].flatMap(size => {
+  const result = [160, 320, 640, 960, 1280].flatMap(size => {
     const actual = Math.min(size, cap);
     if (seen.has(actual)) return [];
     seen.add(actual);
@@ -75,6 +92,7 @@ export function artworkCandidates(src?: string | null): string | undefined {
     if (meta?.artwork_revision) params.set('rev', meta.artwork_revision);
     return [`${base}${identity}?${params} ${actual}w`];
   }).join(', ');
+  return rememberUrl(candidatesCache, cacheKey, result);
 }
 
 interface TrackMediaIdentity {
@@ -87,6 +105,8 @@ interface TrackMediaIdentity {
 /** Bumped after a cover edit so `coverUrl` busts the browser image cache. */
 const [coverVersion, setCoverVersion] = createSignal(0);
 export const bustCovers = (): void => {
+  coverUrlCache.clear();
+  candidatesCache.clear();
   setCoverVersion((n) => n + 1);
 };
 
@@ -97,10 +117,14 @@ export const bustCovers = (): void => {
  * now-playing/edit views. */
 export const coverUrl = (id: string, size?: 'thumb'): string => {
   const v = coverVersion();
+  const origin = mediaOrigin();
+  const cacheKey = `${origin}|${v}|${id}|${size ?? ''}`;
+  const cached = coverUrlCache.get(cacheKey);
+  if (cached !== undefined) return cached;
   const revision = artworkMetadata[id]?.artwork_revision;
   const scope = artworkMetadata[id]?.artwork_scope;
   const params = [scope ? `scope=${scope}` : '', size ? `size=${size}` : '', revision ? `rev=${revision}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
-  return `${mediaOrigin()}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`;
+  return rememberUrl(coverUrlCache, cacheKey, `${origin}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`);
 };
 
 interface TrackCoverIdentity {

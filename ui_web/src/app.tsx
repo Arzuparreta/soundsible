@@ -1,14 +1,13 @@
 import { useLocation, useNavigate, type RouteSectionProps } from '@solidjs/router';
-import { createEffect, createSignal, onCleanup, Show, type Component } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, Show, type Component } from 'solid-js';
 import { rememberTabLocation } from './lib/tabMemory';
 import { registerMusicNavigator } from './lib/musicNavigation';
-import { state } from './stores';
+import { nowPlayingOpen, state } from './stores';
 import { ToastOutlet } from './lib/toast';
 import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
 import { OmniBar } from './components/OmniBar';
 import { AppBar } from './components/AppBar';
-import { PlayerSurface } from './components/PlayerSurface';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
 import { ScrollHistoryManager } from './lib/scrollHistory';
@@ -26,6 +25,20 @@ export default function Shell(props: RouteSectionProps) {
   onCleanup(registerMusicNavigator(useNavigate()));
   const location = useLocation();
   createEffect(() => rememberTabLocation(location.pathname, location.search));
+  const [playerSurface, setPlayerSurface] = createSignal<Component>();
+  let loadingPlayerSurface = false;
+  const loadPlayerSurface = () => {
+    if (playerSurface() || loadingPlayerSurface) return;
+    loadingPlayerSurface = true;
+    void import('./components/PlayerSurface').then(
+      (module) => { setPlayerSurface(() => module.PlayerSurface); },
+      () => { loadingPlayerSurface = false; },
+    );
+  };
+  onMount(loadPlayerSurface);
+  createEffect(() => {
+    if (nowPlayingOpen() || state.playback.currentTrack) loadPlayerSurface();
+  });
   // The broadcast bridge, WebRTC and the Live client are fetched only once
   // Live is in use (lib/communityGate), not with the first library paint.
   const [bridge, setBridge] = createSignal<Component>();
@@ -53,7 +66,7 @@ export default function Shell(props: RouteSectionProps) {
           <TabBar />
         </div>
       </div>
-      <PlayerSurface />
+      <Show when={playerSurface()} keyed>{(Surface) => <Surface />}</Show>
       <ResumeBanner />
       <ContextMenuOutlet />
       <ToastOutlet />

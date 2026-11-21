@@ -72,6 +72,8 @@ export function PlayerSurface() {
   const [carouselProgress, setCarouselProgress] = createSignal(1);
   const [carouselLive, setCarouselLive] = createSignal(false);
   const [closing, setClosing] = createSignal(false);
+  const [surfaceSettled, setSurfaceSettled] = createSignal(untrack(nowPlayingOpen));
+  const [surfaceAnimating, setSurfaceAnimating] = createSignal(false);
   const [mobileLayout, setMobileLayout] = createSignal(
     typeof window !== 'undefined'
       && typeof window.matchMedia === 'function'
@@ -84,12 +86,14 @@ export function PlayerSurface() {
   });
   let surfaceEl: HTMLDivElement | undefined;
   let restoreFocus: HTMLElement | null = null;
-  let wasOpen = false;
+  let wasOpen = untrack(nowPlayingOpen);
   let wasAuto = auto();
   let swipeStart: { x: number; y: number; at: number; id: number; scroller: HTMLElement | null } | null = null;
   let swipeActive = false;
   let touchMove: ReturnType<typeof createTouchMoveLease> | undefined;
   let closeTimer: number | undefined;
+  let openTimer: number | undefined;
+  let focusTimer: number | undefined;
   /* Where the exit starts and how long it is worth, handed over by whatever
      closed the surface. Null when the close came from somewhere that has no
      gesture behind it — the keyboard shortcut — which then gets the full exit. */
@@ -128,6 +132,29 @@ export function PlayerSurface() {
     wasAuto = active;
   });
 
+  const clearOpenSettle = () => {
+    window.clearTimeout(openTimer);
+    openTimer = undefined;
+    window.clearTimeout(focusTimer);
+    focusTimer = undefined;
+    surfaceEl?.removeEventListener('transitionend', onOpenTransitionEnd);
+  };
+
+  const settleOpen = () => {
+    clearOpenSettle();
+    setSurfaceAnimating(false);
+    if (!untrack(nowPlayingOpen)) return;
+    setSurfaceSettled(true);
+    focusTimer = window.setTimeout(() => {
+      focusTimer = undefined;
+      if (untrack(nowPlayingOpen)) surfaceEl?.focus({ preventScroll: true });
+    }, 60);
+  };
+
+  const onOpenTransitionEnd = (event: TransitionEvent) => {
+    if (event.target === surfaceEl && event.propertyName === 'transform') settleOpen();
+  };
+
   createEffect(() => {
     const open = nowPlayingOpen();
     const activeAuto = open && auto();
@@ -146,10 +173,19 @@ export function PlayerSurface() {
       endClose();
       restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setPanel('stage');
-      requestAnimationFrame(() => surfaceEl?.focus({ preventScroll: true }));
+      setSurfaceAnimating(true);
+      setSurfaceSettled(false);
+      clearOpenSettle();
+      const reduced = typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (surfaceEl) surfaceEl.addEventListener('transitionend', onOpenTransitionEnd);
+      openTimer = window.setTimeout(settleOpen, reduced ? 0 : 340);
     } else if (!open && wasOpen) {
+      clearOpenSettle();
+      setSurfaceSettled(false);
+      setSurfaceAnimating(true);
       beginClose();
-      requestAnimationFrame(() => restoreFocus?.focus({ preventScroll: true }));
     }
     wasOpen = open;
   });
@@ -187,9 +223,17 @@ export function PlayerSurface() {
     // `closing` there would make it re-run on its own state change.
     if (!untrack(closing)) return;
     setClosing(false);
+    setSurfaceAnimating(false);
     // Reset while the surface is off screen so reopening never reveals the
     // previous carousel card during a smooth snap back to the player.
     setPanel('stage');
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        if (!untrack(nowPlayingOpen)) restoreFocus?.focus({ preventScroll: true });
+      });
+    } else if (!untrack(nowPlayingOpen)) {
+      restoreFocus?.focus({ preventScroll: true });
+    }
   };
 
   /**
@@ -371,8 +415,11 @@ export function PlayerSurface() {
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
     onCleanup(() => {
+      window.clearTimeout(openTimer);
+      window.clearTimeout(focusTimer);
       window.clearTimeout(closeTimer);
       media?.removeEventListener('change', syncLayout);
+      surfaceEl?.removeEventListener('transitionend', onOpenTransitionEnd);
       surfaceEl?.removeEventListener('animationend', onCloseAnimationEnd);
       surfaceEl?.removeEventListener('touchstart', beginTouch);
       touchMove?.release();
@@ -398,6 +445,7 @@ export function PlayerSurface() {
           [styles.auto]: auto(),
         }}
         data-player-surface-open={nowPlayingOpen() ? '' : undefined}
+        data-surface-animating={surfaceAnimating() ? '' : undefined}
         data-player-stage=""
         aria-hidden={!nowPlayingOpen()}
         tabIndex={-1}
@@ -486,6 +534,7 @@ export function PlayerSurface() {
               setCarouselProgress(index);
             }}
             surfaceOpen={nowPlayingOpen() && !auto()}
+            panelsReady={surfaceSettled()}
             onCloseSurface={() => closeSurface()}
           />
           </Show>
@@ -508,6 +557,7 @@ export function PlayerSurface() {
                 setCarouselProgress(index);
               }}
               surfaceOpen={nowPlayingOpen() && auto()}
+              panelsReady={surfaceSettled()}
             />
           </Show>
         </div>

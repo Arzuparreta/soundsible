@@ -34,9 +34,8 @@ export default function AlbumGrid(props: { albums: CatalogAlbum[] }) {
               </Show>
               <div class={styles.sleeve}>
                 <div class={styles.cover} style={{ position: 'relative', background: coverGradient(album().title) }}>
-                  {/* A new element per record: a reused image would keep showing the
-                    * previous record's sleeve until the next one arrived. */}
-                  <Show when={album().cover_track_id} keyed>{(id) => <CoverImage src={coverUrl(id)} />}</Show>
+                  {/* Kept mounted per recycled card slot; ArtworkImage hides stale artwork until decoded. */}
+                  <Show when={album().cover_track_id}>{(id) => <CoverImage src={coverUrl(id())} />}</Show>
                 </div>
                 <span class={styles.title}>{album().title}</span>
               </div>

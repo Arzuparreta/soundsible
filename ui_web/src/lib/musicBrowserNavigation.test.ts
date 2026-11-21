@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { createComputed, createRoot } from 'solid-js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { musicBrowserNavigation as nav } from './musicBrowserNavigation';
 
 describe('music explorer history', () => {
@@ -20,5 +21,19 @@ describe('music explorer history', () => {
     expect(nav.current().view).toEqual({ kind: 'playlist', name: 'Viaje largo' });
     nav.select('playlists');
     expect(nav.current().view).toEqual({ kind: 'playlist', name: 'Viaje largo' });
+  });
+  it('records scroll offsets without firing reactive navigation subscribers', () => {
+    const spy = vi.fn();
+    createRoot((dispose) => {
+      createComputed(() => {
+        spy(nav.current().view.kind);
+      });
+      expect(spy).toHaveBeenCalledTimes(1);
+      nav.setScroll(420);
+      nav.update({ scroll: 840 });
+      expect(nav.current().scroll).toBe(840);
+      expect(spy).toHaveBeenCalledTimes(1);
+      dispose();
+    });
   });
 });

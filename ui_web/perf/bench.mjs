@@ -32,9 +32,17 @@ const SURFACES = {
   playlist: { hash: '#/playlists/Playlist%201', ready: '[data-song-row], [data-music-list-row]' },
   // The full player's own library browser: opened over the Songs view, with
   // the wheel over its tile.
-  'player-browser': { player: 'browser', ready: '[data-player-tile="browser"] [data-music-list-row], [data-player-tile="browser"] [data-song-row]' },
-  'player-queue': { player: 'queue', ready: '[data-player-tile="queue"] [data-drag-row]' },
+  'player-browser': { player: 'browser', ready: '#now-playing-view [data-player-tile="browser"] [data-music-list-row], #now-playing-view [data-player-tile="browser"] [data-song-row]' },
+  'player-queue': { player: 'queue', ready: '#now-playing-view [data-player-tile="queue"] [data-drag-row]' },
 };
+
+/** Opt-in surfaces outside the default scroll suite (player transition & DJ mode). */
+const EXTRA_SURFACES = {
+  'player-open': { action: 'player-open', ready: '[data-song-row], [data-music-list-row]' },
+  'dj-browser': { player: 'browser', auto: true, ready: '#auto-mode-view [data-player-tile="browser"] [data-music-list-row], #auto-mode-view [data-player-tile="browser"] [data-song-row]' },
+  'dj-idle': { player: 'stage', auto: true, idle: true, ready: '#auto-mode-view [data-player-tile="stage"]' },
+};
+const ALL_SURFACES = { ...SURFACES, ...EXTRA_SURFACES };
 
 /** The input: one wheel event per 60 Hz frame for 3.2 s, 7,500 px/s. */
 const BURST_MS = 3200, WHEEL_INTERVAL_MS = 16, WHEEL_DELTA = 120;
@@ -77,7 +85,7 @@ const tag = process.env.TAG ?? 'run';
 // builds the bundle unminified, so the functions keep their names. The numbers
 // of a profiled run are not comparable with a normal one.
 const profileDir = process.env.PROFILE;
-for (const name of surfaces) if (!SURFACES[name]) throw new Error(`Unknown surface ${name}; known: ${Object.keys(SURFACES).join(', ')}`);
+for (const name of surfaces) if (!ALL_SURFACES[name]) throw new Error(`Unknown surface ${name}; known: ${Object.keys(ALL_SURFACES).join(', ')}`);
 
 // A production bundle, built outside the tree: `ui_web/dist` belongs to the
 // running engine and must not be touched from here.
@@ -140,7 +148,9 @@ function selfTime(profile, top = 60) {
 }
 
 async function measure(name, rate) {
-  const surface = SURFACES[name];
+  const surface = ALL_SURFACES[name];
+  const isAction = Boolean(surface.action);
+  const isIdle = idle || Boolean(surface.idle);
   const { context, page } = await open();
   let tracing = false;
   try {
@@ -152,7 +162,14 @@ async function measure(name, rate) {
       await page.waitForFunction(() => navigator.mediaSession?.playbackState === 'playing', undefined, { timeout: 15_000 });
     }
     let over = null;
-    if (surface.player) {
+    if (isAction) {
+      if (!playing) {
+        await page.getByRole('button', { name: /^Play .+ by / }).first().click();
+        await page.waitForFunction(() => navigator.mediaSession?.playbackState === 'playing', undefined, { timeout: 15_000 });
+        await page.getByRole('button', { name: 'Pause' }).first().click();
+        await page.waitForFunction(() => navigator.mediaSession?.playbackState !== 'playing', undefined, { timeout: 15_000 });
+      }
+    } else if (surface.player) {
       if (surface.player === 'queue') {
         // Populate the real manual lane through the same menu a listener uses.
         // This happens before throttling/tracing, never through app internals.
@@ -175,21 +192,27 @@ async function measure(name, rate) {
         await page.waitForFunction(() => navigator.mediaSession?.playbackState === 'playing', undefined, { timeout: 15_000 });
       }
       await page.locator('[data-omni-cover]').locator('xpath=preceding-sibling::button').click({ timeout: 10_000 });
-      if (!playing) {
-        await page.locator('[data-player-tile="stage"]').getByRole('button', { name: 'Pause' }).click();
-        await page.waitForFunction(() => navigator.mediaSession?.playbackState !== 'playing', undefined, { timeout: 15_000 });
+      if (surface.auto) {
+        await page.locator('#now-playing-mode-dj').click({ timeout: 10_000 });
+        await page.waitForFunction(() => document.documentElement.dataset.playerSurface === 'auto', undefined, { timeout: 10_000 });
       }
-      if (width < 1024) {
+      if (!playing) {
+        await page.locator('[data-player-tile="stage"]').getByRole('button', { name: 'Pause' }).click().catch(() => {});
+        await page.waitForFunction(() => navigator.mediaSession?.playbackState !== 'playing', undefined, { timeout: 15_000 }).catch(() => {});
+      }
+      if (width < 1024 && surface.player !== 'stage') {
+        const panelIndex = surface.player === 'browser' ? 0 : 2;
         await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button')
-          .nth(surface.player === 'browser' ? 0 : 2).click();
+          .nth(panelIndex).click();
         await page.waitForFunction(panel => {
           const tile = document.querySelector(`[data-player-tile="${panel}"]`);
-          const carousel = document.querySelector('[data-now-playing-carousel]');
+          const carousel = document.querySelector(document.documentElement.dataset.playerSurface === 'auto' ? '[data-auto-carousel]' : '[data-now-playing-carousel]');
           return tile && carousel && Math.abs(tile.getBoundingClientRect().left - carousel.getBoundingClientRect().left) < 2;
         }, surface.player);
       }
+      const modeScope = surface.auto ? '#auto-mode-view' : '#now-playing-view';
       await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
-      over = await page.locator(`[data-player-tile="${surface.player}"]`).boundingBox();
+      over = await page.locator(`${modeScope} [data-player-tile="${surface.player}"]`).boundingBox();
     } else if (name !== 'songs') {
       await page.evaluate((hash) => { window.location.hash = hash; }, surface.hash);
       await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
@@ -231,7 +254,16 @@ async function measure(name, rate) {
     const started = await page.evaluate(() => { performance.mark('bench-start'); return performance.now(); });
     const sends = [];
     const began = Date.now();
-    if (touch) {
+    if (surface.action === 'player-open') {
+      const opener = page.locator('[data-omni-cover]').locator('xpath=preceding-sibling::button');
+      const closer = page.locator('[data-player-surface-open]').getByRole('button', { name: 'Close', exact: true });
+      for (let cycle = 0; cycle < 2; cycle += 1) {
+        await opener.click({ timeout: 10_000 });
+        await sleep(650);
+        await closer.click({ timeout: 10_000 });
+        await sleep(550);
+      }
+    } else if (touch) {
       // A paced finger stroke inside the viewport followed by native fling.
       // synthesizeScrollGesture produced pointer events but no actual scroll
       // on this Chromium build; the motion guard rejects that empty sample.
@@ -245,19 +277,19 @@ async function measure(name, rate) {
       await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       await sleep(Math.max(0, began + BURST_MS - Date.now()));
     }
-    for (let tick = 0; !idle && !touch && tick * WHEEL_INTERVAL_MS < BURST_MS; tick += 1) {
+    for (let tick = 0; !isIdle && !isAction && !touch && tick * WHEEL_INTERVAL_MS < BURST_MS; tick += 1) {
       const due = began + tick * WHEEL_INTERVAL_MS;
       if (due > Date.now()) await sleep(due - Date.now());
       sends.push(session.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY: WHEEL_DELTA }).catch(() => {}));
     }
-    // INPUT=none measures what the page costs while nothing is touched.
-    if (idle) await sleep(BURST_MS);
+    // INPUT=none or idle surface measures what the page costs while nothing is touched.
+    if (isIdle && !isAction) await sleep(BURST_MS);
     // The tail: frames the burst caused that are still being produced.
     await sleep(400);
     const lastScroll = await page.evaluate(() => window.__benchLastScroll);
     const now = await page.evaluate(() => performance.now());
     const SETTLE_MS = 100;
-    const ended = idle || !lastScroll ? now : Math.min(now, lastScroll + SETTLE_MS);
+    const ended = isIdle || isAction || !lastScroll ? now : Math.min(now, lastScroll + SETTLE_MS);
     if (profileDir) {
       const { profile } = await session.send('Profiler.stop');
       mkdirSync(profileDir, { recursive: true });
@@ -280,7 +312,7 @@ async function measure(name, rate) {
     if (!mark) throw new Error(`${name}: the trace has no bench-start mark, so its window cannot be placed`);
     const window = { from: mark, to: mark + (ended - started) * 1000 };
     const scrolled = (await page.evaluate(() => [...document.querySelectorAll('*')].reduce((sum, element) => sum + element.scrollTop, 0))) - scrollBefore;
-    if (!idle && scrolled < Math.min(height, scrollportHeight)) throw new Error(`${name}: the burst scrolled only ${scrolled}px — the input did not travel one scrollport`);
+    if (!isIdle && !isAction && scrolled < Math.min(height, scrollportHeight)) throw new Error(`${name}: the burst scrolled only ${scrolled}px — the input did not travel one scrollport`);
     const page_state = await page.evaluate(() => ({ dom_elements: document.querySelectorAll('*').length, playing_at_end: navigator.mediaSession?.playbackState === 'playing' }));
     if (playing && !page_state.playing_at_end) throw new Error(`${name}: playback stopped during the run`);
     return { ...analyse(events, window), scrolled_px: Math.round(scrolled), scrollport_height: scrollportHeight, moving_ms: Math.round(ended - started), ...page_state };

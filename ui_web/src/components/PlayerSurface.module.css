@@ -40,9 +40,17 @@
   transform: translateY(100%);
   transition:
     transform var(--dur-medium) var(--ease-out),
-    opacity var(--dur-medium) var(--ease-out),
     visibility 0s linear var(--dur-medium);
   isolation: isolate;
+}
+
+.surface:not(.open),
+.view:not(.viewActive) {
+  --decorative-animation-state: paused;
+}
+
+.surface[data-surface-animating] {
+  will-change: transform;
 }
 
 .surface:focus {
@@ -132,6 +140,10 @@
 
 .backdrop[data-rasterized] {
   filter: none;
+}
+
+.surface:not(.open):not(.closing) .backdrop {
+  display: none;
 }
 
 .backdrop canvas {

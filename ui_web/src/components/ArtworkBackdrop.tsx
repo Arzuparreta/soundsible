@@ -1,8 +1,10 @@
 import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 
-/** Rasterize the wallpaper's existing filter when its image/theme/size changes.
- * CPU composition otherwise evaluates the viewport-sized blur again on every
- * scroll frame. Engines without Canvas filters retain the CSS implementation. */
+const MAX_BACKDROP_EDGE = 240;
+
+/** Rasterize the wallpaper's existing filter at a bounded resolution when its
+ * image, theme, or aspect changes. Keeping the canvas at <= 240px cuts software
+ * blur and texture bandwidth by ~80x while the GPU compositor upscales for free. */
 export function ArtworkBackdrop(props: { src: string; active: boolean; visible: boolean; class: string; activeClass: string }) {
   let element!: HTMLDivElement;
   let canvas!: HTMLCanvasElement;
@@ -10,6 +12,7 @@ export function ArtworkBackdrop(props: { src: string; active: boolean; visible: 
   let image: HTMLImageElement | undefined;
   let frame = 0;
   let context: CanvasRenderingContext2D | null = null;
+  let lastKey = '';
 
   const paint = () => {
     if (!props.visible || !context || !image?.naturalWidth || !element.clientWidth || !element.clientHeight) return;
@@ -18,14 +21,25 @@ export function ArtworkBackdrop(props: { src: string; active: boolean; visible: 
     // wrapper until the bitmap is complete, so loading/failure has a fallback.
     delete element.dataset.rasterized;
     const filter = getComputedStyle(element).filter;
-    // The wallpaper is blurred by dozens of CSS pixels; one raster pixel per
-    // CSS pixel preserves that geometry without a DPR-squared bitmap budget.
-    canvas.width = width;
-    canvas.height = height;
-    context.filter = filter;
-    const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+    const ratio = Math.min(1, MAX_BACKDROP_EDGE / Math.max(width, height));
+    const drawWidth = Math.max(1, Math.round(width * ratio));
+    const drawHeight = Math.max(1, Math.round(height * ratio));
+    const key = `${image.currentSrc || props.src}|${filter}|${drawWidth}x${drawHeight}`;
+    if (key === lastKey) {
+      element.dataset.rasterized = '';
+      setReady(true);
+      return;
+    }
+    const scaledFilter = filter.replace(/blur\(([\d.]+)px\)/g, (_match, px) =>
+      `blur(${(Number(px) * ratio).toFixed(2)}px)`);
+    canvas.width = drawWidth;
+    canvas.height = drawHeight;
+    canvas.dataset.sourceFilter = filter;
+    context.filter = scaledFilter;
+    const scale = Math.max(drawWidth / image.naturalWidth, drawHeight / image.naturalHeight);
     const drawnWidth = image.naturalWidth * scale, drawnHeight = image.naturalHeight * scale;
-    context.drawImage(image, (width - drawnWidth) / 2, (height - drawnHeight) / 2, drawnWidth, drawnHeight);
+    context.drawImage(image, (drawWidth - drawnWidth) / 2, (drawHeight - drawnHeight) / 2, drawnWidth, drawnHeight);
+    lastKey = key;
     element.dataset.rasterized = '';
     setReady(true);
   };
@@ -50,6 +64,7 @@ export function ArtworkBackdrop(props: { src: string; active: boolean; visible: 
   createEffect(() => {
     const source = props.src;
     setReady(false);
+    lastKey = '';
     if (element) delete element.dataset.rasterized;
     image = undefined;
     if (!source) return;
@@ -62,6 +77,6 @@ export function ArtworkBackdrop(props: { src: string; active: boolean; visible: 
   return <div ref={element} class={props.class} classList={{ [props.activeClass]: props.active }}
     style={{ 'background-image': !ready() && props.src ? `url("${props.src}")` : undefined }}
     data-player-backdrop={props.active ? 'active' : 'inactive'} aria-hidden="true">
-    <canvas ref={canvas} hidden={!ready()} />
+    <canvas ref={canvas} width={0} height={0} hidden={!ready()} />
   </div>;
 }

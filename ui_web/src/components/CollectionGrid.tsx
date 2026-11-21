@@ -1,8 +1,14 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type Accessor, type JSX } from 'solid-js';
-import { createVirtualizer } from '@tanstack/solid-virtual';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor, type JSX } from 'solid-js';
+import { createVirtualizer, defaultRangeExtractor } from '@tanstack/solid-virtual';
 import { createScrollOrigin } from '../lib/scrollOrigin';
-import { createSlots } from './CollectionView';
-import { ArtworkWidthContext } from '../lib/artworkSlot';
+import {
+  createScrollSettled,
+  createSlots,
+  gridSlotClass,
+  hiddenSlotClass,
+  scrollingFastClass,
+} from './CollectionView';
+import { ArtworkWidthContext, ScrollActivityContext } from '../lib/artworkSlot';
 
 interface Tracks { columns: number; columnWidth: number; rowGap: number }
 
@@ -22,9 +28,6 @@ function readTracks(grid: HTMLElement): Tracks {
  * scrolls out is reused for the card that scrolls in (see `createSlots`). The number of
  * columns is read back from the browser, so the stylesheet remains the only
  * place that knows the card recipe.
- *
- * Rows can differ in height (a title that wraps), so each rendered row is
- * measured and the spacers use the measured heights.
  */
 export function CollectionGrid<T>(props: {
   items: readonly T[];
@@ -41,29 +44,74 @@ export function CollectionGrid<T>(props: {
   children: (item: Accessor<T>, index: Accessor<number>) => JSX.Element;
 }) {
   let grid: HTMLDivElement | undefined;
+  let lastWidth = -1;
   const [tracks, setTracks] = createSignal<Tracks>({ columns: 1, columnWidth: 160, rowGap: 0 }, {
     equals: (a, b) => a.columns === b.columns && a.columnWidth === b.columnWidth && a.rowGap === b.rowGap,
   });
-  // The grid's width decides its columns.
+  const [captionExtra, setCaptionExtra] = createSignal<number>();
+  let captionFrame = 0;
+  onCleanup(() => cancelAnimationFrame(captionFrame));
+
+  const measureCaptionOnce = (measuredTracks: Tracks) => {
+    if (props.captionHeight != null || typeof requestAnimationFrame === 'undefined') return;
+    cancelAnimationFrame(captionFrame);
+    captionFrame = requestAnimationFrame(() => {
+      if (!grid) return;
+      const cardSlot = grid.querySelector<HTMLElement>(':scope > :not([data-grid-spacer])');
+      if (!cardSlot) return;
+      const box = cardSlot.getBoundingClientRect();
+      if (box.width <= 0 || box.height <= measuredTracks.columnWidth) return;
+      const extra = Math.ceil(box.height - measuredTracks.columnWidth);
+      setCaptionExtra((prev) => (prev === extra ? prev : extra));
+    });
+  };
+
+  // Spacer changes grow/shrink height during scroll; ignore same-width ResizeObserver callbacks
+  // so scrolling never triggers getComputedStyle / getBoundingClientRect loops.
   const { scroller, origin: margin } = createScrollOrigin(() => grid, {
     scrollElement: props.scrollElement,
-    onLayout: () => setTracks(readTracks(grid!)),
+    onLayout: () => {
+      if (!grid) return;
+      const nextWidth = grid.clientWidth;
+      if (nextWidth > 0 && nextWidth === lastWidth) return;
+      lastWidth = nextWidth;
+      const next = readTracks(grid);
+      setTracks(next);
+      measureCaptionOnce(next);
+    },
   });
+  const { scrolling, fast } = createScrollSettled(scroller);
   const rowCount = () => Math.ceil(props.items.length / tracks().columns);
 
+  let previousGridRange: number[] = [];
   const virtualizer = createVirtualizer({
     get count() { return rowCount(); },
     getScrollElement: () => scroller(),
-    estimateSize: () => tracks().columnWidth + (props.captionHeight ?? 64),
+    estimateSize: () => tracks().columnWidth + (props.captionHeight ?? untrack(captionExtra) ?? 64),
     get gap() { return tracks().rowGap; },
     get scrollMargin() { return margin(); },
     get overscan() { return props.overscan ?? 2; },
-    onChange: (instance) => setScrolling(instance.isScrolling),
+    rangeExtractor: (range) => {
+      if (rowCount() > 8 && (scroller()?.clientHeight ?? 0) > 700) {
+        const step = 2;
+        const qStart = Math.floor(range.startIndex / step) * step;
+        const qEnd = Math.ceil((range.endIndex + 1) / step) * step - 1;
+        const start = Math.max(0, qStart - range.overscan);
+        const end = Math.min(range.count - 1, qEnd + range.overscan);
+        const next: number[] = [];
+        for (let index = start; index <= end; index += 1) next.push(index);
+        if (previousGridRange.length === next.length && previousGridRange.every((v, i) => v === next[i])) {
+          return previousGridRange;
+        }
+        previousGridRange = next;
+        return next;
+      }
+      return defaultRangeExtractor(range);
+    },
   });
-  // A different column count is a different set of rows: forget their sizes.
-  createEffect(on(() => tracks().columns, () => virtualizer.measure(), { defer: true }));
+  // A different column count or measured caption height changes row heights once per layout pass.
+  createEffect(on([() => tracks().columns, captionExtra], () => virtualizer.measure(), { defer: true }));
 
-  const [scrolling, setScrolling] = createSignal(false);
   const rows = () => virtualizer.getVirtualItems();
   const first = () => rows()[0];
   const last = () => rows()[rows().length - 1];
@@ -87,51 +135,37 @@ export function CollectionGrid<T>(props: {
   /** The grid line of the first rendered row: the spacer above takes line 1. */
   const firstLine = () => (before() > 0 ? 2 : 1);
 
-  // Every card of a grid row is stretched to the row, so one card is the row.
-  createEffect(() => {
-    const from = first();
-    const held = slots();
-    if (!from || !held.length || typeof requestAnimationFrame === 'undefined') return;
-    const columns = tracks().columns;
-    const frame = requestAnimationFrame(() => {
-      for (const slot of held) {
-        const index = slot.place().index;
-        const height = index % columns === 0 ? slot.element?.offsetHeight ?? 0 : 0;
-        if (height > 0) virtualizer.resizeItem(Math.floor(index / columns), height);
-      }
-    });
-    onCleanup(() => cancelAnimationFrame(frame));
-  });
-
   return (
-    <div ref={grid} class={props.class} data-collection-grid>
+    <div ref={grid} class={props.class} classList={{ [scrollingFastClass]: fast() }} data-collection-grid>
       <Show when={before() > 0}>
         <div data-grid-spacer aria-hidden="true" style={{ 'grid-area': '1 / 1 / 2 / -1', height: `${before()}px` }} />
       </Show>
-      <For each={slots()}>
-        {(slot) => {
-          const index = () => slot.place().index;
-          const item = () => props.items[index()];
-          return (
-            // Placed by line, not by document order, so a reused slot does not
-            // have to move in the document while the grid scrolls.
-            <div
-              ref={(element) => { slot.element = element; }}
-              style={{
-                display: 'grid',
-                'min-width': 0,
-                contain: 'layout style',
-                'grid-row': Math.floor(index() / tracks().columns) - (first()?.index ?? 0) + firstLine(),
-                'grid-column': (index() % tracks().columns) + 1,
-              }}
-            >
-              <ArtworkWidthContext.Provider value={() => tracks().columnWidth}>
-                <Show when={item() !== undefined}>{props.children(item as Accessor<T>, index)}</Show>
-              </ArtworkWidthContext.Provider>
-            </div>
-          );
-        }}
-      </For>
+      <ScrollActivityContext.Provider value={fast}>
+        <For each={slots()}>
+          {(slot) => {
+            const index = () => slot.place().index;
+            const item = () => props.items[index()];
+            return (
+              // Placed by line, not by document order, so a reused slot does not
+              // have to move in the document while the grid scrolls.
+              <div
+                ref={(element) => { slot.element = element; }}
+                class={gridSlotClass}
+                classList={{ [hiddenSlotClass]: !slot.active() }}
+                aria-hidden={!slot.active() ? 'true' : undefined}
+                style={{
+                  'grid-row': Math.floor(index() / tracks().columns) - (first()?.index ?? 0) + firstLine(),
+                  'grid-column': (index() % tracks().columns) + 1,
+                }}
+              >
+                <ArtworkWidthContext.Provider value={() => tracks().columnWidth}>
+                  <Show when={item() !== undefined}>{props.children(item as Accessor<T>, index)}</Show>
+                </ArtworkWidthContext.Provider>
+              </div>
+            );
+          }}
+        </For>
+      </ScrollActivityContext.Provider>
       <Show when={after() > 0}>
         <div data-grid-spacer aria-hidden="true" style={{ 'grid-area': `${rows().length + firstLine()} / 1 / auto / -1`, height: `${after()}px` }} />
       </Show>

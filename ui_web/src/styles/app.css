@@ -75,12 +75,7 @@ html[data-page-hidden] {
 
 #app {
   height: 100%;
-  transform-origin: center;
-  transition:
-    transform 520ms var(--ease-out),
-    filter 420ms var(--ease-out),
-    opacity 420ms var(--ease-out),
-    visibility 0s linear 0s;
+  transition: visibility 0s linear 0s;
 }
 
 /* The player surface is a portal onto <body>: full viewport, fixed, and opaque
@@ -103,13 +98,7 @@ html[data-player-surface]:not([data-player-swiping]) #app {
   visibility: hidden;
   /* Hide late (after the surface has landed), reveal immediately on the way back
      — the base rule's 0s delay handles the return. */
-  transition-delay: 0s, 0s, 0s, 520ms;
-}
-
-html[data-player-surface='auto'] #app {
-  opacity: 0.42;
-  filter: blur(16px) saturate(0.75);
-  transform: scale(0.96);
+  transition-delay: 520ms;
 }
 
 /* Reduced motion collapses the durations (tokens.css) but not the delays, and a
@@ -117,18 +106,6 @@ html[data-player-surface='auto'] #app {
 @media (prefers-reduced-motion: reduce) {
   html[data-player-surface]:not([data-player-swiping]) #app {
     transition-delay: 0s;
-  }
-}
-
-/* A transform or filter on #app makes it the containing block for fixed
-   descendants. Now Playing is itself fixed, so either effect would temporarily
-   position the whole sheet against the app shell instead of the viewport and
-   make it jump when the transition ends. Mobile keeps only the opacity handoff;
-   Auto supplies its own blur and depth. Desktop retains the established effect. */
-@media (max-width: 767px) {
-  html[data-player-surface='auto'] #app {
-    filter: none;
-    transform: none;
   }
 }
 

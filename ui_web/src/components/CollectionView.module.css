@@ -1,0 +1,31 @@
+.canvas {
+  position: relative;
+  width: 100%;
+}
+
+.slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  contain: size layout style;
+}
+
+.slotMeasured {
+  contain: layout style;
+}
+
+.gridSlot {
+  display: grid;
+  min-width: 0;
+  contain: layout style;
+}
+
+.scrollingFast {
+  pointer-events: none;
+}
+
+.slotHidden {
+  display: none;
+  pointer-events: none;
+}

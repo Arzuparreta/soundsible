@@ -1,7 +1,7 @@
 import { ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { savedFromTrack } from '../lib/saved';
-import { createMemo, createSignal, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { createActivityMemo } from '../lib/activityMemo';
 import { mobileListLayout } from '../lib/listLayout';
 import { pageVisible } from '../lib/pageVisibility';
@@ -57,7 +57,28 @@ export function AutoMode(props: {
   onPanelChange: (panel: AutoModePanelId) => void;
   onCarouselProgress?: (index: number, live: boolean) => void;
   surfaceOpen: boolean;
+  panelsReady?: boolean;
 }) {
+  const [routeMounted, setRouteMounted] = createSignal(props.panelsReady ?? true);
+  const [browserMounted, setBrowserMounted] = createSignal(props.panelsReady ?? true);
+  createEffect(() => {
+    if (!props.panelsReady || (routeMounted() && browserMounted())) return;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    if (typeof requestAnimationFrame === 'function') {
+      firstFrame = requestAnimationFrame(() => {
+        setRouteMounted(true);
+        secondFrame = requestAnimationFrame(() => setBrowserMounted(true));
+      });
+      onCleanup(() => {
+        cancelAnimationFrame(firstFrame);
+        cancelAnimationFrame(secondFrame);
+      });
+    } else {
+      setRouteMounted(true);
+      setBrowserMounted(true);
+    }
+  });
   const [layout, setLayout] = createSignal(readLayout());
   // Explicit picker intent distinguishes requesting a song at a seam from
   // adding reference material; ordinary browsing remains free of either task.
@@ -99,16 +120,26 @@ export function AutoMode(props: {
     setLayoutPersisted(autoModeLayoutFromPreset('balanced'));
   };
 
-  const panelActive = (panel: AutoModePanelId) => props.surfaceOpen && pageVisible()
+  const panelActive = (panel: AutoModePanelId) => props.surfaceOpen && (props.panelsReady ?? true) && pageVisible()
     && (!mobileListLayout() || props.panel === panel);
   const routeActive = () => panelActive('route');
-  const upcoming = createActivityMemo(routeActive, () => state.playback.queue.slice(Math.max(0, state.playback.index + 1)), []);
+  const upcoming = createActivityMemo(
+    routeActive,
+    () => state.playback.queue.slice(Math.max(0, state.playback.index + 1)),
+    [],
+    () => [state.playback.queue, state.playback.index],
+  );
   const firstEditable = createActivityMemo(routeActive, () => {
     const index = state.playback.index;
     const floor = state.autoMode.transition.status === 'idle' ? index : index + 1;
     return editableFrom(routeRows(state.playback.queue), index, floor);
-  }, 0);
-  const staleSeams = createActivityMemo(routeActive, () => new Set(state.autoMode.staleSeams), new Set<string>());
+  }, 0, () => [state.playback.queue, state.playback.index, state.autoMode.transition.status]);
+  const staleSeams = createActivityMemo(
+    routeActive,
+    () => new Set(state.autoMode.staleSeams),
+    new Set<string>(),
+    () => [state.autoMode.staleSeams],
+  );
   /** The rows that travel together. A bridge exists only to reach the song it
    * leads into, so aiming at either of them describes the same block. */
   const routeBlock = (queueId: string): string[] => {
@@ -176,7 +207,7 @@ export function AutoMode(props: {
       onCarry: committed ? undefined : () => setCarriedTrack({ track, queueId: track.queueId }),
       menu,
     };
-  }), []);
+  }), [], () => [upcoming(), state.autoMode.transition.status, state.playback.djMixing, staleSeams()]);
 
   const mixPending = createMemo(() => routeEntries().some((entry) => entry.stale));
   const routeWaiting = createMemo(() => (
@@ -364,7 +395,11 @@ export function AutoMode(props: {
           onSelect={applyLayoutPreset}
           onReset={resetDesktopLayout}
         />}
-        renderPanel={(panel, dragHandle) => panel === 'browser' ? Browser(dragHandle) : panel === 'stage' ? Stage(dragHandle) : Route(dragHandle)}
+        renderPanel={(panel, dragHandle) => panel === 'stage'
+          ? Stage(dragHandle)
+          : panel === 'browser'
+            ? <Show when={browserMounted()}>{Browser(dragHandle)}</Show>
+            : <Show when={routeMounted()}>{Route(dragHandle)}</Show>}
       />
       <Show when={carriedTrack()}>
         {(track) => (

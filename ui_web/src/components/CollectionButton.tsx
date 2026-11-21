@@ -10,7 +10,11 @@ export type CollectionState = 'unsaved' | 'streaming' | 'downloading' | 'owned';
 
 export interface CollectionButtonProps {
   /** The song this control acts on — identity plus snapshot, from `lib/saved`. */
-  entry: SavedEntry;
+  entry?: SavedEntry;
+  /** Lightweight key array to observe state without allocating an eager snapshot per recycled row. */
+  keys?: string[];
+  /** Lazy snapshot factory invoked only when the user activates the control. */
+  resolveEntry?: () => SavedEntry;
   /** Smaller variant for dense rows (search results, album tracklists). */
   compact?: boolean;
   /** Extra class from the host surface, for layout only. */
@@ -45,7 +49,7 @@ export interface CollectionButtonProps {
  * and only appears once a song has passed the first step.
  */
 export function CollectionButton(props: CollectionButtonProps) {
-  const keys = createMemo(() => props.entry.keys);
+  const keys = createMemo(() => props.keys ?? props.entry?.keys ?? []);
   const state = createMemo<CollectionState>(() => {
     if (ownedTrackForKeys(keys())) return 'owned';
     if (props.busy || isDownloadingKeys(keys())) return 'downloading';
@@ -68,10 +72,12 @@ export function CollectionButton(props: CollectionButtonProps) {
   const act = (event: MouseEvent) => {
     // Rows are buttons themselves; acting on one must not also play it.
     event.stopPropagation();
-    if (state() === 'unsaved') actions.toggleSaved(props.entry);
+    const resolved = props.entry ?? props.resolveEntry?.();
+    if (!resolved) return;
+    if (state() === 'unsaved') actions.toggleSaved(resolved);
     else if (state() === 'streaming') {
       if (props.onDownload) props.onDownload();
-      else void actions.downloadSaved(props.entry);
+      else void actions.downloadSaved(resolved);
     }
   };
 

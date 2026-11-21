@@ -124,10 +124,9 @@
   z-index: 1;
   width: 0.62rem;
   height: 0.62rem;
-  border: 2px solid color-mix(in srgb, var(--accent) 62%, var(--stage-panel));
+  border: 2px solid var(--accent);
   border-radius: var(--radius-full);
   background: var(--stage-panel);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 24%, transparent);
   animation: routeLoadingStep 1.35s ease-in-out infinite;
   animation-play-state: var(--decorative-animation-state, running);
 }
@@ -141,14 +140,12 @@
 
 @keyframes routeLoadingStep {
   0%, 55%, 100% {
-    border-color: color-mix(in srgb, var(--accent) 42%, var(--stage-line));
-    box-shadow: 0 0 0 0 transparent;
+    opacity: 0.45;
     transform: scale(0.82);
   }
   22% {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 0.34rem color-mix(in srgb, var(--accent) 14%, transparent);
-    transform: scale(1);
+    opacity: 1;
+    transform: scale(1.06);
   }
 }
 
@@ -158,8 +155,7 @@
   }
 
   .routeLoadingMark i:nth-child(2) {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--accent) 12%, transparent);
+    opacity: 1;
     transform: scale(1);
   }
 }

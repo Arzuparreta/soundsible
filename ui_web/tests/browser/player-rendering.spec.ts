@@ -25,16 +25,26 @@ test('wallpaper retains artwork and themes and parks only when hidden', async ({
     const canvas = element.querySelector('canvas');
     const context = canvas?.getContext('2d');
     const rasterized = element.hasAttribute('data-rasterized');
-    const pixel = rasterized && context ? [...context.getImageData(canvas!.width / 2, canvas!.height / 2, 1, 1).data] : null;
-    return { image: css.backgroundImage, filter: rasterized ? context!.filter : css.filter,
+    const pixel = rasterized && context
+      ? [...context.getImageData(Math.floor(canvas!.width / 2), Math.floor(canvas!.height / 2), 1, 1).data]
+      : null;
+    return {
+      image: css.backgroundImage,
+      filter: rasterized ? (canvas!.dataset.sourceFilter ?? '') : css.filter,
+      contextFilter: rasterized ? context!.filter : css.filter,
+      canvasWidth: canvas?.width ?? 0,
       rasterized, supported: !!context && 'filter' in context, pixel, duration: css.animationDuration,
-      timing: css.animationTimingFunction, transition: css.transitionDuration };
+      timing: css.animationTimingFunction, transition: css.transitionDuration,
+    };
   });
   await expect.poll(async () => (await appearance()).duration).toBe('38s');
   if ((await appearance()).supported) await expect.poll(async () => (await appearance()).rasterized).toBe(true);
   const dark = await appearance();
-  if (dark.rasterized) expect(dark.pixel![0]).toBeGreaterThan(dark.pixel![1]);
-  else expect(dark.image).toContain('/api/static/cover/');
+  if (dark.rasterized) {
+    expect(dark.pixel![0]).toBeGreaterThan(dark.pixel![1]);
+    expect(dark.canvasWidth).toBeLessThanOrEqual(240);
+    expect(dark.contextFilter).toContain('blur(');
+  } else expect(dark.image).toContain('/api/static/cover/');
   expect(dark.filter).toContain('blur(62px)');
   expect(dark.duration).toBe('38s');
   expect(dark.timing).toMatch(/^steps\(76(?:, end)?\)$/);
@@ -94,7 +104,11 @@ test('a collapsed player defers wallpaper raster work until it opens again', asy
   // Wait for the finite exit: the backdrop is still visible while it travels.
   await expect.poll(() => page.locator('[data-player-stage]').evaluate(element => getComputedStyle(element).visibility)).toBe('hidden');
   const filters = () => page.locator('[data-player-backdrop] canvas').evaluateAll(elements =>
-    elements.map(element => (element as HTMLCanvasElement).getContext('2d')!.filter));
+    elements.map(element => ({
+      source: (element as HTMLCanvasElement).dataset.sourceFilter ?? '',
+      context: (element as HTMLCanvasElement).getContext('2d')!.filter,
+      width: (element as HTMLCanvasElement).width,
+    })));
   const parked = await filters();
   await page.evaluate(async () => {
     document.documentElement.dataset.theme = 'light';
@@ -102,7 +116,10 @@ test('a collapsed player defers wallpaper raster work until it opens again', asy
   });
   expect(await filters()).toEqual(parked);
   await page.locator('[data-omni-player]').getByRole('button', { name: /^NORMAL:/ }).click();
-  await expect.poll(filters).toContain('blur(64px) saturate(1.85) brightness(1.22)');
+  await expect.poll(async () => (await filters()).map(item => item.source)).toContain('blur(64px) saturate(1.85) brightness(1.22)');
+  for (const item of await filters()) {
+    if (item.source) expect(item.width).toBeLessThanOrEqual(240);
+  }
 });
 
 test('the queue equaliser moves all its bars on the same few frames a second', async ({ page }) => {

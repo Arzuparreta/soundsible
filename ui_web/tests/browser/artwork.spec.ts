@@ -67,7 +67,7 @@ for (const catalog of [false, true]) {
   });
 }
 
-test('CSS row artwork retains its thumbnail when a larger candidate is registered', async ({ page }) => {
+test('row artwork retains its thumbnail when a larger candidate is registered', async ({ page }) => {
   await mockMusicEngine(page);
   const requests: string[] = [];
   await page.route('https://i.ytimg.com/**', route => {
@@ -79,12 +79,13 @@ test('CSS row artwork retains its thumbnail when a larger candidate is registere
     const path = '/player/tests/browser/fixtures/artwork-probe.tsx';
     (await import(path)).mount('https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg', true);
   });
-  const cover = page.locator('[data-cover-probe] [data-row-cover]');
-  await expect(cover).toHaveCSS('background-image', /mqdefault/);
+  const cover = page.locator('[data-cover-probe] [data-row-cover] img');
+  await expect(cover).toHaveAttribute('src', /mqdefault/);
+  await expect.poll(() => cover.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
   await page.evaluate(async () => {
     const path = '/player/tests/browser/fixtures/artwork-probe.tsx';
     (await import(path)).upgrade();
   });
-  await expect(cover).toHaveCSS('background-image', /mqdefault/);
+  await expect(cover).toHaveAttribute('src', /mqdefault/);
   expect(requests.some(url => url.includes('maxresdefault'))).toBe(false);
 });
