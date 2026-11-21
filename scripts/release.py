@@ -262,7 +262,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     run("git", "switch", "--quiet", "--create", branch, "origin/main")
     set_declared_version(version)
     sync(version, check=False)
-    run("git", "commit", "--quiet", "--all", "--message", f"Versión {version}")
+    run("git", "commit", "--quiet", "--all", "--message", f"Release {version}")
     run("git", "push", "--quiet", "--set-upstream", "origin", branch)
 
     body = (
@@ -275,7 +275,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     url = run(
         "gh", "pr", "create",
         "--base", "main",
-        "--title", f"Versión {version}",
+        "--title", f"Release {version}",
         "--body", body,
         "--label", "impact:none",
     ).splitlines()[-1]
