@@ -56,6 +56,39 @@ def _cooperative() -> bool:
     return monkey is not None and monkey.is_module_patched("threading")
 
 
+def off_loop(fn, *args, **kwargs):
+    """Run blocking work on a native thread when the engine serves under gevent.
+
+    Under `patch_process` a `ThreadPoolExecutor` worker is a greenlet on the
+    hub, not a thread. File reads and SQLite statements never yield, so work
+    that reads a network share or writes a large transaction holds every
+    request — and the watchdog — while it runs (#492). gevent's native pool
+    runs it on a real thread; the GIL is released around file I/O and SQLite
+    calls, and the caller's greenlet waits without blocking the loop.
+
+    The caller waits for the work even when it is interrupted, then re-raises
+    the interruption: the work may hold a pooled connection or an open
+    transaction that must not be handed back while a thread still uses it.
+
+    `fn` must not use gevent primitives or greenlet-local state, which belong
+    to the hub's thread. Outside a cooperative process it runs where called.
+    """
+    if not _cooperative():
+        return fn(*args, **kwargs)
+    from gevent import get_hub
+
+    result = get_hub().threadpool.spawn(fn, *args, **kwargs)
+    interrupted = None
+    while not result.ready():
+        try:
+            result.wait()
+        except BaseException as exc:  # noqa: BLE001 - re-raised once the work has finished
+            interrupted = interrupted or exc
+    if interrupted is not None:
+        raise interrupted
+    return result.get()
+
+
 def start_loop_watchdog(stall_seconds: float = STALL_EXIT_SECONDS, *, rearm_seconds: float = _REARM_SECONDS) -> None:
     """Exit with status 1 once the cooperative loop has not run for `stall_seconds`.
 

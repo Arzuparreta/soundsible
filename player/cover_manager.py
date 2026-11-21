@@ -4,6 +4,7 @@ import threading
 
 from shared.constants import DEFAULT_CACHE_DIR
 from shared.audio_files import AudioProcessor
+from shared.cooperative import off_loop
 
 
 class CoverFetchManager:
@@ -80,7 +81,9 @@ class CoverFetchManager:
             # Note: A. try embedded art (medium)
             if embedded_path and os.path.exists(embedded_path):
                 try:
-                    cover_data = AudioProcessor.extract_cover_art(embedded_path)
+                    # A native thread: this pool's workers are greenlets on
+                    # the engine's loop, and tag reads never yield (#492).
+                    cover_data = off_loop(AudioProcessor.extract_cover_art, embedded_path)
                     if cover_data:
                         with open(dest_path, 'wb') as f:
                             f.write(cover_data)
@@ -130,7 +133,7 @@ class CoverFetchManager:
         if os.path.exists(dest_path):
             return dest_path
         try:
-            cover_data = AudioProcessor.extract_cover_art(str(source_path))
+            cover_data = off_loop(AudioProcessor.extract_cover_art, str(source_path))
             if not cover_data:
                 return None
             store.bind(track.id, store.put(cover_data), getattr(track, "cover_source", None), only_missing=True)
