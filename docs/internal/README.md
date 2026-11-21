@@ -29,8 +29,10 @@ Read the matching handoff before continuing one of these lines of work.
 | --- | --- |
 | Android port | [android/HANDOFF.md](android/HANDOFF.md) — development setup in [ANDROID.md](ANDROID.md) |
 | DJ mode | [dj/HANDOFF.md](dj/HANDOFF.md) — responsibilities in [dj/ARCHITECTURE.md](dj/ARCHITECTURE.md), direction in [dj/DIRECTION.md](dj/DIRECTION.md) |
+| Discovery & recommendations | [discovery/HANDOFF.md](discovery/HANDOFF.md) — gap study vs. Spotify/Apple Music, backlog, and decisions |
 | Architecture review | [audits/ARCHITECTURE_HANDOFF.md](audits/ARCHITECTURE_HANDOFF.md) |
 | Resource optimization | [audits/ENGINEERING_HANDOFF.md](audits/ENGINEERING_HANDOFF.md) |
+| Web UI architecture review | [audits/WEB_UI_REVIEW_HANDOFF.md](audits/WEB_UI_REVIEW_HANDOFF.md) |
 
 ## Folders
 
@@ -38,6 +40,7 @@ Read the matching handoff before continuing one of these lines of work.
 | --- | --- |
 | [`android/`](android/) | Port plan, slices, release gates, evidence and capability files read by the release scripts. |
 | [`dj/`](dj/) | DJ analysis work packages (P12–P18), detector comparison and probes. |
+| [`discovery/`](discovery/) | Discovery, recommendations and music sources study, backlog and iteration handoff. |
 | [`audits/`](audits/) | Dated engineering and architecture reviews. |
 | [`performance/`](performance/) | Performance investigations with their raw results. |
 | [`engineering/`](engineering/) | Library integrity, recovery and catalog reconciliation. |
