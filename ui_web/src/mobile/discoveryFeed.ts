@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { api, type DiscoveryMusicFeed } from '../lib/api';
-import { discoveryCatalogItem, discoveryHasVisible } from '../lib/searchDiscovery';
+import { discoveryHasVisible, resolveDiscoveryTrackShelves } from '../lib/searchDiscovery';
 import { prioritizeCatalogItems } from '../lib/catalogEntity';
 import type { CatalogItem } from '../types/music';
 
@@ -13,9 +13,22 @@ export function createNativeDiscoveryFeed(props: {
   const [feed, setFeed] = createSignal<DiscoveryMusicFeed>({});
   const [loading, setLoading] = createSignal(false), [error, setError] = createSignal(false);
   const sections = createMemo(() => (feed().browse_sections ?? []).map(section => ({ ...section, items: prioritizeCatalogItems(section.items, props.known) })));
-  const songs = createMemo(() => prioritizeCatalogItems((feed().items ?? []).map(discoveryCatalogItem), props.known).slice(0, 10));
-  const hasContent = () => discoveryHasVisible(sections(), songs());
-  const hasVisibleContent = () => discoveryHasVisible(sections(), songs(), props.expanded());
+  const trackShelves = createMemo(() => resolveDiscoveryTrackShelves(feed(), items => prioritizeCatalogItems(items, props.known)));
+  const songs = createMemo(() => {
+    const out: CatalogItem[] = [];
+    const seen = new Set<string>();
+    for (const shelf of trackShelves()) {
+      for (const item of shelf.items) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        out.push(item);
+        if (out.length >= 10) return out;
+      }
+    }
+    return out;
+  });
+  const hasContent = () => discoveryHasVisible(sections(), trackShelves());
+  const hasVisibleContent = () => discoveryHasVisible(sections(), trackShelves(), props.expanded());
   let request: AbortController | undefined, timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false, epoch = 0, attempts = 0;
   function cancel() { epoch++; request?.abort(); clearTimeout(timer); }
@@ -47,5 +60,5 @@ export function createNativeDiscoveryFeed(props: {
     if (!disconnected && !paused && (newAccount || previous?.[1] || !hasContent() || feed().revalidating || feed().browse_error)) void load();
   }));
   onCleanup(() => { disposed = true; cancel(); });
-  return { feed, sections, songs, loading, error, retry: () => { attempts = 0; setError(false); void load(true); } };
+  return { feed, sections, trackShelves, songs, loading, error, retry: () => { attempts = 0; setError(false); void load(true); } };
 }

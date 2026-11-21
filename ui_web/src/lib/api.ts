@@ -211,6 +211,8 @@ export interface DiscoveryFeedSection {
   id: string;
   title: string;
   reason?: string;
+  reason_key?: string;
+  reason_params?: Record<string, string>;
   item_ids?: string[];
   section_type?: string;
   title_key?: string;

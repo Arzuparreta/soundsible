@@ -507,19 +507,64 @@ def test_music_feed_uses_taste_artist_before_generic_external(tmp_path):
 
     def fake_deezer(path, params=None, ttl_sec=0):
         if path == "search/artist":
-            return {"data": [{"id": 77, "name": "Taste Artist"}]}
-        if path == "artist/77/top":
+            return {"data": [{"id": 77, "name": "Taste Artist", "nb_fan": 50000}]}
+        if path == "artist/77/related":
+            return {
+                "data": [
+                    {"id": 88, "name": "Related One"},
+                    {"id": 89, "name": "Related Two"},
+                    {"id": 90, "name": "Related Three"},
+                ]
+            }
+        if path == "artist/88/top":
             return {
                 "data": [
                     {
                         "id": 501,
-                        "title": "Taste External",
-                        "title_short": "Taste External",
+                        "title": "Related Cut 1",
+                        "title_short": "Related Cut 1",
                         "duration": 220,
                         "rank": 800000,
-                        "artist": {"id": 77, "name": "Taste Artist"},
-                        "album": {"title": "Taste Album", "cover_medium": "https://example.test/taste.jpg"},
-                    }
+                        "artist": {"id": 88, "name": "Related One"},
+                        "album": {"title": "Rel Album 1", "cover_medium": "https://example.test/r1.jpg"},
+                    },
+                    {
+                        "id": 502,
+                        "title": "Related Cut 2",
+                        "title_short": "Related Cut 2",
+                        "duration": 210,
+                        "rank": 790000,
+                        "artist": {"id": 88, "name": "Related One"},
+                        "album": {"title": "Rel Album 1", "cover_medium": "https://example.test/r1.jpg"},
+                    },
+                ]
+            }
+        if path == "artist/89/top":
+            return {
+                "data": [
+                    {
+                        "id": 503,
+                        "title": "Related Cut 3",
+                        "title_short": "Related Cut 3",
+                        "duration": 205,
+                        "rank": 780000,
+                        "artist": {"id": 89, "name": "Related Two"},
+                        "album": {"title": "Rel Album 2", "cover_medium": "https://example.test/r2.jpg"},
+                    },
+                ]
+            }
+        if path == "artist/90/top":
+            return {
+                "data": [
+                    {
+                        "id": 504,
+                        "title": "Related Cut 4",
+                        "title_short": "Related Cut 4",
+                        "duration": 230,
+                        "rank": 770000,
+                        "artist": {"id": 90, "name": "Related Three"},
+                        "album": {"title": "Rel Album 3", "cover_medium": "https://example.test/r3.jpg"},
+                    },
                 ]
             }
         return {"tracks": {"data": []}, "data": []}
@@ -527,11 +572,165 @@ def test_music_feed_uses_taste_artist_before_generic_external(tmp_path):
     with patch.object(_disc_feed, "_deezer_json", side_effect=fake_deezer):
         body = _disc_routes._build_music_feed(metadata, ["fav-1"], limit=12)
 
-    assert body["sections"][0]["id"] == "because_you_listen_taste_artist"
-    first_id = body["sections"][0]["item_ids"][0]
-    first_item = next(item for item in body["items"] if item["id"] == first_id)
-    assert first_item["source"] == "deezer_taste_artist"
-    assert first_item["title"] == "Taste External"
+    more_like = body["sections"][0]
+    assert more_like["id"] == "because_you_listen_taste_artist"
+    assert more_like["reason_key"] == "because_listen"
+    assert more_like["reason_params"] == {"artist": "Taste Artist"}
+    by_id = {item["id"]: item for item in body["items"]}
+    section_items = [by_id[iid] for iid in more_like["item_ids"]]
+    assert len(section_items) == 4
+    assert all(item["source"] == "deezer_taste_artist" for item in section_items)
+    assert all(item["artist"] != "Taste Artist" for item in section_items)
+    assert [item["title"] for item in section_items] == [
+        "Related Cut 1",
+        "Related Cut 3",
+        "Related Cut 4",
+        "Related Cut 2",
+    ]
+
+    from shared.discovery_intelligence import compose_discovery_feed
+
+    composed = compose_discovery_feed(body, max_sections=6, section_size=10)
+    composed_more_like = next(s for s in composed["sections"] if s["id"] == "because_you_listen_taste_artist")
+    assert len(composed_more_like["item_ids"]) == 4
+
+
+def test_more_like_folds_diacritics_skips_owned_and_never_falls_back_to_seed_artist(tmp_path):
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("fav-1", "Burnin' for You", "Blue Oyster Cult"),
+            _track("owned-rel", "Owned Related", "Uriah Heep"),
+        ],
+        playlists={},
+        settings={},
+    )
+
+    def fake_deezer(path, params=None, ttl_sec=0):
+        if path == "search/artist":
+            return {
+                "data": [
+                    {"id": 10, "name": "Blue Oyster Cult Tribute", "nb_fan": 5},
+                    {"id": 20, "name": "Blue Öyster Cult", "nb_fan": 500000},
+                ]
+            }
+        if path == "artist/20/related":
+            return {"data": [{"id": 30, "name": "Uriah Heep"}]}
+        if path == "artist/30/top":
+            return {
+                "data": [
+                    {"id": 601, "title": "Owned Related", "artist": {"id": 30, "name": "Uriah Heep"}, "album": {"title": "A"}},
+                    {"id": 602, "title": "Seed Collab", "artist": {"id": 20, "name": "Blue Öyster Cult"}, "album": {"title": "A"}},
+                    {"id": 603, "title": "Easy Livin'", "artist": {"id": 30, "name": "Uriah Heep"}, "album": {"title": "Demons"}},
+                ]
+            }
+        raise AssertionError(f"Unexpected path {path}")
+
+    with patch.object(_disc_feed, "_deezer_json", side_effect=fake_deezer):
+        rows = _disc_feed._deezer_related_artist_rows(
+            "Blue Oyster Cult",
+            10,
+            local_keys=_disc_feed._local_library_keys(metadata),
+        )
+
+    assert [r["title"] for r in rows] == ["Easy Livin'"]
+
+    def no_related(path, params=None, ttl_sec=0):
+        if path == "search/artist":
+            return {"data": [{"id": 20, "name": "Different Band", "nb_fan": 100}]}
+        raise AssertionError(f"Should not fetch {path} without an exact folded match")
+
+    with patch.object(_disc_feed, "_deezer_json", side_effect=no_related):
+        assert _disc_feed._deezer_related_artist_rows("Blue Oyster Cult", 10) == []
+
+
+def test_more_like_handles_missing_artist_name_owned_full_title_quota_and_non_latin_slugs(tmp_path):
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("fav-1", "First Light", "宇多田ヒカル"),
+            _track("fav-2", "Gruppa Krovi", "Кино"),
+            _track("fav-3", "El Mal Querer", "Rosalía"),
+            _track("owned-remaster", "Track One (Remastered)", "Rel Alpha"),
+        ],
+        playlists={},
+        settings={},
+    )
+
+    def fake_deezer(path, params=None, ttl_sec=None):
+        q = (params or {}).get("q", "")
+        if path == "search/artist":
+            if q == "宇多田ヒカル":
+                return {"data": [{"id": 100, "name": "宇多田ヒカル", "nb_fan": 90000}]}
+            if q == "Кино":
+                return {"data": [{"id": 200, "name": "Кино", "nb_fan": 80000}]}
+            if q == "Rosalía":
+                return {"data": [{"id": 300, "name": "Rosalía", "nb_fan": 95000}]}
+            return {"data": []}
+        if path.endswith("/related"):
+            aid = path.split("/")[1]
+            # Share Rel Alpha (101) across seeds while offering distinct Rel Beta/Gamma so seed 2 isn't starved
+            return {
+                "data": [
+                    {"id": 101, "name": "Rel Alpha"},
+                    {"id": int(aid) + 2, "name": f"Rel Distinct {aid}"},
+                ]
+            }
+        if path == "artist/101/top":
+            return {
+                "data": [
+                    # Owned by full `title` even though `title_short` drops `(Remastered)`
+                    {"id": 700, "title": "Track One (Remastered)", "title_short": "Track One", "artist": {"id": 101, "name": "Rel Alpha"}},
+                    # Same seed id leak (artist dict id matches seed_id)
+                    {"id": 701, "title": "Seed Collab", "artist": {"id": 100, "name": "Someone Else"}},
+                    # Artist dict missing "name" — must fall back cleanly to rel_name without AttributeError
+                    {"id": 702, "title": "Fresh Alpha", "artist": {"id": 101}},
+                ]
+            }
+        if path.startswith("artist/") and path.endswith("/top"):
+            aid = path.split("/")[1]
+            return {
+                "data": [
+                    {"id": int(aid) * 10 + 1, "title": f"Distinct Cut {aid}", "artist": {"id": int(aid), "name": f"Rel Distinct {int(aid) - 2}"}},
+                ]
+            }
+        return {"data": []}
+
+    with patch.object(_disc_feed, "_deezer_json", side_effect=fake_deezer):
+        body = _disc_routes._build_music_feed(metadata, ["fav-1", "fav-2", "fav-3"], limit=12)
+
+    section_ids = [s["id"] for s in body["sections"] if s.get("section_type") == "deezer_taste_artist"]
+    assert len(section_ids) == 3
+    assert len(set(section_ids)) == 3
+    assert all(sid.startswith("because_you_listen_") for sid in section_ids)
+    assert "because_you_listen_rosalia" in section_ids
+    assert all(item["id"] != "deezer:700" for item in body["items"])
+    sec_utada = next(s for s in body["sections"] if s.get("title_params") == {"artist": "宇多田ヒカル"})
+    sec_kino = next(s for s in body["sections"] if s.get("title_params") == {"artist": "Кино"})
+    assert "deezer:701" not in sec_utada["item_ids"]
+    assert sec_kino["item_ids"][0] == "deezer:2021"
+    assert any(item["id"] == "deezer:702" and item["artist"] == "Rel Alpha" for item in body["items"])
+
+    # Quota exhaustion must short-circuit immediately without retrying subsequent seeds/artists.
+    calls = []
+
+    def quota_fail(path, params=None, ttl_sec=None):
+        calls.append(path)
+        if path == "search/artist":
+            return {"data": [{"id": 100, "name": (params or {}).get("q")}]}
+        if path == "artist/100/related":
+            return {"data": [{"id": 101, "name": "Rel 1"}, {"id": 102, "name": "Rel 2"}]}
+        raise deezer.DeezerQuotaError(path)
+
+    items, sections = [], []
+    with patch.object(_disc_feed, "_deezer_json", side_effect=quota_fail):
+        _disc_feed._append_personalized_artist_sections(
+            items, sections, metadata=metadata, fav_ids=["fav-1", "fav-2"], local_keys=set(), seen=set(), limit=10
+        )
+    assert calls == ["search/artist", "artist/100/related", "artist/101/top"]
+    assert sections == []
 
 
 # ─── confirm_video_id path ────────────────────────────────────────────────────
@@ -837,7 +1036,9 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
     def fake_get(url, params=None, timeout=None, headers=None):
         if url.endswith("/search/artist"):
             return _FakeResponse({"data": [{"id": 77, "name": "Local Artist"}]})
-        if url.endswith("/artist/77/top"):
+        if url.endswith("/artist/77/related"):
+            return _FakeResponse({"data": [{"id": 88, "name": "Related Artist"}]})
+        if url.endswith("/artist/88/top"):
             return _FakeResponse({
                 "data": [
                     {
@@ -846,7 +1047,7 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
                         "title_short": "Taste Match",
                         "duration": 201,
                         "rank": 999,
-                        "artist": {"id": 77, "name": "Local Artist"},
+                        "artist": {"id": 88, "name": "Related Artist"},
                         "album": {"title": "Taste Album", "cover_big": "https://example.test/new.jpg"},
                     },
                     {
@@ -855,11 +1056,13 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
                         "title_short": "Second Taste Match",
                         "duration": 198,
                         "rank": 900,
-                        "artist": {"id": 77, "name": "Local Artist"},
+                        "artist": {"id": 88, "name": "Related Artist"},
                         "album": {"title": "Taste Album", "cover_big": "https://example.test/second.jpg"},
-                    }
+                    },
                 ]
             })
+        if url.endswith("/albums"):
+            return _FakeResponse({"data": []})
         raise AssertionError(url)
 
     with patch.object(_disc_feed, "_get_api", return_value=api), \
