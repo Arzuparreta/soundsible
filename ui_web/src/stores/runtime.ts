@@ -2,7 +2,7 @@ import { isAppleMobile } from '../lib/audio/appleMobile';
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { syncSavedEntities } from "../lib/savedEntities";
 import { user } from "../lib/session";
-import { createSocket, type AppSocket, dispatchDiscoverSeed } from "../lib/socket";
+import { createSocket, type AppSocket } from "../lib/socket";
 import { dispatchDiscoveryFeedReady, type DiscoveryFeedReadyEvent } from "../lib/discoveryEvents";
 import { api, type RemotePlaybackState } from "../lib/api";
 import { audioService, onProgramEvent, setProgramTransportReporter, type ProgramMediaEventName, type ProgramPlaybackSnapshot } from "../lib/audio";
@@ -505,11 +505,6 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       void api.getSaved().then(lifetime.guard(saved => setState('saved', saved))).catch(lifetime.guard(() => {}));
     }));
     socket.on('downloader_update', lifetime.guard(data => applyDownloadEvent((data ?? {}) as DownloadEvent)));
-    socket.on('discover_seed_ready', lifetime.guard(data => dispatchDiscoverSeed(data as {
-      request_id: string;
-      seed_track_id: string;
-      recs: unknown[];
-    })));
     socket.on('discovery_feed_ready', lifetime.guard(data => dispatchDiscoveryFeedReady((data ?? {}) as DiscoveryFeedReadyEvent)));
 
     // ── Remote control: this device acts on commands from another device. ──
@@ -591,6 +586,9 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     void import('../lib/discover').then(lifetime.guard(m => {
       lifetime.own(m.resetDiscover);
       m.ensureDiscover();
+    }));
+    void import('../lib/discoveryFeedStore').then(lifetime.guard(m => {
+      lifetime.own(m.resetDiscoveryFeed);
     }));
 
     // Global keyboard shortcuts (desktop). The decision table lives in

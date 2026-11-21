@@ -38,7 +38,6 @@ import {
   isPlayingTrack,
   isQueuedItem,
   isQueuedResult,
-  isQueuedTrack,
   musicLibrary,
   ownedTrackForItem,
   ownedTrackForResult,
@@ -48,7 +47,15 @@ import { coverUrl, trackCoverUrl } from '../lib/media';
 import { ArtworkSurface } from '../design/Artwork';
 import { parseYouTubeInput } from '../lib/youtube';
 import { resultCredit } from '../lib/queueDiscovery';
-import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
+import {
+  discoveryExploreItems,
+  discoveryLoading,
+  discoveryRefreshing,
+  dismissDiscoveryItem,
+  refreshDiscoveryFeed,
+  restoreDiscoveryItem,
+  retainDiscoveryFeed,
+} from '../lib/discoveryFeedStore';
 import { albumSort, albumFilter, filterTracks, libraryFilter, setLibraryFilter, catalogArtists, librarySort, libraryTab, setLibrarySort, setLibraryTab, sortTracks } from '../lib/libraryView';
 import { artistKey, artistPath, albumPath } from '../lib/artistRoute';
 import { normalizeLibraryQuery, searchLibrary, type LibrarySearchResult } from '../lib/librarySearch';
@@ -59,6 +66,8 @@ import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { libraryContext, playlistContext } from '../lib/playbackContext';
 import { isPodcastTrack } from '../lib/track';
 import { pickPlaylistCoverTrack } from '../lib/playlists';
+import { savedFromCatalogItem } from '../lib/saved';
+import { openEntryMenu } from './entryActions';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
@@ -78,7 +87,7 @@ import {
   type CachedCatalog,
   type ResolvedSection,
 } from '../lib/searchSections';
-import type { CatalogAlbum, CatalogItem, CatalogSection, SearchResult, Track } from '../types/music';
+import type { CatalogAlbum, CatalogItem, CatalogSection, RecommendationContext, SearchResult, Track } from '../types/music';
 import { musicBrowserNavigation as navigation, type BrowserView, type BrowserSection, type SearchScope, type ResultType } from '../lib/musicBrowserNavigation';
 import { tracksByIds } from '../lib/catalogTracks';
 import { albumBrowseQuery, collateAlbums } from '../lib/albumBrowse';
@@ -119,6 +128,7 @@ function playableTrack(item: CatalogItem): Track | null {
   if (direct) return direct;
   const id = catalogPreviewId(item);
   if (!id) return null;
+  const recommendation = item.raw?.recommendation as RecommendationContext | undefined;
   return {
     id,
     title: item.title,
@@ -128,6 +138,7 @@ function playableTrack(item: CatalogItem): Track | null {
     cover: item.cover,
     source: 'preview',
     originKeys: catalogItemKeys(item),
+    ...(recommendation ? { recommendation } : {}),
   };
 }
 
@@ -216,7 +227,12 @@ export function NowPlayingBrowser(props: {
   let requestId = 0;
 
   const active = () => props.active !== false && pageVisible();
-  createEffect(() => { if (active() && currentView().kind === 'root') ensureNodeFeed(); });
+  createEffect(() => {
+    if (active() && currentView().kind === 'root') {
+      const release = retainDiscoveryFeed();
+      onCleanup(release);
+    }
+  });
   const libraryTracks = createActivityMemo(active, () =>
     sortTracks(filterTracks(musicLibrary(), libraryFilter()), librarySort(), new Set(favouriteLibraryIds())),
     [], () => [musicLibrary(), libraryFilter(), librarySort(), favouriteLibraryIds()]);
@@ -730,7 +746,25 @@ export function NowPlayingBrowser(props: {
         <Match when={true}>
           <Switch>
             <Match when={currentView().kind === 'root'}>
-              <RootView autoRow={autoRow} />
+              <RootView
+                autoRow={autoRow}
+                resolving={resolving()}
+                canOpenRowMenu={canOpenRowMenu()}
+                onTrack={(item) => {
+                  const playable = playableTrack(item);
+                  if (playable) {
+                    if (inAuto()) void placeTrack(playable);
+                    else actions.playNow(playable);
+                  } else {
+                    void useItem(item, inAuto() ? placeTrack : actions.playNow);
+                  }
+                }}
+                onQueue={(item) => {
+                  const playable = playableTrack(item);
+                  if (playable) actions.enqueue(playable);
+                  else void useItem(item, actions.enqueue);
+                }}
+              />
             </Match>
             <Match when={currentView().kind === 'bookmarks'}>
               <div class={styles.body} data-browser-body>
@@ -836,30 +870,55 @@ export function NowPlayingBrowser(props: {
   );
 }
 
-function RootView(props: { autoRow: (track: Track) => AutoRowProps }) {
+function RootView(props: {
+  autoRow: (target: Track | CatalogItem | null) => AutoRowProps;
+  resolving: Set<string>;
+  canOpenRowMenu: boolean;
+  onTrack: (item: CatalogItem) => void;
+  onQueue: (item: CatalogItem) => void;
+}) {
+  const busy = () => discoveryLoading() || discoveryRefreshing();
   return (
     <div class={styles.body} data-browser-body>
       <section>
         <Toolbar label={t('discoverNodes.title')}>
-          <Control type="button" aria-label={t('discoverNodes.refresh')} disabled={nodeLoading()} onClick={refreshNodeFeed}>
-            <RefreshIcon spinning={nodeLoading()} />
+          <Control
+            type="button"
+            aria-label={t('discoverNodes.refresh')}
+            disabled={busy()}
+            onClick={() => refreshDiscoveryFeed()}
+          >
+            <RefreshIcon spinning={busy()} />
           </Control>
         </Toolbar>
-        <Show when={!nodeLoading() || nodeFeed().length > 0} fallback={<SkeletonRows count={6} />}>
-          <For each={nodeFeed()}>
-            {(result) => {
-              const track = resultTrack(result);
+        <Show when={!discoveryLoading() || discoveryExploreItems().length > 0} fallback={<SkeletonRows count={6} />}>
+          <For each={discoveryExploreItems()}>
+            {(item) => {
+              const playable = playableTrack(item);
+              const recommendation = item.raw?.recommendation as RecommendationContext | undefined;
               return (
                 <BrowserTrackRow
-                  title={track.title}
-                  subtitle={track.artist} music={libraryTrackMusic(track)}
-                  cover={track.cover}
-                  seed={track.id}
-                  active={isPlayingTrack(track)}
-                  queued={isQueuedTrack(track)}
-                  onPlay={() => actions.playNow(track)}
-                  onQueue={() => actions.enqueue(track)}
-                  {...props.autoRow(track)}
+                  title={item.title}
+                  subtitle={itemArtist(item)}
+                  music={catalogMusic(item)}
+                  cover={item.cover || (item.track_id ? coverUrl(item.track_id, 'thumb') : undefined)}
+                  seed={item.id}
+                  active={isPlayingItem(item)}
+                  queued={isQueuedItem(item)}
+                  resolving={props.resolving.has(item.id)}
+                  onPlay={() => props.onTrack(item)}
+                  onQueue={() => props.onQueue(item)}
+                  {...props.autoRow(item)}
+                  onMenu={props.canOpenRowMenu
+                    ? (event) => openEntryMenu(savedFromCatalogItem(item), {
+                        item,
+                        music: catalogMusic(item),
+                        track: playable ?? undefined,
+                        recommendation,
+                        onNotInterested: () => dismissDiscoveryItem(item.id),
+                        onUndoNotInterested: () => restoreDiscoveryItem(item.id),
+                      }, event)
+                    : undefined}
                 />
               );
             }}

@@ -138,6 +138,25 @@ def _expand_seed(video_id: str, user_id: str | None) -> None:
             }, user_id=subscriber)
         except Exception as exc:
             logger.debug("discover: telling %s about %s failed: %s", subscriber, video_id, exc)
+    if results:
+        users: list[str | None] = []
+        seen_users: set[str | None] = set()
+        for subscriber, _request_id, _seed_track_id in waiting:
+            uid = subscriber or user_id
+            if uid not in seen_users:
+                seen_users.add(uid)
+                users.append(uid)
+        if not users:
+            users = [user_id]
+        try:
+            from shared.api.routes.discovery_common import _invalidate_personalized_cache_for_user
+            from shared.api.routes.discovery_feed import _schedule_discovery_feed_refresh
+
+            for uid in users:
+                for cache_key, feed_limit in _invalidate_personalized_cache_for_user(uid):
+                    _schedule_discovery_feed_refresh(cache_key, uid, feed_limit, rotate=False)
+        except Exception as exc:
+            logger.debug("discover: feed refresh after %s failed: %s", video_id, exc)
 
 
 def _schedule_expand(video_id: str, request_id: str | None = None, seed_track_id: str | None = None) -> None:
@@ -186,10 +205,35 @@ def discover_feed():
     Response:
       {request_id, ready: [{seed_track_id, recs}], pending: [seed_track_id]}
     """
-    raw = (request.args.get("seeds") or "").strip()
-    seed_ids = [s for s in raw.split(",") if s.strip()]
-    if not seed_ids:
-        return jsonify({"request_id": "", "ready": [], "pending": []}), 400
+    if "seeds" in request.args:
+        raw = (request.args.get("seeds") or "").strip()
+        seed_ids = [s for s in raw.split(",") if s.strip()]
+        if not seed_ids:
+            return jsonify({"request_id": "", "ready": [], "pending": []}), 400
+    else:
+        from shared.discovery_seeds import select_graph_seed_tracks
+        from shared.user_context import current_user_id
+
+        api = _get_api()
+        lib = api["get_library"]()
+        metadata = getattr(lib, "metadata", None)
+        fav_ids = list(api["favourite_library_ids"]())
+        seed_ids = (
+            [
+                t.id
+                for t in select_graph_seed_tracks(
+                    metadata,
+                    fav_ids,
+                    limit=5,
+                    user_id=current_user_id(),
+                    rotate=True,
+                )
+            ]
+            if metadata and getattr(metadata, "tracks", None)
+            else []
+        )
+        if not seed_ids:
+            return jsonify({"request_id": str(uuid.uuid4()), "ready": [], "pending": []})
     seed_ids = seed_ids[:20]  # cap
     limit = min(50, max(1, request.args.get("limit", _DISCOVER_RECS_PER_SEED, type=int)))
     request_id = str(uuid.uuid4())
@@ -282,41 +326,16 @@ def warm_discover_seeds(track_ids: list[str]) -> None:
 
 
 def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:
-    """Pick the most-likely seeds: favourites + most-recently-added library
-    tracks (non-podcast). This mirrors the client's recency weighting so the
-    warm set covers the client's probable picks."""
+    """Pick top graph seeds via the shared discovery seed scorer."""
+    from shared.discovery_seeds import select_graph_seed_tracks
+
     api = _get_api()
     lib = api["get_library"]()
     metadata = getattr(lib, "metadata", None)
     if not metadata or not metadata.tracks:
         return []
-    tracks = list(metadata.tracks)
-    # Note: Filter out podcasts (no artist/title or marked as podcast).
-    tracks = [t for t in tracks if t.artist and t.title]
-    fav_ids = set(api["favourite_library_ids"]())
-    # Note: Favourites first, then newest additions. Favourites are the strongest
-    # taste signal; recent additions are the most likely current picks.
-    fav_tracks = [t for t in tracks if t.id in fav_ids]
-    non_fav = [t for t in tracks if t.id not in fav_ids]
-    # Newest first by the date each song joined the library. The manifest is
-    # stored oldest → newest, but a rescan or a re-keyed id can move a row
-    # within it, and `added_at` is the field that actually answers "recent".
-    non_fav.sort(key=lambda t: t.added_at or "", reverse=True)
-    picked: list[str] = []
-    seen: set[str] = set()
-    for t in fav_tracks:
-        if len(picked) >= limit:
-            break
-        if t.id not in seen:
-            picked.append(t.id)
-            seen.add(t.id)
-    for t in non_fav:
-        if len(picked) >= limit:
-            break
-        if t.id not in seen:
-            picked.append(t.id)
-            seen.add(t.id)
-    return picked
+    fav_ids = list(api["favourite_library_ids"]())
+    return [t.id for t in select_graph_seed_tracks(metadata, fav_ids, limit=limit, rotate=False)]
 
 
 def warm_discover_top_seeds() -> None:

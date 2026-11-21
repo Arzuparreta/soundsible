@@ -6,9 +6,9 @@ import { user, userKey } from './session';
 
 /**
  * Lightweight discovery-adjacent data: the user's recently saved tracks and
- * the top-podcasts rail. Music recommendations themselves are produced
- * client-side by the node engine (`nodeDiscover.ts`) — the old server feed of
- * fixed "More like X" rails is intentionally gone.
+ * the top-podcasts rail. Music recommendations themselves live in
+ * `discoveryFeedStore.ts`, backing both the Discover route and the player's
+ * Explore panel from the unified discovery feed contract.
  */
 
 export interface RecentlySavedItem {

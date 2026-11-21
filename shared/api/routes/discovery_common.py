@@ -64,15 +64,26 @@ _DISCOVERY_FEED_LOCK = threading.Lock()
 _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
 
 
-def _invalidate_personalized_cache() -> None:
-    from shared.user_context import current_user_id
-
-    feed_prefix = f"discovery-feed-v4:{current_user_id() or '-'}:"
+def _invalidate_personalized_cache_for_user(user_id: str | None) -> list[tuple[str, int]]:
+    feed_prefix = f"discovery-feed-v4:{user_id or '-'}:"
     now = time.time()
+    entries: list[tuple[str, int]] = []
     with _DISCOVERY_FEED_LOCK:
         for key in [key for key in _DISCOVERY_FEED_CACHE if key.startswith(feed_prefix)]:
             _, stale_until, body = _DISCOVERY_FEED_CACHE[key]
             _DISCOVERY_FEED_CACHE[key] = (0, max(stale_until, now + _DISCOVERY_FEED_STALE_SEC), body)
+            try:
+                limit = int(key.rsplit(":", 1)[1])
+            except (IndexError, ValueError):
+                limit = 10
+            entries.append((key, limit))
+    return entries
+
+
+def _invalidate_personalized_cache() -> None:
+    from shared.user_context import current_user_id
+
+    _invalidate_personalized_cache_for_user(current_user_id())
 
 
 def _podcast_row_from_itunes_search(r: dict) -> dict | None:

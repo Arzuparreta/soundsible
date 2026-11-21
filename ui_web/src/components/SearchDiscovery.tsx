@@ -4,11 +4,22 @@ import { openCatalogEntityMenu } from './savedEntityActions';
 import { createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { api, type DiscoveryMusicFeed } from '../lib/api';
-import { onDiscoveryFeedReady } from '../lib/discoveryEvents';
+import {
+  discoveryBrowseSections,
+  discoveryDismissed,
+  discoveryError,
+  discoveryFeed,
+  discoveryLoading,
+  discoveryRefreshing,
+  discoveryTrackShelves,
+  dismissDiscoveryItem,
+  filterDiscoveryTrackShelves,
+  refreshDiscoveryFeed,
+  restoreDiscoveryItem,
+  retainDiscoveryFeed,
+} from '../lib/discoveryFeedStore';
 import { prefetchPreviews } from '../lib/prefetch';
 import { catalogPreviewId, itemArtist } from '../lib/catalogItem';
-import { userKey } from '../lib/session';
-import { clearSearchCache, readSearchCache, writeSearchCache } from '../lib/searchCache';
 import { discoveryHasVisible, resolveDiscoveryTrackShelves } from '../lib/searchDiscovery';
 import { catalogDestination } from '../lib/musicNavigation';
 import { navigateBackOr } from '../lib/scrollHistory';
@@ -17,10 +28,6 @@ import { CatalogResultRow } from './CatalogResultRow';
 import { SearchDiscoveryView } from './SearchDiscoveryView';
 import { isPlayingItem, state } from '../stores';
 import type { CatalogItem } from '../types/music';
-
-const CACHE = 'search-discovery';
-const REVALIDATE_FALLBACK_MS = 15_000;
-const MAX_REVALIDATE_ATTEMPTS = 4;
 
 export function SearchDiscovery(props: {
   section?: string;
@@ -31,77 +38,67 @@ export function SearchDiscovery(props: {
   saving: Set<string>;
 }) {
   const navigate = useNavigate();
-  const cacheKey = userKey('home');
-  const cached = readSearchCache<DiscoveryMusicFeed>(CACHE, cacheKey);
-  const [feed, setFeed] = createSignal<DiscoveryMusicFeed>(cached ?? {});
-  const [loading, setLoading] = createSignal(!cached);
-  const [refreshing, setRefreshing] = createSignal(false);
-  const [error, setError] = createSignal(false);
-  const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
-  let controller: AbortController | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
-  let attempts = 0;
-  const sections = createMemo(() => (feed().browse_sections ?? []).map(section => ({ ...section, items: prioritizeDiscoveries(section.items) })));
-  const trackShelves = createMemo(() => {
-    const hidden = dismissed();
-    const shelves = resolveDiscoveryTrackShelves(feed(), prioritizeDiscoveries);
-    if (!hidden.size) return shelves;
-    return shelves
-      .map(shelf => ({ ...shelf, items: shelf.items.filter(item => !hidden.has(item.id)) }))
-      .filter(shelf => shelf.items.length > 0);
-  });
   const expanded = () => props.section?.trim() || undefined;
+  const [snapshot, setSnapshot] = createSignal<DiscoveryMusicFeed | null>(null);
+
+  // Keep the opened section's visible list stable across background pushes.
+  createEffect(() => {
+    const exp = expanded();
+    if (!exp) {
+      setSnapshot(null);
+      return;
+    }
+    const current = discoveryFeed();
+    if (!untrack(snapshot)) {
+      const snapSections = (current.browse_sections ?? []).map(section => ({
+        ...section,
+        items: prioritizeDiscoveries(section.items),
+      }));
+      const snapShelves = filterDiscoveryTrackShelves(
+        resolveDiscoveryTrackShelves(current, prioritizeDiscoveries),
+        untrack(discoveryDismissed),
+      );
+      if (discoveryHasVisible(snapSections, snapShelves, exp)) {
+        setSnapshot(current);
+      }
+    }
+  });
+
+  const sections = createMemo(() => {
+    const frozen = snapshot();
+    if (frozen && expanded()) {
+      return (frozen.browse_sections ?? []).map(section => ({
+        ...section,
+        items: prioritizeDiscoveries(section.items),
+      }));
+    }
+    return discoveryBrowseSections();
+  });
+  const trackShelves = createMemo(() => {
+    const frozen = snapshot();
+    if (frozen && expanded()) {
+      return filterDiscoveryTrackShelves(
+        resolveDiscoveryTrackShelves(frozen, prioritizeDiscoveries),
+        discoveryDismissed(),
+      );
+    }
+    return discoveryTrackShelves();
+  });
   // What the listener is looking at: the opened section alone, or the home.
   const hasVisibleContent = () => discoveryHasVisible(sections(), trackShelves(), expanded());
 
-  async function load(refresh = false) {
-    clearTimeout(timer);
-    controller?.abort();
-    const request = new AbortController();
-    controller = request;
-    if (refresh) setRefreshing(true);
-    try {
-      const next = await api.getDiscoveryMusicFeed(request.signal, refresh);
-      if (disposed || request.signal.aborted) return;
-      // Keep the visible selection stable while browsing a section.
-      if (!expanded() || !hasVisibleContent()) setFeed(next);
-      writeSearchCache(CACHE, cacheKey, expanded() && hasVisibleContent() ? feed() : next);
-      setError(!!next.browse_error || !!next.error);
-      if (next.revalidating) {
-        setRefreshing(true);
-        if (attempts++ < MAX_REVALIDATE_ATTEMPTS) timer = setTimeout(() => void load(), REVALIDATE_FALLBACK_MS);
-        else {
-          setError(true);
-          setRefreshing(false);
-        }
-      } else {
-        setRefreshing(false);
-      }
-    } catch {
-      if (!disposed && !request.signal.aborted) {
-        setError(true);
-        setRefreshing(false);
-      }
-    } finally {
-      if (!disposed && !request.signal.aborted) setLoading(false);
-    }
-  }
-  const stopPush = onDiscoveryFeedReady(() => {
-    if (disposed) return;
-    if (feed().revalidating || refreshing() || !expanded() || !hasVisibleContent()) {
-      clearTimeout(timer);
-      void load(false);
-    }
+  onMount(() => {
+    const release = retainDiscoveryFeed();
+    onCleanup(release);
   });
-  onMount(() => { if (!cached || cached.revalidating || cached.browse_error) void load(); });
-  createEffect(() => props.onReady(!loading() || hasVisibleContent()));
+  createEffect(() => props.onReady(!discoveryLoading() || hasVisibleContent()));
 
   // Speculative warm-up: prefetch the first visible Discover songs so tapping
   // a recommendation starts near-instantly without a cold search/resolve wait.
   const prefetchedCatalog = new Set<string>();
   createEffect(() => {
-    if (state.autoMode.active || loading()) return;
+    if (state.autoMode.active || discoveryLoading()) return;
     const currentExpanded = expanded();
     const shelves = trackShelves();
     const visible = currentExpanded
@@ -131,40 +128,28 @@ export function SearchDiscovery(props: {
   });
 
   const refresh = () => {
-    attempts = 0;
-    setDismissed(new Set<string>());
-    setError(false);
-    void load(true);
+    setSnapshot(null);
+    refreshDiscoveryFeed();
   };
   createEffect(() => {
     props.onRefreshControl?.({
       canRefresh: !expanded() && hasVisibleContent(),
-      refreshing: refreshing() || !!feed().revalidating || loading(),
+      refreshing: discoveryRefreshing() || !!discoveryFeed().revalidating || discoveryLoading(),
       refresh,
     });
   });
 
-  onCleanup(() => { disposed = true; stopPush(); controller?.abort(); clearTimeout(timer); props.onRefreshControl?.(null); });
+  onCleanup(() => { disposed = true; props.onRefreshControl?.(null); });
 
   return <SearchDiscoveryView sections={sections()} trackShelves={trackShelves()} expanded={expanded()}
-    loading={loading()} error={error()} preparing={!!feed().revalidating}
+    loading={discoveryLoading()} error={discoveryError()} preparing={!!discoveryFeed().revalidating}
     onBack={() => navigateBackOr(navigate, '/search')}
-    onRetry={() => { attempts = 0; setDismissed(new Set<string>()); setLoading(true); setError(false); void load(true); }}
+    onRetry={() => { setSnapshot(null); refreshDiscoveryFeed({ resetLoading: true }); }}
     renderMore={(section, link) => <MusicLink path={`/search?browse=${encodeURIComponent(section)}`} label={link.label} class={link.class}>{link.children}</MusicLink>}
     renderEntity={(item, link) => <MusicLink path={catalogDestination(item)!} class={link.class} label={link.label} onMenu={event => openCatalogEntityMenu(item, event)}>{link.children}</MusicLink>}
     renderStatus={item => <CatalogCollectionStatus item={item} />}
     renderSong={item => <CatalogResultRow showLibraryStatus item={item} active={isPlayingItem(item)} saving={props.saving.has(item.id)}
       onPlay={() => props.onPlay(item)} onDownload={() => props.onSave(item)}
-      onNotInterested={() => {
-        setDismissed(prev => { const next = new Set(prev); next.add(item.id); return next; });
-        clearSearchCache(CACHE);
-      }}
-      onUndoNotInterested={() => {
-        setDismissed(prev => {
-          if (!prev.has(item.id)) return prev;
-          const next = new Set(prev);
-          next.delete(item.id);
-          return next;
-        });
-      }} />} />;
+      onNotInterested={() => dismissDiscoveryItem(item.id)}
+      onUndoNotInterested={() => restoreDiscoveryItem(item.id)} />} />;
 }

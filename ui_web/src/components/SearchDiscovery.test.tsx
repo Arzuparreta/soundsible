@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, waitFor } from '@solidjs/testing-library';
 import { clearSearchCache } from '../lib/searchCache';
 import { dispatchDiscoveryFeedReady } from '../lib/discoveryEvents';
+import { resetDiscoveryFeed } from '../lib/discoveryFeedStore';
 import { setLocale } from '../lib/i18n';
 
 const mocks = vi.hoisted(() => ({
@@ -58,6 +59,7 @@ import { SearchDiscovery } from './SearchDiscovery';
 
 beforeEach(() => {
   setLocale('en');
+  resetDiscoveryFeed();
   clearSearchCache();
   vi.clearAllMocks();
   mocks.resolveCatalogItem.mockResolvedValue({ video_id: 'vid12345678' });

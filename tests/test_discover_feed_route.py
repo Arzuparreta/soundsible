@@ -446,3 +446,96 @@ def test_one_waiters_failed_ranking_does_not_silence_the_others(monkeypatch):
     _disc_graph._expand_seed(_VID3, current_user_id())
 
     assert calls == [("broken", []), (current_user_id(), [{"id": "rel"}])]
+
+
+def test_feed_without_seeds_selects_seeds_and_preserves_empty_seeds_400(monkeypatch):
+    """D6: GET /api/discover/feed without `seeds` auto-selects graph seeds via
+    `select_graph_seed_tracks`, while `?seeds=` keeps HTTP 400 validation."""
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("t1", "Song One", "Artist One", _VID1),
+            _track("t2", "Song Two", "Artist Two", _VID2),
+        ],
+        playlists={},
+        settings={},
+    )
+    api, _mock_dl, _fake_emit = _mock_api(metadata)
+    api["favourite_library_ids"].return_value = ["t2"]
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
+
+    cached_recs = [{"id": "rec11111111", "title": "Related Auto", "channel": "Other", "duration": 200}]
+    mock_db = MagicMock()
+    mock_db.get_related_mix.return_value = cached_recs
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
+
+    with patch("shared.discovery_intelligence.rank_recommendation_rows", side_effect=lambda rows, **kw: rows), \
+         patch.object(_disc_graph, "rank_recommendation_rows", side_effect=lambda rows, **kw: rows):
+        client = _make_app().test_client()
+        empty_res = client.get("/api/discover/feed?seeds=&limit=10")
+        assert empty_res.status_code == 400
+
+        auto_res = client.get("/api/discover/feed?limit=10")
+        assert auto_res.status_code == 200
+        body = auto_res.get_json()
+        assert body["pending"] == []
+        assert [entry["seed_track_id"] for entry in body["ready"]]
+        assert set(entry["seed_track_id"] for entry in body["ready"]).issubset({"t1", "t2"})
+
+
+def test_expand_seed_invalidates_discovery_feed_cache_and_schedules_refresh(monkeypatch):
+    """D6: Successful graph expansion invalidates the active discovery feed cache
+    and schedules a personalized discovery feed refresh for waiting users."""
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: {
+        "get_downloader": lambda open_browser=False: MagicMock(),
+        "emit_to_user": MagicMock(),
+    })
+    from shared import related_work
+    monkeypatch.setattr(
+        related_work,
+        "submit",
+        lambda key, fn: type("F", (), {"result": lambda self: [{"id": "rel11111111", "title": "Rel"}]})(),
+    )
+    monkeypatch.setattr(_disc_graph, "rank_recommendation_rows", lambda rows, source: rows)
+
+    scheduled = []
+    with patch(
+        "shared.api.routes.discovery_common._invalidate_personalized_cache_for_user",
+        return_value=[(f"discovery-feed-v4:{current_user_id()}:10", 10)],
+    ) as inv_mock, patch(
+        "shared.api.routes.discovery_feed._schedule_discovery_feed_refresh",
+        side_effect=lambda cache_key, uid, feed_limit, rotate=False: scheduled.append(
+            (cache_key, uid, feed_limit, rotate)
+        ),
+    ):
+        _disc_graph._discover_subscribers[_VID4] = [(current_user_id(), "req-1", "t1")]
+        _disc_graph._expand_seed(_VID4, current_user_id())
+
+    inv_mock.assert_called_once_with(current_user_id())
+    assert scheduled == [(f"discovery-feed-v4:{current_user_id()}:10", current_user_id(), 10, False)]
+
+
+def test_top_warm_seed_ids_uses_diacritic_folded_seed_scorer(monkeypatch):
+    """D6: _top_warm_seed_ids delegates to select_graph_seed_tracks with
+    diacritic-folded recent-artist affinity boosting and returns track IDs."""
+    from types import SimpleNamespace
+
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("t1", "Song 1", "José González"),
+            _track("t2", "Song 2", "Jose Gonzalez"),
+            _track("t3", "Song 3", "Other Artist"),
+        ],
+        playlists={},
+        settings={},
+    )
+    api, _mock_dl, _fake_emit = _mock_api(metadata)
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
+    with patch(
+        "shared.discovery_seeds.load_listening_event_rollups",
+        return_value=SimpleNamespace(recent_artists={"jose gonzalez"}),
+    ):
+        selected = _disc_graph._top_warm_seed_ids(limit=2)
+
+    assert selected == ["t2", "t1"]

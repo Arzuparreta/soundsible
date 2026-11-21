@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@solidjs/testing-lib
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Search from './Search';
 import { setLocale } from '../lib/i18n';
+import { resetDiscoveryFeed } from '../lib/discoveryFeedStore';
 import { clearSearchCache } from '../lib/searchCache';
 import { setSearchHistoryEnabled } from '../lib/searchHistory';
 import { encodeTrackCapsule } from '../lib/trackShare';
@@ -81,6 +82,7 @@ describe('Search route', () => {
   beforeEach(() => {
     setLocale('en');
     // Module scope outlives a test the way it outlives a navigation.
+    resetDiscoveryFeed();
     clearSearchCache();
     vi.useFakeTimers();
     apiMock.getDiscoveryMusicFeed.mockResolvedValue({ items: [], browse_sections: [] });

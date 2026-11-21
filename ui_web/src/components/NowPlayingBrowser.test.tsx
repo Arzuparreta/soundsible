@@ -24,11 +24,17 @@ const apiMock = vi.hoisted(() => ({
   getLibraryArtist: vi.fn().mockResolvedValue({ track_ids: ['local-1'] }),
   getLibraryAlbum: vi.fn().mockResolvedValue({ track_ids: ['local-1'] }),
 }));
-const nodeMock = vi.hoisted(() => ({
-  ensureNodeFeed: vi.fn(),
-  refreshNodeFeed: vi.fn(),
+const exploreMock = vi.hoisted(() => ({
+  retainDiscoveryFeed: vi.fn(() => vi.fn()),
+  refreshDiscoveryFeed: vi.fn(),
+  dismissDiscoveryItem: vi.fn(),
+  restoreDiscoveryItem: vi.fn(),
   items: [] as Array<Record<string, unknown>>,
   loading: false,
+  refreshing: false,
+}));
+const entryMenuMock = vi.hoisted(() => ({
+  openEntryMenu: vi.fn(),
 }));
 const storeMock = vi.hoisted(() => {
   const local: Track = { id: 'local-1', title: 'Local Song', artist: 'Local Artist', album: 'Home' };
@@ -78,11 +84,14 @@ vi.mock('../lib/media', async (importOriginal) => ({
   coverUrl: (id: string) => `/cover/${id}`,
 }));
 vi.mock('../lib/prefetch', () => ({ prefetchPreviews: vi.fn() }));
-vi.mock('../lib/nodeDiscover', () => ({
-  ensureNodeFeed: nodeMock.ensureNodeFeed,
-  refreshNodeFeed: nodeMock.refreshNodeFeed,
-  nodeFeed: () => nodeMock.items,
-  nodeLoading: () => nodeMock.loading,
+vi.mock('../lib/discoveryFeedStore', () => ({
+  retainDiscoveryFeed: exploreMock.retainDiscoveryFeed,
+  refreshDiscoveryFeed: exploreMock.refreshDiscoveryFeed,
+  dismissDiscoveryItem: exploreMock.dismissDiscoveryItem,
+  restoreDiscoveryItem: exploreMock.restoreDiscoveryItem,
+  discoveryExploreItems: () => exploreMock.items,
+  discoveryLoading: () => exploreMock.loading,
+  discoveryRefreshing: () => exploreMock.refreshing,
 }));
 vi.mock('../lib/toast', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), loading: vi.fn() },
@@ -102,6 +111,7 @@ vi.mock('../stores', async () => {
     favouriteTracks: () => storeMock.state.favorites.includes(storeMock.local.id) ? [storeMock.local] : [],
   };
 });
+vi.mock('./entryActions', () => ({ openEntryMenu: entryMenuMock.openEntryMenu }));
 vi.mock('./trackActions', () => ({ openTrackMenu: vi.fn() }));
 vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
 vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));
@@ -133,8 +143,9 @@ beforeEach(() => {
   apiMock.searchYouTube.mockResolvedValue([]);
   apiMock.peekYouTube.mockResolvedValue(null);
   apiMock.resolveCatalogItem.mockResolvedValue({});
-  nodeMock.items = [];
-  nodeMock.loading = false;
+  exploreMock.items = [];
+  exploreMock.loading = false;
+  exploreMock.refreshing = false;
   storeMock.state.favorites = [];
 });
 
@@ -191,7 +202,14 @@ describe('NowPlayingBrowser', () => {
   it.each(['auto-neutral', 'auto-route'] as const)(
     'gives every song one route control and no browse clutter in %s',
     async (purpose) => {
-      nodeMock.items = [{ id: 'node-1', title: 'Node Song', channel: 'Node Artist' }];
+      exploreMock.items = [{
+        id: 'youtube:node-1',
+        type: 'track',
+        source: 'youtube',
+        title: 'Node Song',
+        artist: 'Node Artist',
+        external_ids: { youtube_id: 'node-1' },
+      }];
       storeMock.state.favorites = ['local-1'];
       render(() => <NowPlayingBrowser purpose={purpose} onClose={vi.fn()} />);
 
@@ -217,13 +235,56 @@ describe('NowPlayingBrowser', () => {
   );
 
   it('keeps normal browser row actions visible', () => {
-    nodeMock.items = [{ id: 'node-1', title: 'Node Song', channel: 'Node Artist' }];
+    exploreMock.items = [{
+      id: 'youtube:node-1',
+      type: 'track',
+      source: 'youtube',
+      title: 'Node Song',
+      artist: 'Node Artist',
+      external_ids: { youtube_id: 'node-1' },
+    }];
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 
     expect(screen.queryByRole('button', { name: 'Request' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
     expect(rowClaimsMenu(/Local Song/)).toBe(true);
     expect(screen.queryByRole('button', { name: /to the route$/ })).not.toBeInTheDocument();
+  });
+
+  it('refreshes Explore from the unified feed and wires recommendation menu callbacks', () => {
+    exploreMock.items = [{
+      id: 'deezer:node-2',
+      type: 'track',
+      source: 'deezer',
+      title: 'Deezer Explore',
+      artist: 'Deezer Artist',
+      external_ids: { deezer_id: '987', isrc: 'US1234567890' },
+      raw: { recommendation: { reason: 'Related to Test', source: 'deezer_similar' } },
+    }];
+    render(() => <NowPlayingBrowser onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }));
+    expect(exploreMock.retainDiscoveryFeed).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New recommendations' }));
+    expect(exploreMock.refreshDiscoveryFeed).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }));
+    expect(entryMenuMock.openEntryMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Deezer Explore', artist: 'Deezer Artist' }),
+      expect.objectContaining({
+        recommendation: { reason: 'Related to Test', source: 'deezer_similar' },
+        onNotInterested: expect.any(Function),
+        onUndoNotInterested: expect.any(Function),
+      }),
+      expect.anything(),
+    );
+
+    const ctx = entryMenuMock.openEntryMenu.mock.calls[0][1];
+    ctx.onNotInterested();
+    expect(exploreMock.dismissDiscoveryItem).toHaveBeenCalledWith('deezer:node-2');
+    ctx.onUndoNotInterested();
+    expect(exploreMock.restoreDiscoveryItem).toHaveBeenCalledWith('deezer:node-2');
   });
 
   it('opens catalog artists in the general page without placing a DJ request', async () => {
