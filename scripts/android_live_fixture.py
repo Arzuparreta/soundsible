@@ -60,6 +60,47 @@ def mediamtx() -> Path:
     return binary
 
 
+def mediamtx_config(certificate_dir: Path) -> str:
+    """Loopback-only MediaMTX config for the Android emulator fixture.
+
+    Advertising host interface IPs (eth0, docker0, etc.) alongside 10.0.2.2
+    lets ICE test multiple host addresses through QEMU SLIRP's UDP NAT at once;
+    when MediaMTX pairs a loopback local candidate with a non-loopback prflx
+    remote candidate, return RTCP/STUN packets can be dropped and pion/ice
+    closes the publisher after 30 s (5 s disconnected + 25 s failed).
+    """
+    return f"""logLevel: info
+rtsp: false
+rtmp: false
+hls: false
+srt: false
+playback: false
+moq: false
+api: true
+apiAddress: 127.0.0.1:29997
+authMethod: http
+authHTTPAddress: http://127.0.0.1:28080/internal/media-auth
+authHTTPExclude:
+  - action: api
+  - action: metrics
+webrtc: true
+webrtcAddress: 127.0.0.1:28889
+webrtcEncryption: true
+webrtcServerCert: {certificate_dir / "server.pem"}
+webrtcServerKey: {certificate_dir / "server-key.pem"}
+webrtcLocalUDPAddress: 127.0.0.1:28189
+webrtcLocalTCPAddress: 127.0.0.1:28189
+webrtcIPsFromInterfaces: false
+webrtcAdditionalHosts: [10.0.2.2]
+webrtcHandshakeTimeout: 30s
+pathDefaults:
+  source: publisher
+  overridePublisher: false
+paths:
+  all_others:
+"""
+
+
 class LiveFixture:
     def __init__(self, directory: Path, ca: Path, certificate: Path, key: Path, log):
         self.directory, self.ca, self.certificate, self.key, self.log = directory, ca, certificate, key, log
@@ -78,35 +119,7 @@ class LiveFixture:
                 except OSError:
                     raise RuntimeError(f"Live fixture port {port} is occupied") from None
         config = self.directory / "mediamtx.yml"
-        config.write_text(f"""logLevel: info
-rtsp: false
-rtmp: false
-hls: false
-srt: false
-playback: false
-moq: false
-api: true
-apiAddress: 127.0.0.1:29997
-authMethod: http
-authHTTPAddress: http://127.0.0.1:28080/internal/media-auth
-authHTTPExclude:
-  - action: api
-  - action: metrics
-webrtc: true
-webrtcAddress: :28889
-webrtcEncryption: true
-webrtcServerCert: {self.directory.parent / "server.pem"}
-webrtcServerKey: {self.directory.parent / "server-key.pem"}
-webrtcLocalUDPAddress: :28189
-webrtcLocalTCPAddress: :28189
-webrtcAdditionalHosts: [10.0.2.2]
-webrtcHandshakeTimeout: 30s
-pathDefaults:
-  source: publisher
-  overridePublisher: false
-paths:
-  all_others:
-""")
+        config.write_text(mediamtx_config(self.directory.parent))
         environment = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
                        "COMMUNITY_DB_PATH": str(self.directory / "community.db"),
                        "COMMUNITY_ARTWORK_DIR": str(self.directory / "artwork"),

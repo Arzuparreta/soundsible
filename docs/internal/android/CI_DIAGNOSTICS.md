@@ -128,3 +128,27 @@ The traces must distinguish socket registration, delivery to the client, rejecti
 owner/generation and an exception when rebuilding the queue. The case's assertions
 and deadlines are kept; a green retry alone does not demonstrate
 that the cause has been repaired.
+
+## Publisher closed after 30 s in the Android Live fixture
+
+On `main` (`e6bad843`, run `44857843679`, shard 5), `LiveListenerTest.httpCoreRelay`
+failed at `Manual retry did not recover decoded Live` with `state=1, requested=false`.
+The failure was unrelated to PR #483 (`StartupTest` passed).
+
+The shard artifacts showed MediaMTX closing the synthetic publisher (`peer:1`,
+session `1e7ec0df`) with `closed: peer connection closed` 30.4 s after connecting
+(`02:56:20` to `02:56:51`), while MediaMTX was still receiving 50 RTP packets/s.
+Comparing `rtc.stats` against passing runs showed `peer:1`'s `candidate-pair`
+`packetsReceived` froze at `3` after the first second (versus `+11 packets/s` of
+RTCP/TWCC in passing runs), so MediaMTX's `pion/ice` keepalives on its selected
+pair received no responses and hit `5 s disconnected + 25 s failed = 30 s`.
+Once the publisher closed, every WHEP manual retry failed with 404 (`no stream
+is available`).
+
+`scripts/android_live_fixture.py` left `webrtcIPsFromInterfaces` at its default
+(`true`) and bound `:28189` on all interfaces, so MediaMTX advertised host
+interface IPs (`10.1.0.x`, `172.17.0.1`, `127.0.0.1`) alongside `10.0.2.2`.
+Behind QEMU SLIRP's UDP NAT, MediaMTX could pair `local: host/udp/127.0.0.1/28189`
+with a non-loopback `remote: prflx/udp/10.1.0.120:<port>` whose return packets
+were dropped. The fixture now binds MediaMTX WebRTC listeners to `127.0.0.1`
+only, sets `webrtcIPsFromInterfaces: false`, and advertises only `10.0.2.2`.
