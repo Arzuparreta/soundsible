@@ -37,6 +37,8 @@ export interface TrackMenuContext {
    * its own menu moves or drops it, so this leaves out everything that plays,
    * places or deletes it, and keeps what having the song means. */
   inRoute?: boolean;
+  onNotInterested?: () => void;
+  onUndoNotInterested?: () => void;
 }
 
 /** The links a menu offers into the music itself: one entry per performer, then
@@ -116,7 +118,10 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({
       icon: icons.feedback(),
       label: t('trackActions.notInterested'),
-      onSelect: () => void sendNotInterested(track),
+      onSelect: () => void sendNotInterested(track, {
+        onDismissed: ctx.onNotInterested,
+        onUndone: ctx.onUndoNotInterested,
+      }),
     });
   }
   // Having a song and having its bytes are two separate steps, and the menu
@@ -164,28 +169,45 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   return list;
 }
 
-async function sendNotInterested(track: Track): Promise<void> {
+export async function sendDiscoveryNotInterested(
+  payload: Record<string, unknown>,
+  hooks?: { onDismissed?: () => void; onUndone?: () => void },
+): Promise<void> {
   try {
-    const result = await api.sendDiscoveryFeedback({
-      media_type: isPodcastTrack(track) ? 'podcast_episode' : 'music_track',
-      track_id: track.source === 'preview' ? undefined : track.id,
-      title: track.title,
-      artist: track.artist,
-      youtube_id: !isPodcastTrack(track)
-        ? track.youtube_id || (track.source === 'preview' ? track.id : undefined)
-        : undefined,
-      podcast_feed_id: track.podcast_feed_id,
-      podcast_episode_id: track.podcast_episode_guid,
-      podcast_show_title: isPodcastTrack(track) ? track.artist : undefined,
-      source: track.recommendation?.source,
-    });
+    const result = await api.sendDiscoveryFeedback(payload);
     if (!result.recorded || !result.event_id) return;
+    hooks?.onDismissed?.();
+    const eventId = result.event_id;
     toast.action(t('trackActions.feedbackSaved'), t('common.undo'), () => {
-      void api.undoDiscoveryFeedback(result.event_id!).catch(() => {});
+      void api.undoDiscoveryFeedback(eventId)
+        .then(() => { hooks?.onUndone?.(); })
+        .catch(() => {});
     });
   } catch {
     toast.error(t('trackActions.feedbackFailed'));
   }
+}
+
+async function sendNotInterested(
+  track: Track,
+  hooks?: { onDismissed?: () => void; onUndone?: () => void },
+): Promise<void> {
+  const deezerId = track.originKeys?.find((key) => key.startsWith('deezer:'))?.slice(7);
+  await sendDiscoveryNotInterested({
+    media_type: isPodcastTrack(track) ? 'podcast_episode' : 'music_track',
+    track_id: track.source === 'preview' ? undefined : track.id,
+    title: track.title,
+    artist: track.artist,
+    youtube_id: !isPodcastTrack(track)
+      ? track.youtube_id || (track.source === 'preview' ? track.id : undefined)
+      : undefined,
+    deezer_id: deezerId || undefined,
+    isrc: track.isrc ?? undefined,
+    podcast_feed_id: track.podcast_feed_id,
+    podcast_episode_id: track.podcast_episode_guid,
+    podcast_show_title: isPodcastTrack(track) ? track.artist : undefined,
+    source: track.recommendation?.source,
+  }, hooks);
 }
 
 async function confirmDelete(track: Track): Promise<void> {

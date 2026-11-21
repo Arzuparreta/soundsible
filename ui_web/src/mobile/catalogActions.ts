@@ -10,12 +10,13 @@ import { openContextMenu } from '../lib/contextMenu';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
 import type { MigrationJob } from '../lib/migrationApi';
 
-export type CatalogPurpose = 'play' | 'save' | 'remove' | 'acquire';
+export type CatalogPurpose = 'play' | 'save' | 'remove' | 'acquire' | 'radio';
 
 /** Search, recommendations and entity songs share account-scoped native actions. */
 export function createNativeCatalogActions(props: {
   generation: () => number; tracks: () => Track[]; saved: () => SavedEntry[];
   disconnected: () => boolean; onPlay: (track: Track) => Promise<void>;
+  onStartRadio?: (track: Track) => Promise<void>;
   onAcquire?: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
   onPlayCollection?: (tracks: Track[], index: number, context?: import('../lib/program/runtime').ProgramContext, shuffle?: boolean) => Promise<void>;
 }) {
@@ -124,6 +125,9 @@ export function createNativeCatalogActions(props: {
       if (purpose === 'play') {
         if (!track) throw new Error('No preview');
         await props.onPlay(track);
+      } else if (purpose === 'radio') {
+        if (!track || !props.onStartRadio) throw new Error('Radio unavailable');
+        await props.onStartRadio(track);
       } else if (purpose === 'acquire') {
         if (!track || !props.onAcquire) throw new Error('Acquisition unavailable');
         await props.onAcquire(track);
@@ -134,7 +138,7 @@ export function createNativeCatalogActions(props: {
         if (!disposed && generation === props.generation()) await props.onChanged();
       }
     } catch (failure) {
-      if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : purpose === 'play' ? 'search.noPreview' : purpose === 'acquire' ? 'search.notSaved' : 'common.loadFailed'));
+      if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : purpose === 'play' || purpose === 'radio' ? 'search.noPreview' : purpose === 'acquire' ? 'search.notSaved' : 'common.loadFailed'));
     } finally { if (current()) setPending(null); }
   }
   async function acquireCatalogItem(item: CatalogItem, current: () => boolean, confirm?: string): Promise<void> {

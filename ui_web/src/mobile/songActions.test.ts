@@ -21,19 +21,31 @@ it('offers one link per performer and then the album, like the web menu', () => 
   expect(nativeMusicLinkActions(trackMusic({ ...song, media_kind: 'podcast_episode' } as Track), open, false)).toEqual([]);
 });
 
-it('sends "not interested" only for recommended items, with an undo for the same account', async () => {
+it('sends "not interested" only for recommended items, forwards deezer/isrc and dismissal hooks, and undoes for the same account', async () => {
   const plain = { id: 'x', type: 'track', title: 'T', artist: 'A', raw: {} } as CatalogItem;
   expect(catalogFeedback(plain)).toBeNull(); expect(nativeFeedbackActions(null, () => true)).toEqual([]);
-  const recommended = { ...plain, raw: { youtube_id: 'dQw4w9WgXcQ', recommendation: { identity: 'id-1', source: 'discover', reason: 'Because you played A' } } } as CatalogItem;
+  const recommended = {
+    ...plain,
+    external_ids: { deezer_id: '300', isrc: 'USRC17607839' },
+    raw: { youtube_id: 'dQw4w9WgXcQ', recommendation: { identity: 'id-1', source: 'discover', reason: 'Because you played A' } },
+  } as CatalogItem;
   let current = true;
-  const actions = nativeFeedbackActions(catalogFeedback(recommended), () => current);
+  const onDismissed = vi.fn();
+  const onUndone = vi.fn();
+  const actions = nativeFeedbackActions(catalogFeedback(recommended), () => current, { onDismissed, onUndone });
   expect(actions.map(action => [action.label, !!action.disabled])).toEqual([['Because you played A', true], ['trackActions.notInterested', false]]);
   mocks.request.mockResolvedValueOnce({ recorded: true, event_id: 'event/1' }).mockResolvedValueOnce({ undone: true });
   actions[1].onSelect(); await flush();
-  expect(mocks.request.mock.calls[0][1].body).toEqual({ feedback: 'not_interested', item: { media_type: 'music_track', track_id: undefined, title: 'T', artist: 'A', youtube_id: 'dQw4w9WgXcQ', source: 'discover' } });
+  expect(mocks.request.mock.calls[0][1].body).toEqual({
+    feedback: 'not_interested',
+    item: { media_type: 'music_track', track_id: undefined, title: 'T', artist: 'A', youtube_id: 'dQw4w9WgXcQ', deezer_id: '300', isrc: 'USRC17607839', source: 'discover' },
+  });
+  expect(onDismissed).toHaveBeenCalledTimes(1);
   const undo = mocks.toast.action.mock.calls[0][2];
   current = false; undo(); expect(mocks.request).toHaveBeenCalledTimes(1);
-  current = true; undo(); expect(mocks.request.mock.calls[1][0]).toBe('/api/discovery/feedback/event%2F1');
+  current = true; undo(); await flush();
+  expect(mocks.request.mock.calls[1][0]).toBe('/api/discovery/feedback/event%2F1');
+  expect(onUndone).toHaveBeenCalledTimes(1);
 });
 
 it('lists only other online devices and asks the chosen one to play the library song', async () => {

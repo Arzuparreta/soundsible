@@ -7,6 +7,7 @@ import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { focusRequestedSearch } from '../lib/searchFocus';
 import { ViewHeader } from '../components/ViewHeader';
+import { Control } from '../design/Control';
 import { openOverlay } from '../lib/overlay';
 import { desktopShell } from '../lib/shellLayout';
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
@@ -33,7 +34,7 @@ import {
   rememberSearch,
   searchHistoryEnabled,
 } from '../lib/searchHistory';
-import { CloseIcon } from '../components/icons';
+import { CloseIcon, RefreshIcon } from '../components/icons';
 import {
   catalogPreviewId,
   itemArtist,
@@ -149,6 +150,8 @@ export default function Search() {
   const [lastRun, setLastRun] = createSignal('');
   const [recents, setRecents] = createSignal<string[]>(loadRecentSearches(initialDomain));
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
+  const [discoverControl, setDiscoverControl] = createSignal<{ canRefresh: boolean; refreshing: boolean; refresh: () => void } | null>(null);
+  const showDiscoverRefresh = () => !q().trim() && !sharedCapsule() && !sharedInvalid() && !searchParams.browse && Boolean(discoverControl()?.canRefresh);
   const [sharedCapsule, setSharedCapsule] = createSignal<TrackShareCapsuleV1 | null>(null);
   const [sharedItem, setSharedItem] = createSignal<CatalogItem | null>(null);
   const [sharedLoading, setSharedLoading] = createSignal(false);
@@ -707,7 +710,27 @@ export default function Search() {
 
   return (
     <div class="view">
-      <ViewHeader title={tr('nav.search')} onTitleTap={() => reselectPrimaryTab('/search')} />
+      <ViewHeader
+        title={tr('nav.search')}
+        onTitleTap={() => reselectPrimaryTab('/search')}
+        barActions={showDiscoverRefresh() ? [{
+          label: tr('searchHome.refresh'),
+          icon: () => <RefreshIcon class={discoverControl()?.refreshing ? styles.spinning : undefined} />,
+          disabled: Boolean(discoverControl()?.refreshing),
+          onSelect: () => discoverControl()?.refresh(),
+        }] : []}
+        actions={showDiscoverRefresh() ? (
+          <Control
+            class={styles.refresh}
+            disabled={Boolean(discoverControl()?.refreshing)}
+            aria-busy={discoverControl()?.refreshing ? 'true' : undefined}
+            onClick={() => discoverControl()?.refresh()}
+          >
+            <RefreshIcon class={discoverControl()?.refreshing ? styles.spinning : undefined} />
+            <span>{tr('searchHome.refresh')}</span>
+          </Control>
+        ) : undefined}
+      />
       {/* Suggestions and recent searches live as long as focus stays anywhere
           in this box, so Tab can reach them from the field. */}
       <div
@@ -853,7 +876,8 @@ export default function Search() {
           </Match>
           <Match when={!q().trim()}>
             <SearchDiscovery section={typeof searchParams.browse === 'string' ? searchParams.browse : undefined}
-              onReady={setDiscoveryReady} onPlay={playItem} onSave={(item) => void saveItem(item)} saving={saving()} />
+              onReady={setDiscoveryReady} onRefreshControl={setDiscoverControl}
+              onPlay={playItem} onSave={(item) => void saveItem(item)} saving={saving()} />
           </Match>
           <Match when={queryTooShort()}>
             <p class={styles.hint} role="status">{tr('search.typeMore')}</p>

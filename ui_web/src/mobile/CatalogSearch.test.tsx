@@ -6,8 +6,15 @@ import type { CatalogItem, CatalogSearchResponse, SavedEntry, Track } from '../t
 import CatalogSearch from './CatalogSearch';
 import { dispatchNavigationBack } from './backNavigation';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
-const mocks = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn(), save: vi.fn(), menu: vi.fn(), feed: vi.fn(), artist: vi.fn(), album: vi.fn(), albumJob: vi.fn(), artistJob: vi.fn() }));
+const mocks = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn(), save: vi.fn(), menu: vi.fn(), feed: vi.fn(), artist: vi.fn(), album: vi.fn(), albumJob: vi.fn(), artistJob: vi.fn(), request: vi.fn(), toastAction: vi.fn(), toastError: vi.fn(), toastInfo: vi.fn(), toastLoading: vi.fn() }));
 vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { searchCatalog: mocks.search, resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save, getDiscoveryMusicFeed: mocks.feed, getArtistProfile: mocks.artist, getAlbumProfile: mocks.album, getAlbumDownload: mocks.albumJob, getArtistDownload: mocks.artistJob } }));
+vi.mock('../lib/http', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/http')>();
+  return { ...actual, request: mocks.request };
+});
+vi.mock('../lib/toast', () => ({
+  toast: { action: mocks.toastAction, error: mocks.toastError, info: mocks.toastInfo, loading: mocks.toastLoading },
+}));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: mocks.menu }));
 const row: CatalogItem = { id: 'deezer:track:1', title: 'Song', artist: 'Artist', source: 'deezer', type: 'track', duration: 120, external_ids: { deezer_id: '1' } };
 const result = (items: CatalogItem[]): CatalogSearchResponse => ({ query: 'song', items, sections: [] });
@@ -180,11 +187,52 @@ it('opens an artist asked for from a song menu once, and Back returns to search'
 });
 it('adds artist links and "not interested" to a recommended song that has not resolved yet', async () => {
   const recommended = { ...row, album: 'Record', raw: { recommendation: { identity: 'r1', source: 'discover', reason: 'Because you played Artist' } } } as CatalogItem;
-  mocks.feed.mockResolvedValue({ items: [{ id: recommended.id, title: 'Song', artist: 'Artist', album: 'Record', recommendation_identity: 'r1', reason: 'Because you played Artist' }] });
-  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  mocks.feed.mockResolvedValue({ items: [{ id: recommended.id, title: 'Song', artist: 'Artist', album: 'Record', external_ids: { deezer_id: '1' }, recommendation_identity: 'r1', reason: 'Because you played Artist' }] });
+  const startRadio = vi.fn().mockResolvedValue(undefined);
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onStartRadio={startRadio} onPlay={vi.fn()} onChanged={vi.fn()} />);
   await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
   fireEvent.contextMenu(view.getByText('Song'));
   await waitFor(() => expect(mocks.menu).toHaveBeenCalled());
-  const labels = mocks.menu.mock.calls.at(-1)![0].actions.map((action: { label: string }) => action.label);
-  expect(labels).toEqual(expect.arrayContaining(['Go to artist', 'Go to album', 'Because you played Artist', 'Not interested']));
+  const actions = mocks.menu.mock.calls.at(-1)![0].actions as Array<{ label: string; onSelect: () => void }>;
+  expect(actions.map(action => action.label)).toEqual(expect.arrayContaining(['Start radio', 'Go to artist', 'Go to album', 'Because you played Artist', 'Not interested']));
+
+  mocks.request
+    .mockResolvedValueOnce({ recorded: true, event_id: 'ev-deezer-1' })
+    .mockResolvedValueOnce({ undone: true });
+  actions.find(action => action.label === 'Not interested')!.onSelect();
+  await waitFor(() => expect(view.queryByText('Song')).toBeNull());
+  expect(mocks.request).toHaveBeenCalledWith('/api/discovery/feedback', expect.objectContaining({
+    method: 'POST',
+    body: expect.objectContaining({
+      feedback: 'not_interested',
+      item: expect.objectContaining({ deezer_id: '1', title: 'Song', artist: 'Artist', source: 'discover' }),
+    }),
+  }));
+
+  const undo = mocks.toastAction.mock.calls[0][2];
+  undo();
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  expect(mocks.request).toHaveBeenCalledWith('/api/discovery/feedback/ev-deezer-1', { method: 'DELETE', timeoutMs: 5000 });
+
+  actions.find(action => action.label === 'Start radio')!.onSelect();
+  await waitFor(() => expect(mocks.resolve).toHaveBeenCalled());
+  await waitFor(() => expect(startRadio).toHaveBeenCalledWith(expect.objectContaining({ id: 'A1111111111', title: 'Song', artist: 'Artist' })));
+});
+
+it('renders the Discover refresh control beside the Android search bar and hides it while searching', async () => {
+  mocks.feed
+    .mockResolvedValueOnce({ items: [{ id: 'deezer:1', title: 'First Pick', artist: 'Artist One' }] })
+    .mockResolvedValueOnce({ items: [{ id: 'deezer:2', title: 'Second Pick', artist: 'Artist Two' }] });
+
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  await waitFor(() => expect(view.getByText('First Pick')).toBeTruthy());
+
+  const refreshBtn = view.getByRole('button', { name: 'Refresh' });
+  expect(refreshBtn.closest('[data-testid="search-discovery"]')).toBeNull();
+  fireEvent.click(refreshBtn);
+  await waitFor(() => expect(view.getByText('Second Pick')).toBeTruthy());
+  expect(mocks.feed.mock.calls[1][1]).toBe(true);
+
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  expect(view.queryByRole('button', { name: 'Refresh' })).toBeNull();
 });

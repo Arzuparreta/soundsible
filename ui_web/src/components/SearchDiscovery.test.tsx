@@ -8,8 +8,13 @@ import { setLocale } from '../lib/i18n';
 const mocks = vi.hoisted(() => ({
   getDiscoveryMusicFeed: vi.fn(),
   resolveCatalogItem: vi.fn(),
+  sendDiscoveryFeedback: vi.fn(),
+  undoDiscoveryFeedback: vi.fn(),
   prefetchPreviews: vi.fn(),
   navigate: vi.fn(),
+  openContextMenu: vi.fn(),
+  toastAction: vi.fn(),
+  toastError: vi.fn(),
 }));
 
 vi.mock('@solidjs/router', () => ({ useNavigate: () => mocks.navigate }));
@@ -17,9 +22,13 @@ vi.mock('../lib/api', () => ({
   api: {
     getDiscoveryMusicFeed: mocks.getDiscoveryMusicFeed,
     resolveCatalogItem: mocks.resolveCatalogItem,
+    sendDiscoveryFeedback: mocks.sendDiscoveryFeedback,
+    undoDiscoveryFeedback: mocks.undoDiscoveryFeedback,
   },
 }));
 vi.mock('../lib/prefetch', () => ({ prefetchPreviews: mocks.prefetchPreviews }));
+vi.mock('../lib/contextMenu', () => ({ openContextMenu: mocks.openContextMenu }));
+vi.mock('../lib/toast', () => ({ toast: { action: mocks.toastAction, error: mocks.toastError } }));
 vi.mock('../lib/session', () => ({ userKey: (k: string) => `u1:${k}` }));
 vi.mock('../stores', async () => {
   const { identityMock } = await import('../lib/identityMock');
@@ -83,8 +92,15 @@ it('reloads via discovery_feed_ready push, supports refresh, and speculatively p
     });
 
   const onReady = vi.fn();
+  let control: { canRefresh: boolean; refreshing: boolean; refresh: () => void } | null = null;
   const view = render(() => (
-    <SearchDiscovery onReady={onReady} onPlay={vi.fn()} onSave={vi.fn()} saving={new Set()} />
+    <SearchDiscovery
+      onReady={onReady}
+      onRefreshControl={(next) => { control = next; }}
+      onPlay={vi.fn()}
+      onSave={vi.fn()}
+      saving={new Set()}
+    />
   ));
 
   await waitFor(() => expect(view.getByText('Track One')).toBeTruthy());
@@ -98,8 +114,54 @@ it('reloads via discovery_feed_ready push, supports refresh, and speculatively p
 
   dispatchDiscoveryFeedReady({ limit: 10 });
   await waitFor(() => expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(control?.canRefresh).toBe(true));
 
-  fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+  control!.refresh();
   await waitFor(() => expect(view.getByText('Rotated Track')).toBeTruthy());
   expect(mocks.getDiscoveryMusicFeed.mock.calls[2][1]).toBe(true);
+});
+
+it('dismisses a recommended Deezer song on Not interested and restores it on Undo', async () => {
+  mocks.getDiscoveryMusicFeed.mockResolvedValueOnce({
+    sections: [{ id: 'more_like_x', title: 'More like X', item_ids: ['deezer:300'] }],
+    items: [{
+      id: 'deezer:300',
+      title: 'Midnight City',
+      artist: 'M83',
+      source: 'deezer',
+      external_ids: { deezer_id: '300' },
+      recommendation_identity: 'music:deezer:300',
+      reason: 'Related to music in your library.',
+      reason_code: 'library_graph',
+    }],
+  });
+  mocks.sendDiscoveryFeedback.mockResolvedValueOnce({ recorded: true, event_id: 'ev-300' });
+  mocks.undoDiscoveryFeedback.mockResolvedValueOnce({ undone: true });
+
+  const view = render(() => (
+    <SearchDiscovery onReady={vi.fn()} onPlay={vi.fn()} onSave={vi.fn()} saving={new Set()} />
+  ));
+
+  await waitFor(() => expect(view.getByText('Midnight City')).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'More options: Midnight City' }));
+  const menuActions = mocks.openContextMenu.mock.calls[0][0].actions as Array<{ label: string; disabled?: boolean; onSelect: () => void }>;
+  expect(menuActions.map(action => [action.label, Boolean(action.disabled)])).toEqual(expect.arrayContaining([
+    ['Start radio', false],
+    ['Related to music in your library.', true],
+    ['Not interested', false],
+  ]));
+
+  menuActions.find(action => action.label === 'Not interested')!.onSelect();
+  await waitFor(() => expect(view.queryByText('Midnight City')).toBeNull());
+  expect(mocks.sendDiscoveryFeedback).toHaveBeenCalledWith(expect.objectContaining({
+    media_type: 'music_track',
+    deezer_id: '300',
+    title: 'Midnight City',
+    artist: 'M83',
+  }));
+
+  const undo = mocks.toastAction.mock.calls[0][2];
+  undo();
+  await waitFor(() => expect(view.getByText('Midnight City')).toBeTruthy());
+  expect(mocks.undoDiscoveryFeedback).toHaveBeenCalledWith('ev-300');
 });
