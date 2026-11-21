@@ -38,6 +38,24 @@ public class StartupTest {
         fail("Packaged Android startup did not complete: " + evaluate(scenario, "document.body.innerText"));
     }
 
+    /**
+     * A packaged font is reported loaded only once its request has finished, and
+     * startup never waits for that: the first frame appears without it and the
+     * browser swaps the face in afterwards. Sampling the check once right after
+     * awaitReady therefore raced the request and failed releases at random.
+     * Missing fonts still fail here, after the deadline, with their real status.
+     */
+    public void awaitFont(ActivityScenario<MainActivity> scenario, String font) throws Exception {
+        String check = "document.fonts.check('" + font + "')";
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        while (System.nanoTime() < deadline) {
+            if ("true".equals(evaluate(scenario, check))) return;
+            Thread.sleep(100);
+        }
+        fail("Packaged font not loaded: " + font + ": " + evaluate(scenario,
+            "Array.from(document.fonts).map(f => f.family + ' ' + f.weight + ' ' + f.status).join(', ')"));
+    }
+
     /** Bounded rows must be reached by scrolling, not assumed to exist offscreen. */
     public void revealLibraryTrack(ActivityScenario<MainActivity> scenario, String id) throws Exception {
         revealLibraryRow(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-browse-track-id]'))"
@@ -88,7 +106,7 @@ public class StartupTest {
             assertEquals("\"dark\"", evaluate(scenario, "document.documentElement.dataset.theme"));
             assertEquals("\"Conecta tu Soundsible\"", evaluate(scenario, "document.querySelector('[data-testid=android-unconfigured] h1').textContent"));
             assertEquals("false", evaluate(scenario, "Array.from(document.images).some(i => !i.complete || !i.naturalWidth)"));
-            assertEquals("true", evaluate(scenario, "document.fonts.check('16px \"Plus Jakarta Sans\"')"));
+            awaitFont(scenario, "16px \"Plus Jakarta Sans\"");
         }
     }
 }
