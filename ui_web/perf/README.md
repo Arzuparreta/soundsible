@@ -21,7 +21,7 @@ only to its own fixture server on a free port, never to an engine.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `SURFACES` | all | `songs`, `favourites`, `albums`, `artists`, `album`, `artist`, `playlist`, `player-browser`, `player-queue` |
+| `SURFACES` | all | Default scroll suite: `songs`, `favourites`, `albums`, `artists`, `album`, `artist`, `playlist`, `player-browser`, `player-queue`. Opt-in extras (pass explicitly in `SURFACES`): `player-open` (2 open/close cycles), `dj-browser`, `dj-idle` |
 | `RATES` | `1,6` | CPU throttling rates. 6× on a desktop CPU is a proxy for a slow laptop, not a measurement of one |
 | `PLAYING` | off | `1` starts a track first and keeps it playing |
 | `REPEATS` | `3` | Runs per case. The reported row is the run with the median longest task; every run's frame counts are kept under `runs` |

@@ -111,7 +111,7 @@ IDs: **P** performance, **A** code architecture, **U** UX and design system,
 | # | Item | Evidence | Status |
 | --- | --- | --- | --- |
 | P1 | Every entering row resolves its saved/favourite state by scanning the whole saved array: `savedEntryForKeys` ([identity.ts:254](../../../ui_web/src/stores/identity.ts#L254)) calls `savedEntryForIdentity` ([saved.ts:14](../../../ui_web/src/lib/saved.ts#L14)), which uses `find`/`filter`. The ambiguity-aware `savedIndex` memo already exists at [identity.ts:69](../../../ui_web/src/stores/identity.ts#L69) and is not used for it. | Measured: using the index at 6× cut Favourites' longest task from 260–282 ms to 145–157 ms and script time from 1.92 s to 1.17–1.24 s. Necessary, not sufficient. | **Closed (step 4).** `savedEntryForKeys` answers from `buildSavedIdentityIndex` (`lib/saved.ts`), a memo in `stores/identity.ts`; a seeded test checks it against the scan on 10,000 random cases. Songs at 6×: longest task 288 → 125 ms, script 2,635 → 1,122 ms; at 1× script 1,053 → 322 ms ([numbers](../measurements/web-ui-rendering-2026-11-16/README.md)). `mobile/songMarks.ts` and `mobile/AndroidStart.tsx` still call the scanning `savedEntryForIdentity` over their own entries. |
-| P2 | The song row is expensive to mount. With a 300-song library, tasks still reach 160–205 ms at 6×; a plain row in the same shell stays at 35 ms. More overscan makes it worse (30 rows: 424 ms task). | Measured | **Partly closed (step 5).** A CPU profile (`PROFILE=<dir>` on the bench) showed the cost was building and destroying row subtrees, with no single hot function. `CollectionRows` ([CollectionView.tsx](../../../ui_web/src/components/CollectionView.tsx)) reuses a row's slot for the next track; slots keep their place in the document while the list moves and return to list order when it stops. Songs at 6×: longest task 125 → 49 ms, longest display gap 100 → 33 ms, script 1,122 → 740 ms ([numbers](../measurements/web-ui-rendering-2026-11-16/README.md)). Still open: about a third of the frames are partial at 6×; what remains is style recalculation (about 0.25 ms per element at 6×) and paint, not script. |
+| P2 | The song row is expensive to mount. With a 300-song library, tasks still reach 160–205 ms at 6×; a plain row in the same shell stays at 35 ms. More overscan makes it worse (30 rows: 424 ms task). | Measured | **Updated (2026-11-20 ThinkPad X270 overhaul).** Building on step 5's `createSlots` reuse, the follow-up removes `CollectionGrid`'s scroll-frame `offsetHeight` loop, quantizes window ranges, switches dense rows to async `<img>` (`ArtworkSurface`) with fling-velocity budgeting (`ScrollActivityContext` / `createScrollDeferred`) and CSS containment, drops `#app` `blur(16px)`/`scale(0.96)`, caps `ArtworkBackdrop` blur canvas to `240px`, and dynamically loads `PlayerSurface`. Physical X270 (HD Graphics 520, `1920x1080`): Songs complete frames `186/286 → 198/209` (`65.0% → 94.7%`), dropped `8 → 0`, max task `50.6 → 33.9 ms`, GPU busy `3,304.5 → 2,069 ms`; Albums `48/149 → 148/227` (`32.2% → 65.2%`), max gap `127.2 → 34.4 ms`; `dj-idle` `202/202` (`0` partial/dropped) ([measurements](../measurements/web-ui-thinkpad-2026-11-20/README.md)). |
 | P3 | Surfaces with no virtualization: `AlbumGrid`, `ArtistGrid`, the player's album browser ([NowPlayingBrowser.tsx:919](../../../ui_web/src/components/NowPlayingBrowser.tsx#L919)) and local search (`:1040`), artist and album track lists ([Artist.tsx:397](../../../ui_web/src/routes/Artist.tsx#L397), [Album.tsx:410](../../../ui_web/src/routes/Album.tsx#L410)), podcast subscriptions, DJ route entries. | Measured: player album browser 12,214 DOM elements; album grid 1.28 s and artist page 1.38 s of paint at 6×. | **Closed (step 6).** `CollectionGrid` ([CollectionGrid.tsx](../../../ui_web/src/components/CollectionGrid.tsx)) bounds `AlbumGrid`, `ArtistGrid` and the podcast subscriptions: one real CSS grid, spacers for the rows not rendered, cards reused and placed by grid line. `EntityTrackList` bounds artist and album track lists over 60 rows with `CollectionRows`, which now measures its own origin under a page header (`lib/scrollOrigin.ts`). The player's album tab was bounded with `VirtualRows` in step 6; step 7 migrates it to `CollectionRows` and bounds the player's local search too. Document size: albums 5,649 → 604 elements, artist page 1,794 → 529. Scroll numbers are a trade, not all better: albums improve (complete frames at 6× 50 → 77), the 200-card artist grid is worse at 6× (56 → 42) ([numbers](../measurements/web-ui-rendering-2026-11-16/README.md)). Left whole on purpose: DJ sources (`AutoReferences`), a list the user adds to by hand. |
 | P4 | Player queue and player browser spend most of their time in ordinary layout (1,073 ms at 6× for the queue). Per-row and list containment, layer promotion, removing the query containers and disabling optional measurement each failed to remove it. | Measured in steps 2 and 7 | **Closed (step 7).** Reused rows and strict containment of the definite-size player panels stop descendant row changes from propagating intrinsic layout to neighbouring tiles. At 6× browser layout 992 → 553 ms and queue layout 617 → 228 ms; longest tasks 49.6 → 27.7 ms and 67.0 → 36.9 ms. Partial frames remain: this closes the identified layout defect, not target-device acceptance ([evidence](../measurements/web-ui-step7-2026-11-17/README.md)). |
 | P5 | ~~Desktop playback drops 8–27 frames per burst on every route surface.~~ The frames reported as dropped come after a short list has reached its end: the `OmniBar` progress fill (`transition: transform 0.25s steps(2, end)`) changes pixels twice per position update while Chromium expects a frame each vsync for a running animation. | Measured in step 3: 0 dropped frames while the list moves, playing or paused; ablation and at-rest runs in [the baseline](../measurements/web-ui-rendering-2026-11-16/README.md). Cost at rest while playing: 85 ms main thread and 43 ms compositor per 3.6 s (30 and 15 paused). | **Closed: measurement artifact, not a defect.** No application change. |
@@ -247,7 +247,8 @@ Two things that cost time in step 1:
 | 6 P3 | #466 | Done |
 | 7 P4 + A2 (+ A3) | #467 | Done |
 | 8 Design system (U2, U3, U6, U7; U4 decision) | #468 | Done |
-| 9 P6, X1–X3 (+ remaining A1/DJ activity) | #469 | Complete in this change; merge is gated by all latest-head checks |
+| 9 P6, X1–X3 (+ remaining A1/DJ activity) | #469 | Done (baseline for this follow-up) |
+| ThinkPad X270 follow-up (scroll, artwork, player/DJ compositing) | Pending PR | Complete locally; gated by CI checks and merge |
 
 ## Evidence kept outside the repository
 
@@ -278,10 +279,15 @@ do not overlap browser suites, builds and performance runs. Read live PR
 state rather than assuming an open PR has reached main.
 
 The nine migration steps are an implementation sequence, not proof of
-Spotify/YouTube parity. P2 remains partly closed: CPU 6× still produces
-partial frames from style/paint deadlines, despite removing its row-mount
-hotspot. Physical X270/iPhone/WebView/WebView2, live-library and 144 Hz
-acceptance remain unmeasured. Any next performance work starts by tracing
-that residual on the target device, not by inferring a framework rewrite
-from the proxy. The legacy per-file design baseline remains an inventory
-for incremental migration, not a claim that every control was rewritten.
+Spotify/YouTube parity. Following the 2026-11-20 physical ThinkPad X270
+follow-up ([measurements](../measurements/web-ui-thinkpad-2026-11-20/README.md)),
+`songs` reaches `198/209` complete (`0` dropped, `33.9 ms` longest task),
+`albums` jumps from `48/149` to `148/227`, and `dj-idle` holds `202/202` (`14.3 ms`
+longest task) under hardware ANGLE compositing (`1920x1080`), with initial
+authenticated `library` payload trimmed to `206,915` B gzip (`8,401` B under the
+`215,316` B ceiling). Physical iPhone PWA, Android WebView, Windows WebView2, live-library,
+144 Hz acceptance, and cold first-open chunk load vs cached repeat-open remain
+explicitly bounded or unmeasured. Any next performance work continues from real
+target-device traces rather than assuming a framework rewrite. The legacy
+per-file design baseline remains an inventory for incremental migration, not a
+claim that every control was rewritten.

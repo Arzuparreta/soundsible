@@ -6,7 +6,11 @@ import styles from './FavouriteButton.module.css';
 
 export interface FavouriteButtonProps {
   /** The song this heart saves — identity plus snapshot, built by `lib/saved`. */
-  favourite: SavedEntry;
+  favourite?: SavedEntry;
+  /** Lightweight key array to observe favourite state without allocating an eager snapshot per recycled row. */
+  keys?: string[];
+  /** Lazy snapshot factory invoked only when toggled. */
+  resolveEntry?: () => SavedEntry;
   /** Smaller variant for dense rows (search results, album tracklists). */
   compact?: boolean;
   /** Extra class from the host surface, for layout only. */
@@ -26,7 +30,8 @@ export interface FavouriteButtonProps {
  * and the downloaded file alike.
  */
 export function FavouriteButton(props: FavouriteButtonProps) {
-  const saved = createMemo(() => isFavouriteKeys(props.favourite.keys));
+  const keys = () => props.keys ?? props.favourite?.keys ?? [];
+  const saved = createMemo(() => isFavouriteKeys(keys()));
   const label = () => (saved() ? t('trackActions.removeFav') : t('trackActions.addFav'));
 
   return (
@@ -40,7 +45,8 @@ export function FavouriteButton(props: FavouriteButtonProps) {
       onClick={(e) => {
         // Rows are buttons themselves; hearting one must not also play it.
         e.stopPropagation();
-        actions.toggleFavourite(props.favourite);
+        const resolved = props.favourite ?? props.resolveEntry?.();
+        if (resolved) actions.toggleFavourite(resolved);
       }}
     >
       <svg

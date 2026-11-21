@@ -13,10 +13,14 @@ test.beforeEach(async ({ page }) => {
   ] } }));
 });
 
-/** The artwork of every row: the one element carrying the cover background. */
+/** The artwork of every row: either a visible decoded `<img>` or its fallback gradient. */
 async function coverBoxes(list: Locator) {
-  return list.evaluate((root) => [...root.querySelectorAll<HTMLElement>('*')]
-    .filter((element) => getComputedStyle(element).backgroundImage.includes('gradient'))
+  return list.evaluate((root) => [...root.querySelectorAll<HTMLElement>('[data-artwork-surface]')]
+    .filter((element) => {
+      const img = element.querySelector('img');
+      const hasLoadedImg = !!img && img.complete && img.naturalWidth > 0 && getComputedStyle(img).opacity !== '0';
+      return hasLoadedImg || getComputedStyle(element).backgroundImage.includes('gradient');
+    })
     .map((element) => element.getBoundingClientRect())
     .map(({ width, height }) => ({ width, height })));
 }

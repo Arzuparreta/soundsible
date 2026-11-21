@@ -5,6 +5,7 @@ import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import Button from './Button';
 import { CollectionRows } from './CollectionView';
+import { ArtworkSurface } from '../design/Artwork';
 import { openContextMenu } from '../lib/contextMenu';
 import { coverStyle } from '../lib/cover';
 import { t } from '../lib/i18n';
@@ -411,7 +412,7 @@ function PlayerLane(props: {
   return <div ref={setScroller} class={styles.sectionRows} data-section-rows>
     <Show when={props.virtualize} fallback={<For each={props.entries}>{(entry) => props.children(() => entry)}</For>}>
       <CollectionRows items={props.entries} scrollElement={scroller} itemKey={entry => entry.id}
-        rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows
+        rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows={props.editingId !== null}
         keepMountedIndex={props.entries.findIndex((entry) => entry.id === props.editingId)}>
         {(entry) => props.children(entry)}
       </CollectionRows>
@@ -646,11 +647,7 @@ function PlayerTrackListRow(props: {
             {props.entry.position ?? ''}
           </Show>
         </span>
-        <span
-          class={styles.cover}
-          style={{ 'background-image': props.entry.cover ? `url("${props.entry.cover}")` : undefined }}
-          aria-hidden="true"
-        />
+        <ArtworkSurface class={styles.cover} seed={props.entry.id} src={props.entry.cover} aria-hidden="true" />
         <span class={styles.meta}>
           <span class={styles.title}>{props.entry.title}</span>
           <ArtistLinks class={styles.artist} music={props.entry.music ?? { artist: props.entry.artist, view: "library" }} />

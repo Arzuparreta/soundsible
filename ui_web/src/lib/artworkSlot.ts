@@ -7,3 +7,6 @@ import { createContext, type Accessor } from 'solid-js';
  * a forced layout per card while the grid scrolls.
  */
 export const ArtworkWidthContext = createContext<Accessor<number>>();
+
+/** True while a collection scroller is moving fast enough to defer uncached artwork fetches. */
+export const ScrollActivityContext = createContext<Accessor<boolean>>(() => false);

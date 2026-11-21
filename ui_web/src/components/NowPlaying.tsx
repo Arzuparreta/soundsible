@@ -5,7 +5,7 @@ import { navigateMusic, playerTrackMusic } from '../lib/musicNavigation';
 import { buildTrackMenu } from './trackActions';
 import { menuIcons } from './icons';
 import { savedFromTrack } from '../lib/saved';
-import { createEffect, createSignal, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
 import { createActivityMemo } from '../lib/activityMemo';
 import { mobileListLayout } from '../lib/listLayout';
 import { pageVisible } from '../lib/pageVisibility';
@@ -52,36 +52,76 @@ export function NowPlaying(props: {
   onMobilePanelChange: (panel: NowPlayingMobilePanel) => void;
   onCarouselProgress?: (index: number, live: boolean) => void;
   surfaceOpen: boolean;
+  panelsReady?: boolean;
   onCloseSurface?: () => void;
 }) {
   const [desktopLayout, setDesktopLayout] = createSignal(
     parseNowPlayingLayout(localStorage.getItem(NOW_PLAYING_LAYOUT_KEY), localStorage.getItem('np:panelSide')),
   );
   const [browserView, setBrowserView] = createSignal<'browser' | 'chat'>('browser');
+  const [queueMounted, setQueueMounted] = createSignal(props.panelsReady ?? true);
+  const [browserMounted, setBrowserMounted] = createSignal(props.panelsReady ?? true);
+  createEffect(() => {
+    if (!props.panelsReady || (queueMounted() && browserMounted())) return;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    if (typeof requestAnimationFrame === 'function') {
+      firstFrame = requestAnimationFrame(() => {
+        setQueueMounted(true);
+        secondFrame = requestAnimationFrame(() => setBrowserMounted(true));
+      });
+      onCleanup(() => {
+        cancelAnimationFrame(firstFrame);
+        cancelAnimationFrame(secondFrame);
+      });
+    } else {
+      setQueueMounted(true);
+      setBrowserMounted(true);
+    }
+  });
   let desktopQueueEl: HTMLDivElement | undefined;
 
-  const panelActive = (panel: NowPlayingPanelId) => props.surfaceOpen && pageVisible()
+  const panelActive = (panel: NowPlayingPanelId) => props.surfaceOpen && (props.panelsReady ?? true) && pageVisible()
     && (!mobileListLayout() || props.mobilePanel === panel);
   const queueActive = () => panelActive('queue');
   // Presentation projections sleep with their panel; transport scheduling stays
   // in the stores and continues even while the whole workspace is hidden.
-  const queuePositions = createActivityMemo(queueActive, () => new Map(state.playback.queue.map((entry, index) => [entry.queueId, index])), new Map<string, number>());
-  const currentQueueEntry = createActivityMemo(queueActive, () => state.playback.queue[state.playback.index], undefined);
-  const manualQueue = createActivityMemo(queueActive, () =>
-    state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'manual'),
-    []);
+  const queuePositions = createActivityMemo(
+    queueActive,
+    () => new Map(state.playback.queue.map((entry, index) => [entry.queueId, index])),
+    new Map<string, number>(),
+    () => [state.playback.queue],
+  );
+  const currentQueueEntry = createActivityMemo(
+    queueActive,
+    () => state.playback.queue[state.playback.index],
+    undefined,
+    () => [state.playback.queue, state.playback.index],
+  );
+  const manualQueue = createActivityMemo(
+    queueActive,
+    () => state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'manual'),
+    [],
+    () => [state.playback.queue, state.playback.index],
+  );
   // The radio's picks are still songs to look through. Autoplay's are not: it
   // is a continuation, drawn as its card, however many it has prepared.
-  const radioQueue = createActivityMemo(queueActive, () =>
-    state.playback.radioMode
+  const radioQueue = createActivityMemo(
+    queueActive,
+    () => state.playback.radioMode
       ? state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'generated')
       : [],
-    []);
-  const continuation = createActivityMemo(queueActive, () =>
-    state.playback.radioMode
+    [],
+    () => [state.playback.radioMode, state.playback.queue, state.playback.index],
+  );
+  const continuation = createActivityMemo(
+    queueActive,
+    () => state.playback.radioMode
       ? null
       : contextContinuation(state.playback.queue, state.playback.index, state.playback.repeat === 'all'),
-    null);
+    null,
+    () => [state.playback.radioMode, state.playback.queue, state.playback.index, state.playback.repeat],
+  );
   // The browser's widest fixed row (three scope chips and its tools) fits in
   // 320px; the three minimums and the seams between them fit a 1024px window.
   const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 320, stage: 330, queue: 280 };
@@ -94,14 +134,18 @@ export function NowPlaying(props: {
     }
   });
 
-  // Each lane keeps its own scroll offset, so rewinding the outer box alone
-  // would reopen the queue part-way down whichever lane was left scrolled.
+  // Each lane keeps its own scroll offset; rewind them offscreen after the
+  // exit finishes so opening the surface never flushes layout synchronously.
   createEffect(() => {
-    if (!props.surfaceOpen || !desktopQueueEl) return;
-    desktopQueueEl.scrollTop = 0;
-    for (const lane of desktopQueueEl.querySelectorAll<HTMLElement>('[data-section-rows]')) {
-      lane.scrollTop = 0;
-    }
+    if (props.surfaceOpen || !desktopQueueEl) return;
+    const timer = window.setTimeout(() => {
+      if (!desktopQueueEl || props.surfaceOpen) return;
+      desktopQueueEl.scrollTop = 0;
+      for (const lane of desktopQueueEl.querySelectorAll<HTMLElement>('[data-section-rows]')) {
+        lane.scrollTop = 0;
+      }
+    }, 320);
+    onCleanup(() => window.clearTimeout(timer));
   });
 
   const applyLayoutPreset = (preset: NowPlayingLayoutPresetId) =>
@@ -296,7 +340,14 @@ export function NowPlaying(props: {
       cards,
     });
     return sections;
-  }, initialSections);
+  }, initialSections, () => [
+    currentQueueEntry(),
+    manualQueue(),
+    radioQueue(),
+    continuation(),
+    state.playback.radioMode,
+    state.playback.currentTrack,
+  ]);
 
   return (
     <Show
@@ -346,51 +397,54 @@ export function NowPlaying(props: {
           }
           if (panel === 'queue') {
             return (
-              <PlayerTrackList
-                title={t('nowPlaying.queue')}
-                count={manualQueue().length + radioQueue().length}
-                sections={queueSections()}
-                virtualize
-                empty={t('nowPlaying.queueEmpty')}
-                dragHandle={dragHandle}
-                onReorder={reorderQueue}
-                headAction={{
-                  label: t('nowPlaying.clearManualQueue'),
-                  disabled: manualQueue().length === 0,
-                  onClick: () => actions.clearManualQueue(),
-                }}
-                setScrollerRef={(element) => { desktopQueueEl = element; }}
-              />
-            );
-          }
-          if (hostSession() && browserView() === 'chat') {
-            return (
-              <section class={styles.liveBrowser}>
-                <header>
-                  {dragHandle}
-                  <button type="button" onClick={() => setBrowserView('browser')}>
-                    {t('nowPlaying.panel.browser')}
-                  </button>
-                  <strong>{t('live.chat')}</strong>
-                </header>
-                <LiveRoomPanel compact />
-              </section>
+              <Show when={queueMounted()}>
+                <PlayerTrackList
+                  title={t('nowPlaying.queue')}
+                  count={manualQueue().length + radioQueue().length}
+                  sections={queueSections()}
+                  virtualize
+                  empty={t('nowPlaying.queueEmpty')}
+                  dragHandle={dragHandle}
+                  onReorder={reorderQueue}
+                  headAction={{
+                    label: t('nowPlaying.clearManualQueue'),
+                    disabled: manualQueue().length === 0,
+                    onClick: () => actions.clearManualQueue(),
+                  }}
+                  setScrollerRef={(element) => { desktopQueueEl = element; }}
+                />
+              </Show>
             );
           }
           return (
-            <div class={styles.browserWithLive}>
-              <Show when={hostSession()}>
-                <button class={styles.openLiveChat} type="button" onClick={() => setBrowserView('chat')}>
-                  <span />
-                  {t('live.chat')}
-                </button>
+            <Show when={browserMounted()}>
+              <Show when={hostSession() && browserView() === 'chat'} fallback={
+                <div class={styles.browserWithLive}>
+                  <Show when={hostSession()}>
+                    <button class={styles.openLiveChat} type="button" onClick={() => setBrowserView('chat')}>
+                      <span />
+                      {t('live.chat')}
+                    </button>
+                  </Show>
+                  <NowPlayingBrowser
+                    active={panelActive('browser')}
+                    onClose={() => props.onMobilePanelChange('stage')}
+                    dragHandle={dragHandle}
+                  />
+                </div>
+              }>
+                <section class={styles.liveBrowser}>
+                  <header>
+                    {dragHandle}
+                    <button type="button" onClick={() => setBrowserView('browser')}>
+                      {t('nowPlaying.panel.browser')}
+                    </button>
+                    <strong>{t('live.chat')}</strong>
+                  </header>
+                  <LiveRoomPanel compact />
+                </section>
               </Show>
-              <NowPlayingBrowser
-                active={panelActive('browser')}
-                onClose={() => props.onMobilePanelChange('stage')}
-                dragHandle={dragHandle}
-              />
-            </div>
+            </Show>
           );
         }}
       />

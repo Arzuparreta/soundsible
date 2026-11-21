@@ -1,13 +1,70 @@
-import { For, Show, createEffect, createMemo, createSignal, on, untrack, type Accessor, type JSX, type Setter } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack, type Accessor, type JSX, type Setter } from 'solid-js';
 import { createVirtualizer, defaultRangeExtractor } from '@tanstack/solid-virtual';
+import { ScrollActivityContext } from '../lib/artworkSlot';
 import { createRowHeight, type RowHeight } from '../lib/rowHeight';
 import { createScrollOrigin } from '../lib/scrollOrigin';
+import styles from './CollectionView.module.css';
 
 export interface Place { index: number; start: number; size: number; key?: string | number | bigint }
-export interface Slot { place: Accessor<Place>; setPlace: Setter<Place>; element?: HTMLElement }
+export interface Slot {
+  place: Accessor<Place>;
+  setPlace: Setter<Place>;
+  active: Accessor<boolean>;
+  setActive: Setter<boolean>;
+  element?: HTMLElement;
+}
 
 const samePlace = (a: Place, b: Place) => a.index === b.index && a.start === b.start && a.size === b.size && a.key === b.key;
 const placeKey = (place: Place) => place.key ?? place.index;
+const sameNumbers = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+export const gridSlotClass = styles.gridSlot;
+export const hiddenSlotClass = styles.slotHidden;
+export const scrollingFastClass = styles.scrollingFast;
+export { ScrollActivityContext } from '../lib/artworkSlot';
+
+/** Passive scroll-activity and fling-velocity tracker. */
+export function createScrollSettled(
+  scroller: Accessor<HTMLElement | null>,
+  delay = 180,
+  fastDelay = 150,
+): { scrolling: Accessor<boolean>; fast: Accessor<boolean> } {
+  const [scrolling, setScrolling] = createSignal(false);
+  const [fast, setFast] = createSignal(false);
+  createEffect(() => {
+    const el = scroller();
+    if (!el) return;
+    let scrollTimer: ReturnType<typeof setTimeout> | undefined;
+    let fastTimer: ReturnType<typeof setTimeout> | undefined;
+    let prevTop = el.scrollTop;
+    let prevTime = performance.now();
+    const onScroll = () => {
+      setScrolling(true);
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => setScrolling(false), delay);
+      const now = performance.now();
+      const top = el.scrollTop;
+      const dt = Math.max(1, now - prevTime);
+      const velocity = Math.abs(top - prevTop) / dt;
+      prevTop = top;
+      prevTime = now;
+      if (velocity > 1.5) {
+        setFast(true);
+        clearTimeout(fastTimer);
+        fastTimer = setTimeout(() => setFast(false), fastDelay);
+      }
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    onCleanup(() => {
+      el.removeEventListener('scroll', onScroll);
+      clearTimeout(scrollTimer);
+      clearTimeout(fastTimer);
+      setScrolling(false);
+      setFast(false);
+    });
+  });
+  return { scrolling, fast };
+}
 
 /**
  * The slots that show `places`, reusing the slot of a place that left for a
@@ -15,23 +72,33 @@ const placeKey = (place: Place) => place.key ?? place.index;
  *
  * Moving a node in the document makes the browser restyle and lay out its
  * whole subtree again, which costs as much as building it. While the
- * collection moves, a reused slot therefore keeps its position in the returned
- * array (and so in the document) and is positioned by style alone; the array
- * is put back in list order when the collection stops.
+ * collection moves, slots keep their document position and unused slots stay
+ * parked in the pool (hidden rather than removed) so transient range-size
+ * dips never tear down or rebuild row subtrees. Once scrolling settles, slots
+ * return to list order and excess parked slots are trimmed.
  */
 export function createSlots(
   places: () => readonly Place[],
   scrolling: Accessor<boolean>,
   canvas: () => HTMLElement | undefined,
 ): Accessor<Slot[]> {
+  let wasMoving = false;
   const slots = createMemo<Slot[]>((previous) => {
     const wanted = places();
     const moving = scrolling();
+    if (
+      previous.length === wanted.length
+      && moving === wasMoving
+      && previous.every((slot, idx) => untrack(slot.active) && samePlace(untrack(slot.place), wanted[idx]))
+    ) {
+      return previous;
+    }
+    wasMoving = moving;
     // Capture before Solid moves nodes into document order: by the time an
     // effect runs, moving the focused node may already have blurred it.
     const focused = document.activeElement;
     const focusedSlot = focused instanceof HTMLElement
-      ? previous.find(slot => slot.element?.contains(focused)) : undefined;
+      ? previous.find(slot => untrack(slot.active) && slot.element?.contains(focused)) : undefined;
     if (focusedSlot) {
       const key = placeKey(untrack(focusedSlot.place));
       queueMicrotask(() => {
@@ -50,20 +117,26 @@ export function createSlots(
       if (!slot && (slot = free.pop())) {
         // Focus belongs to the item that had it, not to whichever item is
         // shown next in the same slot.
-        const focused = document.activeElement;
-        if (focused instanceof HTMLElement && slot.element?.contains(focused)) focused.blur();
+        const focusedEl = document.activeElement;
+        if (focusedEl instanceof HTMLElement && slot.element?.contains(focusedEl)) focusedEl.blur();
       }
-      if (slot) slot.setPlace(place);
-      else {
+      if (slot) {
+        slot.setPlace(place);
+        slot.setActive(true);
+      } else {
         const [get, set] = createSignal<Place>(place, { equals: samePlace });
-        slot = { place: get, setPlace: set };
+        const [active, setActive] = createSignal(true);
+        slot = { place: get, setPlace: set, active, setActive };
         fresh.push(slot);
       }
       used.add(slot);
       return slot;
     });
     if (!moving) return ordered;
-    return [...previous.filter((slot) => used.has(slot)), ...fresh];
+    for (const slot of previous) {
+      if (!used.has(slot)) slot.setActive(false);
+    }
+    return fresh.length ? [...previous, ...fresh] : previous;
   }, []);
 
   return slots;
@@ -72,22 +145,6 @@ export function createSlots(
 /**
  * The rows of a fixed-row collection: only the ones the scrollport can show,
  * and none of them built twice.
- *
- * A row that scrolls out is not destroyed. Its slot is handed to the row that
- * scrolls in, so entering the window costs the handful of text, attribute and
- * style writes that differ between two tracks instead of a new subtree with
- * its listeners, memos and cleanup. Building and tearing down rows was most of
- * a fast scroll's script time (handoff item P2).
- *
- * At rest the slots are in list order in the document, so tab order and what
- * a screen reader walks match what is on screen.
- *
- * Because a slot outlives the item it shows, `children` receives accessors and
- * must read them where the value is used. State a row keeps for itself has to
- * be keyed on the item, or it will follow the slot to the next item.
- *
- * The rows live in the caller's scrollport, by default the route's primary
- * one, and start wherever the content above them ends.
  */
 export function CollectionRows<T>(props: {
   items: readonly T[];
@@ -109,12 +166,9 @@ export function CollectionRows<T>(props: {
   children: (item: Accessor<T>, index: Accessor<number>) => JSX.Element;
 }) {
   const rowH = createRowHeight(() => props.rowHeight ?? { cssVar: '--row-h', fallback: 56 });
-  const [scrolling, setScrolling] = createSignal(false);
   let canvas: HTMLDivElement | undefined;
-  // The virtualizer samples its scrollport when it first sees it. During setup
-  // the caller's element exists but is not laid out, and a zero-height sample
-  // is an empty window; `createScrollOrigin` hands it over once mounted.
   const { scroller, origin } = createScrollOrigin(() => canvas, { scrollElement: props.scrollElement });
+  const { scrolling, fast } = createScrollSettled(scroller);
   const margin = () => props.scrollMargin ?? origin();
   const keys = createMemo(() => props.itemKey ? props.items.map(props.itemKey) : undefined, undefined, {
     equals: (a, b) => a === b || !!a && !!b && a.length === b.length && a.every((key, index) => key === b[index]),
@@ -123,6 +177,7 @@ export function CollectionRows<T>(props: {
     const current = keys();
     return (index: number) => current?.[index] ?? index;
   });
+  let previousRange: number[] = [];
   const virtualizer = createVirtualizer({
     get count() { return props.items.length; },
     getScrollElement: () => scroller(),
@@ -130,15 +185,32 @@ export function CollectionRows<T>(props: {
     get getItemKey() { return itemKey(); },
     get rangeExtractor() {
       const pinned = props.keepMountedIndex;
+      const count = props.items.length;
+      const tall = (scroller()?.clientHeight ?? 0) > 700;
+      const step = tall ? 8 : 4;
       return (range: Parameters<typeof defaultRangeExtractor>[0]) => {
-        const indexes = defaultRangeExtractor(range);
-        if (pinned != null && pinned >= 0 && pinned < props.items.length && !indexes.includes(pinned)) indexes.push(pinned);
-        return indexes.sort((a, b) => a - b);
+        let indexes: number[];
+        if (count > 40) {
+          const qStart = Math.floor(range.startIndex / step) * step;
+          const qEnd = Math.ceil((range.endIndex + 1) / step) * step - 1;
+          const start = Math.max(0, qStart - range.overscan);
+          const end = Math.min(range.count - 1, qEnd + range.overscan);
+          indexes = [];
+          for (let index = start; index <= end; index += 1) indexes.push(index);
+        } else {
+          indexes = defaultRangeExtractor(range);
+        }
+        if (pinned != null && pinned >= 0 && pinned < count && !indexes.includes(pinned)) {
+          indexes.push(pinned);
+          indexes.sort((a, b) => a - b);
+        }
+        if (sameNumbers(previousRange, indexes)) return previousRange;
+        previousRange = indexes;
+        return indexes;
       };
     },
     get scrollMargin() { return margin(); },
-    get overscan() { return props.overscan ?? 6; },
-    onChange: (instance) => setScrolling(instance.isScrolling),
+    get overscan() { return props.overscan ?? ((scroller()?.clientHeight ?? 0) > 700 ? 12 : 8); },
   });
   // `estimateSize` is only consulted when the virtualizer measures.
   createEffect(on(rowH, () => virtualizer.measure(), { defer: true }));
@@ -149,39 +221,38 @@ export function CollectionRows<T>(props: {
     <div
       ref={canvas}
       data-collection-rows
-      class={props.class}
-      style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}
+      class={props.class ? `${styles.canvas} ${props.class}` : styles.canvas}
+      classList={{ [styles.scrollingFast]: fast() }}
+      style={{ height: `${virtualizer.getTotalSize()}px` }}
     >
-      <For each={slots()}>
-        {(slot) => {
-          const index = () => slot.place().index;
-          // A shrinking list empties its last slots before the window follows.
-          const item = () => props.items[index()];
-          createEffect(() => {
-            index();
-            if (props.measureRows && slot.element) virtualizer.measureElement(slot.element);
-          });
-          return (
-            <div
-              ref={(element) => { slot.element = element; }}
-              data-index={index()}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: props.measureRows ? undefined : `${slot.place().size}px`,
-                // The row cannot change anything outside its box, so one row
-                // changing never lays out its neighbours.
-                contain: props.measureRows ? 'layout style' : 'size layout style',
-                transform: `translateY(${slot.place().start - margin()}px)`,
-              }}
-            >
-              <Show when={item() !== undefined}>{props.children(item as Accessor<T>, index)}</Show>
-            </div>
-          );
-        }}
-      </For>
+      <ScrollActivityContext.Provider value={fast}>
+        <For each={slots()}>
+          {(slot) => {
+            const index = () => slot.place().index;
+            // A shrinking list empties its last slots before the window follows.
+            const item = () => props.items[index()];
+            createEffect(() => {
+              index();
+              if (props.measureRows && slot.active() && slot.element) virtualizer.measureElement(slot.element);
+            });
+            return (
+              <div
+                ref={(element) => { slot.element = element; }}
+                data-index={slot.active() ? index() : undefined}
+                aria-hidden={!slot.active() ? 'true' : undefined}
+                class={props.measureRows ? `${styles.slot} ${styles.slotMeasured}` : styles.slot}
+                classList={{ [styles.slotHidden]: !slot.active() }}
+                style={{
+                  height: props.measureRows ? undefined : `${slot.place().size}px`,
+                  transform: `translateY(${slot.place().start - margin()}px)`,
+                }}
+              >
+                <Show when={item() !== undefined}>{props.children(item as Accessor<T>, index)}</Show>
+              </div>
+            );
+          }}
+        </For>
+      </ScrollActivityContext.Provider>
     </div>
   );
 }

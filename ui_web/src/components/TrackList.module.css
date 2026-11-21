@@ -2,5 +2,6 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  background: var(--bg-base);
   padding: 0 0 var(--space-lg);
 }

@@ -17,7 +17,8 @@ import { ArtworkSurface } from '../design/Artwork';
 import { formatDuration } from '../lib/format';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
-import { isSavedTrack, state } from '../stores';
+import { trackKeys } from '../lib/playbackIdentity';
+import { isSavedKeys, state } from '../stores';
 import { FavouriteButton } from './FavouriteButton';
 import { Spinner } from './Spinner';
 import { CollectionButton } from './CollectionButton';
@@ -57,9 +58,10 @@ export interface SongRowProps {
  */
 export default function SongRow(props: SongRowProps) {
   const openMenu = (ev?: MenuEvent) => props.onMenu?.(props.track, ev);
-  /** Identity plus snapshot, shared by the heart and the collection control so
-   * the two can never disagree about which song this row is. */
-  const entry = createMemo(() => savedFromTrack(props.track));
+  /** Reactive key list for collection/favourite checks without building a full SavedEntry on every recycle. */
+  const keys = createMemo(() => trackKeys(props.track));
+  const resolveEntry = () => savedFromTrack(props.track);
+  const music = createMemo(() => props.music ?? trackMusic(props.track));
 
   const onRowClick = () => {
     if (props.track.unavailable) return;
@@ -110,12 +112,12 @@ export default function SongRow(props: SongRowProps) {
       : props.track.title);
 
   return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.track.title} subtitle={props.track.artist} music={props.music ?? trackMusic(props.track)} seed={props.track.id}
+    <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.track.title} subtitle={props.track.artist} music={music()} seed={props.track.id}
       cover={props.cover ?? props.track.cover} index={props.index} annotation={props.compact ? undefined : props.badge}
       active={props.active} disabled={props.track.unavailable} busy={props.busy || (props.active && state.playback.isLoading)}
       // A compact row carries no collection marks — the same trim the desktop
       // row makes — so the shared row is told there is no entry to mark.
-      entry={props.compact || props.favouritable === false ? undefined : entry()}
+      entry={props.compact || props.favouritable === false ? undefined : resolveEntry()}
       favouritesKnown={props.favouritesKnown} actionLabel={label()} primaryAction={props.primaryAction}
       onActivate={onRowClick} onMenu={props.hideMenu ? undefined : (event) => props.onMenu
         ? props.onMenu(props.track, event)
@@ -147,7 +149,7 @@ export default function SongRow(props: SongRowProps) {
           {...tap}
           onKeyDown={onKeyDown}
           ><span class={styles.title}>{props.track.title}</span></span>
-        <ArtistLinks class={styles.artist} music={props.music ?? trackMusic(props.track)} />
+        <ArtistLinks class={styles.artist} music={music()} />
       </div>
       <Show when={props.badge && !props.compact}>
         <span class={styles.badge}>{props.badge}</span>
@@ -158,7 +160,7 @@ export default function SongRow(props: SongRowProps) {
         * badge saying the same thing. It deliberately sits before the stable
         * duration/heart/menu stripe, so appearing never shifts those controls. */}
       <Show when={!props.compact && props.favouritable !== false}>
-        <CollectionButton entry={entry()} class={styles.rowCollect} hideOwned />
+        <CollectionButton keys={keys()} resolveEntry={resolveEntry} class={styles.rowCollect} hideOwned />
       </Show>
       <div class={styles.actionStripe}>
         <Show when={props.busy}><Spinner size={14} /></Show>
@@ -168,8 +170,8 @@ export default function SongRow(props: SongRowProps) {
           * about which of your songs stand out, not about where they live. What
           * it never gets is a heart before it is yours: `entry()` is only saved
           * once the row is part of the collection. */}
-        <Show when={!props.compact && props.favouritable !== false && isSavedTrack(props.track)}>
-          <FavouriteButton favourite={entry()} class={styles.rowHeart} />
+        <Show when={!props.compact && props.favouritable !== false && isSavedKeys(keys())}>
+          <FavouriteButton keys={keys()} resolveEntry={resolveEntry} class={styles.rowHeart} />
         </Show>
         <Show when={props.onMenu}>
           <IconButton

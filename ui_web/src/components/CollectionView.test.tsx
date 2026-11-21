@@ -116,4 +116,38 @@ describe('CollectionRows', () => {
     expect(document.activeElement).toBe(focused);
     expect(rows().map(row => row.textContent)).toEqual(['Item 1', 'Item 2', 'Item 0']);
   });
+
+  it('keeps slots mounted in the DOM without removing nodes while actively scrolling', async () => {
+    let scroller!: HTMLDivElement;
+    const items = Array.from({ length: 1000 }, (_, at) => `Item ${at}`);
+    const view = render(() => (
+      <div ref={scroller} style={{ height: '560px', overflow: 'auto' }}>
+        <CollectionRows items={items} scrollElement={() => scroller} rowHeight={56}>
+          {(item, index) => <button data-row data-at={index()}>{item()}</button>}
+        </CollectionRows>
+      </div>
+    ));
+    const canvas = view.container.querySelector('[data-collection-rows]')!;
+    // First move into the middle so upper + lower overscan slots exist.
+    scroller.scrollTop = 56 * 200;
+    scroller.dispatchEvent(new Event('scroll'));
+    await settle();
+
+    let removedWhileMoving = 0;
+    const observer = new MutationObserver((records) => {
+      for (const record of records) removedWhileMoving += record.removedNodes.length;
+    });
+    observer.observe(canvas, { childList: true });
+
+    // Scroll back to the top (shrinking wanted rows) and mid-list again while moving.
+    scroller.scrollTop = 0;
+    scroller.dispatchEvent(new Event('scroll'));
+    scroller.scrollTop = 56 * 400;
+    scroller.dispatchEvent(new Event('scroll'));
+    scroller.scrollTop = 56 * 12;
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(removedWhileMoving).toBe(0);
+    observer.disconnect();
+    await settle();
+  });
 });
