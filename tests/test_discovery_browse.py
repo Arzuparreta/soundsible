@@ -35,9 +35,42 @@ def test_personalized_entities_are_interleaved_unique_and_navigable(monkeypatch)
     counts = Counter(r['external_ids']['deezer_artist_id'] for r in albums['items'])
     assert max(counts.values()) == 2
     assert all(r['external_ids']['deezer_album_id'] for r in albums['items'])
+    assert all(r['reason_artist'] in {'Artist 1', 'Artist 2'} for r in albums['items'])
     assert any(r['title'] == 'Album 0' and r['record_type'] == 'single' and r['release_date'] == '2026-01-01' for r in albums['items'])
     assert not any(r['title'] == 'Album 4' for r in albums['items'])
     assert not body['browse_error']
+
+
+def test_albums_prioritize_related_artists_and_skip_owned_albums(monkeypatch):
+    from shared.text_utils import identity_key
+
+    def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            return {"data": [artist(1, "Seed Band")]}
+        if path == "artist/1/related":
+            return {"data": [artist(2, "Related Band")]}
+        if path == "artist/2/albums":
+            return {"data": [
+                {"id": 201, "title": "Already Owned LP", "record_type": "album", "release_date": "2024-01-01"},
+                {"id": 202, "title": "Unowned Discovery LP", "record_type": "album", "release_date": "2024-02-01"},
+            ]}
+        if path == "artist/1/albums":
+            return {"data": [
+                {"id": 101, "title": "Seed Catalog LP", "record_type": "album", "release_date": "2022-01-01"},
+            ]}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(deezer, "get", get)
+    body = build_browse_sections(
+        ["Seed Band"],
+        owned_album_keys={identity_key("Already Owned LP", "Related Band")},
+        today=datetime.date(2026, 11, 22),
+    )
+    sections_by_id = {sec["id"]: sec for sec in body["browse_sections"]}
+    albums = sections_by_id["albums"]["items"]
+    assert [item["title"] for item in albums] == ["Unowned Discovery LP", "Seed Catalog LP"]
+    assert albums[0]["reason_artist"] == "Seed Band"
+    assert albums[1]["reason_artist"] == ""
 
 
 def test_diacritic_folded_artist_resolution_prefers_highest_fan_count(monkeypatch):

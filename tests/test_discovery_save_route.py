@@ -1069,7 +1069,11 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
          patch.object(deezer, "session", return_value=MagicMock(get=MagicMock(side_effect=fake_get))):
         body = _disc_routes._build_discovery_feed_body(12, include_external=True)
 
-    assert any(s["id"] == "made_for_your_library" for s in body["sections"])
+    assert all(
+        s["id"] not in {"made_for_your_library", "rediscover"}
+        and not s["id"].startswith("from_playlist_")
+        for s in body["sections"]
+    )
     assert any(s["id"] == "because_you_listen_local_artist" for s in body["sections"])
     assert any(item["id"] == "deezer:101" for item in body["items"])
     external = next(item for item in body["items"] if item["id"] == "deezer:101")
@@ -1106,15 +1110,21 @@ def test_music_feed_uses_cache_when_fresh(tmp_path):
 def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
     _make_runtime(tmp_path)
     _disc_routes._DISCOVERY_FEED_CACHE.clear()
+    t1 = _track("t1", "One", "Artist One")
+    t1.youtube_id = "vid11111111"
     metadata = LibraryMetadata(
         version=1,
         tracks=[
-            _track("t1", "One", "Artist One"),
+            t1,
             _track("t2", "Two", "Artist Two"),
             _track("t3", "Three", "Artist Three"),
         ],
         playlists={},
         settings={},
+    )
+    instance_db().set_related_mix(
+        "vid11111111",
+        [{"id": "rel11111111", "title": "Graph Pick", "channel": "Related Artist", "duration": 200}],
     )
     mod = MagicMock()
     mod.favourite_library_ids.return_value = ["t1"]
@@ -1125,7 +1135,6 @@ def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
 
     with patch.object(_disc_feed, "_get_api", return_value=api), \
          patch.object(_disc_feed, "_deezer_json", return_value={"data": []}), \
-         patch.object(_disc_feed, "_cached_related_feed_candidates"), \
          patch.object(_disc_feed, "_schedule_discovery_feed_refresh", return_value=False):
         first = _make_app().test_client().get("/api/discovery/music/feed?limit=6")
         second = _make_app().test_client().get("/api/discovery/music/feed?limit=6")
@@ -1136,7 +1145,8 @@ def test_discovery_feed_ranks_server_sections_and_reuses_fresh_cache(tmp_path):
     assert first_body["v"] == 1
     assert first_body["cached"] is False
     assert first_body["sections"]
-    assert first_body["sections"][0]["section_type"] == "track_rail"
+    assert first_body["sections"][0]["id"] == "explore_from_t1"
+    assert first_body["sections"][0]["section_type"] == "youtube_graph"
     assert first_body["items"]
     assert all(item.get("reason") for item in first_body["items"])
     assert second.get_json()["cached"] is True

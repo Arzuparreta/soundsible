@@ -80,13 +80,6 @@ export function discoveryShelfTitle(shelf: DiscoveryTrackShelf): string {
     case 'explore_from':
       if (shelf.titleParams?.title) return t('searchHome.exploreFrom', { title: shelf.titleParams.title });
       break;
-    case 'from_playlist':
-      if (shelf.titleParams?.playlist) return t('searchHome.fromPlaylist', { playlist: shelf.titleParams.playlist });
-      break;
-    case 'rediscover':
-      return t('searchHome.rediscover');
-    case 'made_for_library':
-      return t('searchHome.madeForLibrary');
     case 'songs':
       return t('searchHome.songs');
   }
@@ -100,24 +93,12 @@ export function discoveryShelfReason(shelf: DiscoveryTrackShelf): string {
       return t('searchHome.reasonMoreLike', shelf.reasonParams);
     case 'explore_connections':
       return t('searchHome.reasonExploreFrom', shelf.reasonParams);
-    case 'rediscover':
-      return t('searchHome.reasonRediscover', shelf.reasonParams);
-    case 'made_for_library':
-      return t('searchHome.reasonMadeForLibrary', shelf.reasonParams);
-    case 'from_playlist':
-      return t('searchHome.reasonFromPlaylist', shelf.reasonParams);
   }
   switch (shelf.titleKey) {
     case 'more_like':
       return t('searchHome.reasonMoreLike', shelf.titleParams);
     case 'explore_from':
       return t('searchHome.reasonExploreFrom', shelf.titleParams);
-    case 'rediscover':
-      return t('searchHome.reasonRediscover');
-    case 'made_for_library':
-      return t('searchHome.reasonMadeForLibrary');
-    case 'from_playlist':
-      return t('searchHome.reasonFromPlaylist');
   }
   return shelf.reason?.trim() || '';
 }

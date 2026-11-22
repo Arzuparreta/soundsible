@@ -151,14 +151,6 @@ test('renders structured backend shelves with localized reasons and expands dyna
           item_ids: Array.from({ length: 7 }, (_, i) => `deezer:${300 + i}`),
         },
         {
-          id: 'rediscover',
-          title: 'Rediscover',
-          title_key: 'rediscover',
-          reason: "Tracks in your library you haven't played in a while.",
-          reason_key: 'rediscover',
-          item_ids: ['music:library-track-1', 'music:library-track-2'],
-        },
-        {
           id: 'explore_from_seed',
           title: 'Explore from Jesucristo García',
           title_key: 'explore_from',
@@ -175,8 +167,6 @@ test('renders structured backend shelves with localized reasons and expands dyna
           cover: artwork(i + 2),
           duration: 210,
         })),
-        { id: 'music:library-track-1', track_id: 'library-track-1', title: 'Joya olvidada 1', artist: 'Artista 1', cover: artwork(4) },
-        { id: 'music:library-track-2', track_id: 'library-track-2', title: 'Joya olvidada 2', artist: 'Artista 2', cover: artwork(5) },
         { id: 'youtube:vid01', title: 'Conexión directa', artist: 'Marea', external_ids: { youtube_id: 'vid00000001' }, cover: artwork(6) },
       ],
     },
@@ -191,10 +181,6 @@ test('renders structured backend shelves with localized reasons and expands dyna
   await expect(moreLike.getByText('Artistas similares según lo que escuchas')).toBeVisible();
   await expect(moreLike.getByText(/^Tema similar /)).toHaveCount(5);
 
-  const rediscover = home.getByRole('region', { name: 'Redescubrir' });
-  await expect(rediscover).toBeVisible();
-  await expect(rediscover.getByText('Temas de tu biblioteca que hace tiempo que no escuchas')).toBeVisible();
-
   const exploreFrom = home.getByRole('region', { name: 'Explorar desde Jesucristo García' });
   await expect(exploreFrom).toBeVisible();
   await expect(exploreFrom.getByText('Conexiones de tu grafo musical')).toBeVisible();
@@ -208,10 +194,10 @@ test('renders structured backend shelves with localized reasons and expands dyna
   await expect(page).toHaveURL(/browse=because_you_listen_extremoduro/);
   await expect(home.getByRole('heading', { name: 'Más como Extremoduro' })).toBeFocused();
   await expect(home.getByText(/^Tema similar /)).toHaveCount(7);
-  await expect(home.getByRole('region', { name: 'Redescubrir' })).toHaveCount(0);
+  await expect(home.getByRole('region', { name: 'Explorar desde Jesucristo García' })).toHaveCount(0);
 
   await home.getByRole('button', { name: 'Volver a Descubrir' }).click();
-  await expect(rediscover).toBeVisible();
+  await expect(exploreFrom).toBeVisible();
   await expect(moreLike.getByRole('link', { name: 'Ver todos: Más como Extremoduro' })).toBeFocused();
   await expect.poll(() => scroll.evaluate(el => el.scrollTop)).toBeCloseTo(offset, -1);
 
