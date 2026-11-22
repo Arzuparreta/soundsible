@@ -91,7 +91,6 @@
   behaviour the pull request changed on purpose. WebKit — the iPhone's engine —
   runs from the Playwright image over a read-only mount, so it leaves no
   root-owned files in `node_modules/.vite` or `test-results`:
-- UI aimed PRs need before/after images. Motion or timing needs a short video.
 
   ```sh
   cd ui_web
@@ -108,6 +107,20 @@
   closed port, as in CI, instead of to the engine running on this machine. A
   failing spec is either a regression or a test your change made obsolete: say
   which, and fix it in the same pull request.
+- Screenshots belong only to UI-aimed pull requests: ones whose purpose is
+  what the interface looks like or how it behaves on screen — a new or
+  redesigned screen, component, layout, menu, control or interaction. Show
+  before/after screenshots in the pull request description; motion or timing
+  that stills cannot show gets a short video instead. A pull request that
+  touches `ui_web/` for another reason (wiring, a data field, a fix with no
+  visible change, tests, refactors, performance) carries none, even when it
+  edits a component. The images explain the change to its reviewer and live
+  only in the pull request: never commit them to the working branch or
+  anywhere under `docs/` (`docs/images/` holds only the pictures the user
+  guides show). Push them to the `pr-assets` branch, which is never merged and
+  runs no CI, under `<pr-branch>/`, and embed them with a commit-pinned link:
+  `https://raw.githubusercontent.com/Arzuparreta/soundsible/<pr-assets-sha>/<pr-branch>/<file>.png`.
+  Link a video the same way.
 - **The AltStore PAL path has never been executed.** `.github/workflows/ios-altstore-pal.yml`,
   `ios/exportOptions/app-store-connect.plist` and the `--marketplace-id` half of
   `scripts/altstore_source.py` were written from documentation, not from a

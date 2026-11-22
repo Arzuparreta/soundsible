@@ -265,14 +265,6 @@ supplies the lines. Subsonic excludes those records because its lyrics
 responses cannot carry that attribution. The client identification uses the
 project link and the existing public contact from `SECURITY.md`.
 
-UI captures from the implementation run use synthetic lyrics and the browser
-fixture's local audio: [before](lyrics-providers-2026-11-15/ui/before-desktop.png)
-(plain text) and [after](lyrics-providers-2026-11-15/ui/after-desktop.png)
-(line timing and provider credit). The [timing clip](lyrics-providers-2026-11-15/ui/timing-demo.mp4)
-checks three lines becoming current during fixture playback, with the credit
-visible. These show the presentation change, not
-acoustic alignment of any provider's lyrics with a real recording.
-
 ## Source contracts checked
 
 - [lrc.red API and attribution / client identification requirements](https://lrc.red/api).
