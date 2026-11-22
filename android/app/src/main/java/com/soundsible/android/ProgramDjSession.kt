@@ -48,6 +48,26 @@ internal class ProgramDjSession(private val context: Context, private val genera
         }
         return LiveSnapshot(deck(mix.primary), mix.secondary?.let(::deck), mix)
     }
+    fun transitionState(): org.json.JSONObject {
+        check(Looper.myLooper() == main.looper)
+        val view = output.liveView()
+        val window = output.transition()
+        val status = when {
+            view.phase == "crossfading" -> "mixing"
+            armed && window != null -> "armed"
+            else -> "idle"
+        }
+        return org.json.JSONObject().put("status", status).apply {
+            if (status != "idle" && window != null) {
+                route.getOrNull(indices[window.incoming])?.item?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
+                    ?.takeIf { it.isNotBlank() }?.let { put("next_queue_id", it) }
+                plan?.outCueUs?.let { us ->
+                    val sec = us / 1_000_000.0
+                    if (sec.isFinite() && sec >= 0.0) put("at", sec)
+                }
+            }
+        }
+    }
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var closed = false
     private var route = initial.toList()
@@ -353,7 +373,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val owners = live.mapNotNull { it.ownerKey }.toSet()
         return live.map { itemKey(it.item) }.toSet() + route.filter { itemKey(it.item) in owners || it.ownerKey in owners }.map { itemKey(it.item) }
     }
-    private fun policyRows(rows: List<Row> = route, identity: (MediaItem) -> String = ::recording) =
+    internal fun policyRows(rows: List<Row> = route, identity: (MediaItem) -> String = ::recording) =
         rows.map { row -> ProgramDjRoutePolicy.RouteRow(itemKey(row.item), row.kind, row.ownerKey,
             ProgramQueue.requestGroup(row.item), identity(row.item)) }
     private fun recording(item: MediaItem) = (item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) ?: "") + ":" + item.mediaId

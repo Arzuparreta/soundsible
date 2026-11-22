@@ -28,19 +28,35 @@ class QueueLanesTest {
         core("/api/auth/login", "POST", JSONObject().put("username", "member").put("password", "android-test"))
         val client = connection.client
         val peerId = java.util.UUID.randomUUID().toString()
+        val peerInstance = java.util.UUID.randomUUID().toString()
+        val peerState = JSONObject().put("device_id", peerId).put("device_name", "Resume laptop").put("track_id", "member-track")
+            .put("track", JSONObject().put("id", "member-track").put("title", "Left on the laptop").put("artist", "member artist")).put("position_sec", 42).put("is_playing", true)
         val connected = CountDownLatch(1); val stopped = CountDownLatch(1)
         val peer = IO.socket(origin, IO.Options().apply {
             forceNew = true; reconnection = false; callFactory = client; webSocketFactory = client
             extraHeaders = mapOf("Cookie" to listOf(connection.cookieHeader(epoch)!!))
         })
-        peer.on(Socket.EVENT_CONNECT) { peer.emit("playback_register", JSONObject().put("device_id", peerId).put("device_name", "Resume laptop").put("device_type", "desktop")); connected.countDown() }
-        peer.on("playback_stop_requested") { stopped.countDown() }
+        peer.on(Socket.EVENT_CONNECT) {
+            peer.emit("playback_register", JSONObject()
+                .put("device_id", peerId).put("device_name", "Resume laptop").put("device_type", "desktop")
+                .put("form_factor", "computer").put("instance_id", peerInstance).put("protocol", 1)
+                .put("commands", JSONArray(listOf("session.export", "session.import", "session.release"))))
+            connected.countDown()
+        }
+        peer.on("device_command") { arguments ->
+            val payload = arguments.firstOrNull() as? JSONObject ?: return@on
+            val ack = arguments.lastOrNull() as? io.socket.client.Ack
+            when (payload.optString("name")) {
+                "session.export" -> ack?.call(JSONObject().put("status", "applied").put("state", peerState))
+                "session.release" -> { stopped.countDown(); ack?.call(JSONObject().put("status", "applied").put("rev", 1)) }
+                else -> ack?.call(JSONObject().put("status", "rejected").put("reason", "unsupported"))
+            }
+        }
         val web = StartupTest()
         try {
             peer.connect(); assertTrue(connected.await(15, TimeUnit.SECONDS))
             core("/api/devices/register", "POST", JSONObject().put("device_id", peerId).put("device_name", "Resume laptop").put("device_type", "desktop"))
-            core("/api/playback/state", "PUT", JSONObject().put("device_id", peerId).put("device_name", "Resume laptop").put("track_id", "member-track")
-                .put("track", JSONObject().put("id", "member-track").put("title", "Left on the laptop").put("artist", "member artist")).put("position_sec", 42).put("is_playing", true))
+            core("/api/playback/state", "PUT", JSONObject(peerState.toString()).put("instance_id", peerInstance).put("seq", 1))
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 fun waitFor(condition: String) {
                     val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)

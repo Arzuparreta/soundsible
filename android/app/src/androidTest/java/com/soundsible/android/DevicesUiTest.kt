@@ -27,6 +27,7 @@ class DevicesUiTest {
         core("/api/auth/login", "POST", JSONObject().put("username", "member").put("password", "android-test"))
         val client = connection.client
         val peerId = java.util.UUID.randomUUID().toString()
+        val peerInstance = java.util.UUID.randomUUID().toString()
         val latestStart = java.util.concurrent.atomic.AtomicReference<JSONObject>()
         var browser: androidx.media3.session.MediaBrowser? = null
         val connected = CountDownLatch(1); val paused = CountDownLatch(1); val resumed = CountDownLatch(1)
@@ -34,8 +35,24 @@ class DevicesUiTest {
             forceNew = true; reconnection = false; callFactory = client; webSocketFactory = client
             extraHeaders = mapOf("Cookie" to listOf(connection.cookieHeader(epoch)!!))
         })
-        peer.on(Socket.EVENT_CONNECT) { peer.emit("playback_register", JSONObject().put("device_id", peerId).put("device_name", "Remote test laptop").put("device_type", "desktop")); connected.countDown() }
-        peer.on("playback_stop_requested") { paused.countDown() }; peer.on("playback_start_requested") { arguments -> latestStart.set(arguments.firstOrNull() as? JSONObject); resumed.countDown() }
+        peer.on(Socket.EVENT_CONNECT) {
+            peer.emit("playback_register", JSONObject()
+                .put("device_id", peerId).put("device_name", "Remote test laptop").put("device_type", "desktop")
+                .put("form_factor", "computer").put("instance_id", peerInstance).put("protocol", 1)
+                .put("commands", org.json.JSONArray(listOf("transport.play", "transport.pause", "transport.next", "transport.previous", "session.export", "session.import", "session.release"))))
+            connected.countDown()
+        }
+        peer.on("device_command") { arguments ->
+            val payload = arguments.firstOrNull() as? JSONObject ?: return@on
+            val ack = arguments.lastOrNull() as? io.socket.client.Ack
+            when (payload.optString("name")) {
+                "transport.pause" -> { paused.countDown(); ack?.call(JSONObject().put("status", "applied").put("rev", 1)) }
+                "transport.play" -> { resumed.countDown(); ack?.call(JSONObject().put("status", "applied").put("rev", 2)) }
+                "session.import" -> { latestStart.set(payload.optJSONObject("args")); ack?.call(JSONObject().put("status", "applied").put("rev", 3)) }
+                "session.release" -> ack?.call(JSONObject().put("status", "applied").put("rev", 4))
+                else -> ack?.call(JSONObject().put("status", "rejected").put("reason", "unsupported"))
+            }
+        }
         val web = StartupTest()
         try {
             peer.connect(); assertTrue(connected.await(15, TimeUnit.SECONDS))

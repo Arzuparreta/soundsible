@@ -15,7 +15,8 @@ import java.util.concurrent.TimeUnit
 /** Confirmed Core preference, owned by the native programme service. */
 @UnstableApi
 internal class ProgramAudioPreference(context: Context, private val connection: EngineConnection, private val main: Handler,
-    private val settingsKey: String, private val tag: String, private val session: () -> MediaLibrarySession?) : AutoCloseable {
+    private val settingsKey: String, private val tag: String, private val session: () -> MediaLibrarySession?,
+    private val onChanged: () -> Unit = {}) : AutoCloseable {
     private val prefs = context.getSharedPreferences("program-audio", Context.MODE_PRIVATE)
     private fun profile(generation: Long) = runCatching { connection.offline.profileKey(generation) }.getOrNull()
     private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(1))
@@ -25,6 +26,7 @@ internal class ProgramAudioPreference(context: Context, private val connection: 
     private var phase = "idle"
     private var serial = 0L
     private var requestId: String? = null
+    private var pendingComplete: ((Boolean) -> Unit)? = null
     private var closed = false
     fun active() = epoch == connection.generation && enabled == true
     private fun publish() {
@@ -32,6 +34,7 @@ internal class ProgramAudioPreference(context: Context, private val connection: 
             putLong(tag + "Generation", connection.generation); putString(tag + "SettingsPhase", phase)
             putBoolean(tag + "Known", enabled != null && epoch == connection.generation); putBoolean(tag + "Enabled", active())
         }) }
+        onChanged()
     }
     fun sync(hasProgramme: Boolean) {
         if (closed) return
@@ -44,13 +47,19 @@ internal class ProgramAudioPreference(context: Context, private val connection: 
             else { phase = "unavailable"; publish() }
         }
     }
-    fun settings(value: Boolean?) {
-        if (closed || requestId != null) return
+    fun settings(value: Boolean?, onComplete: ((Boolean) -> Unit)? = null) {
+        if (closed) { onComplete?.invoke(false); return }
+        if (requestId != null) {
+            if (value == null) { onComplete?.invoke(false); return }
+            serial++; requestId?.let(connection::cancel); requestId = null; worker.queue.clear()
+            pendingComplete?.invoke(false); pendingComplete = null
+        }
         val generation = connection.generation
         val sessionIdentity = runCatching { connection.sessionIdentity(generation) }.getOrNull()
-        if (sessionIdentity == null) { phase = "unavailable"; publish(); return }
+        if (sessionIdentity == null) { phase = "unavailable"; publish(); onComplete?.invoke(false); return }
         val profileKey = profile(generation)
         val token = ++serial; val id = tag + "-settings:" + java.util.UUID.randomUUID(); requestId = id
+        pendingComplete = onComplete
         phase = "loading"; publish()
         try { worker.execute {
             var answer: Boolean? = null
@@ -69,8 +78,9 @@ internal class ProgramAudioPreference(context: Context, private val connection: 
             } catch (_: Exception) { }
             main.post {
                 if (closed || token != serial || generation != connection.generation) return@post
+                val finish = pendingComplete; pendingComplete = null
                 if (runCatching { connection.sessionIdentity(generation) }.getOrNull() != sessionIdentity) {
-                    requestId = null; enabled = null; phase = "unavailable"; publish(); return@post
+                    requestId = null; enabled = null; phase = "unavailable"; publish(); finish?.invoke(false); return@post
                 }
                 requestId = null; phase = if (answer == null) "unavailable" else "ready"
                 if (answer != null) {
@@ -78,13 +88,15 @@ internal class ProgramAudioPreference(context: Context, private val connection: 
                     if (profileKey != null && profileKey == profile(generation)) prefs.edit().putBoolean(profileKey + "." + tag, answer!!).apply()
                 }
                 publish()
+                finish?.invoke(answer != null && (value == null || answer == value))
             }
         } } catch (_: java.util.concurrent.RejectedExecutionException) {
-            requestId = null; phase = "unavailable"; publish()
+            requestId = null; phase = "unavailable"; val finish = pendingComplete; pendingComplete = null; publish(); finish?.invoke(false)
         }
     }
     fun clear() {
         serial++; requestId?.let(connection::cancel); requestId = null
+        pendingComplete?.invoke(false); pendingComplete = null
         enabled = null; epoch = connection.generation; phase = "idle"; shuffle = false; publish()
     }
     override fun close() { closed = true; clear(); worker.shutdownNow() }

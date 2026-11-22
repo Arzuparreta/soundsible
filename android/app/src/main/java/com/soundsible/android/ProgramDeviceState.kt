@@ -42,6 +42,41 @@ internal object ProgramDeviceState {
                 }
             }
     }
+    fun live(
+        player: Player,
+        dj: ProgramDjSession? = null,
+        djPhase: String = "idle",
+        djPlanner: ProgramDjPlanner? = null,
+        mixing: Boolean = true,
+    ): JSONObject {
+        val hasItem = player.mediaItemCount > 0 && player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) != "live"
+        val durationMs = if (hasItem) player.duration else androidx.media3.common.C.TIME_UNSET
+        val durationSec = if (durationMs != androidx.media3.common.C.TIME_UNSET && durationMs > 0) {
+            durationMs / 1000.0
+        } else if (hasItem) {
+            player.currentMediaItem?.mediaMetadata?.extras?.getDouble(ProgramPcmProcessor.DURATION, 0.0)
+                ?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        } else 0.0
+        val djLive = dj?.let {
+            RemoteCommandLogic.djLive(
+                phase = djPhase,
+                repairing = djPhase == "repairing",
+                pendingDirection = djPlanner?.busy() == true,
+                mixing = mixing,
+                transition = it.transitionState(),
+            )
+        }
+        return RemoteCommandLogic.live(
+            hasItem = hasItem,
+            isPlaying = player.isPlaying,
+            playWhenReady = player.playWhenReady,
+            isBuffering = player.playbackState == Player.STATE_BUFFERING,
+            isIdle = player.playbackState == Player.STATE_IDLE,
+            hasError = player.playerError != null,
+            durationSec = durationSec,
+            dj = djLive,
+        )
+    }
     fun snapshot(player: Player, radio: RadioProgram? = null): JSONObject? {
         if (player.mediaItemCount == 0 || player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) == "live") return null
         val index = player.currentMediaItemIndex.coerceIn(0, player.mediaItemCount - 1)
@@ -62,7 +97,8 @@ internal object ProgramDeviceState {
             .put("shuffle", player.shuffleModeEnabled).put("repeat", when (player.repeatMode) { Player.REPEAT_MODE_ALL -> "all"; Player.REPEAT_MODE_ONE -> "one"; else -> "off" })
             .put("radio", (radio?.snapshot() ?: JSONObject().put("active", false).put("seedId", JSONObject.NULL))).put("auto", JSONObject.NULL)
         return JSONObject().put("track_id", track(player.getMediaItemAt(index)).getString("id")).put("track", track(player.getMediaItemAt(index)))
-            .put("position_sec", player.currentPosition.coerceAtLeast(0) / 1000.0).put("is_playing", player.isPlaying).put("session", session)
+            .put("position_sec", player.currentPosition.coerceAtLeast(0) / 1000.0).put("is_playing", player.isPlaying)
+            .put("live", live(player)).put("session", session)
     }
     fun items(connection: EngineConnection, restored: Restored): List<MediaItem> = ProgramQueue.items(connection, restored.rows).mapIndexed { i, item ->
         val entry = restored.entries?.optJSONObject(i) ?: return@mapIndexed item
@@ -76,7 +112,13 @@ internal object ProgramDeviceState {
             entry.optString("youtube_id").takeIf { Regex("^[A-Za-z0-9_-]{11}$").matches(it) }?.let { putString(DEVICE_YOUTUBE, it) }
         }).build()).build()
     }
-    fun snapshotDj(player: Player, dj: ProgramDjSession, planner: ProgramDjPlanner): JSONObject? {
+    fun snapshotDj(
+        player: Player,
+        dj: ProgramDjSession,
+        planner: ProgramDjPlanner,
+        djPhase: String = "idle",
+        mixing: Boolean = true,
+    ): JSONObject? {
         val body = snapshot(player) ?: return null
         val session = body.getJSONObject("session"); val queue = session.getJSONArray("queue")
         val route = dj.routeSnapshot().rows.associateBy { it.item.mediaMetadata.extras?.getString(ProgramQueue.KEY) }
@@ -109,6 +151,7 @@ internal object ProgramDeviceState {
         val workspace = planner.workspace().put("heard", JSONArray().apply { dj.heardIds().toList().takeLast(15).forEach { put(JSONObject().put("id", it)) } })
             .put("plan", plan).put("staleSeams", JSONArray())
         session.put("mode", "auto").put("auto", workspace)
+        body.put("live", live(player, dj, djPhase, planner, mixing))
         return body
     }
     fun djRows(connection: EngineConnection, restored: Restored, planner: ProgramDjPlanner): List<ProgramDjSession.Row> {
@@ -136,21 +179,7 @@ internal object ProgramDeviceState {
             ProgramDjSession.Row(item, if (planned != null && from == previousIdentity && previousKey != null) ProgramDjPlan.proposal(planned, previousKey) else null, kind)
         }
     }
-    private fun row(track: JSONObject): JSONObject {
-        val pending = track.optJSONObject("pendingResolve")
-        val podcast = track.optString("media_kind") == "podcast_episode"
-        val source = if (pending != null) "pending" else if (track.optString("source") == "preview") { if (podcast) "podcast" else "preview" } else "local"
-        return JSONObject().put("source", source).put("item_id", track.optString("item_id").takeIf { it.isNotBlank() && it != "null" }).put("id", track.getString("id")).put("title", track.optString("title"))
-            .put("artist", track.optString("artist")).put("album", track.optString("album")).put("duration", track.optDouble("duration", 0.0)).apply {
-                ProgramRelease.read(track).writeTo(this)
-                if (pending != null) put("pendingResolve", JSONObject(pending.toString()))
-                for (name in listOf("loudness_lufs", "loudness_peak_dbtp")) track.optDouble(name, Double.NaN).takeIf { it.isFinite() }?.let { put(name, it) }
-                if (podcast) { put("mediaKind", "podcast_episode"); put("enclosure", track.optString("podcast_enclosure_url"))
-                    put("episodeGuid", track.optString("podcast_episode_guid")); put("feedId", track.optString("podcast_feed_id")) }
-            }
-    }
-    fun restore(payload: JSONObject): Restored? {
-        val state = payload.optJSONObject("state") ?: JSONObject()
+    fun restoreState(state: JSONObject): Restored? {
         val session = state.optJSONObject("session")
         val radio = session?.optJSONObject("radio")
         if (radio?.optBoolean("active") == true) {
@@ -170,14 +199,14 @@ internal object ProgramDeviceState {
                 for (i in 0 until queue.length()) {
                     val entry = queue.getJSONObject(i)
                     require(entry.optString("queueId").isNotBlank() && keys.add(entry.getString("queueId")))
-                    rows.put(row(entry))
+                    rows.put(RemoteCommandLogic.wireTrackRow(entry))
                 }
                 val index = session.optInt("index", 0).coerceIn(0, rows.length() - 1)
                 return Restored(rows, index, (position * 1000).toLong(), session.optBoolean("shuffle"),
                     when (session.optString("repeat")) { "all" -> Player.REPEAT_MODE_ALL; "one" -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF }, workspace, queue, session.optJSONObject("radio"))
             }
         }
-        val track = payload.optJSONObject("track") ?: return null
-        return Restored(JSONArray().put(row(track)), 0, (position * 1000).toLong(), false, Player.REPEAT_MODE_OFF)
+        val track = state.optJSONObject("track") ?: return null
+        return Restored(JSONArray().put(RemoteCommandLogic.wireTrackRow(track)), 0, (position * 1000).toLong(), false, Player.REPEAT_MODE_OFF)
     }
 }

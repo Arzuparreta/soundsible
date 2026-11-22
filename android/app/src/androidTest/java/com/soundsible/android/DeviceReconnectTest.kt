@@ -63,9 +63,9 @@ class DeviceReconnectTest {
             await("Exhausted native device never reconnected", 45) { device()?.optBoolean("connected") == true }
             assertEquals("Device identity changed across outage", id, device()!!.getString("device_id"))
             await("Recovered state was not republished") { core("/api/playback/state").optString("device_id") == id }
-            core("/api/playback/remote-command", "POST", JSONObject().put("device_id", id).put("command", "pause"))
+            assertEquals("applied", core("/api/devices/$id/commands", "POST", JSONObject().put("name", "transport.pause").put("args", JSONObject())).optString("status"))
             await("Recovered remote pause missing") { main { !active.playWhenReady } }
-            core("/api/playback/remote-command", "POST", JSONObject().put("device_id", id).put("command", "play"))
+            assertEquals("applied", core("/api/devices/$id/commands", "POST", JSONObject().put("name", "transport.play").put("args", JSONObject())).optString("status"))
             pcm.set(false); await("Recovered remote resume missing PCM") { pcm.get() && main { active.isPlaying } }
             assertEquals(key, main { ProgramQueue.key(active, 0) })
         } finally {

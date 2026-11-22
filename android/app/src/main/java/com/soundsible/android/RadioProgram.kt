@@ -14,7 +14,8 @@ import java.util.concurrent.Executors
 @UnstableApi
 class RadioProgram(private val connection: EngineConnection, private val player: Player, private val main: Handler,
                    private val session: () -> MediaLibrarySession?, private val intent: String = "radio",
-                   private val allowPlan: () -> Boolean = { true }, private val selectSeed: () -> androidx.media3.common.MediaItem? = { player.currentMediaItem }) : AutoCloseable {
+                   private val allowPlan: () -> Boolean = { true }, private val selectSeed: () -> androidx.media3.common.MediaItem? = { player.currentMediaItem },
+                   private val onChanged: () -> Unit = {}) : AutoCloseable {
     private val worker = Executors.newSingleThreadExecutor()
     private var seed: JSONObject? = null
     private var profile = "balanced"
@@ -32,6 +33,7 @@ class RadioProgram(private val connection: EngineConnection, private val player:
     private var scheduled = false
     private val refill = Runnable { scheduled = false; plan() }
     fun active(): Boolean = seed != null
+    fun currentProfile(): String = profile
     fun generatedKeys(): Set<String> = generated.toSet()
     fun snapshot(): JSONObject = JSONObject().put("active", seed != null).put("seedId", seed?.optString("id") ?: JSONObject.NULL)
         .put("profile", profile).put("seed", seed?.let { JSONObject(it.toString()) } ?: JSONObject.NULL)
@@ -102,6 +104,7 @@ class RadioProgram(private val connection: EngineConnection, private val player:
     }
     private fun publish() {
         session()?.let { owner -> owner.setSessionExtras(android.os.Bundle(owner.sessionExtras).apply { putLong("${intent}Generation", connection.generation); putBoolean("${intent}Active", seed != null); putString("${intent}Phase", phase); putString("${intent}Profile", profile); putInt("${intent}ErrorStatus", errorStatus) }) }
+        onChanged()
     }
     private fun plan() {
         if (intent == "autoplay" && seed != null) selectSeed()?.let { item ->
