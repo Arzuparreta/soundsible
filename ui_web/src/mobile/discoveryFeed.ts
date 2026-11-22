@@ -34,11 +34,12 @@ export function createNativeDiscoveryFeed(props: {
   const hasContent = () => discoveryHasVisible(sections(), trackShelves());
   const hasVisibleContent = () => discoveryHasVisible(sections(), trackShelves(), props.expanded());
   let request: AbortController | undefined, timer: ReturnType<typeof setTimeout> | undefined;
-  let disposed = false, epoch = 0, attempts = 0;
+  let disposed = false, epoch = 0, attempts = 0, staleFromPush = false;
   function cancel() { epoch++; request?.abort(); clearTimeout(timer); }
   async function load(refresh = false) {
     cancel();
     if (disposed || props.disconnected() || props.paused?.()) { setLoading(false); setRefreshing(false); return; }
+    staleFromPush = false;
     const operation = epoch, generation = props.generation();
     const controller = new AbortController(); request = controller;
     const current = () => !disposed && operation === epoch && generation === props.generation() && !controller.signal.aborted && !props.disconnected() && !props.paused?.();
@@ -60,9 +61,17 @@ export function createNativeDiscoveryFeed(props: {
     } catch { if (current()) { setError(true); setRefreshing(false); } }
     finally { if (current()) setLoading(false); }
   }
-  const stopPush = onDiscoveryFeedReady(() => {
-    if (disposed || props.disconnected() || props.paused?.()) return;
-    if (feed().revalidating || refreshing() || !props.expanded() || !hasVisibleContent()) {
+  const stopPush = onDiscoveryFeedReady((data) => {
+    if (disposed || props.disconnected()) return;
+    if (props.paused?.()) {
+      staleFromPush = true;
+      return;
+    }
+    const currentFeed = feed();
+    const incomingTs = typeof data.generated_at === 'number' ? data.generated_at : undefined;
+    const currentTs = typeof currentFeed.generated_at === 'number' ? currentFeed.generated_at : undefined;
+    const newer = incomingTs !== undefined && (currentTs === undefined || incomingTs > currentTs);
+    if (currentFeed.revalidating || refreshing() || !props.expanded() || !hasVisibleContent() || newer) {
       clearTimeout(timer);
       void load(false);
     }
@@ -70,9 +79,11 @@ export function createNativeDiscoveryFeed(props: {
   createEffect(on(() => [props.generation(), props.disconnected(), !!props.paused?.()] as const, ([generation, disconnected, paused], previous) => {
     cancel(); attempts = 0;
     const newAccount = !previous || generation !== previous[0];
-    if (newAccount) setFeed({});
+    if (newAccount) { setFeed({}); staleFromPush = false; }
     setError(false); setLoading(false); setRefreshing(false);
-    if (!disconnected && !paused && (newAccount || previous?.[1] || !hasContent() || feed().revalidating || feed().browse_error)) void load();
+    if (!disconnected && !paused && (newAccount || previous?.[1] || staleFromPush || !hasContent() || feed().revalidating || feed().browse_error)) {
+      void load();
+    }
   }));
   onCleanup(() => { disposed = true; stopPush(); cancel(); });
   const refresh = () => { attempts = 0; setError(false); void load(true); };

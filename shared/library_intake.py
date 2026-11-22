@@ -87,6 +87,13 @@ def add_tracks_to_user_library(
         realtime.emit_to_user('library_updated', user_id=target)
         if promoted:
             realtime.emit_to_user('favourites_updated', user_id=target)
+        if added:
+            try:
+                from shared.discovery_signals import notify_discovery_signal
+
+                notify_discovery_signal(target, always_refresh=False)
+            except Exception:
+                logger.debug("API: could not notify discovery feed after track intake", exc_info=True)
     return added
 
 

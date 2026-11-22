@@ -105,3 +105,21 @@ it('reloads immediately on discovery_feed_ready push and supports explicit refre
   await waitFor(() => expect(state.songs()[0]?.title).toBe('refreshed'));
   expect(fetchFeed.mock.calls.at(-1)?.[1]).toBe(true);
 });
+
+it('remembers a push arriving while paused and reloads upon return', async () => {
+  const [paused, setPaused] = createSignal(false);
+  const fetchFeed = vi.fn()
+    .mockResolvedValueOnce({ ...song('cold'), generated_at: 100, needs_seed: true })
+    .mockResolvedValueOnce({ ...song('adapted'), generated_at: 200, needs_seed: false });
+  let state!: ReturnType<typeof createNativeDiscoveryFeed>;
+  render(() => { state = createNativeDiscoveryFeed({ generation: () => 1, disconnected: () => false, paused, expanded: () => undefined, known: () => false }, fetchFeed); return null; });
+  await waitFor(() => expect(state.songs()[0]?.title).toBe('cold'));
+
+  setPaused(true);
+  dispatchDiscoveryFeedReady({ limit: 10, generated_at: 200 });
+  expect(fetchFeed).toHaveBeenCalledTimes(1);
+
+  setPaused(false);
+  await waitFor(() => expect(state.songs()[0]?.title).toBe('adapted'));
+  expect(fetchFeed).toHaveBeenCalledTimes(2);
+});

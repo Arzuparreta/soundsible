@@ -1,4 +1,5 @@
 from collections import Counter
+import datetime
 from types import SimpleNamespace
 
 from shared.discovery_browse import build_browse_sections
@@ -48,26 +49,114 @@ def test_diacritic_folded_artist_resolution_prefers_highest_fan_count(monkeypatc
             ]}
         if path == "artist/20/related":
             return {"data": [artist(21, "Thin Lizzy")]}
-        if path.endswith("/albums"):
-            return {"data": [{"id": 300, "title": "Release EP", "record_type": "ep", "release_date": "2026-10-01"}]}
+        if path == "artist/20/albums":
+            return {"data": [{"id": 300, "title": "Older Album", "record_type": "album", "release_date": "2020-10-01"}]}
+        if path == "artist/21/albums":
+            return {"data": [{"id": 301, "title": "Release EP", "record_type": "ep", "release_date": "2024-10-01"}]}
         raise AssertionError(path)
 
     monkeypatch.setattr(deezer, "get", get)
-    body = build_browse_sections(["Blue Oyster Cult"])
+    body = build_browse_sections(["Blue Oyster Cult"], today=datetime.date(2026, 11, 22))
     artists, albums = body["browse_sections"]
     assert artists["items"][0]["title"] == "Thin Lizzy"
     assert artists["items"][0]["reason_artist"] == "Blue Oyster Cult"
-    assert albums["items"][0]["record_type"] == "ep"
-    assert albums["items"][0]["release_date"] == "2026-10-01"
+    assert any(item["record_type"] == "ep" and item["release_date"] == "2024-10-01" for item in albums["items"])
+
+
+def test_new_releases_sorted_newest_first_with_badge_window_and_dedup(monkeypatch):
+    ref_today = datetime.date(2026, 11, 22)
+
+    def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            name = params["q"]
+            aid = 100 if name == "Artist One" else 200
+            return {"data": [artist(aid, name)]}
+        if path == "artist/100/related":
+            return {"data": [artist(101, "Related One")]}
+        if path == "artist/200/related":
+            return {"data": [artist(201, "Related Two")]}
+        if path == "artist/100/albums":
+            return {"data": [
+                {"id": 1001, "title": "Brand New Single", "record_type": "single", "release_date": "2026-11-17"},
+                {"id": 1002, "title": "Thirty Day EP", "record_type": "ep", "release_date": "2026-10-23"},
+                {"id": 1003, "title": "Third Same Artist", "record_type": "album", "release_date": "2026-10-01"},
+                {"id": 1004, "title": "Archive LP", "record_type": "album", "release_date": "2025-01-01"},
+                {"id": 1005, "title": "Future LP", "record_type": "album", "release_date": "2026-11-25"},
+            ]}
+        if path == "artist/200/albums":
+            return {"data": [
+                {"id": 2001, "title": "Thirty One Days", "record_type": "album", "release_date": "2026-10-22"},
+                {"id": 2002, "title": "Edge 180", "record_type": "single", "release_date": "2026-05-26"},
+                {"id": 2003, "title": "Too Old 181", "record_type": "album", "release_date": "2026-05-25"},
+                {"id": 2004, "title": "Bad Date", "record_type": "album", "release_date": "unknown"},
+            ]}
+        if path in ("artist/101/albums", "artist/201/albums"):
+            return {"data": []}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(deezer, "get", get)
+    body = build_browse_sections(
+        ["Artist One", "Artist Two"],
+        limit=10,
+        today=ref_today,
+    )
+    sections_by_id = {sec["id"]: sec for sec in body["browse_sections"]}
+    new_rel = sections_by_id["new_releases"]["items"]
+    assert [item["title"] for item in new_rel] == [
+        "Brand New Single",
+        "Thirty Day EP",
+        "Thirty One Days",
+        "Edge 180",
+    ]
+    assert [item["is_new"] for item in new_rel] == [True, True, False, False]
+    assert all(item["reason_artist"] == "" for item in new_rel)
+
+    # Albums section must not duplicate releases already surfaced in new_releases.
+    new_ids = {item["external_ids"]["deezer_album_id"] for item in new_rel}
+    album_ids = {item["external_ids"]["deezer_album_id"] for item in sections_by_id["albums"]["items"]}
+    assert new_ids.isdisjoint(album_ids)
+    assert "1004" in album_ids
+    assert "1003" in album_ids
+
+
+def test_new_releases_reuse_saved_deezer_id_without_artist_search(monkeypatch):
+    calls = []
+
+    def get(path, params=None, **kwargs):
+        calls.append(path)
+        if path == "search/artist":
+            return {"data": [artist(1, params["q"])]}
+        if path == "artist/1/related":
+            return {"data": []}
+        if path == "artist/1/albums":
+            return {"data": []}
+        if path == "artist/555/albums":
+            return {"data": [
+                {"id": 9001, "title": "Saved Band New EP", "record_type": "ep", "release_date": "2026-11-18"},
+            ]}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(deezer, "get", get)
+    body = build_browse_sections(
+        ["Alpha"],
+        release_seeds=[{"name": "Saved Band", "deezer_id": "555"}],
+        today=datetime.date(2026, 11, 22),
+    )
+    assert body["browse_sections"][0]["id"] == "new_releases"
+    assert body["browse_sections"][0]["items"][0]["title"] == "Saved Band New EP"
+    assert body["browse_sections"][0]["items"][0]["artist"] == "Saved Band"
+    assert calls.count("search/artist") == 1
+    assert "artist/555/albums" in calls
 
 
 def test_cold_start_uses_popular_entities_without_personalized_reasons(monkeypatch):
     def get(path, params=None, **kwargs):
         if path.endswith('artists'):
             return {'data': [artist(1), artist(1), {'name': 'Invalid'}]}
-        return {'data': [{'id': i, 'title': f'Album {i}', 'artist': artist(i % 3 + 1)} for i in range(1, 12)]}
+        return {'data': [{'id': i, 'title': f'Album {i}', 'artist': artist(i % 3 + 1), 'release_date': '2026-11-20'} for i in range(1, 12)]}
     monkeypatch.setattr(deezer, 'get', get)
     body = build_browse_sections([])
+    assert [s['id'] for s in body['browse_sections']] == ['artists', 'albums']
     assert all(s['popular'] for s in body['browse_sections'])
     assert len(body['browse_sections'][0]['items']) == 1
     assert len(body['browse_sections'][1]['items']) == 6
@@ -127,10 +216,11 @@ def test_feed_cache_reports_inflight_and_keeps_accounts_separate(monkeypatch):
 def test_failed_enrichment_preserves_cached_entities(monkeypatch):
     from shared.api.routes import discovery_feed as route
     key = 'discovery-feed-v4:testuser:10'
+    old_new = {'id': 'new_releases', 'items': [{'title': 'Fresh EP'}]}
     old = {'id': 'artists', 'items': [{'title': 'Existing'}]}
-    monkeypatch.setattr(route, '_DISCOVERY_FEED_CACHE', {key: (0, 9999999999, {'browse_sections': [old]})})
+    monkeypatch.setattr(route, '_DISCOVERY_FEED_CACHE', {key: (0, 9999999999, {'browse_sections': [old_new, old]})})
     monkeypatch.setattr(route, '_DISCOVERY_FEED_INFLIGHT', {key})
     monkeypatch.setattr(route, '_build_discovery_feed_body', lambda *args, **kwargs: {'browse_error': True, 'browse_sections': []})
     route._refresh_discovery_feed_cache(key, 'testuser', 10)
-    assert route._DISCOVERY_FEED_CACHE[key][2]['browse_sections'] == [old]
+    assert route._DISCOVERY_FEED_CACHE[key][2]['browse_sections'] == [old_new, old]
     assert key not in route._DISCOVERY_FEED_INFLIGHT

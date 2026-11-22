@@ -3,9 +3,11 @@ from types import SimpleNamespace
 from shared.discovery_intelligence import emit_discovery_event, reset_discovery_profile
 from shared.discovery_seeds import (
     clear_recent_seeds,
+    load_saved_entity_artists,
     record_recent_graph_seeds,
     record_recent_taste_seeds,
     select_graph_seed_tracks,
+    select_release_seed_artists,
     select_taste_artists,
 )
 from shared.models import LibraryMetadata, Track
@@ -126,6 +128,63 @@ def test_graph_seeds_rotate_filter_podcasts_and_reset_clears_history(tmp_path):
             reset_discovery_profile()
         after_reset = [t.id for t in select_graph_seed_tracks(metadata, ["t1"], limit=3, user_id="alice", rotate=True, require_youtube_id=True)]
         assert after_reset[0] == "t1"
+    finally:
+        clear_recent_seeds(clear_all=True)
+        reset_runtime()
+
+
+def test_saved_entities_feed_taste_and_unrotated_release_seeds(tmp_path):
+    from player import saved_entities
+
+    _setup_runtime(tmp_path)
+    try:
+        with user_context("alice"):
+            saved_entities.set_saved(
+                {
+                    "kind": "album",
+                    "name": "La ley innata",
+                    "artist": "Extremoduro",
+                    "destination": "/album/La%20ley%20innata?deezer_id=901&view=discover",
+                },
+                True,
+            )
+            saved_entities.set_saved(
+                {
+                    "kind": "artist",
+                    "name": "Marea",
+                    "destination": "/artist/Marea?deezer_id=42&view=discover",
+                },
+                True,
+            )
+            saved_entities.set_saved(
+                {
+                    "kind": "artist",
+                    "name": "Extremoduro",
+                    "destination": "/artist/Extremoduro?deezer_id=77&view=discover",
+                },
+                True,
+            )
+
+        extracted = load_saved_entity_artists("alice")
+        assert extracted == [
+            {"name": "Extremoduro", "deezer_id": "77", "kind": "artist"},
+            {"name": "Marea", "deezer_id": "42", "kind": "artist"},
+        ]
+
+        empty_metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+        assert select_taste_artists(empty_metadata, [], limit=5, user_id="alice") == ["Extremoduro", "Marea"]
+        assert select_taste_artists(empty_metadata, [], limit=5, user_id="bob") == []
+
+        record_recent_taste_seeds("alice", ["Extremoduro", "Marea"])
+        tracks = [_track("t1", "Robe"), _track("t2", "Platero y Tú")]
+        rich = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})
+        release_seeds = select_release_seed_artists(rich, ["t1"], limit=5, user_id="alice")
+        # Release seeds never rotate away saved artists and keep known deezer_ids.
+        assert release_seeds[:2] == [
+            {"name": "Extremoduro", "deezer_id": "77"},
+            {"name": "Marea", "deezer_id": "42"},
+        ]
+        assert [item["name"] for item in release_seeds] == ["Extremoduro", "Marea", "Robe", "Platero y Tú"]
     finally:
         clear_recent_seeds(clear_all=True)
         reset_runtime()

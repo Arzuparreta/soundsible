@@ -423,3 +423,113 @@ test('unresolved Deezer Discover rows expose reason, immediate dismissal with Un
   const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
   expect(audit.violations).toEqual([]);
 });
+
+test('renders new_releases rail with New badge, formatted date, and expansion', async ({ page }) => {
+  await page.route('**/api/discovery/music/feed?**', (route) =>
+    route.fulfill({
+      json: {
+        needs_seed: false,
+        browse_sections: [
+          {
+            id: 'new_releases',
+            popular: false,
+            items: [
+              {
+                id: 'deezer:album:901',
+                type: 'album',
+                source: 'deezer',
+                title: 'Estreno reciente',
+                artist: 'Marea',
+                record_type: 'ep',
+                release_date: '2026-11-18',
+                is_new: true,
+                cover: artwork(1),
+                external_ids: { deezer_album_id: '901', deezer_artist_id: '1' },
+              },
+              {
+                id: 'deezer:album:902',
+                type: 'album',
+                source: 'deezer',
+                title: 'Lanzamiento previo',
+                artist: 'Extremoduro',
+                record_type: 'album',
+                release_date: '2026-09-10',
+                is_new: false,
+                cover: artwork(2),
+                external_ids: { deezer_album_id: '902', deezer_artist_id: '2' },
+              },
+              {
+                id: 'deezer:album:903',
+                type: 'album',
+                source: 'deezer',
+                title: 'Tercer lanzamiento',
+                artist: 'Robe',
+                record_type: 'single',
+                release_date: '2026-08-05',
+                is_new: false,
+                cover: artwork(3),
+                external_ids: { deezer_album_id: '903', deezer_artist_id: '3' },
+              },
+            ],
+          },
+          {
+            id: 'artists',
+            popular: false,
+            items: [
+              { id: 'deezer:artist:4', type: 'artist', source: 'deezer', title: 'Platero y Tú', cover: artwork(4), reason_artist: 'Extremoduro', external_ids: { deezer_artist_id: '4' } },
+            ],
+          },
+        ],
+        sections: [],
+        items: [],
+      },
+    }),
+  );
+
+  await page.goto('/player/#/search');
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  const home = page.getByTestId('search-discovery');
+  const releases = home.getByRole('region', { name: 'Novedades' });
+  await expect(releases).toBeVisible();
+  await expect(releases.getByText('Nuevo', { exact: true })).toHaveCount(1);
+  await expect(releases.getByText(/Marea · EP · /)).toBeVisible();
+  await expect(releases.getByText(/Robe · Sencillo · /)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  await releases.getByRole('link', { name: 'Ver todos: Novedades' }).click();
+  await expect(page).toHaveURL(/browse=new_releases/);
+  await expect(home.getByRole('heading', { name: 'Novedades' })).toBeFocused();
+  await expect(home.getByRole('region', { name: 'Artistas por descubrir' })).toHaveCount(0);
+
+  const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
+  expect(audit.violations).toEqual([]);
+});
+
+test('shows subtle passive cold-start hint when Discover has only popular charts', async ({ page }) => {
+  await page.route('**/api/discovery/music/feed?**', (route) =>
+    route.fulfill({
+      json: {
+        needs_seed: true,
+        browse_sections: [
+          {
+            id: 'artists',
+            popular: true,
+            items: [
+              { id: 'deezer:artist:10', type: 'artist', source: 'deezer', title: 'Artista popular', cover: artwork(1), external_ids: { deezer_artist_id: '10' } },
+            ],
+          },
+        ],
+        sections: [],
+        items: [],
+      },
+    }),
+  );
+
+  await page.goto('/player/#/search');
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  const home = page.getByTestId('search-discovery');
+  await expect(home.getByRole('note')).toContainText('Descubrir se adapta automáticamente');
+
+  const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
+  expect(audit.violations).toEqual([]);
+});

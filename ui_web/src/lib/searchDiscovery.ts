@@ -1,6 +1,6 @@
 import type { DiscoveryBrowseItem, DiscoveryBrowseSection, DiscoveryFeedItem, DiscoveryMusicFeed } from './api';
 import type { CatalogItem } from '../types/music';
-import { t } from './i18n';
+import { locale, t } from './i18n';
 
 export interface DiscoveryTrackShelf {
   id: string;
@@ -122,6 +122,56 @@ export function discoveryShelfReason(shelf: DiscoveryTrackShelf): string {
   return shelf.reason?.trim() || '';
 }
 
+const RELEASE_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export function discoveryBrowseSectionTitle(id: string, popular = false): string {
+  switch (id) {
+    case 'new_releases':
+      return t('searchHome.newReleases');
+    case 'artists':
+      return t(popular ? 'searchHome.popularArtists' : 'searchHome.artists');
+    case 'albums':
+      return t(popular ? 'searchHome.popularAlbums' : 'searchHome.albums');
+    default:
+      return t('searchHome.songs');
+  }
+}
+
+export function formatDiscoveryReleaseDate(releaseDate?: string, now = new Date()): string {
+  const raw = releaseDate?.trim();
+  if (!raw) return '';
+  const match = RELEASE_DATE_RE.exec(raw);
+  if (!match) return '';
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) {
+    return '';
+  }
+  return new Intl.DateTimeFormat(locale(), {
+    month: 'short',
+    day: 'numeric',
+    ...(year !== now.getUTCFullYear() ? { year: 'numeric' } : {}),
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+export function isColdDiscoveryFeed(
+  feed: DiscoveryMusicFeed,
+  sections: readonly DiscoveryBrowseSection[],
+  trackShelves: readonly DiscoveryTrackShelf[],
+): boolean {
+  return Boolean(feed.needs_seed)
+    && trackShelves.length === 0
+    && sections.length > 0
+    && sections.every(section => section.popular);
+}
+
 export function discoveryEntityReason(item: DiscoveryBrowseItem, round: boolean): string {
   const reason = item.reason_artist?.trim();
   if (!reason) return '';
@@ -130,7 +180,11 @@ export function discoveryEntityReason(item: DiscoveryBrowseItem, round: boolean)
   return t('searchHome.similarTo', { artist: reason });
 }
 
-export function discoveryEntitySubtitle(item: DiscoveryBrowseItem, round: boolean): string {
+export function discoveryEntitySubtitle(
+  item: DiscoveryBrowseItem,
+  round: boolean,
+  options?: { showReleaseDate?: boolean },
+): string {
   if (round) return '';
   const recordType = item.record_type?.trim().toLowerCase();
   const typeLabel = recordType === 'single'
@@ -138,7 +192,8 @@ export function discoveryEntitySubtitle(item: DiscoveryBrowseItem, round: boolea
     : recordType === 'ep'
       ? t('searchHome.recordTypeEp')
       : '';
-  return [item.artist?.trim() ?? '', typeLabel].filter(Boolean).join(' · ');
+  const dateLabel = options?.showReleaseDate ? formatDiscoveryReleaseDate(item.release_date) : '';
+  return [item.artist?.trim() ?? '', typeLabel, dateLabel].filter(Boolean).join(' · ');
 }
 
 /** Preserve playable identities and recommendation feedback across the shared row. */

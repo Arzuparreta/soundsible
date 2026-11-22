@@ -28,8 +28,10 @@ from shared.discovery_seeds import (
     record_recent_graph_seeds,
     record_recent_taste_seeds,
     select_graph_seed_tracks,
+    select_release_seed_artists,
     select_taste_artists,
 )
+from shared.discovery_signals import register_discovery_signal_handler
 from shared.hardening import rate_limit
 from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
@@ -46,6 +48,7 @@ from .discovery_common import (
     _DISCOVERY_FEED_TTL_SEC,
     _MAX_PERSONALIZED_SEEDS,
     _get_api,
+    _invalidate_personalized_cache_for_user_detailed,
 )
 from .discovery_graph import _schedule_expand
 
@@ -603,7 +606,8 @@ def _build_discovery_feed_body(
         from shared.discovery_browse import build_browse_sections
 
         seeds = taste_seeds if taste_seeds is not None else _top_taste_artists(metadata, fav_ids, rotate=rotate)
-        body.update(build_browse_sections(seeds, min(limit, 10)))
+        release_seeds = select_release_seed_artists(metadata, fav_ids, limit=8, user_id=user_id)
+        body.update(build_browse_sections(seeds, min(limit, 10), release_seeds=release_seeds))
         if seeds:
             record_recent_taste_seeds(user_id, seeds)
     return body
@@ -631,7 +635,11 @@ def _refresh_discovery_feed_cache(
                 current_sections = {s["id"]: s for s in body.get("browse_sections", [])}
                 for section in previous[2].get("browse_sections", []):
                     current_sections.setdefault(section["id"], section)
-                body["browse_sections"] = [current_sections[key] for key in ("artists", "albums") if key in current_sections]
+                body["browse_sections"] = [
+                    current_sections[key]
+                    for key in ("new_releases", "artists", "albums")
+                    if key in current_sections
+                ]
             dirty = not _followup and cache_key in _DISCOVERY_FEED_DIRTY
             expires_at = 0 if dirty else now + (5 if body.get("browse_error") else _DISCOVERY_FEED_TTL_SEC)
             _DISCOVERY_FEED_CACHE[cache_key] = (
@@ -697,6 +705,34 @@ def _schedule_discovery_feed_refresh(
             _DISCOVERY_FEED_INFLIGHT.discard(cache_key)
         raise
     return True
+
+
+def notify_discovery_signal(user_id: str | None = None, *, always_refresh: bool = False) -> bool:
+    """Invalidate cached Discover feeds for ``user_id`` and wake cold (or forced) ones."""
+    from shared.user_context import current_user_id
+
+    uid = user_id if user_id is not None else current_user_id()
+    scheduled = False
+    for cache_key, feed_limit, was_cold in _invalidate_personalized_cache_for_user_detailed(uid):
+        if not (always_refresh or was_cold):
+            continue
+        try:
+            if _schedule_discovery_feed_refresh(cache_key, uid, feed_limit, rotate=False):
+                scheduled = True
+        except Exception as exc:
+            logger.debug("Discovery signal refresh failed for %s: %s", cache_key, exc)
+    return scheduled
+
+
+def _dispatch_discovery_signal(
+    user_id: str | None = None,
+    *,
+    always_refresh: bool = False,
+) -> bool:
+    return notify_discovery_signal(user_id, always_refresh=always_refresh)
+
+
+register_discovery_signal_handler(_dispatch_discovery_signal)
 
 
 @discovery_bp.route("/api/discovery/music/feed", methods=["GET"])

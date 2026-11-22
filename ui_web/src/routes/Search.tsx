@@ -598,6 +598,23 @@ export default function Search() {
 
   const playItem = (item: CatalogItem) => {
     if (item.type === 'track' || item.type === 'library_track') {
+      if (q().trim().length >= 2) {
+        const artist = itemArtist(item);
+        if (artist && item.title) {
+          const youtubeId = item.external_ids?.youtube_id
+            ? String(item.external_ids.youtube_id)
+            : catalogPreviewId(item) || undefined;
+          void api.emitDiscoveryEvent('music_search_played', {
+            media_type: 'music_track',
+            track_id: item.track_id || undefined,
+            title: item.title,
+            artist,
+            album: item.album,
+            youtube_id: youtubeId,
+            source: 'search',
+          }).catch(() => {});
+        }
+      }
       void playCatalogItem(item);
     } else if (item.type === 'artist') {
       const artist = itemArtist(item) || item.title;
@@ -687,10 +704,20 @@ export default function Search() {
   };
 
   const previewYouTube = (result: SearchResult) => {
+    const credit = resultCredit(result);
+    if (q().trim().length >= 2 && credit.artist && result.title) {
+      void api.emitDiscoveryEvent('music_search_played', {
+        media_type: 'music_track',
+        title: result.title,
+        artist: credit.artist,
+        youtube_id: result.id,
+        source: 'search',
+      }).catch(() => {});
+    }
     actions.playTrack({
       id: result.id,
       title: result.title,
-      ...resultCredit(result),
+      ...credit,
       duration: result.duration,
       source: 'preview',
       cover: result.thumbnail,

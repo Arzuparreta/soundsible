@@ -112,7 +112,12 @@ def discovery_events_post():
         return jsonify({"error": "Unsupported discovery event"}), 400
     recorded = emit_discovery_event(event, payload)
     if recorded:
-        _invalidate_personalized_cache()
+        try:
+            from .discovery_feed import notify_discovery_signal
+
+            notify_discovery_signal(always_refresh=False)
+        except Exception:
+            _invalidate_personalized_cache()
     return jsonify({"status": "recorded" if recorded else "disabled", "recorded": recorded})
 
 

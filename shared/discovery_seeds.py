@@ -7,12 +7,13 @@ import threading
 
 from shared.discovery_intelligence import load_listening_event_rollups
 from shared.text_utils import fold_text
-from shared.user_context import current_user_id
+from shared.user_context import current_user_id, user_context
 
 _MAX_TRACKED_USERS = 128
 _MAX_RECENT_TASTE_SEEDS = 10
 _MAX_RECENT_GRAPH_SEEDS = 12
 _DEFAULT_ROTATION_PENALTY = 0.02
+_DEEZER_ARTIST_KEY_PREFIX = "artist:deezer:"
 
 _SEED_LOCK = threading.Lock()
 _RECENT_TASTE_SEEDS: OrderedDict[str, list[str]] = OrderedDict()
@@ -85,6 +86,56 @@ def clear_recent_seeds(user_id: str | None = None, *, clear_all: bool = False) -
         _RECENT_GRAPH_SEEDS.pop(scope, None)
 
 
+def load_saved_entity_artists(user_id: str | None = None) -> list[dict[str, str]]:
+    """Return artist seeds extracted from bookmarked artists and albums, newest first."""
+    try:
+        from player.saved_entities import get_entries
+
+        if user_id is not None:
+            with user_context(user_id):
+                entries = get_entries()
+        else:
+            entries = get_entries()
+    except Exception:
+        return []
+
+    out: list[dict[str, str]] = []
+    by_folded: dict[str, dict[str, str]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        kind = str(entry.get("kind") or "").strip()
+        if kind == "artist":
+            name = str(entry.get("name") or "").strip()
+            deezer_id = ""
+            for key in entry.get("keys") or ():
+                if isinstance(key, str) and key.startswith(_DEEZER_ARTIST_KEY_PREFIX):
+                    candidate = key[len(_DEEZER_ARTIST_KEY_PREFIX):].strip()
+                    if candidate.isdigit():
+                        deezer_id = candidate
+                        break
+        elif kind == "album":
+            name = str(entry.get("artist") or "").strip()
+            deezer_id = ""
+        else:
+            continue
+        folded = fold_text(name)
+        if not folded:
+            continue
+        existing = by_folded.get(folded)
+        if existing is not None:
+            if kind == "artist" and existing["kind"] != "artist":
+                existing["kind"] = "artist"
+                existing["name"] = name
+            if deezer_id and not existing["deezer_id"]:
+                existing["deezer_id"] = deezer_id
+            continue
+        item = {"name": name, "deezer_id": deezer_id, "kind": kind}
+        by_folded[folded] = item
+        out.append(item)
+    return out
+
+
 def select_taste_artists(
     metadata,
     fav_ids: list[str],
@@ -94,9 +145,10 @@ def select_taste_artists(
     rotate: bool = False,
     penalty: float = _DEFAULT_ROTATION_PENALTY,
 ) -> list[str]:
-    """Rank taste seed artists across favourites, playlists, library, and listens."""
+    """Rank taste seed artists across favourites, bookmarks, playlists, library, and listens."""
     tracks = list(metadata.tracks if metadata and metadata.tracks else [])
     rollup = load_listening_event_rollups()
+    saved_artists = load_saved_entity_artists(user_id)
     by_id = {track.id: track for track in tracks}
     scores: dict[str, float] = {}
     display: dict[str, str] = {}
@@ -113,6 +165,12 @@ def select_taste_artists(
         track = by_id.get(str(tid))
         if track:
             add_artist(track.album_artist or track.artist, 9.0 - min(idx, 8) * 0.35)
+
+    for idx, saved in enumerate(saved_artists):
+        if saved["kind"] == "artist":
+            add_artist(saved["name"], 8.5 - min(idx, 8) * 0.35)
+        else:
+            add_artist(saved["name"], 5.5 - min(idx, 8) * 0.25)
 
     playlists = metadata.playlists if metadata and isinstance(metadata.playlists, dict) else {}
     playlist_track_ids: set[str] = set()
@@ -148,6 +206,44 @@ def select_taste_artists(
 
     ranked = sorted(scores, key=lambda key: scores[key], reverse=True)
     return [display[key] for key in ranked[:limit] if display.get(key)]
+
+
+def select_release_seed_artists(
+    metadata,
+    fav_ids: list[str],
+    limit: int = 8,
+    *,
+    user_id: str | None = None,
+) -> list[dict[str, str]]:
+    """Return unrotated artist seeds for release-radar checks, prioritizing bookmarks."""
+    saved_artists = load_saved_entity_artists(user_id)
+    deezer_by_folded = {
+        fold_text(item["name"]): item["deezer_id"]
+        for item in saved_artists
+        if fold_text(item["name"]) and item["deezer_id"]
+    }
+
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def push(name: str, deezer_id: str = "") -> None:
+        if len(out) >= limit:
+            return
+        folded = fold_text(name)
+        if not folded or folded in seen:
+            return
+        seen.add(folded)
+        out.append({"name": name, "deezer_id": deezer_id or deezer_by_folded.get(folded, "")})
+
+    for kind in ("artist", "album"):
+        for item in saved_artists:
+            if item["kind"] == kind:
+                push(item["name"], item["deezer_id"])
+
+    for name in select_taste_artists(metadata, fav_ids, limit=limit, user_id=user_id, rotate=False):
+        push(name)
+
+    return out[:limit]
 
 
 def select_graph_seed_tracks(

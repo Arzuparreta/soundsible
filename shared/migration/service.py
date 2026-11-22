@@ -389,6 +389,12 @@ class MigrationRunner:
             emit_to_user("library_updated", user_id=self.user_id)
         except Exception:
             logger.debug("Could not emit migration library update", exc_info=True)
+        try:
+            from shared.discovery_signals import notify_discovery_signal
+
+            notify_discovery_signal(self.user_id, always_refresh=False)
+        except Exception:
+            logger.debug("Could not notify discovery feed after migration", exc_info=True)
 
     def _finish(self) -> None:
         if self.store.job_state(self.job_id) == "cancelled":
