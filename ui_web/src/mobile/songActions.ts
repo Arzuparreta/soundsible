@@ -1,6 +1,6 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import type { MenuAction } from '../components/ActionMenu';
-import type { Device } from '../lib/api';
+import { api, type Device } from '../lib/api';
 import { itemArtist } from '../lib/catalogTrack';
 import { openContextMenu } from '../lib/contextMenu';
 import { request } from '../lib/http';
@@ -107,7 +107,7 @@ export function nativeFeedbackActions(
 }
 
 export { canPlayOnDevice } from '../lib/remotePlayback';
-import { canPlayOnDevice, remotePlayRequest } from '../lib/remotePlayback';
+import { canPlayOnDevice, remoteCommandMessage, remotePlayTracksArgs } from '../lib/remotePlayback';
 
 /** Lists the account's other online devices and asks the chosen one to play this element. */
 export async function openNativePlayOnDevice(track: Track, self: () => Promise<string | null>, current: () => boolean, event?: MenuEvent): Promise<void> {
@@ -115,8 +115,8 @@ export async function openNativePlayOnDevice(track: Track, self: () => Promise<s
   let devices: Device[];
   try {
     const [listed, own] = await Promise.all([request<{ devices?: Device[] }>('/api/devices', { timeoutMs: 8000 }), self()]);
-    devices = (listed.devices ?? []).filter(device => device.device_id !== own && device.socket_active);
-  } catch { if (current()) toast.error(t('deviceSheet.failed')); return; }
+    devices = (listed.devices ?? []).filter(device => device.device_id !== own && Boolean(device.online ?? device.socket_active));
+  } catch { if (current()) toast.error(t('common.loadFailed')); return; }
   if (!current()) return;
   if (!devices.length) { toast.info(t('deviceSheet.emptyOthers')); return; }
   openContextMenu({ title: t('deviceSheet.title'), subtitle: track.title, actions: devices.map(device => ({
@@ -125,9 +125,13 @@ export async function openNativePlayOnDevice(track: Track, self: () => Promise<s
       if (!current()) return;
       const name = device.device_name ?? t('deviceSheet.fallbackDevice');
       const progress = toast.loading(t('deviceSheet.sendingTo', { device: name }));
-      void request('/api/playback/remote-command', { method: 'POST', body: { device_id: device.device_id, command: 'play', ...remotePlayRequest(track) }, timeoutMs: 8000 })
-        .then(() => { if (current()) progress.update('success', t('deviceSheet.playingOn')); else progress.dismiss(); })
-        .catch(() => { if (current()) progress.update('error', t('deviceSheet.failed')); else progress.dismiss(); });
+      void api.deviceCommand(device.device_id, 'play.tracks', remotePlayTracksArgs(track), { timeoutMs: 10_000 })
+        .then(answer => {
+          if (!current()) { progress.dismiss(); return; }
+          if (answer.status === 'applied') progress.update('success', t('deviceSheet.playingOn'));
+          else progress.update('error', remoteCommandMessage(answer, name));
+        })
+        .catch(() => { if (current()) progress.update('error', remoteCommandMessage(null, name)); else progress.dismiss(); });
     },
   })) }, event);
 }

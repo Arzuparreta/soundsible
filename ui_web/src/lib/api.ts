@@ -292,10 +292,47 @@ export interface DjRouteRef extends DjItemRef {
 
 
 
+import type { DeviceFormFactor } from './deviceIdentity';
+export type { DeviceFormFactor } from './deviceIdentity';
+
+export type LivePlaybackPhase =
+  | 'loading'
+  | 'playing'
+  | 'paused'
+  | 'buffering'
+  | 'error'
+  | 'needs_gesture'
+  | 'idle';
+
+export interface LiveDjTransition {
+  status: 'idle' | 'armed' | 'mixing';
+  next_queue_id?: string;
+  at?: number;
+}
+
+export interface LiveDjState {
+  phase: import('./generatedQueue').AutoPhase;
+  repairing: boolean;
+  pending_direction: boolean;
+  mixing: boolean;
+  transition: LiveDjTransition;
+}
+
+export interface LivePlaybackState {
+  phase: LivePlaybackPhase;
+  duration: number;
+  volume?: { level: number; muted: boolean };
+  dj: LiveDjState | null;
+}
+
 export interface DeviceRegistration {
   device_id: string;
   device_name: string;
   device_type: string;
+  form_factor: DeviceFormFactor;
+  instance_id: string;
+  protocol: number;
+  commands: string[];
 }
 
 /** A device registered for playback in the current scope. */
@@ -303,11 +340,41 @@ export interface Device {
   device_id: string;
   device_name?: string;
   device_type?: string;
+  form_factor?: DeviceFormFactor;
+  online?: boolean;
   last_seen_ts?: number;
   socket_active?: boolean;
+  protocol?: number | null;
+  commands?: string[];
+  playing?: {
+    track: Track;
+    is_playing: boolean;
+    position_sec: number;
+    measured_at_ms: number;
+    mode: 'normal' | 'dj' | 'radio' | 'podcast';
+    rev: number;
+  } | null;
 }
 
-export type RemoteCommand = 'play' | 'pause' | 'next' | 'previous' | 'seek';
+export type DeviceCommandAnswer =
+  | { status: 'applied'; rev?: number; state?: Record<string, unknown> }
+  | { status: 'rejected'; reason: string; step?: 'export' | 'import' }
+  | { status: 'unreachable'; reason: string; step?: 'export' | 'import' };
+
+function commandAnswerFromError(err: unknown): DeviceCommandAnswer | null {
+  if (!err || typeof err !== 'object' || !('payload' in err)) return null;
+  const payload = (err as { payload?: unknown }).payload;
+  if (!payload || typeof payload !== 'object') return null;
+  const status = (payload as { status?: unknown }).status;
+  if (status !== 'rejected' && status !== 'unreachable') return null;
+  const reason = (payload as { reason?: unknown }).reason;
+  const step = (payload as { step?: unknown }).step;
+  return {
+    status,
+    reason: typeof reason === 'string' ? reason : 'invalid_state',
+    ...(step === 'export' || step === 'import' ? { step } : {}),
+  };
+}
 
 /** Connect payload the engine attaches to a pairing session (QR + LAN URLs). */
 export interface PairingConnect {
@@ -439,12 +506,45 @@ export const api = {
     request<void>('/api/devices/register', { method: 'POST', body: d }),
   /** Devices registered for playback in this scope (for remote control). */
   listDevices: () => request<{ devices?: Device[] }>('/api/devices'),
-  /** Send a transport command to another device (it acts via Socket.IO). */
-  remoteCommand: (deviceId: string, command: RemoteCommand, extra?: { track_id?: string; track?: import('./playbackQueue').ContextTrack; position_sec?: number }) =>
-    request<{ status?: string }>('/api/playback/remote-command', {
-      method: 'POST',
-      body: { device_id: deviceId, command, ...extra },
-    }),
+  /** Send a remote command to another device; returns the contract answer even on 4xx/5xx. */
+  deviceCommand: async (
+    deviceId: string,
+    name: string,
+    args: Record<string, unknown> = {},
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<DeviceCommandAnswer> => {
+    try {
+      return await request<DeviceCommandAnswer>(`/api/devices/${encodeURIComponent(deviceId)}/commands`, {
+        method: 'POST',
+        body: { name, args },
+        signal: opts?.signal,
+        timeoutMs: opts?.timeoutMs ?? 10_000,
+      });
+    } catch (err) {
+      const answer = commandAnswerFromError(err);
+      if (answer) return answer;
+      throw err;
+    }
+  },
+  /** Transfer the active session from one device to another; returns the contract answer. */
+  transfer: async (
+    fromDeviceId: string,
+    toDeviceId: string,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<DeviceCommandAnswer> => {
+    try {
+      return await request<DeviceCommandAnswer>('/api/devices/transfer', {
+        method: 'POST',
+        body: { from_device_id: fromDeviceId, to_device_id: toDeviceId },
+        signal: opts?.signal,
+        timeoutMs: opts?.timeoutMs ?? 15_000,
+      });
+    } catch (err) {
+      const answer = commandAnswerFromError(err);
+      if (answer) return answer;
+      throw err;
+    }
+  },
 
   /** Warm previews the user is likely to play next: the engine resolves their
    * stream URLs in the background and, with `download`, also caches the audio
@@ -524,9 +624,12 @@ export const api = {
     device_id: string;
     device_name?: string;
     device_type?: string;
+    instance_id?: string;
+    seq?: number;
+    live?: LivePlaybackState;
     session?: PlaybackSessionSnapshot | null;
   }, opts?: { keepalive?: boolean }) =>
-    request<{ status?: string }>('/api/playback/state', { method: 'PUT', body, keepalive: opts?.keepalive }),
+    request<{ status?: string; rev?: number }>('/api/playback/state', { method: 'PUT', body, keepalive: opts?.keepalive }),
 
   // ── Device pairing (owner side; admin-scoped, allowed on the trusted LAN) ──
   /** Open an auto-confirming pairing session; returns the code + QR connect payload. */

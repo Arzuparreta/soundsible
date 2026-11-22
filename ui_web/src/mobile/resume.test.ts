@@ -2,6 +2,7 @@ import { createRoot, createSignal } from 'solid-js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('../lib/http', () => ({ request: mocks.request }));
+vi.mock('../lib/i18n', () => ({ t: (key: string, params?: Record<string, string>) => params ? `${key}:${Object.values(params).join(',')}` : key }));
 import { createNativeResume } from './resume';
 const NOW = 1_800_000_000_000;
 const remote = (fields: Record<string, unknown> = {}) => ({ device_id: 'laptop', device_name: 'Laptop', track_id: 't1', track: { id: 't1', title: 'Song' }, updated_at: NOW / 1000 - 60, ...fields });
@@ -28,11 +29,12 @@ it('ignores stale, empty and own sessions', async () => {
     const { resume, dispose } = setup(); await flush(); expect(resume.offer()).toBeNull(); dispose();
   }
 });
-it('hands the session to this phone through Core and honours a recent "No"', async () => {
-  mocks.request.mockResolvedValueOnce(remote()).mockResolvedValueOnce({ status: 'ok' });
+it('transfers the session to this phone through Core and honours a recent "No"', async () => {
+  mocks.request.mockResolvedValueOnce(remote()).mockResolvedValueOnce({ status: 'applied', rev: 4 });
   const first = setup(); await flush();
-  await first.resume.resume();
-  expect(mocks.request.mock.calls[1]).toEqual(['/api/playback/handoff', expect.objectContaining({ method: 'POST', body: { from_device_id: 'laptop', to_device_id: 'phone' } })]);
+  const err = await first.resume.resume();
+  expect(err).toBeNull();
+  expect(mocks.request.mock.calls[1]).toEqual(['/api/devices/transfer', expect.objectContaining({ method: 'POST', body: { from_device_id: 'laptop', to_device_id: 'phone' } })]);
   expect(first.resume.offer()).toBeNull(); first.dispose();
   mocks.request.mockResolvedValueOnce(remote());
   const second = setup(); await flush(); second.resume.dismiss(); second.dispose();
@@ -40,6 +42,15 @@ it('hands the session to this phone through Core and honours a recent "No"', asy
   const third = setup(); await flush(); expect(third.resume.offer()).toBeNull(); third.dispose();
   mocks.request.mockResolvedValueOnce(remote({ updated_at: NOW / 1000 + 10 }));
   const fourth = setup(); await flush(); expect(fourth.resume.offer()?.device_id).toBe('laptop');
+});
+it('keeps the offer and returns the contract error message when transfer is rejected', async () => {
+  mocks.request.mockResolvedValueOnce(remote())
+    .mockRejectedValueOnce({ status: 409, payload: { status: 'rejected', reason: 'nothing_playing', step: 'export' } });
+  const { resume, dispose } = setup(); await flush();
+  const err = await resume.resume();
+  expect(err).toBe('deviceSheet.nothingPlaying:Laptop');
+  expect(resume.offer()?.device_id).toBe('laptop');
+  dispose();
 });
 it('waits for this phone to be registered and drops an answer for a previous account', async () => {
   let deliver!: (value: unknown) => void;

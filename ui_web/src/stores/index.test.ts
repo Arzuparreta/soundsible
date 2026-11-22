@@ -138,20 +138,18 @@ describe('DJ session work and first mix', () => {
 });
 
 describe('portable remote playback', () => {
-  it.each([
-    { id: 'dQw4w9WgXcQ', title: 'Song', artist: 'A', source: 'preview' as const },
-    { id: 'ep', title: 'Episode', artist: 'Show', source: 'preview' as const, media_kind: 'podcast_episode',
-      podcast_episode_guid: 'ep', podcast_enclosure_url: 'https://example.com/episode.mp3' },
-  ])('replaces the receiver DJ session with $title without asking for confirmation', async (track) => {
+  it('starts a DJ selection when play.tracks arrives for music during DJ mode, matching a local tap', async () => {
+    const track = { id: 'dQw4w9WgXcQ', title: 'Song', artist: 'A', source: 'preview' as const };
     const confirmDialog = vi.fn().mockResolvedValue(false);
-    const store = await loadStore({ __confirmDialog: confirmDialog,
-      podcastPeek: vi.fn().mockResolvedValue({ stream_token: 'receiver-token' }) }); store.initStore(); await flush();
+    const store = await loadStore({ __confirmDialog: confirmDialog }); store.initStore(); await flush();
     store.actions.playFrom([t1, t2], 0);
     store.actions.enterAutoMode();
     expect(store.state.autoMode.active).toBe(true);
-    store.fireSocketEvent('playback_start_requested', { track, state: { session: null } });
-    await flush();
-    expect(store.state.autoMode.active).toBe(false);
+    const ack = vi.fn();
+    store.fireSocketEvent('device_command', { name: 'play.tracks', args: { tracks: [track], index: 0 } }, ack);
+    await vi.waitFor(() => expect(ack).toHaveBeenCalled());
+    expect(ack).toHaveBeenCalledWith(expect.objectContaining({ status: 'applied' }));
+    expect(store.state.autoMode.active).toBe(true);
     expect(store.state.playback.currentTrack).toMatchObject(track);
     expect(store.state.playback.queue.map(item => item.id)).toEqual([track.id]);
     expect(confirmDialog).not.toHaveBeenCalled();
@@ -178,8 +176,9 @@ describe('portable remote playback', () => {
     const store = await loadStore(); store.initStore(); await flush();
     const track = { id: 'dQw4w9WgXcQ', source: 'preview', title: 'Song', artist: 'A', album: 'Record',
       cover: 'https://example.com/cover.jpg', originKeys: ['deezer:42'], artists: ['A', 'B'] };
-    store.fireSocketEvent('playback_start_requested', { track, state: { track_id: track.id, position_sec: 0 } });
-    await flush();
+    const ack = vi.fn();
+    store.fireSocketEvent('device_command', { name: 'play.tracks', args: { tracks: [track], index: 0 } }, ack);
+    await vi.waitFor(() => expect(ack).toHaveBeenCalled());
     expect(store.state.playback.currentTrack).toMatchObject(track);
     expect(store.audioService.load).toHaveBeenCalledWith('/preview/dQw4w9WgXcQ', expect.any(Number));
   });
@@ -189,7 +188,9 @@ describe('portable remote playback', () => {
     const store = await loadStore({ podcastPeek }); store.initStore(); await flush();
     const track = { id: 'ep', title: 'Episode', artist: 'Show', source: 'preview', media_kind: 'podcast_episode',
       podcast_episode_guid: 'ep', podcast_feed_id: 'feed', podcast_enclosure_url: 'https://example.com/episode.mp3' };
-    store.fireSocketEvent('playback_start_requested', { track }); await flush();
+    const ack = vi.fn();
+    store.fireSocketEvent('device_command', { name: 'play.tracks', args: { tracks: [track], index: 0 } }, ack);
+    await vi.waitFor(() => expect(ack).toHaveBeenCalled());
     expect(store.state.playback.currentTrack).toMatchObject(track);
     expect(podcastPeek).toHaveBeenCalledWith(track.podcast_enclosure_url);
     expect(store.audioService.load).toHaveBeenCalledWith('/podcast/receiver-token', 1, expect.any(Number));
@@ -198,16 +199,20 @@ describe('portable remote playback', () => {
   it('resolves a catalogue reference on the receiving device', async () => {
     const resolveCatalogItem = vi.fn().mockResolvedValue({ video_id: 'dQw4w9WgXcQ' });
     const store = await loadStore({ resolveCatalogItem }); store.initStore(); await flush();
-    store.fireSocketEvent('playback_start_requested', { track: { id: 'deezer:42', title: 'Song', artist: 'A', source: 'preview',
-      pendingResolve: { catalogItemId: 'deezer:42', title: 'Song', artist: 'A' } } });
+    const track = { id: 'deezer:42', title: 'Song', artist: 'A', source: 'preview',
+      pendingResolve: { catalogItemId: 'deezer:42', title: 'Song', artist: 'A' } };
+    store.fireSocketEvent('device_command', { name: 'play.tracks', args: { tracks: [track], index: 0 } });
     await vi.waitFor(() => expect(store.state.playback.currentTrack?.id).toBe('dQw4w9WgXcQ'));
     expect(resolveCatalogItem).toHaveBeenCalled();
   });
 
-  it('keeps a blocked remote selection ready for a tap without retrying or skipping', async () => {
+  it('keeps a blocked remote selection ready for a tap without retrying or skipping and rejects with needs_gesture', async () => {
     const load = vi.fn().mockRejectedValue(new DOMException('Tap required', 'NotAllowedError'));
     const store = await loadStore({}, { load }); store.initStore(); await flush();
-    store.fireSocketEvent('playback_start_requested', { track: { ...t1, source: 'preview' } }); await flush();
+    const ack = vi.fn();
+    store.fireSocketEvent('device_command', { name: 'play.tracks', args: { tracks: [{ ...t1, source: 'preview' }], index: 0 } }, ack);
+    await vi.waitFor(() => expect(ack).toHaveBeenCalled());
+    expect(ack).toHaveBeenCalledWith({ status: 'rejected', reason: 'needs_gesture' });
     expect(store.state.playback).toMatchObject({ currentTrack: { id: 't1' }, phase: 'paused', needsGesture: true, loadError: false, isLoading: false });
     expect(load).toHaveBeenCalledTimes(1);
     store.actions.resumePlayback(); await flush();
@@ -577,11 +582,11 @@ async function loadStore(
   vi.doMock('../lib/haptics', () => ({ vibrate: vi.fn() }));
   /** Events the store subscribed to, so a test can send one the way the engine
    * would — a remote control command, a handoff from another device. */
-  const socketHandlers = new Map<string, (data?: unknown) => void>();
+  const socketHandlers = new Map<string, (...args: unknown[]) => void>();
   const disconnect = vi.fn();
   const connect = vi.fn();
   const createSocket = vi.fn(() => ({
-    on: (event: string, handler: (data?: unknown) => void) => socketHandlers.set(event, handler),
+    on: (event: string, handler: (...args: unknown[]) => void) => socketHandlers.set(event, handler),
     emit: vi.fn(), disconnect, connect, connected: false,
   }));
   vi.doMock('../lib/socket', () => ({
@@ -590,7 +595,7 @@ async function loadStore(
 
   const store = await import('./index');
   storeCleanups.push(() => store.disposeStore());
-  const fireSocketEvent = (event: string, data?: unknown) => socketHandlers.get(event)?.(data);
+  const fireSocketEvent = (event: string, ...args: unknown[]) => socketHandlers.get(event)?.(...args);
   const fireProgramTransport = (event: Partial<ProgramTransportEvent>) => programTransportReporter?.({
     kind: 'pause',
     origin: 'ui',
@@ -3900,18 +3905,24 @@ describe('cross-device sessions', () => {
     expect(state.playback.queue.map((entry) => entry.id)).toEqual(['t1']);
   });
 
-  it('takes the whole session over when another device hands playback here', async () => {
+  it('takes the whole session over when another device transfers playback here', async () => {
     const { body, queue } = await publishedAutoSession();
-    const { initStore, state, fireSocketEvent } = await loadStore({
+    const { initStore, state, fireSocketEvent, fireDeckEvent } = await loadStore({
       relatedYouTube: vi.fn().mockResolvedValue(related),
+      putPlaybackState: vi.fn().mockResolvedValue({ status: 'ok', rev: 9 }),
     });
     initStore();
     await flush();
 
-    fireSocketEvent('playback_start_requested', {
-      track: body.track,
-      state: { ...body, device_id: 'dev1', position_sec: 42, is_playing: true },
-    });
+    const ack = vi.fn();
+    fireSocketEvent('device_command', {
+      name: 'session.import',
+      args: { state: { ...body, device_id: 'dev1', position_sec: 42, is_playing: true } },
+    }, ack);
+    await vi.waitFor(() => expect(state.playback.currentTrack?.id).toBe('current'));
+    expect(ack).not.toHaveBeenCalled();
+    fireDeckEvent('playing');
+    await vi.waitFor(() => expect(ack).toHaveBeenCalledWith({ status: 'applied', rev: 9 }));
 
     expect(state.autoMode.active).toBe(true);
     expect(state.playback.queue.map((entry) => entry.id)).toEqual(queue);
@@ -4776,7 +4787,7 @@ it('authenticated runtime starts once, closes once, and starts a fresh socket fo
   store.disposeStore();
   store.disposeStore();
   expect(store.disconnect).toHaveBeenCalledTimes(1);
-  store.fireSocketEvent('playback_start_requested', { track_id: 'old-account' });
+  store.fireSocketEvent('device_command', { name: 'play.tracks', args: { tracks: [{ id: 'old-account', title: 'Old', artist: 'A' }], index: 0 } });
   await flush();
   expect(store.state.playback.queue).toEqual([]);
   store.initStore();

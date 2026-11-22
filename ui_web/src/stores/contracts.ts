@@ -1,4 +1,4 @@
-import { type LibraryScanStatus } from "../lib/api";
+import { type LibraryScanStatus, type LivePlaybackState } from "../lib/api";
 import { type ProgramTransportOrigin } from "../lib/audio";
 import { type AutoActivity } from "../lib/generatedQueue";
 import { type ContextTrack, type PlaybackContextDescriptor } from "../lib/playbackQueue";
@@ -77,6 +77,9 @@ export type PublishedPlaybackState = {
   device_id: string;
   device_name: string;
   device_type: string;
+  instance_id: string;
+  seq: number;
+  live: LivePlaybackState;
   session?: PlaybackSessionSnapshot | null;
 };
 export interface PlayerActions {

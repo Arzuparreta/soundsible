@@ -6,11 +6,11 @@ for (const keys of [['yt:dQw4w9WgXcQ'], ['deezer:42']]) {
     await mockMusicEngine(page);
     await page.route(url => url.pathname === '/api/library', route => route.fulfill({ json: { tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] } }));
     await page.route(url => url.pathname === '/api/library/saved', route => route.fulfill({ json: { saved: [{ keys, title: 'Canción remota', artist: 'Artista remoto' }] } }));
-    await page.route('**/api/devices', route => route.fulfill({ json: { devices: [{ device_id: 'other-device', device_name: 'Portátil', socket_active: true }] } }));
+    await page.route('**/api/devices', route => route.fulfill({ json: { devices: [{ device_id: 'other-device', device_name: 'Portátil', online: true, socket_active: true }] } }));
     const commands: Array<Record<string, any>> = [];
-    await page.route('**/api/playback/remote-command', async route => {
+    await page.route('**/api/devices/other-device/commands', async route => {
       commands.push(route.request().postDataJSON());
-      await route.fulfill({ json: { status: 'sent' } });
+      await route.fulfill({ json: { status: 'applied', rev: 1 } });
     });
     const acquired: string[] = [];
     page.on('request', request => {
@@ -22,9 +22,13 @@ for (const keys of [['yt:dQw4w9WgXcQ'], ['deezer:42']]) {
     await page.getByText('Reproducir en dispositivo', { exact: true }).click();
     await page.getByRole('button', { name: /^Portátil/ }).click();
     await expect.poll(() => commands.length).toBe(1);
-    expect(commands[0]).toMatchObject({ device_id: 'other-device', command: 'play', track: { title: 'Canción remota', artist: 'Artista remoto', source: 'preview', originKeys: keys } });
-    if (keys[0].startsWith('yt:')) expect(commands[0].track.id).toBe('dQw4w9WgXcQ');
-    else expect(commands[0].track.pendingResolve).toMatchObject({ catalogItemId: keys[0], artist: 'Artista remoto', title: 'Canción remota' });
+    expect(commands[0]).toMatchObject({
+      name: 'play.tracks',
+      args: { index: 0, tracks: [{ title: 'Canción remota', artist: 'Artista remoto', source: 'preview', originKeys: keys }] },
+    });
+    const sent = commands[0].args.tracks[0];
+    if (keys[0].startsWith('yt:')) expect(sent.id).toBe('dQw4w9WgXcQ');
+    else expect(sent.pendingResolve).toMatchObject({ catalogItemId: keys[0], artist: 'Artista remoto', title: 'Canción remota' });
     expect(acquired).toEqual([]);
   });
 }

@@ -335,6 +335,9 @@ function createClient() {
     set stagedEntry(value) {
       queue.stagedEntry = value;
     },
+    get committedTransition() {
+      return dj.committedTransition;
+    },
     get autoSessionEpoch() {
       return dj.autoSessionEpoch;
     },
@@ -436,6 +439,34 @@ function createClient() {
       return actions;
     }
   }, lifetime);
+  let remoteExecutor: Promise<ReturnType<(typeof import('./remoteCommands'))['createRemoteCommandExecutor']>> | null = null;
+  async function handleDeviceCommand(
+    payload: import('../lib/socket').DeviceCommandRequest,
+    ack?: (response: import('../lib/socket').DeviceCommandAck) => void,
+  ): Promise<void> {
+    const isCurrent = lifetime.capture();
+    try {
+      remoteExecutor ??= import('./remoteCommands').then(({ createRemoteCommandExecutor }) =>
+        createRemoteCommandExecutor({
+          actions,
+          committedQueueId: () => dj.committedTransition?.queueId ?? null,
+          startSettled: () => transport.startSettled,
+          pushPlaybackState: session.pushPlaybackState,
+          playbackStateBody: session.playbackStateBody,
+          livePosition: session.livePosition,
+          lastRev: session.lastRev,
+          sessionFor: session.sessionFor,
+          playRestoredSession: session.playRestoredSession,
+        }, lifetime),
+      );
+      const executor = await remoteExecutor;
+      if (!isCurrent()) return;
+      const answer = await executor.execute(payload);
+      if (isCurrent()) ack?.(answer);
+    } catch {
+      if (isCurrent()) ack?.({ status: 'rejected', reason: 'invalid_state' });
+    }
+  }
   const runtime = createRuntime({
     get RESUME_HANDOFF_ATTEMPTS() {
       return session.RESUME_HANDOFF_ATTEMPTS;
@@ -473,6 +504,10 @@ function createClient() {
     get pushPlaybackState() {
       return session.pushPlaybackState;
     },
+    get startSessionSync() {
+      return session.startSessionSync;
+    },
+    handleDeviceCommand,
     get unmatchedSelection() {
       return transport.unmatchedSelection;
     },
@@ -562,12 +597,6 @@ function createClient() {
     },
     get loudnessAsked() {
       return transport.loudnessAsked;
-    },
-    get sessionFor() {
-      return session.sessionFor;
-    },
-    get playRestoredSession() {
-      return session.playRestoredSession;
     },
     get sessionOutOfDate() {
       return session.sessionOutOfDate;

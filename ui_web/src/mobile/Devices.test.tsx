@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({ state: vi.fn(), listen: vi.fn(), handoff: vi.f
 vi.mock('./devices', () => ({ nativeDevices: { deviceState: mocks.state, deviceHandoff: mocks.handoff, deviceRename: mocks.rename, addListener: mocks.listen } }));
 vi.mock('../lib/prompt', () => ({ promptDialog: mocks.prompt }));
 vi.mock('../lib/http', () => ({ request: mocks.request }));
-vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
+vi.mock('../lib/i18n', () => ({ t: (key: string, params?: Record<string, string>) => params ? `${key}:${Object.values(params).join(',')}` : key }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 function setup() {
   const remove = vi.fn().mockResolvedValue(undefined);
@@ -20,19 +20,46 @@ function setup() {
   return remove;
 }
 it('identifies service device and only controls other online devices', async () => {
-  setup(); render(() => <NativeDevices generation={() => 4} current={() => true} />);
+  setup();
+  mocks.request.mockImplementation((path: string) => {
+    if (path === '/api/devices/peer/commands') return Promise.resolve({ status: 'applied', rev: 3 });
+    if (path === '/api/devices') return Promise.resolve({ devices: [
+      { device_id: 'native', device_name: 'Android', socket_active: true },
+      { device_id: 'peer', device_name: 'Laptop', socket_active: true },
+      { device_id: 'offline', device_name: 'Offline', socket_active: false },
+    ] });
+    return Promise.resolve({ devices: [] });
+  });
+  render(() => <NativeDevices generation={() => 4} current={() => true} />);
   await waitFor(() => expect(screen.getByText('deviceSheet.selfSuffix')).toBeInTheDocument());
   const play = screen.getAllByRole('button', { name: 'deviceSheet.ariaPlay' });
   expect(play).toHaveLength(2); expect(play[1]).toBeDisabled();
   await fireEvent.click(play[0]);
-  expect(mocks.request).toHaveBeenCalledWith('/api/playback/remote-command', expect.objectContaining({ body: { device_id: 'peer', command: 'play' } }));
+  expect(mocks.request).toHaveBeenCalledWith('/api/devices/peer/commands', expect.objectContaining({
+    method: 'POST', body: { name: 'transport.play', args: {} },
+  }));
+});
+it('shows the contract error message when a command is not applied', async () => {
+  setup();
+  mocks.request.mockImplementation((path: string) => {
+    if (path === '/api/devices/peer/commands') return Promise.reject({ status: 409, payload: { status: 'rejected', reason: 'needs_gesture' } });
+    if (path === '/api/devices') return Promise.resolve({ devices: [
+      { device_id: 'native', device_name: 'Android', socket_active: true },
+      { device_id: 'peer', device_name: 'Laptop', socket_active: true },
+    ] });
+    return Promise.resolve({ devices: [] });
+  });
+  render(() => <NativeDevices generation={() => 4} current={() => true} />);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'deviceSheet.ariaPlay' })).toBeEnabled());
+  await fireEvent.click(screen.getByRole('button', { name: 'deviceSheet.ariaPlay' }));
+  await waitFor(() => expect(screen.getByText('deviceSheet.needsGesture:Laptop')).toBeInTheDocument());
 });
 it('disables controls after account change and removes subscription on cleanup', async () => {
   const remove = setup(); const [current, setCurrent] = createSignal(true);
   const view = render(() => <NativeDevices generation={() => 4} current={current} />);
   await waitFor(() => expect(screen.getAllByRole('button', { name: 'deviceSheet.ariaPause' })[0]).toBeEnabled());
   setCurrent(false); await fireEvent.click(screen.getAllByRole('button', { name: 'deviceSheet.ariaPause' })[0]);
-  expect(mocks.request.mock.calls.some(([path]) => path === '/api/playback/remote-command')).toBe(false);
+  expect(mocks.request.mock.calls.some(([path]) => String(path).endsWith('/commands'))).toBe(false);
   view.unmount(); expect(remove).toHaveBeenCalledOnce();
 });
 it('ignores a device list which finishes after account ownership changes', async () => {
