@@ -5,30 +5,26 @@ import type { Device } from '../lib/api';
 import { t } from '../lib/i18n';
 import { trackCoverUrl } from '../lib/media';
 import { openOverlay } from '../lib/overlay';
-import { state } from '../stores';
-import {
-  controlledName,
-  deviceName,
-  isControllable,
-  isOnline,
-  refreshDevices,
-  remoteDevices,
-  remoteDevicesFailed,
-  remoteTarget,
-  remoteUnreachable,
-  retryTarget,
-  selectTarget,
-  transferTo,
-} from '../stores/remote';
+import { deviceName, isControllable, isOnline, type RemoteControl } from '../lib/remoteControl';
 import type { Track } from '../types/music';
 import Button from './Button';
 import styles from './ConnectSheet.module.css';
-import { deviceIcon } from './DeviceSheet';
+import { deviceIcon } from './deviceIcon';
 import { EmptyState } from './EmptyState';
 import { CheckIcon } from './icons';
 import { SkeletonRows } from './Skeleton';
 
+/** This device as the sheet shows it. */
+export interface ConnectSelf {
+  readonly name: string;
+  readonly formFactor?: string;
+  readonly deviceType?: string;
+  track(): Track | null;
+  playing(): boolean;
+}
+
 function Row(props: {
+  selected: boolean;
   id: string | null;
   name: string;
   icon: JSX.Element;
@@ -39,7 +35,7 @@ function Row(props: {
   tabStop: boolean;
   onSelect: () => void;
 }) {
-  const selected = () => remoteTarget() === props.id;
+  const selected = () => props.selected;
   return (
     <Control
       class={styles.row}
@@ -86,8 +82,12 @@ const moveFocus: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (event) => {
 };
 
 /** Which device plays and which one this player controls. Tapping a device
- * controls it; moving the music is the explicit, secondary action. */
-export function openConnectSheet(): void {
+ * controls it; moving the music is the explicit, secondary action. The web
+ * player and the Android app open it with their own controller and device. */
+export function openConnectSheet(control: RemoteControl, self: ConnectSelf): void {
+  const { controlledName, devices: remoteDevices, devicesFailed: remoteDevicesFailed, refreshDevices, retryTarget, selectTarget, target: remoteTarget,
+    transferTo, unreachable: remoteUnreachable } = control;
+  const selfId = () => control.host.selfId();
   openOverlay(
     (close) => {
       const [busy, setBusy] = createSignal(false);
@@ -101,7 +101,7 @@ export function openConnectSheet(): void {
         });
       });
       const others = createMemo(() =>
-        (remoteDevices() ?? []).filter((d) => d.device_id !== state.device.device_id && isOnline(d)),
+        (remoteDevices() ?? []).filter((d) => d.device_id !== selfId() && isOnline(d)),
       );
       const control = (id: string | null) => {
         selectTarget(id);
@@ -116,9 +116,9 @@ export function openConnectSheet(): void {
       };
       // One transfer button, and only when its direction is unambiguous.
       const transfer = (d: Device) => {
-        const here = Boolean(state.playback.currentTrack), there = Boolean(d.playing?.track);
-        if (here === there) return null;
-        const [from, to] = here ? [state.device.device_id, d.device_id] : [d.device_id, state.device.device_id];
+        const here = Boolean(self.track()), there = Boolean(d.playing?.track), id = selfId();
+        if (here === there || !id) return null;
+        const [from, to] = here ? [id, d.device_id] : [d.device_id, id];
         return { label: t(here ? 'deviceSheet.moveHere' : 'deviceSheet.listenHere'), run: () => transferTo(from, to) };
       };
       return (
@@ -138,12 +138,13 @@ export function openConnectSheet(): void {
           </Show>
           <div ref={list} class={styles.list} role="radiogroup" aria-label={t('settings.devices')} onKeyDown={moveFocus}>
             <Row
+              selected={remoteTarget() === null}
               id={null}
-              name={state.device.device_name}
-              icon={deviceIcon(state.device.form_factor, state.device.device_type)}
+              name={self.name}
+              icon={deviceIcon(self.formFactor, self.deviceType)}
               badge={t('settings.group.thisDevice')}
-              track={state.playback.currentTrack}
-              playing={state.playback.isPlaying}
+              track={self.track()}
+              playing={self.playing()}
               tabStop={!listed()}
               onSelect={() => control(null)}
             />
@@ -168,6 +169,7 @@ export function openConnectSheet(): void {
                   }>
                     <div class={styles.entry}>
                       <Row
+                        selected={remoteTarget() === d.device_id}
                         id={d.device_id}
                         name={deviceName(d)}
                         icon={deviceIcon(d.form_factor, d.device_type)}

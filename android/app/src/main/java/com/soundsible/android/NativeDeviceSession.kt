@@ -53,6 +53,8 @@ internal class NativeDeviceSession(
     private var hadTrack = false
     private var lastPositionPing = 0L
     private var stateRetryAfter = 0L
+    /** The device the WebView controls, with the profile it belongs to; watched again on every connect. */
+    private var watched: Pair<String, String>? = null
     private var activePublishWaiters = mutableListOf<(Long?) -> Unit>()
     private var nextPublishWaiters = mutableListOf<(Long?) -> Unit>()
     @Volatile private var closed = false
@@ -66,7 +68,7 @@ internal class NativeDeviceSession(
             main.postDelayed(this, 2000)
         }
     }
-    init { connection.resetListeners.add(resetListener); main.post(tick) }
+    init { connection.resetListeners.add(resetListener); main.post(tick); NativeDeviceEvents.session = this }
 
     /** Debug delivery phases only: never log account, device, media or exception messages. */
     private fun diagnostic(phase: String, event: String = "", failure: Throwable? = null) {
@@ -100,7 +102,6 @@ internal class NativeDeviceSession(
     fun state(): JSONObject = JSONObject().put("generation", connection.generation).put("device_name", name())
         .put("device_id", if (owns()) deviceId else JSONObject.NULL).put("connected", owns() && socket?.connected() == true)
         .put("retrying", retryAfter > SystemClock.elapsedRealtime())
-        .put("can_handoff", owns() && socket?.connected() == true && handoffFuture == null && snapshot() != null)
 
     private fun connect() {
         if (closed || connecting || SystemClock.elapsedRealtime() < retryAfter) return
@@ -151,6 +152,8 @@ internal class NativeDeviceSession(
                     next.on(Socket.EVENT_CONNECT) { main.post {
                         if (owns() && socket === next) {
                             next.emit("playback_register", registration()); diagnostic("registration_emitted"); publish(state()); changed()
+                            // Room membership left with the old socket.
+                            watched?.takeIf { it.first == profile }?.let { watchOn(next, it.second, null) }
                         }
                     } }
                     next.io().on(Manager.EVENT_RECONNECT_FAILED) { main.post {
@@ -164,6 +167,10 @@ internal class NativeDeviceSession(
                     } }
                     next.on("device_command") { arguments ->
                         handleDeviceCommand(next, arguments)
+                    }
+                    for (event in listOf("device_updated", "device_state")) next.on(event) { arguments ->
+                        val payload = arguments.firstOrNull() as? JSONObject ?: return@on
+                        main.post { if (owns() && socket === next) forward(event, payload) }
                     }
                     next.connect()
                 } catch (_: Exception) { reset() }
@@ -241,6 +248,44 @@ internal class NativeDeviceSession(
                 finish(RemoteCommandLogic.ackRejected("invalid_state"))
             }
         }
+    }
+
+    /** Account events reach the WebView tagged with the account they belong to. */
+    private fun forward(event: String, payload: JSONObject) {
+        if (payload.toString().length <= 512 * 1024) NativeDeviceEvents.emit(event, payload.put("generation", epoch))
+    }
+
+    /** Watch another device for the WebView (contract: watching a device); `null` stops. Answers with the
+     * engine's acknowledgement, or `null` when there is no socket yet: the device is then watched on connect. */
+    fun watch(id: String?, done: (JSONObject?) -> Unit) {
+        val owner = profile
+        if (!owns() || owner == null || id != null && (id.isBlank() || id.length > 128)) { done(null); return }
+        val active = socket?.takeIf { it.connected() }
+        val previous = watched?.second
+        watched = id?.let { owner to it }
+        if (active != null && previous != null && previous != id) active.emit("unwatch_device", JSONObject().put("device_id", previous))
+        if (id == null) done(JSONObject().put("ok", true))
+        else if (active == null) done(null)
+        else watchOn(active, id, done)
+    }
+
+    /** Without `done` (a reconnect) the acknowledgement is forwarded as the events it stands for. */
+    private fun watchOn(target: Socket, id: String, done: ((JSONObject?) -> Unit)?) {
+        val token = serial
+        val finished = AtomicBoolean(false)
+        val timeout = Runnable { if (finished.compareAndSet(false, true)) done?.invoke(null) }
+        main.postDelayed(timeout, 8000)
+        target.emit("watch_device", arrayOf<Any>(JSONObject().put("device_id", id)), Ack { arguments -> main.post {
+            main.removeCallbacks(timeout)
+            if (!finished.compareAndSet(false, true)) return@post
+            val ack = arguments.firstOrNull() as? JSONObject
+            val current = token == serial && owns() && socket === target && watched?.second == id
+            if (done != null) { done(if (current) ack else null); return@post }
+            if (!current || ack == null) return@post
+            val now = ack.opt("server_now_ms")
+            ack.optJSONObject("device")?.let { forward("device_updated", JSONObject().put("device", it).put("server_now_ms", now)) }
+            ack.optJSONObject("state")?.let { forward("device_state", it.put("device_id", id).apply { if (!has("server_now_ms")) put("server_now_ms", now) }) }
+        } })
     }
 
     private fun exportState(): JSONObject? = snapshot()
@@ -417,6 +462,7 @@ internal class NativeDeviceSession(
     override fun close() {
         if (closed) return
         closed = true
+        if (NativeDeviceEvents.session === this) NativeDeviceEvents.session = null
         main.removeCallbacks(tick)
         main.removeCallbacks(debouncedReport)
         connection.resetListeners.remove(resetListener)
@@ -424,4 +470,13 @@ internal class NativeDeviceSession(
         publishWorker.shutdown()
         handoffWorker.shutdown()
     }
+}
+
+/** The service and the WebView's plugin run in one process: the plugin reaches the
+ * device session and its account events here instead of through MediaSession extras. */
+@UnstableApi
+internal object NativeDeviceEvents {
+    @Volatile var session: NativeDeviceSession? = null
+    val listeners = java.util.concurrent.CopyOnWriteArrayList<(String, JSONObject) -> Unit>()
+    fun emit(event: String, payload: JSONObject) = listeners.forEach { it(event, payload) }
 }

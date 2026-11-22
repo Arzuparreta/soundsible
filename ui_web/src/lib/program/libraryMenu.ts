@@ -2,7 +2,7 @@ import { programTrack } from './tracks';
 import type { ActionMenuOptions } from '../../components/ActionMenu';
 import { t } from '../i18n';
 import type { Track } from '../../types/music';
-import type { ProgramCommand, ProgramState, ProgramTrack } from './runtime';
+import { offers, type ProgramCommand, type ProgramState, type ProgramTrack } from './runtime';
 
 /** Capture the occurrence when opening the menu. Native guards reject a stale order/anchor. */
 export function programLibraryMenu(track: Track, state: () => ProgramState | null, pending: () => boolean,
@@ -22,11 +22,11 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
     void execute(command).catch(() => {});
   };
   return { title: track.title, subtitle: track.artist, actions: [
-    ...(!captured?.dj?.active || shell ? [
+    ...((!captured?.dj?.active || shell) && offers(captured, 'queueAdd') ? [
       { label: t('android.insertAfter'), disabled, onSelect: () => select('insertAfter') },
       { label: t('trackActions.addToQueue'), disabled, onSelect: () => select('append') },
     ] : []),
-    ...(candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' ? [{
+    ...(candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' && offers(captured, 'dj') ? [{
       label: t(captured?.items[captured.index]?.id === candidate.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
       disabled: disabled || captured?.items[captured.index]?.mediaKind === 'podcast_episode',
       onSelect: () => {
@@ -40,7 +40,7 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
           : { action: 'djContext', tracks, queueToken: captured.queueToken, programToken: captured.programToken, key: captured.items[captured.index]?.key }).catch(() => {});
       },
     }] : []),
-    ...(shell && captured?.dj?.active && candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' ? [{
+    ...(shell && captured?.dj?.active && candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' && offers(captured, 'djSources') ? [{
       label: t('musicExplorer.reference'),
       selected: captured.dj.sources?.some(source => source.tracks.length === 1 && source.tracks[0].id === candidate.id && (source.tracks[0].source ?? 'local') === candidate.source),
       disabled: disabled || (captured.dj.sources?.length ?? 0) >= 64 || captured.dj.sources?.some(source => source.tracks.length === 1 && source.tracks[0].id === candidate.id && (source.tracks[0].source ?? 'local') === candidate.source),
@@ -56,7 +56,7 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
         }] }).catch(() => {});
       },
     }] : []),
-    ...(shell && captured?.dj?.active && captured.programToken && candidate?.source !== 'pending' && candidate?.mediaKind !== 'podcast_episode' ? [{
+    ...(shell && captured?.dj?.active && captured.programToken && candidate?.source !== 'pending' && candidate?.mediaKind !== 'podcast_episode' && offers(captured, 'djPlace') ? [{
       label: t('autoMode.dj.routeAction'), disabled,
       onSelect: () => {
         const observed = state();
@@ -65,13 +65,13 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
         else void execute({ action: 'djRequest', tracks, programToken: captured.programToken!, queueToken: captured.queueToken }).catch(() => {});
       },
     }] : []),
-    ...(candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' && captured?.items[captured.index]?.id === candidate.id ? [{
+    ...(candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' && captured?.items[captured.index]?.id === candidate.id && offers(captured, 'radio') ? [{
       label: t(captured.radio?.active ? 'nowPlaying.stopRadioConfirm' : 'trackActions.startRadio'), disabled: !captured.ready || pending(),
       onSelect: () => {
         if (!captured.ready || pending() || state()?.generation !== captured.generation) return;
         void execute({ action: 'radio', enabled: !captured.radio?.active, profile: captured.radio?.profile ?? 'balanced', queueToken: captured.queueToken, key: captured.items[captured.index]?.key }).catch(() => {});
       },
-    }, ...(captured.radio?.active ? (['familiar', 'balanced', 'explore'] as const).map(profile => ({
+    }, ...(captured.radio?.active && offers(captured, 'radioProfile') ? (['familiar', 'balanced', 'explore'] as const).map(profile => ({
       label: t(`autoMode.profile.${profile}`), selected: captured.radio?.profile === profile,
       disabled: !captured.ready || pending(),
       onSelect: () => {

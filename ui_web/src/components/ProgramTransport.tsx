@@ -3,7 +3,7 @@ import { coverStyle } from '../lib/cover';
 import { programCover } from '../lib/program/tracks';
 import { clockTime } from '../lib/format';
 import { t } from '../lib/i18n';
-import type { ProgramState, ProgramCommand } from '../lib/program/runtime';
+import { offers, type ProgramState, type ProgramCommand } from '../lib/program/runtime';
 import styles from './ProgramTransport.module.css';
 import { openContextMenu } from '../lib/contextMenu';
 import { vibrate } from '../lib/haptics';
@@ -29,20 +29,20 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
       const queueToken = props.state.queueToken;
       const enabled = props.state.autoplay?.enabled;
       const known = typeof enabled === 'boolean';
-      openContextMenu({ title: props.state.title, actions: [...(!live() && props.onLyrics && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' ? [{ label: t('nowPlaying.showLyrics'), onSelect: () => { if (props.state.generation === generation && !disabled()) props.onLyrics?.(); } }] : []), ...(!live() ? [{
+      openContextMenu({ title: props.state.title, actions: [...(!live() && props.onLyrics && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' ? [{ label: t('nowPlaying.showLyrics'), onSelect: () => { if (props.state.generation === generation && !disabled()) props.onLyrics?.(); } }] : []), ...(!live() && offers(props.state, 'autoplay') ? [{
         label: known ? t('settings.autoplay') : t('common.retry'), selected: enabled === true,
         disabled: props.state.autoplay?.settingsPhase === 'loading', onSelect: () => {
           if (disabled() || props.state.generation !== generation) return;
           void run({ action: 'autoplay', enabled: enabled !== true, reload: !known });
         },
-      }] : []), ...(!live() && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' && !props.state.dj?.active ? [{
+      }] : []), ...(!live() && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' && !props.state.dj?.active && offers(props.state, 'dj') ? [{
         label: t('musicExplorer.startDjFromCurrent'),
         disabled: ['planning', 'warming'].includes(props.state.dj?.phase ?? ''),
         onSelect: () => {
           if (disabled() || props.state.generation !== generation || props.state.items[props.state.index]?.key !== key) return;
           void run({ action: 'dj', fromCurrent: true, queueToken: props.state.queueToken, key });
         },
-      }] : []), ...(props.state.dj?.active && programToken ? ([{
+      }] : []), ...(props.state.dj?.active && programToken && offers(props.state, 'djSources') ? [{
         label: t('autoMode.source.title'), selected: false,
         onSelect: () => {
           const current = () => props.state.generation === generation && props.state.programToken === programToken && props.state.dj?.active === true;
@@ -51,22 +51,22 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
             if (current()) openNativeDjSources(() => props.state, () => props.pending, props.command);
           });
         },
-      }, {
+      }] : []), ...(props.state.dj?.active && programToken && offers(props.state, 'djRepair') ? [{
         label: t('autoMode.route.fix'), selected: false,
         disabled: props.state.items.length - (props.state.dj?.editableFrom ?? props.state.index + 1) < 2 || props.state.dj?.phase === 'repairing',
         onSelect: () => {
           if (disabled() || props.state.generation !== generation || props.state.programToken !== programToken || props.state.queueToken !== queueToken || !props.state.dj?.active || props.state.dj.phase === 'repairing') return;
           void run({ action: 'djRepair', programToken, queueToken });
         },
-      }]) : [])] }, event);
+      }] : [])] }, event);
     }}>⋯</button>
-    <button data-program-close aria-label={t('android.closeProgram')} title={t('android.closeProgram')} disabled={disabled()} onClick={() => void run({ action: 'stop', queueToken: props.state.queueToken, programToken: props.state.programToken })}>×</button></div>
-    <Show when={props.state.items[props.state.index]?.mediaKind === 'podcast_episode'}><button data-podcast-back aria-label={t('podcasts.skipBack')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: -15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>−15s</button><button data-podcast-forward aria-label={t('podcasts.skipForward')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: 15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>+15s</button></Show>
+    <Show when={offers(props.state, 'stop')}><button data-program-close aria-label={t('android.closeProgram')} title={t('android.closeProgram')} disabled={disabled()} onClick={() => void run({ action: 'stop', queueToken: props.state.queueToken, programToken: props.state.programToken })}>×</button></Show></div>
+    <Show when={props.state.items[props.state.index]?.mediaKind === 'podcast_episode' && offers(props.state, 'seek')}><button data-podcast-back aria-label={t('podcasts.skipBack')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: -15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>−15s</button><button data-podcast-forward aria-label={t('podcasts.skipForward')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: 15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>+15s</button></Show>
     <button disabled={disabled() || !props.state.hasPrevious} onClick={() => void run({ action: 'previous' })}>{t('common.prev')}</button>
     <button disabled={disabled()} onClick={() => void run({ action: props.state.playWhenReady ? 'pause' : 'play' })}>{props.state.playWhenReady ? t('common.pause') : t('common.play')}</button>
     <button disabled={disabled() || !props.state.hasNext} onClick={() => void run({ action: 'next' })}>{t('common.next')}</button>
-    <Show when={!live() && !props.state.dj?.active}><button disabled={disabled()} aria-pressed={props.state.shuffle} onClick={() => void run({ action: 'shuffle', enabled: !props.state.shuffle })}>{t('nowPlaying.shuffle')}</button>
-    <label>{t('nowPlaying.repeat')} <select aria-label={t('nowPlaying.repeat')} value={props.state.repeat} disabled={disabled()} onChange={event => void run({ action: 'repeat', mode: Number(event.currentTarget.value) as 0 | 1 | 2 })}>
+    <Show when={!live() && !props.state.dj?.active && offers(props.state, 'shuffle')}><button disabled={disabled()} aria-pressed={props.state.shuffle} onClick={() => void run({ action: 'shuffle', enabled: !props.state.shuffle })}>{t('nowPlaying.shuffle')}</button>
+    </Show><Show when={!live() && !props.state.dj?.active && offers(props.state, 'repeat')}><label>{t('nowPlaying.repeat')} <select aria-label={t('nowPlaying.repeat')} value={props.state.repeat} disabled={disabled()} onChange={event => void run({ action: 'repeat', mode: Number(event.currentTarget.value) as 0 | 1 | 2 })}>
       <option value="0">{t('android.repeatOff')}</option><option value="1">{t('android.repeatOne')}</option><option value="2">{t('android.repeatAll')}</option>
     </select></label></Show>
     <input aria-label={t('android.seek')} disabled={disabled() || props.state.durationMs <= 0 || props.state.seekable === false} type="range" min="0" max={props.state.durationMs || 0} value={seeking() ?? props.state.positionMs} step="1000" aria-valuetext={clockTime((seeking() ?? props.state.positionMs) / 1000)} onInput={event => setSeeking(Number(event.currentTarget.value))} onChange={event => { const target = Number(event.currentTarget.value); void run({ action: 'seek', positionMs: target }).finally(() => setSeeking(null)); }} />

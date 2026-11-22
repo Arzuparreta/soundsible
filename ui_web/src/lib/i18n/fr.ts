@@ -626,7 +626,6 @@ export const fr: Dict = {
       maintenance: 'Maintenance',
       updates: 'Mises à jour',
       thisDevice: 'Cet appareil',
-      network: 'Sur ce réseau',
     },
     note: {
       connection: 'Mesuré à partir de la musique déjà livrée, sans trafic de test. Un morceau demande environ 1,5 fois son propre débit pour jouer sans interruption.',
@@ -913,7 +912,6 @@ export const fr: Dict = {
     empty: 'La liste ne contient aucun titre.',
   },
   deviceSheet: {
-    transfer: 'Transférer la lecture',
     sendingTo: 'Envoi vers {device}…',
     fallbackDevice: 'appareil',
     playingOn: 'Lecture en cours',
@@ -936,12 +934,6 @@ export const fr: Dict = {
     title: 'Lire sur…',
     emptyOthers: 'Aucun autre appareil connecté.',
     ariaOnline: 'En ligne',
-    empty: 'Aucun appareil connecté.',
-    selfSuffix: ' (celui-ci)',
-    ariaPrev: 'Précédent',
-    ariaPause: 'Pause',
-    ariaPlay: 'Lire',
-    ariaNext: 'Suivant',
   },
   pairDevice: {
     statusPending: 'En attente du scan de l’appareil…',

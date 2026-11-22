@@ -9,6 +9,7 @@ import styles from './DeviceSheet.module.css';
 import { EmptyState } from './EmptyState';
 import { SkeletonRows } from './Skeleton';
 import Button from './Button';
+import { deviceIcon } from './deviceIcon';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { remoteCommandMessage, remotePlayTracksArgs } from '../lib/remotePlayback';
 import { player } from '../stores/player';
@@ -17,28 +18,6 @@ const others = (devs: Device[]): Device[] => devs.filter((d) => d.device_id !== 
 const deviceName = (d: Device): string => d.device_name ?? t('deviceSheet.fallbackDevice');
 const isOnline = (d: Device): boolean => Boolean(d.online ?? d.socket_active);
 
-export function deviceIcon(formFactor?: string, type?: string): JSX.Element {
-  if (formFactor === 'computer' || (!formFactor && type === 'desktop'))
-    return (
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="2" y="4" width="20" height="13" rx="2" />
-        <path d="M8 21h8M12 17v4" />
-      </svg>
-    );
-  if (formFactor === 'tablet')
-    return (
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="4" y="2" width="16" height="20" rx="2" />
-        <path d="M11 18h2" />
-      </svg>
-    );
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <rect x="6" y="2" width="12" height="20" rx="2" />
-      <path d="M11 18h2" />
-    </svg>
-  );
-}
 
 /** One read of the device list. A failed read is its own state: an empty list
  * would say "no other devices" about devices nobody managed to ask for. */
@@ -124,7 +103,7 @@ export function openPlayOnDevice(track: Track): void {
 }
 
 /** The device sheet (control another device, move the music) is loaded on use. */
-export const openConnect = () => void import('./ConnectSheet').then((m) => m.openConnectSheet());
+export const openConnect = () => void import('./webConnect').then((m) => m.openWebConnectSheet());
 
 /** What a device button says: the controlled device, or where devices are. */
 export const connectLabel = () =>

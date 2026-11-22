@@ -56,7 +56,8 @@ class QueueLanesTest {
         try {
             peer.connect(); assertTrue(connected.await(15, TimeUnit.SECONDS))
             core("/api/devices/register", "POST", JSONObject().put("device_id", peerId).put("device_name", "Resume laptop").put("device_type", "desktop"))
-            core("/api/playback/state", "PUT", JSONObject(peerState.toString()).put("instance_id", peerInstance).put("seq", 1))
+            // Paused there: a device playing elsewhere would be controlled at startup instead of offered for resume.
+            core("/api/playback/state", "PUT", JSONObject(peerState.toString()).put("is_playing", false).put("instance_id", peerInstance).put("seq", 1))
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 fun waitFor(condition: String) {
                     val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)

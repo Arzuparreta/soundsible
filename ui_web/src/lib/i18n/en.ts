@@ -625,7 +625,6 @@ export const en = {
       maintenance: 'Maintenance',
       updates: 'Updates',
       thisDevice: 'This device',
-      network: 'On this network',
     },
     /* Footers: the quiet line under a group that says what it actually does. */
     note: {
@@ -907,7 +906,6 @@ export const en = {
     empty: 'The playlist has no tracks.',
   },
   deviceSheet: {
-    transfer: 'Transfer playback',
     sendingTo: 'Sending to {device}…',
     fallbackDevice: 'device',
     playingOn: 'Playing',
@@ -930,12 +928,6 @@ export const en = {
     title: 'Play on…',
     emptyOthers: 'No other devices connected.',
     ariaOnline: 'Online',
-    empty: 'No devices connected.',
-    selfSuffix: ' (this)',
-    ariaPrev: 'Previous',
-    ariaPause: 'Pause',
-    ariaPlay: 'Play',
-    ariaNext: 'Next',
   },
   pairDevice: {
     statusPending: 'Waiting for the device to scan…',

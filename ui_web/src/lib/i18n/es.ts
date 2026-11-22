@@ -622,7 +622,6 @@ export const es: Dict = {
       maintenance: 'Mantenimiento',
       updates: 'Actualizaciones',
       thisDevice: 'Este dispositivo',
-      network: 'En esta red',
     },
     note: {
       connection: 'Medido con la música ya servida, sin tráfico de prueba. Una pista necesita alrededor de 1,5 veces su propio bitrate para sonar del tirón.',
@@ -906,7 +905,6 @@ export const es: Dict = {
     empty: 'La lista no tiene pistas.',
   },
   deviceSheet: {
-    transfer: 'Transferir reproducción',
     sendingTo: 'Enviando a {device}…',
     fallbackDevice: 'dispositivo',
     playingOn: 'Reproduciendo',
@@ -929,12 +927,6 @@ export const es: Dict = {
     title: 'Reproducir en…',
     emptyOthers: 'No hay otros dispositivos conectados.',
     ariaOnline: 'En línea',
-    empty: 'No hay dispositivos conectados.',
-    selfSuffix: ' (este)',
-    ariaPrev: 'Anterior',
-    ariaPause: 'Pausar',
-    ariaPlay: 'Reproducir',
-    ariaNext: 'Siguiente',
   },
   pairDevice: {
     statusPending: 'Esperando a que el dispositivo escanee…',

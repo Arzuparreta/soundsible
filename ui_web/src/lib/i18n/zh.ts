@@ -622,7 +622,6 @@ export const zh: Dict = {
       maintenance: '维护',
       updates: '更新',
       thisDevice: '本设备',
-      network: '此网络中',
     },
     note: {
       connection: '根据已经传输的音乐测得，不产生测试流量。一首曲目需要约 1.5 倍自身码率才能顺畅播放。',
@@ -901,7 +900,6 @@ export const zh: Dict = {
     empty: '歌单中没有曲目。',
   },
   deviceSheet: {
-    transfer: '转移播放',
     sendingTo: '正在发送到 {device}…',
     fallbackDevice: '设备',
     playingOn: '正在播放',
@@ -924,12 +922,6 @@ export const zh: Dict = {
     title: '在…上播放',
     emptyOthers: '没有其他已连接的设备。',
     ariaOnline: '在线',
-    empty: '没有已连接的设备。',
-    selfSuffix: '（本机）',
-    ariaPrev: '上一首',
-    ariaPause: '暂停',
-    ariaPlay: '播放',
-    ariaNext: '下一首',
   },
   pairDevice: {
     statusPending: '等待设备扫描…',

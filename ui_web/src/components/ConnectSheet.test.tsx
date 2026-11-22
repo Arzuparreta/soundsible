@@ -6,7 +6,8 @@ import { discardOverlays, OverlayOutlet } from '../lib/overlay';
 import { RuntimeLifetime } from '../lib/runtimeLifetime';
 import type { AppSocket } from '../lib/socket';
 import { resetAccountState, setState, state } from '../stores/core';
-import { attachRemoteSocket, refreshDevices, remoteTarget, resetRemoteState, selectTarget } from '../stores/remote';
+import { attachRemoteSocket, refreshDevices, remoteControl, remoteTarget, resetRemoteState, selectTarget } from '../stores/remote';
+import { webConnectSelf } from './webConnect';
 import { openConnectSheet } from './ConnectSheet';
 
 const mocks = vi.hoisted(() => ({ listDevices: vi.fn(), transfer: vi.fn() }));
@@ -25,7 +26,7 @@ const device = (over: Partial<Device>): Device => ({
 function open(devices: Device[]) {
   mocks.listDevices.mockResolvedValue({ devices });
   render(() => <OverlayOutlet />);
-  openConnectSheet();
+  openConnectSheet(remoteControl, webConnectSelf);
   return screen.findByRole('radiogroup');
 }
 
