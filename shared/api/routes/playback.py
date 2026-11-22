@@ -2,7 +2,6 @@
 Streaming, cover, preview, and playback state routes.
 """
 
-import json
 import logging
 import math
 import os
@@ -15,6 +14,9 @@ from werkzeug.exceptions import HTTPException
 from shared import preview_cache, preview_streams, request_scope
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
+from shared.realtime import emit_device_state, emit_device_updated, server_now_ms
+from shared.remote.dispatcher import send_command, transfer_playback
+from shared.remote.validator import bound_track
 from shared.security import request_client_address, request_rate_limit_key
 from shared.stream_resolution import ResolvedStream
 from shared.url_utils import validate_youtube_video_id
@@ -54,13 +56,11 @@ def _preview_stream_rate_limit(ip: str) -> bool:
 def _get_api():
     from shared.api import is_trusted_network, is_safe_path, WEB_UI_PATH, get_playback_state, put_playback_state, get_scope_from_request
     from shared.user_cores import get_library, get_track_by_id
-    from shared.realtime import socketio
     from shared.download_pump import get_downloader
     from shared.playback_state import register_device, get_registered_device, list_registered_devices
     return {
         "get_library": get_library,
         "get_track_by_id": get_track_by_id,
-        "socketio": socketio,
         "get_downloader": get_downloader,
         "is_trusted_network": is_trusted_network,
         "is_safe_path": is_safe_path,
@@ -71,28 +71,9 @@ def _get_api():
         "register_device": register_device,
         "get_registered_device": get_registered_device,
         "list_registered_devices": list_registered_devices,
+        "send_command": send_command,
+        "transfer_playback": transfer_playback,
     }
-
-
-def _playback_room(scope: str, device_id: str) -> str:
-    return f"playback:{scope}:{device_id}"
-
-
-def _emit_playback_stop(api, scope: str, device_id: str) -> None:
-    api["socketio"].emit("playback_stop_requested", {}, room=_playback_room(scope, device_id))
-
-
-def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: dict | None = None, *, handoff: bool = False) -> None:
-    payload = {"state": state}
-    if handoff:
-        payload["handoff"] = True
-    if track:
-        payload["track"] = track
-    api["socketio"].emit("playback_start_requested", payload, room=_playback_room(scope, device_id))
-
-
-def _emit_playback_previous(api, scope: str, device_id: str) -> None:
-    api["socketio"].emit("playback_previous_requested", {}, room=_playback_room(scope, device_id))
 
 
 @playback_bp.route("/api/devices/register", methods=["POST"])
@@ -100,17 +81,18 @@ def _emit_playback_previous(api, scope: str, device_id: str) -> None:
 def register_playback_device():
     api = _get_api()
     scope = api["get_scope_from_request"]()
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     device = api["register_device"](
         scope,
         device_id=data.get("device_id"),
         device_name=data.get("device_name"),
         device_type=data.get("device_type"),
+        form_factor=data.get("form_factor"),
     )
+    emit_device_updated(scope, device)
     return jsonify({
         "status": "registered",
         "device": device,
-        "room": _playback_room(scope, device["device_id"]),
     })
 
 
@@ -118,10 +100,34 @@ def register_playback_device():
 def list_playback_devices():
     api = _get_api()
     scope = api["get_scope_from_request"]()
-    return jsonify({"devices": [
-        {**device, "socket_active": bool(device.get("active_sid"))}
-        for device in api["list_registered_devices"](scope)
-    ]})
+    return jsonify({
+        "devices": api["list_registered_devices"](scope),
+        "server_now_ms": server_now_ms(),
+    })
+
+
+@playback_bp.route("/api/devices/<device_id>/commands", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+def device_send_command(device_id):
+    api = _get_api()
+    scope = api["get_scope_from_request"]()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"status": "rejected", "reason": "invalid"}), 400
+    status, body = api["send_command"](scope, device_id, data.get("name"), data.get("args"))
+    return jsonify(body), status
+
+
+@playback_bp.route("/api/devices/transfer", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+def device_transfer():
+    api = _get_api()
+    scope = api["get_scope_from_request"]()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"status": "rejected", "reason": "invalid"}), 400
+    status, body = api["transfer_playback"](scope, data.get("from_device_id"), data.get("to_device_id"))
+    return jsonify(body), status
 
 
 @playback_bp.route("/api/static/stream/<track_id>", methods=["GET"])
@@ -999,267 +1005,105 @@ def _observe_for_scrobbling(state: dict) -> None:
 def playback_put_state():
     api = _get_api()
     scope = api["get_scope_from_request"]()
-    data = request.json or {}
-    api["put_playback_state"](scope, data)
+    data = request.get_json(silent=True) or {}
+    result = api["put_playback_state"](scope, data)
+    if isinstance(result, dict) and result.get("status") == "stale":
+        return jsonify({"status": "stale"})
     _observe_for_scrobbling(data)
+    if isinstance(result, dict):
+        if result.get("device_row"):
+            emit_device_updated(scope, result["device_row"])
+        device_state = result.get("device_state")
+        if device_state:
+            emit_device_state(scope, device_state["device_id"], device_state)
+        return jsonify({"status": "ok", "rev": result["rev"]})
     return jsonify({"status": "ok"})
 
 
 @playback_bp.route("/api/playback/handoff", methods=["POST"])
 @require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_handoff():
+    """Compatibility wrapper over POST /api/devices/transfer."""
     api = _get_api()
     scope = api["get_scope_from_request"]()
-    data = request.json or {}
-    from_device_id = (data.get("from_device_id") or "").strip()
-    to_device_id = (data.get("to_device_id") or "").strip()
-    if not from_device_id or not to_device_id:
-        return jsonify({"error": "from_device_id and to_device_id required"}), 400
-    if from_device_id == to_device_id:
-        return jsonify({"error": "from_device_id and to_device_id must differ"}), 400
-
-    state = api["get_playback_state"](scope, device_id=from_device_id)
-    if not state or not state.get("track_id"):
-        return jsonify({"error": "No active playback state for source device"}), 404
-
-    target_device = api["get_registered_device"](scope, to_device_id)
-    if not target_device:
-        return jsonify({"error": "Target device not found", "device_id": to_device_id}), 404
-    target_state = {
-        **state,
-        "device_id": to_device_id,
-        "device_name": target_device.get("device_name") or state.get("device_name"),
-        "is_playing": True,
-    }
-    api["put_playback_state"](scope, target_state)
-    _emit_playback_stop(api, scope, from_device_id)
-
-    track_payload = None
-    try:
-        lib = api["get_library"]()
-        track = api["get_track_by_id"](lib, target_state.get("track_id"))
-        if track:
-            track_payload = track.to_dict()
-    except Exception as e:
-        logger.debug("API: handoff track payload lookup failed: %s", e)
-    if not track_payload and isinstance(target_state.get("track"), dict):
-        track_payload = target_state["track"]
-
-    _emit_playback_start(api, scope, to_device_id, target_state, track=track_payload, handoff=True)
-    response = {
-        "status": "sent",
-        "from_device_id": from_device_id,
-        "to_device_id": to_device_id,
-        "state": target_state,
-    }
-    if not target_device.get("active_sid"):
-        response["warning"] = "Device appears offline (no active socket)"
-    return jsonify(response)
-
-
-@playback_bp.route("/api/playback/notify-stop", methods=["POST"])
-@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
-def playback_notify_stop():
-    api = _get_api()
-    scope = api["get_scope_from_request"]()
-    data = request.json or {}
-    device_id = data.get("device_id")
-    if not device_id:
-        return jsonify({"error": "device_id required"}), 400
-    _emit_playback_stop(api, scope, device_id)
-    return jsonify({"status": "sent"})
-
-
-def _remote_track(value):
-    """Bound a portable element. Only normal player source resolvers may fetch audio."""
-    if not isinstance(value, dict) or len(json.dumps(value).encode("utf-8")) > 32768:
-        raise ValueError("track must be an object of at most 32 KiB")
-    track_id = value.get("id")
-    if not isinstance(track_id, str) or not track_id.strip() or len(track_id) > 512:
-        raise ValueError("track.id required (at most 512 characters)")
-    if value.get("source") not in (None, "local", "preview"):
-        raise ValueError("Unsupported track source")
-    # File paths, tokens, URLs resolved on the sender and queue/session ownership
-    # never travel. Local metadata is read from the library instead.
-    track = {"id": track_id}
-    for key in (
-        "title", "artist", "album", "album_artist", "cover", "youtube_id",
-        "media_kind", "podcast_episode_guid", "podcast_enclosure_url", "podcast_feed_id",
-        "podcast_rss_url", "deezer_artist_id", "deezer_album_id", "canonical_identity",
-        "source_title", "source_artist", "discovery_youtube_id", "playback_source_kind",
-    ):
-        field = value.get(key)
-        if field is not None:
-            if not isinstance(field, str) or len(field) > 4096:
-                raise ValueError(f"Invalid track.{key}")
-            track[key] = field
-    for key in ("duration", "track_number", "disc_number", "year"):
-        field = value.get(key)
-        if field is not None:
-            if isinstance(field, bool) or not isinstance(field, (int, float)) or not math.isfinite(field) or field < 0:
-                raise ValueError(f"Invalid track.{key}")
-            track[key] = field
-    for key in ("originKeys", "artists"):
-        field = value.get(key)
-        if field is not None:
-            if not isinstance(field, list) or len(field) > 64 or any(not isinstance(item, str) or len(item) > 512 for item in field):
-                raise ValueError(f"Invalid track.{key}")
-            track[key] = field
-    if isinstance(value.get("artist_is_channel"), bool):
-        track["artist_is_channel"] = value["artist_is_channel"]
-    if value.get("source") != "preview":
-        return track
-    track["source"] = "preview"
-    if track.get("media_kind") == "podcast_episode" or track.get("podcast_episode_guid"):
-        from shared.podcast_rss import assert_safe_http_url
-        if not track.get("podcast_enclosure_url"):
-            raise ValueError("Podcast enclosure URL required")
-        assert_safe_http_url(track["podcast_enclosure_url"])
-        track["media_kind"] = "podcast_episode"
-    elif value.get("pendingResolve") is not None:
-        pending = value["pendingResolve"]
-        if not isinstance(pending, dict) or any(
-            not isinstance(pending.get(key), str) or not pending[key].strip() or len(pending[key]) > limit
-            for key, limit in (("catalogItemId", 512), ("artist", 4096), ("title", 4096))
-        ):
-            raise ValueError("Invalid pending catalogue reference")
-        track["pendingResolve"] = {key: pending[key] for key in ("catalogItemId", "artist", "title")}
-        if "duration" in track:
-            track["pendingResolve"]["duration"] = track["duration"]
-    else:
-        video_id = track.get("youtube_id") or track_id
-        if not validate_youtube_video_id(video_id):
-            raise ValueError("Invalid YouTube video id")
-        # Both web and native preview resolvers use the playable id as the id.
-        track["id"] = video_id
-        track["youtube_id"] = video_id
-    return track
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"status": "rejected", "reason": "invalid"}), 400
+    status, body = api["transfer_playback"](scope, data.get("from_device_id"), data.get("to_device_id"))
+    return jsonify(body), status
 
 
 @playback_bp.route("/api/playback/remote-command", methods=["POST"])
 @require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 def playback_remote_command():
+    """Compatibility wrapper over POST /api/devices/<device_id>/commands."""
     api = _get_api()
     scope = api["get_scope_from_request"]()
-    data = request.json or {}
-    device_id = (data.get("device_id") or "").strip()
-    command = (data.get("command") or "").strip().lower()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"status": "rejected", "reason": "invalid"}), 400
+    device_id = data.get("device_id").strip() if isinstance(data.get("device_id"), str) else ""
+    command = data.get("command").strip().lower() if isinstance(data.get("command"), str) else ""
 
     if not device_id or command not in {"pause", "play", "next", "previous", "seek"}:
-        return jsonify({"error": "device_id and command (pause, play, next, previous, seek) required"}), 400
-
-    target = api["get_registered_device"](scope, device_id)
-    if not target:
-        return jsonify({"error": "Target device not found", "device_id": device_id}), 404
-
-    room = _playback_room(scope, device_id)
+        return jsonify({"status": "rejected", "reason": "invalid"}), 400
 
     if command == "pause":
-        _emit_playback_stop(api, scope, device_id)
-        api["put_playback_state"](scope, {
-            **(api["get_playback_state"](scope, device_id=device_id) or {}),
-            "is_playing": False,
-            "device_id": device_id,
-            "device_name": target.get("device_name"),
-        })
-    elif command == "play":
-        raw_id = data.get("track_id") or ""
-        if not isinstance(raw_id, str):
-            return jsonify({"error": "track_id must be a string"}), 400
-        track_id = raw_id.strip()
-        descriptor = None
-        if "track" in data:
-            try:
-                descriptor = _remote_track(data["track"])
-                if track_id and track_id != data["track"]["id"]:
-                    raise ValueError("track_id must match track.id")
-                position = float(data.get("position_sec") or 0)
-                if not math.isfinite(position) or not 0 <= position <= 604800:
-                    raise ValueError("Invalid position_sec")
-            except (TypeError, ValueError, OverflowError) as error:
-                return jsonify({"error": str(error)}), 400
-            track_id = descriptor["id"]
-        state = api["get_playback_state"](scope, device_id=device_id) or api["get_playback_state"](scope)
-        if descriptor and descriptor.get("source") == "preview":
-            target_state = {
-                "track_id": track_id, "track": descriptor,
-                "position_sec": position, "is_playing": True,
-                "device_id": device_id, "device_name": target.get("device_name"),
-                "session": None,
-            }
-        elif track_id:
-            lib = api["get_library"]()
-            track = api["get_track_by_id"](lib, track_id)
-            if track:
-                target_state = {
-                    "track_id": track_id,
-                    "track": track.to_dict(),
-                    "position_sec": float(data.get("position_sec") or 0),
-                    "is_playing": True,
-                    "device_id": device_id,
-                    "device_name": target.get("device_name"),
-                    "session": None,
-                }
-            elif state and state.get("track_id") == track_id:
-                target_state = {
-                    **state,
-                    "device_id": device_id,
-                    "device_name": target.get("device_name") or state.get("device_name"),
-                    "is_playing": True,
-                }
-            else:
-                return jsonify({"error": "Track not found for target device"}), 404
-        elif not state or not state.get("track_id"):
-            return jsonify({"error": "No playback state available for target device"}), 404
-        else:
-            target_state = {
-                **state,
-                "device_id": device_id,
-                "device_name": target.get("device_name") or state.get("device_name"),
-                "is_playing": True,
-            }
-        api["put_playback_state"](scope, target_state)
-        track_payload = target_state.get("track") if isinstance(target_state.get("track"), dict) else None
-        _emit_playback_start(api, scope, device_id, target_state, track=track_payload)
+        status, body = api["send_command"](scope, device_id, "transport.pause", {})
     elif command == "next":
-        api["socketio"].emit("playback_next_requested", {}, room=room)
+        status, body = api["send_command"](scope, device_id, "transport.next", {})
     elif command == "previous":
-        _emit_playback_previous(api, scope, device_id)
+        status, body = api["send_command"](scope, device_id, "transport.previous", {})
+    elif command == "seek":
+        if "position_sec" not in data or data.get("position_sec") is None:
+            return jsonify({"status": "rejected", "reason": "invalid"}), 400
+        status, body = api["send_command"](
+            scope, device_id, "transport.seek", {"position_sec": data.get("position_sec")}
+        )
     else:
-        raw = data.get("position_sec")
-        if raw is None:
-            return jsonify({"error": "position_sec required for seek"}), 400
-        try:
-            position_sec = float(raw)
-        except (TypeError, ValueError):
-            return jsonify({"error": "position_sec must be a number"}), 400
-        if position_sec < 0:
-            return jsonify({"error": "position_sec must be >= 0"}), 400
-        state = api["get_playback_state"](scope, device_id=device_id) or api["get_playback_state"](scope)
-        if not state or not state.get("track_id"):
-            return jsonify({"error": "No playback state available for target device"}), 404
-        target_state = {
-            **state,
-            "device_id": device_id,
-            "device_name": target.get("device_name") or state.get("device_name"),
-            "position_sec": position_sec,
-        }
-        api["put_playback_state"](scope, target_state)
-        api["socketio"].emit("playback_seek_requested", {"position_sec": position_sec}, room=room)
-
-    warning = None
-    if not target.get("active_sid"):
-        warning = "Device appears offline (no active socket)"
-    response = {
-        "status": "sent",
-        "command": command,
-        "device_id": device_id,
-    }
-    if command == "seek":
-        response["position_sec"] = position_sec
-    if warning:
-        response["warning"] = warning
-    return jsonify(response)
+        has_track = "track" in data
+        raw_id = data.get("track_id")
+        if raw_id is not None and not isinstance(raw_id, str):
+            return jsonify({"status": "rejected", "reason": "invalid"}), 400
+        track_id = (raw_id or "").strip()
+        if not has_track and not track_id:
+            status, body = api["send_command"](scope, device_id, "transport.play", {})
+        else:
+            if "position_sec" in data and data.get("position_sec") is not None:
+                raw_pos = data.get("position_sec")
+                try:
+                    if isinstance(raw_pos, bool):
+                        raise ValueError("Invalid position_sec")
+                    position = float(raw_pos)
+                    if not math.isfinite(position) or not 0 <= position <= 604800:
+                        raise ValueError("Invalid position_sec")
+                except (TypeError, ValueError, OverflowError):
+                    return jsonify({"status": "rejected", "reason": "invalid"}), 400
+            if has_track:
+                raw_track = data["track"]
+                if not isinstance(raw_track, dict):
+                    return jsonify({"status": "rejected", "reason": "invalid"}), 400
+                if track_id and track_id != raw_track.get("id"):
+                    return jsonify({"status": "rejected", "reason": "invalid"}), 400
+                try:
+                    descriptor = bound_track(raw_track)
+                except ValueError:
+                    return jsonify({"status": "rejected", "reason": "invalid"}), 400
+                if descriptor.get("source") != "preview":
+                    lib = api["get_library"]()
+                    lib_track = api["get_track_by_id"](lib, descriptor["id"])
+                    if lib_track:
+                        descriptor = bound_track(lib_track.to_dict())
+            else:
+                lib = api["get_library"]()
+                lib_track = api["get_track_by_id"](lib, track_id)
+                if not lib_track:
+                    return jsonify({"status": "rejected", "reason": "not_found"}), 404
+                descriptor = bound_track(lib_track.to_dict())
+            status, body = api["send_command"](
+                scope, device_id, "play.tracks", {"tracks": [descriptor], "index": 0}
+            )
+    return jsonify(body), status
 
 
 @playback_bp.route("/api/playback/link", methods=["GET"])

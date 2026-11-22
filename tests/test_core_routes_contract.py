@@ -336,8 +336,8 @@ def _patch_playback_api(monkeypatch, *, playback_state=None):
     fake_lib = _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={}))
     _devices = {}
 
-    def fake_register_device(scope, device_id, device_name, device_type):
-        dev = {"device_id": device_id, "device_name": device_name, "device_type": device_type}
+    def fake_register_device(scope, device_id, device_name, device_type, form_factor=None):
+        dev = {"device_id": device_id, "device_name": device_name, "device_type": device_type, "form_factor": form_factor}
         _devices.setdefault(scope, {})[device_id] = dev
         return dev
 

@@ -14,9 +14,9 @@ In desktop-engine mode, the base URL is not assumed to be `:5005`. Read the read
 
 ## Agent Rules
 
-1. Use the Agent API for playback control: `/api/agent/*`.
+1. Use the Agent API for playback control: `/api/agent/*`, or the general device command endpoints `/api/devices/<device_id>/commands` and `/api/devices/transfer` (with `playback:control` scope).
 2. Do not invent device IDs. Read `/api/devices` and target a real `device_id` or exact `device_name`.
-3. If a response includes `warning: "Device appears offline (no active socket)"`, the command was emitted but no browser player is currently connected to that device room.
+3. Every command returns a final status: `200` `{"status": "applied", "rev": n}`, `400`/`404`/`409` `{"status": "rejected", "reason": "..."}`, or `503`/`504` `{"status": "unreachable", "reason": "offline" | "timeout"}`. Commands never answer `"sent"` and never write playback state on a device's behalf.
 4. Deezer is metadata only. Soundsible never plays Deezer audio.
 5. For playable search results outside the library, use YouTube / YouTube Music search through the downloader's yt-dlp path.
 6. Each player keeps its own up-next list; the engine has no playback queue an agent can add to. The download queue only downloads.
@@ -85,15 +85,9 @@ Soundsible has three independent concepts:
 | Player session | What a device is playing, reported by the device; the web player and Android also report what they have up next (`session.queue`), the iOS app does not yet | `GET /api/playback/state` (read only) |
 | Download queue | Background jobs that download tracks into the library | `POST /api/downloader/queue` |
 
-The active player is normally a browser tab or PWA at `/player/` or `/player/desktop/`. The player registers a device and joins a Socket.IO room:
+The active player is normally a browser tab, PWA, desktop shell, or Android app. Each running copy registers as an instance of its `device_id` over Socket.IO (`playback_register`), declaring its protocol version and supported commands.
 
-```text
-playback:{scope}:{device_id}
-```
-
-Current scope is `default`.
-
-Agent HTTP commands emit Socket.IO events into the target device room. If the target browser is not connected, Soundsible can accept the request but the device will not react.
+Agent HTTP commands dispatch `device_command` directly to the device's owning Socket.IO instance and wait for its acknowledgement (5 seconds, or 10 seconds for `session.import` during transfer). If the device is offline, does not support the protocol, does not declare the command, or fails to acknowledge in time, the engine returns `unreachable` or `rejected` directly rather than pretending the command succeeded.
 
 ## Devices
 
@@ -111,22 +105,32 @@ Example response:
     {
       "device_id": "dev-1775490811387-hu7wrzro8",
       "device_name": "Desktop",
-      "device_type": "desktop",
-      "scope": "default",
-      "active_sid": "abc123",
-      "socket_connected": true,
-      "last_seen_ts": 1775490830.0
+      "device_type": "web",
+      "form_factor": "computer",
+      "online": true,
+      "socket_active": true,
+      "protocol": 1,
+      "commands": ["transport.play", "transport.pause", "transport.next", "transport.previous", "transport.seek", "play.tracks"],
+      "playing": {
+        "track": { "id": "track-id", "title": "One More Time", "artist": "Daft Punk" },
+        "is_playing": true,
+        "position_sec": 42.1,
+        "measured_at_ms": 1763820000000,
+        "mode": "normal",
+        "rev": 17
+      }
     }
-  ]
+  ],
+  "server_now_ms": 1763820001000
 }
 ```
 
 How agents should choose a device:
 
-1. Prefer a device with `active_sid` set.
+1. Prefer a device with `online: true` and `protocol` set (non-null).
 2. Prefer `device_type != "agent"` for playback.
 3. If the user says "Desktop", target the device whose `device_name` is exactly `Desktop`, or use its `device_id`.
-4. If there are no devices with `active_sid`, tell the user to open Soundsible in a browser or PWA.
+4. If there are no online devices, tell the user to open Soundsible in a browser, PWA, or app.
 
 Register an agent device, optional but useful for discovery:
 
@@ -136,9 +140,23 @@ curl -X POST http://localhost:5005/api/devices/register \
   -d '{"device_id":"openclaw-agent","device_name":"OpenClaw","device_type":"agent"}'
 ```
 
-Browser players also register over Socket.IO. HTTP registration alone does not make a device controllable; `active_sid` is the signal that a real Socket.IO player is connected.
+Browser and app players also register over Socket.IO. HTTP registration alone does not make a device controllable; `online: true` with a non-null `protocol` is the signal that a live player instance is connected and accepting commands.
 
 ## Control Playback
+
+Both `/api/agent/command` and `/api/agent/play` run through the remote command dispatcher (`POST /api/devices/<device_id>/commands`) and return its HTTP status codes and JSON answers:
+
+| HTTP | Body | Meaning |
+|---|---|---|
+| `200` | `{"status": "applied", "rev": 18}` | The target ran the command and published its updated state |
+| `400` | `{"status": "rejected", "reason": "invalid"}` | Unknown command or invalid arguments |
+| `404` | `{"status": "rejected", "reason": "unknown_device"}` | Target device not found (or no device registered) |
+| `404` | `{"status": "rejected", "reason": "not_found"}` | Requested track or search query returned no playable item |
+| `409` | `{"status": "rejected", "reason": "update_required" \| "unsupported" \| "invalid_state" \| "not_found" \| "locked" \| "needs_gesture" \| "nothing_playing"}` | Target rejected the command or does not support the protocol/command |
+| `503` | `{"status": "unreachable", "reason": "offline"}` | Target has no connected Socket.IO instance |
+| `504` | `{"status": "unreachable", "reason": "timeout"}` | Target did not acknowledge in time |
+
+The legacy endpoints `POST /api/playback/remote-command` and `POST /api/playback/handoff` remain for one release as thin wrappers over `POST /api/devices/<device_id>/commands` and `POST /api/devices/transfer`, returning these same answer shapes.
 
 Pause a target device:
 
@@ -176,7 +194,7 @@ curl -X POST http://localhost:5005/api/agent/command \
   -d '{"command":"seek","position_sec":75.5,"device_id":"Desktop"}'
 ```
 
-Seek uses absolute seconds from the start of the current track. To seek to 1:15, send `position_sec: 75`. To jump forward or backward, first read `/api/playback/state`, add or subtract seconds from `position_sec`, then send the new absolute value.
+Seek uses absolute seconds from the start of the current track. To seek to 1:15, send `position_sec: 75`. To jump forward or backward, first read `/api/playback/state` or `/api/devices`, add or subtract seconds from `position_sec`, then send the new absolute value.
 
 Supported commands:
 
@@ -184,12 +202,13 @@ Supported commands:
 {"command":"pause"}
 {"command":"play"}
 {"command":"next"}
+{"command":"previous"}
 {"command":"seek","position_sec":75.5}
 ```
 
-For `seek`, `position_sec` is required and must be a number greater than or equal to `0`. `position_ms` is also accepted for millisecond-based clients. The target browser clamps positions beyond the loaded track duration to the end of the track.
+For `seek`, `position_sec` is required and must be a finite number greater than or equal to `0`. `position_ms` is also accepted for millisecond-based clients. The target player clamps positions beyond the loaded track duration to the end of the track.
 
-If `device_id` is omitted, Soundsible targets the most recently registered non-agent device, preferring devices with an active socket.
+If `device_id` is omitted, Soundsible targets the most recently seen non-agent device, preferring online devices.
 
 ## Play Music Now
 
@@ -214,48 +233,47 @@ curl -X POST http://localhost:5005/api/agent/play \
 Search behavior:
 
 1. Soundsible searches the local library first.
-2. If no library match is found, it searches YouTube Music through yt-dlp.
-3. The target player receives either a library track payload or a preview payload.
+2. If no library match is found, it searches YouTube through yt-dlp.
+3. The engine dispatches `play.tracks` with the bounded track descriptor to the target player's owning instance.
 
-Expected response when sent to a live device:
-
-```json
-{
-  "status": "sent",
-  "device_id": "dev-...",
-  "track": {
-    "id": "track-or-video-id",
-    "title": "Track title",
-    "artist": "Artist"
-  }
-}
-```
-
-If the device is registered but offline:
+Expected response when applied by a live device:
 
 ```json
 {
-  "status": "sent",
-  "device_id": "dev-...",
-  "warning": "Device appears offline (no active socket)"
+  "status": "applied",
+  "rev": 19
 }
 ```
 
-Treat that as not actually played.
+If the device is registered but offline, the engine returns HTTP `503`:
+
+```json
+{
+  "status": "unreachable",
+  "reason": "offline"
+}
+```
 
 ### Browser Autoplay Limitation
 
-After a browser reload, the page may have no user activation. In that state, Chrome, Safari, and Firefox can reject audible `audio.play()` calls that originate from Socket.IO or HTTP-triggered agent commands.
+After a browser reload, the page may have no user activation. In that state, Chrome, Safari, and Firefox can reject audible `audio.play()` calls that originate from remote commands.
 
-Soundsible handles this by staging the remote request in the player. The target device shows a **Remote playback is ready** prompt with the requested track. One tap starts the staged playback and unlocks the browser audio session for later agent commands in that page session.
+When the browser blocks audio start, the target responds with HTTP `409`:
+
+```json
+{
+  "status": "rejected",
+  "reason": "needs_gesture"
+}
+```
 
 Agent behavior:
 
-1. If `/api/agent/play` returns `status: "sent"` and the device has `active_sid`, the command reached the browser.
-2. If playback does not audibly start immediately after a fresh reload, tell the user to tap the remote playback prompt on that device.
-3. Once the user has started any audio in that page session, later agent playback, pause, resume, and next commands should work without this prompt.
+1. If `/api/agent/play` or `/api/agent/command` returns `status: "applied"`, the target ran the action and published its new state.
+2. If it returns `409` with `reason: "needs_gesture"`, tell the user to tap play on that device to unlock browser audio.
+3. Once the user has started audio in that page session, later remote play, pause, resume, skip, and seek commands work without this prompt.
 
-This is a browser security policy, not a Soundsible API failure. To avoid the prompt completely, use a native playback surface or server-side playback engine instead of browser audio.
+This is a browser security policy, not a Soundsible API failure. To avoid it completely, use a native playback surface such as the Android app or desktop shell.
 
 ## Library
 
@@ -629,28 +647,24 @@ curl 'http://localhost:5005/api/playback/state?exclude_device=<device-id>'
 Move playback from one device to another:
 
 ```bash
-curl -X POST http://localhost:5005/api/playback/handoff \
+curl -X POST http://localhost:5005/api/devices/transfer \
   -H 'Content-Type: application/json' \
   -d '{"from_device_id":"dev-phone","to_device_id":"dev-desktop"}'
 ```
 
-Handoff behavior:
+(`POST /api/playback/handoff` stays for one release as a wrapper over `POST /api/devices/transfer` with the same body and answers.)
 
-1. Reads state from `from_device_id`.
-2. Emits `playback_stop_requested` to `playback:default:<from_device_id>`.
-3. Writes target playback state with `to_device_id`.
-4. Emits `playback_start_requested` to `playback:default:<to_device_id>`.
+Transfer behavior:
 
-If `to_device_id` has no active socket, the response includes an offline warning.
+1. Sends `session.export` to `from_device_id` (or uses its last published state if it is offline or has no protocol). If no track is playing, returns `409` `{"status": "rejected", "reason": "nothing_playing", "step": "export"}`.
+2. Sends `session.import` to `to_device_id` (10 s timeout). If this fails, returns the failure with `"step": "import"` and leaves `from_device_id` playing.
+3. Only after `to_device_id` answers `applied`, sends `session.release` to `from_device_id` if it is online (failures here are logged and the answer stays `applied`).
 
 Seek behavior:
 
-1. `POST /api/agent/command` with `{"command":"seek","position_sec":...}` reads the target device playback state.
-2. The API writes the requested `position_sec` into playback state.
-3. The API emits `playback_seek_requested` to `playback:default:<device_id>`.
-4. The browser player sets `audio.currentTime` and persists the new position.
-
-If the target has no current playback state, the API returns `404` with `No playback state available for target device`.
+1. `POST /api/agent/command` with `{"command":"seek","position_sec":...}` dispatches `transport.seek` to the target's owning instance and waits for its acknowledgement.
+2. The engine never writes playback state on the device's behalf; the player seeks and publishes its updated state before acknowledging `applied`.
+3. If nothing is playing on the target, the target answers `409` `{"status": "rejected", "reason": "nothing_playing"}` (or `invalid_state`).
 
 ## Podcasts
 
@@ -677,9 +691,9 @@ For "play X on my desktop":
 
 1. Verify token with `GET /api/agent/verify`.
 2. Read devices with `GET /api/devices`.
-3. Select `Desktop` with `active_sid`; if missing, ask the user to open `/player/desktop/`.
+3. Select `Desktop` with `online: true` and `protocol` set; if missing, ask the user to open `/player/desktop/`.
 4. Call `POST /api/agent/play` with `{"query":"X","device_id":"Desktop"}`.
-5. If the response has `warning`, report that the device is offline.
+5. Check the response: `applied` means the target played and published; `unreachable` (`offline`/`timeout`) or `rejected` (`needs_gesture`, `update_required`, etc.) explains why it did not.
 
 For "add X to the queue": the up-next list belongs to the player, and there is
 no endpoint that adds to it. Offer to play X now (`/api/agent/play`) or to
@@ -724,11 +738,13 @@ Common problems:
 
 | Symptom | Meaning | Fix |
 |---|---|---|
-| `warning: Device appears offline` | Device is registered but has no active Socket.IO room join | Open/reload the player on that device |
-| `Target device not found` | Agent used an unknown device ID/name | Call `/api/devices` and target a real device |
-| Command returns `sent` but nothing plays | Usually no active socket or browser autoplay blocked | Check `active_sid`; after reload, tap the remote playback prompt once |
-| Seek returns `seek requires position_sec` | Agent sent `seek` without an absolute position | Send `{"command":"seek","position_sec":75}` |
-| Seek returns no playback state | Target device has not reported a current track | Start playback first or target the active device from `/api/devices` |
+| `503 unreachable` (`offline`) | Device is registered but has no connected Socket.IO instance | Open/reload the player on that device |
+| `504 unreachable` (`timeout`) | Target instance did not acknowledge the command in time | Retry or check the player tab/app |
+| `404 rejected` (`unknown_device`) | Agent used an unknown device ID/name, or no device is registered | Call `/api/devices` and target a real device |
+| `409 rejected` (`update_required`) | Device is online without a remote-control protocol (older app) | Update Soundsible on that device |
+| `409 rejected` (`needs_gesture`) | Browser autoplay policy blocked audio start after a fresh reload | Ask the user to tap play on that device once |
+| `400 rejected` (`invalid`) on seek | Agent sent `seek` without a valid non-negative `position_sec` | Send `{"command":"seek","position_sec":75}` |
+| `409 rejected` (`nothing_playing`) | Target device has no current track | Start playback first or target the active device from `/api/devices` |
 | Deezer ID fails | Deezer IDs are metadata only | Resolve by title/artist through YouTube Music |
 | Download queue rejects raw `video_id` | `/api/downloader/queue` requires `items[].song_str` | Send full YouTube URL in `song_str` plus `video_id` |
 | Download queue rejects `ytmusic_search` with plain text | Explicit YouTube source types require resolved YouTube URLs | Search first, then queue the selected result URL; or omit `source_type` for plain text fallback |
@@ -740,11 +756,13 @@ Common problems:
 GET  /api/health
 GET  /api/devices
 POST /api/devices/register
+POST /api/devices/<device_id>/commands
+POST /api/devices/transfer
 
 POST /api/agent/token          admin
 GET  /api/agent/verify         agent token
 POST /api/agent/play           agent token
-POST /api/agent/command        agent token; pause/play/next/seek
+POST /api/agent/command        agent token; pause/play/next/previous/seek
 GET  /api/agent/debug/socketio agent token
 
 GET  /api/library
@@ -763,8 +781,8 @@ POST /api/library/playlists/<name>/tracks
 
 GET    /api/playback/state
 PUT    /api/playback/state
-POST   /api/playback/handoff
-POST   /api/playback/notify-stop
+POST   /api/playback/remote-command   wrapper over /api/devices/<id>/commands
+POST   /api/playback/handoff          wrapper over /api/devices/transfer
 
 GET  /api/downloader/youtube/search?q=&limit=&source=
 GET  /api/downloader/youtube/peek?id=

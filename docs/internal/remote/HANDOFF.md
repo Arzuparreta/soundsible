@@ -42,8 +42,8 @@ the whole session. Faults found in the old pipeline:
 
 | Item | Status |
 | --- | --- |
-| Engine: registry, instances, dispatcher, live state events, transfer, wrappers, agent API | open |
-| Web target: executor, instances, names and form factor, `live`, prompt session publishing | done |
+| Engine: registry, instances, dispatcher, live state events, transfer, wrappers, agent API | done — `shared/remote/` (registry, validator, dispatcher), instances, `rev`/`seq`/`live` in `shared/playback_state.py`, `watch_device`/`device_updated`/`device_state`, `/api/devices/<id>/commands`, `/api/devices/transfer`, wrappers and agent API on the dispatcher |
+| Web target: executor, instances, names and form factor, `live`, prompt session publishing | done — `ui_web/src/stores/remoteCommands.ts`, `lib/deviceIdentity.ts`, publishing in `stores/session.ts` |
 | Android target: executor, transfer, existing callers on the new endpoints | open |
 | Web player read through one accessor (no visible change) | done — `ui_web/src/stores/player.ts`; `stores/identity.ts` still reads local playback (import cycle), fixed with connected mode |
 | Web connected mode: device sheet, controlling another device, states and messages | open |
