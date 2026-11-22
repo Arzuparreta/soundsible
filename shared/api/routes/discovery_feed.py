@@ -645,9 +645,10 @@ def _refresh_discovery_feed_cache(
     payload: dict = {"limit": limit}
     rerun = False
     try:
+        from shared import request_scope
         from shared.user_context import user_context
 
-        with user_context(user_id):
+        with request_scope.request_scope(), user_context(user_id):
             body = _build_discovery_feed_body(limit, include_external=True, rotate=rotate)
         now = time.time()
         with _DISCOVERY_FEED_LOCK:

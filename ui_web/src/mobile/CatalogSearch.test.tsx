@@ -256,6 +256,48 @@ it('hides all songs by an artist in Android Discover on "Less from this artist" 
   expect(view.getByText('Track Two')).toBeTruthy();
 });
 
+it('dismisses collaboration tracks by structured artists array on Android when primary artist is rejected', async () => {
+  mocks.feed.mockResolvedValue({
+    items: [
+      {
+        id: 'deezer:10',
+        title: 'Get Lucky',
+        artist: 'Daft Punk, Pharrell Williams',
+        artists: ['Daft Punk', 'Pharrell Williams'],
+        external_ids: { deezer_id: '10' },
+        recommendation_identity: 'r10',
+        reason: 'Recommended',
+      },
+      {
+        id: 'deezer:11',
+        title: 'Happy',
+        artist: 'Pharrell Williams',
+        external_ids: { deezer_id: '11' },
+        recommendation_identity: 'r11',
+        reason: 'Recommended',
+      },
+    ],
+  });
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  await waitFor(() => expect(view.getByText('Get Lucky')).toBeTruthy());
+
+  fireEvent.contextMenu(view.getByText('Get Lucky'));
+  await waitFor(() => expect(mocks.menu).toHaveBeenCalled());
+  const actions = mocks.menu.mock.calls.at(-1)![0].actions as Array<{ label: string; onSelect: () => void }>;
+  mocks.request.mockResolvedValueOnce({ recorded: true, event_id: 'ev-dp' });
+  actions.find(action => action.label === 'Less from this artist')!.onSelect();
+
+  await waitFor(() => expect(view.queryByText('Get Lucky')).toBeNull());
+  expect(view.getByText('Happy')).toBeTruthy();
+  expect(mocks.request).toHaveBeenCalledWith('/api/discovery/feedback', expect.objectContaining({
+    method: 'POST',
+    body: expect.objectContaining({
+      feedback: 'less_from_artist',
+      item: expect.objectContaining({ artist: 'Daft Punk' }),
+    }),
+  }));
+});
+
 it('renders the Discover refresh control beside the Android search bar and hides it while searching', async () => {
   mocks.feed
     .mockResolvedValueOnce({ items: [{ id: 'deezer:1', title: 'First Pick', artist: 'Artist One' }] })

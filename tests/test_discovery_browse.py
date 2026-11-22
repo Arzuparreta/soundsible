@@ -395,3 +395,90 @@ def test_less_from_artist_demotes_browse_sections_and_related_rows(tmp_path, mon
         assert [row["title"] for row in related_rows] == ["Good Track", "Disliked Track"]
     finally:
         reset_runtime()
+
+
+def test_background_feed_refresh_builds_signal_index_once_per_refresh(tmp_path, monkeypatch):
+    from shared import discovery_intelligence as di
+    from shared.api.routes import discovery_feed as route
+    from shared.models import LibraryMetadata, Track
+    from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
+
+    reset_runtime()
+    runtime = RuntimeConfig(
+        host="127.0.0.1",
+        port=5005,
+        config_dir=(tmp_path / "cfg").resolve(),
+        data_dir=(tmp_path / "data").resolve(),
+        cache_dir=(tmp_path / "cache").resolve(),
+        log_dir=(tmp_path / "logs").resolve(),
+        music_dir=(tmp_path / "music").resolve(),
+        ui_dist=None,
+        owner_token_file=None,
+        lan_enabled=False,
+        advanced_mode=False,
+    )
+    configure_runtime(runtime)
+    for path in (runtime.config_dir, runtime.data_dir, runtime.cache_dir, runtime.log_dir, runtime.music_dir):
+        path.mkdir(parents=True, exist_ok=True)
+    try:
+        tracks = [
+            Track(
+                id=f"t{i}",
+                title=f"Song {i}",
+                artist=f"Seed {i}",
+                album="Album",
+                duration=180,
+                file_hash=f"h-{i}",
+                original_filename=f"t{i}.mp3",
+                file_size=1000,
+                bitrate=320,
+                format="mp3",
+            )
+            for i in range(1, 4)
+        ]
+        lib = SimpleNamespace(
+            metadata=LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={}),
+            refresh_if_stale=lambda: None,
+        )
+        monkeypatch.setattr(
+            route,
+            "_get_api",
+            lambda: {
+                "get_library": lambda: lib,
+                "favourite_library_ids": lambda: ["t1"],
+                "emit_to_user": lambda *a, **kw: None,
+            },
+        )
+        monkeypatch.setattr(route, "_DISCOVERY_FEED_CACHE", {})
+        monkeypatch.setattr(route, "_DISCOVERY_FEED_INFLIGHT", {"k-once"})
+
+        def get(path, params=None, **kwargs):
+            if path == "search/artist":
+                idx = int(params["q"].split()[-1])
+                return {"data": [artist(idx, params["q"])]}
+            if path.endswith("/related"):
+                aid = int(path.split("/")[1])
+                return {"data": [artist(10 + aid, f"Rel {aid}A"), artist(20 + aid, f"Rel {aid}B")]}
+            if path.endswith("/top"):
+                aid = int(path.split("/")[1])
+                return {"data": [{"id": aid * 100, "title": f"Hit {aid}", "artist": artist(aid, f"Rel {aid}")}]}
+            if path.endswith("/albums"):
+                aid = int(path.split("/")[1])
+                return {"data": [{"id": aid * 1000, "title": f"LP {aid}", "record_type": "album", "release_date": "2026-11-15"}]}
+            raise AssertionError(path)
+
+        monkeypatch.setattr(deezer, "get", get)
+
+        builds = 0
+        original_build = di._build_signal_index
+
+        def counting_build():
+            nonlocal builds
+            builds += 1
+            return original_build()
+
+        monkeypatch.setattr(di, "_build_signal_index", counting_build)
+        route._refresh_discovery_feed_cache("k-once", "alice", 10)
+        assert builds == 1
+    finally:
+        reset_runtime()

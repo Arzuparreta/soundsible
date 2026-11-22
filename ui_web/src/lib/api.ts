@@ -194,6 +194,7 @@ export interface DiscoveryFeedItem {
   track_id?: string;
   title: string;
   artist: string;
+  artists?: string[] | null;
   album?: string;
   duration?: number;
   cover?: string;

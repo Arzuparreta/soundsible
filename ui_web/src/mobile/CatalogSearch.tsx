@@ -58,6 +58,12 @@ export default function CatalogSearch(props: {
   const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
   const [dismissedArtists, setDismissedArtists] = createSignal<Set<string>>(new Set());
   const foldArtist = (name: string | undefined) => (name ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const itemArtistNames = (item: CatalogItem, fallback?: string): string[] => {
+    const structured = item.raw?.artists?.map((name) => name.trim()).filter(Boolean);
+    if (structured?.length) return structured;
+    const single = (fallback ?? itemArtist(item)).trim();
+    return single ? [single] : [];
+  };
   const [entities, setEntities] = createSignal<{ subject: NativeEntitySubject; returnScroll: number }[]>([]);
   const entity = () => entities().at(-1);
   const holdings = createMemo(() => catalogEntityHoldings(props.tracks));
@@ -73,8 +79,11 @@ export default function CatalogSearch(props: {
       .map(section => ({
         ...section,
         items: section.items.filter(item => {
-          const key = foldArtist(item.type === 'artist' ? (item.artist || item.title) : (item.artist || item.subtitle));
-          return !key || !hiddenArtists.has(key);
+          const fallback = item.type === 'artist' ? (item.artist || item.title) : (item.artist || item.subtitle);
+          return !itemArtistNames(item, fallback).some(name => {
+            const key = foldArtist(name);
+            return Boolean(key && hiddenArtists.has(key));
+          });
         }),
       }))
       .filter(section => section.items.length > 0);
@@ -90,8 +99,10 @@ export default function CatalogSearch(props: {
         items: shelf.items.filter(item => {
           if (hidden.has(item.id)) return false;
           if (hiddenArtists.size) {
-            const key = foldArtist(itemArtist(item));
-            if (key && hiddenArtists.has(key)) return false;
+            for (const name of itemArtistNames(item)) {
+              const key = foldArtist(name);
+              if (key && hiddenArtists.has(key)) return false;
+            }
           }
           return true;
         }),

@@ -187,6 +187,42 @@ describe('discoveryFeedStore', () => {
     await flush();
   });
 
+  it('dismisses collaboration tracks by structured artists array and clears dismissedArtists on refresh and reset', async () => {
+    mocks.getDiscoveryMusicFeed.mockResolvedValue({
+      sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:1', 'deezer:2'] }],
+      items: [
+        {
+          id: 'deezer:1',
+          type: 'track',
+          source: 'deezer',
+          title: 'Get Lucky',
+          artist: 'Daft Punk, Pharrell Williams',
+          artists: ['Daft Punk', 'Pharrell Williams'],
+        },
+        { id: 'deezer:2', type: 'track', source: 'deezer', title: 'Happy', artist: 'Pharrell Williams' },
+      ],
+    });
+
+    ensureDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']));
+
+    dismissDiscoveryArtist('Daft Punk');
+    expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:2']);
+
+    // refreshDiscoveryFeed clears dismissedArtists so refreshed feeds show everything returned by the server.
+    refreshDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']));
+
+    dismissDiscoveryArtist('Daft Punk');
+    expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:2']);
+    resetDiscoveryFeed();
+    ensureDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']));
+
+    vi.useRealTimers();
+    await flush();
+  });
+
   it('re-hydrates cleanly when the active user key changes', async () => {
     mocks.getDiscoveryMusicFeed
       .mockResolvedValueOnce({

@@ -780,3 +780,83 @@ def test_discovery_feedback_route_accepts_less_from_artist_and_validates_artist(
     )
     assert disabled.status_code == 200
     assert disabled.get_json()["recorded"] is False
+
+
+def test_collaborations_match_structured_artists_and_record_primary_artist(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+
+    event_id = record_less_from_artist({
+        "artist": "Daft Punk, Pharrell Williams",
+        "artists": ["Daft Punk", "Pharrell Williams"],
+        "title": "Get Lucky",
+        "source": "discover",
+    })
+    assert event_id
+    signals = user_db().get_discovery_signals()
+    assert "music:artist:daft punk" in signals
+    assert "music:artist:pharrell williams" not in signals
+
+    collab = {
+        "id": "deezer:10",
+        "title": "Lose Yourself to Dance",
+        "artist": "Daft Punk, Pharrell Williams",
+        "artists": ["Daft Punk", "Pharrell Williams"],
+        "score": 1.0,
+    }
+    solo_pharrell = {
+        "id": "deezer:11",
+        "title": "Happy",
+        "artist": "Pharrell Williams",
+        "score": 1.0,
+    }
+    unstructured_feat = {
+        "id": "deezer:12",
+        "title": "Other Collab",
+        "artist": "Daft Punk feat. Pharrell Williams",
+        "score": 1.0,
+    }
+    ranked = rank_recommendation_rows([collab, solo_pharrell, unstructured_feat], source="discover")
+    scores = {row["id"]: row["score"] for row in ranked}
+    assert scores["deezer:10"] < scores["deezer:11"]
+    assert scores["deezer:11"] == pytest.approx(1.0)
+    # Never splits unstructured artist strings on delimiters.
+    assert scores["deezer:12"] == pytest.approx(1.0)
+
+
+def test_profile_policy_v3_backfills_discovery_signal_aliases_from_existing_events(tmp_path):
+    runtime = _make_runtime(tmp_path)
+    init_telemetry(runtime)
+    db = user_db()
+    # Seed a legacy v2 install: signal + event exist, alias table is empty, policy is "2".
+    db.record_discovery_signal(
+        event_id="legacy-ev-1",
+        event="not_interested",
+        identity="music:deezer:777",
+        media_type="music_track",
+        positive_delta=0,
+        negative_delta=1,
+        payload={
+            "media_type": "music_track",
+            "title": "Legacy Song",
+            "artist": "Blue Öyster Cult",
+            "deezer_id": "777",
+            "isrc": "USLEG0000001",
+        },
+        created_at=100,
+        aliases=(),
+    )
+    with db._get_connection() as conn:
+        conn.execute("DELETE FROM discovery_signal_aliases")
+        conn.execute(
+            "INSERT OR REPLACE INTO library_info (key, value) VALUES ('discovery_profile_policy', '2')"
+        )
+        conn.commit()
+    assert db.get_discovery_signal_aliases() == []
+
+    # Reading any multiplier triggers one-time policy v3 backfill into discovery_signal_aliases.
+    assert recommendation_multiplier("music:isrc:usleg0000001") < 1.0
+    assert db.discovery_profile_policy_version() == "3"
+    stored_aliases = set(db.get_discovery_signal_aliases())
+    assert ("music:isrc:usleg0000001", "music:deezer:777") in stored_aliases
+    assert ("music:meta:blue oyster cult\x00legacy song", "music:deezer:777") in stored_aliases

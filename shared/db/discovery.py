@@ -26,8 +26,12 @@ class DiscoveryStore:
         negative_delta: float,
         payload: Dict[str, Any],
         created_at: int,
+        aliases: Iterable[str] = (),
     ) -> None:
         """Atomically append an event and fold it into the current profile."""
+        alias_set = {str(alias) for alias in aliases if alias}
+        if identity:
+            alias_set.add(identity)
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
@@ -74,6 +78,11 @@ class DiscoveryStore:
                     int(created_at),
                 ),
             )
+            if alias_set:
+                conn.executemany(
+                    "INSERT OR IGNORE INTO discovery_signal_aliases (alias, identity) VALUES (?, ?)",
+                    [(alias, identity) for alias in alias_set],
+                )
             conn.execute("COMMIT")
 
     def undo_discovery_signal(self, event_id: str, undone_at: int) -> bool:
@@ -129,12 +138,12 @@ class DiscoveryStore:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def get_active_discovery_event_payloads(self) -> List[tuple[str, str]]:
+    def get_discovery_signal_aliases(self) -> List[tuple[str, str]]:
         with self._get_connection() as conn:
             rows = conn.execute(
-                "SELECT identity, payload_json FROM discovery_events WHERE undone_at IS NULL"
+                "SELECT alias, identity FROM discovery_signal_aliases"
             ).fetchall()
-            return [(str(row[0] or ""), str(row[1] or "")) for row in rows if row[0]]
+            return [(str(row[0] or ""), str(row[1] or "")) for row in rows if row[0] and row[1]]
 
     def replace_discovery_signals(
         self,
@@ -142,11 +151,13 @@ class DiscoveryStore:
         event_deltas: Dict[str, tuple[float, float]],
         *,
         policy_version: str,
+        aliases: Iterable[tuple[str, str]] = (),
     ) -> None:
         """Atomically rebuild derived recommendation weights, preserving audit rows."""
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("DELETE FROM discovery_signals")
+            conn.execute("DELETE FROM discovery_signal_aliases")
             for row in aggregates:
                 conn.execute(
                     """
@@ -165,6 +176,12 @@ class DiscoveryStore:
                         float(row.get("negative_weight") or 0),
                         int(row.get("updated_at") or 0),
                     ),
+                )
+            alias_pairs = [(str(alias), str(identity)) for alias, identity in aliases if alias and identity]
+            if alias_pairs:
+                conn.executemany(
+                    "INSERT OR IGNORE INTO discovery_signal_aliases (alias, identity) VALUES (?, ?)",
+                    alias_pairs,
                 )
             for event_id, (positive, negative) in event_deltas.items():
                 conn.execute(
@@ -195,4 +212,5 @@ class DiscoveryStore:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("DELETE FROM discovery_events")
             conn.execute("DELETE FROM discovery_signals")
+            conn.execute("DELETE FROM discovery_signal_aliases")
             conn.execute("COMMIT")

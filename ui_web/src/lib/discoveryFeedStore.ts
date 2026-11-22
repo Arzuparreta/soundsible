@@ -140,6 +140,13 @@ async function load(refresh = false, force = false): Promise<void> {
   return task;
 }
 
+function itemArtistNames(item: CatalogItem, fallback?: string): string[] {
+  const structured = item.raw?.artists?.map((name) => name.trim()).filter(Boolean);
+  if (structured?.length) return structured;
+  const single = (fallback ?? itemArtist(item)).trim();
+  return single ? [single] : [];
+}
+
 export function filterDiscoveryTrackShelves(
   shelves: DiscoveryTrackShelf[],
   hidden: ReadonlySet<string>,
@@ -152,8 +159,10 @@ export function filterDiscoveryTrackShelves(
       items: shelf.items.filter((item) => {
         if (hidden.has(item.id)) return false;
         if (hiddenArtists?.size) {
-          const artistKey = foldDiscoveryArtistKey(itemArtist(item));
-          if (artistKey && hiddenArtists.has(artistKey)) return false;
+          for (const name of itemArtistNames(item)) {
+            const artistKey = foldDiscoveryArtistKey(name);
+            if (artistKey && hiddenArtists.has(artistKey)) return false;
+          }
         }
         return true;
       }),
@@ -170,10 +179,12 @@ export function filterDiscoveryBrowseSections(
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        const artistKey = foldDiscoveryArtistKey(
-          item.type === 'artist' ? (item.artist || item.title) : (item.artist || item.subtitle),
-        );
-        return !artistKey || !hiddenArtists.has(artistKey);
+        const fallback = item.type === 'artist' ? (item.artist || item.title) : (item.artist || item.subtitle);
+        for (const name of itemArtistNames(item, fallback)) {
+          const artistKey = foldDiscoveryArtistKey(name);
+          if (artistKey && hiddenArtists.has(artistKey)) return false;
+        }
+        return true;
       }),
     }))
     .filter((section) => section.items.length > 0);
@@ -286,6 +297,7 @@ export function refreshDiscoveryFeed(options?: { resetLoading?: boolean }): void
   if (key !== activeKey) hydrateFromCache();
   attempts = 0;
   setDismissed(new Set<string>());
+  setDismissedArtists(new Set<string>());
   setError(false);
   clearSearchCache(CACHE);
   if (options?.resetLoading) setLoading(true);
@@ -348,6 +360,7 @@ export function resetDiscoveryFeed(): void {
   hasRetainedConsumer = false;
   clearSearchCache(CACHE);
   setDismissed(new Set<string>());
+  setDismissedArtists(new Set<string>());
   setError(false);
   setRefreshing(false);
   setFeed({});

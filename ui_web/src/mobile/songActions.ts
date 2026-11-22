@@ -1,6 +1,7 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import type { MenuAction } from '../components/ActionMenu';
 import type { Device } from '../lib/api';
+import { itemArtist } from '../lib/catalogTrack';
 import { openContextMenu } from '../lib/contextMenu';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
@@ -37,8 +38,9 @@ export function catalogFeedback(item: CatalogItem): { recommendation: Recommenda
   const isrc = typeof isrcRaw === 'string' && isrcRaw ? isrcRaw : undefined;
   const mbidRaw = item.external_ids?.mbid ?? item.external_ids?.musicbrainz_id ?? item.raw?.mbid;
   const mbid = typeof mbidRaw === 'string' && mbidRaw ? mbidRaw : undefined;
+  const primaryArtist = item.raw?.artists?.map((name) => name.trim()).find(Boolean) || itemArtist(item);
   return { recommendation, item: {
-    media_type: 'music_track', track_id: item.track_id, title: item.title, artist: item.artist,
+    media_type: 'music_track', track_id: item.track_id, title: item.title, artist: primaryArtist,
     youtube_id: typeof youtube === 'string' ? youtube : undefined,
     ...(deezerId ? { deezer_id: deezerId } : {}),
     ...(deezerArtistId ? { deezer_artist_id: deezerArtistId } : {}),
@@ -89,7 +91,8 @@ export function nativeFeedbackActions(
       });
     }).catch(() => { if (current()) toast.error(t('trackActions.feedbackFailed')); });
   };
-  const artist = feedback.item.media_type !== 'podcast_show' && typeof feedback.item.artist === 'string'
+  const isPodcast = String(feedback.item.media_type ?? '').startsWith('podcast');
+  const artist = !isPodcast && typeof feedback.item.artist === 'string'
     ? feedback.item.artist.trim()
     : '';
   return [

@@ -103,11 +103,12 @@ def _expand_seed(video_id: str, user_id: str | None) -> None:
     """Extract one seed's related mix, persist it, and tell every feed request
     waiting on it. Errors are logged and swallowed — a failed seed just
     contributes no recs, and its waiters are still told it is done."""
+    from shared import request_scope
     from shared.user_context import user_context
 
     results = None
     try:
-        with user_context(user_id):
+        with request_scope.request_scope(), user_context(user_id):
             dl = _get_api()["get_downloader"](open_browser=False)
             from shared.related_work import submit
             results = submit(video_id, lambda: dl.downloader.get_related_videos(
@@ -128,7 +129,7 @@ def _expand_seed(video_id: str, user_id: str | None) -> None:
         recs = results or []
         try:
             if recs and subscriber:
-                with user_context(subscriber):
+                with request_scope.request_scope(), user_context(subscriber):
                     recs = rank_recommendation_rows(recs, source="discover")
         except Exception as exc:
             logger.debug("discover: ranking %s for %s failed: %s", video_id, subscriber, exc)
@@ -357,9 +358,12 @@ def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:
 def warm_discover_top_seeds() -> None:
     """Convenience wrapper: pick the top seeds from the library and warm them.
     Called at startup and on library_updated."""
+    from shared import request_scope
+
     try:
-        ids = _top_warm_seed_ids()
-        if ids:
-            warm_discover_seeds(ids)
+        with request_scope.request_scope():
+            ids = _top_warm_seed_ids()
+            if ids:
+                warm_discover_seeds(ids)
     except Exception as exc:
         logger.debug("discover warm: top seeds failed: %s", exc)

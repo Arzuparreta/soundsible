@@ -125,16 +125,18 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
         onUndone: ctx.onUndoNotInterested,
       }),
     });
-    if (!isPodcast && track.artist?.trim()) {
-      const artist = track.artist.trim();
-      list.push({
-        icon: icons.feedback(),
-        label: t('trackActions.lessFromArtist'),
-        onSelect: () => void sendLessFromArtist(track, {
-          onDismissed: () => ctx.onLessFromArtist?.(artist),
-          onUndone: () => ctx.onUndoLessFromArtist?.(artist),
-        }),
-      });
+    if (!isPodcast) {
+      const artist = track.artists?.map((name) => name.trim()).find(Boolean) || track.artist?.trim() || '';
+      if (artist) {
+        list.push({
+          icon: icons.feedback(),
+          label: t('trackActions.lessFromArtist'),
+          onSelect: () => void sendLessFromArtist(track, artist, {
+            onDismissed: () => ctx.onLessFromArtist?.(artist),
+            onUndone: () => ctx.onUndoLessFromArtist?.(artist),
+          }),
+        });
+      }
     }
   }
   // Having a song and having its bytes are two separate steps, and the menu
@@ -229,7 +231,9 @@ function trackFeedbackPayload(track: Track): Record<string, unknown> {
       ? track.youtube_id || (track.source === 'preview' ? track.id : undefined)
       : undefined,
     deezer_id: deezerId || undefined,
+    ...(track.deezer_artist_id ? { deezer_artist_id: track.deezer_artist_id } : {}),
     isrc: track.isrc ?? undefined,
+    ...(track.musicbrainz_id ? { mbid: track.musicbrainz_id } : {}),
     podcast_feed_id: track.podcast_feed_id,
     podcast_episode_id: track.podcast_episode_guid,
     podcast_show_title: isPodcastTrack(track) ? track.artist : undefined,
@@ -246,9 +250,10 @@ async function sendNotInterested(
 
 async function sendLessFromArtist(
   track: Track,
+  primaryArtist: string,
   hooks?: { onDismissed?: () => void; onUndone?: () => void },
 ): Promise<void> {
-  await sendDiscoveryLessFromArtist(trackFeedbackPayload(track), hooks);
+  await sendDiscoveryLessFromArtist({ ...trackFeedbackPayload(track), artist: primaryArtist }, hooks);
 }
 
 async function confirmDelete(track: Track): Promise<void> {

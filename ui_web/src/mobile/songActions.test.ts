@@ -72,6 +72,23 @@ it('sends "not interested" and "less from this artist" only for recommended item
     () => true,
   );
   expect(podcastActions.map(action => action.label)).toEqual(['trackActions.notInterested']);
+  const podcastEpisodeActions = nativeFeedbackActions(
+    { recommendation: {}, item: { media_type: 'podcast_episode', artist: 'Show Host' } },
+    () => true,
+  );
+  expect(podcastEpisodeActions.map(action => action.label)).toEqual(['trackActions.notInterested']);
+
+  // Uses structured primary artist (artists[0]) and falls back to subtitle via itemArtist.
+  const collab = {
+    id: 'c1', type: 'track', title: 'Get Lucky', artist: 'Daft Punk, Pharrell Williams',
+    raw: { artists: ['Daft Punk', 'Pharrell Williams'], recommendation: { identity: 'id-c1', source: 'discover' } },
+  } as CatalogItem;
+  expect(catalogFeedback(collab)?.item.artist).toBe('Daft Punk');
+  const subtitleOnly = {
+    id: 'c2', type: 'track', title: 'Track', subtitle: 'Subtitle Artist',
+    raw: { recommendation: { identity: 'id-c2', source: 'discover' } },
+  } as CatalogItem;
+  expect(catalogFeedback(subtitleOnly)?.item.artist).toBe('Subtitle Artist');
 });
 
 it('lists only other online devices and asks the chosen one to play the library song', async () => {

@@ -22,7 +22,7 @@ from shared.text_utils import fold_text
 from shared.user_context import user_config_dir
 
 SETTINGS_VERSION = 1
-DISCOVERY_PROFILE_POLICY_VERSION = "2"
+DISCOVERY_PROFILE_POLICY_VERSION = "3"
 _GENERATED_SOURCES = {"auto_mode", "autoplay", "radio"}
 _PROFILE_POLICY_LOCK = threading.Lock()
 DEFAULT_SETTINGS = {
@@ -158,6 +158,7 @@ def ensure_discovery_profile_policy() -> None:
             return
         aggregates: dict[str, dict[str, Any]] = {}
         event_deltas: dict[str, tuple[float, float]] = {}
+        alias_pairs: set[tuple[str, str]] = set()
         for row in db.get_discovery_events():
             try:
                 payload = json.loads(str(row.get("payload_json") or "{}"))
@@ -199,10 +200,13 @@ def ensure_discovery_profile_policy() -> None:
                 int(aggregate["updated_at"]),
                 int(row.get("created_at") or 0),
             )
+            for alias in _storage_aliases(identity, aggregate["media_type"], payload):
+                alias_pairs.add((alias, identity))
         db.replace_discovery_signals(
             aggregates.values(),
             event_deltas,
             policy_version=DISCOVERY_PROFILE_POLICY_VERSION,
+            aliases=alias_pairs,
         )
 
 
@@ -446,6 +450,7 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
         negative_delta=negative_delta,
         payload=safe,
         created_at=int(safe["ts"]),
+        aliases=_storage_aliases(identity, media_type, safe),
     )
     emit("listening-events", safe)
     # The rollup is memoized per request; a request that records an event and
@@ -459,16 +464,37 @@ def _norm(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
-def _extract_artist_fields(payload: dict[str, Any]) -> tuple[str, str]:
-    """Return ``(artist_name, deezer_artist_id)`` from a flat or nested row."""
+def _extract_artist_names(payload: dict[str, Any]) -> list[str]:
+    """Return ordered structured performer names when present, else the single artist string.
+
+    Never splits artist strings on punctuation or words (``,``, ``feat.``, ``&``).
+    """
+    names: list[str] = []
+    raw_artists = payload.get("artists")
+    if isinstance(raw_artists, (list, tuple)):
+        for entry in raw_artists:
+            if isinstance(entry, dict):
+                cleaned = _clean_str(entry.get("name"), 220)
+            else:
+                cleaned = _clean_str(entry, 220)
+            if cleaned:
+                names.append(cleaned)
+    if names:
+        return list(dict.fromkeys(names))
     raw_artist = payload.get("artist")
-    artist_name = ""
-    deezer_artist_id = ""
     if isinstance(raw_artist, dict):
-        artist_name = _clean_str(raw_artist.get("name"), 220)
-        deezer_artist_id = _clean_str(raw_artist.get("id"), 160)
+        primary = _clean_str(raw_artist.get("name"), 220)
     else:
-        artist_name = _clean_str(raw_artist or payload.get("artist_name"), 220)
+        primary = _clean_str(raw_artist or payload.get("artist_name"), 220)
+    return [primary] if primary else []
+
+
+def _extract_artist_fields(payload: dict[str, Any]) -> tuple[str, str]:
+    """Return ``(primary_artist_name, deezer_artist_id)`` from a flat or nested row."""
+    names = _extract_artist_names(payload)
+    artist_name = names[0] if names else ""
+    raw_artist = payload.get("artist")
+    deezer_artist_id = _clean_str(raw_artist.get("id"), 160) if isinstance(raw_artist, dict) else ""
     external_ids = payload.get("external_ids") if isinstance(payload.get("external_ids"), dict) else {}
     if not deezer_artist_id:
         deezer_artist_id = _clean_str(
@@ -479,7 +505,7 @@ def _extract_artist_fields(payload: dict[str, Any]) -> tuple[str, str]:
 
 
 def artist_identity(payload: dict[str, Any]) -> tuple[str, str]:
-    """Canonical identity for an artist-level discovery signal."""
+    """Canonical identity for an artist-level discovery signal (primary artist)."""
     artist_name, deezer_artist_id = _extract_artist_fields(payload)
     folded = fold_text(artist_name)
     if folded:
@@ -490,15 +516,32 @@ def artist_identity(payload: dict[str, Any]) -> tuple[str, str]:
 
 
 def artist_aliases(payload: dict[str, Any]) -> list[str]:
-    """Every artist-level identity a payload can be known by."""
-    artist_name, deezer_artist_id = _extract_artist_fields(payload)
+    """Every artist-level identity a payload can match (structured ``artists`` or ``artist``)."""
+    _, deezer_artist_id = _extract_artist_fields(payload)
     aliases: list[str] = []
-    folded = fold_text(artist_name)
-    if folded:
-        aliases.append(f"music:artist:{folded}")
+    for name in _extract_artist_names(payload):
+        folded = fold_text(name)
+        if folded:
+            aliases.append(f"music:artist:{folded}")
     if deezer_artist_id:
         aliases.append(f"music:deezer_artist:{_norm(deezer_artist_id)}")
     return list(dict.fromkeys(aliases))
+
+
+def _storage_aliases(identity: str, media_type: str, payload: dict[str, Any]) -> list[str]:
+    """Aliases written to ``discovery_signal_aliases`` for one stored signal."""
+    aliases: list[str] = []
+    if identity:
+        aliases.append(identity)
+        if identity.startswith("music:meta:"):
+            aliases.append(_fold_meta_identity(identity))
+    is_artist = media_type == "music_artist" or identity.startswith(("music:artist:", "music:deezer_artist:"))
+    if is_artist:
+        primary_artist, deezer_artist_id = _extract_artist_fields(payload)
+        aliases.extend(artist_aliases({"artist": primary_artist, "deezer_artist_id": deezer_artist_id}))
+    else:
+        aliases.extend(identity_aliases(payload))
+    return list(dict.fromkeys(alias for alias in aliases if alias))
 
 
 def canonical_identity(payload: dict[str, Any]) -> tuple[str, str]:
@@ -632,6 +675,7 @@ def record_not_interested(payload: dict[str, Any]) -> str:
         negative_delta=1,
         payload=safe,
         created_at=created_at,
+        aliases=_storage_aliases(identity, media_type, safe),
     )
     emit("listening-events", {
         "v": 2,
@@ -685,6 +729,7 @@ def record_less_from_artist(payload: dict[str, Any]) -> str:
         negative_delta=1,
         payload=safe,
         created_at=created_at,
+        aliases=_storage_aliases(identity, media_type, safe),
     )
     emit("listening-events", {
         "v": 2,
@@ -727,7 +772,10 @@ def reset_discovery_profile() -> None:
 
 @dataclass
 class _SignalIndex:
-    """Read-time alias index mapping every known alias to stored canonical identities."""
+    """In-memory alias index built from ``discovery_signals`` and ``discovery_signal_aliases``.
+
+    Lookup is strictly one-hop (alias -> canonical identities, no transitive closure).
+    """
     signals: dict[str, dict[str, Any]] = field(default_factory=dict)
     alias_to_identities: dict[str, set[str]] = field(default_factory=dict)
 
@@ -743,6 +791,7 @@ def _fold_meta_identity(identity: str) -> str:
 
 
 def _build_signal_index() -> _SignalIndex:
+    """Build a one-hop alias index in O(signals + aliases) without scanning ``discovery_events``."""
     ensure_discovery_profile_policy()
     db = user_db()
     signals = db.get_discovery_signals()
@@ -765,21 +814,8 @@ def _build_signal_index() -> _SignalIndex:
             for alias in identity_aliases({"artist": sig.get("artist"), "title": sig.get("title")}):
                 register(alias, identity)
 
-    for identity, payload_json in db.get_active_discovery_event_payloads():
-        if identity not in signals:
-            continue
-        try:
-            payload = json.loads(payload_json or "{}")
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
-        if not isinstance(payload, dict):
-            continue
-        is_artist = (
-            identity.startswith(("music:artist:", "music:deezer_artist:"))
-            or str(payload.get("media_type") or "") == "music_artist"
-        )
-        aliases = artist_aliases(payload) if is_artist else identity_aliases(payload)
-        for alias in aliases:
+    for alias, identity in db.get_discovery_signal_aliases():
+        if identity in signals:
             register(alias, identity)
 
     return _SignalIndex(signals=signals, alias_to_identities=alias_to_identities)
@@ -829,15 +865,34 @@ def recommendation_multiplier(identity: str, payload: dict[str, Any] | None = No
     return _signal_multiplier(_combined_signal(index, aliases))
 
 
-def artist_recommendation_multiplier(artist: str = "", *, deezer_artist_id: str = "") -> float:
-    """Soft learning multiplier for an artist across discovery surfaces."""
+def artist_recommendation_multiplier(
+    artist: str = "",
+    *,
+    deezer_artist_id: str = "",
+    artists: Iterable[str] | None = None,
+) -> float:
+    """Soft learning multiplier for an artist (or structured performer list) across discovery surfaces."""
     if not load_discovery_settings().get("learning_enabled", True):
         return 1.0
-    aliases = artist_aliases({"artist": artist, "deezer_artist_id": deezer_artist_id})
+    payload: dict[str, Any] = {"artist": artist, "deezer_artist_id": deezer_artist_id}
+    if artists is not None:
+        payload["artists"] = list(artists)
+    aliases = artist_aliases(payload)
     if not aliases:
         return 1.0
     index = _load_signal_index()
     return _signal_multiplier(_combined_signal(index, aliases))
+
+
+def is_artist_demoted(artist: str = "", *, deezer_artist_id: str = "") -> bool:
+    """Return True when the listener has an active ``less_from_artist`` signal for this artist."""
+    if not load_discovery_settings().get("learning_enabled", True):
+        return False
+    aliases = artist_aliases({"artist": artist, "deezer_artist_id": deezer_artist_id})
+    if not aliases:
+        return False
+    combined = _combined_signal(_load_signal_index(), aliases)
+    return bool(combined and float(combined.get("negative_count") or 0) > 0)
 
 
 def _signal_multiplier(signal: dict[str, Any] | None) -> float:

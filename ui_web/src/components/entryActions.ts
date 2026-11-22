@@ -167,15 +167,21 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
         onUndone: ctx.onUndoNotInterested,
       }),
     });
-    const artist = (ctx.item ? (ctx.item.artist || ctx.item.subtitle || entry.artist) : entry.artist)?.trim();
+    const artist = ctx.item?.raw?.artists?.map((name) => name.trim()).find(Boolean)
+      || ctx.music?.artists?.map((name) => name.trim()).find(Boolean)
+      || (ctx.item ? (ctx.item.artist || ctx.item.subtitle || entry.artist) : entry.artist)?.trim()
+      || '';
     if (artist) {
       list.push({
         icon: menuIcons.feedback(),
         label: t('trackActions.lessFromArtist'),
-        onSelect: () => void sendDiscoveryLessFromArtist(catalogFeedbackPayload(entry, ctx), {
-          onDismissed: () => ctx.onLessFromArtist?.(artist),
-          onUndone: () => ctx.onUndoLessFromArtist?.(artist),
-        }),
+        onSelect: () => void sendDiscoveryLessFromArtist(
+          { ...catalogFeedbackPayload(entry, ctx), artist },
+          {
+            onDismissed: () => ctx.onLessFromArtist?.(artist),
+            onUndone: () => ctx.onUndoLessFromArtist?.(artist),
+          },
+        ),
       });
     }
   }
