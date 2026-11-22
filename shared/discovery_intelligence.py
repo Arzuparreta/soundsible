@@ -8,7 +8,6 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -781,217 +780,6 @@ def _build_main_items(
     return items, seen
 
 
-def _parse_iso_timestamp(value: Any) -> float | None:
-    text = _clean_str(value, 64)
-    if not text:
-        return None
-    if text[-1:] in ("Z", "z"):
-        text = text[:-1] + "+00:00"
-    try:
-        dt = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.timestamp()
-
-
-def _load_track_user_states() -> dict[str, dict[str, Any]]:
-    if not load_discovery_settings().get("learning_enabled", True):
-        return {}
-    try:
-        return user_db().get_all_track_user_states()
-    except Exception:
-        return {}
-
-
-def _build_rediscover_section(
-    tracks: list[Track],
-    rollup: ListeningRollup,
-    *,
-    fav_set: set[str] | None = None,
-    playlists: dict | None = None,
-    track_states: dict[str, dict[str, Any]] | None = None,
-    seen: set[str] | None = None,
-    items: list[dict[str, Any]] | None = None,
-) -> dict[str, Any] | None:
-    states = track_states if track_states is not None else _load_track_user_states()
-    played_history = set(rollup.played_track_ids) | {
-        str(tid)
-        for tid, st in states.items()
-        if (st.get("play_count") or 0) > 0 or st.get("last_played_at")
-    }
-    if len(played_history) < 3:
-        return None
-
-    fav_ids_set = fav_set or set()
-    playlist_counts: dict[str, int] = {}
-    if isinstance(playlists, dict):
-        for ids in playlists.values():
-            if isinstance(ids, list):
-                for tid in {str(x) for x in ids}:
-                    playlist_counts[tid] = playlist_counts.get(tid, 0) + 1
-
-    now = time.time()
-    recent_cooldown_sec = 14 * 86400
-    scored: list[tuple[float, str, Track, float]] = []
-
-    for track in tracks:
-        if getattr(track, "media_kind", None) == "podcast_episode":
-            continue
-        state = states.get(track.id) or {}
-        rating = state.get("rating")
-        if rating is not None and rating <= 2:
-            continue
-
-        last_played_at = max(
-            float(state.get("last_played_at") or 0),
-            float(rollup.track_last_played_at.get(track.id, 0)),
-        )
-        if last_played_at > 0 and (now - last_played_at) < recent_cooldown_sec:
-            continue
-
-        plays = max(int(state.get("play_count") or 0), int(rollup.track_plays.get(track.id, 0)))
-        affinity = 0.0
-        if track.id in fav_ids_set:
-            affinity += 3.0
-        if rating == 5:
-            affinity += 3.0
-        elif rating == 4:
-            affinity += 2.2
-        elif rating == 3:
-            affinity += 0.5
-        if plays > 0:
-            affinity += min(2.5, math.log1p(plays) * 0.9)
-        item_id = getattr(track, "item_id", None)
-        pl_count = playlist_counts.get(track.id, 0) + (
-            playlist_counts.get(str(item_id), 0) if item_id and str(item_id) != track.id else 0
-        )
-        if pl_count > 0:
-            affinity += min(2.0, pl_count * 1.0)
-        artist_norm = _norm(track.album_artist or track.artist)
-        if artist_norm:
-            affinity += min(1.0, math.log1p(rollup.artist_affinity.get(artist_norm, 0.0)) * 0.25)
-
-        if last_played_at > 0:
-            age_days = (now - last_played_at) / 86400.0
-            dormancy = 1.0 + min(2.0, math.log1p(max(0.0, age_days - 14.0) / 14.0))
-        else:
-            added_ts = _parse_iso_timestamp(getattr(track, "added_at", None))
-            if added_ts is not None:
-                added_age_days = max(0.0, (now - added_ts) / 86400.0)
-                dormancy = (
-                    0.6 + min(1.4, math.log1p((added_age_days - 14.0) / 30.0))
-                    if added_age_days >= 14.0
-                    else 0.35
-                )
-            else:
-                dormancy = 0.35
-
-        combined = affinity + dormancy
-        scored.append((combined, track.id, track, last_played_at))
-
-    if not scored:
-        return None
-
-    scored.sort(key=lambda row: (-row[0], row[1]))
-    rediscover_ids: list[str] = []
-    rediscover_dedup: set[str] = set()
-    artist_counts: dict[str, int] = {}
-
-    for combined, tid, track, last_played_at in scored:
-        if tid in rediscover_dedup:
-            continue
-        artist_norm = _norm(track.album_artist or track.artist)
-        if artist_norm and artist_counts.get(artist_norm, 0) >= 2:
-            continue
-        rediscover_dedup.add(tid)
-        if artist_norm:
-            artist_counts[artist_norm] = artist_counts.get(artist_norm, 0) + 1
-        rediscover_ids.append(f"music:{tid}")
-        if items is not None and seen is not None and tid not in seen:
-            seen.add(tid)
-            reason = (
-                "You haven't played this in a while."
-                if last_played_at > 0
-                else "From your library — worth revisiting."
-            )
-            items.append(_music_item(
-                track,
-                reason=reason,
-                reason_code="library_rediscover",
-                score=min(0.96, 0.64 + combined * 0.045),
-            ))
-        if len(rediscover_ids) >= 16:
-            break
-
-    if not rediscover_ids:
-        return None
-    return {
-        "id": "rediscover",
-        "title": "Rediscover",
-        "title_key": "rediscover",
-        "reason": "Tracks in your library you haven't played in a while.",
-        "reason_key": "rediscover",
-        "item_ids": rediscover_ids,
-        "preserve_order": True,
-    }
-
-
-def _build_playlist_sections(
-    tracks: list[Track],
-    by_id: dict[str, Track],
-    playlists: dict,
-    rollup: ListeningRollup,
-    seen: set[str],
-    items: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    playlist_members: dict[str, list[str]] = {}
-    for name, ids in playlists.items():
-        if isinstance(ids, list):
-            playlist_members[str(name)] = [str(x) for x in ids if str(x) in by_id]
-    if not playlist_members:
-        return []
-
-    sorted_playlists = sorted(
-        [(name, ids) for name, ids in playlist_members.items() if ids],
-        key=lambda kv: len(kv[1]),
-        reverse=True,
-    )
-    sections: list[dict[str, Any]] = []
-    for pl_name, pl_ids in sorted_playlists[:3]:
-        pl_item_ids: list[str] = []
-        pl_dedup: set[str] = set()
-        for tid in pl_ids[:8]:
-            if tid not in pl_dedup:
-                pl_dedup.add(tid)
-                pl_item_ids.append(f"music:{tid}")
-                track = by_id.get(tid)
-                if track and track.id not in seen:
-                    seen.add(track.id)
-                    artist_norm = _norm(track.album_artist or track.artist)
-                    boost = _rollup_score_boost(artist_norm, rollup)
-                    items.append(_music_item(
-                        track,
-                        reason=f'From your playlist "{pl_name}".',
-                        reason_code="playlist_taste",
-                        score=min(1.0, 0.85 + boost),
-                    ))
-        if pl_item_ids:
-            sections.append({
-                "id": f"from_playlist_{_norm(pl_name)[:40].replace(' ', '_')}",
-                "title": pl_name,
-                "title_key": "from_playlist",
-                "title_params": {"playlist": pl_name},
-                "reason": "Tracks from your playlist.",
-                "reason_key": "from_playlist",
-                "item_ids": pl_item_ids,
-                "playlist_name": pl_name,
-                "section_type": "from_your_playlists",
-            })
-    return sections
-
-
 def build_music_recommendations(
     metadata: LibraryMetadata | None,
     favourite_ids: Iterable[str] | None = None,
@@ -1010,61 +798,16 @@ def build_music_recommendations(
     if not tracks:
         return {
             "items": [],
-            "sections": [
-                {
-                    "id": "cold_start",
-                    "title": "Start your library",
-                    "title_key": "cold_start",
-                    "reason": "Add music, import playlists, or search to teach Soundsible what to recommend.",
-                    "item_ids": [],
-                }
-            ],
+            "sections": [],
             "settings": load_discovery_settings(),
         }
 
     by_id = {t.id: t for t in tracks}
-    items, seen = _build_main_items(tracks, by_id, fav_ids, fav_set, playlists, rollup, limit)
-
-    sections: list[dict[str, Any]] = [
-        {
-            "id": "made_for_your_library",
-            "title": "Made for Your Library",
-            "title_key": "made_for_library",
-            "reason": "Local-first picks from favourites, playlists, and library structure.",
-            "reason_key": "made_for_library",
-            "item_ids": [item["id"] for item in items[:limit]],
-        }
-    ]
-
-    track_states = _load_track_user_states()
-    rediscover = _build_rediscover_section(
-        tracks,
-        rollup,
-        fav_set=fav_set,
-        playlists=playlists,
-        track_states=track_states,
-        seen=seen,
-        items=items,
-    )
-    if rediscover:
-        reserved = set(rediscover["item_ids"][:10])
-        filtered_main = [item_id for item_id in sections[0]["item_ids"] if item_id not in reserved]
-        if filtered_main:
-            sections[0]["item_ids"] = filtered_main
-        sections.append(rediscover)
-
-    playlist_sections = _build_playlist_sections(tracks, by_id, playlists, rollup, seen, items)
-    sections.extend(playlist_sections)
-
+    items, _ = _build_main_items(tracks, by_id, fav_ids, fav_set, playlists, rollup, limit)
     ranked_items = rank_recommendation_rows(items, source="discover")
-    referenced_ids = {item_id for sec in sections for item_id in sec.get("item_ids") or []}
-    kept_items = [
-        item for idx, item in enumerate(ranked_items)
-        if idx < limit or item["id"] in referenced_ids
-    ]
     return {
-        "items": kept_items,
-        "sections": sections,
+        "items": ranked_items[:limit],
+        "sections": [],
         "settings": load_discovery_settings(),
     }
 

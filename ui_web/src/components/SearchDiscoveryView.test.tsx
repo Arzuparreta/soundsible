@@ -104,33 +104,16 @@ it('renders localized structured track shelves with reasons and expands dynamic 
         item_ids: ['rel:0', 'graph:1'],
       },
       {
-        id: 'rediscover',
-        title: 'Rediscover',
-        title_key: 'rediscover',
-        reason_key: 'rediscover',
-        item_ids: ['lib:1'],
-      },
-      {
-        id: 'from_playlist_road',
-        title: 'Road Trip',
-        title_key: 'from_playlist',
-        title_params: { playlist: 'Road Trip' },
-        reason_key: 'from_playlist',
-        item_ids: ['lib:2'],
-      },
-      {
         id: 'custom_shelf',
         title: 'Custom Picks',
-        reason: 'Curated locally.',
-        item_ids: ['lib:3'],
+        reason: 'Curated externally.',
+        item_ids: ['ext:1'],
       },
     ],
     items: [
       ...Array.from({ length: 7 }, (_, i) => ({ id: `rel:${i}`, title: `Related ${i}`, artist: `Band ${i}` })),
       { id: 'graph:1', title: 'Graph Track', artist: 'Graph Band' },
-      { id: 'lib:1', track_id: 't1', title: 'Old Gem', artist: 'Archive' },
-      { id: 'lib:2', track_id: 't2', title: 'Playlist Track', artist: 'Road Band' },
-      { id: 'lib:3', track_id: 't3', title: 'Custom Track', artist: 'Custom Band' },
+      { id: 'ext:1', title: 'Custom Track', artist: 'Custom Band' },
     ],
   }, items => [...items]);
 
@@ -145,12 +128,8 @@ it('renders localized structured track shelves with reasons and expands dynamic 
   expect(view.getByText('Similar artists based on your listening')).toBeTruthy();
   expect(view.getByRole('region', { name: 'Explore from Jesucristo García' })).toBeTruthy();
   expect(view.getByText('Connections from your listening graph')).toBeTruthy();
-  expect(view.getByRole('region', { name: 'Rediscover' })).toBeTruthy();
-  expect(view.getByText("Tracks from your library you haven't played lately")).toBeTruthy();
-  expect(view.getByRole('region', { name: 'From Road Trip' })).toBeTruthy();
-  expect(view.getByText('Tracks from your playlist')).toBeTruthy();
   expect(view.getByRole('region', { name: 'Custom Picks' })).toBeTruthy();
-  expect(view.getByText('Curated locally.')).toBeTruthy();
+  expect(view.getByText('Curated externally.')).toBeTruthy();
 
   expect(view.queryByRole('button', { name: 'Related 6' })).toBeNull();
   const more = view.getByRole('button', { name: 'See all: More like Extremoduro' });
@@ -159,7 +138,7 @@ it('renders localized structured track shelves with reasons and expands dynamic 
 
   await waitFor(() => expect(view.getByRole('heading', { name: 'More like Extremoduro' })).toHaveFocus());
   expect(view.getByRole('button', { name: 'Related 6' })).toBeTruthy();
-  expect(view.queryByRole('region', { name: 'Rediscover' })).toBeNull();
+  expect(view.queryByRole('region', { name: 'Explore from Jesucristo García' })).toBeNull();
 
   await setLocale('es');
   await waitFor(() => expect(view.getByRole('heading', { name: 'Más como Extremoduro' })).toBeTruthy());

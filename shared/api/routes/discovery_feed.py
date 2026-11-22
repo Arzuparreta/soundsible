@@ -1,9 +1,9 @@
 """The music discovery feed.
 
-Built from the listening rollup plus Deezer enrichment, and served
-stale-while-revalidate: a cold request answers from local recommendations
-without waiting on Deezer, and the enriched version replaces it in the
-background.
+Built from local taste seeds (listening rollup, favourites, playlists, and saved
+entities) plus Deezer and YouTube graph enrichment, and served
+stale-while-revalidate: a cold request answers from cached graph mixes without
+waiting on Deezer, and the enriched version replaces it in the background.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from flask import jsonify, request
 
 from shared.database import instance_db
 from shared.discovery_intelligence import (
-    build_music_recommendations,
     compose_discovery_feed,
     load_listening_event_rollups,
     load_discovery_settings,
@@ -402,6 +401,15 @@ def _local_library_keys(metadata) -> set[str]:
     return {_norm_music_key(t.title, t.artist or t.album_artist) for t in tracks}
 
 
+def _local_album_keys(metadata) -> set[str]:
+    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
+    return {
+        key
+        for t in tracks
+        if (key := _norm_music_key(t.album, t.album_artist or t.artist))
+    }
+
+
 def _build_music_feed(
     metadata,
     fav_ids: list[str],
@@ -410,7 +418,6 @@ def _build_music_feed(
     taste_seeds: list[str] | None = None,
     rotate: bool = False,
 ) -> dict:
-    local_recs = build_music_recommendations(metadata, fav_ids, limit=limit)
     local_keys = _local_library_keys(metadata)
     items: list[dict] = []
     seen: set[str] = set()
@@ -428,22 +435,12 @@ def _build_music_feed(
         rotate=rotate,
     )
 
-    if sections:
-        for item in local_recs.get("items") or []:
-            if not isinstance(item, dict) or not item.get("id") or str(item["id"]) in seen:
-                continue
-            seen.add(str(item["id"]))
-            items.append(item)
-        for section in local_recs.get("sections") or []:
-            if isinstance(section, dict) and section.get("item_ids"):
-                sections.append(section)
-
     ranked_items = rank_recommendation_rows(items, source="discover")
     return {
         "generated_at": int(time.time()),
         "items": ranked_items,
         "sections": sections,
-        "settings": local_recs.get("settings") or load_discovery_settings(),
+        "settings": load_discovery_settings(),
         "needs_seed": not bool(sections),
     }
 
@@ -580,11 +577,13 @@ def _build_discovery_feed_body(
             rotate=rotate,
         )
     else:
-        feed = build_music_recommendations(metadata, fav_ids, limit=max(24, limit * 3))
-    if not feed["sections"]:
-        local = build_music_recommendations(metadata, fav_ids, limit=max(24, limit * 3))
-        feed["items"].extend(local.get("items") or [])
-        feed["sections"].extend(local.get("sections") or [])
+        feed = {
+            "generated_at": int(time.time()),
+            "items": [],
+            "sections": [],
+            "settings": load_discovery_settings(),
+            "needs_seed": True,
+        }
     _cached_related_feed_candidates(
         metadata,
         fav_ids,
@@ -607,7 +606,16 @@ def _build_discovery_feed_body(
 
         seeds = taste_seeds if taste_seeds is not None else _top_taste_artists(metadata, fav_ids, rotate=rotate)
         release_seeds = select_release_seed_artists(metadata, fav_ids, limit=8, user_id=user_id)
-        body.update(build_browse_sections(seeds, min(limit, 10), release_seeds=release_seeds))
+        body.update(
+            build_browse_sections(
+                seeds,
+                min(limit, 10),
+                release_seeds=release_seeds,
+                owned_album_keys=_local_album_keys(metadata),
+            )
+        )
+        if any(not sec.get("popular", True) for sec in body.get("browse_sections") or []):
+            body["needs_seed"] = False
         if seeds:
             record_recent_taste_seeds(user_id, seeds)
     return body

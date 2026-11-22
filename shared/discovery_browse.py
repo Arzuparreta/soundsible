@@ -7,7 +7,7 @@ from itertools import zip_longest
 import time
 
 from shared.providers import deezer
-from shared.text_utils import fold_text
+from shared.text_utils import fold_text, identity_key
 
 _ALLOWED_RECORD_TYPES = {"album", "ep", "single"}
 _NEW_RELEASE_WINDOW_DAYS = 180
@@ -30,6 +30,7 @@ def build_browse_sections(
     limit: int = 10,
     *,
     release_seeds: list[dict[str, str]] | None = None,
+    owned_album_keys: set[str] | None = None,
     today: datetime.date | None = None,
 ) -> dict:
     """Return navigable catalog entities; never infer artists from video channels.
@@ -197,19 +198,35 @@ def build_browse_sections(
     if popular:
         album_pools.append(rows("chart/0/albums", {"limit": 30}))
     else:
-        # Alternate familiar and related artists, so albums also lead outward.
-        owners = []
-        for pair in zip_longest(seeds, artists):
-            owners.extend(item for item in pair if item)
-        for owner in owners[:5]:
+        # Prioritize related artists so "Albums for you" leads outward with
+        # "Similar to {artist}" attribution; fall back to seed artists only when
+        # related artists do not fill five album pools.
+        seen_owners: set[str] = set()
+        for owner in [*artists, *seeds]:
+            if len(album_pools) >= 5:
+                break
             aid = owner["external_ids"]["deezer_artist_id"]
+            if aid in seen_owners:
+                continue
+            seen_owners.add(aid)
+            owner_name = owner["title"]
             releases = artist_albums(aid)
-            album_pools.append([
-                {**r, "artist": {"id": aid, "name": owner["title"]},
-                 "reason_artist": owner.get("reason_artist") or owner["title"]}
+            pool = [
+                {
+                    **r,
+                    "artist": {"id": aid, "name": owner_name},
+                    "reason_artist": owner.get("reason_artist") or "",
+                }
                 for r in releases
                 if (str(r.get("record_type") or "").strip().casefold() or "album") in _ALLOWED_RECORD_TYPES
-            ])
+                and str(r.get("id") or "") not in new_release_ids
+                and not (
+                    owned_album_keys
+                    and identity_key(str(r.get("title") or "").strip(), owner_name) in owned_album_keys
+                )
+            ]
+            if pool:
+                album_pools.append(pool)
 
     albums: list[dict] = []
     seen_albums: set[str] = set(new_release_ids)
@@ -225,7 +242,8 @@ def build_browse_sections(
             rtype = str(row.get("record_type") or "").strip().casefold()
             if (not aid.isdigit() or not owner_id.isdigit() or not name or not title
                     or aid in seen_albums or per_artist[owner_id] >= 2
-                    or (rtype and rtype not in _ALLOWED_RECORD_TYPES)):
+                    or (rtype and rtype not in _ALLOWED_RECORD_TYPES)
+                    or (owned_album_keys and identity_key(title, name) in owned_album_keys)):
                 continue
             seen_albums.add(aid)
             per_artist[owner_id] += 1
