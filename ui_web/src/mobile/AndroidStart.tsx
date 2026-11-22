@@ -19,7 +19,7 @@ import type { createNativeAppearance } from './appearance';
 import type { createNativeFeedback } from './feedback';
 import { vibrate } from '../lib/haptics';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
-import { createEffect, createSignal, on, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from 'solid-js';
 import { t } from '../lib/i18n';
 import { createNativeCollectionReader } from './collectionReader';
 import { trackKeys } from '../lib/playbackIdentity';
@@ -364,8 +364,9 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   });
   // Devices are listed once this phone is on the account socket and its own program is known,
   // so the startup rule (attach to a device playing elsewhere) sees whether this phone has music.
-  createEffect(on(() => { const state = device(); return !!user() && program() !== null && state?.generation === generation && state.connected; },
-    ready => { if (ready) void remote.control.refreshDevices(); }));
+  // A memo: the native state is republished every half second, and only the change of readiness lists devices.
+  const devicesReady = createMemo(() => { const state = device(); return !!user() && program() !== null && state?.generation === generation && state.connected === true; });
+  createEffect(on(devicesReady, ready => { if (ready) void remote.control.refreshDevices(); }));
   function openDevices() {
     openConnectSheet(remote.control, {
       get name() { return device()?.device_name || t('deviceSheet.fallbackDevice'); },
