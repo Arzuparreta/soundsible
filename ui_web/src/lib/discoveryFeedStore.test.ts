@@ -25,10 +25,12 @@ import {
   discoveryLoading,
   discoveryRefreshing,
   discoveryTrackShelves,
+  dismissDiscoveryArtist,
   dismissDiscoveryItem,
   ensureDiscoveryFeed,
   refreshDiscoveryFeed,
   resetDiscoveryFeed,
+  restoreDiscoveryArtist,
   restoreDiscoveryItem,
   retainDiscoveryFeed,
 } from './discoveryFeedStore';
@@ -136,6 +138,50 @@ describe('discoveryFeedStore', () => {
     restoreDiscoveryItem('deezer:1');
     expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']);
     expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']);
+
+    vi.useRealTimers();
+    await flush();
+  });
+
+  it('hides all rows and browse cards by a dismissed artist (folding accents) and restores them on undo', async () => {
+    mocks.getDiscoveryMusicFeed.mockResolvedValueOnce({
+      sections: [
+        { id: 's1', title: 'S1', item_ids: ['deezer:1', 'deezer:2', 'deezer:3'] },
+      ],
+      browse_sections: [
+        {
+          id: 'artists',
+          items: [
+            { id: 'deezer:artist:1', type: 'artist', title: 'Blue Öyster Cult', artist: 'Blue Öyster Cult' },
+            { id: 'deezer:artist:2', type: 'artist', title: 'Thin Lizzy', artist: 'Thin Lizzy' },
+          ],
+        },
+        {
+          id: 'albums',
+          items: [
+            { id: 'deezer:album:1', type: 'album', title: 'Fire of Unknown Origin', artist: 'Blue Oyster Cult' },
+          ],
+        },
+      ],
+      items: [
+        { id: 'deezer:1', type: 'track', source: 'deezer', title: 'Reaper', artist: 'Blue Öyster Cult' },
+        { id: 'deezer:2', type: 'track', source: 'deezer', title: 'Burnin', artist: 'Blue Oyster Cult' },
+        { id: 'deezer:3', type: 'track', source: 'deezer', title: 'Jailbreak', artist: 'Thin Lizzy' },
+      ],
+    });
+
+    ensureDiscoveryFeed();
+    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1', 'deezer:2', 'deezer:3']));
+
+    dismissDiscoveryArtist('Blue Oyster Cult');
+    expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:3']);
+    expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:3']);
+    expect(discoveryBrowseSections().map((s) => s.id)).toEqual(['artists']);
+    expect(discoveryBrowseSections()[0].items.map((i) => i.title)).toEqual(['Thin Lizzy']);
+
+    restoreDiscoveryArtist('Blue Öyster Cult');
+    expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:1', 'deezer:2', 'deezer:3']);
+    expect(discoveryBrowseSections().map((s) => s.id)).toEqual(['artists', 'albums']);
 
     vi.useRealTimers();
     await flush();

@@ -18,6 +18,7 @@ from flask import jsonify, request
 
 from shared.database import instance_db
 from shared.discovery_intelligence import (
+    artist_recommendation_multiplier,
     compose_discovery_feed,
     load_listening_event_rollups,
     load_discovery_settings,
@@ -95,7 +96,15 @@ def _deezer_track_to_feed_item(row: dict, *, source: str, reason: str, reason_co
     if not deezer_id or not title or not artist:
         return None
     album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
+    artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+    deezer_artist_id = str(artist_row.get("id") or "").strip()
+    isrc = str(row.get("isrc") or "").strip()
     cover = deezer.image(album_row, "cover") or str(row.get("cover") or "")
+    external_ids = {"deezer_id": str(deezer_id)}
+    if deezer_artist_id:
+        external_ids["deezer_artist_id"] = deezer_artist_id
+    if isrc:
+        external_ids["isrc"] = isrc
     return {
         "id": f"deezer:{deezer_id}",
         "media_type": "music_track",
@@ -117,7 +126,7 @@ def _deezer_track_to_feed_item(row: dict, *, source: str, reason: str, reason_co
             "downloadable": not in_library,
             "needs_resolution": True,
         },
-        "external_ids": {"deezer_id": str(deezer_id)},
+        "external_ids": external_ids,
     }
 
 
@@ -268,6 +277,10 @@ def _deezer_related_artist_rows(
         fresh = [pair for pair in related_artists if pair[0] not in used_related_artists]
         reused = [pair for pair in related_artists if pair[0] in used_related_artists]
         related_artists = fresh + reused
+    related_artists.sort(
+        key=lambda pair: artist_recommendation_multiplier(pair[1], deezer_artist_id=pair[0]),
+        reverse=True,
+    )
 
     pools: list[list[dict]] = []
     fetched = 0

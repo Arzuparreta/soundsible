@@ -51,8 +51,10 @@ import {
   discoveryExploreItems,
   discoveryLoading,
   discoveryRefreshing,
+  dismissDiscoveryArtist,
   dismissDiscoveryItem,
   refreshDiscoveryFeed,
+  restoreDiscoveryArtist,
   restoreDiscoveryItem,
   retainDiscoveryFeed,
 } from '../lib/discoveryFeedStore';
@@ -921,6 +923,8 @@ function RootView(props: {
                         recommendation,
                         onNotInterested: () => dismissDiscoveryItem(item.id),
                         onUndoNotInterested: () => restoreDiscoveryItem(item.id),
+                        onLessFromArtist: (artist) => dismissDiscoveryArtist(artist),
+                        onUndoLessFromArtist: (artist) => restoreDiscoveryArtist(artist),
                       }, event)
                     : undefined}
                 />

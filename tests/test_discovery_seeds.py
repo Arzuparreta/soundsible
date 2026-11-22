@@ -1,6 +1,11 @@
 from types import SimpleNamespace
 
-from shared.discovery_intelligence import emit_discovery_event, reset_discovery_profile
+from shared.discovery_intelligence import (
+    emit_discovery_event,
+    record_less_from_artist,
+    reset_discovery_profile,
+    undo_discovery_feedback,
+)
 from shared.discovery_seeds import (
     clear_recent_seeds,
     load_saved_entity_artists,
@@ -185,6 +190,36 @@ def test_saved_entities_feed_taste_and_unrotated_release_seeds(tmp_path):
             {"name": "Marea", "deezer_id": "42"},
         ]
         assert [item["name"] for item in release_seeds] == ["Extremoduro", "Marea", "Robe", "Platero y Tú"]
+    finally:
+        clear_recent_seeds(clear_all=True)
+        reset_runtime()
+
+
+def test_less_from_artist_demotes_taste_and_release_seeds(tmp_path):
+    _setup_runtime(tmp_path)
+    try:
+        tracks = [
+            _track("t1", "Blue Öyster Cult"),
+            _track("t2", "Thin Lizzy"),
+            _track("t3", "Rush"),
+        ]
+        metadata = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})
+        assert select_taste_artists(metadata, ["t1"], limit=2, user_id="alice")[0] == "Blue Öyster Cult"
+
+        with user_context("alice"):
+            event_id = record_less_from_artist({"artist": "Blue Oyster Cult"})
+        assert event_id
+
+        demoted = select_taste_artists(metadata, ["t1"], limit=2, user_id="alice")
+        assert "Blue Öyster Cult" not in demoted
+        assert set(demoted) == {"Thin Lizzy", "Rush"}
+
+        release_seeds = select_release_seed_artists(metadata, ["t1"], limit=3, user_id="alice")
+        assert release_seeds[-1]["name"] == "Blue Öyster Cult"
+
+        with user_context("alice"):
+            assert undo_discovery_feedback(event_id) is True
+        assert select_taste_artists(metadata, ["t1"], limit=2, user_id="alice")[0] == "Blue Öyster Cult"
     finally:
         clear_recent_seeds(clear_all=True)
         reset_runtime()

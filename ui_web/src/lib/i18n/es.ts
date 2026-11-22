@@ -874,6 +874,7 @@ export const es: Dict = {
     deleteMsg: 'Se eliminará «{title}» de la biblioteca y del disco.',
     deleteConfirm: 'Eliminar',
     notInterested: 'No me interesa',
+    lessFromArtist: 'Menos de este artista',
     feedbackSaved: 'Aparecerá con menos frecuencia',
     feedbackFailed: 'No se pudo guardar la preferencia',
   },

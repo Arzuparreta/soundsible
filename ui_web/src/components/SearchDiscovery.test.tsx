@@ -167,3 +167,68 @@ it('dismisses a recommended Deezer song on Not interested and restores it on Und
   await waitFor(() => expect(view.getByText('Midnight City')).toBeTruthy());
   expect(mocks.undoDiscoveryFeedback).toHaveBeenCalledWith('ev-300');
 });
+
+it('dismisses all songs by an artist in Discover on Less from this artist and restores them on Undo', async () => {
+  mocks.getDiscoveryMusicFeed.mockResolvedValueOnce({
+    sections: [{ id: 'more_like_a', title: 'More like A', item_ids: ['deezer:300', 'deezer:301', 'deezer:302'] }],
+    items: [
+      {
+        id: 'deezer:300',
+        type: 'track',
+        source: 'deezer_taste_artist',
+        title: 'Midnight City',
+        artist: 'M83',
+        external_ids: { deezer_id: '300', deezer_artist_id: '50' },
+        recommendation_identity: 'music:deezer:300',
+        reason: 'Similar to A.',
+      },
+      {
+        id: 'deezer:301',
+        type: 'track',
+        source: 'deezer_taste_artist',
+        title: 'Wait',
+        artist: 'M83',
+        external_ids: { deezer_id: '301', deezer_artist_id: '50' },
+        recommendation_identity: 'music:deezer:301',
+        reason: 'Similar to A.',
+      },
+      {
+        id: 'deezer:302',
+        type: 'track',
+        source: 'deezer_taste_artist',
+        title: 'Outro Other',
+        artist: 'Air',
+        external_ids: { deezer_id: '302', deezer_artist_id: '51' },
+        recommendation_identity: 'music:deezer:302',
+        reason: 'Similar to A.',
+      },
+    ],
+  });
+  mocks.sendDiscoveryFeedback.mockResolvedValueOnce({ recorded: true, event_id: 'ev-artist-50' });
+  mocks.undoDiscoveryFeedback.mockResolvedValueOnce({ undone: true });
+
+  const view = render(() => (
+    <SearchDiscovery onReady={vi.fn()} onPlay={vi.fn()} onSave={vi.fn()} saving={new Set()} />
+  ));
+
+  await waitFor(() => expect(view.getByText('Midnight City')).toBeTruthy());
+  expect(view.getByText('Wait')).toBeTruthy();
+
+  fireEvent.click(view.getByRole('button', { name: 'More options: Midnight City' }));
+  const menuActions = mocks.openContextMenu.mock.calls.at(-1)![0].actions as Array<{ label: string; onSelect: () => void }>;
+  menuActions.find(action => action.label === 'Less from this artist')!.onSelect();
+
+  await waitFor(() => expect(view.queryByText('Midnight City')).toBeNull());
+  expect(view.queryByText('Wait')).toBeNull();
+  expect(view.getByText('Outro Other')).toBeTruthy();
+  expect(mocks.sendDiscoveryFeedback).toHaveBeenCalledWith(
+    expect.objectContaining({ artist: 'M83', deezer_artist_id: '50' }),
+    'less_from_artist',
+  );
+
+  const undo = mocks.toastAction.mock.calls.at(-1)![2];
+  undo();
+  await waitFor(() => expect(view.getByText('Midnight City')).toBeTruthy());
+  expect(view.getByText('Wait')).toBeTruthy();
+  expect(mocks.undoDiscoveryFeedback).toHaveBeenCalledWith('ev-artist-50');
+});

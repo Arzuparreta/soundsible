@@ -8,7 +8,7 @@ import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import { openContextMenu } from '../lib/contextMenu';
 import type { CatalogItem, RecommendationContext, SavedEntry, Track } from '../types/music';
-import { buildTrackMenu, musicLinkActions, sendDiscoveryNotInterested } from './trackActions';
+import { buildTrackMenu, musicLinkActions, sendDiscoveryLessFromArtist, sendDiscoveryNotInterested } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import type { MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
@@ -24,6 +24,8 @@ export interface EntryMenuContext {
   onRadio?: () => void;
   onNotInterested?: () => void;
   onUndoNotInterested?: () => void;
+  onLessFromArtist?: (artist: string) => void;
+  onUndoLessFromArtist?: (artist: string) => void;
   busy?: boolean;
 }
 
@@ -36,12 +38,20 @@ function catalogFeedbackPayload(entry: SavedEntry, ctx: EntryMenuContext): Recor
     : typeof extDeezer === 'number'
       ? String(extDeezer)
       : keyDeezer;
+  const extDeezerArtist = item?.external_ids?.deezer_artist_id;
+  const deezerArtistId = typeof extDeezerArtist === 'string' && extDeezerArtist
+    ? extDeezerArtist
+    : typeof extDeezerArtist === 'number'
+      ? String(extDeezerArtist)
+      : undefined;
   const extYoutube = item?.external_ids?.youtube_id;
   const youtubeId = typeof extYoutube === 'string' && extYoutube
     ? extYoutube
     : savedVideoId(entry) ?? undefined;
   const extIsrc = item?.external_ids?.isrc;
   const isrc = typeof extIsrc === 'string' && extIsrc ? extIsrc : undefined;
+  const extMbid = item?.external_ids?.mbid ?? item?.external_ids?.musicbrainz_id;
+  const mbid = typeof extMbid === 'string' && extMbid ? extMbid : undefined;
   return {
     media_type: 'music_track',
     track_id: item?.track_id ?? undefined,
@@ -49,7 +59,9 @@ function catalogFeedbackPayload(entry: SavedEntry, ctx: EntryMenuContext): Recor
     artist: item ? (item.artist || item.subtitle || entry.artist) : entry.artist,
     youtube_id: youtubeId,
     deezer_id: deezerId,
+    ...(deezerArtistId ? { deezer_artist_id: deezerArtistId } : {}),
     isrc,
+    ...(mbid ? { mbid } : {}),
     source: ctx.recommendation?.source,
   };
 }
@@ -116,6 +128,8 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     onPlayOnDevice: openPlayOnDevice,
     onNotInterested: ctx.onNotInterested,
     onUndoNotInterested: ctx.onUndoNotInterested,
+    onLessFromArtist: ctx.onLessFromArtist,
+    onUndoLessFromArtist: ctx.onUndoLessFromArtist,
   }));
   if (!track && entry.title && entry.artist) {
     const pending: ContextTrack = {
@@ -153,6 +167,17 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
         onUndone: ctx.onUndoNotInterested,
       }),
     });
+    const artist = (ctx.item ? (ctx.item.artist || ctx.item.subtitle || entry.artist) : entry.artist)?.trim();
+    if (artist) {
+      list.push({
+        icon: menuIcons.feedback(),
+        label: t('trackActions.lessFromArtist'),
+        onSelect: () => void sendDiscoveryLessFromArtist(catalogFeedbackPayload(entry, ctx), {
+          onDismissed: () => ctx.onLessFromArtist?.(artist),
+          onUndone: () => ctx.onUndoLessFromArtist?.(artist),
+        }),
+      });
+    }
   }
   if (saved && !owned) list.push({ icon: menuIcons.remove(), label: t('collection.unsave'), danger: true, onSelect: () => actions.toggleSaved(entry) });
   return list;

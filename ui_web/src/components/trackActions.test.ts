@@ -66,7 +66,7 @@ describe('buildTrackMenu — podcast coherence', () => {
       recommendation: { identity: 'music:track:dj2', source: 'auto_mode', reason: 'Following the thread of Root' } };
     const l = labels(found, { ...ctx, inRoute: true });
     expect(l).toEqual(['Add to playlist', 'Go to artist', 'Go to album', 'Share',
-      'Following the thread of Root', 'Not interested', 'Save to your library', 'Download']);
+      'Following the thread of Root', 'Not interested', 'Less from this artist', 'Save to your library', 'Download']);
 
     // Deleting a file would strip the song out of the queue behind the route.
     const owned: Track = { id: 'lib3', title: 'Song', artist: 'A' };

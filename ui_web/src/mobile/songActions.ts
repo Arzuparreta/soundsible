@@ -27,13 +27,23 @@ export function catalogFeedback(item: CatalogItem): { recommendation: Recommenda
     : typeof deezerRaw === 'number'
       ? String(deezerRaw)
       : undefined;
+  const deezerArtistRaw = item.external_ids?.deezer_artist_id ?? item.raw?.deezer_artist_id;
+  const deezerArtistId = typeof deezerArtistRaw === 'string' && deezerArtistRaw
+    ? deezerArtistRaw
+    : typeof deezerArtistRaw === 'number'
+      ? String(deezerArtistRaw)
+      : undefined;
   const isrcRaw = item.external_ids?.isrc ?? item.raw?.isrc;
   const isrc = typeof isrcRaw === 'string' && isrcRaw ? isrcRaw : undefined;
+  const mbidRaw = item.external_ids?.mbid ?? item.external_ids?.musicbrainz_id ?? item.raw?.mbid;
+  const mbid = typeof mbidRaw === 'string' && mbidRaw ? mbidRaw : undefined;
   return { recommendation, item: {
     media_type: 'music_track', track_id: item.track_id, title: item.title, artist: item.artist,
     youtube_id: typeof youtube === 'string' ? youtube : undefined,
     ...(deezerId ? { deezer_id: deezerId } : {}),
+    ...(deezerArtistId ? { deezer_artist_id: deezerArtistId } : {}),
     ...(isrc ? { isrc } : {}),
+    ...(mbid ? { mbid } : {}),
     source: recommendation.source,
   } };
 }
@@ -50,28 +60,46 @@ type Feedback = { recommendation: { reason?: string }; item: Record<string, unkn
 export function nativeFeedbackActions(
   feedback: Feedback | null,
   current: () => boolean,
-  hooks?: { onDismissed?: () => void; onUndone?: () => void },
+  hooks?: {
+    onDismissed?: () => void;
+    onUndone?: () => void;
+    onArtistDismissed?: (artist: string) => void;
+    onArtistUndone?: (artist: string) => void;
+  },
 ): MenuAction[] {
   if (!feedback) return [];
+  const send = (
+    kind: 'not_interested' | 'less_from_artist',
+    onDismissed?: () => void,
+    onUndone?: () => void,
+  ) => {
+    if (!current()) return;
+    void request<{ recorded?: boolean; event_id?: string | null }>('/api/discovery/feedback', {
+      method: 'POST', body: { feedback: kind, item: feedback.item }, timeoutMs: 5000,
+    }).then(result => {
+      if (!current() || !result.recorded || !result.event_id) return;
+      onDismissed?.();
+      const event = result.event_id;
+      toast.action(t('trackActions.feedbackSaved'), t('common.undo'), () => {
+        if (current()) {
+          void request(`/api/discovery/feedback/${encodeURIComponent(event)}`, { method: 'DELETE', timeoutMs: 5000 })
+            .then(() => { if (current()) onUndone?.(); })
+            .catch(() => {});
+        }
+      });
+    }).catch(() => { if (current()) toast.error(t('trackActions.feedbackFailed')); });
+  };
+  const artist = feedback.item.media_type !== 'podcast_show' && typeof feedback.item.artist === 'string'
+    ? feedback.item.artist.trim()
+    : '';
   return [
     ...(feedback.recommendation.reason ? [{ label: feedback.recommendation.reason, disabled: true, onSelect: () => {} }] : []),
-    { label: t('trackActions.notInterested'), disabled: !current(), onSelect: () => {
-      if (!current()) return;
-      void request<{ recorded?: boolean; event_id?: string | null }>('/api/discovery/feedback', {
-        method: 'POST', body: { feedback: 'not_interested', item: feedback.item }, timeoutMs: 5000,
-      }).then(result => {
-        if (!current() || !result.recorded || !result.event_id) return;
-        hooks?.onDismissed?.();
-        const event = result.event_id;
-        toast.action(t('trackActions.feedbackSaved'), t('common.undo'), () => {
-          if (current()) {
-            void request(`/api/discovery/feedback/${encodeURIComponent(event)}`, { method: 'DELETE', timeoutMs: 5000 })
-              .then(() => { if (current()) hooks?.onUndone?.(); })
-              .catch(() => {});
-          }
-        });
-      }).catch(() => { if (current()) toast.error(t('trackActions.feedbackFailed')); });
-    } },
+    { label: t('trackActions.notInterested'), disabled: !current(), onSelect: () => send('not_interested', hooks?.onDismissed, hooks?.onUndone) },
+    ...(artist ? [{
+      label: t('trackActions.lessFromArtist'),
+      disabled: !current(),
+      onSelect: () => send('less_from_artist', () => hooks?.onArtistDismissed?.(artist), () => hooks?.onArtistUndone?.(artist)),
+    }] : []),
   ];
 }
 

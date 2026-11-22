@@ -1,6 +1,7 @@
 import { createMemo, createRoot, createSignal } from 'solid-js';
 import { api, type DiscoveryBrowseSection, type DiscoveryMusicFeed } from './api';
 import { prioritizeDiscoveries } from './catalogCollection';
+import { itemArtist } from './catalogItem';
 import { onDiscoveryFeedReady } from './discoveryEvents';
 import { clearSearchCache, readSearchCache, writeSearchCache } from './searchCache';
 import { resolveDiscoveryTrackShelves, type DiscoveryTrackShelf } from './searchDiscovery';
@@ -17,6 +18,11 @@ const [loading, setLoading] = createSignal(true);
 const [refreshing, setRefreshing] = createSignal(false);
 const [error, setError] = createSignal(false);
 const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
+const [dismissedArtists, setDismissedArtists] = createSignal<Set<string>>(new Set());
+
+export function foldDiscoveryArtistKey(artist: string | undefined): string {
+  return (artist ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
 
 let activeKey = '';
 let controller: AbortController | undefined;
@@ -62,6 +68,7 @@ function hydrateFromCache(): DiscoveryMusicFeed | null {
     attempts = 0;
     epoch += 1;
     setDismissed(new Set<string>());
+    setDismissedArtists(new Set<string>());
     setError(false);
     setRefreshing(false);
     setFeed(cached ?? {});
@@ -136,11 +143,40 @@ async function load(refresh = false, force = false): Promise<void> {
 export function filterDiscoveryTrackShelves(
   shelves: DiscoveryTrackShelf[],
   hidden: ReadonlySet<string>,
+  hiddenArtists?: ReadonlySet<string>,
 ): DiscoveryTrackShelf[] {
-  if (!hidden.size) return shelves;
+  if (!hidden.size && !hiddenArtists?.size) return shelves;
   return shelves
-    .map((shelf) => ({ ...shelf, items: shelf.items.filter((item) => !hidden.has(item.id)) }))
+    .map((shelf) => ({
+      ...shelf,
+      items: shelf.items.filter((item) => {
+        if (hidden.has(item.id)) return false;
+        if (hiddenArtists?.size) {
+          const artistKey = foldDiscoveryArtistKey(itemArtist(item));
+          if (artistKey && hiddenArtists.has(artistKey)) return false;
+        }
+        return true;
+      }),
+    }))
     .filter((shelf) => shelf.items.length > 0);
+}
+
+export function filterDiscoveryBrowseSections(
+  sections: DiscoveryBrowseSection[],
+  hiddenArtists: ReadonlySet<string>,
+): DiscoveryBrowseSection[] {
+  if (!hiddenArtists.size) return sections;
+  return sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        const artistKey = foldDiscoveryArtistKey(
+          item.type === 'artist' ? (item.artist || item.title) : (item.artist || item.subtitle),
+        );
+        return !artistKey || !hiddenArtists.has(artistKey);
+      }),
+    }))
+    .filter((section) => section.items.length > 0);
 }
 
 export const discoveryFeed = feed;
@@ -148,13 +184,17 @@ export const discoveryLoading = loading;
 export const discoveryRefreshing = refreshing;
 export const discoveryError = error;
 export const discoveryDismissed = dismissed;
+export const discoveryDismissedArtists = dismissedArtists;
 
 const { browseSections, trackShelves, exploreItems } = createRoot(() => {
   const browseSections = createMemo<DiscoveryBrowseSection[]>(() =>
-    (feed().browse_sections ?? []).map((section) => ({
-      ...section,
-      items: prioritizeDiscoveries(section.items),
-    })),
+    filterDiscoveryBrowseSections(
+      (feed().browse_sections ?? []).map((section) => ({
+        ...section,
+        items: prioritizeDiscoveries(section.items),
+      })),
+      dismissedArtists(),
+    ),
   );
 
   const rawTrackShelves = createMemo<DiscoveryTrackShelf[]>(() =>
@@ -162,7 +202,7 @@ const { browseSections, trackShelves, exploreItems } = createRoot(() => {
   );
 
   const trackShelves = createMemo<DiscoveryTrackShelf[]>(() =>
-    filterDiscoveryTrackShelves(rawTrackShelves(), dismissed()),
+    filterDiscoveryTrackShelves(rawTrackShelves(), dismissed(), dismissedArtists()),
   );
 
   /**
@@ -266,6 +306,29 @@ export function restoreDiscoveryItem(id: string): void {
     if (!prev.has(id)) return prev;
     const next = new Set(prev);
     next.delete(id);
+    return next;
+  });
+  clearSearchCache(CACHE);
+}
+
+export function dismissDiscoveryArtist(artist: string): void {
+  const key = foldDiscoveryArtistKey(artist);
+  if (!key) return;
+  setDismissedArtists((prev) => {
+    const next = new Set(prev);
+    next.add(key);
+    return next;
+  });
+  clearSearchCache(CACHE);
+}
+
+export function restoreDiscoveryArtist(artist: string): void {
+  const key = foldDiscoveryArtistKey(artist);
+  if (!key) return;
+  setDismissedArtists((prev) => {
+    if (!prev.has(key)) return prev;
+    const next = new Set(prev);
+    next.delete(key);
     return next;
   });
   clearSearchCache(CACHE);

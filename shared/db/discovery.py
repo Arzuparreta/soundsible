@@ -129,6 +129,13 @@ class DiscoveryStore:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def get_active_discovery_event_payloads(self) -> List[tuple[str, str]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT identity, payload_json FROM discovery_events WHERE undone_at IS NULL"
+            ).fetchall()
+            return [(str(row[0] or ""), str(row[1] or "")) for row in rows if row[0]]
+
     def replace_discovery_signals(
         self,
         aggregates: Iterable[Dict[str, Any]],

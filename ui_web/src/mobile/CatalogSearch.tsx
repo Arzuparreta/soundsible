@@ -56,6 +56,8 @@ export default function CatalogSearch(props: {
   const { pending, trackFor, isSaved, act } = catalog;
   const [expanded, setExpanded] = createSignal<string | undefined>();
   const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
+  const [dismissedArtists, setDismissedArtists] = createSignal<Set<string>>(new Set());
+  const foldArtist = (name: string | undefined) => (name ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const [entities, setEntities] = createSignal<{ subject: NativeEntitySubject; returnScroll: number }[]>([]);
   const entity = () => entities().at(-1);
   const holdings = createMemo(() => catalogEntityHoldings(props.tracks));
@@ -63,15 +65,40 @@ export default function CatalogSearch(props: {
   const known = (item: CatalogItem) => item.type === 'artist' || item.type === 'album' ? entitySaved(item) || catalogEntityHeld(item, holdings()) : isSaved(item) || !!trackFor(item) && trackFor(item)?.source !== 'preview';
   const feed = createNativeDiscoveryFeed({ generation: () => props.generation, disconnected: () => props.disconnected,
     paused: () => !!query().trim() || !!entity(), expanded, known });
+  const visibleSections = createMemo(() => {
+    const hiddenArtists = dismissedArtists();
+    const sections = feed.sections();
+    if (!hiddenArtists.size) return sections;
+    return sections
+      .map(section => ({
+        ...section,
+        items: section.items.filter(item => {
+          const key = foldArtist(item.type === 'artist' ? (item.artist || item.title) : (item.artist || item.subtitle));
+          return !key || !hiddenArtists.has(key);
+        }),
+      }))
+      .filter(section => section.items.length > 0);
+  });
   const visibleTrackShelves = createMemo(() => {
     const hidden = dismissed();
+    const hiddenArtists = dismissedArtists();
     const shelves = feed.trackShelves();
-    if (!hidden.size) return shelves;
+    if (!hidden.size && !hiddenArtists.size) return shelves;
     return shelves
-      .map(shelf => ({ ...shelf, items: shelf.items.filter(item => !hidden.has(item.id)) }))
+      .map(shelf => ({
+        ...shelf,
+        items: shelf.items.filter(item => {
+          if (hidden.has(item.id)) return false;
+          if (hiddenArtists.size) {
+            const key = foldArtist(itemArtist(item));
+            if (key && hiddenArtists.has(key)) return false;
+          }
+          return true;
+        }),
+      }))
       .filter(shelf => shelf.items.length > 0);
   });
-  const refreshFeed = () => { setDismissed(new Set<string>()); feed.refresh(); };
+  const refreshFeed = () => { setDismissed(new Set<string>()); setDismissedArtists(new Set<string>()); feed.refresh(); };
   let navigation = 0;
   let restorePosition: number | undefined;
   let sectionPosition = 0;
@@ -118,7 +145,7 @@ export default function CatalogSearch(props: {
   let account = props.generation;
   createEffect(on(() => [query().trim(), props.generation, props.disconnected, retry()] as const, ([term, generation, disconnected]) => {
     const epoch = ++searchEpoch;
-    if (account !== generation) { navigation++; setEntities([]); setExpanded(undefined); setDismissed(new Set<string>()); }
+    if (account !== generation) { navigation++; setEntities([]); setExpanded(undefined); setDismissed(new Set<string>()); setDismissedArtists(new Set<string>()); }
     catalog.reset(account !== generation); account = generation;
     const controller = new AbortController();
     setRows([]); setError(''); setPartial(false); setLoading(Boolean(term && !disconnected));
@@ -170,6 +197,21 @@ export default function CatalogSearch(props: {
         next.delete(item.id);
         return next;
       }),
+      onArtistDismissed: (artist) => {
+        const key = foldArtist(artist);
+        if (!key) return;
+        setDismissedArtists(prev => { const next = new Set(prev); next.add(key); return next; });
+      },
+      onArtistUndone: (artist) => {
+        const key = foldArtist(artist);
+        if (!key) return;
+        setDismissedArtists(prev => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      },
     });
     if (resolved && props.onResolvedMenu) {
       if (resolved.source === 'preview') props.onResolvedMenu(resolved, event, [
@@ -205,12 +247,12 @@ export default function CatalogSearch(props: {
       active={Boolean(track() && (props.isActive ? props.isActive(track()!) : props.activeId === track()!.id))} busy={pending() === item.id}
       disabled={props.disconnected} onActivate={() => { emitSearchPlayed(item); void act(item, 'play'); }} onMenu={event => menu(item, event)} />;
   };
-  const cold = () => isColdDiscoveryFeed(feed.feed(), feed.sections(), visibleTrackShelves());
+  const cold = () => isColdDiscoveryFeed(feed.feed(), visibleSections(), visibleTrackShelves());
   return <section class={styles.library} data-testid="android-catalog-search">
     <div style={{ display: entity() ? 'none' : undefined }}>
     <div class={styles.searchTools}>
       <SearchField value={query()} placeholder={t('search.placeholder')} onInput={setQuery} />
-      <Show when={!query().trim() && !expanded() && !props.disconnected && discoveryHasVisible(feed.sections(), visibleTrackShelves())}>
+      <Show when={!query().trim() && !expanded() && !props.disconnected && discoveryHasVisible(visibleSections(), visibleTrackShelves())}>
         <IconButton
           class={styles.refreshBtn}
           label={t('searchHome.refresh')}
@@ -241,7 +283,7 @@ export default function CatalogSearch(props: {
           onActivate={() => { const path = catalogEntityDestination(item); if (path) openEntity(path); }} onMenu={event => entityMenu(item, event)} />
         : songRow(item)}</For>
     </Show>
-    <Show when={!query().trim() && !props.disconnected}><SearchDiscoveryView sections={feed.sections()} trackShelves={visibleTrackShelves()} expanded={expanded()}
+    <Show when={!query().trim() && !props.disconnected}><SearchDiscoveryView sections={visibleSections()} trackShelves={visibleTrackShelves()} expanded={expanded()}
       loading={feed.loading()} error={feed.error()} preparing={!!feed.feed().revalidating} cold={cold()}
       onBack={backSection} onRetry={refreshFeed}
       renderMore={(section, link) => <button type="button" class={link.class} aria-label={link.label} onClick={() => openSection(section)}>{link.children}</button>}

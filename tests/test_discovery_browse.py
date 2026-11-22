@@ -333,3 +333,65 @@ def test_failed_enrichment_preserves_cached_entities(monkeypatch):
     route._refresh_discovery_feed_cache(key, 'testuser', 10)
     assert route._DISCOVERY_FEED_CACHE[key][2]['browse_sections'] == [old_new, old]
     assert key not in route._DISCOVERY_FEED_INFLIGHT
+
+
+def test_less_from_artist_demotes_browse_sections_and_related_rows(tmp_path, monkeypatch):
+    from shared.api.routes import discovery_feed as route
+    from shared.discovery_intelligence import record_less_from_artist
+    from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
+
+    reset_runtime()
+    runtime = RuntimeConfig(
+        host="127.0.0.1",
+        port=5005,
+        config_dir=(tmp_path / "cfg").resolve(),
+        data_dir=(tmp_path / "data").resolve(),
+        cache_dir=(tmp_path / "cache").resolve(),
+        log_dir=(tmp_path / "logs").resolve(),
+        music_dir=(tmp_path / "music").resolve(),
+        ui_dist=None,
+        owner_token_file=None,
+        lan_enabled=False,
+        advanced_mode=False,
+    )
+    configure_runtime(runtime)
+    for path in (runtime.config_dir, runtime.data_dir, runtime.cache_dir, runtime.log_dir, runtime.music_dir):
+        path.mkdir(parents=True, exist_ok=True)
+    try:
+        record_less_from_artist({"artist": "Disliked Band", "deezer_artist_id": "11"})
+
+        def get(path, params=None, **kwargs):
+            if path == "search/artist":
+                return {"data": [artist(1, "Seed Band")]}
+            if path == "artist/1/related":
+                return {"data": [artist(11, "Disliked Band"), artist(12, "Good Band")]}
+            if path == "artist/11/albums":
+                return {"data": [{"id": 1101, "title": "Disliked New", "record_type": "album", "release_date": "2026-11-20"}]}
+            if path == "artist/12/albums":
+                return {"data": [{"id": 1201, "title": "Good New", "record_type": "album", "release_date": "2026-11-10"}]}
+            if path == "artist/1/albums":
+                return {"data": []}
+            if path == "artist/11/top":
+                return {"data": [{"id": 911, "title": "Disliked Track", "artist": artist(11, "Disliked Band")}]}
+            if path == "artist/12/top":
+                return {"data": [{"id": 912, "title": "Good Track", "artist": artist(12, "Good Band")}]}
+            raise AssertionError(path)
+
+        monkeypatch.setattr(deezer, "get", get)
+        body = build_browse_sections(
+            ["Seed Band"],
+            limit=10,
+            release_seeds=[
+                {"name": "Disliked Band", "deezer_id": "11"},
+                {"name": "Good Band", "deezer_id": "12"},
+            ],
+            today=datetime.date(2026, 11, 22),
+        )
+        sections = {sec["id"]: sec["items"] for sec in body["browse_sections"]}
+        assert [item["title"] for item in sections["artists"]] == ["Good Band", "Disliked Band"]
+        assert [item["title"] for item in sections["new_releases"]] == ["Good New", "Disliked New"]
+
+        related_rows = route._deezer_related_artist_rows("Seed Band", limit=4)
+        assert [row["title"] for row in related_rows] == ["Good Track", "Disliked Track"]
+    finally:
+        reset_runtime()

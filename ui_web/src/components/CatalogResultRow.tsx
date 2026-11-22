@@ -34,6 +34,8 @@ export interface CatalogResultRowProps {
   onDownload: () => void;
   onNotInterested?: () => void;
   onUndoNotInterested?: () => void;
+  onLessFromArtist?: (artist: string) => void;
+  onUndoLessFromArtist?: (artist: string) => void;
 }
 
 /** Shared external-catalog song row used by Search, Artist and Album. */
@@ -48,6 +50,8 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
     onDownload: props.onDownload,
     onNotInterested: props.onNotInterested,
     onUndoNotInterested: props.onUndoNotInterested,
+    onLessFromArtist: props.onLessFromArtist,
+    onUndoLessFromArtist: props.onUndoLessFromArtist,
     busy: props.saving,
   }, event);
   const tap = createResponsiveTap({

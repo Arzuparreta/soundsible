@@ -18,6 +18,7 @@ from shared.file_revision import publication_lock
 from shared.models import LibraryMetadata, Track
 from shared.database import user_db
 from shared.telemetry import emit, user_telemetry_dir
+from shared.text_utils import fold_text
 from shared.user_context import user_config_dir
 
 SETTINGS_VERSION = 1
@@ -357,9 +358,10 @@ def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
         current = _apply_settings_patch(_read_discovery_settings(), patch)
         publish(path, text_pieces([json.dumps(current, indent=2, sort_keys=True)]))
     # A request that saves settings and then reads them back must see the write,
-    # and `learning_enabled` also gates the rollup.
+    # and `learning_enabled` also gates the rollup and signal index.
     request_scope.invalidate("discovery_settings:")
     request_scope.invalidate("listening_rollup:")
+    request_scope.invalidate("discovery_signal_index:")
     return current
 
 
@@ -411,6 +413,10 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
         "source",
         "youtube_id",
         "deezer_id",
+        "deezer_artist_id",
+        "isrc",
+        "mbid",
+        "musicbrainz_id",
         "playlist_name",
         "podcast_feed_id",
         "podcast_episode_id",
@@ -425,6 +431,8 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
             safe[key] = value
         else:
             safe[key] = _clean_str(value)
+    if not safe.get("mbid") and safe.get("musicbrainz_id"):
+        safe["mbid"] = safe["musicbrainz_id"]
     identity, media_type = canonical_identity(safe)
     safe["identity"] = identity
     safe["media_type"] = media_type
@@ -443,6 +451,7 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
     # The rollup is memoized per request; a request that records an event and
     # then rebuilds a feed must see it.
     request_scope.invalidate("listening_rollup:")
+    request_scope.invalidate("discovery_signal_index:")
     return True
 
 
@@ -450,9 +459,54 @@ def _norm(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _extract_artist_fields(payload: dict[str, Any]) -> tuple[str, str]:
+    """Return ``(artist_name, deezer_artist_id)`` from a flat or nested row."""
+    raw_artist = payload.get("artist")
+    artist_name = ""
+    deezer_artist_id = ""
+    if isinstance(raw_artist, dict):
+        artist_name = _clean_str(raw_artist.get("name"), 220)
+        deezer_artist_id = _clean_str(raw_artist.get("id"), 160)
+    else:
+        artist_name = _clean_str(raw_artist or payload.get("artist_name"), 220)
+    external_ids = payload.get("external_ids") if isinstance(payload.get("external_ids"), dict) else {}
+    if not deezer_artist_id:
+        deezer_artist_id = _clean_str(
+            payload.get("deezer_artist_id") or external_ids.get("deezer_artist_id"),
+            160,
+        )
+    return artist_name, deezer_artist_id
+
+
+def artist_identity(payload: dict[str, Any]) -> tuple[str, str]:
+    """Canonical identity for an artist-level discovery signal."""
+    artist_name, deezer_artist_id = _extract_artist_fields(payload)
+    folded = fold_text(artist_name)
+    if folded:
+        return f"music:artist:{folded}", "music_artist"
+    if deezer_artist_id:
+        return f"music:deezer_artist:{_norm(deezer_artist_id)}", "music_artist"
+    return "", "music_artist"
+
+
+def artist_aliases(payload: dict[str, Any]) -> list[str]:
+    """Every artist-level identity a payload can be known by."""
+    artist_name, deezer_artist_id = _extract_artist_fields(payload)
+    aliases: list[str] = []
+    folded = fold_text(artist_name)
+    if folded:
+        aliases.append(f"music:artist:{folded}")
+    if deezer_artist_id:
+        aliases.append(f"music:deezer_artist:{_norm(deezer_artist_id)}")
+    return list(dict.fromkeys(aliases))
+
+
 def canonical_identity(payload: dict[str, Any]) -> tuple[str, str]:
-    """Stable, local identity for one exact track, episode, or show."""
+    """Stable, local identity for one exact track, artist, episode, or show."""
     media_type = _clean_str(payload.get("media_type"), 40)
+    if media_type == "music_artist":
+        identity, _ = artist_identity(payload)
+        return identity or "music:artist:", "music_artist"
     is_podcast = media_type.startswith("podcast") or bool(
         payload.get("podcast_feed_id")
         or payload.get("podcast_episode_id")
@@ -473,19 +527,69 @@ def canonical_identity(payload: dict[str, Any]) -> tuple[str, str]:
             "podcast_show",
         )
 
+    external_ids = payload.get("external_ids") if isinstance(payload.get("external_ids"), dict) else {}
     for key, prefix in (
         ("youtube_id", "music:youtube"),
         ("track_id", "music:track"),
         ("isrc", "music:isrc"),
         ("deezer_id", "music:deezer"),
+        ("mbid", "music:mbid"),
     ):
-        value = _clean_str(payload.get(key), 160)
+        raw_val = payload.get(key) or external_ids.get(key)
+        if not raw_val and key == "mbid":
+            raw_val = payload.get("musicbrainz_id") or external_ids.get("musicbrainz_id")
+        value = _clean_str(raw_val, 160)
         if value:
             return f"{prefix}:{_norm(value)}", "music_track"
+    artist_name, _ = _extract_artist_fields(payload)
     return (
-        f"music:meta:{_norm(payload.get('artist'))}\x00{_norm(payload.get('title'))}",
+        f"music:meta:{fold_text(artist_name)}\x00{fold_text(payload.get('title'))}",
         "music_track",
     )
+
+
+def identity_aliases(payload: dict[str, Any]) -> list[str]:
+    """Every identity a discovery payload can be matched by across providers."""
+    if not isinstance(payload, dict):
+        return []
+    media_type = _clean_str(payload.get("media_type"), 40)
+    if media_type == "music_artist":
+        return artist_aliases(payload)
+    is_podcast = media_type.startswith("podcast") or bool(
+        payload.get("podcast_feed_id")
+        or payload.get("podcast_episode_id")
+        or payload.get("itunes_collection_id")
+    )
+    if is_podcast:
+        primary, _ = canonical_identity(payload)
+        aliases = [primary] if primary else []
+        itunes_id = _clean_str(payload.get("itunes_collection_id"), 400)
+        episode = _clean_str(payload.get("podcast_episode_id"), 400)
+        if itunes_id and not episode:
+            aliases.append(f"podcast:show:{_norm(itunes_id)}")
+        return list(dict.fromkeys(aliases))
+
+    external_ids = payload.get("external_ids") if isinstance(payload.get("external_ids"), dict) else {}
+    aliases: list[str] = []
+    for key, prefix in (
+        ("youtube_id", "music:youtube"),
+        ("track_id", "music:track"),
+        ("isrc", "music:isrc"),
+        ("deezer_id", "music:deezer"),
+        ("mbid", "music:mbid"),
+    ):
+        raw_val = payload.get(key) or external_ids.get(key)
+        if not raw_val and key == "mbid":
+            raw_val = payload.get("musicbrainz_id") or external_ids.get("musicbrainz_id")
+        value = _clean_str(raw_val, 160)
+        if value:
+            aliases.append(f"{prefix}:{_norm(value)}")
+    artist_name, _ = _extract_artist_fields(payload)
+    artist_folded = fold_text(artist_name)
+    title_folded = fold_text(payload.get("title"))
+    if artist_folded and title_folded:
+        aliases.append(f"music:meta:{artist_folded}\x00{title_folded}")
+    return list(dict.fromkeys(aliases))
 
 
 def record_not_interested(payload: dict[str, Any]) -> str:
@@ -502,7 +606,10 @@ def record_not_interested(payload: dict[str, Any]) -> str:
             "artist",
             "youtube_id",
             "deezer_id",
+            "deezer_artist_id",
             "isrc",
+            "mbid",
+            "musicbrainz_id",
             "podcast_feed_id",
             "podcast_episode_id",
             "podcast_show_title",
@@ -511,6 +618,8 @@ def record_not_interested(payload: dict[str, Any]) -> str:
         )
         if payload.get(key) is not None
     }
+    if not safe.get("mbid") and safe.get("musicbrainz_id"):
+        safe["mbid"] = safe["musicbrainz_id"]
     identity, media_type = canonical_identity(safe)
     event_id = str(uuid.uuid4())
     created_at = int(time.time())
@@ -534,16 +643,74 @@ def record_not_interested(payload: dict[str, Any]) -> str:
         **safe,
     })
     request_scope.invalidate("listening_rollup:")
+    request_scope.invalidate("discovery_signal_index:")
+    return event_id
+
+
+def record_less_from_artist(payload: dict[str, Any]) -> str:
+    """Record an artist-level soft-negative signal and return its undo id."""
+    if not load_discovery_settings().get("learning_enabled", True):
+        return ""
+    ensure_discovery_profile_policy()
+    artist_name, deezer_artist_id = _extract_artist_fields(payload if isinstance(payload, dict) else {})
+    safe: dict[str, Any] = {
+        key: _clean_str(payload.get(key), 400)
+        for key in (
+            "track_id",
+            "title",
+            "youtube_id",
+            "deezer_id",
+            "isrc",
+            "mbid",
+            "source",
+        )
+        if isinstance(payload, dict) and payload.get(key) is not None
+    }
+    if artist_name:
+        safe["artist"] = artist_name
+    if deezer_artist_id:
+        safe["deezer_artist_id"] = deezer_artist_id
+    safe["media_type"] = "music_artist"
+    identity, media_type = artist_identity(safe)
+    if not identity:
+        return ""
+    event_id = str(uuid.uuid4())
+    created_at = int(time.time())
+    user_db().record_discovery_signal(
+        event_id=event_id,
+        event="less_from_artist",
+        identity=identity,
+        media_type=media_type,
+        positive_delta=0,
+        negative_delta=1,
+        payload=safe,
+        created_at=created_at,
+    )
+    emit("listening-events", {
+        "v": 2,
+        "event": "less_from_artist",
+        "event_id": event_id,
+        "identity": identity,
+        "media_type": media_type,
+        "ts": created_at,
+        **safe,
+    })
+    request_scope.invalidate("listening_rollup:")
+    request_scope.invalidate("discovery_signal_index:")
     return event_id
 
 
 def undo_discovery_feedback(event_id: str) -> bool:
-    return user_db().undo_discovery_signal(_clean_str(event_id, 80), int(time.time()))
+    undone = user_db().undo_discovery_signal(_clean_str(event_id, 80), int(time.time()))
+    if undone:
+        request_scope.invalidate("discovery_signal_index:")
+    return undone
 
 
 def reset_discovery_profile() -> None:
     """Clear the bound account's aggregate, audit rows, and listening log."""
     request_scope.invalidate("listening_rollup:")
+    request_scope.invalidate("discovery_signal_index:")
     try:
         from shared.discovery_seeds import clear_recent_seeds
 
@@ -558,13 +725,119 @@ def reset_discovery_profile() -> None:
             continue
 
 
-def recommendation_multiplier(identity: str) -> float:
+@dataclass
+class _SignalIndex:
+    """Read-time alias index mapping every known alias to stored canonical identities."""
+    signals: dict[str, dict[str, Any]] = field(default_factory=dict)
+    alias_to_identities: dict[str, set[str]] = field(default_factory=dict)
+
+
+def _fold_meta_identity(identity: str) -> str:
+    if not identity.startswith("music:meta:"):
+        return identity
+    rest = identity[len("music:meta:"):]
+    if "\x00" not in rest:
+        return identity
+    artist, title = rest.split("\x00", 1)
+    return f"music:meta:{fold_text(artist)}\x00{fold_text(title)}"
+
+
+def _build_signal_index() -> _SignalIndex:
+    ensure_discovery_profile_policy()
+    db = user_db()
+    signals = db.get_discovery_signals()
+    alias_to_identities: dict[str, set[str]] = {}
+
+    def register(alias: str, canonical: str) -> None:
+        if alias:
+            alias_to_identities.setdefault(alias, set()).add(canonical)
+
+    for identity, sig in signals.items():
+        register(identity, identity)
+        if identity.startswith("music:meta:"):
+            register(_fold_meta_identity(identity), identity)
+        media_type = str(sig.get("media_type") or "")
+        is_artist = media_type == "music_artist" or identity.startswith(("music:artist:", "music:deezer_artist:"))
+        if is_artist:
+            for alias in artist_aliases({"artist": sig.get("artist")}):
+                register(alias, identity)
+        elif media_type == "music_track" or identity.startswith("music:"):
+            for alias in identity_aliases({"artist": sig.get("artist"), "title": sig.get("title")}):
+                register(alias, identity)
+
+    for identity, payload_json in db.get_active_discovery_event_payloads():
+        if identity not in signals:
+            continue
+        try:
+            payload = json.loads(payload_json or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        is_artist = (
+            identity.startswith(("music:artist:", "music:deezer_artist:"))
+            or str(payload.get("media_type") or "") == "music_artist"
+        )
+        aliases = artist_aliases(payload) if is_artist else identity_aliases(payload)
+        for alias in aliases:
+            register(alias, identity)
+
+    return _SignalIndex(signals=signals, alias_to_identities=alias_to_identities)
+
+
+def _load_signal_index() -> _SignalIndex:
+    return request_scope.scoped(
+        f"discovery_signal_index:{user_config_dir()}",
+        _build_signal_index,
+    )
+
+
+def _combined_signal(index: _SignalIndex, aliases: Iterable[str]) -> dict[str, Any] | None:
+    """Aggregate matched canonical signals without double-counting any stored identity."""
+    matched: set[str] = set()
+    for alias in aliases:
+        if not alias:
+            continue
+        targets = index.alias_to_identities.get(alias)
+        if targets:
+            matched.update(targets)
+    if not matched:
+        return None
+    positive = 0.0
+    negatives = 0.0
+    for canonical in matched:
+        sig = index.signals.get(canonical)
+        if not sig:
+            continue
+        positive += max(0.0, float(sig.get("positive_weight") or 0))
+        negatives += max(0.0, float(sig.get("negative_count") or 0))
+    return {"positive_weight": positive, "negative_count": negatives}
+
+
+def recommendation_multiplier(identity: str, payload: dict[str, Any] | None = None) -> float:
     """Soft learning multiplier. It can approach, but never reach, zero."""
     if not load_discovery_settings().get("learning_enabled", True):
         return 1.0
-    ensure_discovery_profile_policy()
-    signal = user_db().get_discovery_signals().get(identity)
-    return _signal_multiplier(signal)
+    index = _load_signal_index()
+    aliases: list[str] = []
+    if identity:
+        aliases.append(identity)
+        if identity.startswith("music:meta:"):
+            aliases.append(_fold_meta_identity(identity))
+    if isinstance(payload, dict):
+        aliases.extend(identity_aliases(payload))
+    return _signal_multiplier(_combined_signal(index, aliases))
+
+
+def artist_recommendation_multiplier(artist: str = "", *, deezer_artist_id: str = "") -> float:
+    """Soft learning multiplier for an artist across discovery surfaces."""
+    if not load_discovery_settings().get("learning_enabled", True):
+        return 1.0
+    aliases = artist_aliases({"artist": artist, "deezer_artist_id": deezer_artist_id})
+    if not aliases:
+        return 1.0
+    index = _load_signal_index()
+    return _signal_multiplier(_combined_signal(index, aliases))
 
 
 def _signal_multiplier(signal: dict[str, Any] | None) -> float:
@@ -595,27 +868,29 @@ def rank_recommendation_rows(
         "autoplay": ("Similar to what you were listening to.", "autoplay_related"),
         "podcast": ("Recommended from your local podcast activity.", "podcast_activity"),
     }
-    signals: dict[str, dict[str, Any]] = {}
+    signal_index: _SignalIndex | None = None
     if load_discovery_settings().get("learning_enabled", True):
-        ensure_discovery_profile_policy()
-        signals = user_db().get_discovery_signals()
+        signal_index = _load_signal_index()
     for index, raw in enumerate(rows):
         row = dict(raw)
+        external_ids = row.get("external_ids") if isinstance(row.get("external_ids"), dict) else {}
+        identity_payload = dict(row)
+        for ext_key in ("youtube_id", "deezer_id", "isrc", "mbid", "musicbrainz_id", "deezer_artist_id"):
+            if not identity_payload.get(ext_key) and external_ids.get(ext_key):
+                identity_payload[ext_key] = external_ids[ext_key]
+        is_podcast = str(identity_payload.get("media_type") or "").startswith("podcast")
+        if (
+            not is_podcast
+            and not any(
+                identity_payload.get(key)
+                for key in ("youtube_id", "track_id", "deezer_id", "isrc", "mbid", "musicbrainz_id")
+            )
+        ):
+            raw_id = str(identity_payload.get("video_id") or identity_payload.get("id") or "").strip()
+            if raw_id and ":" not in raw_id:
+                identity_payload["youtube_id"] = raw_id
         identity = _clean_str(row.get("recommendation_identity"), 500)
         if not identity:
-            external_ids = row.get("external_ids") if isinstance(row.get("external_ids"), dict) else {}
-            identity_payload = dict(row)
-            for ext_key in ("youtube_id", "deezer_id", "isrc"):
-                if not identity_payload.get(ext_key) and external_ids.get(ext_key):
-                    identity_payload[ext_key] = external_ids[ext_key]
-            is_podcast = str(identity_payload.get("media_type") or "").startswith("podcast")
-            if (
-                not is_podcast
-                and not any(identity_payload.get(key) for key in ("youtube_id", "track_id", "deezer_id", "isrc"))
-            ):
-                raw_id = str(identity_payload.get("video_id") or identity_payload.get("id") or "").strip()
-                if raw_id and ":" not in raw_id:
-                    identity_payload["youtube_id"] = raw_id
             identity, _ = canonical_identity(identity_payload)
         base = float(row.get("score") or max(0.001, 1.0 - index * 0.01))
         row["recommendation_identity"] = identity
@@ -626,7 +901,19 @@ def rank_recommendation_rows(
         )
         row["reason"] = _clean_str(row.get("reason")) or fallback_reason
         row["reason_code"] = _clean_str(row.get("reason_code"), 80) or fallback_code
-        row["score"] = round(max(0.0001, base * _signal_multiplier(signals.get(identity))), 6)
+        multiplier = 1.0
+        if signal_index is not None:
+            track_aliases = list(dict.fromkeys([
+                identity,
+                _fold_meta_identity(identity),
+                *identity_aliases(identity_payload),
+            ]))
+            multiplier *= _signal_multiplier(_combined_signal(signal_index, track_aliases))
+            if not is_podcast:
+                multiplier *= _signal_multiplier(
+                    _combined_signal(signal_index, artist_aliases(identity_payload))
+                )
+        row["score"] = round(max(0.0001, base * multiplier), 6)
         ranked.append((float(row["score"]), index, row))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     return [row for _, _, row in ranked]

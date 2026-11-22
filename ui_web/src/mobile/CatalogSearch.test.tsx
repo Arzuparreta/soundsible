@@ -194,7 +194,7 @@ it('adds artist links and "not interested" to a recommended song that has not re
   fireEvent.contextMenu(view.getByText('Song'));
   await waitFor(() => expect(mocks.menu).toHaveBeenCalled());
   const actions = mocks.menu.mock.calls.at(-1)![0].actions as Array<{ label: string; onSelect: () => void }>;
-  expect(actions.map(action => action.label)).toEqual(expect.arrayContaining(['Start radio', 'Go to artist', 'Go to album', 'Because you played Artist', 'Not interested']));
+  expect(actions.map(action => action.label)).toEqual(expect.arrayContaining(['Start radio', 'Go to artist', 'Go to album', 'Because you played Artist', 'Not interested', 'Less from this artist']));
 
   mocks.request
     .mockResolvedValueOnce({ recorded: true, event_id: 'ev-deezer-1' })
@@ -217,6 +217,43 @@ it('adds artist links and "not interested" to a recommended song that has not re
   actions.find(action => action.label === 'Start radio')!.onSelect();
   await waitFor(() => expect(mocks.resolve).toHaveBeenCalled());
   await waitFor(() => expect(startRadio).toHaveBeenCalledWith(expect.objectContaining({ id: 'A1111111111', title: 'Song', artist: 'Artist' })));
+});
+
+it('hides all songs by an artist in Android Discover on "Less from this artist" and restores on Undo', async () => {
+  mocks.feed.mockResolvedValue({
+    items: [
+      { id: 'deezer:1', title: 'Track One', artist: 'Same Artist', external_ids: { deezer_id: '1', deezer_artist_id: '50' }, recommendation_identity: 'r1', reason: 'Recommended' },
+      { id: 'deezer:2', title: 'Track Two', artist: 'Same Artist', external_ids: { deezer_id: '2', deezer_artist_id: '50' }, recommendation_identity: 'r2', reason: 'Recommended' },
+      { id: 'deezer:3', title: 'Other Track', artist: 'Other Artist', external_ids: { deezer_id: '3', deezer_artist_id: '51' }, recommendation_identity: 'r3', reason: 'Recommended' },
+    ],
+  });
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  await waitFor(() => expect(view.getByText('Track One')).toBeTruthy());
+  expect(view.getByText('Track Two')).toBeTruthy();
+
+  fireEvent.contextMenu(view.getByText('Track One'));
+  await waitFor(() => expect(mocks.menu).toHaveBeenCalled());
+  const actions = mocks.menu.mock.calls.at(-1)![0].actions as Array<{ label: string; onSelect: () => void }>;
+  mocks.request
+    .mockResolvedValueOnce({ recorded: true, event_id: 'ev-artist-1' })
+    .mockResolvedValueOnce({ undone: true });
+  actions.find(action => action.label === 'Less from this artist')!.onSelect();
+
+  await waitFor(() => expect(view.queryByText('Track One')).toBeNull());
+  expect(view.queryByText('Track Two')).toBeNull();
+  expect(view.getByText('Other Track')).toBeTruthy();
+  expect(mocks.request).toHaveBeenCalledWith('/api/discovery/feedback', expect.objectContaining({
+    method: 'POST',
+    body: expect.objectContaining({
+      feedback: 'less_from_artist',
+      item: expect.objectContaining({ artist: 'Same Artist', deezer_artist_id: '50' }),
+    }),
+  }));
+
+  const undo = mocks.toastAction.mock.calls.at(-1)![2];
+  undo();
+  await waitFor(() => expect(view.getByText('Track One')).toBeTruthy());
+  expect(view.getByText('Track Two')).toBeTruthy();
 });
 
 it('renders the Discover refresh control beside the Android search bar and hides it while searching', async () => {

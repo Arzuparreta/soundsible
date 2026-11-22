@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections import OrderedDict
 import threading
 
-from shared.discovery_intelligence import load_listening_event_rollups
+from shared.discovery_intelligence import (
+    artist_recommendation_multiplier,
+    load_listening_event_rollups,
+)
 from shared.text_utils import fold_text
 from shared.user_context import current_user_id, user_context
 
@@ -198,6 +201,11 @@ def select_taste_artists(
     for raw_key, count in rollup.artist_saves.items():
         add_artist(raw_key, min(10.0, count * 3.0), title_fallback=True)
 
+    for key in list(scores):
+        mult = _artist_seed_multiplier(key, user_id)
+        if mult < 1.0:
+            scores[key] *= mult * 0.25
+
     if rotate:
         recent = _get_recent(_RECENT_TASTE_SEEDS, user_id)
         for key in recent:
@@ -206,6 +214,16 @@ def select_taste_artists(
 
     ranked = sorted(scores, key=lambda key: scores[key], reverse=True)
     return [display[key] for key in ranked[:limit] if display.get(key)]
+
+
+def _artist_seed_multiplier(artist: str, user_id: str | None = None, *, deezer_artist_id: str = "") -> float:
+    try:
+        if user_id is not None:
+            with user_context(user_id):
+                return artist_recommendation_multiplier(artist, deezer_artist_id=deezer_artist_id)
+        return artist_recommendation_multiplier(artist, deezer_artist_id=deezer_artist_id)
+    except Exception:
+        return 1.0
 
 
 def select_release_seed_artists(
@@ -243,6 +261,14 @@ def select_release_seed_artists(
     for name in select_taste_artists(metadata, fav_ids, limit=limit, user_id=user_id, rotate=False):
         push(name)
 
+    out.sort(
+        key=lambda item: _artist_seed_multiplier(
+            item["name"],
+            user_id,
+            deezer_artist_id=item["deezer_id"],
+        ),
+        reverse=True,
+    )
     return out[:limit]
 
 
