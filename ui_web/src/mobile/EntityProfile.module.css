@@ -24,6 +24,20 @@
   border-radius: var(--radius-full);
   font-size: var(--text-label);
 }
+.profile .secondary {
+  min-height: var(--control-h);
+  padding: 0;
+  background: var(--bg-raised);
+  color: var(--ink-primary);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  font-size: var(--text-label);
+}
+.profile .labelCredit {
+  margin: var(--space-md) var(--gutter) 0;
+  font-size: var(--text-caption);
+  color: var(--ink-tertiary);
+}
 .profile .status {
   min-height: var(--control-h);
   padding: 0;
@@ -35,5 +49,5 @@
   text-align: start;
 }
 @media (min-width: 768px) {
-  .profile .play { padding-inline: var(--space-md); }
+  .profile .play, .profile .secondary { padding-inline: var(--space-md); }
 }

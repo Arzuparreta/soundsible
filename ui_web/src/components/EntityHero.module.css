@@ -70,6 +70,10 @@ button.art { cursor: pointer; }
   min-width: 0; min-height: var(--control-h);
 }
 .toolbar > :last-child { grid-column: 3; }
+.primaryActions {
+  display: inline-flex; align-items: center; gap: var(--space-xs);
+  min-width: 0;
+}
 .context { min-width: 0; font-size: var(--text-label); font-weight: var(--fw-semibold); color: var(--ink-secondary); }
 .viewSelect {
   min-width: 0; width: min(100%, 18rem); min-height: var(--control-h);
@@ -80,7 +84,7 @@ button.art { cursor: pointer; }
   text-overflow: ellipsis; cursor: pointer;
 }
 .viewSelect option { background: var(--bg-raised); color: var(--ink-primary); }
-.play, .options {
+.play, .secondary, .options {
   display: inline-flex; align-items: center; justify-content: center;
   gap: var(--space-xs); flex: none;
   width: var(--control-h); height: var(--control-h);
@@ -89,15 +93,17 @@ button.art { cursor: pointer; }
   white-space: nowrap; cursor: pointer;
 }
 .play { color: var(--ink-on-accent); background: var(--accent-primary); }
+.secondary { color: var(--ink-primary); background: var(--bg-raised); border-color: var(--hairline); }
 .options { color: var(--ink-secondary); background: transparent; border-color: var(--hairline); }
-.play:disabled, .options:disabled { opacity: .45; cursor: not-allowed; }
+.play:disabled, .secondary:disabled, .options:disabled { opacity: .45; cursor: not-allowed; }
 .primaryLabel { display: none; }
 .retry { margin-inline-start: var(--space-sm); }
-.viewSelect:focus-visible, .play:focus-visible, .options:focus-visible, .back:focus-visible {
+.viewSelect:focus-visible, .play:focus-visible, .secondary:focus-visible, .options:focus-visible, .back:focus-visible {
   outline: 2px solid var(--accent-ink); outline-offset: 2px;
 }
 @media (hover: hover) and (pointer: fine) {
   .play:hover:not(:disabled) { background: var(--accent-hover); }
+  .secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--hairline-strong); }
   .options:hover:not(:disabled), .back:hover, .viewSelect:hover { background: var(--bg-hover); color: var(--ink-primary); }
   .credit a:hover { color: var(--ink-primary); }
 }
@@ -111,6 +117,6 @@ button.art { cursor: pointer; }
   .compact, .podcast { --entity-art: 136px; }
   .identity { align-self: end; }
   .title { font-size: clamp(28px, 3vw, 40px); }
-  .play { width: auto; padding-inline: var(--space-lg); }
+  .play, .secondary { width: auto; padding-inline: var(--space-lg); }
   .primaryLabel { display: inline; }
 }

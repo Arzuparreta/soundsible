@@ -834,6 +834,7 @@ export const en = {
     discover: 'Discover',
     library: 'My library',
     topTracks: 'Top tracks',
+    latestRelease: 'Latest release',
     albums: 'Albums',
     singlesEps: 'Singles & EPs',
     related: 'Fans also like',
@@ -850,6 +851,7 @@ export const en = {
     empty: 'No tracks from this album in your library.',
     year: '{year}',
     noTracklist: 'No tracklist available for this album.',
+    moreBy: 'More by {artist}',
   },
   placeholder: {
     notFoundTitle: 'Not found',

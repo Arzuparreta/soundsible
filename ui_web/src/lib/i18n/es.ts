@@ -833,6 +833,7 @@ export const es: Dict = {
     discover: 'Descubrir',
     library: 'Mi biblioteca',
     topTracks: 'Canciones populares',
+    latestRelease: 'Último lanzamiento',
     albums: 'Álbumes',
     singlesEps: 'Singles y EPs',
     related: 'A los fans también les gusta',
@@ -849,6 +850,7 @@ export const es: Dict = {
     empty: 'No hay pistas de este álbum en tu biblioteca.',
     year: '{year}',
     noTracklist: 'No hay tracklist para este álbum.',
+    moreBy: 'Más de {artist}',
   },
   placeholder: {
     notFoundTitle: 'No encontrado',

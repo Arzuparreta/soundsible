@@ -1064,7 +1064,183 @@ def test_artist_releases_omit_track_count(monkeypatch):
 
     assert "track_count" not in album
     assert album["year"] == 2020
+    assert album["release_date"] == "2020-01-01"
     assert album["record_type"] == "album"
+
+
+def test_artist_endpoint_returns_latest_release(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "resolve_artist_id", _mock_resolve_artist_id)
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_profile", _mock_deezer_artist_profile)
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "artist_top_tracks", _mock_deezer_artist_top)
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "related_artists", _mock_deezer_related)
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_artist_releases",
+        lambda artist_id, limit=100: {
+            "albums": [
+                {"deezer_id": "201", "title": "Older Album", "cover": "http://x/201.jpg", "year": 2020, "release_date": "2020-05-01", "record_type": "album"},
+            ],
+            "singles_eps": [
+                {"deezer_id": "202", "title": "Newest Single", "cover": "http://x/202.jpg", "year": 2024, "release_date": "2024-11-15", "record_type": "single"},
+            ],
+        },
+    )
+
+    body = _make_app().test_client().get("/api/catalog/artist?name=Oliver+Heldens&deezer_id=27").get_json()
+
+    assert body["latest_release"]["deezer_id"] == "202"
+    assert body["latest_release"]["title"] == "Newest Single"
+    assert body["latest_release"]["release_date"] == "2024-11-15"
+    assert body["latest_release"]["record_type"] == "single"
+
+
+def test_iso_release_date_rejects_invalid_calendar_dates(monkeypatch):
+    assert catalog_routes._iso_release_date("2024-00-00") == ""
+    assert catalog_routes._iso_release_date("2024-99-99") == ""
+    assert catalog_routes._iso_release_date("2024-02-30") == ""
+    assert catalog_routes._iso_release_date("2024-02-29") == "2024-02-29"
+
+    monkeypatch.setattr(
+        catalog_routes.deezer_catalog,
+        "deezer_get",
+        lambda path, params=None, timeout=8: {
+            "data": [
+                _deezer_album_row("1", "Bogus Date", "album", "2024-99-99"),
+                _deezer_album_row("2", "Zero Month", "album", "2024-00-00"),
+                _deezer_album_row("3", "Real Release", "album", "2024-05-10"),
+            ]
+        },
+    )
+    out = catalog_routes._deezer_artist_releases("27")
+    by_id = {a["deezer_id"]: a for a in out["albums"]}
+    assert by_id["1"]["release_date"] == ""
+    assert by_id["2"]["release_date"] == ""
+    assert by_id["3"]["release_date"] == "2024-05-10"
+    assert max(out["albums"], key=catalog_routes._release_sort_key)["deezer_id"] == "3"
+
+
+def test_album_profile_exposes_metadata_and_duration_fallback(monkeypatch):
+    def fake_get(path, params=None, timeout=8):
+        if path == "album/555":
+            return {
+                "id": 555,
+                "title": "Homework",
+                "artist": {"id": 27, "name": "Daft Punk"},
+                "cover_xl": "http://x/555.jpg",
+                "release_date": "1997-01-20",
+                "label": "Virgin Records",
+                "duration": 0,
+                "record_type": "album",
+                "genres": {"data": [{"name": "Electronic"}, {"name": "House"}]},
+                "tracks": {"data": []},
+            }
+        if path == "album/555/tracks":
+            return {
+                "total": 2,
+                "data": [
+                    {"id": 1, "title": "Daftendirekt", "duration": 164, "artist": {"name": "Daft Punk"}, "track_position": 1, "disk_number": 1},
+                    {"id": 2, "title": "WDPK 83.7 FM", "duration": 28, "artist": {"name": "Daft Punk"}, "track_position": 2, "disk_number": 1},
+                ],
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "deezer_get", fake_get)
+
+    profile = catalog_routes._deezer_album_profile("555")
+
+    assert profile["release_date"] == "1997-01-20"
+    assert profile["label"] == "Virgin Records"
+    assert profile["duration"] == 192
+    assert profile["record_type"] == "album"
+    assert profile["artist_deezer_id"] == "27"
+    assert profile["genre"] == "Electronic, House"
+
+
+def test_album_endpoint_more_by_artist_excludes_self_caps_12_and_sorts_newest(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_album_profile",
+        lambda album_id, library_keys=None: {
+            "title": "Current Album",
+            "artist": "Daft Punk",
+            "artist_deezer_id": "27",
+            "cover": "http://x/200.jpg",
+            "year": 2020,
+            "release_date": "2020-06-01",
+            "label": "Daft Life",
+            "duration": 3120,
+            "record_type": "album",
+            "genre": "Electronic",
+            "tracklist": [],
+        },
+    )
+    albums = [
+        {"deezer_id": "200", "title": "Current Album", "cover": "", "year": 2020, "release_date": "2020-06-01", "record_type": "album"},
+        *[
+            {"deezer_id": str(300 + i), "title": f"Album {i}", "cover": "", "year": 2000 + i, "release_date": f"{2000 + i}-01-01", "record_type": "album"}
+            for i in range(10)
+        ],
+    ]
+    singles = [
+        {"deezer_id": str(400 + i), "title": f"Single {i}", "cover": "", "year": 2021 + i, "release_date": f"{2021 + i}-03-10", "record_type": "single"}
+        for i in range(5)
+    ]
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_artist_releases",
+        lambda artist_id, limit=100: {"albums": albums, "singles_eps": singles},
+    )
+
+    body = _make_app().test_client().get("/api/catalog/album?name=Current+Album&deezer_id=200&artist=Daft+Punk").get_json()
+
+    assert body["release_date"] == "2020-06-01"
+    assert body["label"] == "Daft Life"
+    assert body["duration"] == 3120
+    assert body["record_type"] == "album"
+    assert body["artist_deezer_id"] == "27"
+    more = body["more_by_artist"]
+    assert len(more) == 12
+    assert all(entry["deezer_id"] != "200" for entry in more)
+    dates = [entry["release_date"] for entry in more]
+    assert dates == sorted(dates, reverse=True)
+    assert more[0]["deezer_id"] == "404"
+
+
+def test_album_endpoint_more_by_artist_failure_is_partial(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_album_profile",
+        lambda album_id, library_keys=None: {
+            "title": "Current Album",
+            "artist": "Daft Punk",
+            "artist_deezer_id": "27",
+            "cover": "",
+            "year": 2020,
+            "release_date": "2020-06-01",
+            "label": "Daft Life",
+            "duration": 2400,
+            "record_type": "album",
+            "genre": "Electronic",
+            "tracklist": [],
+        },
+    )
+
+    def boom(artist_id, limit=100):
+        raise RuntimeError("deezer 503")
+
+    monkeypatch.setattr(catalog_routes, "_deezer_artist_releases", boom)
+
+    body = _make_app().test_client().get("/api/catalog/album?name=Current+Album&deezer_id=201&artist=Daft+Punk").get_json()
+
+    assert body["resolved"] is True
+    assert body["more_by_artist"] == []
+    assert {"source": "deezer", "error": "deezer 503"} in body["partial_failures"]
 
 
 def test_artist_endpoint_reports_failing_fetch_instead_of_null(monkeypatch):

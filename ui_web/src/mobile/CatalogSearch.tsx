@@ -37,6 +37,7 @@ export default function CatalogSearch(props: {
   onResolvedMenu?: (track: Track, event?: MenuEvent, actions?: MenuAction[]) => void;
   onPlayOnDevice?: (track: Track) => void;
   onStartRadio?: (track: Track) => Promise<void>;
+  onStartDj?: (tracks: Track[], label: string) => Promise<void>;
   savedEntities?: SavedEntity[]; onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void;
   onPlayCollection?: (tracks: Track[], index: number) => Promise<void>;
   activeId?: string; isActive?: (track: Track) => boolean; onAcquire?: (track: Track) => Promise<void>; onPlay: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
@@ -51,7 +52,7 @@ export default function CatalogSearch(props: {
   const [retry, setRetry] = createSignal(0);
   const catalog = createNativeCatalogActions({ generation: () => props.generation, tracks: () => props.tracks,
     saved: () => props.saved, disconnected: () => props.disconnected, onPlay: props.onPlay,
-    onStartRadio: props.onStartRadio, onAcquire: props.onAcquire, onChanged: props.onChanged, onPlayCollection: props.onPlayCollection });
+    onStartRadio: props.onStartRadio, onStartDj: props.onStartDj, onAcquire: props.onAcquire, onChanged: props.onChanged, onPlayCollection: props.onPlayCollection });
   const { pending, trackFor, isSaved, act } = catalog;
   const [expanded, setExpanded] = createSignal<string | undefined>();
   const [dismissed, setDismissed] = createSignal<Set<string>>(new Set());
@@ -250,7 +251,9 @@ export default function CatalogSearch(props: {
     </div>
     <Show when={entity()?.subject} keyed>{subject => <NativeEntityProfile subject={subject} generation={props.generation} tracks={props.tracks}
       disconnected={props.disconnected} catalog={catalog} isActive={props.isActive} onBack={backEntity} onOpen={openEntity}
-      onEntityMenu={props.onEntityMenu} onTrackMenu={menu} onChanged={props.onChanged} savedEntities={props.savedEntities} offlineMenuActions={props.offlineMenuActions} onReady={restoreScroll} />}</Show>
+      onEntityMenu={props.onEntityMenu} onTrackMenu={menu} onChanged={props.onChanged} savedEntities={props.savedEntities}
+      canStartRadio={!!props.onStartRadio} canStartDj={!!props.onStartDj}
+      offlineMenuActions={props.offlineMenuActions} onReady={restoreScroll} />}</Show>
     <Show when={entity() && catalog.error()}><p role="alert">{catalog.error()}</p></Show>
     <Show when={entity() && catalog.partial()}><p role="status">{t('musicExplorer.partial')}</p></Show>
   </section>;

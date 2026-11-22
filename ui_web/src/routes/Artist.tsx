@@ -2,9 +2,10 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { openSavedEntityMenu } from '../components/savedEntityActions';
 import { CollectionControl } from '../components/CollectionControl';
 import Button from '../components/Button';
+import { Control } from '../design/Control';
 import { CollectionActions } from '../components/CollectionActions';
 import { openActionMenu } from '../components/ActionMenu';
-import { BackIcon, PlayIcon, menuIcons } from '../components/icons';
+import { BackIcon, PlayIcon, RadioIcon, menuIcons } from '../components/icons';
 import { EntityViewSelect } from '../components/EntityViewSelect';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
@@ -18,11 +19,12 @@ import { hasCoverArt, trackCoverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
+import { isPodcastTrack } from '../lib/track';
 import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
-import type { ArtistProfile, CatalogItem, Track } from '../types/music';
+import type { AlbumSummary, ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
-import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
+import { useCatalogCollection, itemArtist, itemToTrack, playCatalogItem, resolveCatalogTrack, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import hero from '../components/EntityHero.module.css';
@@ -82,7 +84,16 @@ export default function Artist() {
 
   const currentProfile = () => profile.loading ? null : profile();
 
+  let disposed = false;
+  let actionEpoch = 0;
+  // Each busy flag belongs to the action that set it, so a later action that
+  // makes an earlier one stale does not leave the earlier button disabled.
+  let radioOwner = 0;
+  let djOwner = 0;
+
   onCleanup(() => {
+    disposed = true;
+    actionEpoch++;
     aborter?.abort();
     cancelCatalogResolve();
   });
@@ -123,8 +134,11 @@ export default function Artist() {
   const topTracks = createMemo<CatalogItem[]>(() => currentProfile()?.top_tracks ?? []);
   const albums = createMemo(() => currentProfile()?.albums ?? []);
   const singlesEps = createMemo(() => currentProfile()?.singles_eps ?? []);
+  const latestRelease = createMemo(() => currentProfile()?.latest_release ?? null);
   const related = createMemo(() => currentProfile()?.related_artists ?? []);
   const candidates = createMemo(() => currentProfile()?.candidates ?? []);
+  const [radioBusy, setRadioBusy] = createSignal(false);
+  const [djBusy, setDjBusy] = createSignal(false);
   // A library link (it carries the artist's catalog id) keeps its library tab
   // while the read is pending or after it failed; only an answered empty read
   // says the artist is no longer owned.
@@ -148,7 +162,14 @@ export default function Artist() {
   createEffect(
     on(
       () => JSON.stringify([name(), viewParams().deezerId ?? '']),
-      () => setViewOverride(null),
+      () => {
+        actionEpoch++;
+        setViewOverride(null);
+        radioOwner = 0;
+        djOwner = 0;
+        setRadioBusy(false);
+        setDjBusy(false);
+      },
       { defer: true },
     ),
   );
@@ -210,6 +231,101 @@ export default function Artist() {
       if (items.length === 0) return;
       const order = shuffled(items);
       void playCatalogItem(order[0], order, context);
+    }
+  };
+
+  const resolveFirstCandidate = async (
+    items: readonly CatalogItem[],
+    isCurrent: () => boolean,
+  ): Promise<{ track: Track; index: number } | null> => {
+    for (let i = 0; i < items.length; i++) {
+      const known = itemToTrack(items[i]);
+      if (known && !isPodcastTrack(known)) return { track: known, index: i };
+    }
+    for (let i = 0; i < items.length; i++) {
+      if (!isCurrent()) return null;
+      const resolved = await resolveCatalogTrack(items[i]).catch(() => null);
+      if (!isCurrent()) return null;
+      if (resolved && !isPodcastTrack(resolved)) return { track: resolved, index: i };
+    }
+    return null;
+  };
+
+  const startArtistRadio = async () => {
+    if (radioBusy()) return;
+    const token = ++actionEpoch;
+    const isCurrent = () => !disposed && token === actionEpoch;
+    radioOwner = token;
+    setRadioBusy(true);
+    try {
+      if (view() === 'library') {
+        const seed = libraryTrackList()[0];
+        if (!seed) return;
+        await actions.startRadio(seed);
+        return;
+      }
+      const candidates = topTracks().slice(0, 10);
+      if (candidates.length === 0) return;
+      const found = await resolveFirstCandidate(candidates, isCurrent);
+      if (!isCurrent()) return;
+      if (!found) {
+        toast.error(t('search.noPreview'));
+        return;
+      }
+      await actions.startRadio(found.track);
+    } catch {
+      if (isCurrent()) toast.error(t('search.noPreview'));
+    } finally {
+      if (!disposed && radioOwner === token) setRadioBusy(false);
+    }
+  };
+
+  const podcastPlaying = () => Boolean(state.playback.currentTrack && isPodcastTrack(state.playback.currentTrack));
+
+  const startArtistDj = async () => {
+    if (djBusy()) return;
+    if (podcastPlaying()) {
+      toast.info(t('modeChange.podcastMessage'));
+      return;
+    }
+    if (view() === 'library') {
+      const tracks = libraryTrackList().filter((track) => !isPodcastTrack(track));
+      if (tracks.length === 0) return;
+      actions.enterAutoMode({ source: tracks[0], deferPlanning: true });
+      if (!state.autoMode.active) {
+        toast.info(t('modeChange.podcastMessage'));
+        return;
+      }
+      actions.startDjSelection(tracks, name());
+      return;
+    }
+    const candidates = topTracks().slice(0, 10);
+    if (candidates.length === 0) return;
+    const token = ++actionEpoch;
+    const isCurrent = () => !disposed && token === actionEpoch;
+    const artistLabel = name();
+    djOwner = token;
+    setDjBusy(true);
+    try {
+      const found = await resolveFirstCandidate(candidates, isCurrent);
+      if (!isCurrent()) return;
+      if (!found) {
+        toast.error(t('search.noPreview'));
+        return;
+      }
+      actions.enterAutoMode({ source: found.track, deferPlanning: true });
+      if (!state.autoMode.active) {
+        toast.info(t('modeChange.podcastMessage'));
+        return;
+      }
+      const seededItems = candidates.map((item, idx) => (
+        idx === found.index && found.track.source === 'preview'
+          ? { ...item, external_ids: { ...item.external_ids, youtube_id: found.track.id } }
+          : item
+      ));
+      await useCatalogCollection(seededItems, artistLabel, 'start', undefined, isCurrent);
+    } finally {
+      if (!disposed && djOwner === token) setDjBusy(false);
     }
   };
 
@@ -281,6 +397,7 @@ export default function Artist() {
   useAppBar({ title: name, back, backLabel: () => t('artist.ariaBack'), heading });
 
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;
+  const radioLabel = () => t(state.autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');
 
   return (
     <div class="view">
@@ -323,19 +440,35 @@ export default function Artist() {
                   { value: 'library', label: `${t('artist.library')}${membership.loading || membershipFailed() ? '' : ` (${libraryTrackList().length})`}` },
                 ]} />
             </Show>
-            <Show when={state.autoMode.active} fallback={
-              <button type="button" class={hero.play} aria-label={t('artist.play')} title={t('artist.play')} disabled={!playable()} onClick={playAll}>
-                <PlayIcon size={16} />
-                <span class={hero.primaryLabel}>{t('artist.play')}</span>
-              </button>
-            }>
-              <CollectionActions title={name()} auto iconOnlyOnMobile buttonClass={hero.play}
-                tracks={view() === 'library' ? libraryTrackList() : undefined}
-                items={view() === 'library' ? undefined : topTracks()} />
-            </Show>
+            <div class={hero.primaryActions}>
+              <Show when={state.autoMode.active} fallback={
+                <button type="button" class={hero.play} aria-label={t('artist.play')} title={t('artist.play')} disabled={!playable()} onClick={playAll}>
+                  <PlayIcon size={16} />
+                  <span class={hero.primaryLabel}>{t('artist.play')}</span>
+                </button>
+              }>
+                <CollectionActions title={name()} auto iconOnlyOnMobile buttonClass={hero.play}
+                  tracks={view() === 'library' ? libraryTrackList() : undefined}
+                  items={view() === 'library' ? undefined : topTracks()} />
+              </Show>
+              <Control
+                class={hero.secondary}
+                aria-label={radioLabel()}
+                title={radioLabel()}
+                disabled={!playable() || radioBusy()}
+                aria-busy={radioBusy() || undefined}
+                onClick={() => void startArtistRadio()}
+              >
+                <RadioIcon size={16} />
+                <span class={hero.primaryLabel}>{radioLabel()}</span>
+              </Control>
+            </div>
             <CollectionControl
               compact menuActions={() => [
-                ...(!state.autoMode.active ? [{ icon: menuIcons.shuffle(), label: t('artist.shuffle'), disabled: !playable(), onSelect: shuffle }] : []),
+                ...(!state.autoMode.active ? [
+                  { icon: menuIcons.shuffle(), label: t('artist.shuffle'), disabled: !playable(), onSelect: shuffle },
+                  { icon: menuIcons.changeSession(), label: t('autoMode.startDj'), disabled: !playable() || djBusy() || podcastPlaying(), onSelect: () => void startArtistDj() },
+                ] : []),
                 ...(candidates().length ? [{ icon: menuIcons.artist(), label: t('artist.notThisArtist'), onSelect: chooseCandidate }] : []),
               ]}
               onMenuReady={(open) => { openCollectionMenu = open; }}
@@ -361,6 +494,7 @@ export default function Artist() {
                   topTracks={topTracks()}
                   albums={albums()}
                   singlesEps={singlesEps()}
+                  latestRelease={latestRelease()}
                   related={related()}
                   loading={profile.loading}
                   saving={saving()}
@@ -395,8 +529,9 @@ function LibraryView(props: { tracks: Track[]; loading: boolean; failed: boolean
 
 function DiscoverView(props: {
   topTracks: CatalogItem[];
-  albums: Array<{ deezer_id: string; title: string; cover: string; year?: number | null; track_count?: number }>;
-  singlesEps: Array<{ deezer_id: string; title: string; cover: string; year?: number | null; track_count?: number }>;
+  albums: AlbumSummary[];
+  singlesEps: AlbumSummary[];
+  latestRelease: AlbumSummary | null;
   related: Array<{ deezer_id: string; name: string; picture: string; nb_fans: number }>;
   loading: boolean;
   saving: Set<string>;
@@ -405,7 +540,7 @@ function DiscoverView(props: {
   artistName: string;
 }) {
   return <ArtistDiscoveryView topTracks={props.topTracks} albums={props.albums} singlesEps={props.singlesEps}
-    related={props.related} loading={props.loading} artistName={props.artistName}
+    latestRelease={props.latestRelease} related={props.related} loading={props.loading} artistName={props.artistName}
     renderSong={(item, index, queue) => <CatalogResultRow item={item} index={index} active={isPlayingItem(item)}
       saving={props.saving.has(item.id)} onPlay={() => props.onPlayItem(item, queue)} onDownload={() => props.onSaveItem(item)} />}
     renderLink={link => <MusicLink class={link.class} path={link.entity.destination} onMenu={event => void openSavedEntityMenu(link.entity, event)}>{link.children}</MusicLink>} />;

@@ -7,7 +7,7 @@ import { EntityViewSelect } from '../components/EntityViewSelect';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { CoverImage } from '../components/CoverImage';
-import { ArtistLinks } from '../components/MusicLinks';
+import { ArtistLinks, MusicLink } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { actions, musicLibrary, isPlayingItem, state } from '../stores';
@@ -15,11 +15,12 @@ import { api } from '../lib/api';
 import { coverUrl, hasCoverArt, trackCoverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import { trackCount } from '../lib/format';
+import { formatReleaseDate, formatTotalDuration } from '../lib/releaseFormat';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
 import { albumPath, artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
-import type { AlbumProfile, CatalogAlbum, CatalogItem, Track } from '../types/music';
+import type { AlbumProfile, AlbumSummary, CatalogAlbum, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
@@ -29,6 +30,8 @@ import { coverGradient } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { CatalogResultRow } from '../components/CatalogResultRow';
+import { ReleaseShelf } from '../components/ArtistDiscoveryView';
+import { openSavedEntityMenu } from '../components/savedEntityActions';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { EntityTrackList } from '../components/EntityTrackList';
 import { tabRoot } from '../lib/tabMemory';
@@ -170,7 +173,25 @@ export default function Album() {
     ? (membership.loading || membershipFailed() ? undefined : libraryTrackList().length)
     : tracklist().length || undefined;
   const year = () => currentProfile()?.year ?? membershipRead()?.album.year ?? undefined;
+  const displayArtist = () => currentProfile()?.artist || artistName();
   const displayTitle = () => currentProfile()?.title || title();
+  const totalDuration = () => {
+    if (view() === 'library') {
+      if (membership.loading || membershipFailed()) return 0;
+      return membershipRead()?.album.duration || libraryTrackList().reduce((sum, tr) => sum + (tr.duration ?? 0), 0);
+    }
+    return currentProfile()?.duration || tracklist().reduce((sum, item) => sum + (item.duration ?? 0), 0);
+  };
+  const metaParts = createMemo(() => {
+    const parts: string[] = [];
+    const date = formatReleaseDate(currentProfile()?.release_date, year());
+    if (date) parts.push(date);
+    const n = shownCount();
+    if (n) parts.push(trackCount(n));
+    const runtime = formatTotalDuration(totalDuration());
+    if (runtime) parts.push(runtime);
+    return parts;
+  });
 
   /**
    * This record as a context, for the tab it is played from. The queue's card
@@ -328,11 +349,16 @@ export default function Album() {
             <h1 ref={setHeading} class={hero.title}><button type="button" class={hero.titleButton}
               data-testid="collection-header-name" aria-haspopup="dialog" title={t('savedEntities.options')}
               {...titleMenuTap} onContextMenu={headerContextMenu}>{displayTitle()}</button></h1>
-            <ArtistLinks class={hero.credit} music={{ artist: currentProfile()?.artist || artistName(), view: view(), artistId: membershipRead()?.album.album_artist_id ?? undefined }} />
+            <ArtistLinks class={hero.credit} music={{ artist: displayArtist(), view: view(), artistId: membershipRead()?.album.album_artist_id ?? undefined }} />
             <span class={hero.meta}>
-              <Show when={year()}><span>{year()}</span></Show>
-              <Show when={year() && shownCount()}><span aria-hidden="true">·</span></Show>
-              <Show when={shownCount()}>{(n) => <span>{trackCount(n())}</span>}</Show>
+              <For each={metaParts()}>
+                {(part, idx) => (
+                  <>
+                    <Show when={idx() > 0}><span aria-hidden="true">·</span></Show>
+                    <span>{part}</span>
+                  </>
+                )}
+              </For>
             </span>
           </div>
           <div class={hero.toolbar} data-entity-toolbar>
@@ -381,6 +407,9 @@ export default function Album() {
               }>
                 <DiscoverView
                   tracklist={tracklist()}
+                  label={currentProfile()?.label || ''}
+                  artistName={displayArtist()}
+                  moreByArtist={currentProfile()?.more_by_artist ?? []}
                   saving={saving()}
                   onPlayItem={(item, queue) => void playCatalogItem(item, queue, albumContext('discover'))}
                   onSaveItem={saveItem}
@@ -408,6 +437,9 @@ function LibraryView(props: { tracks: Track[]; context: PlaybackContextDescripto
 
 function DiscoverView(props: {
   tracklist: CatalogItem[];
+  label: string;
+  artistName: string;
+  moreByArtist: AlbumSummary[];
   saving: Set<string>;
   onPlayItem: (item: CatalogItem, queue?: CatalogItem[]) => void;
   onSaveItem: (item: CatalogItem) => void;
@@ -429,6 +461,21 @@ function DiscoverView(props: {
             )}
           </For>
         </div>
+      </Show>
+      <Show when={props.label}>
+        <p class={styles.labelCredit}>℗ {props.label}</p>
+      </Show>
+      <Show when={props.moreByArtist.length > 0 && props.artistName}>
+        <ReleaseShelf
+          title={t('album.moreBy', { artist: props.artistName })}
+          artistName={props.artistName}
+          releases={props.moreByArtist}
+          renderLink={link => (
+            <MusicLink class={link.class} path={link.entity.destination} onMenu={event => void openSavedEntityMenu(link.entity, event)}>
+              {link.children}
+            </MusicLink>
+          )}
+        />
       </Show>
     </div>
   );

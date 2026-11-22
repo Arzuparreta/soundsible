@@ -3,11 +3,14 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
 import { artistPath, resolveViewMode } from '../lib/artistRoute';
+import { trackCount } from '../lib/format';
+import { formatReleaseDate, formatTotalDuration } from '../lib/releaseFormat';
 import { itemArtist } from '../lib/catalogTrack';
 import { coverUrl } from '../lib/media';
-import { ArtistDiscoveryView, fansLabel, formatFans } from '../components/ArtistDiscoveryView';
+import { ArtistDiscoveryView, ReleaseShelf, fansLabel, formatFans } from '../components/ArtistDiscoveryView';
 import { EntityViewSelect } from '../components/EntityViewSelect';
-import { BackIcon, MoreIcon, PlayIcon, menuIcons } from '../components/icons';
+import { BackIcon, MoreIcon, PlayIcon, RadioIcon, menuIcons } from '../components/icons';
+import { Control } from '../design/Control';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { CoverImage } from '../components/CoverImage';
 import { CollectionDownloadView } from '../components/CollectionDownloadView';
@@ -35,6 +38,7 @@ export default function NativeEntityProfile(props: {
   onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void;
   onTrackMenu: (item: CatalogItem, event?: MenuEvent) => void;
   onReady?: () => void; onChanged: () => Promise<void>; savedEntities?: SavedEntity[];
+  canStartRadio?: boolean; canStartDj?: boolean;
   offlineMenuActions?: (tracks: Track[]) => MenuAction[];
 }) {
   const profile = createNativeEntityProfile({ subject: () => props.subject, generation: () => props.generation, disconnected: () => props.disconnected });
@@ -93,6 +97,9 @@ export default function NativeEntityProfile(props: {
     openContextMenu({ title: props.subject.name, actions: [
       { icon: menuIcons.shuffle(), label: t('artist.shuffle'), disabled: disabled || !songs().length || !!props.catalog.pending(),
         onSelect: () => { if (current()) void props.catalog.playCollection(songs(), 0, context(), true); } },
+      ...(props.subject.kind === 'artist' && props.canStartDj ? [{ icon: menuIcons.changeSession(), label: t('autoMode.startDj'),
+        disabled: disabled || !songs().length || !!props.catalog.pending(),
+        onSelect: () => { if (current()) void props.catalog.startDj(songs(), props.subject.name); } }] : []),
       nativeEntityMark(bookmark(), () => props.savedEntities ?? [], current, props.onChanged, () => { if (current()) setBookmarkError(true); }),
       ...(subject().deezerId || discovered().length ? [{ label: t('collectionControl.addSongs'), disabled, onSelect: () => { if (current()) void collection.saveSongs(); } }] : []),
       ...(subject().deezerId ? [{ label: t(props.subject.kind === 'artist' ? 'collectionControl.downloadArtist' : 'collectionControl.downloadAlbum', { title: props.subject.name }), disabled,
@@ -118,6 +125,28 @@ export default function NativeEntityProfile(props: {
       active={!!track() && !!props.isActive?.(track()!)} busy={props.catalog.pending() === item.id}
       disabled={props.disconnected} onActivate={() => void props.catalog.playCollection(queue, index - 1, context())} onMenu={event => props.onTrackMenu(item, event)} />;
   };
+  const albumArtist = () => album()?.artist || props.subject.artist || '';
+  const albumMetaParts = createMemo(() => {
+    if (props.subject.kind !== 'album') return [];
+    const record = album();
+    const localTracks = owned();
+    const parts: string[] = [];
+    const year = record?.year ?? localTracks.find(track => track.year)?.year ?? undefined;
+    const date = formatReleaseDate(record?.release_date, year);
+    if (date) parts.push(date);
+    const list = songs();
+    if (list.length) parts.push(trackCount(list.length));
+    const totalSec = view() === 'library' || !record
+      ? localTracks.reduce((sum, tr) => sum + (tr.duration ?? 0), 0)
+      : (record.duration || record.tracklist.reduce((sum, item) => sum + (item.duration ?? 0), 0));
+    const runtime = formatTotalDuration(totalSec);
+    if (runtime) parts.push(runtime);
+    return parts;
+  });
+  const renderEntityLink = (link: { entity: SavedEntity; class: string; children: import('solid-js').JSX.Element }) => {
+    const tap = createResponsiveTap({ onTap: () => props.onOpen(link.entity.destination), onLongPress: () => props.onEntityMenu?.(link.entity) });
+    return <button type="button" class={link.class} aria-label={link.entity.name} data-entity-destination={link.entity.destination} disabled={props.disconnected} {...tap}>{link.children}</button>;
+  };
   return <section class={`${styles.library} ${profileStyles.profile}`} data-testid="android-entity-profile">
     <header class={`${hero.header} ${profileStyles.header}`}>
       <button class={`${hero.back} ${profileStyles.back}`} type="button" aria-label={t('artist.ariaBack')} onClick={props.onBack}><BackIcon size={20} /></button>
@@ -127,6 +156,13 @@ export default function NativeEntityProfile(props: {
           <h1 class={`${hero.title} ${profileStyles.title}`}>{props.subject.name}</h1>
           <Show when={props.subject.artist}><span class={hero.credit}>{props.subject.artist}</span></Show>
           <Show when={artist()?.metadata?.nb_fans}><span class={hero.meta}>{fansLabel(artist()!.metadata!.nb_fans)}</span></Show>
+          <Show when={albumMetaParts().length > 0}>
+            <span class={hero.meta}>
+              <For each={albumMetaParts()}>
+                {(part, idx) => <><Show when={idx() > 0}><span aria-hidden="true">·</span></Show><span>{part}</span></>}
+              </For>
+            </span>
+          </Show>
           <Show when={collection.job() && step() !== 'download'}>
             <Show when={step() === 'owned'} fallback={<button class={profileStyles.status} type="button" data-android-collection-progress onClick={details}>
               {progressLabel()}
@@ -139,9 +175,19 @@ export default function NativeEntityProfile(props: {
               options={[{ value: 'discover', label: t('artist.discover') }, { value: 'library', label: `${t('artist.library')} ${owned().length}` }]}
               onChange={value => setOverride(value === 'library' ? 'library' : 'discover')} />
           </Show>
-          <button class={`${hero.play} ${profileStyles.play}`} type="button" aria-label={t('artist.play')}
-            aria-busy={!!props.catalog.pending() || undefined} disabled={props.disconnected || !songs().length || !!props.catalog.pending()}
-            onClick={() => void props.catalog.playCollection(songs(), 0, context())}><PlayIcon size={20} /><span class={hero.primaryLabel}>{t('artist.play')}</span></button>
+          <div class={hero.primaryActions}>
+            <button class={`${hero.play} ${profileStyles.play}`} type="button" aria-label={t('artist.play')}
+              aria-busy={!!props.catalog.pending() || undefined} disabled={props.disconnected || !songs().length || !!props.catalog.pending()}
+              onClick={() => void props.catalog.playCollection(songs(), 0, context())}><PlayIcon size={20} /><span class={hero.primaryLabel}>{t('artist.play')}</span></button>
+            <Show when={props.subject.kind === 'artist' && props.canStartRadio}>
+              <Control class={`${hero.secondary} ${profileStyles.secondary}`} aria-label={t('trackActions.startRadio')}
+                aria-busy={!!props.catalog.pending() || undefined}
+                disabled={props.disconnected || !songs().length || !!props.catalog.pending()}
+                onClick={() => void props.catalog.startRadio(songs())}>
+                <RadioIcon size={18} /><span class={hero.primaryLabel}>{t('trackActions.startRadio')}</span>
+              </Control>
+            </Show>
+          </div>
           <button class={`${hero.options} ${profileStyles.options}`} type="button" aria-label={`${t('savedEntities.options')}: ${props.subject.name}`}
             aria-haspopup="dialog" disabled={props.disconnected || collection.busy()} onClick={collectionMenu}><MoreIcon size={20} /></button>
         </div>
@@ -151,11 +197,18 @@ export default function NativeEntityProfile(props: {
     <Show when={profile.error() || libraryError()}><p role="alert">{t('common.loadFailed')} <button onClick={() => { setLibraryRetry(value => value + 1); profile.retry(); }}>{t('common.retry')}</button></p></Show>
     <Show when={profile.profile()?.partial_failures?.length}><p role="status">{t('musicExplorer.partial')}</p></Show>
     <Show when={profile.loading() || libraryLoading()}><p role="status">{t('common.loading')}</p></Show>
-    <Show when={view() === 'discover' && artist()} fallback={<For each={songs()} fallback={<Show when={!profile.loading() && !libraryLoading()}><EmptyState>{t('artist.empty')}</EmptyState></Show>}>{(item, index) => songRow(item, index() + 1, songs())}</For>}>
+    <Show when={view() === 'discover' && artist()} fallback={<>
+      <For each={songs()} fallback={<Show when={!profile.loading() && !libraryLoading()}><EmptyState>{t('artist.empty')}</EmptyState></Show>}>{(item, index) => songRow(item, index() + 1, songs())}</For>
+      <Show when={view() === 'discover' && album()?.label}>
+        <p class={profileStyles.labelCredit}>℗ {album()!.label}</p>
+      </Show>
+      <Show when={view() === 'discover' && (album()?.more_by_artist?.length ?? 0) > 0 && albumArtist()}>
+        <ReleaseShelf title={t('album.moreBy', { artist: albumArtist() })} artistName={albumArtist()} releases={album()!.more_by_artist!} renderLink={renderEntityLink} />
+      </Show>
+    </>}>
       <ArtistDiscoveryView artistName={props.subject.name} topTracks={artist()?.top_tracks ?? []} albums={artist()?.albums ?? []}
-        singlesEps={artist()?.singles_eps ?? []} related={artist()?.related_artists ?? []} loading={profile.loading()} renderSong={songRow}
-        renderLink={link => { const tap = createResponsiveTap({ onTap: () => props.onOpen(link.entity.destination), onLongPress: () => props.onEntityMenu?.(link.entity) });
-          return <button type="button" class={link.class} aria-label={link.entity.name} data-entity-destination={link.entity.destination} disabled={props.disconnected} {...tap}>{link.children}</button>; }} />
+        singlesEps={artist()?.singles_eps ?? []} latestRelease={artist()?.latest_release ?? null} related={artist()?.related_artists ?? []} loading={profile.loading()} renderSong={songRow}
+        renderLink={renderEntityLink} />
     </Show>
   </section>;
 }
