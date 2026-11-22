@@ -219,6 +219,22 @@ it('adds artist links and "not interested" to a recommended song that has not re
   await waitFor(() => expect(startRadio).toHaveBeenCalledWith(expect.objectContaining({ id: 'A1111111111', title: 'Song', artist: 'Artist' })));
 });
 
+it('offers the shared queue pair on a Discover song that has not resolved yet, handing it over as a pending song', async () => {
+  mocks.feed.mockResolvedValue({ items: [{ id: row.id, title: 'Song', artist: 'Artist', external_ids: { deezer_id: '1' }, recommendation_identity: 'r1' }] });
+  const queued: Track[] = [];
+  const queueActions = vi.fn((track: Track) => [{ label: 'queue pair', onSelect: () => { queued.push(track); } }]);
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} queueActions={queueActions} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.contextMenu(view.getByText('Song'));
+  await waitFor(() => expect(mocks.menu).toHaveBeenCalled());
+  const actions = mocks.menu.mock.calls.at(-1)![0].actions as Array<{ label: string; onSelect: () => void }>;
+  expect(actions.map(action => action.label).slice(0, 2)).toEqual(['Play', 'queue pair']);
+  actions[1].onSelect();
+  expect(queued).toEqual([expect.objectContaining({ id: row.id, title: 'Song', artist: 'Artist',
+    pendingResolve: { catalogItemId: row.id, title: 'Song', artist: 'Artist', duration: undefined } })]);
+  expect(mocks.resolve).not.toHaveBeenCalled();
+});
+
 it('hides all songs by an artist in Android Discover on "Less from this artist" and restores on Undo', async () => {
   mocks.feed.mockResolvedValue({
     items: [

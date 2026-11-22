@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { api, ApiError } from '../lib/api';
 import { itemArtist } from '../lib/catalogTrack';
 import { savedFromCatalogItem, savedToTrack } from '../lib/saved';
-import { createNativeCatalogActions } from './catalogActions';
+import { createNativeCatalogActions, pendingCatalogTrack } from './catalogActions';
 import { createNativeDiscoveryFeed } from './discoveryFeed';
 import NativeEntityProfile from './EntityProfile';
 import { catalogFeedback, nativeFeedbackActions, nativeMusicLinkActions } from './songActions';
@@ -35,6 +35,8 @@ export default function CatalogSearch(props: {
   generation: number; tracks: Track[]; saved: SavedEntry[]; disconnected: boolean; history?: ReturnType<typeof createSearchHistoryStorage>;
   offlineMenuActions?: (tracks: Track[]) => MenuAction[];
   onResolvedMenu?: (track: Track, event?: MenuEvent, actions?: MenuAction[]) => void;
+  /** "Play next" and "Add to queue" for a song, matched to a video or not. */
+  queueActions?: (track: Track) => MenuAction[];
   onPlayOnDevice?: (track: Track) => void;
   onStartRadio?: (track: Track) => Promise<void>;
   onStartDj?: (tracks: Track[], label: string) => Promise<void>;
@@ -238,6 +240,7 @@ export default function CatalogSearch(props: {
       : [];
     openContextMenu({ title: item.title, actions: [
       { label: t('common.play'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('play') },
+      ...(props.queueActions && item.title && itemArtist(item) ? props.queueActions(pendingCatalogTrack(item)) : []),
       ...radioActions,
       ...(props.onPlayOnDevice && item.title && itemArtist(item) ? [{ label: t('trackActions.playOnDevice'), disabled: props.disconnected,
         onSelect: () => { if (current()) props.onPlayOnDevice!(savedToTrack(savedFromCatalogItem(item), new Map())!); } }] : []),
