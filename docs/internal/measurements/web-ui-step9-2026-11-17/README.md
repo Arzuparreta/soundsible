@@ -138,23 +138,10 @@ packaged asset before sync. This is a development artifact, not a release.
 Local `scripts/android.py build` passed APK/test-APK assembly and lint.
 `aapt dump badging` confirms `sdkVersion: 26`; ZIP inspection confirms
 `assets/public/webview-error.html`, WebView 120 and the matching configured
-error path in the actual APK. [The packaged update screen](webview-update-screen.png)
+error path in the actual APK. The packaged update screen
 was also rendered with JavaScript disabled; this is an HTML/package check,
 not an old Android device test. Six checker tests passed. The separate `:app:testDebugUnitTest` task passed 102 tests in 27 report
 files with zero failures/errors/skips. Remote emulator checks remain required.
-
-## Visual evidence
-
-| View | Before | After |
-| --- | --- | --- |
-| Desktop | [Before](player-desktop-before.png) | [After](player-desktop-after.png) |
-| Phone | [Before](player-phone-before.png) | [After](player-phone-after.png) |
-
-[Short wheel-scroll recording](player-scroll-after.webm) and
-[native touch/fling and pull-down recording at CPU 6×](player-touch-after.webm). These captures are
-separate from timed runs. Visual review confirms the retained artwork,
-material, rows and composition. The font, density and theme screenshot
-contracts remain covered by the browser suite.
 
 ## Validation checkpoint
 

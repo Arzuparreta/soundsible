@@ -17,21 +17,6 @@ returns without scrolling. Canonical album/artist pages remain under Search
 prevents new raw controls and literal recipe debt without blocking legacy code.
 See [the design contracts](../../ui/DESIGN_SYSTEM.md).
 
-## Visual evidence
-
-Production fixture with real artwork, dark theme and normal density.
-
-| View | Before | After |
-| --- | --- | --- |
-| Desktop | [Before](player-desktop-before.png) | [After](player-desktop-after.png) |
-| Phone | [Before](player-phone-before.png) | [After](player-phone-after.png) |
-
-[Short scroll recording](player-scroll-after.webm). Screenshot baselines in
-`ui_web/tests/browser/design-system.spec.ts-snapshots` cover dark/light ×
-Compact/Normal/Large on Chromium and WebKit, phone and desktop. All 24 were
-visually reviewed after verifying the actual UI font loaded. The recording
-is a separate run and is not used for timings.
-
 ## Measured tradeoffs
 
 Three runs per case on the same Ryzen desktop with NVIDIA hardware composition.

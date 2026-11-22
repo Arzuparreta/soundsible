@@ -206,9 +206,8 @@ session should:
 
 1. Read the status table. The first step with an `Open` item is the next one.
 2. Branch from `origin/main` as `fix/web-ui-stepN-…` or `perf/web-ui-stepN-…`.
-3. Follow `AGENTS.md` for the browser suite, before/after images
-   (`docs/internal/measurements/web-ui-stepN-<date>/`), the impact label and
-   the CI gate, then update the status table in the same pull request.
+3. Follow `AGENTS.md` for the browser suite, before/after images in the
+   pull request description, the impact label and the CI gate, then update the status table in the same pull request.
 
 Every performance step is measured with the rendering bench
 ([ui_web/perf/README.md](../../../ui_web/perf/README.md)) against

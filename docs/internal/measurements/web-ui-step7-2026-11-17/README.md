@@ -24,19 +24,6 @@ Step 7 of the [web UI review](../../audits/WEB_UI_REVIEW_HANDOFF.md).
   cover reader no longer reruns when another track changes or a full snapshot
   replaces the collection (A3). Account reset still removes every key and hint.
 
-## Visual evidence
-
-The production fixture, normal density, dark theme, with playback running. These are
-rendering changes; labels, artwork, dimensions and composition stay equivalent.
-
-| View | Before | After |
-| --- | --- | --- |
-| Desktop | [Before](player-desktop-before.png) | [After](player-desktop-after.png) |
-| Phone browser | [Before](player-phone-before.png) | [After](player-phone-after.png) |
-
-[Short scroll recording](player-scroll-after.webm). Recording is a separate run,
-not used for performance numbers.
-
 ## Reproduction
 
 Use `SURFACES=player-browser,player-queue RATES=1,6 REPEATS=3 TAG=step7 node
