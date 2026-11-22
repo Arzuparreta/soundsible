@@ -86,6 +86,10 @@ export default function Artist() {
 
   let disposed = false;
   let actionEpoch = 0;
+  // Each busy flag belongs to the action that set it, so a later action that
+  // makes an earlier one stale does not leave the earlier button disabled.
+  let radioOwner = 0;
+  let djOwner = 0;
 
   onCleanup(() => {
     disposed = true;
@@ -161,6 +165,8 @@ export default function Artist() {
       () => {
         actionEpoch++;
         setViewOverride(null);
+        radioOwner = 0;
+        djOwner = 0;
         setRadioBusy(false);
         setDjBusy(false);
       },
@@ -249,6 +255,7 @@ export default function Artist() {
     if (radioBusy()) return;
     const token = ++actionEpoch;
     const isCurrent = () => !disposed && token === actionEpoch;
+    radioOwner = token;
     setRadioBusy(true);
     try {
       if (view() === 'library') {
@@ -269,7 +276,7 @@ export default function Artist() {
     } catch {
       if (isCurrent()) toast.error(t('search.noPreview'));
     } finally {
-      if (isCurrent()) setRadioBusy(false);
+      if (!disposed && radioOwner === token) setRadioBusy(false);
     }
   };
 
@@ -297,6 +304,7 @@ export default function Artist() {
     const token = ++actionEpoch;
     const isCurrent = () => !disposed && token === actionEpoch;
     const artistLabel = name();
+    djOwner = token;
     setDjBusy(true);
     try {
       const found = await resolveFirstCandidate(candidates, isCurrent);
@@ -317,7 +325,7 @@ export default function Artist() {
       ));
       await useCatalogCollection(seededItems, artistLabel, 'start', undefined, isCurrent);
     } finally {
-      if (isCurrent()) setDjBusy(false);
+      if (!disposed && djOwner === token) setDjBusy(false);
     }
   };
 

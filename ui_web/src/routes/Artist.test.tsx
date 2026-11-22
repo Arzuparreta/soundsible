@@ -366,6 +366,30 @@ describe('Artist route view mode', () => {
     ));
   });
 
+  it('re-enables Start radio when a DJ start makes the pending radio start stale', async () => {
+    apiMock.getArtistProfile.mockResolvedValue(profileFor('Daft Punk', false));
+    let finishRadioResolve: (value: unknown) => void = () => {};
+    apiMock.resolveCatalogItem
+      .mockImplementationOnce(() => new Promise(resolve => { finishRadioResolve = resolve; }))
+      .mockResolvedValue({ video_id: 'vid-dp-1' });
+
+    renderAt('/artist/Daft%20Punk?view=discover');
+    await screen.findByText('Daft Punk Hit');
+
+    const radio = screen.getByRole('button', { name: 'Start radio' });
+    fireEvent.click(radio);
+    await waitFor(() => expect(radio).toBeDisabled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+    const menu = menuMock.open.mock.calls.at(-1)![0] as { actions: Array<{ label: string; onSelect: () => void }> };
+    menu.actions.find(action => action.label === 'Start a DJ session')!.onSelect();
+    await waitFor(() => expect(storeMock.startDjSelection).toHaveBeenCalled());
+
+    finishRadioResolve({ video_id: 'vid-late' });
+    await waitFor(() => expect(radio).not.toBeDisabled());
+    expect(storeMock.startRadio).not.toHaveBeenCalled();
+  });
+
   it('catches library Start radio errors with a toast instead of an unhandled rejection', async () => {
     storeMock.library = [{ id: 'l1', title: 'Owned', artist: 'Owned Artist', album: 'A' }];
     storeMock.startRadio.mockRejectedValueOnce(new Error('offline'));
