@@ -128,12 +128,15 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         val source = sources[index] ?: return@synchronized "absent"
         "ended=${source.ended}, queued=${source.queued}, supplied=${source.clock.supplied}, played=${source.clock.played(positionUs() * config!!.sampleRate / 1000000)}, playing=${source.playing}"
     }
-    fun blend(lengthMs: Long, value: ProgramMixCurve.Technique, echoDelaySeconds: Double? = null) = synchronized(lock) {
+    /**
+     * False, and nothing changes, when the incoming input is not ready: the
+     * decoder thread can pause or flush it after the caller's own check.
+     */
+    fun blend(lengthMs: Long, value: ProgramMixCurve.Technique, echoDelaySeconds: Double? = null): Boolean = synchronized(lock) {
         require(lengthMs in 50..60000 && sources.all { it != null } && mixStart == Long.MAX_VALUE)
         val rate = config!!.sampleRate
         require(recovery == null) { "Current input is recovering" }
-        val incoming = sources[1 - active]!!
-        require(readyInput(1 - active)) { "Incoming input not ready" }
+        if (!readyInput(1 - active)) return@synchronized false
         restoration = null
         technique = value
         configureEcho(value, echoDelaySeconds)
@@ -146,14 +149,15 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             window = ProgramMixWindow(mixStart, mixLength, active, 1 - active, outputEpoch)
         }
         lock.notifyAll()
+        true
     }
-    /** Schedule against reserved output, consuming incoming preroll silently on the same clock. */
+    /** Schedule against reserved output, consuming incoming preroll silently on the same clock. False as [blend]. */
     fun arm(lengthMs: Long, value: ProgramMixCurve.Technique, leadMs: Long, prerollMs: Long,
-        echoDelaySeconds: Double? = null) = synchronized(lock) {
+        echoDelaySeconds: Double? = null): Boolean = synchronized(lock) {
         require(value != ProgramMixCurve.Technique.DIRECT && lengthMs in 50..60000)
         require(leadMs in 1..60000 && prerollMs in 0..4000 && prerollMs <= leadMs)
         require(!closed && owns() && failure == null && recovery == null && mixStart == Long.MAX_VALUE)
-        require(readyInput(1 - active)) { "Incoming input not ready" }
+        if (!readyInput(1 - active)) return@synchronized false
         val rate = config!!.sampleRate
         restoration = null
         technique = value
@@ -163,6 +167,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         mixLength = lengthMs * rate / 1000
         window = ProgramMixWindow(mixStart, mixLength, active, 1 - active, outputEpoch)
         lock.notifyAll()
+        true
     }
     private fun configureEcho(value: ProgramMixCurve.Technique, seconds: Double?) {
         val delay = seconds?.takeIf { value == ProgramMixCurve.Technique.ECHO_CUT && it.isFinite() && it > 0 && it <= 2 }

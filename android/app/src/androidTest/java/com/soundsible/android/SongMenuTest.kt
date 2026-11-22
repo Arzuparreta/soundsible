@@ -90,7 +90,8 @@ class SongMenuTest {
                 assertTrue("Peer never asked to play", received.await(15, TimeUnit.SECONDS))
                 assertEquals("member-track", started.get().getJSONArray("tracks").getJSONObject(0).getString("id"))
                 assertEquals(0, started.get().optInt("index", -1))
-                waitFor("document.body.innerText.includes('Playback request sent')")
+                // The sending toast turns into the success message once the device answers applied.
+                waitFor("Array.from(document.querySelectorAll('[role=status]')).some(s=>s.innerText.includes('Playing'))")
             }
         } finally { peer.off(); peer.disconnect(); connection.clearSession(true) }
     }

@@ -29,6 +29,13 @@ class RemoteCommandLogicTest {
         assertEquals("tablet", tablet.getString("form_factor"))
     }
 
+    @Test fun commandGuardsNameOnlyDeclaredCommands() {
+        val declared = RemoteCommandLogic.supportedCommands.toSet()
+        for (guarded in listOf(RemoteCommandLogic.ownQueueCommands, RemoteCommandLogic.currentItemCommands, RemoteCommandLogic.djSessionCommands)) {
+            assertEquals(emptySet<String>(), guarded - declared)
+        }
+    }
+
     @Test fun liveStateOmitsVolumeAndMapsPhases() {
         val playing = RemoteCommandLogic.live(
             hasItem = true, isPlaying = true, playWhenReady = true, isBuffering = false,

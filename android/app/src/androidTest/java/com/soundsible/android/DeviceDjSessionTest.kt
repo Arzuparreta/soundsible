@@ -173,7 +173,10 @@ class DeviceDjSessionTest {
             publishPeer(bad)
             val rejected = core("/api/devices/transfer", "POST", JSONObject().put("from_device_id", peerId).put("to_device_id", id), expected = 409)
             assertEquals("rejected", rejected.optString("status"))
-            await("Invalid workspace did not leave the valid native workspace intact") { core("/api/playback/state").optJSONObject("session")?.optJSONObject("auto")?.optJSONArray("sources")?.optJSONObject(0)?.optString("label") == "Updated direction" }
+            // The account's newest publication is now the peer's invalid one: read the native workspace itself.
+            await("Invalid workspace did not leave the valid native workspace intact") {
+                main { active.sessionExtras.getString("djSources") }?.let { JSONArray(it).optJSONObject(0)?.optString("label") } == "Updated direction"
+            }
             assertEquals(validKey, main { ProgramQueue.key(active, active.currentMediaItemIndex) })
             assertFalse("Malformed transfer resumed paused native programme", main { active.playWhenReady })
             // play.tracks during DJ mode starts a fresh DJ selection instead of exiting DJ mode.

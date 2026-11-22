@@ -310,11 +310,7 @@ class PlaybackService : MediaLibraryService() {
         djRouteEditor = ProgramDjRouteEditor(connection, main, { dj }, djPlanner) { phase, code -> publishDj(phase, code) }
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
-                // Only matcher 400/404 means this retained recording cannot be played.
-                // Authentication, TLS and temporary failures keep the occurrence for Retry.
-                if (dj != null || player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.PENDING) == null) return
-                val status = generateSequence(error as Throwable) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
-                if (status != 400 && status != 404) return
+                if (!unplayablePending(error)) return
                 val epoch = connection.generation
                 val key = ProgramQueue.key(player, player.currentMediaItemIndex)
                 main.post {
@@ -689,198 +685,112 @@ class PlaybackService : MediaLibraryService() {
         djPlanner.start(sources, true)
     }
 
-    private fun indexOfQueueId(queueId: String): Int =
-        (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == queueId } ?: -1
-
     private fun executeRemoteCommand(name: String, args: org.json.JSONObject, done: (String?) -> Unit) {
+        if (liveListener != null && name in RemoteCommandLogic.ownQueueCommands) throw RemoteCommandRejected("invalid_state")
+        if (player.mediaItemCount == 0 && name in RemoteCommandLogic.currentItemCommands) throw RemoteCommandRejected("nothing_playing")
+        if (dj == null && name in RemoteCommandLogic.djSessionCommands) throw RemoteCommandRejected("invalid_state")
+        fun invalid(): Nothing = throw RemoteCommandRejected("invalid")
+        fun queueId(key: String) = args.optString(key).takeIf { !args.isNull(key) && it.isNotBlank() }
+        fun indexOfEntry(queueId: String) = (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == queueId }
+            ?: throw RemoteCommandRejected("not_found")
+        fun on() = args.opt("on") as? Boolean ?: invalid()
+        fun tracks() = args.optJSONArray("tracks")?.takeIf { it.length() > 0 }?.let(RemoteCommandLogic::wireTrackRows) ?: invalid()
+        fun track() = RemoteCommandLogic.wireTrackRow(args.optJSONObject("track") ?: invalid())
+        fun program(action: String, fill: Bundle.() -> Unit = {}) = applyProgramCommand(Bundle().apply {
+            putString("action", action); putLong("generation", connection.generation); fill()
+        })
+        fun entry(action: String, index: Int, fill: Bundle.() -> Unit = {}) = program(action) {
+            putString("queueToken", ProgramQueue.token(player)); putInt("index", index); putString("key", ProgramQueue.key(player, index)); fill()
+        }
+        fun djSettings(sources: org.json.JSONArray, resetRequestGroups: Boolean) = program("djSettings") {
+            putString("programToken", ProgramQueue.programToken(player))
+            putString("sources", sources.toString()); putBoolean("resetRequestGroups", resetRequestGroups)
+        }
+        fun djSource(activation: Int): org.json.JSONObject {
+            val items = ProgramQueue.items(connection, tracks(), ProgramQueue.programToken(player))
+            if (items.any { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
+                    it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" }) throw RemoteCommandRejected("invalid_state")
+            return org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString())
+                .put("label", args.optString("label").trim().ifEmpty { items.first().mediaMetadata.title?.toString().orEmpty() })
+                .put("activation", activation).put("tracks", org.json.JSONArray(items.map(djPlanner::reference)))
+        }
         when (name) {
-            "transport.play" -> {
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                if (player.mediaItemCount == 0) throw RemoteCommandRejected("nothing_playing")
-                val index = player.currentMediaItemIndex
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "play")
-                    putLong("generation", connection.generation)
-                    putString("queueToken", ProgramQueue.token(player))
-                    putInt("index", index)
-                    putString("key", ProgramQueue.key(player, index))
-                })
-                done(null)
-            }
-            "transport.pause" -> {
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                if (player.mediaItemCount == 0) throw RemoteCommandRejected("nothing_playing")
-                player.pause()
-                done(null)
-            }
+            "transport.play" -> entry("play", player.currentMediaItemIndex)
+            "transport.pause" -> player.pause()
             "transport.next" -> {
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                if (player.mediaItemCount == 0) throw RemoteCommandRejected("nothing_playing")
                 if (!player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) throw RemoteCommandRejected("invalid_state")
                 player.seekToNextMediaItem()
-                done(null)
             }
             "transport.previous" -> {
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                if (player.mediaItemCount == 0) throw RemoteCommandRejected("nothing_playing")
                 if (!player.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)) throw RemoteCommandRejected("invalid_state")
                 player.seekToPreviousMediaItem()
-                done(null)
             }
             "transport.seek" -> {
-                val seconds = RemoteCommandLogic.parseSeekSeconds(args) ?: throw RemoteCommandRejected("invalid")
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                if (player.mediaItemCount == 0) throw RemoteCommandRejected("nothing_playing")
+                val seconds = RemoteCommandLogic.parseSeekSeconds(args) ?: invalid()
                 if (!player.isCurrentMediaItemSeekable) throw RemoteCommandRejected("invalid_state")
                 player.seekTo((seconds * 1000.0).toLong())
-                done(null)
             }
             "transport.set_shuffle" -> {
-                if (!args.has("on") || args.get("on") !is Boolean) throw RemoteCommandRejected("invalid")
-                val on = args.getBoolean("on")
-                if (liveListener != null || !player.isCommandAvailable(Player.COMMAND_SET_SHUFFLE_MODE)) throw RemoteCommandRejected("invalid_state")
-                player.shuffleModeEnabled = on
-                done(null)
+                val value = on()
+                if (!player.isCommandAvailable(Player.COMMAND_SET_SHUFFLE_MODE)) throw RemoteCommandRejected("invalid_state")
+                player.shuffleModeEnabled = value
             }
             "transport.set_repeat" -> {
-                val mode = RemoteCommandLogic.parseRepeatMode(args.optString("mode")) ?: throw RemoteCommandRejected("invalid")
-                if (liveListener != null || !player.isCommandAvailable(Player.COMMAND_SET_REPEAT_MODE)) throw RemoteCommandRejected("invalid_state")
+                val mode = RemoteCommandLogic.parseRepeatMode(args.optString("mode")) ?: invalid()
+                if (!player.isCommandAvailable(Player.COMMAND_SET_REPEAT_MODE)) throw RemoteCommandRejected("invalid_state")
                 player.repeatMode = mode
-                done(null)
             }
             "play.tracks" -> {
-                val tracks = args.optJSONArray("tracks") ?: throw RemoteCommandRejected("invalid")
-                if (tracks.length() == 0 || !args.has("index") || args.isNull("index")) throw RemoteCommandRejected("invalid")
-                val index = args.optInt("index", -1)
-                if (index !in 0 until tracks.length()) throw RemoteCommandRejected("invalid")
-                val rows = RemoteCommandLogic.wireTrackRows(tracks)
+                val rows = tracks()
+                val index = (args.opt("index") as? Number)?.toInt()?.takeIf { it in 0 until rows.length() } ?: invalid()
                 val context = args.optJSONObject("context")
                 val contextKind = context?.optString("kind")?.takeIf { it in listOf("album", "artist", "playlist") }
-                val contextId = if (contextKind != null) context.optString("id").takeIf { it.isNotBlank() && it.length <= 512 } else null
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "queue")
-                    putLong("generation", connection.generation)
-                    putString("tracks", rows.toString())
-                    putInt("index", index)
-                    if (contextKind != null && contextId != null) {
-                        putString("contextKind", contextKind)
-                        putString("contextId", contextId)
-                    }
-                })
-                done(null)
+                val contextId = context?.optString("id")?.takeIf { contextKind != null && it.isNotBlank() && it.length <= 512 }
+                program("queue") {
+                    putString("tracks", rows.toString()); putInt("index", index)
+                    if (contextId != null) { putString("contextKind", contextKind); putString("contextId", contextId) }
+                }
             }
             "queue.add" -> {
-                val track = args.optJSONObject("track") ?: throw RemoteCommandRejected("invalid")
-                val at = args.optString("at")
-                if (at != "next" && at != "end") throw RemoteCommandRejected("invalid")
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                val rows = org.json.JSONArray().put(RemoteCommandLogic.wireTrackRow(track))
-                if (dj != null) {
-                    applyProgramCommand(Bundle().apply {
-                        putString("action", "djRequest")
-                        putLong("generation", connection.generation)
-                        putString("programToken", ProgramQueue.programToken(player))
-                        putString("queueToken", ProgramQueue.token(player))
+                val rows = org.json.JSONArray().put(track())
+                val at = args.optString("at").takeIf { it == "next" || it == "end" } ?: invalid()
+                when {
+                    dj != null -> program("djRequest") {
+                        putString("programToken", ProgramQueue.programToken(player)); putString("queueToken", ProgramQueue.token(player))
                         putString("tracks", rows.toString())
-                    })
-                } else if (at == "next") {
-                    val empty = player.mediaItemCount == 0
-                    applyProgramCommand(Bundle().apply {
-                        putString("action", "insertAfter")
-                        putLong("generation", connection.generation)
-                        putString("queueToken", ProgramQueue.token(player))
-                        putInt("index", if (empty) -1 else player.currentMediaItemIndex)
-                        putString("key", if (empty) "" else ProgramQueue.key(player, player.currentMediaItemIndex))
-                        putString("tracks", rows.toString())
-                    })
-                } else {
-                    applyProgramCommand(Bundle().apply {
-                        putString("action", "append")
-                        putLong("generation", connection.generation)
-                        putString("queueToken", ProgramQueue.token(player))
-                        putString("tracks", rows.toString())
-                    })
+                    }
+                    at == "next" && player.mediaItemCount > 0 -> entry("insertAfter", player.currentMediaItemIndex) { putString("tracks", rows.toString()) }
+                    at == "next" -> program("insertAfter") {
+                        putString("queueToken", ProgramQueue.token(player)); putInt("index", -1); putString("key", ""); putString("tracks", rows.toString())
+                    }
+                    else -> program("append") { putString("queueToken", ProgramQueue.token(player)); putString("tracks", rows.toString()) }
                 }
-                done(null)
             }
             "queue.move" -> {
-                val queueId = args.optString("queue_id").takeIf { it.isNotBlank() } ?: throw RemoteCommandRejected("invalid")
-                val beforeQueueId = args.optString("before_queue_id").takeIf { !args.isNull("before_queue_id") && it.isNotBlank() }
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                val fromIndex = indexOfQueueId(queueId)
-                if (fromIndex < 0) throw RemoteCommandRejected("not_found")
-                val beforeIndex = beforeQueueId?.let { id ->
-                    indexOfQueueId(id).also { if (it < 0) throw RemoteCommandRejected("not_found") }
-                }
+                val moving = queueId("queue_id") ?: invalid()
+                val before = queueId("before_queue_id")
+                val from = indexOfEntry(moving)
+                val beforeIndex = before?.let(::indexOfEntry)
                 val owner = dj
-                if (owner != null) {
-                    when (val plan = RemoteCommandLogic.djMoveTarget(owner.policyRows(), queueId, beforeQueueId, owner.editableFrom(), owner.protectedKeys())) {
-                        RemoteCommandLogic.DjMovePlan.Locked -> throw RemoteCommandRejected("locked")
-                        RemoteCommandLogic.DjMovePlan.NoOp -> { done(null); return }
-                        is RemoteCommandLogic.DjMovePlan.Move -> {
-                            applyProgramCommand(Bundle().apply {
-                                putString("action", "move")
-                                putLong("generation", connection.generation)
-                                putString("queueToken", ProgramQueue.token(player))
-                                putInt("index", fromIndex)
-                                putString("key", queueId)
-                                putInt("toIndex", plan.toIndex)
-                            })
-                        }
-                    }
-                } else {
-                    val target = RemoteCommandLogic.normalMoveTarget(player.mediaItemCount, fromIndex, beforeIndex)
-                    if (target != null) {
-                        applyProgramCommand(Bundle().apply {
-                            putString("action", "move")
-                            putLong("generation", connection.generation)
-                            putString("queueToken", ProgramQueue.token(player))
-                            putInt("index", fromIndex)
-                            putString("key", queueId)
-                            putInt("toIndex", target)
-                        })
-                    }
+                val target = if (owner == null) RemoteCommandLogic.normalMoveTarget(player.mediaItemCount, from, beforeIndex)
+                else when (val plan = RemoteCommandLogic.djMoveTarget(owner.policyRows(), moving, before, owner.editableFrom(), owner.protectedKeys())) {
+                    RemoteCommandLogic.DjMovePlan.Locked -> throw RemoteCommandRejected("locked")
+                    RemoteCommandLogic.DjMovePlan.NoOp -> null
+                    is RemoteCommandLogic.DjMovePlan.Move -> plan.toIndex
                 }
-                done(null)
+                if (target != null) entry("move", from) { putInt("toIndex", target) }
             }
             "queue.remove" -> {
-                val queueId = args.optString("queue_id").takeIf { it.isNotBlank() } ?: throw RemoteCommandRejected("invalid")
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                val index = indexOfQueueId(queueId)
-                if (index < 0) throw RemoteCommandRejected("not_found")
+                val removed = queueId("queue_id") ?: invalid()
+                val index = indexOfEntry(removed)
                 dj?.let { owner ->
-                    if (RemoteCommandLogic.djRemoveLocked(owner.policyRows(), queueId, owner.protectedKeys())) {
-                        throw RemoteCommandRejected("locked")
-                    }
+                    if (RemoteCommandLogic.djRemoveLocked(owner.policyRows(), removed, owner.protectedKeys())) throw RemoteCommandRejected("locked")
                 }
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "remove")
-                    putLong("generation", connection.generation)
-                    putString("queueToken", ProgramQueue.token(player))
-                    putInt("index", index)
-                    putString("key", queueId)
-                })
-                done(null)
+                entry("remove", index)
             }
-            "queue.play_entry" -> {
-                val queueId = args.optString("queue_id").takeIf { it.isNotBlank() } ?: throw RemoteCommandRejected("invalid")
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                val index = indexOfQueueId(queueId)
-                if (index < 0) throw RemoteCommandRejected("not_found")
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "select")
-                    putLong("generation", connection.generation)
-                    putString("queueToken", ProgramQueue.token(player))
-                    putInt("index", index)
-                    putString("key", queueId)
-                })
-                done(null)
-            }
+            "queue.play_entry" -> entry("select", indexOfEntry(queueId("queue_id") ?: invalid()))
             "radio.start" -> {
-                val track = args.optJSONObject("track") ?: throw RemoteCommandRejected("invalid")
-                val row = RemoteCommandLogic.wireTrackRow(track)
-                val items = ProgramQueue.items(connection, org.json.JSONArray().put(row), lane = "context")
-                val item = items.single()
+                val item = ProgramQueue.items(connection, org.json.JSONArray().put(track()), lane = "context").single()
                 if (item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
                     item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" ||
                     connection.cookieHeader(connection.generation) == null) {
@@ -894,187 +804,61 @@ class PlaybackService : MediaLibraryService() {
                     djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
                     restoreNormal(); publishDj("idle", 0)
                     autoplay.clear(); radio.clear()
-                    player.setMediaItems(items, 0, 0); player.prepare(); player.play()
+                    player.setMediaItems(listOf(item), 0, 0); player.prepare(); player.play()
                 } else if (!player.playWhenReady) {
                     player.play()
                 }
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "radio")
-                    putLong("generation", connection.generation)
-                    putBoolean("enabled", true)
-                    putString("profile", radio.currentProfile())
-                    putString("queueToken", ProgramQueue.token(player))
-                    putString("key", ProgramQueue.key(player, player.currentMediaItemIndex))
-                })
-                done(null)
+                entry("radio", player.currentMediaItemIndex) { putBoolean("enabled", true); putString("profile", radio.currentProfile()) }
             }
-            "radio.stop" -> {
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "radio")
-                    putLong("generation", connection.generation)
-                    putBoolean("enabled", false)
-                    putString("queueToken", ProgramQueue.token(player))
-                })
-                done(null)
-            }
+            "radio.stop" -> program("radio") { putBoolean("enabled", false); putString("queueToken", ProgramQueue.token(player)) }
             "dj.start" -> {
-                val tracks = args.optJSONArray("tracks") ?: throw RemoteCommandRejected("invalid")
-                if (tracks.length() == 0) throw RemoteCommandRejected("invalid")
-                val rows = RemoteCommandLogic.wireTrackRows(tracks)
+                val rows = tracks()
                 val label = args.optString("label").trim().takeIf { it.isNotEmpty() }
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "djSelection")
-                    putLong("generation", connection.generation)
-                    putString("programToken", ProgramQueue.programToken(player))
-                    putString("tracks", rows.toString())
+                program("djSelection") {
+                    putString("programToken", ProgramQueue.programToken(player)); putString("tracks", rows.toString())
                     if (label != null) putString("label", label)
-                })
-                done(null)
-            }
-            "dj.start_from_current" -> {
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                if (player.mediaItemCount == 0) throw RemoteCommandRejected("nothing_playing")
-                if (dj == null) {
-                    applyProgramCommand(Bundle().apply {
-                        putString("action", "dj")
-                        putLong("generation", connection.generation)
-                        putBoolean("fromCurrent", true)
-                        putString("queueToken", ProgramQueue.token(player))
-                        putString("key", ProgramQueue.key(player, player.currentMediaItemIndex))
-                    })
                 }
-                done(null)
             }
-            "dj.stop" -> {
-                if (dj == null) throw RemoteCommandRejected("invalid_state")
-                exitDj(keepUserRequests = true)
-                done(null)
-            }
+            "dj.start_from_current" -> if (dj == null) entry("dj", player.currentMediaItemIndex) { putBoolean("fromCurrent", true) }
+            "dj.stop" -> exitDj(keepUserRequests = true)
             "dj.place" -> {
-                val owner = dj ?: throw RemoteCommandRejected("invalid_state")
-                val tracks = args.optJSONArray("tracks") ?: throw RemoteCommandRejected("invalid")
-                if (tracks.length() == 0) throw RemoteCommandRejected("invalid")
-                val beforeQueueId = args.optString("before_queue_id").takeIf { !args.isNull("before_queue_id") && it.isNotBlank() }
-                if (beforeQueueId != null) {
-                    if (indexOfQueueId(beforeQueueId) < 0) throw RemoteCommandRejected("not_found")
-                    if (owner.requestDestination(beforeQueueId) == null) throw RemoteCommandRejected("locked")
+                val before = queueId("before_queue_id")
+                val rows = tracks()
+                if (before != null) {
+                    indexOfEntry(before)
+                    if (dj!!.requestDestination(before) == null) throw RemoteCommandRejected("locked")
                 }
-                val rows = RemoteCommandLogic.wireTrackRows(tracks)
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "djRequest")
-                    putLong("generation", connection.generation)
-                    putString("programToken", ProgramQueue.programToken(player))
-                    putString("queueToken", ProgramQueue.token(player))
+                program("djRequest") {
+                    putString("programToken", ProgramQueue.programToken(player)); putString("queueToken", ProgramQueue.token(player))
                     putString("tracks", rows.toString())
-                    if (beforeQueueId != null) putString("beforeKey", beforeQueueId)
-                })
-                done(null)
+                    if (before != null) putString("beforeKey", before)
+                }
             }
             "dj.add_source" -> {
-                if (dj == null) throw RemoteCommandRejected("invalid_state")
-                val tracks = args.optJSONArray("tracks") ?: throw RemoteCommandRejected("invalid")
-                if (tracks.length() == 0) throw RemoteCommandRejected("invalid")
-                val items = ProgramQueue.items(connection, RemoteCommandLogic.wireTrackRows(tracks), ProgramQueue.programToken(player))
-                if (items.any { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
-                    it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" }) {
-                    throw RemoteCommandRejected("invalid_state")
-                }
-                val currentSources = djPlanner.sources
-                if (currentSources.length() >= 64) throw RemoteCommandRejected("invalid_state")
-                var maxActivation = 0
-                val nextSources = org.json.JSONArray()
-                for (i in 0 until currentSources.length()) {
-                    val existing = currentSources.getJSONObject(i)
-                    maxActivation = maxOf(maxActivation, existing.optInt("activation", 0))
-                    nextSources.put(existing)
-                }
-                val label = args.optString("label").trim().ifEmpty { items.first().mediaMetadata.title?.toString().orEmpty() }
-                val added = org.json.JSONObject()
-                    .put("id", java.util.UUID.randomUUID().toString())
-                    .put("label", label)
-                    .put("activation", maxActivation + 1)
-                    .put("tracks", org.json.JSONArray(items.map(djPlanner::reference)))
-                nextSources.put(added)
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "djSettings")
-                    putLong("generation", connection.generation)
-                    putString("programToken", ProgramQueue.programToken(player))
-                    putString("sources", nextSources.toString())
-                    putBoolean("resetRequestGroups", false)
-                })
-                done(null)
+                val current = djPlanner.sources
+                val added = djSource(0)
+                if (current.length() >= 64) throw RemoteCommandRejected("invalid_state")
+                val activation = (0 until current.length()).maxOfOrNull { current.getJSONObject(it).optInt("activation", 0) } ?: 0
+                djSettings(org.json.JSONArray(current.toString()).put(added.put("activation", activation + 1)), resetRequestGroups = false)
             }
             "dj.remove_source" -> {
-                if (dj == null) throw RemoteCommandRejected("invalid_state")
-                val sourceId = args.optString("source_id").takeIf { it.isNotBlank() } ?: throw RemoteCommandRejected("invalid")
-                val currentSources = djPlanner.sources
-                val remaining = org.json.JSONArray()
-                var found = false
-                for (i in 0 until currentSources.length()) {
-                    val existing = currentSources.getJSONObject(i)
-                    if (existing.optString("id") == sourceId) found = true else remaining.put(existing)
-                }
-                if (!found) throw RemoteCommandRejected("not_found")
+                val sourceId = args.optString("source_id").takeIf { it.isNotBlank() } ?: invalid()
+                val current = djPlanner.sources
+                val remaining = org.json.JSONArray((0 until current.length()).map { current.getJSONObject(it) }.filter { it.optString("id") != sourceId })
+                if (remaining.length() == current.length()) throw RemoteCommandRejected("not_found")
                 if (remaining.length() == 0) throw RemoteCommandRejected("invalid_state")
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "djSettings")
-                    putLong("generation", connection.generation)
-                    putString("programToken", ProgramQueue.programToken(player))
-                    putString("sources", remaining.toString())
-                    putBoolean("resetRequestGroups", false)
-                })
-                done(null)
+                djSettings(remaining, resetRequestGroups = false)
             }
-            "dj.change_session" -> {
-                if (dj == null) throw RemoteCommandRejected("invalid_state")
-                val tracks = args.optJSONArray("tracks") ?: throw RemoteCommandRejected("invalid")
-                if (tracks.length() == 0) throw RemoteCommandRejected("invalid")
-                val items = ProgramQueue.items(connection, RemoteCommandLogic.wireTrackRows(tracks), ProgramQueue.programToken(player))
-                if (items.any { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
-                    it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" }) {
-                    throw RemoteCommandRejected("invalid_state")
-                }
-                val label = args.optString("label").trim().ifEmpty { items.first().mediaMetadata.title?.toString().orEmpty() }
-                val source = org.json.JSONObject()
-                    .put("id", java.util.UUID.randomUUID().toString())
-                    .put("label", label)
-                    .put("activation", 1)
-                    .put("tracks", org.json.JSONArray(items.map(djPlanner::reference)))
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "djSettings")
-                    putLong("generation", connection.generation)
-                    putString("programToken", ProgramQueue.programToken(player))
-                    putString("sources", org.json.JSONArray().put(source).toString())
-                    putBoolean("resetRequestGroups", true)
-                })
-                done(null)
+            "dj.change_session" -> djSettings(org.json.JSONArray().put(djSource(1)), resetRequestGroups = true)
+            "dj.repair" -> program("djRepair") {
+                putString("programToken", ProgramQueue.programToken(player)); putString("queueToken", ProgramQueue.token(player))
             }
-            "dj.repair" -> {
-                if (dj == null) throw RemoteCommandRejected("invalid_state")
-                applyProgramCommand(Bundle().apply {
-                    putString("action", "djRepair")
-                    putLong("generation", connection.generation)
-                    putString("programToken", ProgramQueue.programToken(player))
-                    putString("queueToken", ProgramQueue.token(player))
-                })
-                done(null)
-            }
-            "dj.set_mixing" -> {
-                if (!args.has("on") || args.get("on") !is Boolean) throw RemoteCommandRejected("invalid")
-                val on = args.getBoolean("on")
-                if (liveListener != null) throw RemoteCommandRejected("invalid_state")
-                mixing.settings(on) { ok -> done(if (ok) null else "invalid_state") }
-            }
-            "session.import" -> {
-                importRemoteSession(args, done)
-            }
-            "session.release" -> {
-                if (liveListener == null) player.pause()
-                done(null)
-            }
+            "dj.set_mixing" -> { mixing.settings(on()) { ok -> done(if (ok) null else "invalid_state") }; return }
+            "session.import" -> { importRemoteSession(args, done); return }
+            "session.release" -> if (liveListener == null) player.pause()
             else -> throw RemoteCommandRejected("unsupported")
         }
+        done(null)
     }
 
     private fun importRemoteSession(args: org.json.JSONObject, done: (String?) -> Unit) {
@@ -1107,51 +891,46 @@ class PlaybackService : MediaLibraryService() {
         awaitImportPlaying(done)
     }
 
+    /**
+     * Only matcher 400/404 means a retained pending recording cannot be played.
+     * Authentication, TLS and temporary failures keep the occurrence for Retry.
+     */
+    private fun unplayablePending(error: PlaybackException): Boolean {
+        if (dj != null || player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.PENDING) == null) return false
+        val status = generateSequence(error as Throwable) { it.cause }
+            .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
+        return status == 400 || status == 404
+    }
+
     /** Transfer succeeds only once the target is actually playing, bounded well under the 10 s wire timeout. */
     private fun awaitImportPlaying(done: (String?) -> Unit) {
         pendingImport?.invoke(); pendingImport = null
-        if (player.isPlaying) { done(null); return }
         val epoch = connection.generation
-        val deadline = android.os.SystemClock.elapsedRealtime() + 7500L
         var settled = false
         lateinit var listener: Player.Listener
-        lateinit var poll: Runnable
+        lateinit var deadline: Runnable
         fun settle(reason: String?) {
             if (settled) return
             settled = true
-            player.removeListener(listener)
-            main.removeCallbacks(poll)
-            pendingImport = null
+            player.removeListener(listener); main.removeCallbacks(deadline); pendingImport = null
             done(reason)
         }
-        fun pendingSkipPossible(): Boolean {
-            val error = player.playerError ?: return false
-            if (dj != null || player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.PENDING) == null) return false
-            val status = generateSequence(error as Throwable) { it.cause }
-                .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
-                .firstOrNull()?.responseCode
-            return (status == 400 || status == 404) && player.nextMediaItemIndex != C.INDEX_UNSET && player.mediaItemCount > 1
-        }
         fun check() {
-            if (settled) return
-            if (connection.generation != epoch) { settle("invalid_state"); return }
-            if (player.isPlaying) { settle(null); return }
-            if (!player.playWhenReady) { settle("invalid_state"); return }
-            if (player.playerError != null && !pendingSkipPossible()) { settle("invalid_state"); return }
-            if (android.os.SystemClock.elapsedRealtime() >= deadline) { settle("invalid_state"); return }
-        }
-        listener = object : Player.Listener {
-            override fun onEvents(player: Player, events: Player.Events) { check() }
-        }
-        poll = object : Runnable {
-            override fun run() {
-                check()
-                if (!settled) main.postDelayed(this, 50)
+            when {
+                connection.generation != epoch -> settle("invalid_state")
+                player.isPlaying -> settle(null)
+                !player.playWhenReady -> settle("invalid_state")
+                // The error listener skips an unplayable pending entry; wait for the next one.
+                player.playerError?.let { unplayablePending(it) && player.nextMediaItemIndex != C.INDEX_UNSET && player.mediaItemCount > 1 } == false ->
+                    settle("invalid_state")
             }
         }
+        listener = object : Player.Listener { override fun onEvents(player: Player, events: Player.Events) = check() }
+        deadline = Runnable { settle(if (player.isPlaying) null else "invalid_state") }
         pendingImport = { settle("invalid_state") }
         player.addListener(listener)
-        main.postDelayed(poll, 50)
+        main.postDelayed(deadline, 7500)
+        check()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
