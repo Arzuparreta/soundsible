@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { actions, state, setNowPlayingOpen } from '../stores';
+import { setNowPlayingOpen } from '../stores';
+import { player } from '../stores/player';
 import { clockTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { claimHoldGesture } from '../lib/holdGesture';
@@ -21,9 +22,9 @@ export function OmniSeek(props: { onClaim: () => void }) {
   let releaseHold: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let gesture: { id: number; x: number; y: number; active: boolean; moved: boolean; touch: boolean; startPosition: number; fromRail: boolean; blank: boolean } | undefined;
-  const duration = () => Number.isFinite(state.playback.duration) ? Math.max(0, state.playback.duration) : 0;
-  const disabled = () => !state.playback.currentTrack || !Number.isFinite(duration()) || duration() <= 0 || state.playback.isLoading || Boolean(state.playback.loadError);
-  const playbackPosition = createMemo<number>(previous => pageVisible() ? state.playback.currentTime : previous ?? 0);
+  const duration = () => Number.isFinite(player().playback.duration) ? Math.max(0, player().playback.duration) : 0;
+  const disabled = () => !player().playback.currentTrack || !Number.isFinite(duration()) || duration() <= 0 || player().playback.isLoading || Boolean(player().playback.loadError);
+  const playbackPosition = createMemo<number>(previous => pageVisible() ? player().playback.currentTime : previous ?? 0);
   const position = () => Math.max(0, Math.min(duration() || 0, preview() ?? playbackPosition()));
   const clear = () => {
     clearTimeout(timer);
@@ -38,7 +39,7 @@ export function OmniSeek(props: { onClaim: () => void }) {
   };
   createEffect(() => {
     // Even a replacement with the same duration invalidates an in-flight edit.
-    state.playback.currentTrack?.id;
+    player().playback.currentTrack?.id;
     duration();
     disabled();
     pageVisible();
@@ -102,7 +103,7 @@ export function OmniSeek(props: { onClaim: () => void }) {
     const target = preview();
     if (touch && (active || fromRail || blank)) shieldGhostClicks();
     clear();
-    if (active && moved && target !== null && !disabled()) actions.seek(target);
+    if (active && moved && target !== null && !disabled()) player().actions.seek(target);
     // Only the portion inside the pill retains its existing tap-to-open action.
     else if (!active && touch && (blank || (fromRail && y >= input.getBoundingClientRect().top + 16))) setNowPlayingOpen(true);
   };
@@ -155,7 +156,7 @@ export function OmniSeek(props: { onClaim: () => void }) {
       onClick={event => { event.preventDefault(); event.stopPropagation(); }}
       onKeyDown={event => { if (event.key === 'Escape') clear(); }}
       onContextMenu={event => event.preventDefault()}
-      onInput={event => { if (!gesture && !disabled()) actions.seek(Number(event.currentTarget.value)); }}
+      onInput={event => { if (!gesture && !disabled()) player().actions.seek(Number(event.currentTarget.value)); }}
     />
     <Show when={preview() !== null}>
       <span class={styles.seekHandle} style={{ left: `${duration() > 0 ? position() / duration() * 100 : 0}%` }} aria-hidden="true" />

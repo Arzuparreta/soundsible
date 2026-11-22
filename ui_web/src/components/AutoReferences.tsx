@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from 'solid-js';
-import { state, actions } from '../stores';
+import { player } from '../stores/player';
 import { autoTrackDragging, readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { openOverlay } from '../lib/overlay';
 import { coverStyle } from '../lib/cover';
@@ -14,11 +14,15 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
   const [over, setOver] = createSignal(false);
   const armed = () => Boolean(autoTrackDragging() || props.carried);
   let depth = 0;
-  const rows = () => <For each={state.autoMode.sources}>{(source) => <div class={styles.referenceRow}
+  const canStartFromCurrent = () => {
+    const track = player().playback.currentTrack;
+    return Boolean(track && !isPodcastTrack(track));
+  };
+  const rows = () => <For each={player().autoMode.sources}>{(source) => <div class={styles.referenceRow}
     draggable={source.tracks.length === 1} onDragStart={(event) => source.tracks[0] && writeAutoTrackTransfer(event, { track: source.tracks[0] })}>
     <span class={styles.referenceCover} style={coverStyle(source.label, source.tracks[0] ? trackCoverUrl(source.tracks[0], 'thumb') : undefined)} />
     <span class={styles.referenceName} title={source.label}>{source.label}</span><small>{source.tracks.length}</small>
-    <Show when={state.autoMode.sources.length > 1}><button type="button" aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => actions.removeAutoSource(source.id)}>×</button></Show>
+    <Show when={player().autoMode.sources.length > 1}><button type="button" aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => player().actions.removeAutoSource(source.id)}>×</button></Show>
   </div>}</For>;
   return <section class={styles.references} aria-label={t('musicExplorer.references')}
     data-target={armed() ? '' : undefined} data-over={over() ? '' : undefined}
@@ -28,16 +32,16 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     onDrop={(event) => { event.preventDefault(); event.stopPropagation(); depth = 0; setOver(false); const transfer = readAutoTrackTransfer(event); if (transfer) props.onUse(transfer.track); }}>
     <header class={styles.sessionActions}>
       <button type="button" title={t('musicExplorer.startFromCurrent')}
-        disabled={!state.playback.currentTrack || isPodcastTrack(state.playback.currentTrack)}
-        onClick={() => { const track = state.playback.currentTrack; if (track) void actions.startDjFromTrack(track); }}>
+        disabled={!canStartFromCurrent()}
+        onClick={() => { const track = player().playback.currentTrack; if (track) void player().actions.startDjFromTrack(track); }}>
         <ChangeSessionIcon size={16} /><span>{t('musicExplorer.startFromCurrent')}</span>
       </button>
       <button type="button" title={t('musicExplorer.mixWith')} onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}><SourceIcon size={16} /><span>{t('musicExplorer.mixWith')}</span></button>
       <button type="button" title={t('musicExplorer.changeShort')} onClick={props.onChange}><ChangeSessionIcon size={16} /><span>{t('musicExplorer.changeShort')}</span></button>
     </header>
-    <Show when={state.autoMode.sources.length} fallback={<button type="button" class={styles.referenceEmpty} onClick={props.onAdd}>{t('musicExplorer.referenceEmpty')}</button>}>
+    <Show when={player().autoMode.sources.length} fallback={<button type="button" class={styles.referenceEmpty} onClick={props.onAdd}>{t('musicExplorer.referenceEmpty')}</button>}>
       <div class={styles.referenceRows}>{rows()}</div>
-      <Show when={state.autoMode.sources.length > 2}><button type="button" class={styles.referenceMore} onClick={() => openOverlay(() => <section class={styles.referenceSheet}><h2>{t('musicExplorer.references')}</h2>{rows()}</section>, { ariaLabel: () => t('musicExplorer.references') })}>{t('musicExplorer.viewReferences')} ({state.autoMode.sources.length})</button></Show>
+      <Show when={player().autoMode.sources.length > 2}><button type="button" class={styles.referenceMore} onClick={() => openOverlay(() => <section class={styles.referenceSheet}><h2>{t('musicExplorer.references')}</h2>{rows()}</section>, { ariaLabel: () => t('musicExplorer.references') })}>{t('musicExplorer.viewReferences')} ({player().autoMode.sources.length})</button></Show>
     </Show>
   </section>;
 }

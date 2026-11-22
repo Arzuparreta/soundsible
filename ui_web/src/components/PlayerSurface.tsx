@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { actions, nowPlayingOpen, setNowPlayingOpen, state } from '../stores';
+import { nowPlayingOpen, setNowPlayingOpen } from '../stores';
+import { player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
@@ -59,8 +60,8 @@ type BackdropState = {
 export function PlayerSurface() {
   const [opened, setOpened] = createSignal(nowPlayingOpen());
   createEffect(() => { if (nowPlayingOpen()) setOpened(true); });
-  const current = createMemo(() => state.playback.currentTrack);
-  const auto = createMemo(() => state.autoMode.active);
+  const current = createMemo(() => player().playback.currentTrack);
+  const auto = createMemo(() => player().autoMode.active);
   const autoAvailable = createMemo(() => !current() || !isPodcastTrack(current()!));
   const art = createMemo(() => {
     const track = current();
@@ -287,13 +288,13 @@ export function PlayerSurface() {
   };
 
   const showNowPlaying = () => {
-    if (auto()) actions.exitAutoMode();
+    if (auto()) player().actions.exitAutoMode();
     setPanel('stage');
   };
 
   const showAuto = () => {
     if (!autoAvailable() || auto()) return;
-    actions.enterAutoMode();
+    player().actions.enterAutoMode();
   };
 
   /** Arrow keys, Home and End walk the mode tabs without choosing one. */

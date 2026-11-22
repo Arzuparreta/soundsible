@@ -1,5 +1,5 @@
 import { Show, type JSX } from 'solid-js';
-import { state, actions } from '../stores';
+import { player } from '../stores/player';
 import { confirmDialog } from '../lib/confirm';
 import { t } from '../lib/i18n';
 import { RadioIcon } from './icons';
@@ -15,16 +15,16 @@ export async function onStopRadio(): Promise<void> {
     confirmLabel: t('nowPlaying.stopRadioConfirm'),
     danger: true,
   });
-  if (ok) actions.stopRadio();
+  if (ok) player().actions.stopRadio();
 }
 
 export function RadioBadge(props: { class: string; loadingClass: string }): JSX.Element {
   return (
-    <Show when={state.playback.radioMode}>
+    <Show when={player().playback.radioMode}>
       <button
         type="button"
         class={props.class}
-        classList={{ [props.loadingClass]: state.playback.radioLoading }}
+        classList={{ [props.loadingClass]: player().playback.radioLoading }}
         onClick={() => void onStopRadio()}
         aria-label={t('nowPlaying.radioActiveAria')}
         title={t('nowPlaying.radioActiveAria')}

@@ -2,7 +2,8 @@ import { useLocation, useNavigate, type RouteSectionProps } from '@solidjs/route
 import { createEffect, createSignal, onCleanup, onMount, Show, type Component } from 'solid-js';
 import { rememberTabLocation } from './lib/tabMemory';
 import { registerMusicNavigator } from './lib/musicNavigation';
-import { nowPlayingOpen, state } from './stores';
+import { nowPlayingOpen } from './stores';
+import { player } from './stores/player';
 import { ToastOutlet } from './lib/toast';
 import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
@@ -37,7 +38,7 @@ export default function Shell(props: RouteSectionProps) {
   };
   onMount(loadPlayerSurface);
   createEffect(() => {
-    if (nowPlayingOpen() || state.playback.currentTrack) loadPlayerSurface();
+    if (nowPlayingOpen() || player().playback.currentTrack) loadPlayerSurface();
   });
   // The broadcast bridge, WebRTC and the Live client are fetched only once
   // Live is in use (lib/communityGate), not with the first library paint.
@@ -51,7 +52,7 @@ export default function Shell(props: RouteSectionProps) {
     // when it is up: that is what lets every scroller reserve room for it
     // (app.css). Same condition the pill hides itself on — there is one track
     // or there is not.
-    <div class={styles.app} data-mini-player={state.playback.currentTrack ? '' : undefined}>
+    <div class={styles.app} data-mini-player={player().playback.currentTrack ? '' : undefined}>
       <ScrollHistoryManager />
       <Show when={bridge()} keyed>{(Bridge) => <Bridge />}</Show>
       <Sidebar />

@@ -3,6 +3,7 @@ import { type MenuAction, type ActionMenuOptions } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import type { Track } from '../types/music';
 import { actions, isDownloadingTrack, isFavouriteTrack, isSavedTrack, state } from '../stores';
+import { player } from '../stores/player';
 import { savedFromTrack } from '../lib/saved';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
@@ -68,7 +69,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   const isSaved = isLibrary || isSavedTrack(track);
   const isPodcast = isPodcastTrack(track);
   const inRoute = ctx.inRoute === true;
-  const inAuto = inRoute || ctx.auto === true || state.autoMode.active;
+  const inAuto = inRoute || ctx.auto === true || player().autoMode.active;
   // A streamed podcast episode plays via a minted token, not a `previewUrl`, so
   // the generic queue can't re-load it — keep it out of queue/playlist flows.
   // Downloaded episodes are real library files and queue fine.
@@ -76,26 +77,26 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   const list: MenuAction[] = [];
 
   if (ctx.auto && !isPodcast && !inRoute) {
-    list.push({ icon: icons.playNext(), label: t('musicExplorer.playNow'), onSelect: () => actions.playNow(track) });
-    list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void actions.placeAutoTrack(track) });
-    list.push({ icon: icons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) });
+    list.push({ icon: icons.playNext(), label: t('musicExplorer.playNow'), onSelect: () => player().actions.playNow(track) });
+    list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void player().actions.placeAutoTrack(track) });
+    list.push({ icon: icons.source(), label: t('musicExplorer.reference'), onSelect: () => player().actions.useAutoTrackAsSource(track) });
   } else if (queueable) {
-    list.push({ icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => actions.playNext(track) });
-    list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => actions.enqueue(track) });
+    list.push({ icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => player().actions.playNext(track) });
+    list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => player().actions.enqueue(track) });
   }
   if (!isPodcast && !inRoute)
     list.push({
       icon: icons.changeSession(),
-      label: t(state.playback.currentTrack?.id === track.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
+      label: t(player().playback.currentTrack?.id === track.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
       onSelect: () => {
-        if (state.autoMode.active && !ctx.auto) actions.startDjSelection([track], track.title);
-        else void actions.startDjFromTrack(track);
+        if (player().autoMode.active && !ctx.auto) player().actions.startDjSelection([track], track.title);
+        else void player().actions.startDjFromTrack(track);
       },
     });
   if (ctx.onAddToPlaylist && !isPodcast)
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
   if (!isPodcast && !inRoute)
-    list.push({ icon: icons.radio(), label: inAuto ? t('modeChange.startRadio') : t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
+    list.push({ icon: icons.radio(), label: inAuto ? t('modeChange.startRadio') : t('trackActions.startRadio'), onSelect: () => void player().actions.startRadio(track) });
   list.push(...musicLinkActions(ctx.music ?? trackMusic(track)));
   // The heart only makes sense over songs you have: it marks some of them out
   // from the others. The menu offers saving instead until then.

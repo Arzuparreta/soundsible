@@ -18,7 +18,8 @@ import { formatDuration } from '../lib/format';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { trackKeys } from '../lib/playbackIdentity';
-import { isSavedKeys, state } from '../stores';
+import { isSavedKeys } from '../stores';
+import { player } from '../stores/player';
 import { FavouriteButton } from './FavouriteButton';
 import { Spinner } from './Spinner';
 import { CollectionButton } from './CollectionButton';
@@ -114,7 +115,7 @@ export default function SongRow(props: SongRowProps) {
   return (
     <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.track.title} subtitle={props.track.artist} music={music()} seed={props.track.id}
       cover={props.cover ?? props.track.cover} index={props.index} annotation={props.compact ? undefined : props.badge}
-      active={props.active} disabled={props.track.unavailable} busy={props.busy || (props.active && state.playback.isLoading)}
+      active={props.active} disabled={props.track.unavailable} busy={props.busy || (props.active && player().playback.isLoading)}
       // A compact row carries no collection marks — the same trim the desktop
       // row makes — so the shared row is told there is no entry to mark.
       entry={props.compact || props.favouritable === false ? undefined : resolveEntry()}

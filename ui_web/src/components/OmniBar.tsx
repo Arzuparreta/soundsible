@@ -3,7 +3,8 @@ import { isPodcastTrack } from '../lib/track';
 import { ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
-import { state, actions, setNowPlayingOpen } from '../stores';
+import { state, setNowPlayingOpen } from '../stores';
+import { player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
 import { mobileListLayout } from '../lib/listLayout';
 import { OmniSeek } from './OmniSeek';
@@ -16,7 +17,7 @@ import styles from './OmniBar.module.css';
 
 /** Persistent mini-player. Progress line + tap-to-expand + play/pause + next. */
 export function OmniBar() {
-  const current = createMemo(() => state.playback.currentTrack);
+  const current = createMemo(() => player().playback.currentTrack);
   const podcast = createMemo(() => Boolean(current() && isPodcastTrack(current()!)));
   const [swipeOffset, setSwipeOffset] = createSignal(0);
   let swipe: { id: number; x: number; y: number; captured: boolean } | null = null;
@@ -49,11 +50,11 @@ export function OmniBar() {
     if (!swipe || event.pointerId !== swipe.id) return;
     const dismiss = swipe.captured && swipeOffset() <= -72 && mobile();
     resetSwipe();
-    if (dismiss) actions.dismissPlayback();
+    if (dismiss) player().actions.dismissPlayback();
   };
-  const loading = createMemo(() => state.playback.isLoading);
-  const failed = createMemo(() => state.playback.loadError);
-  const modeLabel = createMemo(() => state.autoMode.active ? t('autoMode.label') : t('nowPlaying.modeLabel'));
+  const loading = createMemo(() => player().playback.isLoading);
+  const failed = createMemo(() => player().playback.loadError);
+  const modeLabel = createMemo(() => player().autoMode.active ? t('autoMode.label') : t('nowPlaying.modeLabel'));
   const openLabel = createMemo(() => {
     const track = current();
     return track ? `${modeLabel()}: ${track.title} — ${track.artist}` : t('autoMode.enter');
@@ -62,12 +63,12 @@ export function OmniBar() {
    * there is something more urgent to report. */
   const subtitle = createMemo(() => {
     if (failed()) return t('omnibar.unavailable');
-    if (state.playback.needsGesture) return t('omnibar.needsGesture');
-    if (state.playback.phase === 'starved') return t('omnibar.findingMore');
-    if (state.playback.phase === 'recovering') return t('omnibar.reconnecting');
-    if (state.playback.phase === 'buffering') return bufferingLine();
+    if (player().playback.needsGesture) return t('omnibar.needsGesture');
+    if (player().playback.phase === 'starved') return t('omnibar.findingMore');
+    if (player().playback.phase === 'recovering') return t('omnibar.reconnecting');
+    if (player().playback.phase === 'buffering') return bufferingLine();
     if (loading()) {
-      const prep = state.playback.previewPreparation;
+      const prep = player().playback.previewPreparation;
       if (prep && (prep.state === 'pending' || prep.state === 'streamable')) {
         const pct = prep.progress == null ? null : Math.round(prep.progress * 100);
         const eta = prep.eta_seconds == null ? null : Math.max(0, Math.round(prep.eta_seconds));
@@ -91,7 +92,7 @@ export function OmniBar() {
     }
     return t('omnibar.buffering');
   };
-  const audibleVolume = createMemo(() => (state.playback.muted ? 0 : state.playback.volume));
+  const audibleVolume = createMemo(() => (player().playback.muted ? 0 : player().playback.volume));
   const volumePct = createMemo(() => Math.round(gainToVolumePosition(audibleVolume()) * 100));
   /**
    * On a phone the pill is one thing you press to open the player, so nothing
@@ -120,7 +121,7 @@ export function OmniBar() {
   const adjustVolumeByWheel = (e: WheelEvent) => {
     e.preventDefault();
     const step = e.deltaY < 0 ? 0.05 : -0.05;
-    actions.setVolume(nudgeVolumeGain(audibleVolume(), step));
+    player().actions.setVolume(nudgeVolumeGain(audibleVolume(), step));
   };
 
   return (
@@ -145,10 +146,10 @@ export function OmniBar() {
         class={styles.openButton}
         type="button"
         aria-label={openLabel()}
-        onClick={() => (current() || state.autoMode.active) ? setNowPlayingOpen(true) : actions.enterAutoMode()}
+        onClick={() => (current() || player().autoMode.active) ? setNowPlayingOpen(true) : player().actions.enterAutoMode()}
       />
         <div class={styles.cover} style={coverBg()} data-omni-cover="">
-          <Show when={state.autoMode.active}>
+          <Show when={player().autoMode.active}>
             <span class={styles.coverModeBadge} data-omni-mode-badge="" aria-hidden="true">DJ</span>
           </Show>
         </div>
@@ -179,10 +180,10 @@ export function OmniBar() {
           ? t('common.retry')
           : loading()
             ? t('common.cancel')
-            : state.playback.isPlaying ? t('common.pause') : t('common.play')}
+            : player().playback.isPlaying ? t('common.pause') : t('common.play')}
         aria-busy={loading()}
         disabled={!current()}
-        onClick={() => actions.togglePlay()}
+        onClick={() => player().actions.togglePlay()}
       >
         <Switch>
           <Match when={failed()}>
@@ -193,7 +194,7 @@ export function OmniBar() {
           <Match when={loading()}>
             <Spinner size={20} />
           </Match>
-          <Match when={state.playback.isPlaying}>
+          <Match when={player().playback.isPlaying}>
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
               <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
             </svg>
@@ -211,7 +212,7 @@ export function OmniBar() {
         type="button"
         aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')}
         disabled={!current()}
-        onClick={() => podcast() ? actions.seekBy(15) : state.autoMode.active ? void actions.autoSkip() : actions.next()}
+        onClick={() => podcast() ? player().actions.seekBy(15) : player().autoMode.active ? void player().actions.autoSkip() : player().actions.next()}
       >
         <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z" /></svg>}>
           <PodcastSkipIcon size={22} />
@@ -222,12 +223,12 @@ export function OmniBar() {
         <button
           class={styles.soundBtn}
           type="button"
-          aria-label={state.playback.muted || state.playback.volume === 0 ? t('omnibar.unmute') : t('omnibar.mute')}
-          aria-pressed={state.playback.muted}
-          onClick={() => actions.toggleMute()}
+          aria-label={player().playback.muted || player().playback.volume === 0 ? t('omnibar.unmute') : t('omnibar.mute')}
+          aria-pressed={player().playback.muted}
+          onClick={() => player().actions.toggleMute()}
         >
           <Show
-            when={!state.playback.muted && state.playback.volume > 0}
+            when={!player().playback.muted && player().playback.volume > 0}
             fallback={
               <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
@@ -250,7 +251,7 @@ export function OmniBar() {
             value={volumePct()}
             aria-label={t('omnibar.volume')}
             aria-valuetext={`${volumePct()}%`}
-            onInput={(e) => actions.setVolume(volumePositionToGain(Number(e.currentTarget.value) / 100))}
+            onInput={(e) => player().actions.setVolume(volumePositionToGain(Number(e.currentTarget.value) / 100))}
           />
         </div>
 

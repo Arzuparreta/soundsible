@@ -5,7 +5,7 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } fro
 import { createActivityMemo } from '../lib/activityMemo';
 import { mobileListLayout } from '../lib/listLayout';
 import { pageVisible } from '../lib/pageVisibility';
-import { actions, state } from '../stores';
+import { player } from '../stores/player';
 import {
   AUTO_MODE_LAYOUT_KEY,
   AUTO_MODE_PANELS,
@@ -95,18 +95,18 @@ export function AutoMode(props: {
     props.onPanelChange(panel);
   };
   const placeInRoute = (track: Track, beforeQueueId?: string) => {
-    void actions.placeAutoTrack(track, beforeQueueId);
+    void player().actions.placeAutoTrack(track, beforeQueueId);
     setCarriedTrack(null);
   };
   const placeCarriedInRoute = (beforeQueueId?: string) => {
     const carried = carriedTrack();
     if (!carried) return;
-    if (carried.queueId) actions.moveAutoRoute(carried.queueId, beforeQueueId);
-    else void actions.placeAutoTrack(carried.track, beforeQueueId);
+    if (carried.queueId) player().actions.moveAutoRoute(carried.queueId, beforeQueueId);
+    else void player().actions.placeAutoTrack(carried.track, beforeQueueId);
     setCarriedTrack(null);
   };
   const addToSources = (track: Track) => {
-    actions.useAutoTrackAsSource(track);
+    player().actions.useAutoTrackAsSource(track);
     setCarriedTrack(null);
   };
 
@@ -125,20 +125,20 @@ export function AutoMode(props: {
   const routeActive = () => panelActive('route');
   const upcoming = createActivityMemo(
     routeActive,
-    () => state.playback.queue.slice(Math.max(0, state.playback.index + 1)),
+    () => player().playback.queue.slice(Math.max(0, player().playback.index + 1)),
     [],
-    () => [state.playback.queue, state.playback.index],
+    () => [player().playback.queue, player().playback.index],
   );
   const firstEditable = createActivityMemo(routeActive, () => {
-    const index = state.playback.index;
-    const floor = state.autoMode.transition.status === 'idle' ? index : index + 1;
-    return editableFrom(routeRows(state.playback.queue), index, floor);
-  }, 0, () => [state.playback.queue, state.playback.index, state.autoMode.transition.status]);
+    const index = player().playback.index;
+    const floor = player().autoMode.transition.status === 'idle' ? index : index + 1;
+    return editableFrom(routeRows(player().playback.queue), index, floor);
+  }, 0, () => [player().playback.queue, player().playback.index, player().autoMode.transition.status]);
   const staleSeams = createActivityMemo(
     routeActive,
-    () => new Set(state.autoMode.staleSeams),
+    () => new Set(player().autoMode.staleSeams),
     new Set<string>(),
-    () => [state.autoMode.staleSeams],
+    () => [player().autoMode.staleSeams],
   );
   /** The rows that travel together. A bridge exists only to reach the song it
    * leads into, so aiming at either of them describes the same block. */
@@ -154,7 +154,7 @@ export function AutoMode(props: {
     return block.length ? block : [queueId];
   };
   const routeEntries = createActivityMemo<PlayerTrackListEntry[]>(routeActive, () => upcoming().map((track, index) => {
-    const committed = index === 0 && state.autoMode.transition.status !== 'idle';
+    const committed = index === 0 && player().autoMode.transition.status !== 'idle';
     // Tapping a seam is the touch path: drops are handled by the list itself,
     // which can aim at the nearest seam instead of asking for a hit on this.
     const gap = (
@@ -175,12 +175,12 @@ export function AutoMode(props: {
     // the track menu's, and none of it touches the route: a finished download
     // never replaces the occurrence, so even the cued handoff can be kept.
     const menu = () => [
-      { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
-      { icon: menuIcons.changeSession(), label: t('musicExplorer.startDjFromSong'), onSelect: () => void actions.startDjFromTrack(track) },
+      { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => player().actions.useAutoTrackAsSource(track) },
+      { icon: menuIcons.changeSession(), label: t('musicExplorer.startDjFromSong'), onSelect: () => void player().actions.startDjFromTrack(track) },
       ...buildTrackMenu(track, { music: playerTrackMusic(track), inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor }),
-      ...(state.playback.index + index + 1 < firstEditable() ? [] : [{
+      ...(player().playback.index + index + 1 < firstEditable() ? [] : [{
         icon: menuIcons.remove(), label: t('autoMode.route.remove'), danger: true,
-        onSelect: () => actions.removeAutoRouteOccurrence(track.queueId),
+        onSelect: () => player().actions.removeAutoRouteOccurrence(track.queueId),
       }]),
     ];
     return {
@@ -199,7 +199,7 @@ export function AutoMode(props: {
       locked: committed,
       // With the mixing off every join is a plain cut, planned or not: a
       // seam with no transition of its own is nothing to point out.
-      stale: !committed && state.playback.djMixing && staleSeams().has(track.queueId),
+      stale: !committed && player().playback.djMixing && staleSeams().has(track.queueId),
       draggable: !committed,
       before: gap,
       onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
@@ -207,44 +207,47 @@ export function AutoMode(props: {
       onCarry: committed ? undefined : () => setCarriedTrack({ track, queueId: track.queueId }),
       menu,
     };
-  }), [], () => [upcoming(), state.autoMode.transition.status, state.playback.djMixing, staleSeams()]);
+  }), [], () => [upcoming(), player().autoMode.transition.status, player().playback.djMixing, staleSeams()]);
 
   const mixPending = createMemo(() => routeEntries().some((entry) => entry.stale));
   const routeWaiting = createMemo(() => (
     routeEntries().length === 0
-    && (state.autoMode.phase === 'planning' || state.autoMode.phase === 'warming' || state.autoMode.phase === 'degraded')
+    && (player().autoMode.phase === 'planning' || player().autoMode.phase === 'warming' || player().autoMode.phase === 'degraded')
   ));
 
   const routeEmpty = () => (
     <Show
       when={routeWaiting()}
-      fallback={state.autoMode.phase === 'exhausted'
-        ? <div role="status"><p>{t('autoMode.route.exhausted')}</p><button type="button" onClick={() => actions.retryAutoRoute()}>{t('common.retry')}</button></div>
-        : state.autoMode.sources.length ? t('autoMode.mobile.routeEmpty') : t('autoMode.source.routeEmpty')}
+      fallback={player().autoMode.phase === 'exhausted'
+        ? <div role="status"><p>{t('autoMode.route.exhausted')}</p><button type="button" onClick={() => player().actions.retryAutoRoute()}>{t('common.retry')}</button></div>
+        : player().autoMode.sources.length ? t('autoMode.mobile.routeEmpty') : t('autoMode.source.routeEmpty')}
     >
       <div
         class={styles.routeLoading}
-        data-route-loading={state.autoMode.phase}
+        data-route-loading={player().autoMode.phase}
         role="status"
         aria-live="polite"
         aria-busy="true"
       >
         <span class={styles.routeLoadingMark} aria-hidden="true"><i /><i /><i /></span>
         <strong>
-          {state.autoMode.phase === 'warming'
-            ? t('autoMode.route.warming', { title: state.playback.currentTrack?.title ?? state.autoMode.sources[0]?.label ?? '' })
-            : state.autoMode.phase === 'degraded'
+          {player().autoMode.phase === 'warming'
+            ? t('autoMode.route.warming', { title: player().playback.currentTrack?.title ?? player().autoMode.sources[0]?.label ?? '' })
+            : player().autoMode.phase === 'degraded'
             ? t('autoMode.route.retrying')
-            : state.playback.currentTrack
-              ? t('autoMode.route.preparingFrom', { title: state.playback.currentTrack.title })
-              : t('autoMode.route.preparing')}
+            : (() => {
+                const current = player().playback.currentTrack;
+                return current
+                  ? t('autoMode.route.preparingFrom', { title: current.title })
+                  : t('autoMode.route.preparing');
+              })()}
         </strong>
         <span>
-          {state.autoMode.phase === 'warming'
+          {player().autoMode.phase === 'warming'
             ? t('autoMode.route.warmingHint')
-            : state.autoMode.phase === 'degraded'
+            : player().autoMode.phase === 'degraded'
             ? t('autoMode.route.retryingHint')
-            : state.playback.isPlaying
+            : player().playback.isPlaying
               ? t('autoMode.route.preparingWhilePlaying')
               : t('autoMode.route.preparingHint')}
         </span>
@@ -257,32 +260,35 @@ export function AutoMode(props: {
   const stageEmpty = () => (
     <div class={styles.stageOpening}>
       <Show
-        when={state.autoMode.phase === 'planning' || state.autoMode.phase === 'warming' || state.autoMode.phase === 'degraded'}
+        when={player().autoMode.phase === 'planning' || player().autoMode.phase === 'warming' || player().autoMode.phase === 'degraded'}
         fallback={<>
-          <p>{state.autoMode.activity?.status === 'error' ? t(state.autoMode.activity.key) : t('nowPlaying.nothingPlaying')}</p>
+          <p>{(() => {
+            const activity = player().autoMode.activity;
+            return activity?.status === 'error' ? t(activity.key) : t('nowPlaying.nothingPlaying');
+          })()}</p>
           <button type="button" onClick={() => openDestination('reference')}>{t('musicExplorer.referenceEmpty')}</button>
         </>}
       >
         <div
           class={styles.routeLoading}
-          data-route-loading={state.autoMode.phase}
+          data-route-loading={player().autoMode.phase}
           data-stage-opening=""
           role="status"
           aria-live="polite"
-          aria-busy={state.autoMode.phase !== 'degraded'}
+          aria-busy={player().autoMode.phase !== 'degraded'}
         >
           <span class={styles.routeLoadingMark} aria-hidden="true"><i /><i /><i /></span>
-          <strong>{state.autoMode.phase === 'degraded' ? t('autoMode.agent.openingFailed') : t('autoMode.booth.opening')}</strong>
+          <strong>{player().autoMode.phase === 'degraded' ? t('autoMode.agent.openingFailed') : t('autoMode.booth.opening')}</strong>
           <span>
-            {state.autoMode.phase === 'degraded'
+            {player().autoMode.phase === 'degraded'
               ? t('autoMode.route.retryingHint')
-              : state.autoMode.sources.length
-                ? t('autoMode.source.added', { title: state.autoMode.sources[0].label })
+              : player().autoMode.sources.length
+                ? t('autoMode.source.added', { title: player().autoMode.sources[0].label })
                 : t('autoMode.booth.openingHint')}
           </span>
         </div>
-        <Show when={state.autoMode.phase === 'degraded'}>
-          <button type="button" onClick={() => actions.retryAutoRoute()}>{t('common.retry')}</button>
+        <Show when={player().autoMode.phase === 'degraded'}>
+          <button type="button" onClick={() => player().actions.retryAutoRoute()}>{t('common.retry')}</button>
         </Show>
       </Show>
     </div>
@@ -327,16 +333,16 @@ export function AutoMode(props: {
       headAction={[
         // Fix mix rebuilds transitions and the bridges that carry them. With
         // the mixing off there are none to hear, so there is nothing to fix.
-        ...(state.playback.djMixing ? [{
-          label: state.autoMode.repairing ? t('autoMode.route.fixing') : t('autoMode.route.fix'),
+        ...(player().playback.djMixing ? [{
+          label: player().autoMode.repairing ? t('autoMode.route.fixing') : t('autoMode.route.fix'),
           // Reordering opens joins the DJ never chose. The button says so
           // rather than waiting for a plain fade to announce it on arrival.
           title: mixPending() ? t('autoMode.route.mixPending') : t('autoMode.route.fixHint'),
           pending: mixPending(),
-          disabled: state.autoMode.repairing
-            || state.autoMode.pendingDirection
+          disabled: player().autoMode.repairing
+            || player().autoMode.pendingDirection
             || routeEntries().filter((entry) => !entry.locked).length < 2,
-          onClick: () => void actions.repairAutoRoute(),
+          onClick: () => void player().actions.repairAutoRoute(),
         }] : []),
         {
           label: t('autoMode.route.add'),
@@ -349,7 +355,7 @@ export function AutoMode(props: {
         // The header means "at the end". A row that is already in the route
         // moves there rather than being copied into a second occurrence of
         // itself, which is what dropping short of a seam used to earn.
-        if (transfer.queueId) actions.moveAutoRoute(transfer.queueId);
+        if (transfer.queueId) player().actions.moveAutoRoute(transfer.queueId);
         else placeInRoute(transfer.track);
       }}
       onReorder={(queueId, slot) => {
@@ -357,7 +363,7 @@ export function AutoMode(props: {
         // fixed and throw away the transition it was planned with — a plain
         // fade earned by changing nothing.
         if (isNoopMove(routeBlock(queueId), slot)) return;
-        actions.moveAutoRoute(queueId, dropBeforeId(upcoming().map((entry) => entry.queueId), slot));
+        player().actions.moveAutoRoute(queueId, dropBeforeId(upcoming().map((entry) => entry.queueId), slot));
       }}
       onDropAtSlot={(slot, event) => {
         const transfer = readAutoTrackTransfer(event);
@@ -368,7 +374,7 @@ export function AutoMode(props: {
   );
 
   return (
-    <div class={styles.root} data-playing={state.playback.isPlaying ? 'true' : 'false'}>
+    <div class={styles.root} data-playing={player().playback.isPlaying ? 'true' : 'false'}>
       <PlayerWorkspace
         panels={AUTO_MODE_PANELS}
         activePanel={props.panel}

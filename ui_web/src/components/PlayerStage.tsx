@@ -2,7 +2,8 @@ import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
-import { actions, isSavedTrack, state } from '../stores';
+import { isSavedTrack } from '../stores';
+import { player } from '../stores/player';
 import { clockTime } from '../lib/format';
 import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
@@ -56,7 +57,7 @@ export function PlayerStage(props: {
   /** What the stage says with no track. Auto tells the story of its opening. */
   empty?: JSX.Element;
 }) {
-  const track = createMemo(() => state.playback.currentTrack);
+  const track = createMemo(() => player().playback.currentTrack);
   const podcast = createMemo(() => Boolean(track() && isPodcastTrack(track()!)));
   const [mobileVisual, setMobileVisual] = createSignal(initialMobileVisualState);
   const [layoutBusy, setLayoutBusy] = createSignal(false);
@@ -92,17 +93,17 @@ export function PlayerStage(props: {
   };
   const [desktopLyrics, setDesktopLyrics] = createSignal(readDesktopLyrics());
   const desktopLyricsActive = createMemo(() => desktopLyrics() && !podcast());
-  const loading = createMemo(() => state.playback.isLoading);
-  const loadFailed = createMemo(() => state.playback.loadError);
+  const loading = createMemo(() => player().playback.isLoading);
+  const loadFailed = createMemo(() => player().playback.loadError);
   const position = createMemo<number>((previous) => {
-    if (!pageVisible()) return previous ?? untrack(() => state.playback.currentTime);
-    return props.surfaceOpen ? state.playback.currentTime : untrack(() => state.playback.currentTime);
+    if (!pageVisible()) return previous ?? untrack(() => player().playback.currentTime);
+    return props.surfaceOpen ? player().playback.currentTime : untrack(() => player().playback.currentTime);
   });
   const seekPct = () => {
-    const duration = state.playback.duration;
+    const duration = player().playback.duration;
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   };
-  const volPct = () => Math.round(gainToVolumePosition(state.playback.muted ? 0 : state.playback.volume) * 100);
+  const volPct = () => Math.round(gainToVolumePosition(player().playback.muted ? 0 : player().playback.volume) * 100);
 
 
   createEffect(() => {
@@ -172,19 +173,19 @@ export function PlayerStage(props: {
           {
             icon: menuIcons.shuffle(),
             label: t('nowPlaying.shuffle'),
-            selected: state.playback.shuffle,
-            onSelect: () => actions.toggleShuffle(),
+            selected: player().playback.shuffle,
+            onSelect: () => player().actions.toggleShuffle(),
           },
           {
             icon: menuIcons.repeat(),
             label: t('nowPlaying.repeat'),
-            selected: state.playback.repeat !== 'off',
-            onSelect: () => actions.cycleRepeat(),
+            selected: player().playback.repeat !== 'off',
+            onSelect: () => player().actions.cycleRepeat(),
           },
           {
             icon: menuIcons.radio(),
-            label: state.playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio'),
-            onSelect: () => state.playback.radioMode ? void onStopRadio() : void actions.startRadio(current),
+            label: player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio'),
+            onSelect: () => player().playback.radioMode ? void onStopRadio() : void player().actions.startRadio(current),
           },
         ] : []),
         // The one Auto-native thing to do with the song on air now has a button
@@ -203,8 +204,8 @@ export function PlayerStage(props: {
   };
 
   const next = () => {
-    if (props.mode === 'auto') void actions.autoSkip();
-    else actions.next();
+    if (props.mode === 'auto') void player().actions.autoSkip();
+    else player().actions.next();
   };
 
   return (
@@ -306,33 +307,33 @@ export function PlayerStage(props: {
                     class={styles.seek}
                     type="range"
                     min={0}
-                    max={Math.max(1, Math.floor(state.playback.duration))}
+                    max={Math.max(1, Math.floor(player().playback.duration))}
                     value={Math.floor(position())}
                     step={1}
                     style={{ '--fill': `${seekPct()}%` }}
                     aria-label={t('nowPlaying.seekLabel')}
-                    onInput={(event) => actions.seek(Number(event.currentTarget.value))}
+                    onInput={(event) => player().actions.seek(Number(event.currentTarget.value))}
                   />
                   <div class={styles.times}>
                     <span>{clockTime(position())}</span>
-                    <span>{clockTime(state.playback.duration)}</span>
+                    <span>{clockTime(player().playback.duration)}</span>
                   </div>
                 </div>
 
                 <div class={styles.controls} data-lyrics-morph="">
                   <Show when={props.mode === 'now-playing'}>
                     <button
-                      classList={{ [styles.toggle]: true, [styles.on]: state.playback.shuffle }}
+                      classList={{ [styles.toggle]: true, [styles.on]: player().playback.shuffle }}
                       type="button"
                       aria-label={t('nowPlaying.shuffle')}
-                      aria-pressed={state.playback.shuffle}
-                      onClick={() => actions.toggleShuffle()}
+                      aria-pressed={player().playback.shuffle}
+                      onClick={() => player().actions.toggleShuffle()}
                     >
                       <ShuffleIcon size={20} />
                     </button>
                   </Show>
 
-                  <button class={styles.ctrl} type="button" aria-label={podcast() ? t('podcasts.skipBack') : t('common.prev')} onClick={() => podcast() ? actions.seekBy(-15) : actions.prev()}>
+                  <button class={styles.ctrl} type="button" aria-label={podcast() ? t('podcasts.skipBack') : t('common.prev')} onClick={() => podcast() ? player().actions.seekBy(-15) : player().actions.prev()}>
                     <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>}>
                       <PodcastSkipIcon backward />
                     </Show>
@@ -341,9 +342,9 @@ export function PlayerStage(props: {
                   <button
                     class={styles.play}
                     type="button"
-                    aria-label={loadFailed() ? t('common.retry') : state.playback.isPlaying ? t('common.pause') : t('common.play')}
+                    aria-label={loadFailed() ? t('common.retry') : player().playback.isPlaying ? t('common.pause') : t('common.play')}
                     aria-busy={loading()}
-                    onClick={() => actions.togglePlay()}
+                    onClick={() => player().actions.togglePlay()}
                   >
                     <Switch>
                       <Match when={loadFailed()}>
@@ -354,7 +355,7 @@ export function PlayerStage(props: {
                       <Match when={loading()}>
                         <Spinner size={26} onAccent />
                       </Match>
-                      <Match when={state.playback.isPlaying}>
+                      <Match when={player().playback.isPlaying}>
                         <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
                           <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
                         </svg>
@@ -367,7 +368,7 @@ export function PlayerStage(props: {
                     </Switch>
                   </button>
 
-                  <button class={styles.ctrl} type="button" aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')} onClick={() => podcast() ? actions.seekBy(15) : next()}>
+                  <button class={styles.ctrl} type="button" aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')} onClick={() => podcast() ? player().actions.seekBy(15) : next()}>
                     <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" /></svg>}>
                       <PodcastSkipIcon />
                     </Show>
@@ -375,13 +376,13 @@ export function PlayerStage(props: {
 
                   <Show when={props.mode === 'now-playing'}>
                     <button
-                      classList={{ [styles.toggle]: true, [styles.on]: state.playback.repeat !== 'off' }}
+                      classList={{ [styles.toggle]: true, [styles.on]: player().playback.repeat !== 'off' }}
                       type="button"
                       aria-label={t('nowPlaying.repeat')}
-                      onClick={() => actions.cycleRepeat()}
+                      onClick={() => player().actions.cycleRepeat()}
                     >
                       <RepeatIcon size={20} />
-                      <Show when={state.playback.repeat === 'one'}>
+                      <Show when={player().playback.repeat === 'one'}>
                         <span class={styles.repeatOne}>1</span>
                       </Show>
                     </button>
@@ -421,7 +422,7 @@ export function PlayerStage(props: {
                     </button>
                   </Show>
 
-                  <Show when={props.onOpenList && state.playback.queue.length > 1}>
+                  <Show when={props.onOpenList && player().playback.queue.length > 1}>
                     <button
                       classList={{ [styles.actBtn]: true, [styles.mobileQueueToggle]: true }}
                       type="button"
@@ -441,14 +442,14 @@ export function PlayerStage(props: {
                       classList={{
                         [styles.actBtn]: true,
                         [styles.radioAction]: true,
-                        [styles.actOn]: state.playback.radioMode,
-                        [styles.actPulse]: state.playback.radioLoading,
+                        [styles.actOn]: player().playback.radioMode,
+                        [styles.actPulse]: player().playback.radioLoading,
                       }}
                       type="button"
-                      aria-label={state.playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
-                      title={state.playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
-                      aria-pressed={state.playback.radioMode}
-                      onClick={() => (state.playback.radioMode ? void onStopRadio() : void actions.startRadio(current()))}
+                      aria-label={player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
+                      title={player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
+                      aria-pressed={player().playback.radioMode}
+                      onClick={() => (player().playback.radioMode ? void onStopRadio() : void player().actions.startRadio(current()))}
                     >
                       <RadioIcon size={20} />
                     </button>
@@ -457,15 +458,15 @@ export function PlayerStage(props: {
                   <div class={styles.volume}>
                     <button
                       class={styles.actBtn}
-                      classList={{ [styles.actOn]: state.playback.muted }}
+                      classList={{ [styles.actOn]: player().playback.muted }}
                       type="button"
-                      aria-label={state.playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
-                      aria-pressed={state.playback.muted}
-                      title={state.playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
-                      onClick={() => actions.toggleMute()}
+                      aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
+                      aria-pressed={player().playback.muted}
+                      title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
+                      onClick={() => player().actions.toggleMute()}
                     >
                       <Show
-                        when={!state.playback.muted}
+                        when={!player().playback.muted}
                         fallback={
                           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
@@ -487,7 +488,7 @@ export function PlayerStage(props: {
                         style={{ '--fill': `${volPct()}%` }}
                         aria-label={t('omnibar.volume')}
                         aria-valuetext={`${volPct()}%`}
-                        onInput={(event) => actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
+                        onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
                       />
                     </span>
                   </div>

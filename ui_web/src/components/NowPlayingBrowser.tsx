@@ -43,6 +43,7 @@ import {
   ownedTrackForResult,
   state,
 } from '../stores';
+import { player } from '../stores/player';
 import { coverUrl, trackCoverUrl } from '../lib/media';
 import { ArtworkSurface } from '../design/Artwork';
 import { parseYouTubeInput } from '../lib/youtube';
@@ -159,7 +160,7 @@ async function enqueueCatalogItem(item: CatalogItem): Promise<void> {
   try {
     const track = await resolveCatalogTrack(item);
     if (!track) throw new Error('unresolved');
-    actions.enqueue(track);
+    player().actions.enqueue(track);
   } catch {
     toast.error(t('searchPanel.noResolve'));
   }
@@ -442,12 +443,12 @@ export function NowPlayingBrowser(props: {
     if (resolving().has(item.id)) return;
     const purpose = props.purpose;
     const before = props.routeBeforeQueueId;
-    const epoch = inAuto() ? (changeMode() ? actions.beginAutoSessionChange() : actions.autoSessionToken()) : null;
+    const epoch = inAuto() ? (changeMode() ? player().actions.beginAutoSessionChange() : player().actions.autoSessionToken()) : null;
     markResolving(item.id, true);
     try {
       const track = await resolveCatalogTrack(item);
       if (!track) throw new Error('unresolved');
-      if (props.purpose !== purpose || props.routeBeforeQueueId !== before || (epoch !== null && actions.autoSessionToken() !== epoch)) return;
+      if (props.purpose !== purpose || props.routeBeforeQueueId !== before || (epoch !== null && player().actions.autoSessionToken() !== epoch)) return;
       action(track);
     } catch {
       toast.error(t('searchPanel.noResolve'));
@@ -458,13 +459,13 @@ export function NowPlayingBrowser(props: {
 
   const placeTrack = async (track: Track) => {
     if (changeMode()) {
-      const changing = actions.changeAutoSession([track], track.title);
+      const changing = player().actions.changeAutoSession([track], track.title);
       props.onPlaced?.();
       await changing;
       return;
     }
-    if (referenceMode()) actions.useAutoTrackAsSource(track);
-    else void actions.placeAutoTrack(track, props.routeBeforeQueueId);
+    if (referenceMode()) player().actions.useAutoTrackAsSource(track);
+    else void player().actions.placeAutoTrack(track, props.routeBeforeQueueId);
     // Only a placement aimed at a seam is a finished errand. Adding from
     // ordinary browsing leaves the listener where they are, free to add more —
     // bouncing them to the route after every song made building a set a chore.
@@ -594,7 +595,7 @@ export function NowPlayingBrowser(props: {
   const renderTrack = (
     track: () => Track,
     onPlay: () => void,
-    _onQueue: () => void = () => actions.enqueue(track()),
+    _onQueue: () => void = () => player().actions.enqueue(track()),
   ) => (
     <BrowserTrackRow
       title={track().title}
@@ -702,7 +703,7 @@ export function NowPlayingBrowser(props: {
               setScope('global');
               runSearch(value);
             }}
-            onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, query()) : undefined}
+            onUse={inAuto() ? (tracks) => player().actions.addAutoSource(tracks, query()) : undefined}
           />
         </Match>
         <Match when={globalSearching()}>
@@ -720,8 +721,8 @@ export function NowPlayingBrowser(props: {
             primaryLabel={inAuto() ? referenceMode() ? sourceLabel() : t('musicExplorer.request') : undefined}
             primaryShort={inAuto() && !referenceMode() ? t('musicExplorer.requestShort') : undefined}
             autoRow={autoRow}
-            onTrack={(item) => void useItem(item, inAuto() ? placeTrack : actions.playNow)}
-            onQueue={(item) => void useItem(item, actions.enqueue)}
+            onTrack={(item) => void useItem(item, inAuto() ? placeTrack : (track) => player().actions.playNow(track))}
+            onQueue={(item) => void useItem(item, (track) => player().actions.enqueue(track))}
             onEntity={(item) => {
               if (item.type === 'playlist') { push({ kind: 'playlist', name: item.title }, true); } else if (item.type === 'artist') {
                 push({
@@ -742,7 +743,7 @@ export function NowPlayingBrowser(props: {
                 }, true);
               }
             }}
-            onYoutube={(result) => inAuto() ? placeTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
+            onYoutube={(result) => inAuto() ? placeTrack(resultTrack(result)) : player().actions.playNow(resultTrack(result))}
           />
         </Match>
         <Match when={true}>
@@ -756,15 +757,15 @@ export function NowPlayingBrowser(props: {
                   const playable = playableTrack(item);
                   if (playable) {
                     if (inAuto()) void placeTrack(playable);
-                    else actions.playNow(playable);
+                    else player().actions.playNow(playable);
                   } else {
-                    void useItem(item, inAuto() ? placeTrack : actions.playNow);
+                    void useItem(item, inAuto() ? placeTrack : (track) => player().actions.playNow(track));
                   }
                 }}
                 onQueue={(item) => {
                   const playable = playableTrack(item);
-                  if (playable) actions.enqueue(playable);
-                  else void useItem(item, actions.enqueue);
+                  if (playable) player().actions.enqueue(playable);
+                  else void useItem(item, (track) => player().actions.enqueue(track));
                 }}
               />
             </Match>
@@ -799,7 +800,7 @@ export function NowPlayingBrowser(props: {
                 onArtist={(name) => push({ kind: 'libraryArtist', name, artistId: libraryArtists().find((row) => row.name === name)?.id })}
                 onAlbum={(album) => push({ kind: 'libraryAlbum', name: album.title, artist: album.album_artist, albumId: album.id })}
                 renderTrack={renderTrack}
-                onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, t('nav.library')) : undefined}
+                onUse={inAuto() ? (tracks) => player().actions.addAutoSource(tracks, t('nav.library')) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'favourites'}>
@@ -812,7 +813,7 @@ export function NowPlayingBrowser(props: {
                 onBack={back}
                 renderTrack={renderTrack}
                 showPlayAll={!routeMode()}
-                onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, t('nav.favourites')) : undefined}
+                onUse={inAuto() ? (tracks) => player().actions.addAutoSource(tracks, t('nav.favourites')) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'libraryArtist'}>
@@ -824,7 +825,7 @@ export function NowPlayingBrowser(props: {
                 onExplore={() => push({ kind: 'catalogArtist', name: (currentView() as { name: string }).name })}
                 onBack={back}
                 renderTrack={renderTrack}
-                onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name) : undefined}
+                onUse={inAuto() ? (tracks) => player().actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'playlists'}>
@@ -837,7 +838,7 @@ export function NowPlayingBrowser(props: {
                 onBack={back}
                 renderTrack={renderTrack}
                 showPlayAll={!routeMode()}
-                onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'playlist' }>).name) : undefined}
+                onUse={inAuto() ? (tracks) => player().actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'playlist' }>).name) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'libraryAlbum'}>
@@ -1032,7 +1033,7 @@ function LibraryView(props: {
       >
         <CollectionRows items={props.tracks} scrollElement={scrollRef}>
           {(track, index) => props.renderTrack(track, () =>
-            actions.playFrom(props.tracks, index(), { context: libraryContext(t('nav.library')) }),
+            player().actions.playFrom(props.tracks, index(), { context: libraryContext(t('nav.library')) }),
           )}
         </CollectionRows>
       </Show></Show>
@@ -1066,7 +1067,7 @@ function LibraryArtistView(props: {
       </Toolbar>
       <For each={catalog()?.albums ?? []}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For>
       <CollectionRows items={tracks()} scrollElement={scrollRef}>
-        {(track, index) => props.renderTrack(track, () => actions.playFrom(tracks(), index(), { context: {
+        {(track, index) => props.renderTrack(track, () => player().actions.playFrom(tracks(), index(), { context: {
                   id: `artist:${props.name}`,
                   kind: 'artist',
                   label: props.name,
@@ -1094,7 +1095,7 @@ function LibraryAlbumView(props: {
         label: props.view.name,
         destination: albumPath(props.view.name, props.view.artist, { view: 'library', albumId: props.view.albumId }),
       }} onBack={props.onBack}
-      renderTrack={props.renderTrack} showPlayAll={!props.inAuto} onUse={props.inAuto ? (rows) => actions.addAutoSource(rows, props.view.name) : undefined} />
+      renderTrack={props.renderTrack} showPlayAll={!props.inAuto} onUse={props.inAuto ? (rows) => player().actions.addAutoSource(rows, props.view.name) : undefined} />
   </Show>;
 }
 
@@ -1124,7 +1125,7 @@ function LocalSearchView(props: {
         {(result) => <Show when={result().kind === 'track'} fallback={<SearchArtistRow result={result() as Extract<LibrarySearchResult, { kind: 'artist' }>} onArtist={props.onArtist} />}>
           {/* A search result is a song picked on its own: the rest of the
               results do not follow it. */}
-          {props.renderTrack(() => (result() as Extract<LibrarySearchResult, { kind: 'track' }>).track, () => actions.playNow((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track))}
+          {props.renderTrack(() => (result() as Extract<LibrarySearchResult, { kind: 'track' }>).track, () => player().actions.playNow((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track))}
         </Show>}
       </CollectionRows>
       <div class={styles.searchEverywhere}>
@@ -1237,7 +1238,7 @@ function TrackCollectionView(props: {
         <Show when={props.onUse}><CollectionActions title={props.title} tracks={props.tracks} auto hideReferenceMenu={Boolean(props.headerActions)} onReference={props.onUse} /></Show>
         <Show when={!props.onUse && props.showPlayAll}>
           <Control type="button" disabled={props.tracks.length === 0} aria-label={t('playlistDetail.play')} onClick={() =>
-            actions.playFrom(props.tracks, 0, { context: props.context })
+            player().actions.playFrom(props.tracks, 0, { context: props.context })
           }><PlayIcon /></Control>
         </Show>
         {props.headerActions}
@@ -1245,7 +1246,7 @@ function TrackCollectionView(props: {
       <Show when={editContent()} fallback={
         <Show when={props.tracks.length > 0} fallback={<div class={styles.empty}><p>{props.empty}</p></div>}>
           <CollectionRows items={props.tracks} scrollElement={scroller}>
-            {(track, index) => props.renderTrack(track, () => actions.playFrom(props.tracks, index(), { context: props.context }))}
+            {(track, index) => props.renderTrack(track, () => player().actions.playFrom(props.tracks, index(), { context: props.context }))}
           </CollectionRows>
         </Show>
       }>{editContent()}</Show>
@@ -1345,7 +1346,7 @@ function YoutubeRow(props: {
       owned={!!ownedTrackForResult(props.result)}
       primaryLabel={props.primaryLabel}
       onPlay={props.onPlay}
-      onQueue={() => actions.enqueue(track())}
+      onQueue={() => player().actions.enqueue(track())}
       {...props.autoRow(track())}
     />
   );
