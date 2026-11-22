@@ -356,12 +356,45 @@ def _gather(
 
 
 
+_VARIOUS_ARTISTS_DEEZER_ID = "5080"
+
+
+def _deezer_album_credits(data: dict[str, Any]) -> tuple[str, list[str], str | None]:
+    artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
+    contributors = data.get("contributors") if isinstance(data.get("contributors"), list) else []
+    names: list[str] = []
+    ids: list[str] = []
+    seen: set[str] = set()
+    for row in contributors:
+        if not isinstance(row, dict) or catalog_service.norm(row.get("role")) != "main":
+            continue
+        name = catalog_service.clean(row.get("name"))
+        if not name or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        names.append(name)
+        ids.append(str(row.get("id") or "").strip())
+
+    if not names:
+        fallback_name = catalog_service.clean(artist_row.get("name"))
+        if fallback_name:
+            names.append(fallback_name)
+            ids.append(str(artist_row.get("id") or "").strip())
+
+    artist = ", ".join(names)
+    artist_deezer_id: str | None = None
+    if len(names) == 1:
+        candidate_id = ids[0] or str(artist_row.get("id") or "").strip()
+        if candidate_id and candidate_id != _VARIOUS_ARTISTS_DEEZER_ID and names[0].casefold() != "various artists":
+            artist_deezer_id = candidate_id
+    return artist, names, artist_deezer_id
+
+
 def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -> dict[str, Any]:
     data = deezer_catalog.deezer_get(f"album/{album_id}")
     artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
     title = catalog_service.clean(data.get("title"))
-    artist = catalog_service.clean(artist_row.get("name"))
-    artist_deezer_id = str(artist_row.get("id") or "").strip() or None
+    artist, artists, artist_deezer_id = _deezer_album_credits(data)
     cover = deezer.image(data, "cover")
     release_date = _iso_release_date(data.get("release_date"))
     year = extract_year(data.get("release_date"))
@@ -386,7 +419,7 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
         "cover_big": data.get("cover_big"),
         "cover_medium": data.get("cover_medium"),
         "release_date": data.get("release_date"),
-        "artist": artist_row,
+        "artist": {**artist_row, "name": artist} if artist else artist_row,
     }
     tracklist: list[dict[str, Any]] = []
     for row in _deezer_album_tracks(album_id, embedded):
@@ -405,6 +438,7 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
     return {
         "title": title,
         "artist": artist,
+        "artists": artists,
         "artist_deezer_id": artist_deezer_id,
         "cover": cover,
         "year": year,
@@ -804,6 +838,7 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
 
     title = name
     album_artist = artist or ""
+    album_artists: list[str] = [album_artist] if album_artist else []
     artist_deezer_id: str | None = None
     cover = ""
     year: int | None = None
@@ -829,6 +864,11 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
             profile = _deezer_album_profile(deezer_id, library_keys)
             title = profile["title"] or title
             album_artist = profile["artist"] or album_artist
+            raw_artists = profile.get("artists")
+            if isinstance(raw_artists, list) and raw_artists:
+                album_artists = [str(a).strip() for a in raw_artists if str(a).strip()]
+            else:
+                album_artists = [album_artist] if album_artist else []
             artist_deezer_id = profile.get("artist_deezer_id") or None
             cover = profile["cover"]
             year = profile["year"]
@@ -863,6 +903,7 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
     return {
         "title": title,
         "artist": album_artist,
+        "artists": album_artists,
         "artist_deezer_id": artist_deezer_id,
         "cover": cover,
         "year": year,

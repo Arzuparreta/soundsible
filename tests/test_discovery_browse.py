@@ -125,6 +125,8 @@ def test_new_releases_sorted_newest_first_with_badge_window_and_dedup(monkeypatc
             ]}
         if path in ("artist/101/albums", "artist/201/albums"):
             return {"data": []}
+        if path.startswith("album/"):
+            return {"id": int(path.split("/")[1])}
         raise AssertionError(path)
 
     monkeypatch.setattr(deezer, "get", get)
@@ -167,6 +169,13 @@ def test_new_releases_reuse_saved_deezer_id_without_artist_search(monkeypatch):
             return {"data": [
                 {"id": 9001, "title": "Saved Band New EP", "record_type": "ep", "release_date": "2026-11-18"},
             ]}
+        if path == "album/9001":
+            return {
+                "id": 9001,
+                "title": "Saved Band New EP",
+                "artist": {"id": 555, "name": "Saved Band"},
+                "contributors": [{"id": 555, "name": "Saved Band", "role": "Main"}],
+            }
         raise AssertionError(path)
 
     monkeypatch.setattr(deezer, "get", get)
@@ -180,6 +189,73 @@ def test_new_releases_reuse_saved_deezer_id_without_artist_search(monkeypatch):
     assert body["browse_sections"][0]["items"][0]["artist"] == "Saved Band"
     assert calls.count("search/artist") == 1
     assert "artist/555/albums" in calls
+
+
+def test_new_releases_credits_multi_artist_albums_and_falls_back_on_error(monkeypatch):
+    ref_today = datetime.date(2026, 11, 22)
+
+    def get(path, params=None, **kwargs):
+        if path == "artist/1536/albums":
+            return {"data": [
+                {"id": 1126150202, "title": "Midnight Jazz Confidential", "record_type": "album", "release_date": "2026-11-20"},
+                {"id": 1105296032, "title": "Horror Cinema Club", "record_type": "album", "release_date": "2026-10-23"},
+                {"id": 1100000001, "title": "Third Release Capped", "record_type": "album", "release_date": "2026-10-01"},
+            ]}
+        if path == "artist/777/albums":
+            return {"data": [
+                {"id": 7771, "title": "Solo Work", "record_type": "album", "release_date": "2026-11-10"},
+            ]}
+        if path == "album/1126150202":
+            return {
+                "id": 1126150202,
+                "title": "Midnight Jazz Confidential",
+                "artist": {"id": 2738, "name": "Piero Piccioni"},
+                "contributors": [
+                    {"id": 2738, "name": "Piero Piccioni", "role": "Main"},
+                    {"id": 1536, "name": "Ennio Morricone", "role": "Main"},
+                    {"id": 1536, "name": "Ennio Morricone", "role": "Main"},
+                    {"id": 5741, "name": "Nino Rota", "role": "Main"},
+                    {"id": 134189, "name": "Philippe Sarde", "role": "Main"},
+                    {"id": 8888, "name": "Remaster Engineer", "role": "AssociatedPerformer"},
+                ],
+            }
+        if path == "album/1105296032":
+            raise TimeoutError("deezer album detail timeout")
+        if path == "album/7771":
+            return {
+                "id": 7771,
+                "title": "Solo Work",
+                "artist": {"id": 777, "name": "Solo Composer"},
+                "contributors": [{"id": 777, "name": "Solo Composer", "role": "Main"}],
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setattr(deezer, "get", get)
+    body = build_browse_sections(
+        [],
+        release_seeds=[
+            {"name": "Ennio Morricone", "deezer_id": "1536"},
+            {"name": "Solo Composer", "deezer_id": "777"},
+        ],
+        today=ref_today,
+    )
+    assert not body["browse_error"]
+    sections_by_id = {sec["id"]: sec for sec in body["browse_sections"]}
+    items = sections_by_id["new_releases"]["items"]
+    assert [item["title"] for item in items] == [
+        "Midnight Jazz Confidential",
+        "Solo Work",
+        "Horror Cinema Club",
+    ]
+    assert items[0]["artist"] == "Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde"
+    assert items[0]["subtitle"] == "Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde"
+    assert items[0]["external_ids"]["deezer_artist_id"] == "1536"
+    # Single-artist album preserves owner_name.
+    assert items[1]["artist"] == "Solo Composer"
+    assert items[1]["subtitle"] == "Solo Composer"
+    # Failed album detail lookup preserves owner_name without failing the feed.
+    assert items[2]["artist"] == "Ennio Morricone"
+    assert items[2]["subtitle"] == "Ennio Morricone"
 
 
 def test_cold_start_uses_popular_entities_without_personalized_reasons(monkeypatch):
