@@ -30,6 +30,8 @@ it('maps every non-applied contract answer to its message with the target device
   expect(remoteCommandMessage({ status: 'unreachable', reason: 'timeout' }, 'Speaker')).toBe('deviceSheet.timeout:Speaker');
   expect(remoteCommandMessage({ status: 'rejected', reason: 'update_required' }, 'Speaker')).toBe('deviceSheet.updateRequired:Speaker');
   expect(remoteCommandMessage({ status: 'rejected', reason: 'unsupported' }, 'Speaker')).toBe('deviceSheet.unsupported:Speaker');
+  expect(remoteCommandMessage({ status: 'rejected', reason: 'locked' }, 'Speaker')).toBe('deviceSheet.locked:Speaker');
+  expect(remoteCommandMessage({ status: 'rejected', reason: 'not_found' }, 'Speaker')).toBe('deviceSheet.notFound:Speaker');
   expect(remoteCommandMessage({ status: 'rejected', reason: 'needs_gesture' }, 'Speaker')).toBe('deviceSheet.needsGesture:Speaker');
   expect(remoteCommandMessage({ status: 'rejected', reason: 'nothing_playing' }, 'Speaker')).toBe('deviceSheet.nothingPlaying:Speaker');
   expect(remoteCommandMessage({ status: 'rejected', reason: 'invalid_state' }, 'Speaker')).toBe('deviceSheet.failed:Speaker');

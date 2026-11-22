@@ -8,6 +8,9 @@ import { t } from '../lib/i18n';
 import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import { createTouchMoveLease } from '../lib/touchMoveLease';
+import { Control } from '../design/Control';
+import { connectLabel, openConnect } from './DeviceSheet';
+import { OutputDeviceIcon } from './icons';
 import { ArtworkBackdrop } from './ArtworkBackdrop';
 import { pageVisible } from '../lib/pageVisibility';
 import type { NowPlayingMobilePanel } from './NowPlaying';
@@ -447,6 +450,7 @@ export function PlayerSurface() {
         }}
         data-player-surface-open={nowPlayingOpen() ? '' : undefined}
         data-surface-animating={surfaceAnimating() ? '' : undefined}
+        data-remote={player().remote ? '' : undefined}
         data-player-stage=""
         aria-hidden={!nowPlayingOpen()}
         tabIndex={-1}
@@ -506,17 +510,46 @@ export function PlayerSurface() {
             </button>
           </div>
 
-          <button
-            classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
-            type="button"
-            aria-label={t('common.close')}
-            onClick={() => closeSurface()}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
+          <div class={styles.chromeRight}>
+            <Control
+              class={styles.deviceButton}
+              classList={{ [styles.deviceButtonActive]: player().remote, [styles.deviceButtonError]: player().unreachable }}
+              aria-label={connectLabel()}
+              title={connectLabel()}
+              data-device-trigger="player-header"
+              onClick={openConnect}
+            >
+              <OutputDeviceIcon size={18} />
+              <Show when={player().remote}>
+                <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
+              </Show>
+            </Control>
+            <button
+              classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
+              type="button"
+              aria-label={t('common.close')}
+              onClick={() => closeSurface()}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* The phone header has no room for the device's name: it gets a line of its own. */}
+        <Show when={mobileLayout() && player().remote}>
+          <Control
+            class={styles.remoteBanner}
+            classList={{ [styles.deviceButtonError]: player().unreachable }}
+            data-no-surface-swipe=""
+            data-device-trigger="player-banner"
+            onClick={openConnect}
+          >
+            <OutputDeviceIcon size={14} />
+            <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
+          </Control>
+        </Show>
 
         <div
           id="now-playing-view"

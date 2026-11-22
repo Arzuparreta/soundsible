@@ -6,6 +6,7 @@ import { isMusicTrack } from '../lib/track';
 import { createMemo, createRoot, createSignal } from 'solid-js';
 
 import { state } from './core';
+import { controlledPlayback } from './remoteLink';
 import {
   buildIdentityIndex,
   catalogItemKeys,
@@ -51,13 +52,14 @@ export const [catalogLinks, setCatalogLinks] = createSignal<ReadonlyMap<string, 
 
 export const identity = createRoot(() => {
   const libraryIndex = createMemo(() => buildIdentityIndex(state.library));
+  const activePlayback = () => controlledPlayback() ?? state.playback;
   const playingKeys = createMemo(() =>
-    resolvePlayingKeys(state.playback.currentTrack, libraryIndex(), catalogLinks()),
+    resolvePlayingKeys(activePlayback().currentTrack, libraryIndex(), catalogLinks()),
   );
   // Queue membership has the same identity problem as the playing highlight: a
   // Deezer row already lined up must say so, whatever id the row holds.
   const queuedKeys = createMemo(() =>
-    new Set(futureEntries(state.playback.queue, state.playback.index, 'manual').flatMap(entry =>
+    new Set(futureEntries(activePlayback().queue, activePlayback().index, 'manual').flatMap(entry =>
       [...resolvePlayingKeys(entry, libraryIndex(), catalogLinks())])),
   );
   // Saved songs have the same identity problem, one hop further out: the row

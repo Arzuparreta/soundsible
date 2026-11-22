@@ -11,19 +11,25 @@ import { SkeletonRows } from './Skeleton';
 import Button from './Button';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { remoteCommandMessage, remotePlayTracksArgs } from '../lib/remotePlayback';
-
-type TransportCommand = 'transport.previous' | 'transport.pause' | 'transport.play' | 'transport.next';
+import { player } from '../stores/player';
 
 const others = (devs: Device[]): Device[] => devs.filter((d) => d.device_id !== state.device.device_id);
 const deviceName = (d: Device): string => d.device_name ?? t('deviceSheet.fallbackDevice');
 const isOnline = (d: Device): boolean => Boolean(d.online ?? d.socket_active);
 
-function deviceIcon(formFactor?: string, type?: string): JSX.Element {
-  if (formFactor === 'computer' || type === 'desktop')
+export function deviceIcon(formFactor?: string, type?: string): JSX.Element {
+  if (formFactor === 'computer' || (!formFactor && type === 'desktop'))
     return (
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <rect x="2" y="4" width="20" height="13" rx="2" />
         <path d="M8 21h8M12 17v4" />
+      </svg>
+    );
+  if (formFactor === 'tablet')
+    return (
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="4" y="2" width="16" height="20" rx="2" />
+        <path d="M11 18h2" />
       </svg>
     );
   return (
@@ -117,51 +123,10 @@ export function openPlayOnDevice(track: Track): void {
   });
 }
 
-/** Settings panel: list devices with transport controls for each. */
-export function DevicesPanel() {
-  const list = createDeviceList((devices) => devices);
+/** The device sheet (control another device, move the music) is loaded on use. */
+export const openConnect = () => void import('./ConnectSheet').then((m) => m.openConnectSheet());
 
-  const cmd = async (d: Device, command: TransportCommand) => {
-    const name = deviceName(d);
-    try {
-      const answer = await api.deviceCommand(d.device_id, command);
-      if (answer.status !== 'applied') toast.error(remoteCommandMessage(answer, name));
-    } catch {
-      toast.error(remoteCommandMessage(null, name));
-    }
-  };
-
-  return (
-    <DeviceListState list={list} empty={t('deviceSheet.empty')}>
-        <For each={list.devs()}>
-          {(d) => (
-            <div class={styles.deviceRow}>
-              <span class={styles.icon}>{deviceIcon(d.form_factor, d.device_type)}</span>
-              <span class={styles.itemName}>
-                {d.device_name ?? d.device_id}
-                <Show when={d.device_id === state.device.device_id}>
-                  <span class={styles.self}>{t('deviceSheet.selfSuffix')}</span>
-                </Show>
-              </span>
-              <Show when={d.device_id !== state.device.device_id}>
-                <div class={styles.controls}>
-                  <button class={styles.ctrl} type="button" aria-label={t('deviceSheet.ariaPrev')} onClick={() => void cmd(d, 'transport.previous')}>
-                    <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
-                  </button>
-                  <button class={styles.ctrl} type="button" aria-label={t('deviceSheet.ariaPause')} onClick={() => void cmd(d, 'transport.pause')}>
-                    <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
-                  </button>
-                  <button class={styles.ctrl} type="button" aria-label={t('deviceSheet.ariaPlay')} onClick={() => void cmd(d, 'transport.play')}>
-                    <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z" /></svg>
-                  </button>
-                  <button class={styles.ctrl} type="button" aria-label={t('deviceSheet.ariaNext')} onClick={() => void cmd(d, 'transport.next')}>
-                    <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" /></svg>
-                  </button>
-                </div>
-              </Show>
-            </div>
-          )}
-        </For>
-    </DeviceListState>
-  );
-}
+/** What a device button says: the controlled device, or where devices are. */
+export const connectLabel = () =>
+  !player().remote ? t('settings.devices')
+    : t(player().unreachable ? 'deviceSheet.offline' : 'deviceSheet.playingOnDevice', { device: player().deviceName });

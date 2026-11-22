@@ -103,6 +103,16 @@ export function DeviceIcon(props: GlyphProps) {
     </Glyph>
   );
 }
+/** Audio output / connected device switcher: a speaker cabinet with sound arc. */
+export function OutputDeviceIcon(props: GlyphProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="4" y="3" width="12" height="18" rx="2" />
+      <circle cx="10" cy="14" r="3" />
+      <path d="M10 7h.01M19 8.5a5 5 0 010 7" />
+    </Glyph>
+  );
+}
 const BOOKMARK = 'M6 3h12v18l-6-4-6 4Z';
 const BOOKMARK_STRIKE = 'M3 6l18 12';
 /** Keep an album or artist at hand in Library. Its button fills it once saved. */

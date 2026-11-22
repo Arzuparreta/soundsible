@@ -22,6 +22,7 @@ import { applyVisualPreferences } from "../lib/visualPreferences";
 import { applyDownloadEvent } from "./downloads";
 import { refreshLinkReading } from "../lib/linkQuality";
 import { state, setState, nowPlayingOpen, setNowPlayingOpen } from "./core";
+import { remoteStore, setRemoteStore } from "./remoteLink";
 import { announceTheme, applyTheme } from "./theme";
 import type { PlayerActions, PlaybackAttempt, PublishedPlaybackState } from "./contracts";
 export interface RuntimePorts {
@@ -450,6 +451,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       const registration = { ...state.device, commands: [...state.device.commands] };
       socket!.emit('playback_register', registration);
       void api.registerDevice(registration).catch(lifetime.guard(() => {}));
+      remoteStore()?.onRemoteConnect();
       void ports.actions.loadDownloads(); // re-seed the queue after a (re)connect
       // The station is reachable again: if the music ran out while it was not,
       // this is the moment that ends the silence.
@@ -502,6 +504,11 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     socket.on('device_command', lifetime.guard((payload, ack) => {
       void ports.handleDeviceCommand(payload, ack);
     }));
+    // Controlling other devices loads with the socket, not with the first paint.
+    void import('./remote').then(lifetime.guard(m => {
+      m.attachRemoteSocket(ownedSocket, lifetime);
+      setRemoteStore(m);
+    }));
 
     ports.startSessionSync();
 
@@ -546,34 +553,46 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     // lib/shortcuts so it can be tested without a DOM; the store only supplies
     // the context snapshot and the callbacks.
     if (typeof window !== 'undefined') {
+      // While another device is controlled the shortcuts act on it, as every player control does.
+      const shown = () => {
+        const m = remoteStore();
+        return m?.remoteTarget()
+          ? { playback: m.remotePlayback, autoMode: m.remoteAutoMode, actions: m.remoteActionsFor(ports.actions as PlayerActions) }
+          : { playback: state.playback, autoMode: state.autoMode, actions: ports.actions };
+      };
+      const can = (command: string) => remoteStore()?.remoteCan(command) ?? true;
       lifetime.listen(window, 'keydown', createShortcutHandler(() => ({
-        autoModeActive: state.autoMode.active,
+        autoModeActive: shown().autoMode.active,
         nowPlayingOpen: nowPlayingOpen(),
-        autoModeAvailable: !state.playback.currentTrack || !isPodcastTrack(state.playback.currentTrack)
+        autoModeAvailable: !shown().playback.currentTrack || !isPodcastTrack(shown().playback.currentTrack!)
       }), {
-        togglePlay: () => ports.actions.togglePlay(),
+        togglePlay: () => shown().actions.togglePlay(),
         // Auto Mode owns the queue: skipping has to go through the generated
         // session coordinator
         // so it can pick a replacement, not walk a queue it is rewriting.
         next: () => {
-          if (state.autoMode.active) void ports.actions.autoSkip();else ports.actions.next();
+          if (shown().autoMode.active) void shown().actions.autoSkip();else shown().actions.next();
         },
-        prev: () => ports.actions.prev(),
-        seekBy: delta => ports.actions.seek(Math.max(0, state.playback.currentTime + delta)),
+        prev: () => shown().actions.prev(),
+        seekBy: delta => shown().actions.seek(Math.max(0, shown().playback.currentTime + delta)),
         // `setVolume` clamps, and already lifts mute when the level goes
         // above zero — turning it up is a request to hear something.
-        nudgeVolume: delta => ports.actions.setVolume(nudgeVolumeGain(state.playback.volume, delta)),
-        toggleMute: () => ports.actions.toggleMute(),
-        toggleShuffle: () => ports.actions.toggleShuffle(),
-        cycleRepeat: () => ports.actions.cycleRepeat(),
+        nudgeVolume: delta => {
+          if (can('transport.set_volume')) shown().actions.setVolume(nudgeVolumeGain(shown().playback.volume, delta));
+        },
+        toggleMute: () => {
+          if (can('transport.set_muted')) shown().actions.toggleMute();
+        },
+        toggleShuffle: () => shown().actions.toggleShuffle(),
+        cycleRepeat: () => shown().actions.cycleRepeat(),
         toggleFavourite: () => {
-          const track = state.playback.currentTrack;
+          const track = shown().playback.currentTrack;
           // Whatever is playing can be saved — owning the file is not a
           // precondition, only being a song is (podcasts have their own shelf).
           if (track && !isPodcastTrack(track)) ports.actions.toggleFavouriteTrack(track);
         },
-        enterAutoMode: () => ports.actions.enterAutoMode(),
-        exitAutoMode: () => ports.actions.exitAutoMode(),
+        enterAutoMode: () => shown().actions.enterAutoMode(),
+        exitAutoMode: () => shown().actions.exitAutoMode(),
         closeNowPlaying: () => setNowPlayingOpen(false),
         // Loaded on use: lib/searchFocus imports the stores, so a static
         // import would close a cycle back into this file.

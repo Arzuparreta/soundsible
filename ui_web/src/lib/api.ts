@@ -505,7 +505,7 @@ export const api = {
   registerDevice: (d: DeviceRegistration) =>
     request<void>('/api/devices/register', { method: 'POST', body: d }),
   /** Devices registered for playback in this scope (for remote control). */
-  listDevices: () => request<{ devices?: Device[] }>('/api/devices'),
+  listDevices: () => request<{ devices?: Device[]; server_now_ms?: number }>('/api/devices'),
   /** Send a remote command to another device; returns the contract answer even on 4xx/5xx. */
   deviceCommand: async (
     deviceId: string,

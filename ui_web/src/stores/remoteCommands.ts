@@ -27,6 +27,7 @@ export interface RemoteCommandPorts {
     | 'toggleShuffle'
     | 'cycleRepeat'
     | 'setVolume'
+    | 'toggleMute'
     | 'playFrom'
     | 'playTrack'
     | 'playNext'
@@ -227,6 +228,12 @@ export function createRemoteCommandExecutor(ports: RemoteCommandPorts, lifetime:
       const level = args.level;
       if (typeof level !== 'number' || !Number.isFinite(level) || level < 0 || level > 1) return reject('invalid');
       ports.actions.setVolume(level);
+      return publishAndApply();
+    },
+
+    'transport.set_muted': async (args) => {
+      if (typeof args.on !== 'boolean') return reject('invalid');
+      if (state.playback.muted !== args.on) ports.actions.toggleMute();
       return publishAndApply();
     },
 

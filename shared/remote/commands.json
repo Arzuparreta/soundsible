@@ -17,6 +17,9 @@
     "transport.set_volume": {
       "level": "number"
     },
+    "transport.set_muted": {
+      "on": "bool"
+    },
     "play.tracks": {
       "tracks": "tracks",
       "index": "int",

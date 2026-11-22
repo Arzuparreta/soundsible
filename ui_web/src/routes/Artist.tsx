@@ -13,7 +13,8 @@ import { CoverImage } from '../components/CoverImage';
 import { MusicLink } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, on, Show, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
-import { actions, musicLibrary, isPlayingItem, state } from '../stores';
+import { musicLibrary, isPlayingItem, state } from '../stores';
+import { player } from '../stores/player';
 import { api } from '../lib/api';
 import { hasCoverArt, trackCoverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
@@ -201,15 +202,15 @@ export default function Artist() {
 
   const playAll = () => {
     const context = artistContext();
-    if (state.autoMode.active) {
+    if (player().autoMode.active) {
       // An artist is one source for the DJ, never a list of requests.
-      if (view() === 'library') void actions.startDjSelection(libraryTrackList(), name());
+      if (view() === 'library') void player().actions.startDjSelection(libraryTrackList(), name());
       else void useCatalogCollection(topTracks(), name(), 'start');
       return;
     }
     if (view() === 'library') {
       const tracks = libraryTrackList();
-      if (tracks.length > 0) actions.playFrom(tracks, 0, { context });
+      if (tracks.length > 0) player().actions.playFrom(tracks, 0, { context });
     } else {
       const items = topTracks();
       if (items.length === 0) return;
@@ -219,13 +220,13 @@ export default function Artist() {
 
   const shuffle = () => {
     const context = artistContext();
-    if (state.autoMode.active) {
-      if (view() === 'library') void actions.startDjSelection(libraryTrackList(), name());
+    if (player().autoMode.active) {
+      if (view() === 'library') void player().actions.startDjSelection(libraryTrackList(), name());
       else void useCatalogCollection(topTracks(), name(), 'start');
       return;
     }
     if (view() === 'library') {
-      actions.playShuffled(libraryTrackList(), context);
+      player().actions.playShuffled(libraryTrackList(), context);
     } else {
       const items = topTracks();
       if (items.length === 0) return;
@@ -261,7 +262,7 @@ export default function Artist() {
       if (view() === 'library') {
         const seed = libraryTrackList()[0];
         if (!seed) return;
-        await actions.startRadio(seed);
+        await player().actions.startRadio(seed);
         return;
       }
       const candidates = topTracks().slice(0, 10);
@@ -272,7 +273,7 @@ export default function Artist() {
         toast.error(t('search.noPreview'));
         return;
       }
-      await actions.startRadio(found.track);
+      await player().actions.startRadio(found.track);
     } catch {
       if (isCurrent()) toast.error(t('search.noPreview'));
     } finally {
@@ -280,7 +281,7 @@ export default function Artist() {
     }
   };
 
-  const podcastPlaying = () => Boolean(state.playback.currentTrack && isPodcastTrack(state.playback.currentTrack));
+  const podcastPlaying = () => Boolean(player().playback.currentTrack && isPodcastTrack(player().playback.currentTrack!));
 
   const startArtistDj = async () => {
     if (djBusy()) return;
@@ -291,12 +292,12 @@ export default function Artist() {
     if (view() === 'library') {
       const tracks = libraryTrackList().filter((track) => !isPodcastTrack(track));
       if (tracks.length === 0) return;
-      actions.enterAutoMode({ source: tracks[0], deferPlanning: true });
-      if (!state.autoMode.active) {
+      player().actions.enterAutoMode({ source: tracks[0], deferPlanning: true });
+      if (!player().remote && !player().autoMode.active) {
         toast.info(t('modeChange.podcastMessage'));
         return;
       }
-      actions.startDjSelection(tracks, name());
+      player().actions.startDjSelection(tracks, name());
       return;
     }
     const candidates = topTracks().slice(0, 10);
@@ -313,8 +314,8 @@ export default function Artist() {
         toast.error(t('search.noPreview'));
         return;
       }
-      actions.enterAutoMode({ source: found.track, deferPlanning: true });
-      if (!state.autoMode.active) {
+      player().actions.enterAutoMode({ source: found.track, deferPlanning: true });
+      if (!player().remote && !player().autoMode.active) {
         toast.info(t('modeChange.podcastMessage'));
         return;
       }
@@ -397,7 +398,7 @@ export default function Artist() {
   useAppBar({ title: name, back, backLabel: () => t('artist.ariaBack'), heading });
 
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;
-  const radioLabel = () => t(state.autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');
+  const radioLabel = () => t(player().autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');
 
   return (
     <div class="view">
@@ -441,7 +442,7 @@ export default function Artist() {
                 ]} />
             </Show>
             <div class={hero.primaryActions}>
-              <Show when={state.autoMode.active} fallback={
+              <Show when={player().autoMode.active} fallback={
                 <button type="button" class={hero.play} aria-label={t('artist.play')} title={t('artist.play')} disabled={!playable()} onClick={playAll}>
                   <PlayIcon size={16} />
                   <span class={hero.primaryLabel}>{t('artist.play')}</span>
@@ -465,7 +466,7 @@ export default function Artist() {
             </div>
             <CollectionControl
               compact menuActions={() => [
-                ...(!state.autoMode.active ? [
+                ...(!player().autoMode.active ? [
                   { icon: menuIcons.shuffle(), label: t('artist.shuffle'), disabled: !playable(), onSelect: shuffle },
                   { icon: menuIcons.changeSession(), label: t('autoMode.startDj'), disabled: !playable() || djBusy() || podcastPlaying(), onSelect: () => void startArtistDj() },
                 ] : []),

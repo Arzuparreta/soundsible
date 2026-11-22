@@ -11,6 +11,7 @@ import { createEffect, createMemo, createResource, createSignal, onCleanup, Show
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions, isPlayingEpisode } from '../stores';
+import { player } from '../stores/player';
 import { t } from '../lib/i18n';
 import type { PodcastEpisode, PodcastShowInfo, PodcastSubscription } from '../types/podcast';
 import styles from './PodcastShow.module.css';
@@ -205,8 +206,8 @@ export default function PodcastShow() {
   /** Play the downloaded local copy when present, else stream via token. */
   const playEp = (ep: PodcastEpisode) => {
     const local = localByGuid().get(ep.guid);
-    if (local) actions.playTrack(local);
-    else void actions.playEpisode(ep, show()?.title, show()?.id, image());
+    if (local) player().actions.playTrack(local);
+    else void player().actions.playEpisode(ep, show()?.title, show()?.id, image());
   };
   const openEpisodeMenu = (ep: PodcastEpisode, event?: MenuEvent) => {
     const downloaded = isDownloaded(ep);

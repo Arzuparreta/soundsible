@@ -70,6 +70,9 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
   }
   let publishedSession: string | null = null;
   let publishedLive: string | null = null;
+  /** The session as JSON, kept by `startSessionSync` while it runs, so a volume
+   * or phase change never rebuilds and stringifies the whole session. */
+  let trackedSession: string | null = null;
   let publishSeq = 0;
   let lastAcceptedSeq = 0;
   let lastRev: number | null = null;
@@ -115,8 +118,12 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
     };
   }
 
+  function sessionJson(): string {
+    return trackedSession ?? JSON.stringify(sessionSnapshot() ?? null);
+  }
+
   function sessionOutOfDate(): boolean {
-    return JSON.stringify(sessionSnapshot() ?? null) !== publishedSession;
+    return sessionJson() !== publishedSession;
   }
 
   function liveOutOfDate(): boolean {
@@ -143,22 +150,24 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
     createRoot(dispose => {
       lifetime.own(() => {
         cancelSessionDebounce();
+        trackedSession = null;
         dispose();
       });
-      let primed = false;
-      createEffect(() => {
-        // Track session and live fields (never `currentTime`) so queue/route/setting edits publish promptly.
-        const snapshot = sessionSnapshot();
-        const live = liveState();
-        void JSON.stringify(snapshot ?? null);
-        void JSON.stringify(live);
-        if (!primed) {
-          primed = true;
-          return;
-        }
-        if (!state.playback.currentTrack && !state.autoMode.active) return;
-        scheduleSessionPublish();
-      });
+      // Session and live fields are tracked apart (never `currentTime`), so
+      // queue/route/setting edits publish promptly and a volume drag does not
+      // rebuild the session.
+      const changed = (primed: boolean) => {
+        if (primed && (state.playback.currentTrack || state.autoMode.active)) scheduleSessionPublish();
+        return true;
+      };
+      createEffect<boolean>(primed => {
+        trackedSession = JSON.stringify(sessionSnapshot() ?? null);
+        return changed(primed);
+      }, false);
+      createEffect<boolean>(primed => {
+        void JSON.stringify(liveState());
+        return changed(primed);
+      }, false);
     });
   }
 
@@ -174,9 +183,8 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
     // No track is the end of a session, not a session nobody described: clearing
     // it explicitly is what stops another device offering to resume music this
     // one has already stopped playing.
-    const session = track ? sessionSnapshot() : null;
-    const serialized = JSON.stringify(session ?? null);
-    const includeSession = override.includeSession === true || serialized !== publishedSession;
+    const includeSession = override.includeSession === true || (track ? sessionJson() : 'null') !== publishedSession;
+    const session = includeSession && track ? sessionSnapshot() : null;
     return {
       track_id: track?.id ?? null,
       track: track ?? null,

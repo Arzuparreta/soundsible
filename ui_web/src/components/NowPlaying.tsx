@@ -243,7 +243,7 @@ export function NowPlaying(props: {
     const destination = contextDestination(context, next.next);
     const open = destination ? () => navigateMusic(destination) : undefined;
     const kind = t(`nowPlaying.contextKind.${context.kind}`);
-    const remove = { label: t('nowPlaying.contextRemove', { name: title }), onSelect: () => player().actions.removeContext() };
+    const remove = player().remote ? undefined : { label: t('nowPlaying.contextRemove', { name: title }), onSelect: () => player().actions.removeContext() };
     const artworkFromSongs = context.kind === 'album' || context.kind === 'playlist' || context.kind === 'artist';
     const expands = EXPANDING_CONTEXTS.has(context.kind);
     return {
@@ -269,7 +269,7 @@ export function NowPlaying(props: {
       glyph: <ContextGlyph kind={context.kind} />,
       menu: () => [
         ...(open ? [{ icon: menuIcons.open(), label: t('nowPlaying.contextOpen', { name: title }), onSelect: open }] : []),
-        { icon: menuIcons.remove(), label: t('nowPlaying.removeFromQueue'), danger: true, onSelect: remove.onSelect },
+        ...(remove ? [{ icon: menuIcons.remove(), label: t('nowPlaying.removeFromQueue'), danger: true, onSelect: remove.onSelect }] : []),
       ],
       remove,
     };
@@ -281,7 +281,8 @@ export function NowPlaying(props: {
    * finishing would otherwise rebuild every row above it. */
   const autoplayCard = (): PlayerTrackListCard | null => {
     const current = player().playback.currentTrack;
-    if (player().playback.radioMode || !current || isPodcastTrack(current)) return null;
+    // This device's setting; the controlled device does not publish its own.
+    if (player().remote || player().playback.radioMode || !current || isPodcastTrack(current)) return null;
     const label = t('nowPlaying.autoplayQueue');
     const enabled = () => player().playback.autoplayEnabled;
     return {

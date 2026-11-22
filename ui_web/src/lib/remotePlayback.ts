@@ -10,13 +10,17 @@ export function canPlayOnDevice(track: ContextTrack): boolean {
   return track.source !== 'preview' || /^[A-Za-z0-9_-]{11}$/.test(track.youtube_id || track.id) || Boolean(track.title && track.artist);
 }
 
-export function remotePlayTracksArgs(track: ContextTrack): { tracks: [ContextTrack]; index: 0 } {
-  if (track.pendingResolve) track = { ...track, source: 'preview' };
-  if (track.source === 'preview' && !isPodcastTrack(track) && !track.pendingResolve &&
+export function prepareRemoteTrack(track: ContextTrack): ContextTrack {
+  if (track.pendingResolve) return { ...track, source: 'preview' };
+  if (track.source === 'preview' && !isPodcastTrack(track) &&
     !/^[A-Za-z0-9_-]{11}$/.test(track.youtube_id || track.id)) {
-    track = { ...track, pendingResolve: { catalogItemId: track.id, artist: track.artist, title: track.title, duration: track.duration } };
+    return { ...track, pendingResolve: { catalogItemId: track.id, artist: track.artist, title: track.title, duration: track.duration } };
   }
-  return { tracks: [track], index: 0 };
+  return track;
+}
+
+export function remotePlayTracksArgs(track: ContextTrack): { tracks: [ContextTrack]; index: 0 } {
+  return { tracks: [prepareRemoteTrack(track)], index: 0 };
 }
 
 const REASON_KEYS: Record<string, string> = {
@@ -24,6 +28,8 @@ const REASON_KEYS: Record<string, string> = {
   timeout: 'deviceSheet.timeout',
   update_required: 'deviceSheet.updateRequired',
   unsupported: 'deviceSheet.unsupported',
+  locked: 'deviceSheet.locked',
+  not_found: 'deviceSheet.notFound',
   needs_gesture: 'deviceSheet.needsGesture',
   nothing_playing: 'deviceSheet.nothingPlaying',
 };

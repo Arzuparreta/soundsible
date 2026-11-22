@@ -242,6 +242,7 @@ Types: `bool`, `number` (finite), `int`, `string` (≤ 512), `queue_id` (string 
 | `transport.set_shuffle` | `on: bool` | `toggleShuffle` when different | `shuffleModeEnabled` |
 | `transport.set_repeat` | `mode: enum:off\|all\|one` | `cycleRepeat` until equal | `repeatMode` |
 | `transport.set_volume` | `level: number` (0–1) | `setVolume` | not declared |
+| `transport.set_muted` | `on: bool` | `toggleMute` when different | not declared |
 | `play.tracks` | `tracks: tracks`, `index: int`, `context: context?` | `playFrom` (in DJ mode it starts a DJ selection, as a local tap does) | the `queue` action |
 | `queue.add` | `track: track`, `at: enum:next\|end` | `playNext` / `enqueue` (in DJ mode they place into the route) | the same paths as a local add |
 | `queue.move` | `queue_id`, `before_queue_id: queue_id?` | `moveAutoRoute` in DJ mode, otherwise `moveInQueue` | `ProgramQueue.edit` move |

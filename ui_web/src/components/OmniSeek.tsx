@@ -14,7 +14,7 @@ const TOUCH_HOLD_MS = 400;
  * keyboard/assistive and mouse interface. Capturing at the surface keeps a
  * backwards seek out of the dismissal handler, including across child buttons.
  * Pointer edits stay local until release. */
-export function OmniSeek(props: { onClaim: () => void }) {
+export function OmniSeek(props: { onClaim: () => void; onOpen?: () => void }) {
   const [preview, setPreview] = createSignal<number | null>(null);
   let input!: HTMLInputElement;
   let surface!: HTMLElement;
@@ -23,7 +23,7 @@ export function OmniSeek(props: { onClaim: () => void }) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let gesture: { id: number; x: number; y: number; active: boolean; moved: boolean; touch: boolean; startPosition: number; fromRail: boolean; blank: boolean } | undefined;
   const duration = () => Number.isFinite(player().playback.duration) ? Math.max(0, player().playback.duration) : 0;
-  const disabled = () => !player().playback.currentTrack || !Number.isFinite(duration()) || duration() <= 0 || player().playback.isLoading || Boolean(player().playback.loadError);
+  const disabled = () => !player().playback.currentTrack || player().unreachable || !Number.isFinite(duration()) || duration() <= 0 || player().playback.isLoading || Boolean(player().playback.loadError);
   const playbackPosition = createMemo<number>(previous => pageVisible() ? player().playback.currentTime : previous ?? 0);
   const position = () => Math.max(0, Math.min(duration() || 0, preview() ?? playbackPosition()));
   const clear = () => {
@@ -105,7 +105,10 @@ export function OmniSeek(props: { onClaim: () => void }) {
     clear();
     if (active && moved && target !== null && !disabled()) player().actions.seek(target);
     // Only the portion inside the pill retains its existing tap-to-open action.
-    else if (!active && touch && (blank || (fromRail && y >= input.getBoundingClientRect().top + 16))) setNowPlayingOpen(true);
+    else if (!active && touch && (blank || (fromRail && y >= input.getBoundingClientRect().top + 16))) {
+      if (props.onOpen) props.onOpen();
+      else setNowPlayingOpen(true);
+    }
   };
   onMount(() => {
     surface = input.closest<HTMLElement>('[data-omni-player]') ?? input.parentElement!;

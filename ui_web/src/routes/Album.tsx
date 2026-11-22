@@ -10,7 +10,8 @@ import { CoverImage } from '../components/CoverImage';
 import { ArtistLinks, MusicLink } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
-import { actions, musicLibrary, isPlayingItem, state } from '../stores';
+import { musicLibrary, isPlayingItem, state } from '../stores';
+import { player } from '../stores/player';
 import { api } from '../lib/api';
 import { coverUrl, hasCoverArt, trackCoverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
@@ -215,15 +216,15 @@ export default function Album() {
 
   const playAll = () => {
     const context = albumContext();
-    if (state.autoMode.active) {
+    if (player().autoMode.active) {
       // An album is one source for the DJ, never a list of requests.
-      if (view() === 'library') void actions.startDjSelection(libraryTrackList(), title());
+      if (view() === 'library') void player().actions.startDjSelection(libraryTrackList(), title());
       else void useCatalogCollection(tracklist(), title(), 'start');
       return;
     }
     if (view() === 'library') {
       const tracks = libraryTrackList();
-      if (tracks.length > 0) actions.playFrom(tracks, 0, { context });
+      if (tracks.length > 0) player().actions.playFrom(tracks, 0, { context });
     } else {
       const items = tracklist();
       if (items.length === 0) return;
@@ -233,13 +234,13 @@ export default function Album() {
 
   const shuffle = () => {
     const context = albumContext();
-    if (state.autoMode.active) {
-      if (view() === 'library') void actions.startDjSelection(libraryTrackList(), title());
+    if (player().autoMode.active) {
+      if (view() === 'library') void player().actions.startDjSelection(libraryTrackList(), title());
       else void useCatalogCollection(tracklist(), title(), 'start');
       return;
     }
     if (view() === 'library') {
-      actions.playShuffled(libraryTrackList(), context);
+      player().actions.playShuffled(libraryTrackList(), context);
     } else {
       const items = tracklist();
       if (items.length === 0) return;
@@ -372,7 +373,7 @@ export default function Album() {
                   { value: 'library', label: `${t('album.library')}${membership.loading || membershipFailed() ? '' : ` (${libraryTrackList().length})`}` },
                 ]} />
             </Show>
-            <Show when={state.autoMode.active} fallback={
+            <Show when={player().autoMode.active} fallback={
               <button class={hero.play} type="button" aria-label={t('album.play')} title={t('album.play')} disabled={!playable()} onClick={playAll}>
                 <PlayIcon size={16} />
                 <span class={hero.primaryLabel}>{t('album.play')}</span>
@@ -383,7 +384,7 @@ export default function Album() {
                 items={view() === 'library' ? undefined : tracklist()} />
             </Show>
             <CollectionControl
-              compact menuActions={() => !state.autoMode.active
+              compact menuActions={() => !player().autoMode.active
                 ? [{ icon: menuIcons.shuffle(), label: t('album.shuffle'), disabled: !playable(), onSelect: shuffle }] : []}
               onMenuReady={(open) => { openCollectionMenu = open; }}
               entity={{ kind: 'album', name: title(), artist: artistName(), cover: cover(), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}

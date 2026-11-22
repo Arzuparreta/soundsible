@@ -3,7 +3,7 @@ import { savedEntityAction } from './savedEntityActions';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
-import { actions, state } from '../stores';
+import { player } from '../stores/player';
 import { api } from '../lib/api';
 import { tracksByIds } from '../lib/catalogTracks';
 import { albumDestination, albumMusic, navigateMusic } from '../lib/musicNavigation';
@@ -45,12 +45,12 @@ function albumContext(album: CatalogAlbum): PlaybackContextDescriptor {
 /** Play / shuffle / go-to-album menu definition for a catalog album. */
 export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {}): ActionMenuOptions {
   const play = async (shuffle = false) => {
-    const epoch = actions.beginAutoSessionChange();
+    const epoch = player().actions.beginAutoSessionChange();
     const tracks = await albumTracks(album);
-    if (!tracks.length || actions.autoSessionToken() !== epoch) return;
-    if (shuffle) actions.playShuffled(tracks, albumContext(album));
-    else if (state.autoMode.active) actions.startDjSelection(tracks, album.title);
-    else actions.playFrom(tracks, 0, { context: albumContext(album) });
+    if (!tracks.length || player().actions.autoSessionToken() !== epoch) return;
+    if (shuffle) player().actions.playShuffled(tracks, albumContext(album));
+    else if (player().autoMode.active) player().actions.startDjSelection(tracks, album.title);
+    else player().actions.playFrom(tracks, 0, { context: albumContext(album) });
   };
   const list: MenuAction[] = [
     { icon: menuIcons.play(), label: t('albumActions.play'), onSelect: () => void play() },

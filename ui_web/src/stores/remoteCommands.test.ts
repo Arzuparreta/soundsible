@@ -32,6 +32,7 @@ function createHarness(overrides: Partial<RemoteCommandPorts> = {}) {
     toggleShuffle: vi.fn(() => setState('playback', 'shuffle', s => !s)),
     cycleRepeat: vi.fn(() => setState('playback', 'repeat', r => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'))),
     setVolume: vi.fn(),
+    toggleMute: vi.fn(() => setState('playback', 'muted', m => !m)),
     playFrom: vi.fn(),
     playTrack: vi.fn(),
     playNext: vi.fn(),
@@ -151,39 +152,46 @@ describe('remoteCommands executor', () => {
     expect(await h.executor.execute({ name: 'transport.set_volume', args: { level: 0.4 } })).toEqual({ status: 'applied', rev: 19 });
     expect(h.actions.setVolume).toHaveBeenCalledWith(0.4);
 
+    expect(await h.executor.execute({ name: 'transport.set_muted', args: { on: true } })).toEqual({ status: 'applied', rev: 20 });
+    expect(h.actions.toggleMute).toHaveBeenCalledTimes(1);
+    expect(state.playback.muted).toBe(true);
+    // Already muted -> no toggle.
+    expect(await h.executor.execute({ name: 'transport.set_muted', args: { on: true } })).toEqual({ status: 'applied', rev: 21 });
+    expect(h.actions.toggleMute).toHaveBeenCalledTimes(1);
+
     const ctx = { id: 'alb:1', kind: 'album', label: 'Album' };
-    expect(await h.executor.execute({ name: 'play.tracks', args: { tracks: [t1, t2], index: 1, context: ctx } })).toEqual({ status: 'applied', rev: 20 });
+    expect(await h.executor.execute({ name: 'play.tracks', args: { tracks: [t1, t2], index: 1, context: ctx } })).toEqual({ status: 'applied', rev: 22 });
     expect(h.actions.playFrom).toHaveBeenCalledWith([t1, t2], 1, { context: ctx });
 
-    expect(await h.executor.execute({ name: 'queue.add', args: { track: t3, at: 'next' } })).toEqual({ status: 'applied', rev: 21 });
+    expect(await h.executor.execute({ name: 'queue.add', args: { track: t3, at: 'next' } })).toEqual({ status: 'applied', rev: 23 });
     expect(h.actions.playNext).toHaveBeenCalledWith(t3);
 
-    expect(await h.executor.execute({ name: 'queue.add', args: { track: t3, at: 'end' } })).toEqual({ status: 'applied', rev: 22 });
+    expect(await h.executor.execute({ name: 'queue.add', args: { track: t3, at: 'end' } })).toEqual({ status: 'applied', rev: 24 });
     expect(h.actions.enqueue).toHaveBeenCalledWith(t3);
 
-    expect(await h.executor.execute({ name: 'queue.move', args: { queue_id: 'q2', before_queue_id: 'q1' } })).toEqual({ status: 'applied', rev: 23 });
+    expect(await h.executor.execute({ name: 'queue.move', args: { queue_id: 'q2', before_queue_id: 'q1' } })).toEqual({ status: 'applied', rev: 25 });
     expect(h.actions.moveInQueue).toHaveBeenCalledWith(2, 1);
 
     // Move q1 to end of manual section (no before_queue_id).
-    expect(await h.executor.execute({ name: 'queue.move', args: { queue_id: 'q1' } })).toEqual({ status: 'applied', rev: 24 });
+    expect(await h.executor.execute({ name: 'queue.move', args: { queue_id: 'q1' } })).toEqual({ status: 'applied', rev: 26 });
     expect(h.actions.moveInQueue).toHaveBeenCalledWith(1, 2);
 
-    expect(await h.executor.execute({ name: 'queue.remove', args: { queue_id: 'q1' } })).toEqual({ status: 'applied', rev: 25 });
+    expect(await h.executor.execute({ name: 'queue.remove', args: { queue_id: 'q1' } })).toEqual({ status: 'applied', rev: 27 });
     expect(h.actions.removeQueueEntry).toHaveBeenCalledWith('q1');
 
-    expect(await h.executor.execute({ name: 'queue.play_entry', args: { queue_id: 'q2' } })).toEqual({ status: 'applied', rev: 26 });
+    expect(await h.executor.execute({ name: 'queue.play_entry', args: { queue_id: 'q2' } })).toEqual({ status: 'applied', rev: 28 });
     expect(h.actions.playQueueEntry).toHaveBeenCalledWith('q2');
 
-    expect(await h.executor.execute({ name: 'radio.start', args: { track: t1 } })).toEqual({ status: 'applied', rev: 27 });
+    expect(await h.executor.execute({ name: 'radio.start', args: { track: t1 } })).toEqual({ status: 'applied', rev: 29 });
     expect(h.actions.startRadio).toHaveBeenCalledWith(t1);
 
-    expect(await h.executor.execute({ name: 'radio.stop' })).toEqual({ status: 'applied', rev: 28 });
+    expect(await h.executor.execute({ name: 'radio.stop' })).toEqual({ status: 'applied', rev: 30 });
     expect(h.actions.stopRadio).toHaveBeenCalledTimes(1);
 
-    expect(await h.executor.execute({ name: 'dj.set_mixing', args: { on: false } })).toEqual({ status: 'applied', rev: 29 });
+    expect(await h.executor.execute({ name: 'dj.set_mixing', args: { on: false } })).toEqual({ status: 'applied', rev: 31 });
     expect(h.actions.setDjMixing).toHaveBeenCalledWith(false);
 
-    expect(await h.executor.execute({ name: 'dj.start_from_current' })).toEqual({ status: 'applied', rev: 30 });
+    expect(await h.executor.execute({ name: 'dj.start_from_current' })).toEqual({ status: 'applied', rev: 32 });
     expect(h.actions.enterAutoMode).toHaveBeenCalledTimes(1);
 
     h.lifetime.close();
@@ -277,6 +285,7 @@ describe('remoteCommands executor', () => {
     // invalid args
     expect(await h.executor.execute({ name: 'transport.seek', args: { position_sec: 'bad' } })).toEqual({ status: 'rejected', reason: 'invalid' });
     expect(await h.executor.execute({ name: 'transport.set_volume', args: { level: 2 } })).toEqual({ status: 'rejected', reason: 'invalid' });
+    expect(await h.executor.execute({ name: 'transport.set_muted', args: { on: 'yes' } })).toEqual({ status: 'rejected', reason: 'invalid' });
     expect(await h.executor.execute({ name: 'transport.set_repeat', args: { mode: 'twice' } })).toEqual({ status: 'rejected', reason: 'invalid' });
 
     // nothing_playing when idle
@@ -574,6 +583,64 @@ describe('registration, seq, live state and debounced session publishing', () =>
       mixing: true,
       transition: { status: 'idle' },
     });
+
+    h.store.disposeStore();
+  });
+
+  it('answers a DJ route move with the rev of a publication that already carries the moved route', async () => {
+    const h = await loadStoreHarness();
+    h.store.initStore();
+    const core = await import('./core');
+    const [q0, q1, q2, q3] = [t1, t2, t3, { ...t1, id: 't4' }].map((track, i) =>
+      makeEntry(track, `q${i}`, 'generated', { kind: 'generated' }));
+    core.setState('playback', { currentTrack: q0, queue: [q0, q1, q2, q3], index: 0, isPlaying: true, phase: 'playing' });
+    core.setState('autoMode', { active: true, phase: 'ready', transition: { status: 'idle' } });
+    h.api.putPlaybackState.mockClear();
+
+    const ack = vi.fn();
+    h.fireSocket('device_command', { name: 'queue.move', args: { queue_id: 'q3', before_queue_id: 'q1' } }, ack);
+    await vi.waitFor(() => expect(ack).toHaveBeenCalled());
+
+    const [published] = h.api.putPlaybackState.mock.calls.at(-1)!;
+    expect(published.session.queue.map((entry: PlaybackQueueEntry) => entry.queueId)).toEqual(['q0', 'q3', 'q1', 'q2']);
+    const rev = await h.api.putPlaybackState.mock.results.at(-1)!.value;
+    expect(ack).toHaveBeenCalledWith({ status: 'applied', rev: rev.rev });
+    h.store.disposeStore();
+  });
+
+  it('does not rebuild or stringify the session snapshot on volume or phase changes', async () => {
+    vi.useFakeTimers();
+    const buildSpy = vi.fn();
+    vi.doMock('../lib/playbackSession', async (orig) => {
+      const mod = await orig<typeof import('../lib/playbackSession')>();
+      return {
+        ...mod,
+        buildPlaybackSession: (...args: Parameters<typeof mod.buildPlaybackSession>) => {
+          buildSpy();
+          return mod.buildPlaybackSession(...args);
+        },
+      };
+    });
+    const h = await loadStoreHarness();
+    h.store.initStore();
+    h.store.actions.playFrom([t1, t2], 0);
+    h.fireDeck('playing');
+    await vi.advanceTimersByTimeAsync(250);
+
+    buildSpy.mockClear();
+    h.api.putPlaybackState.mockClear();
+
+    // Dragging volume should only track live state, never rebuild the session snapshot.
+    h.store.actions.setVolume(0.5);
+    h.store.actions.setVolume(0.4);
+    h.store.actions.setVolume(0.3);
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(buildSpy).not.toHaveBeenCalled();
+    expect(h.api.putPlaybackState).toHaveBeenCalledTimes(1);
+    const volCall = h.api.putPlaybackState.mock.calls[0][0];
+    expect(volCall.live.volume.level).toBe(0.3);
+    expect('session' in volCall).toBe(false);
 
     h.store.disposeStore();
   });

@@ -12,6 +12,7 @@ export const WEB_REMOTE_COMMANDS = [
   'transport.set_shuffle',
   'transport.set_repeat',
   'transport.set_volume',
+  'transport.set_muted',
   'play.tracks',
   'queue.add',
   'queue.move',

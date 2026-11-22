@@ -271,7 +271,6 @@ export const SETTINGS_CATALOG = {
         hint: 'settings.pairNote',
         aliases: ['settings.searchAliases.pairedDevices'],
       },
-      { id: 'network-devices', label: 'settings.group.network', hint: 'settings.note.network' },
     ],
   },
   users: {

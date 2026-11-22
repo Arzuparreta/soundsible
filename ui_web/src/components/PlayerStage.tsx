@@ -95,7 +95,10 @@ export function PlayerStage(props: {
   const desktopLyricsActive = createMemo(() => desktopLyrics() && !podcast());
   const loading = createMemo(() => player().playback.isLoading);
   const loadFailed = createMemo(() => player().playback.loadError);
+  // Seeking another device is one command on release; until then the bar holds the drag.
+  const [dragged, setDragged] = createSignal<number | null>(null);
   const position = createMemo<number>((previous) => {
+    if (dragged() !== null) return dragged()!;
     if (!pageVisible()) return previous ?? untrack(() => player().playback.currentTime);
     return props.surfaceOpen ? player().playback.currentTime : untrack(() => player().playback.currentTime);
   });
@@ -312,7 +315,18 @@ export function PlayerStage(props: {
                     step={1}
                     style={{ '--fill': `${seekPct()}%` }}
                     aria-label={t('nowPlaying.seekLabel')}
-                    onInput={(event) => player().actions.seek(Number(event.currentTarget.value))}
+                    aria-busy={player().pending('seek')}
+                    disabled={player().unreachable}
+                    onInput={(event) => {
+                      const value = Number(event.currentTarget.value);
+                      if (player().remote) setDragged(value);
+                      else player().actions.seek(value);
+                    }}
+                    onChange={(event) => {
+                      if (!player().remote) return;
+                      setDragged(null);
+                      player().actions.seek(Number(event.currentTarget.value));
+                    }}
                   />
                   <div class={styles.times}>
                     <span>{clockTime(position())}</span>
@@ -327,13 +341,22 @@ export function PlayerStage(props: {
                       type="button"
                       aria-label={t('nowPlaying.shuffle')}
                       aria-pressed={player().playback.shuffle}
+                      aria-busy={player().pending('shuffle')}
+                      data-pending={player().pending('shuffle') || undefined}
                       onClick={() => player().actions.toggleShuffle()}
                     >
                       <ShuffleIcon size={20} />
                     </button>
                   </Show>
 
-                  <button class={styles.ctrl} type="button" aria-label={podcast() ? t('podcasts.skipBack') : t('common.prev')} onClick={() => podcast() ? player().actions.seekBy(-15) : player().actions.prev()}>
+                  <button
+                    class={styles.ctrl}
+                    type="button"
+                    aria-label={podcast() ? t('podcasts.skipBack') : t('common.prev')}
+                    aria-busy={player().pending('prev')}
+                    data-pending={player().pending('prev') || undefined}
+                    onClick={() => podcast() ? player().actions.seekBy(-15) : player().actions.prev()}
+                  >
                     <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>}>
                       <PodcastSkipIcon backward />
                     </Show>
@@ -343,7 +366,8 @@ export function PlayerStage(props: {
                     class={styles.play}
                     type="button"
                     aria-label={loadFailed() ? t('common.retry') : player().playback.isPlaying ? t('common.pause') : t('common.play')}
-                    aria-busy={loading()}
+                    aria-busy={loading() || player().pending('play')}
+                    data-pending={player().pending('play') || undefined}
                     onClick={() => player().actions.togglePlay()}
                   >
                     <Switch>
@@ -368,7 +392,14 @@ export function PlayerStage(props: {
                     </Switch>
                   </button>
 
-                  <button class={styles.ctrl} type="button" aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')} onClick={() => podcast() ? player().actions.seekBy(15) : next()}>
+                  <button
+                    class={styles.ctrl}
+                    type="button"
+                    aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')}
+                    aria-busy={player().pending('next')}
+                    data-pending={player().pending('next') || undefined}
+                    onClick={() => podcast() ? player().actions.seekBy(15) : next()}
+                  >
                     <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" /></svg>}>
                       <PodcastSkipIcon />
                     </Show>
@@ -379,6 +410,8 @@ export function PlayerStage(props: {
                       classList={{ [styles.toggle]: true, [styles.on]: player().playback.repeat !== 'off' }}
                       type="button"
                       aria-label={t('nowPlaying.repeat')}
+                      aria-busy={player().pending('repeat')}
+                      data-pending={player().pending('repeat') || undefined}
                       onClick={() => player().actions.cycleRepeat()}
                     >
                       <RepeatIcon size={20} />
@@ -455,43 +488,49 @@ export function PlayerStage(props: {
                     </button>
                   </Show>
 
-                  <div class={styles.volume}>
-                    <button
-                      class={styles.actBtn}
-                      classList={{ [styles.actOn]: player().playback.muted }}
-                      type="button"
-                      aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
-                      aria-pressed={player().playback.muted}
-                      title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
-                      onClick={() => player().actions.toggleMute()}
-                    >
-                      <Show
-                        when={!player().playback.muted}
-                        fallback={
-                          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
-                          </svg>
-                        }
-                      >
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
-                        </svg>
+                  <Show when={player().can('transport.set_volume')}>
+                    <div class={styles.volume}>
+                      <Show when={player().can('transport.set_muted')}>
+                        <button
+                          class={styles.actBtn}
+                          classList={{ [styles.actOn]: player().playback.muted }}
+                          type="button"
+                          aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
+                          aria-pressed={player().playback.muted}
+                          aria-busy={player().pending('mute')}
+                          data-pending={player().pending('mute') || undefined}
+                          title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
+                          onClick={() => player().actions.toggleMute()}
+                        >
+                          <Show
+                            when={!player().playback.muted}
+                            fallback={
+                              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
+                              </svg>
+                            }
+                          >
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+                            </svg>
+                          </Show>
+                        </button>
                       </Show>
-                    </button>
-                    <span class={styles.volumePopover}>
-                      <input
-                        class={styles.volRange}
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={volPct()}
-                        style={{ '--fill': `${volPct()}%` }}
-                        aria-label={t('omnibar.volume')}
-                        aria-valuetext={`${volPct()}%`}
-                        onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
-                      />
-                    </span>
-                  </div>
+                      <span class={styles.volumePopover}>
+                        <input
+                          class={styles.volRange}
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={volPct()}
+                          style={{ '--fill': `${volPct()}%` }}
+                          aria-label={t('omnibar.volume')}
+                          aria-valuetext={`${volPct()}%`}
+                          onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
+                        />
+                      </span>
+                    </div>
+                  </Show>
 
                   <button
                     class={styles.actBtn}

@@ -109,6 +109,21 @@ html[data-player-surface]:not([data-player-swiping]) #app {
   }
 }
 
+/* A command to another device is in flight (stores/remote). An answer within
+   250 ms changes nothing on screen; a slower one dims the control, steadily
+   under reduced motion. */
+[data-pending] {
+  animation: pending 1s var(--ease-in-out) 250ms infinite alternate;
+}
+@keyframes pending {
+  to { opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-pending] {
+    animation: pending 0s 250ms forwards;
+  }
+}
+
 /* Global keyboard focus ring for interactive elements that don't define their
    own (icon buttons, nav links, native selects). :where() keeps specificity 0,
    so components with a bespoke ring (e.g. Button) still win. Text inputs keep

@@ -38,7 +38,7 @@ export default function Shell(props: RouteSectionProps) {
   };
   onMount(loadPlayerSurface);
   createEffect(() => {
-    if (nowPlayingOpen() || player().playback.currentTrack) loadPlayerSurface();
+    if (nowPlayingOpen() || player().playback.currentTrack || player().remote) loadPlayerSurface();
   });
   // The broadcast bridge, WebRTC and the Live client are fetched only once
   // Live is in use (lib/communityGate), not with the first library paint.
@@ -52,7 +52,7 @@ export default function Shell(props: RouteSectionProps) {
     // when it is up: that is what lets every scroller reserve room for it
     // (app.css). Same condition the pill hides itself on — there is one track
     // or there is not.
-    <div class={styles.app} data-mini-player={player().playback.currentTrack ? '' : undefined}>
+    <div class={styles.app} data-mini-player={player().playback.currentTrack || player().remote ? '' : undefined}>
       <ScrollHistoryManager />
       <Show when={bridge()} keyed>{(Bridge) => <Bridge />}</Show>
       <Sidebar />
