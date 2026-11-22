@@ -233,7 +233,7 @@ export function OmniBar() {
         class={styles.ctrl}
         type="button"
         aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')}
-        aria-busy={player().pending('next')}
+        aria-busy={player().pending('next') || undefined}
         data-pending={player().pending('next') || undefined}
         disabled={!current() || unreachable()}
         onClick={() => podcast() ? player().actions.seekBy(15) : player().autoMode.active ? void player().actions.autoSkip() : player().actions.next()}
@@ -265,7 +265,7 @@ export function OmniBar() {
               type="button"
               aria-label={player().playback.muted || player().playback.volume === 0 ? t('omnibar.unmute') : t('omnibar.mute')}
               aria-pressed={player().playback.muted}
-              aria-busy={player().pending('mute')}
+              aria-busy={player().pending('mute') || undefined}
               data-pending={player().pending('mute') || undefined}
               onClick={() => player().actions.toggleMute()}
             >

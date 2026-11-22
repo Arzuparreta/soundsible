@@ -315,7 +315,7 @@ export function PlayerStage(props: {
                     step={1}
                     style={{ '--fill': `${seekPct()}%` }}
                     aria-label={t('nowPlaying.seekLabel')}
-                    aria-busy={player().pending('seek')}
+                    aria-busy={player().pending('seek') || undefined}
                     disabled={player().unreachable}
                     onInput={(event) => {
                       const value = Number(event.currentTarget.value);
@@ -341,7 +341,7 @@ export function PlayerStage(props: {
                       type="button"
                       aria-label={t('nowPlaying.shuffle')}
                       aria-pressed={player().playback.shuffle}
-                      aria-busy={player().pending('shuffle')}
+                      aria-busy={player().pending('shuffle') || undefined}
                       data-pending={player().pending('shuffle') || undefined}
                       onClick={() => player().actions.toggleShuffle()}
                     >
@@ -353,7 +353,7 @@ export function PlayerStage(props: {
                     class={styles.ctrl}
                     type="button"
                     aria-label={podcast() ? t('podcasts.skipBack') : t('common.prev')}
-                    aria-busy={player().pending('prev')}
+                    aria-busy={player().pending('prev') || undefined}
                     data-pending={player().pending('prev') || undefined}
                     onClick={() => podcast() ? player().actions.seekBy(-15) : player().actions.prev()}
                   >
@@ -396,7 +396,7 @@ export function PlayerStage(props: {
                     class={styles.ctrl}
                     type="button"
                     aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')}
-                    aria-busy={player().pending('next')}
+                    aria-busy={player().pending('next') || undefined}
                     data-pending={player().pending('next') || undefined}
                     onClick={() => podcast() ? player().actions.seekBy(15) : next()}
                   >
@@ -410,7 +410,7 @@ export function PlayerStage(props: {
                       classList={{ [styles.toggle]: true, [styles.on]: player().playback.repeat !== 'off' }}
                       type="button"
                       aria-label={t('nowPlaying.repeat')}
-                      aria-busy={player().pending('repeat')}
+                      aria-busy={player().pending('repeat') || undefined}
                       data-pending={player().pending('repeat') || undefined}
                       onClick={() => player().actions.cycleRepeat()}
                     >
@@ -497,7 +497,7 @@ export function PlayerStage(props: {
                           type="button"
                           aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
                           aria-pressed={player().playback.muted}
-                          aria-busy={player().pending('mute')}
+                          aria-busy={player().pending('mute') || undefined}
                           data-pending={player().pending('mute') || undefined}
                           title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
                           onClick={() => player().actions.toggleMute()}
