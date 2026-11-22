@@ -869,6 +869,7 @@ export const zh: Dict = {
     deleteMsg: '将从资料库和磁盘中删除“{title}”。',
     deleteConfirm: '删除',
     notInterested: '不感兴趣',
+    lessFromArtist: '减少推荐此艺人',
     feedbackSaved: '以后会减少出现',
     feedbackFailed: '无法保存此偏好',
   },

@@ -21,10 +21,12 @@ from shared.hardening import rate_limit
 from shared.providers import deezer
 from shared.discovery_intelligence import (
     POSITIVE_LISTENING_EVENTS,
+    artist_identity,
     build_music_recommendations,
     emit_discovery_event,
     load_discovery_settings,
     load_recently_saved_tracks,
+    record_less_from_artist,
     record_not_interested,
     reset_discovery_profile,
     save_discovery_settings,
@@ -125,10 +127,16 @@ def discovery_events_post():
 @rate_limit("discovery_feedback", limit=120, window_sec=60)
 def discovery_feedback_post():
     data = request.get_json(silent=True) or {}
-    if data.get("feedback") != "not_interested":
+    feedback = data.get("feedback")
+    if feedback not in ("not_interested", "less_from_artist"):
         return jsonify({"error": "Unsupported feedback"}), 400
     item = data.get("item") if isinstance(data.get("item"), dict) else {}
-    event_id = record_not_interested(item)
+    if feedback == "less_from_artist":
+        if not artist_identity(item)[0]:
+            return jsonify({"error": "artist is required"}), 400
+        event_id = record_less_from_artist(item)
+    else:
+        event_id = record_not_interested(item)
     if event_id:
         _invalidate_personalized_cache()
     return jsonify({

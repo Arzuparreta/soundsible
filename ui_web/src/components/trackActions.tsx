@@ -39,6 +39,8 @@ export interface TrackMenuContext {
   inRoute?: boolean;
   onNotInterested?: () => void;
   onUndoNotInterested?: () => void;
+  onLessFromArtist?: (artist: string) => void;
+  onUndoLessFromArtist?: (artist: string) => void;
 }
 
 /** The links a menu offers into the music itself: one entry per performer, then
@@ -123,6 +125,19 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
         onUndone: ctx.onUndoNotInterested,
       }),
     });
+    if (!isPodcast) {
+      const artist = track.artists?.map((name) => name.trim()).find(Boolean) || track.artist?.trim() || '';
+      if (artist) {
+        list.push({
+          icon: icons.feedback(),
+          label: t('trackActions.lessFromArtist'),
+          onSelect: () => void sendLessFromArtist(track, artist, {
+            onDismissed: () => ctx.onLessFromArtist?.(artist),
+            onUndone: () => ctx.onUndoLessFromArtist?.(artist),
+          }),
+        });
+      }
+    }
   }
   // Having a song and having its bytes are two separate steps, and the menu
   // offers exactly the one the song is standing on.
@@ -169,12 +184,15 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   return list;
 }
 
-export async function sendDiscoveryNotInterested(
+async function sendDiscoveryFeedback(
+  feedback: 'not_interested' | 'less_from_artist',
   payload: Record<string, unknown>,
   hooks?: { onDismissed?: () => void; onUndone?: () => void },
 ): Promise<void> {
   try {
-    const result = await api.sendDiscoveryFeedback(payload);
+    const result = feedback === 'not_interested'
+      ? await api.sendDiscoveryFeedback(payload)
+      : await api.sendDiscoveryFeedback(payload, feedback);
     if (!result.recorded || !result.event_id) return;
     hooks?.onDismissed?.();
     const eventId = result.event_id;
@@ -188,12 +206,23 @@ export async function sendDiscoveryNotInterested(
   }
 }
 
-async function sendNotInterested(
-  track: Track,
+export async function sendDiscoveryNotInterested(
+  payload: Record<string, unknown>,
   hooks?: { onDismissed?: () => void; onUndone?: () => void },
 ): Promise<void> {
+  await sendDiscoveryFeedback('not_interested', payload, hooks);
+}
+
+export async function sendDiscoveryLessFromArtist(
+  payload: Record<string, unknown>,
+  hooks?: { onDismissed?: () => void; onUndone?: () => void },
+): Promise<void> {
+  await sendDiscoveryFeedback('less_from_artist', payload, hooks);
+}
+
+function trackFeedbackPayload(track: Track): Record<string, unknown> {
   const deezerId = track.originKeys?.find((key) => key.startsWith('deezer:'))?.slice(7);
-  await sendDiscoveryNotInterested({
+  return {
     media_type: isPodcastTrack(track) ? 'podcast_episode' : 'music_track',
     track_id: track.source === 'preview' ? undefined : track.id,
     title: track.title,
@@ -202,12 +231,29 @@ async function sendNotInterested(
       ? track.youtube_id || (track.source === 'preview' ? track.id : undefined)
       : undefined,
     deezer_id: deezerId || undefined,
+    ...(track.deezer_artist_id ? { deezer_artist_id: track.deezer_artist_id } : {}),
     isrc: track.isrc ?? undefined,
+    ...(track.musicbrainz_id ? { mbid: track.musicbrainz_id } : {}),
     podcast_feed_id: track.podcast_feed_id,
     podcast_episode_id: track.podcast_episode_guid,
     podcast_show_title: isPodcastTrack(track) ? track.artist : undefined,
     source: track.recommendation?.source,
-  }, hooks);
+  };
+}
+
+async function sendNotInterested(
+  track: Track,
+  hooks?: { onDismissed?: () => void; onUndone?: () => void },
+): Promise<void> {
+  await sendDiscoveryNotInterested(trackFeedbackPayload(track), hooks);
+}
+
+async function sendLessFromArtist(
+  track: Track,
+  primaryArtist: string,
+  hooks?: { onDismissed?: () => void; onUndone?: () => void },
+): Promise<void> {
+  await sendDiscoveryLessFromArtist({ ...trackFeedbackPayload(track), artist: primaryArtist }, hooks);
 }
 
 async function confirmDelete(track: Track): Promise<void> {

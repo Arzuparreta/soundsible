@@ -1,6 +1,11 @@
 from types import SimpleNamespace
 
-from shared.discovery_intelligence import emit_discovery_event, reset_discovery_profile
+from shared.discovery_intelligence import (
+    emit_discovery_event,
+    record_less_from_artist,
+    reset_discovery_profile,
+    undo_discovery_feedback,
+)
 from shared.discovery_seeds import (
     clear_recent_seeds,
     load_saved_entity_artists,
@@ -185,6 +190,59 @@ def test_saved_entities_feed_taste_and_unrotated_release_seeds(tmp_path):
             {"name": "Marea", "deezer_id": "42"},
         ]
         assert [item["name"] for item in release_seeds] == ["Extremoduro", "Marea", "Robe", "Platero y Tú"]
+    finally:
+        clear_recent_seeds(clear_all=True)
+        reset_runtime()
+
+
+def test_less_from_artist_excludes_taste_and_release_seeds_and_backfills_limit(tmp_path):
+    from player import saved_entities
+
+    _setup_runtime(tmp_path)
+    try:
+        tracks = [
+            _track("t1", "Blue Öyster Cult"),
+            _track("t2", "Thin Lizzy"),
+            _track("t3", "Rush"),
+            _track("t4", "Artist 4"),
+            _track("t5", "Artist 5"),
+            _track("t6", "Artist 6"),
+            _track("t7", "Artist 7"),
+            _track("t8", "Artist 8"),
+            _track("t9", "Artist 9"),
+        ]
+        metadata = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})
+        with user_context("alice"):
+            saved_entities.set_saved(
+                {
+                    "kind": "artist",
+                    "name": "Blue Öyster Cult",
+                    "destination": "/artist/Blue%20%C3%96yster%20Cult?deezer_id=77&view=discover",
+                },
+                True,
+            )
+        assert select_taste_artists(metadata, ["t1"], limit=5, user_id="alice")[0] == "Blue Öyster Cult"
+
+        with user_context("alice"):
+            # Reject via deezer_artist_id alone to verify saved-artist ID matching.
+            event_id = record_less_from_artist({"deezer_artist_id": "77"})
+        assert event_id
+
+        # Excluded completely from taste seeds even when limit exceeds remaining artists.
+        filtered_taste = select_taste_artists(metadata, ["t1"], limit=10, user_id="alice")
+        assert "Blue Öyster Cult" not in filtered_taste
+        assert len(filtered_taste) == 8
+
+        # Excluded from release seeds, and the 9th artist steps in to fill limit=8.
+        release_seeds = select_release_seed_artists(metadata, ["t1"], limit=8, user_id="alice")
+        names = [item["name"] for item in release_seeds]
+        assert "Blue Öyster Cult" not in names
+        assert len(names) == 8
+        assert "Artist 9" in names
+
+        with user_context("alice"):
+            assert undo_discovery_feedback(event_id) is True
+        assert select_taste_artists(metadata, ["t1"], limit=5, user_id="alice")[0] == "Blue Öyster Cult"
     finally:
         clear_recent_seeds(clear_all=True)
         reset_runtime()

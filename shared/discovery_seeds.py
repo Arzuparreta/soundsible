@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections import OrderedDict
 import threading
 
-from shared.discovery_intelligence import load_listening_event_rollups
+from shared.discovery_intelligence import (
+    is_artist_demoted,
+    load_listening_event_rollups,
+)
 from shared.text_utils import fold_text
 from shared.user_context import current_user_id, user_context
 
@@ -198,6 +201,19 @@ def select_taste_artists(
     for raw_key, count in rollup.artist_saves.items():
         add_artist(raw_key, min(10.0, count * 3.0), title_fallback=True)
 
+    deezer_by_folded = {
+        fold_text(item["name"]): item["deezer_id"]
+        for item in saved_artists
+        if fold_text(item["name"]) and item["deezer_id"]
+    }
+    for key in list(scores):
+        if _is_artist_excluded(
+            display.get(key, key),
+            user_id,
+            deezer_artist_id=deezer_by_folded.get(key, ""),
+        ):
+            scores.pop(key, None)
+
     if rotate:
         recent = _get_recent(_RECENT_TASTE_SEEDS, user_id)
         for key in recent:
@@ -206,6 +222,16 @@ def select_taste_artists(
 
     ranked = sorted(scores, key=lambda key: scores[key], reverse=True)
     return [display[key] for key in ranked[:limit] if display.get(key)]
+
+
+def _is_artist_excluded(artist: str, user_id: str | None = None, *, deezer_artist_id: str = "") -> bool:
+    try:
+        if user_id is not None:
+            with user_context(user_id):
+                return is_artist_demoted(artist, deezer_artist_id=deezer_artist_id)
+        return is_artist_demoted(artist, deezer_artist_id=deezer_artist_id)
+    except Exception:
+        return False
 
 
 def select_release_seed_artists(
@@ -223,27 +249,34 @@ def select_release_seed_artists(
         if fold_text(item["name"]) and item["deezer_id"]
     }
 
-    out: list[dict[str, str]] = []
+    candidates: list[dict[str, str]] = []
     seen: set[str] = set()
 
     def push(name: str, deezer_id: str = "") -> None:
-        if len(out) >= limit:
-            return
         folded = fold_text(name)
         if not folded or folded in seen:
             return
         seen.add(folded)
-        out.append({"name": name, "deezer_id": deezer_id or deezer_by_folded.get(folded, "")})
+        candidates.append({"name": name, "deezer_id": deezer_id or deezer_by_folded.get(folded, "")})
 
     for kind in ("artist", "album"):
         for item in saved_artists:
             if item["kind"] == kind:
                 push(item["name"], item["deezer_id"])
 
-    for name in select_taste_artists(metadata, fav_ids, limit=limit, user_id=user_id, rotate=False):
+    for name in select_taste_artists(metadata, fav_ids, limit=max(limit * 2, 16), user_id=user_id, rotate=False):
         push(name)
 
-    return out[:limit]
+    filtered = [
+        item
+        for item in candidates
+        if not _is_artist_excluded(
+            item["name"],
+            user_id,
+            deezer_artist_id=item["deezer_id"],
+        )
+    ]
+    return filtered[:limit]
 
 
 def select_graph_seed_tracks(

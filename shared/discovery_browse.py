@@ -7,8 +7,16 @@ from itertools import zip_longest
 import time
 
 from shared.deezer_catalog import main_contributors
+from shared.discovery_intelligence import artist_recommendation_multiplier
 from shared.providers import deezer
 from shared.text_utils import fold_text, identity_key
+
+
+def _artist_mult(name: str, deezer_artist_id: str = "") -> float:
+    try:
+        return artist_recommendation_multiplier(name, deezer_artist_id=deezer_artist_id)
+    except Exception:
+        return 1.0
 
 _ALLOWED_RECORD_TYPES = {"album", "ep", "single"}
 _NEW_RELEASE_WINDOW_DAYS = 180
@@ -117,9 +125,17 @@ def build_browse_sections(
     seen = {s["id"] for s in seeds}
     for round_items in zip_longest(*pools):
         for item in round_items:
-            if item and item["id"] not in seen and len(artists) < limit:
+            if item and item["id"] not in seen:
                 seen.add(item["id"])
                 artists.append(item)
+    artists.sort(
+        key=lambda item: _artist_mult(
+            item["title"],
+            item["external_ids"]["deezer_artist_id"],
+        ),
+        reverse=True,
+    )
+    artists = artists[:limit]
 
     new_releases: list[dict] = []
     new_release_ids: set[str] = set()
@@ -179,7 +195,14 @@ def build_browse_sections(
             names = [name for _, name in main_contributors(album)] if isinstance(album, dict) else []
             return ", ".join(names) if len(names) > 1 else fallback
 
-        raw_releases.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+        raw_releases.sort(
+            key=lambda entry: (
+                _artist_mult(entry[3], entry[2]),
+                entry[0],
+                entry[1],
+            ),
+            reverse=True,
+        )
         new_release_per_artist: Counter = Counter()
         for rel_date, aid_num, owner_id, owner_name, row in raw_releases:
             if len(new_releases) >= limit:
@@ -215,7 +238,15 @@ def build_browse_sections(
         # "Similar to {artist}" attribution; fall back to seed artists only when
         # related artists do not fill five album pools.
         seen_owners: set[str] = set()
-        for owner in [*artists, *seeds]:
+        candidate_owners = sorted(
+            [*artists, *seeds],
+            key=lambda owner: _artist_mult(
+                owner["title"],
+                owner["external_ids"]["deezer_artist_id"],
+            ),
+            reverse=True,
+        )
+        for owner in candidate_owners:
             if len(album_pools) >= 5:
                 break
             aid = owner["external_ids"]["deezer_artist_id"]
@@ -246,7 +277,7 @@ def build_browse_sections(
     per_artist: Counter = Counter()
     for round_items in zip_longest(*album_pools):
         for row in round_items:
-            if not row or len(albums) >= limit:
+            if not row:
                 continue
             aid = str(row.get("id") or "")
             owner = row.get("artist") if isinstance(row.get("artist"), dict) else {}
@@ -273,6 +304,14 @@ def build_browse_sections(
                 "external_ids": {"deezer_album_id": aid, "deezer_artist_id": owner_id},
                 "reason_artist": row.get("reason_artist", ""),
             })
+    albums.sort(
+        key=lambda item: _artist_mult(
+            item["artist"],
+            item["external_ids"]["deezer_artist_id"],
+        ),
+        reverse=True,
+    )
+    albums = albums[:limit]
     browse_sections = [
         {"id": "new_releases", "popular": False, "items": new_releases},
         {"id": "artists", "popular": popular, "items": artists},

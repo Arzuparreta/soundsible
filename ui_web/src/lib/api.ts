@@ -194,6 +194,7 @@ export interface DiscoveryFeedItem {
   track_id?: string;
   title: string;
   artist: string;
+  artists?: string[] | null;
   album?: string;
   duration?: number;
   cover?: string;
@@ -950,10 +951,13 @@ export const api = {
       body: { event, payload: payload ?? {} },
       timeoutMs: 5000,
     }),
-  sendDiscoveryFeedback: (item: Record<string, unknown>) =>
+  sendDiscoveryFeedback: (
+    item: Record<string, unknown>,
+    feedback: 'not_interested' | 'less_from_artist' = 'not_interested',
+  ) =>
     request<{ status?: string; recorded?: boolean; event_id?: string | null }>(
       '/api/discovery/feedback',
-      { method: 'POST', body: { feedback: 'not_interested', item }, timeoutMs: 5000 },
+      { method: 'POST', body: { feedback, item }, timeoutMs: 5000 },
     ),
   undoDiscoveryFeedback: (eventId: string) =>
     request<{ status?: string; undone?: boolean }>(

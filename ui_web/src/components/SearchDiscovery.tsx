@@ -7,14 +7,18 @@ import { api, type DiscoveryMusicFeed } from '../lib/api';
 import {
   discoveryBrowseSections,
   discoveryDismissed,
+  discoveryDismissedArtists,
   discoveryError,
   discoveryFeed,
   discoveryLoading,
   discoveryRefreshing,
   discoveryTrackShelves,
+  dismissDiscoveryArtist,
   dismissDiscoveryItem,
+  filterDiscoveryBrowseSections,
   filterDiscoveryTrackShelves,
   refreshDiscoveryFeed,
+  restoreDiscoveryArtist,
   restoreDiscoveryItem,
   retainDiscoveryFeed,
 } from '../lib/discoveryFeedStore';
@@ -51,13 +55,17 @@ export function SearchDiscovery(props: {
     }
     const current = discoveryFeed();
     if (!untrack(snapshot)) {
-      const snapSections = (current.browse_sections ?? []).map(section => ({
-        ...section,
-        items: prioritizeDiscoveries(section.items),
-      }));
+      const snapSections = filterDiscoveryBrowseSections(
+        (current.browse_sections ?? []).map(section => ({
+          ...section,
+          items: prioritizeDiscoveries(section.items),
+        })),
+        untrack(discoveryDismissedArtists),
+      );
       const snapShelves = filterDiscoveryTrackShelves(
         resolveDiscoveryTrackShelves(current, prioritizeDiscoveries),
         untrack(discoveryDismissed),
+        untrack(discoveryDismissedArtists),
       );
       if (discoveryHasVisible(snapSections, snapShelves, exp)) {
         setSnapshot(current);
@@ -68,10 +76,13 @@ export function SearchDiscovery(props: {
   const sections = createMemo(() => {
     const frozen = snapshot();
     if (frozen && expanded()) {
-      return (frozen.browse_sections ?? []).map(section => ({
-        ...section,
-        items: prioritizeDiscoveries(section.items),
-      }));
+      return filterDiscoveryBrowseSections(
+        (frozen.browse_sections ?? []).map(section => ({
+          ...section,
+          items: prioritizeDiscoveries(section.items),
+        })),
+        discoveryDismissedArtists(),
+      );
     }
     return discoveryBrowseSections();
   });
@@ -81,6 +92,7 @@ export function SearchDiscovery(props: {
       return filterDiscoveryTrackShelves(
         resolveDiscoveryTrackShelves(frozen, prioritizeDiscoveries),
         discoveryDismissed(),
+        discoveryDismissedArtists(),
       );
     }
     return discoveryTrackShelves();
@@ -152,5 +164,7 @@ export function SearchDiscovery(props: {
     renderSong={item => <CatalogResultRow showLibraryStatus item={item} active={isPlayingItem(item)} saving={props.saving.has(item.id)}
       onPlay={() => props.onPlay(item)} onDownload={() => props.onSave(item)}
       onNotInterested={() => dismissDiscoveryItem(item.id)}
-      onUndoNotInterested={() => restoreDiscoveryItem(item.id)} />} />;
+      onUndoNotInterested={() => restoreDiscoveryItem(item.id)}
+      onLessFromArtist={(artist) => dismissDiscoveryArtist(artist)}
+      onUndoLessFromArtist={(artist) => restoreDiscoveryArtist(artist)} />} />;
 }

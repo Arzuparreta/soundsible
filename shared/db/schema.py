@@ -544,6 +544,17 @@ class SchemaMixin:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS discovery_signal_aliases (
+                alias TEXT NOT NULL,
+                identity TEXT NOT NULL,
+                PRIMARY KEY (alias, identity)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_discovery_signal_aliases_identity
+            ON discovery_signal_aliases (identity)
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS discovery_events (
                 id TEXT PRIMARY KEY,
                 event TEXT NOT NULL,

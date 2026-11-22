@@ -5,6 +5,7 @@ const store = vi.hoisted(() => ({
   actions: { toggleFavourite: vi.fn(), toggleSaved: vi.fn(), downloadSaved: vi.fn(), startRadio: vi.fn(), linkCatalogItem: vi.fn() },
   buildTrackMenu: vi.fn(() => []),
   sendDiscoveryNotInterested: vi.fn(),
+  sendDiscoveryLessFromArtist: vi.fn(),
   resolveCatalogItem: vi.fn(),
   toastError: vi.fn(),
 }));
@@ -19,6 +20,7 @@ vi.mock('./trackActions', () => ({
   buildTrackMenu: store.buildTrackMenu,
   musicLinkActions: () => [],
   sendDiscoveryNotInterested: store.sendDiscoveryNotInterested,
+  sendDiscoveryLessFromArtist: store.sendDiscoveryLessFromArtist,
 }));
 vi.mock('../lib/api', () => ({ api: { resolveCatalogItem: store.resolveCatalogItem } }));
 vi.mock('../lib/toast', () => ({ toast: { error: store.toastError } }));
@@ -41,9 +43,11 @@ describe('mobile entry menus', () => {
     list[2].onSelect(); expect(openPlayOnDevice).toHaveBeenCalledWith(expect.objectContaining({ source: 'preview',
       originKeys: entry.keys, pendingResolve: { catalogItemId: 'deezer:42', artist: 'Artist', title: 'Unresolved song', duration: undefined } }));
   });
-  it('exposes recommendation reason, Not interested with deezer_id, and Start radio on unresolved catalog items', async () => {
+  it('exposes recommendation reason, Not interested, Less from this artist, and Start radio on unresolved catalog items', async () => {
     const onNotInterested = vi.fn();
     const onUndoNotInterested = vi.fn();
+    const onLessFromArtist = vi.fn();
+    const onUndoLessFromArtist = vi.fn();
     store.resolveCatalogItem.mockResolvedValueOnce({ video_id: 'dQw4w9WgXcQ' });
     const list = buildEntryMenu(entry, {
       item: {
@@ -52,11 +56,13 @@ describe('mobile entry menus', () => {
         artist: 'Artist',
         source: 'deezer',
         type: 'track',
-        external_ids: { deezer_id: '42', isrc: 'USRC17607839' },
+        external_ids: { deezer_id: '42', deezer_artist_id: '77', isrc: 'USRC17607839' },
       },
       recommendation: { identity: 'music:deezer:42', source: 'discover', reason: 'More from Artist' },
       onNotInterested,
       onUndoNotInterested,
+      onLessFromArtist,
+      onUndoLessFromArtist,
     });
     expect(list.map((action) => [action.label, Boolean(action.disabled)])).toEqual([
       ['collection.save', false],
@@ -65,6 +71,7 @@ describe('mobile entry menus', () => {
       ['trackActions.startRadio', false],
       ['More from Artist', true],
       ['trackActions.notInterested', false],
+      ['trackActions.lessFromArtist', false],
     ]);
     list[3].onSelect();
     await vi.waitFor(() => expect(store.resolveCatalogItem).toHaveBeenCalledWith({ artist: 'Artist', title: 'Unresolved song', duration: undefined }, undefined));
@@ -74,6 +81,7 @@ describe('mobile entry menus', () => {
       expect.objectContaining({
         media_type: 'music_track',
         deezer_id: '42',
+        deezer_artist_id: '77',
         isrc: 'USRC17607839',
         title: 'Unresolved song',
         artist: 'Artist',
@@ -81,19 +89,38 @@ describe('mobile entry menus', () => {
       }),
       { onDismissed: onNotInterested, onUndone: onUndoNotInterested },
     );
+    list[6].onSelect();
+    expect(store.sendDiscoveryLessFromArtist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deezer_id: '42',
+        deezer_artist_id: '77',
+        artist: 'Artist',
+        source: 'discover',
+      }),
+      expect.objectContaining({ onDismissed: expect.any(Function), onUndone: expect.any(Function) }),
+    );
+    const hooks = store.sendDiscoveryLessFromArtist.mock.calls[0][1] as { onDismissed: () => void; onUndone: () => void };
+    hooks.onDismissed();
+    expect(onLessFromArtist).toHaveBeenCalledWith('Artist');
+    hooks.onUndone();
+    expect(onUndoLessFromArtist).toHaveBeenCalledWith('Artist');
   });
   it('forwards recommendation and dismissal hooks to buildTrackMenu for resolved tracks without duplicates', () => {
     store.owned = { id: 'local', title: entry.title, artist: entry.artist };
     const onNotInterested = vi.fn();
     const onUndoNotInterested = vi.fn();
+    const onLessFromArtist = vi.fn();
+    const onUndoLessFromArtist = vi.fn();
     buildEntryMenu(entry, {
       recommendation: { identity: 'music:track:local', source: 'discover', reason: 'In your library' },
       onNotInterested,
       onUndoNotInterested,
+      onLessFromArtist,
+      onUndoLessFromArtist,
     });
     expect(store.buildTrackMenu).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'local', recommendation: { identity: 'music:track:local', source: 'discover', reason: 'In your library' } }),
-      expect.objectContaining({ onNotInterested, onUndoNotInterested }),
+      expect.objectContaining({ onNotInterested, onUndoNotInterested, onLessFromArtist, onUndoLessFromArtist }),
     );
   });
   it('uses the surface download handler and disables a pending download', () => {

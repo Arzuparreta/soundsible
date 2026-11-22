@@ -875,6 +875,7 @@ export const en = {
     deleteMsg: '“{title}” will be deleted from the library and from disk.',
     deleteConfirm: 'Delete',
     notInterested: 'Not interested',
+    lessFromArtist: 'Less from this artist',
     feedbackSaved: 'We’ll make this less likely',
     feedbackFailed: 'Could not save that preference',
   },
