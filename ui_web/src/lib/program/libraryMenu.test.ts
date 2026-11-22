@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { programLibraryMenu } from './libraryMenu';
+import { programLibraryMenu, programQueueActions } from './libraryMenu';
 import type { ProgramState } from './runtime';
 import type { Track } from '../../types/music';
 vi.mock('../i18n', () => ({ t: (key: string) => key }));
@@ -150,4 +150,16 @@ it('external DJ menus start across route refills and keep session controls in th
   state = { ...state, queueToken: 'refilled' };
   menu.actions![0].onSelect();
   expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'djSelection', tracks: [{ ...track, source: 'local' }], label: 'Song', queueToken: 'order', programToken: 'dj' });
+});
+
+it('gives a song that has not resolved yet the same queue pair as the library menu', () => {
+  const song = { ...track, pendingResolve: { catalogItemId: track.id, title: track.title, artist: 'Artist' } };
+  const execute = vi.fn(async (_command: unknown) => {});
+  const pair = programQueueActions(song, () => initial, () => false, execute);
+  expect(pair.map(action => action.label)).toEqual(programLibraryMenu(song, () => initial, () => false, execute).actions!.map(action => action.label));
+  pair.forEach(action => action.onSelect());
+  expect(execute.mock.calls.map(([command]) => (command as { action: string }).action)).toEqual(['insertAfter', 'append']);
+  expect(execute).toHaveBeenCalledWith(expect.objectContaining({ tracks: [expect.objectContaining({ source: 'pending' })] }));
+  const dj = { ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } } as ProgramState;
+  expect(programQueueActions(song, () => dj, () => false, execute)).toEqual([]);
 });

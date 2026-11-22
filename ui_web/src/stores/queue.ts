@@ -7,7 +7,7 @@ import { toast } from "../lib/toast";
 import { isPodcastTrack } from "../lib/track";
 import { GeneratedQueueController } from "../lib/generatedQueue";
 import { t as tr } from "../lib/i18n";
-import { createQueueEntry, futureEntries, isPendingEntry, manualInsertIndex, sameQueueSection, type PlaybackQueueEntry } from "../lib/playbackQueue";
+import { createQueueEntry, futureEntries, isPendingEntry, manualInsertIndex, sameQueueSection, type ContextTrack, type PlaybackQueueEntry } from "../lib/playbackQueue";
 import { shuffled } from "../lib/shuffle";
 import type { Track } from "../types/music";
 import { state, setState, randomId } from "./core";
@@ -224,7 +224,7 @@ export function createQueue(ports: QueuePorts, lifetime: RuntimeLifetime) {
     ports.resumeFromStarved();
   }
   const domainActions = {
-    enqueue(track: Track): void {
+    enqueue(track: ContextTrack): void {
       if (state.autoMode.active && !isPodcastTrack(track)) {
         void ports.actions.placeAutoTrack(track);
         return;
@@ -240,7 +240,7 @@ export function createQueue(ports: QueuePorts, lifetime: RuntimeLifetime) {
       toast.success(tr('toast.addedToQueue'));
       prefetchUpcoming();
     },
-    playNext(track: Track): void {
+    playNext(track: ContextTrack): void {
       if (state.autoMode.active && !isPodcastTrack(track)) {
         void ports.actions.placeAutoTrack(track);
         return;

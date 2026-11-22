@@ -129,9 +129,9 @@ export interface PlayerActions {
   seekBy: (delta: number) => void;
   seek: (t: number) => void;
   jumpTo: (i: number) => void;
-  enqueue: (track: Track) => void;
+  enqueue: (track: ContextTrack) => void;
   playNow: (track: Track) => void;
-  playNext: (track: Track) => void;
+  playNext: (track: ContextTrack) => void;
   removeFromQueue: (i: number) => void;
   moveInQueue: (from: number, to: number) => void;
   promoteInAutoRoute: (queueId: string) => void;
