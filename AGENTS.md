@@ -17,6 +17,11 @@
   before working on web UI rendering performance, lists and scrolling, rows,
   menus or the design system, and update its status table when an item closes.
 
+- Remote control (controlling another device's playback, device presence,
+  transfer, the agent playback API): read `docs/internal/remote/HANDOFF.md`
+  and `docs/internal/remote/CONTRACT.md` before working on it, and update the
+  status table when an item closes.
+
 - Discovery, recommendations and music sources: read
   `docs/internal/discovery/HANDOFF.md` before working on the Discover surface,
   recommendation ranking/sources, or discovery UI/flows, and update its status
