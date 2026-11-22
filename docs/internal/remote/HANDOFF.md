@@ -42,7 +42,7 @@ the whole session. Faults found in the old pipeline:
 
 | Item | Status |
 | --- | --- |
-| Engine: registry, instances, dispatcher, live state events, transfer, wrappers, agent API | open |
+| Engine: registry, instances, dispatcher, live state events, transfer, wrappers, agent API | done — `shared/remote/` registry/validator/dispatcher, per-device instances & `rev`/`seq`/`live` in `shared/playback_state.py`, Socket.IO `watch_device`/`device_updated`/`device_state`, `/api/devices/<id>/commands` & `/api/devices/transfer`, wrappers and agent API on the dispatcher |
 | Web target: executor, instances, names and form factor, `live`, prompt session publishing | open |
 | Android target: executor, transfer, existing callers on the new endpoints | open |
 | Web player read through one accessor (no visible change) | open |
