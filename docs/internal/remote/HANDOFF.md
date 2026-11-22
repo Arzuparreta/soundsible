@@ -45,7 +45,7 @@ the whole session. Faults found in the old pipeline:
 | Engine: registry, instances, dispatcher, live state events, transfer, wrappers, agent API | open |
 | Web target: executor, instances, names and form factor, `live`, prompt session publishing | done |
 | Android target: executor, transfer, existing callers on the new endpoints | open |
-| Web player read through one accessor (no visible change) | open |
+| Web player read through one accessor (no visible change) | done — `ui_web/src/stores/player.ts`; `stores/identity.ts` still reads local playback (import cycle), fixed with connected mode |
 | Web connected mode: device sheet, controlling another device, states and messages | open |
 | Android app connected mode | open |
 | Remove `/api/playback/remote-command` and `/api/playback/handoff` wrappers | open — the release after this ships |
