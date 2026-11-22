@@ -193,4 +193,31 @@ describe('Album route', () => {
     // The whole title is the heading, never a clipped copy of it.
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Record');
   });
+
+  it('shows release date, runtime, genre, label credit, and More by artist only in Discover view', async () => {
+    apiMock.getAlbumProfile.mockResolvedValue(profile({
+      release_date: '2020-05-14',
+      duration: 3120,
+      genre: 'Electronic',
+      label: 'Virgin Records',
+      more_by_artist: [
+        { deezer_id: '50', title: 'Earlier LP', cover: '', year: 2018, record_type: 'album' },
+      ],
+    }));
+    apiMock.getLibraryAlbum.mockResolvedValue({ album: libraryAlbum, track_ids: ['l1', 'l2'] });
+
+    renderAt('/album/Record?artist=Band&view=discover&album_id=al-1');
+
+    await screen.findByText('Catalog song 1');
+    expect(screen.getByText('52 min')).toBeInTheDocument();
+    expect(screen.getByText('Electronic')).toBeInTheDocument();
+    expect(screen.getByText('℗ Virgin Records')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'More by Band' })).toBeInTheDocument();
+    expect(screen.getByText('Earlier LP')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Shown content' }), { target: { value: 'library' } });
+    await screen.findByText('Owned one');
+    expect(screen.queryByText('℗ Virgin Records')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'More by Band' })).toBeNull();
+  });
 });

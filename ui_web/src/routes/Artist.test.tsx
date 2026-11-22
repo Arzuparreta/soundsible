@@ -19,6 +19,12 @@ const storeMock = vi.hoisted(() => ({
   playFrom: vi.fn(),
   playShuffled: vi.fn(),
   playTrack: vi.fn(),
+  startRadio: vi.fn(),
+  enterAutoMode: vi.fn(),
+  startDjSelection: vi.fn(),
+  beginAutoSessionChange: vi.fn(() => 1),
+  autoSessionToken: vi.fn(() => 1),
+  autoModeActive: false,
 }));
 
 vi.mock('../lib/api', () => ({ api: apiMock }));
@@ -36,7 +42,7 @@ vi.mock('../lib/toast', () => ({
     info: vi.fn(),
     success: vi.fn(),
     error: vi.fn(),
-    loading: vi.fn(() => ({ update: vi.fn() })),
+    loading: vi.fn(() => ({ update: vi.fn(), dismiss: vi.fn() })),
   },
 }));
 vi.mock('../stores', async () => {
@@ -46,13 +52,20 @@ vi.mock('../stores', async () => {
       playFrom: (...args: unknown[]) => storeMock.playFrom(...args),
       playShuffled: (...args: unknown[]) => storeMock.playShuffled(...args),
       playTrack: (...args: unknown[]) => storeMock.playTrack(...args),
+      startRadio: (...args: unknown[]) => storeMock.startRadio(...args),
+      enterAutoMode: (...args: unknown[]) => { storeMock.autoModeActive = true; return storeMock.enterAutoMode(...args); },
+      startDjSelection: (...args: unknown[]) => storeMock.startDjSelection(...args),
+      beginAutoSessionChange: () => storeMock.beginAutoSessionChange(),
+      autoSessionToken: () => storeMock.autoSessionToken(),
       linkCatalogItem: vi.fn(),
     },
     state: {
       get library() {
         return storeMock.library;
       },
-      autoMode: { active: false },
+      autoMode: {
+        get active() { return storeMock.autoModeActive; },
+      },
       playback: { currentTrack: null, queue: [] },
     },
     musicLibrary: () => storeMock.library,
@@ -114,6 +127,7 @@ describe('Artist route view mode', () => {
     setLocale('en');
     vi.clearAllMocks();
     storeMock.library = [];
+    storeMock.autoModeActive = false;
   });
 
   it('removes the previous artist content while a new profile is pending', async () => {
@@ -282,5 +296,33 @@ describe('Artist route view mode', () => {
     await screen.findByText('Owned Artist Hit');
     expect(screen.queryByRole('status', { name: 'Loading…' })).toBeNull();
     expect(apiMock.getArtistProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows latest release spotlight, starts artist radio, and starts a DJ session from options', async () => {
+    const profile = profileFor('Daft Punk', false);
+    profile.latest_release = { deezer_id: '77', title: 'Latest Single', cover: '', year: 2025, release_date: '2025-09-01', record_type: 'single' };
+    apiMock.getArtistProfile.mockResolvedValue(profile);
+    apiMock.resolveCatalogItem.mockResolvedValue({ video_id: 'vid-dp-1' });
+
+    renderAt('/artist/Daft%20Punk?view=discover');
+    await screen.findByText('Daft Punk Hit');
+
+    expect(screen.getByRole('heading', { name: 'Latest release' })).toBeInTheDocument();
+    expect(screen.getByText('Latest Single')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start radio' }));
+    await waitFor(() => expect(storeMock.startRadio).toHaveBeenCalledWith(expect.objectContaining({ id: 'vid-dp-1', title: 'Daft Punk Hit' })));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+    const menu = menuMock.open.mock.calls.at(-1)![0] as { actions: Array<{ label: string; onSelect: () => void }> };
+    const startDj = menu.actions.find(action => action.label === 'Start a DJ session');
+    expect(startDj).toBeDefined();
+    startDj!.onSelect();
+
+    await waitFor(() => expect(storeMock.enterAutoMode).toHaveBeenCalledWith(expect.objectContaining({ deferPlanning: true })));
+    await waitFor(() => expect(storeMock.startDjSelection).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'vid-dp-1', title: 'Daft Punk Hit' })],
+      'Daft Punk',
+    ));
   });
 });

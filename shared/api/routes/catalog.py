@@ -256,6 +256,24 @@ def _deezer_artist_profile(artist_id: str) -> dict[str, Any]:
 
 
 
+_ISO_DATE_RE = re.compile(r"^[1-9]\d{3}-\d{2}-\d{2}$")
+
+
+def _iso_release_date(value: Any) -> str:
+    raw = str(value or "").strip()
+    return raw if _ISO_DATE_RE.match(raw) else ""
+
+
+def _release_sort_key(entry: dict[str, Any]) -> str:
+    release_date = str(entry.get("release_date") or "").strip()
+    if release_date:
+        return release_date
+    year = entry.get("year")
+    if isinstance(year, int) and year > 0:
+        return f"{year:04d}-00-00"
+    return ""
+
+
 def _deezer_artist_releases(artist_id: str, limit: int = 100) -> dict[str, list[dict[str, Any]]]:
     """Fetch an artist's releases once and split them into albums vs singles/EPs.
 
@@ -276,11 +294,13 @@ def _deezer_artist_releases(artist_id: str, limit: int = 100) -> dict[str, list[
         if not album_id or not title:
             continue
         record_type = catalog_service.norm(row.get("record_type"))
+        release_date = _iso_release_date(row.get("release_date"))
         entry = {
             "deezer_id": album_id,
             "title": title,
             "cover": deezer.image(row, "cover"),
             "year": extract_year(row.get("release_date")),
+            "release_date": release_date,
             "record_type": record_type or "album",
         }
         # Anything Deezer does not label as a single/EP is treated as an album so
@@ -334,8 +354,12 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
     artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
     title = catalog_service.clean(data.get("title"))
     artist = catalog_service.clean(artist_row.get("name"))
+    artist_deezer_id = str(artist_row.get("id") or "").strip() or None
     cover = deezer.image(data, "cover")
+    release_date = _iso_release_date(data.get("release_date"))
     year = extract_year(data.get("release_date"))
+    label = catalog_service.clean(data.get("label"), 200)
+    record_type = catalog_service.norm(data.get("record_type")) or "album"
     genre_names: list[str] = []
     genres = data.get("genres") if isinstance(data.get("genres"), dict) else {}
     gen_data = genres.get("data") if isinstance(genres.get("data"), list) else []
@@ -367,11 +391,20 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
         if item:
             tracklist.append(item)
 
+    duration = duration_seconds(data.get("duration")) or 0
+    if not duration:
+        duration = sum(int(item.get("duration") or 0) for item in tracklist)
+
     return {
         "title": title,
         "artist": artist,
+        "artist_deezer_id": artist_deezer_id,
         "cover": cover,
         "year": year,
+        "release_date": release_date,
+        "label": label,
+        "duration": duration,
+        "record_type": record_type,
         "genre": ", ".join(genre_names) if genre_names else "",
         "tracklist": tracklist,
     }
@@ -640,6 +673,9 @@ def _artist_profile_uncached(name: str, deezer_id: str | None) -> dict[str, Any]
         singles_eps = releases.get("singles_eps") or []
         related = results.get("related") or []
 
+    dated_releases = [entry for entry in (*albums, *singles_eps) if _release_sort_key(entry)]
+    latest_release = max(dated_releases, key=_release_sort_key) if dated_releases else None
+
     return {
         "name": name,
         "resolved": resolved,
@@ -649,6 +685,7 @@ def _artist_profile_uncached(name: str, deezer_id: str | None) -> dict[str, Any]
         "top_tracks": top_tracks,
         "albums": albums,
         "singles_eps": singles_eps,
+        "latest_release": latest_release,
         "related_artists": related,
         "in_library": bool(library_keys),
         "partial_failures": failures,
@@ -760,10 +797,16 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
 
     title = name
     album_artist = artist or ""
+    artist_deezer_id: str | None = None
     cover = ""
     year: int | None = None
+    release_date = ""
+    label = ""
+    duration = 0
+    record_type = ""
     genre = ""
     tracklist: list[dict[str, Any]] = []
+    more_by_artist: list[dict[str, Any]] = []
     resolved = False
     failures: list[dict[str, str]] = []
 
@@ -779,8 +822,13 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
             profile = _deezer_album_profile(deezer_id, library_keys)
             title = profile["title"] or title
             album_artist = profile["artist"] or album_artist
+            artist_deezer_id = profile.get("artist_deezer_id") or None
             cover = profile["cover"]
             year = profile["year"]
+            release_date = profile.get("release_date") or ""
+            label = profile.get("label") or ""
+            duration = int(profile.get("duration") or 0)
+            record_type = profile.get("record_type") or ""
             genre = profile["genre"]
             tracklist = profile["tracklist"]
             resolved = True
@@ -788,13 +836,36 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
             logger.info("Album profile fetch failed for %s: %s", deezer_id, exc)
             failures.append({"source": "deezer", "error": sanitize_cli_message(str(exc))})
 
+    if resolved and artist_deezer_id:
+        results = _gather(
+            (("more_by_artist", lambda: _deezer_artist_releases(artist_deezer_id, 100)),),
+            failures,
+        )
+        releases = results.get("more_by_artist") or {}
+        seen_ids: set[str] = {str(deezer_id)}
+        candidates: list[dict[str, Any]] = []
+        for entry in (*(releases.get("albums") or []), *(releases.get("singles_eps") or [])):
+            entry_id = str(entry.get("deezer_id") or "")
+            if not entry_id or entry_id in seen_ids:
+                continue
+            seen_ids.add(entry_id)
+            candidates.append(entry)
+        candidates.sort(key=_release_sort_key, reverse=True)
+        more_by_artist = candidates[:12]
+
     return {
         "title": title,
         "artist": album_artist,
+        "artist_deezer_id": artist_deezer_id,
         "cover": cover,
         "year": year,
+        "release_date": release_date,
+        "label": label,
+        "duration": duration,
+        "record_type": record_type,
         "genre": genre,
         "tracklist": tracklist,
+        "more_by_artist": more_by_artist,
         # The record the page settled on, when the link only named it: what a
         # download of the whole album asks for.
         "deezer_id": deezer_id if resolved else None,

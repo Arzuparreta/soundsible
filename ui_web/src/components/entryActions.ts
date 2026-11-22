@@ -54,7 +54,7 @@ function catalogFeedbackPayload(entry: SavedEntry, ctx: EntryMenuContext): Recor
   };
 }
 
-async function startCatalogRadio(entry: SavedEntry, item?: CatalogItem): Promise<void> {
+export async function startCatalogRadio(entry: SavedEntry, item?: CatalogItem): Promise<void> {
   try {
     let track: Track | null = null;
     if (item) {

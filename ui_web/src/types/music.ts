@@ -242,6 +242,7 @@ export interface AlbumSummary {
   title: string;
   cover: string;
   year?: number | null;
+  release_date?: string;
   record_type?: string;
 }
 
@@ -261,6 +262,7 @@ export interface ArtistProfile {
   top_tracks: CatalogItem[];
   albums: AlbumSummary[];
   singles_eps: AlbumSummary[];
+  latest_release?: AlbumSummary | null;
   related_artists: ArtistSummary[];
   in_library: boolean;
   partial_failures?: Array<{ source: string; error: string }>;
@@ -316,10 +318,16 @@ export interface AlbumProfile {
   reconciliation_needed?: boolean;
   title: string;
   artist: string;
+  artist_deezer_id?: string | null;
   cover: string;
   year?: number | null;
+  release_date?: string;
+  label?: string;
+  duration?: number;
+  record_type?: string;
   genre?: string;
   tracklist: CatalogItem[];
+  more_by_artist?: AlbumSummary[];
   /** The Deezer record the page settled on, when the link only named it. */
   deezer_id?: string | null;
   in_library: boolean;

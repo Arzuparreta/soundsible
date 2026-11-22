@@ -828,6 +828,7 @@ export const zh: Dict = {
     discover: '发现',
     library: '我的资料库',
     topTracks: '热门曲目',
+    latestRelease: '最新发布',
     albums: '专辑',
     singlesEps: '单曲和EP',
     related: '粉丝也喜欢',
@@ -844,6 +845,7 @@ export const zh: Dict = {
     empty: '你的资料库中没有这张专辑的曲目。',
     year: '{year}',
     noTracklist: '没有这张专辑的曲目列表。',
+    moreBy: '更多 {artist} 的作品',
   },
   placeholder: {
     notFoundTitle: '未找到',

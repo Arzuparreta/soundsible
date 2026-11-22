@@ -62,3 +62,17 @@ it('opens a long shelf into a grid through a labelled, stateful control', () => 
   expect(rail).not.toHaveAttribute('data-horizontal-scroll');
   expect(rail.querySelectorAll('a')).toHaveLength(6);
 });
+
+it('renders the latest release spotlight card at the top when present', () => {
+  setLocale('en');
+  const open = vi.fn();
+  const view = render(() => <ArtistDiscoveryView artistName="Artist" topTracks={[]} albums={[]} singlesEps={[]} related={[]} loading={false}
+    latestRelease={{ deezer_id: '99', title: 'Fresh Drop', cover: '', year: 2026, release_date: '2026-11-10', record_type: 'single' }}
+    renderSong={() => null} renderLink={link => <button onClick={() => open(link.entity)}>{link.children}</button>} />);
+  expect(view.getByRole('heading', { name: 'Latest release' })).toBeInTheDocument();
+  const card = view.getByRole('button', { name: /Fresh Drop/ });
+  expect(card).toHaveTextContent(/Single/);
+  expect(card).toHaveTextContent(/2026/);
+  fireEvent.click(card);
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({ kind: 'album', name: 'Fresh Drop', destination: expect.stringContaining('deezer_id=99') }));
+});

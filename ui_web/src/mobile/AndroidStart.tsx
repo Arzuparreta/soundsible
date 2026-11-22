@@ -61,7 +61,7 @@ import { openContextMenu, ContextMenuOutlet, dismissContextMenu } from '../lib/c
 import { OverlayOutlet, discardOverlays } from '../lib/overlay';
 import { ToastOutlet } from '../lib/toast';
 import { programLibraryMenu } from '../lib/program/libraryMenu';
-import { queueTrack } from '../lib/program/tracks';
+import { programTrack, queueTrack } from '../lib/program/tracks';
 import ProgramQueue from '../components/ProgramQueue';
 import { offline, availableLibrary, availableProgram, type OfflineState, type OfflineCommand } from './offline';
 import { offlineActions, openOfflineManager } from './OfflineManager';
@@ -102,6 +102,20 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       profile: current.radio?.profile ?? 'balanced',
       queueToken: current.queueToken,
       key,
+    }).catch(() => {});
+  }
+  async function startDj(tracks: Track[], label: string) {
+    const current = program();
+    if (!current?.ready || stale()) return;
+    const requested = tracks.filter(track => !isPodcastTrack(track)).map(programTrack).filter(track => track !== null);
+    if (!requested.length) return;
+    vibrate();
+    await runtime.execute({
+      action: 'djSelection',
+      tracks: requested,
+      label,
+      queueToken: current.queueToken,
+      programToken: current.programToken,
     }).catch(() => {});
   }
   const [origin, setOrigin] = createSignal('');
@@ -531,7 +545,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
         {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => { setLibraryTab('songs'); setSurface('library'); }}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={surface() === 'downloads'} onClick={() => setSurface('downloads')}>{t('downloads.title')}</button><button data-android-migrate aria-pressed={surface() === 'migrate'} onClick={() => setSurface('migrate')}>{t('migrate.title')}</button><button data-android-live onClick={() => { const owner = epoch; openNativeLive(() => generation, () => owner === epoch && !!user(), user()?.display_name || user()?.username || 'DJ', () => void expireSession()); }}>{t('live.title')}</button><button data-android-settings aria-pressed={surface() === 'settings'} onClick={() => setSurface('settings')}>{t('nav.settings')}</button></nav>
-          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch onPlayOnDevice={playOnDevice} onStartRadio={startRadio} openRequest={entityRequest()} onRequestHandled={id => { if (entityRequest()?.id === id) setEntityRequest(null); }} scrollTarget={() => scrollContainer} offlineMenuActions={tracks => offlineActions(tracks, offlineState, offlineCommand, () => generation)} onResolvedMenu={(track, event, actions) => songMenu(track, event, undefined, actions)} savedEntities={savedEntities()} onEntityMenu={entityMenu} onPlayCollection={play} history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser onPlayOnDevice={playOnDevice} generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings library={{ trackCount: () => snapshot()?.tracks.length ?? 0, sync,
+          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch onPlayOnDevice={playOnDevice} onStartRadio={startRadio} onStartDj={startDj} openRequest={entityRequest()} onRequestHandled={id => { if (entityRequest()?.id === id) setEntityRequest(null); }} scrollTarget={() => scrollContainer} offlineMenuActions={tracks => offlineActions(tracks, offlineState, offlineCommand, () => generation)} onResolvedMenu={(track, event, actions) => songMenu(track, event, undefined, actions)} savedEntities={savedEntities()} onEntityMenu={entityMenu} onPlayCollection={play} history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser onPlayOnDevice={playOnDevice} generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings library={{ trackCount: () => snapshot()?.tracks.length ?? 0, sync,
               onImport: () => { setSurface('migrate'); } }} online={() => eventsOnline() && !stale()} server={server} generation={() => generation} subsonic={{ identity: () => epoch, accountId: () => user()?.id ?? '', username: () => user()?.username ?? '', origin, available: () => !stale() && !!user(), copy: nativeCopy(() => generation) }} playback={{ state: program(), pending: programPending(), available: !stale(), command: runtime.execute }} feedback={props.feedback} appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
               const owner = epoch;
               if (updated.id !== user()?.id) throw new Error('Account changed');

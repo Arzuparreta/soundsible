@@ -3,6 +3,7 @@ import type { AlbumSummary, ArtistSummary, CatalogItem } from '../types/music';
 import type { SavedEntity } from '../lib/savedEntityIdentity';
 import { albumPath, artistPath } from '../lib/artistRoute';
 import { coverGradient } from '../lib/cover';
+import { formatRecordType, formatReleaseDate } from '../lib/format';
 import { t } from '../lib/i18n';
 import { CoverImage } from './CoverImage';
 import { EmptyState } from './EmptyState';
@@ -45,25 +46,71 @@ function Shelf(props: { title: string; count: number; children: JSX.Element }) {
   </section>;
 }
 
+/** Reusable release shelf (Albums, Singles & EPs, More by artist) shared across web and Android. */
+export function ReleaseShelf(props: {
+  title: string;
+  artistName: string;
+  releases: AlbumSummary[];
+  renderLink: (link: ArtistDiscoveryLink) => JSX.Element;
+}) {
+  return <Shelf title={props.title} count={props.releases.length}>
+    <For each={props.releases}>{album => props.renderLink({
+      class: styles.albumCard,
+      entity: {
+        kind: 'album', name: album.title, artist: props.artistName, cover: album.cover,
+        destination: albumPath(album.title, props.artistName, { view: 'discover', deezerId: album.deezer_id }),
+      },
+      children: <>
+        <span class={styles.albumCover} style={{ background: coverGradient(album.title) }}><CoverImage src={album.cover} /></span>
+        <span class={styles.albumName}>{album.title}</span>
+        <span class={styles.albumCount}>{album.year ? `${album.year}` : ''}</span>
+      </>,
+    })}</For>
+  </Shelf>;
+}
+
 /** Discography layout shared by the web player and native Android transport. */
 export function ArtistDiscoveryView(props: {
   topTracks: CatalogItem[]; albums: AlbumSummary[]; singlesEps: AlbumSummary[]; related: ArtistSummary[];
+  latestRelease?: AlbumSummary | null;
   loading: boolean; artistName: string;
   renderSong: (item: CatalogItem, index: number, queue: CatalogItem[]) => JSX.Element;
   renderLink: (link: ArtistDiscoveryLink) => JSX.Element;
 }) {
-  const albumCards = (albums: AlbumSummary[]) => <For each={albums}>{album => props.renderLink({ class: styles.albumCard,
-    entity: { kind: 'album', name: album.title, artist: props.artistName, cover: album.cover,
-      destination: albumPath(album.title, props.artistName, { view: 'discover', deezerId: album.deezer_id }) },
-    children: <><span class={styles.albumCover} style={{ background: coverGradient(album.title) }}><CoverImage src={album.cover} /></span>
-      <span class={styles.albumName}>{album.title}</span><span class={styles.albumCount}>{album.year ? `${album.year}` : ''}</span></> })}</For>;
   const topTracks = () => props.topTracks.slice(0, 10);
   // One honest empty state for the whole profile rather than a "nothing here"
   // line under every heading.
-  const nothing = () => !props.loading && !props.topTracks.length && !props.albums.length
+  const nothing = () => !props.loading && !props.latestRelease && !props.topTracks.length && !props.albums.length
     && !props.singlesEps.length && !props.related.length;
+  const latestMeta = (release: AlbumSummary) =>
+    [formatRecordType(release.record_type || 'album'), formatReleaseDate(release.release_date, release.year)].filter(Boolean).join(' · ');
   return <div class={styles.discoverView}>
     <Show when={nothing()}><div class={styles.section}><EmptyState compact>{t('artist.noCatalogData')}</EmptyState></div></Show>
+    <Show when={props.latestRelease}>
+      {(latest) => (
+        <section class={styles.section} data-testid="artist-latest-release">
+          <div class={styles.sectionHead}>
+            <h2 class={styles.sectionTitle}>{t('artist.latestRelease')}</h2>
+          </div>
+          {props.renderLink({
+            class: styles.latestCard,
+            entity: {
+              kind: 'album', name: latest().title, artist: props.artistName, cover: latest().cover,
+              destination: albumPath(latest().title, props.artistName, { view: 'discover', deezerId: latest().deezer_id }),
+            },
+            children: <>
+              <span class={styles.latestCover} style={{ background: coverGradient(latest().title) }}>
+                <CoverImage src={latest().cover} />
+              </span>
+              <span class={styles.latestBody}>
+                <span class={styles.latestTitle}>{latest().title}</span>
+                <Show when={latestMeta(latest())}>{(meta) => <span class={styles.latestMeta}>{meta()}</span>}</Show>
+              </span>
+            </>,
+          })}
+        </section>
+      )}
+    </Show>
     <Show when={topTracks().length > 0}>
       <section class={`${styles.section} ${styles.topSection}`}>
         <h2 class={styles.topTitle}>{t('artist.topTracks')}</h2>
@@ -71,10 +118,10 @@ export function ArtistDiscoveryView(props: {
       </section>
     </Show>
     <Show when={props.albums.length > 0}>
-      <Shelf title={t('artist.albums')} count={props.albums.length}>{albumCards(props.albums)}</Shelf>
+      <ReleaseShelf title={t('artist.albums')} artistName={props.artistName} releases={props.albums} renderLink={props.renderLink} />
     </Show>
     <Show when={props.singlesEps.length > 0}>
-      <Shelf title={t('artist.singlesEps')} count={props.singlesEps.length}>{albumCards(props.singlesEps)}</Shelf>
+      <ReleaseShelf title={t('artist.singlesEps')} artistName={props.artistName} releases={props.singlesEps} renderLink={props.renderLink} />
     </Show>
     <Show when={props.related.length > 0}>
       <Shelf title={t('artist.related')} count={props.related.length}>

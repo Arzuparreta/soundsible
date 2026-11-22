@@ -17,6 +17,7 @@ export function createNativeCatalogActions(props: {
   generation: () => number; tracks: () => Track[]; saved: () => SavedEntry[];
   disconnected: () => boolean; onPlay: (track: Track) => Promise<void>;
   onStartRadio?: (track: Track) => Promise<void>;
+  onStartDj?: (tracks: Track[], label: string) => Promise<void>;
   onAcquire?: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
   onPlayCollection?: (tracks: Track[], index: number, context?: import('../lib/program/runtime').ProgramContext, shuffle?: boolean) => Promise<void>;
 }) {
@@ -187,6 +188,32 @@ export function createNativeCatalogActions(props: {
       if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : 'search.noPreview'));
     } finally { if (current()) setPending(null); }
   }
-  return { trackFor, pending, error, partial, reset, act, playCollection, adoptCollection,
+  async function startDj(items: readonly CatalogItem[], label: string) {
+    if (disposed || props.disconnected() || !props.onStartDj || !items.length) return;
+    const operation = ++epoch, generation = props.generation();
+    controller?.abort(); const request = new AbortController(); controller = request;
+    const current = () => !disposed && operation === epoch && generation === props.generation() && !request.signal.aborted && !props.disconnected();
+    setPending(items[0]?.id ?? null); setError(''); setPartial(false);
+    try {
+      const slice = items.slice(0, 10);
+      const tracks: Track[] = [];
+      for (let offset = 0; offset < slice.length; offset += 3) {
+        if (!current()) return;
+        const batch = await Promise.all(slice.slice(offset, offset + 3).map(async item => {
+          try {
+            const track = trackFor(item) ?? (await resolveRecording(item, request.signal, current)).track;
+            return track && programTrack(track) ? track : null;
+          } catch { return null; }
+        }));
+        tracks.push(...batch.filter((track): track is Track => track !== null));
+      }
+      if (!current()) return;
+      if (!tracks.length) throw new Error('No preview');
+      await props.onStartDj(tracks, label);
+    } catch (failure) {
+      if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : 'search.noPreview'));
+    } finally { if (current()) setPending(null); }
+  }
+  return { trackFor, pending, error, partial, reset, act, playCollection, startDj, adoptCollection,
     isSaved: (item: CatalogItem) => catalogItemKeys(item).some(key => savedKeys().has(key)) };
 }

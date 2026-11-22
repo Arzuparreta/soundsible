@@ -2,9 +2,10 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { openSavedEntityMenu } from '../components/savedEntityActions';
 import { CollectionControl } from '../components/CollectionControl';
 import Button from '../components/Button';
+import { Control } from '../design/Control';
 import { CollectionActions } from '../components/CollectionActions';
 import { openActionMenu } from '../components/ActionMenu';
-import { BackIcon, PlayIcon, menuIcons } from '../components/icons';
+import { BackIcon, PlayIcon, RadioIcon, menuIcons } from '../components/icons';
 import { EntityViewSelect } from '../components/EntityViewSelect';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
@@ -16,13 +17,15 @@ import { actions, musicLibrary, isPlayingItem, state } from '../stores';
 import { api } from '../lib/api';
 import { hasCoverArt, trackCoverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
+import { savedFromCatalogItem } from '../lib/saved';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
 import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
-import type { ArtistProfile, CatalogItem, Track } from '../types/music';
+import type { AlbumSummary, ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
-import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
+import { useCatalogCollection, itemArtist, itemToTrack, playCatalogItem, resolveCatalogTrack, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
+import { startCatalogRadio } from '../components/entryActions';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import hero from '../components/EntityHero.module.css';
@@ -123,8 +126,10 @@ export default function Artist() {
   const topTracks = createMemo<CatalogItem[]>(() => currentProfile()?.top_tracks ?? []);
   const albums = createMemo(() => currentProfile()?.albums ?? []);
   const singlesEps = createMemo(() => currentProfile()?.singles_eps ?? []);
+  const latestRelease = createMemo(() => currentProfile()?.latest_release ?? null);
   const related = createMemo(() => currentProfile()?.related_artists ?? []);
   const candidates = createMemo(() => currentProfile()?.candidates ?? []);
+  const [radioBusy, setRadioBusy] = createSignal(false);
   // A library link (it carries the artist's catalog id) keeps its library tab
   // while the read is pending or after it failed; only an answered empty read
   // says the artist is no longer owned.
@@ -211,6 +216,48 @@ export default function Artist() {
       const order = shuffled(items);
       void playCatalogItem(order[0], order, context);
     }
+  };
+
+  const startArtistRadio = async () => {
+    if (radioBusy()) return;
+    setRadioBusy(true);
+    try {
+      if (view() === 'library') {
+        const seed = libraryTrackList()[0];
+        if (seed) await actions.startRadio(seed);
+      } else {
+        const seed = topTracks()[0];
+        if (seed) await startCatalogRadio(savedFromCatalogItem(seed), seed);
+      }
+    } finally {
+      setRadioBusy(false);
+    }
+  };
+
+  const startArtistDj = async () => {
+    if (view() === 'library') {
+      const tracks = libraryTrackList();
+      if (tracks.length === 0) return;
+      if (!state.autoMode.active) actions.enterAutoMode({ source: tracks[0], deferPlanning: true });
+      actions.startDjSelection(tracks, name());
+      return;
+    }
+    const items = topTracks();
+    if (items.length === 0) return;
+    if (!state.autoMode.active) {
+      const seed = itemToTrack(items[0]) ?? await resolveCatalogTrack(items[0]).catch(() => null);
+      if (!seed) {
+        toast.error(t('search.noPreview'));
+        return;
+      }
+      actions.enterAutoMode({ source: seed, deferPlanning: true });
+      const seededFirst: CatalogItem = seed.source === 'preview'
+        ? { ...items[0], external_ids: { ...items[0].external_ids, youtube_id: seed.id } }
+        : items[0];
+      void useCatalogCollection([seededFirst, ...items.slice(1)], name(), 'start');
+      return;
+    }
+    void useCatalogCollection(items, name(), 'start');
   };
 
   const saveItem = async (item: CatalogItem) => {
@@ -323,19 +370,35 @@ export default function Artist() {
                   { value: 'library', label: `${t('artist.library')}${membership.loading || membershipFailed() ? '' : ` (${libraryTrackList().length})`}` },
                 ]} />
             </Show>
-            <Show when={state.autoMode.active} fallback={
-              <button type="button" class={hero.play} aria-label={t('artist.play')} title={t('artist.play')} disabled={!playable()} onClick={playAll}>
-                <PlayIcon size={16} />
-                <span class={hero.primaryLabel}>{t('artist.play')}</span>
-              </button>
-            }>
-              <CollectionActions title={name()} auto iconOnlyOnMobile buttonClass={hero.play}
-                tracks={view() === 'library' ? libraryTrackList() : undefined}
-                items={view() === 'library' ? undefined : topTracks()} />
-            </Show>
+            <div class={hero.primaryActions}>
+              <Show when={state.autoMode.active} fallback={
+                <button type="button" class={hero.play} aria-label={t('artist.play')} title={t('artist.play')} disabled={!playable()} onClick={playAll}>
+                  <PlayIcon size={16} />
+                  <span class={hero.primaryLabel}>{t('artist.play')}</span>
+                </button>
+              }>
+                <CollectionActions title={name()} auto iconOnlyOnMobile buttonClass={hero.play}
+                  tracks={view() === 'library' ? libraryTrackList() : undefined}
+                  items={view() === 'library' ? undefined : topTracks()} />
+              </Show>
+              <Control
+                class={hero.secondary}
+                aria-label={t(state.autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio')}
+                title={t(state.autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio')}
+                disabled={!playable() || radioBusy()}
+                aria-busy={radioBusy() || undefined}
+                onClick={() => void startArtistRadio()}
+              >
+                <RadioIcon size={16} />
+                <span class={hero.primaryLabel}>{t('trackActions.startRadio')}</span>
+              </Control>
+            </div>
             <CollectionControl
               compact menuActions={() => [
-                ...(!state.autoMode.active ? [{ icon: menuIcons.shuffle(), label: t('artist.shuffle'), disabled: !playable(), onSelect: shuffle }] : []),
+                ...(!state.autoMode.active ? [
+                  { icon: menuIcons.shuffle(), label: t('artist.shuffle'), disabled: !playable(), onSelect: shuffle },
+                  { icon: menuIcons.changeSession(), label: t('autoMode.startDj'), disabled: !playable(), onSelect: () => void startArtistDj() },
+                ] : []),
                 ...(candidates().length ? [{ icon: menuIcons.artist(), label: t('artist.notThisArtist'), onSelect: chooseCandidate }] : []),
               ]}
               onMenuReady={(open) => { openCollectionMenu = open; }}
@@ -361,6 +424,7 @@ export default function Artist() {
                   topTracks={topTracks()}
                   albums={albums()}
                   singlesEps={singlesEps()}
+                  latestRelease={latestRelease()}
                   related={related()}
                   loading={profile.loading}
                   saving={saving()}
@@ -395,8 +459,9 @@ function LibraryView(props: { tracks: Track[]; loading: boolean; failed: boolean
 
 function DiscoverView(props: {
   topTracks: CatalogItem[];
-  albums: Array<{ deezer_id: string; title: string; cover: string; year?: number | null; track_count?: number }>;
-  singlesEps: Array<{ deezer_id: string; title: string; cover: string; year?: number | null; track_count?: number }>;
+  albums: AlbumSummary[];
+  singlesEps: AlbumSummary[];
+  latestRelease: AlbumSummary | null;
   related: Array<{ deezer_id: string; name: string; picture: string; nb_fans: number }>;
   loading: boolean;
   saving: Set<string>;
@@ -405,7 +470,7 @@ function DiscoverView(props: {
   artistName: string;
 }) {
   return <ArtistDiscoveryView topTracks={props.topTracks} albums={props.albums} singlesEps={props.singlesEps}
-    related={props.related} loading={props.loading} artistName={props.artistName}
+    latestRelease={props.latestRelease} related={props.related} loading={props.loading} artistName={props.artistName}
     renderSong={(item, index, queue) => <CatalogResultRow item={item} index={index} active={isPlayingItem(item)}
       saving={props.saving.has(item.id)} onPlay={() => props.onPlayItem(item, queue)} onDownload={() => props.onSaveItem(item)} />}
     renderLink={link => <MusicLink class={link.class} path={link.entity.destination} onMenu={event => void openSavedEntityMenu(link.entity, event)}>{link.children}</MusicLink>} />;
