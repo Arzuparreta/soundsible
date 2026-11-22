@@ -356,12 +356,33 @@ def _gather(
 
 
 
+_VARIOUS_ARTISTS_DEEZER_ID = "5080"
+
+
+def _deezer_album_credits(data: dict[str, Any]) -> tuple[str, list[str], str | None]:
+    """The album's credited artists, and the one artist whose other releases
+    "More by" may list: only a single credited artist that is not Deezer's
+    Various Artists bucket."""
+    artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
+    credits = deezer_catalog.main_contributors(data)
+    if not credits:
+        fallback_name = catalog_service.clean(artist_row.get("name"))
+        if fallback_name:
+            credits = [(str(artist_row.get("id") or "").strip(), fallback_name)]
+    names = [name for _, name in credits]
+    artist_deezer_id: str | None = None
+    if len(credits) == 1:
+        candidate_id = credits[0][0] or str(artist_row.get("id") or "").strip()
+        if candidate_id and candidate_id != _VARIOUS_ARTISTS_DEEZER_ID:
+            artist_deezer_id = candidate_id
+    return ", ".join(names), names, artist_deezer_id
+
+
 def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -> dict[str, Any]:
     data = deezer_catalog.deezer_get(f"album/{album_id}")
     artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
     title = catalog_service.clean(data.get("title"))
-    artist = catalog_service.clean(artist_row.get("name"))
-    artist_deezer_id = str(artist_row.get("id") or "").strip() or None
+    artist, artists, artist_deezer_id = _deezer_album_credits(data)
     cover = deezer.image(data, "cover")
     release_date = _iso_release_date(data.get("release_date"))
     year = extract_year(data.get("release_date"))
@@ -405,6 +426,7 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
     return {
         "title": title,
         "artist": artist,
+        "artists": artists,
         "artist_deezer_id": artist_deezer_id,
         "cover": cover,
         "year": year,
@@ -804,6 +826,7 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
 
     title = name
     album_artist = artist or ""
+    album_artists: list[str] = [album_artist] if album_artist else []
     artist_deezer_id: str | None = None
     cover = ""
     year: int | None = None
@@ -829,6 +852,11 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
             profile = _deezer_album_profile(deezer_id, library_keys)
             title = profile["title"] or title
             album_artist = profile["artist"] or album_artist
+            raw_artists = profile.get("artists")
+            if isinstance(raw_artists, list) and raw_artists:
+                album_artists = [str(a).strip() for a in raw_artists if str(a).strip()]
+            else:
+                album_artists = [album_artist] if album_artist else []
             artist_deezer_id = profile.get("artist_deezer_id") or None
             cover = profile["cover"]
             year = profile["year"]
@@ -863,6 +891,7 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
     return {
         "title": title,
         "artist": album_artist,
+        "artists": album_artists,
         "artist_deezer_id": artist_deezer_id,
         "cover": cover,
         "year": year,

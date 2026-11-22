@@ -174,6 +174,9 @@ export default function Album() {
     : tracklist().length || undefined;
   const year = () => currentProfile()?.year ?? membershipRead()?.album.year ?? undefined;
   const displayArtist = () => currentProfile()?.artist || artistName();
+  // Only the profile's structured list: a name such as "Earth, Wind & Fire"
+  // must never be split on its comma.
+  const displayArtists = () => currentProfile()?.artists?.length ? currentProfile()!.artists : undefined;
   const displayTitle = () => currentProfile()?.title || title();
   const totalDuration = () => {
     if (view() === 'library') {
@@ -349,7 +352,7 @@ export default function Album() {
             <h1 ref={setHeading} class={hero.title}><button type="button" class={hero.titleButton}
               data-testid="collection-header-name" aria-haspopup="dialog" title={t('savedEntities.options')}
               {...titleMenuTap} onContextMenu={headerContextMenu}>{displayTitle()}</button></h1>
-            <ArtistLinks class={hero.credit} music={{ artist: displayArtist(), view: view(), artistId: membershipRead()?.album.album_artist_id ?? undefined }} />
+            <ArtistLinks class={hero.credit} music={{ artist: displayArtist(), artists: displayArtists(), view: view(), artistId: membershipRead()?.album.album_artist_id ?? undefined }} />
             <span class={hero.meta}>
               <For each={metaParts()}>
                 {(part, idx) => (

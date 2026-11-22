@@ -220,4 +220,25 @@ describe('Album route', () => {
     expect(screen.queryByText('℗ Virgin Records')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'More by Band' })).toBeNull();
   });
+
+  it('links each credited main artist individually on a multi-artist album and hides More by', async () => {
+    storeMock.library = [];
+    apiMock.getAlbumProfile.mockResolvedValue(profile({
+      title: 'Midnight Jazz Confidential',
+      artist: 'Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde',
+      artists: ['Piero Piccioni', 'Ennio Morricone', 'Nino Rota', 'Philippe Sarde'],
+      artist_deezer_id: null,
+      more_by_artist: [],
+      in_library: false,
+    }));
+
+    renderAt('/album/Midnight%20Jazz%20Confidential?artist=Ennio%20Morricone&view=discover&deezer_id=1126150202');
+
+    await screen.findByText('Catalog song 1');
+    expect(screen.getByRole('link', { name: 'Piero Piccioni' })).toHaveAttribute('href', '#/artist/Piero%20Piccioni?view=discover');
+    expect(screen.getByRole('link', { name: 'Ennio Morricone' })).toHaveAttribute('href', '#/artist/Ennio%20Morricone?view=discover');
+    expect(screen.getByRole('link', { name: 'Nino Rota' })).toHaveAttribute('href', '#/artist/Nino%20Rota?view=discover');
+    expect(screen.getByRole('link', { name: 'Philippe Sarde' })).toHaveAttribute('href', '#/artist/Philippe%20Sarde?view=discover');
+    expect(screen.queryByRole('heading', { name: /More by/i })).toBeNull();
+  });
 });

@@ -110,6 +110,25 @@ describe('native entity composition', () => {
     expect(screen.queryByText('House')).toBeNull();
   });
 
+  it('shows resolved multi-artist album credit in the Android header', () => {
+    mocks.profile = {
+      title: 'Midnight Jazz Confidential',
+      artist: 'Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde',
+      artists: ['Piero Piccioni', 'Ennio Morricone', 'Nino Rota', 'Philippe Sarde'],
+      artist_deezer_id: null,
+      cover: '',
+      tracklist: items,
+      deezer_id: '1126150202',
+      in_library: false,
+      resolved: true,
+      cached: false,
+    };
+    render(() => <NativeEntityProfile subject={{ kind: 'album', name: 'Midnight Jazz Confidential', artist: 'Ennio Morricone', deezerId: '1126150202', view: 'discover' }}
+      generation={1} disconnected={false} tracks={[]} catalog={catalog} onBack={vi.fn()} onOpen={vi.fn()} onTrackMenu={vi.fn()}
+      onChanged={async () => {}} />);
+    expect(screen.getByText('Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde')).toBeInTheDocument();
+  });
+
   it('renders artist latest release spotlight, Start radio button, and DJ options entry', () => {
     mocks.profile = {
       name: 'Artist', resolved: true, deezer_id: '27',

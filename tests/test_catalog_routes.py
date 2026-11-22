@@ -1158,6 +1158,89 @@ def test_album_profile_exposes_metadata_and_duration_fallback(monkeypatch):
     assert profile["genre"] == "Electronic, House"
 
 
+def test_album_profile_credits_all_main_contributors_and_omits_more_by_artist(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
+    calls: list[str] = []
+
+    def fake_get(path, params=None, timeout=8):
+        calls.append(path)
+        if path == "album/1126150202":
+            return {
+                "id": 1126150202,
+                "title": "Midnight Jazz Confidential",
+                "record_type": "album",
+                "release_date": "2026-11-20",
+                "label": "CAM Sugar",
+                "duration": 3600,
+                "artist": {"id": 2738, "name": "Piero Piccioni"},
+                "contributors": [
+                    {"id": 2738, "name": "Piero Piccioni", "role": "Main", "type": "artist"},
+                    {"id": 1536, "name": "Ennio Morricone", "role": "Main", "type": "artist"},
+                    {"id": 1536, "name": "Ennio Morricone", "role": "Main", "type": "artist"},
+                    {"id": 5741, "name": "Nino Rota", "role": "Main", "type": "artist"},
+                    {"id": 134189, "name": "Philippe Sarde", "role": "Main", "type": "artist"},
+                    {"id": 9999, "name": "Guest Soloist", "role": "Featured", "type": "artist"},
+                ],
+                "tracks": {"data": []},
+            }
+        if path == "album/1126150202/tracks":
+            return {
+                "total": 1,
+                "data": [
+                    {"id": 1, "title": "A notte fonda", "duration": 197, "artist": {"name": "Riz Ortolani"}, "track_position": 1, "disk_number": 1},
+                ],
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "deezer_get", fake_get)
+
+    body = _make_app().test_client().get(
+        "/api/catalog/album?name=Midnight+Jazz+Confidential&artist=Ennio+Morricone&deezer_id=1126150202"
+    ).get_json()
+
+    assert body["resolved"] is True
+    assert body["artist"] == "Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde"
+    assert body["artists"] == ["Piero Piccioni", "Ennio Morricone", "Nino Rota", "Philippe Sarde"]
+    assert body["artist_deezer_id"] is None
+    assert body["more_by_artist"] == []
+    assert not any(path.endswith("/albums") for path in calls)
+
+
+def test_album_profile_omits_artist_deezer_id_for_various_artists_5080(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
+    calls: list[str] = []
+
+    def fake_get(path, params=None, timeout=8):
+        calls.append(path)
+        if path == "album/777":
+            return {
+                "id": 777,
+                "title": "Cinema Sampler",
+                "record_type": "compile",
+                "release_date": "2026-10-01",
+                "artist": {"id": 5080, "name": "Various Artists"},
+                "contributors": [
+                    {"id": 5080, "name": "Various Artists", "role": "Main", "type": "artist"},
+                ],
+                "tracks": {"data": []},
+            }
+        if path == "album/777/tracks":
+            return {"total": 0, "data": []}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "deezer_get", fake_get)
+
+    body = _make_app().test_client().get("/api/catalog/album?name=Cinema+Sampler&deezer_id=777").get_json()
+
+    assert body["resolved"] is True
+    assert body["artist"] == "Various Artists"
+    assert body["artist_deezer_id"] is None
+    assert body["more_by_artist"] == []
+    assert not any(path.endswith("/albums") for path in calls)
+
+
 def test_album_endpoint_more_by_artist_excludes_self_caps_12_and_sorts_newest(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))

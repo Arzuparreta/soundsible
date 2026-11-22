@@ -318,6 +318,7 @@ export interface AlbumProfile {
   reconciliation_needed?: boolean;
   title: string;
   artist: string;
+  artists?: string[];
   artist_deezer_id?: string | null;
   cover: string;
   year?: number | null;

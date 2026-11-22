@@ -154,7 +154,7 @@ export default function NativeEntityProfile(props: {
         <div class={hero.art} classList={{ [hero.round]: props.subject.kind === 'artist' }}><CoverImage src={bookmark().cover} eager /></div>
         <div class={hero.identity}>
           <h1 class={`${hero.title} ${profileStyles.title}`}>{props.subject.name}</h1>
-          <Show when={props.subject.artist}><span class={hero.credit}>{props.subject.artist}</span></Show>
+          <Show when={albumArtist()}><span class={hero.credit}>{albumArtist()}</span></Show>
           <Show when={artist()?.metadata?.nb_fans}><span class={hero.meta}>{fansLabel(artist()!.metadata!.nb_fans)}</span></Show>
           <Show when={albumMetaParts().length > 0}>
             <span class={hero.meta}>

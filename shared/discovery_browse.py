@@ -6,6 +6,7 @@ import datetime
 from itertools import zip_longest
 import time
 
+from shared.deezer_catalog import main_contributors
 from shared.providers import deezer
 from shared.text_utils import fold_text, identity_key
 
@@ -167,6 +168,17 @@ def build_browse_sections(
                     continue
                 raw_releases.append((rel_date, int(aid), owner_id, owner_name, row))
 
+        def credited_artist(album_id: str, fallback: str) -> str:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return fallback
+            try:
+                album = deezer.get(f"album/{album_id}", timeout=min(3, remaining))
+            except Exception:
+                return fallback
+            names = [name for _, name in main_contributors(album)] if isinstance(album, dict) else []
+            return ", ".join(names) if len(names) > 1 else fallback
+
         raw_releases.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
         new_release_per_artist: Counter = Counter()
         for rel_date, aid_num, owner_id, owner_name, row in raw_releases:
@@ -179,13 +191,14 @@ def build_browse_sections(
             rtype = str(row.get("record_type") or "").strip().casefold() or "album"
             new_release_ids.add(aid)
             new_release_per_artist[owner_id] += 1
+            credited = credited_artist(aid, owner_name)
             new_releases.append({
                 "id": f"deezer:album:{aid}",
                 "type": "album",
                 "source": "deezer",
                 "title": title,
-                "artist": owner_name,
-                "subtitle": owner_name,
+                "artist": credited,
+                "subtitle": credited,
                 "cover": deezer.image(row, "cover"),
                 "record_type": rtype,
                 "release_date": rel_date.isoformat(),
