@@ -25,6 +25,13 @@ const storeMock = vi.hoisted(() => ({
   beginAutoSessionChange: vi.fn(() => 1),
   autoSessionToken: vi.fn(() => 1),
   autoModeActive: false,
+  currentTrack: null as Record<string, unknown> | null,
+}));
+const toastMock = vi.hoisted(() => ({
+  info: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
+  loading: vi.fn(() => ({ update: vi.fn(), dismiss: vi.fn() })),
 }));
 
 vi.mock('../lib/api', () => ({ api: apiMock }));
@@ -37,14 +44,7 @@ vi.mock('../lib/media', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/media')>()),
   coverUrl: (id: string) => `/cover/${id}`,
 }));
-vi.mock('../lib/toast', () => ({
-  toast: {
-    info: vi.fn(),
-    success: vi.fn(),
-    error: vi.fn(),
-    loading: vi.fn(() => ({ update: vi.fn(), dismiss: vi.fn() })),
-  },
-}));
+vi.mock('../lib/toast', () => ({ toast: toastMock }));
 vi.mock('../stores', async () => {
   const { identityMock } = await import('../lib/identityMock');
   return {
@@ -66,7 +66,10 @@ vi.mock('../stores', async () => {
       autoMode: {
         get active() { return storeMock.autoModeActive; },
       },
-      playback: { currentTrack: null, queue: [] },
+      playback: {
+        get currentTrack() { return storeMock.currentTrack; },
+        queue: [],
+      },
     },
     musicLibrary: () => storeMock.library,
     ...identityMock({ currentTrack: () => null, library: () => storeMock.library as unknown as Track[] }),
@@ -128,6 +131,7 @@ describe('Artist route view mode', () => {
     vi.clearAllMocks();
     storeMock.library = [];
     storeMock.autoModeActive = false;
+    storeMock.currentTrack = null;
   });
 
   it('removes the previous artist content while a new profile is pending', async () => {
@@ -324,5 +328,52 @@ describe('Artist route view mode', () => {
       [expect.objectContaining({ id: 'vid-dp-1', title: 'Daft Punk Hit' })],
       'Daft Punk',
     ));
+  });
+
+  it('falls back past an unresolvable first track for Radio and DJ, and surfaces podcast/library errors', async () => {
+    const profile = profileFor('Daft Punk', false);
+    profile.top_tracks = [
+      { ...profile.top_tracks[0], id: 'deezer:track:bad', title: 'Broken Track' },
+      { ...profile.top_tracks[0], id: 'deezer:track:good', title: 'Working Track' },
+    ];
+    apiMock.getArtistProfile.mockResolvedValue(profile);
+    apiMock.resolveCatalogItem.mockImplementation(({ title }: { title: string }) =>
+      title === 'Broken Track' ? Promise.resolve({}) : Promise.resolve({ video_id: 'vid-good' }),
+    );
+
+    renderAt('/artist/Daft%20Punk?view=discover');
+    await screen.findByText('Working Track');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start radio' }));
+    await waitFor(() => expect(storeMock.startRadio).toHaveBeenCalledWith(expect.objectContaining({ id: 'vid-good', title: 'Working Track' })));
+
+    storeMock.currentTrack = { id: 'ep-1', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode' };
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+    const podcastMenu = menuMock.open.mock.calls.at(-1)![0] as { actions: Array<{ label: string; disabled?: boolean; onSelect: () => void }> };
+    const disabledDj = podcastMenu.actions.find(action => action.label === 'Start a DJ session');
+    expect(disabledDj?.disabled).toBe(true);
+    disabledDj!.onSelect();
+    expect(toastMock.info).toHaveBeenCalledWith('DJ only mixes music. Playing this podcast will end the DJ session.');
+    expect(storeMock.enterAutoMode).not.toHaveBeenCalled();
+
+    storeMock.currentTrack = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+    const djMenu = menuMock.open.mock.calls.at(-1)![0] as { actions: Array<{ label: string; onSelect: () => void }> };
+    djMenu.actions.find(action => action.label === 'Start a DJ session')!.onSelect();
+    await waitFor(() => expect(storeMock.startDjSelection).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'vid-good', title: 'Working Track' })],
+      'Daft Punk',
+    ));
+  });
+
+  it('catches library Start radio errors with a toast instead of an unhandled rejection', async () => {
+    storeMock.library = [{ id: 'l1', title: 'Owned', artist: 'Owned Artist', album: 'A' }];
+    storeMock.startRadio.mockRejectedValueOnce(new Error('offline'));
+    apiMock.getArtistProfile.mockResolvedValue(profileFor('Owned Artist', true));
+
+    renderAt('/artist/Owned%20Artist?view=library');
+    await screen.findByText('Owned');
+    fireEvent.click(screen.getByRole('button', { name: 'Start radio' }));
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
   });
 });

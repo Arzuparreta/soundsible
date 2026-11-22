@@ -1096,6 +1096,31 @@ def test_artist_endpoint_returns_latest_release(monkeypatch):
     assert body["latest_release"]["record_type"] == "single"
 
 
+def test_iso_release_date_rejects_invalid_calendar_dates(monkeypatch):
+    assert catalog_routes._iso_release_date("2024-00-00") == ""
+    assert catalog_routes._iso_release_date("2024-99-99") == ""
+    assert catalog_routes._iso_release_date("2024-02-30") == ""
+    assert catalog_routes._iso_release_date("2024-02-29") == "2024-02-29"
+
+    monkeypatch.setattr(
+        catalog_routes.deezer_catalog,
+        "deezer_get",
+        lambda path, params=None, timeout=8: {
+            "data": [
+                _deezer_album_row("1", "Bogus Date", "album", "2024-99-99"),
+                _deezer_album_row("2", "Zero Month", "album", "2024-00-00"),
+                _deezer_album_row("3", "Real Release", "album", "2024-05-10"),
+            ]
+        },
+    )
+    out = catalog_routes._deezer_artist_releases("27")
+    by_id = {a["deezer_id"]: a for a in out["albums"]}
+    assert by_id["1"]["release_date"] == ""
+    assert by_id["2"]["release_date"] == ""
+    assert by_id["3"]["release_date"] == "2024-05-10"
+    assert max(out["albums"], key=catalog_routes._release_sort_key)["deezer_id"] == "3"
+
+
 def test_album_profile_exposes_metadata_and_duration_fallback(monkeypatch):
     def fake_get(path, params=None, timeout=8):
         if path == "album/555":

@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from typing import Any
 
 from flask import Blueprint, jsonify, request
@@ -261,7 +262,13 @@ _ISO_DATE_RE = re.compile(r"^[1-9]\d{3}-\d{2}-\d{2}$")
 
 def _iso_release_date(value: Any) -> str:
     raw = str(value or "").strip()
-    return raw if _ISO_DATE_RE.match(raw) else ""
+    if not _ISO_DATE_RE.match(raw):
+        return ""
+    try:
+        date.fromisoformat(raw)
+    except ValueError:
+        return ""
+    return raw
 
 
 def _release_sort_key(entry: dict[str, Any]) -> str:

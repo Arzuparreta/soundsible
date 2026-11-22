@@ -10,7 +10,8 @@ import { setLocale } from '../lib/i18n';
 const mocks = vi.hoisted(() => ({
   profile: null as AlbumProfile | ArtistProfile | null,
   job: null as MigrationJob | null,
-  play: vi.fn(), act: vi.fn(), startDj: vi.fn(), save: vi.fn(), download: vi.fn(),
+  pending: null as string | null,
+  play: vi.fn(), act: vi.fn(), startRadio: vi.fn(), startDj: vi.fn(), save: vi.fn(), download: vi.fn(),
 }));
 vi.mock('./entityProfile', async original => ({
   ...await original<typeof import('./entityProfile')>(),
@@ -26,16 +27,17 @@ const items: CatalogItem[] = ['owned', 'stream'].map(id => ({ id, type: 'track',
 const track: Track = { id: 'local', title: 'owned', artist: 'Artist' };
 const catalog = {
   trackFor: (item: CatalogItem) => item.id === 'owned' ? track : undefined,
-  pending: () => null,
+  pending: () => mocks.pending,
   playCollection: mocks.play,
   act: mocks.act,
+  startRadio: mocks.startRadio,
   startDj: mocks.startDj,
   adoptCollection: vi.fn(),
 } as unknown as ComponentProps<typeof NativeEntityProfile>['catalog'];
 
 describe('native entity composition', () => {
   beforeEach(() => {
-    vi.clearAllMocks(); setLocale('en'); mocks.job = null;
+    vi.clearAllMocks(); setLocale('en'); mocks.job = null; mocks.pending = null;
     mocks.profile = { title: 'Record', artist: 'Artist', cover: '', tracklist: items, deezer_id: '7', in_library: true, resolved: true, cached: false };
   });
   function mount() {
@@ -93,6 +95,21 @@ describe('native entity composition', () => {
     expect(screen.queryByRole('heading', { name: 'More by Artist' })).toBeNull();
   });
 
+  it('shows local album metadata in the hero when offline or Deezer profile is null', () => {
+    mocks.profile = null;
+    const localTracks: Track[] = [
+      { id: 'l1', title: 'One', artist: 'Artist', deezer_album_id: '7', year: 2019, genre: 'House', duration: 600 },
+      { id: 'l2', title: 'Two', artist: 'Artist', deezer_album_id: '7', year: 2019, genre: 'House', duration: 600 },
+    ];
+    render(() => <NativeEntityProfile subject={{ kind: 'album', name: 'Record', artist: 'Artist', deezerId: '7', view: 'library' }}
+      generation={1} disconnected tracks={localTracks} catalog={catalog} onBack={vi.fn()} onOpen={vi.fn()} onTrackMenu={vi.fn()}
+      onChanged={async () => {}} />);
+    expect(screen.getByText('2019')).toBeInTheDocument();
+    expect(screen.getByText('2 tracks')).toBeInTheDocument();
+    expect(screen.getByText('20 min')).toBeInTheDocument();
+    expect(screen.getByText('House')).toBeInTheDocument();
+  });
+
   it('renders artist latest release spotlight, Start radio button, and DJ options entry', () => {
     mocks.profile = {
       name: 'Artist', resolved: true, deezer_id: '27',
@@ -106,8 +123,9 @@ describe('native entity composition', () => {
       onChanged={async () => {}} canStartRadio canStartDj />);
     expect(screen.getByRole('heading', { name: 'Latest release' })).toBeInTheDocument();
     expect(screen.getByText('Fresh EP')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Start radio' }));
-    expect(mocks.act).toHaveBeenCalledWith(items[0], 'radio');
+    const radioBtn = screen.getByRole('button', { name: 'Start radio' });
+    fireEvent.click(radioBtn);
+    expect(mocks.startRadio).toHaveBeenCalledWith(items);
     fireEvent.click(screen.getByRole('button', { name: 'Options: Artist' }));
     const actions = vi.mocked(openContextMenu).mock.calls.at(-1)?.[0].actions ?? [];
     actions.find(action => action.label === 'Start a DJ session')?.onSelect();

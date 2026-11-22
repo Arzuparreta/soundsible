@@ -17,15 +17,14 @@ import { actions, musicLibrary, isPlayingItem, state } from '../stores';
 import { api } from '../lib/api';
 import { hasCoverArt, trackCoverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
-import { savedFromCatalogItem } from '../lib/saved';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
+import { isPodcastTrack } from '../lib/track';
 import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumSummary, ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { useCatalogCollection, itemArtist, itemToTrack, playCatalogItem, resolveCatalogTrack, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
-import { startCatalogRadio } from '../components/entryActions';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import hero from '../components/EntityHero.module.css';
@@ -85,7 +84,12 @@ export default function Artist() {
 
   const currentProfile = () => profile.loading ? null : profile();
 
+  let disposed = false;
+  let actionEpoch = 0;
+
   onCleanup(() => {
+    disposed = true;
+    actionEpoch++;
     aborter?.abort();
     cancelCatalogResolve();
   });
@@ -130,6 +134,7 @@ export default function Artist() {
   const related = createMemo(() => currentProfile()?.related_artists ?? []);
   const candidates = createMemo(() => currentProfile()?.candidates ?? []);
   const [radioBusy, setRadioBusy] = createSignal(false);
+  const [djBusy, setDjBusy] = createSignal(false);
   // A library link (it carries the artist's catalog id) keeps its library tab
   // while the read is pending or after it failed; only an answered empty read
   // says the artist is no longer owned.
@@ -153,7 +158,12 @@ export default function Artist() {
   createEffect(
     on(
       () => JSON.stringify([name(), viewParams().deezerId ?? '']),
-      () => setViewOverride(null),
+      () => {
+        actionEpoch++;
+        setViewOverride(null);
+        setRadioBusy(false);
+        setDjBusy(false);
+      },
       { defer: true },
     ),
   );
@@ -218,46 +228,97 @@ export default function Artist() {
     }
   };
 
+  const resolveFirstCandidate = async (
+    items: readonly CatalogItem[],
+    isCurrent: () => boolean,
+  ): Promise<{ track: Track; index: number } | null> => {
+    for (let i = 0; i < items.length; i++) {
+      const known = itemToTrack(items[i]);
+      if (known && !isPodcastTrack(known)) return { track: known, index: i };
+    }
+    for (let i = 0; i < items.length; i++) {
+      if (!isCurrent()) return null;
+      const resolved = await resolveCatalogTrack(items[i]).catch(() => null);
+      if (!isCurrent()) return null;
+      if (resolved && !isPodcastTrack(resolved)) return { track: resolved, index: i };
+    }
+    return null;
+  };
+
   const startArtistRadio = async () => {
     if (radioBusy()) return;
+    const token = ++actionEpoch;
+    const isCurrent = () => !disposed && token === actionEpoch;
     setRadioBusy(true);
     try {
       if (view() === 'library') {
         const seed = libraryTrackList()[0];
-        if (seed) await actions.startRadio(seed);
-      } else {
-        const seed = topTracks()[0];
-        if (seed) await startCatalogRadio(savedFromCatalogItem(seed), seed);
+        if (!seed) return;
+        await actions.startRadio(seed);
+        return;
       }
-    } finally {
-      setRadioBusy(false);
-    }
-  };
-
-  const startArtistDj = async () => {
-    if (view() === 'library') {
-      const tracks = libraryTrackList();
-      if (tracks.length === 0) return;
-      if (!state.autoMode.active) actions.enterAutoMode({ source: tracks[0], deferPlanning: true });
-      actions.startDjSelection(tracks, name());
-      return;
-    }
-    const items = topTracks();
-    if (items.length === 0) return;
-    if (!state.autoMode.active) {
-      const seed = itemToTrack(items[0]) ?? await resolveCatalogTrack(items[0]).catch(() => null);
-      if (!seed) {
+      const candidates = topTracks().slice(0, 10);
+      if (candidates.length === 0) return;
+      const found = await resolveFirstCandidate(candidates, isCurrent);
+      if (!isCurrent()) return;
+      if (!found) {
         toast.error(t('search.noPreview'));
         return;
       }
-      actions.enterAutoMode({ source: seed, deferPlanning: true });
-      const seededFirst: CatalogItem = seed.source === 'preview'
-        ? { ...items[0], external_ids: { ...items[0].external_ids, youtube_id: seed.id } }
-        : items[0];
-      void useCatalogCollection([seededFirst, ...items.slice(1)], name(), 'start');
+      await actions.startRadio(found.track);
+    } catch {
+      if (isCurrent()) toast.error(t('search.noPreview'));
+    } finally {
+      if (isCurrent()) setRadioBusy(false);
+    }
+  };
+
+  const podcastPlaying = () => Boolean(state.playback.currentTrack && isPodcastTrack(state.playback.currentTrack));
+
+  const startArtistDj = async () => {
+    if (djBusy()) return;
+    if (podcastPlaying()) {
+      toast.info(t('modeChange.podcastMessage'));
       return;
     }
-    void useCatalogCollection(items, name(), 'start');
+    if (view() === 'library') {
+      const tracks = libraryTrackList().filter((track) => !isPodcastTrack(track));
+      if (tracks.length === 0) return;
+      actions.enterAutoMode({ source: tracks[0], deferPlanning: true });
+      if (!state.autoMode.active) {
+        toast.info(t('modeChange.podcastMessage'));
+        return;
+      }
+      actions.startDjSelection(tracks, name());
+      return;
+    }
+    const candidates = topTracks().slice(0, 10);
+    if (candidates.length === 0) return;
+    const token = ++actionEpoch;
+    const isCurrent = () => !disposed && token === actionEpoch;
+    const artistLabel = name();
+    setDjBusy(true);
+    try {
+      const found = await resolveFirstCandidate(candidates, isCurrent);
+      if (!isCurrent()) return;
+      if (!found) {
+        toast.error(t('search.noPreview'));
+        return;
+      }
+      actions.enterAutoMode({ source: found.track, deferPlanning: true });
+      if (!state.autoMode.active) {
+        toast.info(t('modeChange.podcastMessage'));
+        return;
+      }
+      const seededItems = candidates.map((item, idx) => (
+        idx === found.index && found.track.source === 'preview'
+          ? { ...item, external_ids: { ...item.external_ids, youtube_id: found.track.id } }
+          : item
+      ));
+      await useCatalogCollection(seededItems, artistLabel, 'start', undefined, isCurrent);
+    } finally {
+      if (isCurrent()) setDjBusy(false);
+    }
   };
 
   const saveItem = async (item: CatalogItem) => {
@@ -328,6 +389,7 @@ export default function Artist() {
   useAppBar({ title: name, back, backLabel: () => t('artist.ariaBack'), heading });
 
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;
+  const radioLabel = () => t(state.autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');
 
   return (
     <div class="view">
@@ -383,21 +445,21 @@ export default function Artist() {
               </Show>
               <Control
                 class={hero.secondary}
-                aria-label={t(state.autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio')}
-                title={t(state.autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio')}
+                aria-label={radioLabel()}
+                title={radioLabel()}
                 disabled={!playable() || radioBusy()}
                 aria-busy={radioBusy() || undefined}
                 onClick={() => void startArtistRadio()}
               >
                 <RadioIcon size={16} />
-                <span class={hero.primaryLabel}>{t('trackActions.startRadio')}</span>
+                <span class={hero.primaryLabel}>{radioLabel()}</span>
               </Control>
             </div>
             <CollectionControl
               compact menuActions={() => [
                 ...(!state.autoMode.active ? [
                   { icon: menuIcons.shuffle(), label: t('artist.shuffle'), disabled: !playable(), onSelect: shuffle },
-                  { icon: menuIcons.changeSession(), label: t('autoMode.startDj'), disabled: !playable(), onSelect: () => void startArtistDj() },
+                  { icon: menuIcons.changeSession(), label: t('autoMode.startDj'), disabled: !playable() || djBusy() || podcastPlaying(), onSelect: () => void startArtistDj() },
                 ] : []),
                 ...(candidates().length ? [{ icon: menuIcons.artist(), label: t('artist.notThisArtist'), onSelect: chooseCandidate }] : []),
               ]}

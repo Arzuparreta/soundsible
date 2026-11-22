@@ -3,7 +3,8 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
 import { artistPath, resolveViewMode } from '../lib/artistRoute';
-import { formatReleaseDate, formatTotalDuration, trackCount } from '../lib/format';
+import { trackCount } from '../lib/format';
+import { formatReleaseDate, formatTotalDuration } from '../lib/releaseFormat';
 import { itemArtist } from '../lib/catalogTrack';
 import { coverUrl } from '../lib/media';
 import { ArtistDiscoveryView, ReleaseShelf, fansLabel, formatFans } from '../components/ArtistDiscoveryView';
@@ -126,19 +127,21 @@ export default function NativeEntityProfile(props: {
   };
   const albumArtist = () => album()?.artist || props.subject.artist || '';
   const albumMetaParts = createMemo(() => {
+    if (props.subject.kind !== 'album') return [];
     const record = album();
-    if (!record) return [];
+    const localTracks = owned();
     const parts: string[] = [];
-    const date = formatReleaseDate(record.release_date, record.year);
+    const year = record?.year ?? localTracks.find(track => track.year)?.year ?? undefined;
+    const date = formatReleaseDate(record?.release_date, year);
     if (date) parts.push(date);
     const list = songs();
     if (list.length) parts.push(trackCount(list.length));
-    const totalSec = view() === 'library'
-      ? owned().reduce((sum, tr) => sum + (tr.duration ?? 0), 0)
+    const totalSec = view() === 'library' || !record
+      ? localTracks.reduce((sum, tr) => sum + (tr.duration ?? 0), 0)
       : (record.duration || record.tracklist.reduce((sum, item) => sum + (item.duration ?? 0), 0));
     const runtime = formatTotalDuration(totalSec);
     if (runtime) parts.push(runtime);
-    const genre = record.genre?.trim();
+    const genre = (record?.genre || localTracks.find(track => track.genre)?.genre || '').trim();
     if (genre) parts.push(genre);
     return parts;
   });
@@ -180,8 +183,9 @@ export default function NativeEntityProfile(props: {
               onClick={() => void props.catalog.playCollection(songs(), 0, context())}><PlayIcon size={20} /><span class={hero.primaryLabel}>{t('artist.play')}</span></button>
             <Show when={props.subject.kind === 'artist' && props.canStartRadio}>
               <Control class={`${hero.secondary} ${profileStyles.secondary}`} aria-label={t('trackActions.startRadio')}
+                aria-busy={!!props.catalog.pending() || undefined}
                 disabled={props.disconnected || !songs().length || !!props.catalog.pending()}
-                onClick={() => { if (songs()[0]) void props.catalog.act(songs()[0], 'radio'); }}>
+                onClick={() => void props.catalog.startRadio(songs())}>
                 <RadioIcon size={18} /><span class={hero.primaryLabel}>{t('trackActions.startRadio')}</span>
               </Control>
             </Show>

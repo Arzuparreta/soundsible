@@ -105,10 +105,17 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     }).catch(() => {});
   }
   async function startDj(tracks: Track[], label: string) {
+    if (stale()) return;
     const current = program();
-    if (!current?.ready || stale()) return;
+    if (!current?.ready) {
+      setError(t('common.loadFailed'));
+      return;
+    }
     const requested = tracks.filter(track => !isPodcastTrack(track)).map(programTrack).filter(track => track !== null);
-    if (!requested.length) return;
+    if (!requested.length) {
+      setError(t('autoMode.noSeed'));
+      return;
+    }
     vibrate();
     await runtime.execute({
       action: 'djSelection',
@@ -116,7 +123,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       label,
       queueToken: current.queueToken,
       programToken: current.programToken,
-    }).catch(() => {});
+    }).catch(() => setError(t('common.loadFailed')));
   }
   const [origin, setOrigin] = createSignal('');
   const [server, setServer] = createSignal('');

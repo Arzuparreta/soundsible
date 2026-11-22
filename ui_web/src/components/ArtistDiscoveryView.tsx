@@ -3,7 +3,7 @@ import type { AlbumSummary, ArtistSummary, CatalogItem } from '../types/music';
 import type { SavedEntity } from '../lib/savedEntityIdentity';
 import { albumPath, artistPath } from '../lib/artistRoute';
 import { coverGradient } from '../lib/cover';
-import { formatRecordType, formatReleaseDate } from '../lib/format';
+import { formatRecordType, formatReleaseDate } from '../lib/releaseFormat';
 import { t } from '../lib/i18n';
 import { CoverImage } from './CoverImage';
 import { EmptyState } from './EmptyState';
