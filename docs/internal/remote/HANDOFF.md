@@ -44,7 +44,7 @@ the whole session. Faults found in the old pipeline:
 | --- | --- |
 | Engine: registry, instances, dispatcher, live state events, transfer, wrappers, agent API | open |
 | Web target: executor, instances, names and form factor, `live`, prompt session publishing | open |
-| Android target: executor, transfer, existing callers on the new endpoints | open |
+| Android target: executor, transfer, existing callers on the new endpoints | native executor and transfer implemented (`remote/android-target`); undeclared commands: `transport.set_volume` (system volume), `dj.promote`, `dj.avoid` (no native handler); existing `ui_web/src/mobile/` callers handled on the web branch |
 | Web player read through one accessor (no visible change) | open |
 | Web connected mode: device sheet, controlling another device, states and messages | open |
 | Android app connected mode | open |
