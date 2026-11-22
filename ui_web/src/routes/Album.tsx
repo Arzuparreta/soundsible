@@ -174,12 +174,9 @@ export default function Album() {
     : tracklist().length || undefined;
   const year = () => currentProfile()?.year ?? membershipRead()?.album.year ?? undefined;
   const displayArtist = () => currentProfile()?.artist || artistName();
-  const displayArtists = () => {
-    const list = currentProfile()?.artists;
-    if (list?.length) return list;
-    const raw = currentProfile()?.artist;
-    return raw?.includes(', ') ? raw.split(', ').map((s) => s.trim()).filter(Boolean) : undefined;
-  };
+  // Only the profile's structured list: a name such as "Earth, Wind & Fire"
+  // must never be split on its comma.
+  const displayArtists = () => currentProfile()?.artists?.length ? currentProfile()!.artists : undefined;
   const displayTitle = () => currentProfile()?.title || title();
   const totalDuration = () => {
     if (view() === 'library') {

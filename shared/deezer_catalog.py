@@ -232,6 +232,28 @@ def related_artists(artist_id: str, limit: int = 20) -> list[dict[str, Any]]:
     return out
 
 
+def main_contributors(album: dict[str, Any]) -> list[tuple[str, str]]:
+    """The `(deezer_id, name)` of each artist Deezer credits as a main artist of
+    an album, once each, in Deezer's order.
+
+    `album/{id}` names a single `artist`, which is only the first of these: a
+    label compilation credited to four composers reports the first of them as
+    its artist. `artist/{id}/albums` rows carry no artist at all.
+    """
+    contributors = album.get("contributors") if isinstance(album.get("contributors"), list) else []
+    credits: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for row in contributors:
+        if not isinstance(row, dict) or _clean(row.get("role")).casefold() != "main":
+            continue
+        name = _clean(row.get("name"))
+        if not name or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        credits.append((_clean(row.get("id"), 32), name))
+    return credits
+
+
 def extract_year(release_date: Any) -> int | None:
     if not release_date:
         return None

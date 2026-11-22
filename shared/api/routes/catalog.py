@@ -360,34 +360,22 @@ _VARIOUS_ARTISTS_DEEZER_ID = "5080"
 
 
 def _deezer_album_credits(data: dict[str, Any]) -> tuple[str, list[str], str | None]:
+    """The album's credited artists, and the one artist whose other releases
+    "More by" may list: only a single credited artist that is not Deezer's
+    Various Artists bucket."""
     artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
-    contributors = data.get("contributors") if isinstance(data.get("contributors"), list) else []
-    names: list[str] = []
-    ids: list[str] = []
-    seen: set[str] = set()
-    for row in contributors:
-        if not isinstance(row, dict) or catalog_service.norm(row.get("role")) != "main":
-            continue
-        name = catalog_service.clean(row.get("name"))
-        if not name or name.casefold() in seen:
-            continue
-        seen.add(name.casefold())
-        names.append(name)
-        ids.append(str(row.get("id") or "").strip())
-
-    if not names:
+    credits = deezer_catalog.main_contributors(data)
+    if not credits:
         fallback_name = catalog_service.clean(artist_row.get("name"))
         if fallback_name:
-            names.append(fallback_name)
-            ids.append(str(artist_row.get("id") or "").strip())
-
-    artist = ", ".join(names)
+            credits = [(str(artist_row.get("id") or "").strip(), fallback_name)]
+    names = [name for _, name in credits]
     artist_deezer_id: str | None = None
-    if len(names) == 1:
-        candidate_id = ids[0] or str(artist_row.get("id") or "").strip()
-        if candidate_id and candidate_id != _VARIOUS_ARTISTS_DEEZER_ID and names[0].casefold() != "various artists":
+    if len(credits) == 1:
+        candidate_id = credits[0][0] or str(artist_row.get("id") or "").strip()
+        if candidate_id and candidate_id != _VARIOUS_ARTISTS_DEEZER_ID:
             artist_deezer_id = candidate_id
-    return artist, names, artist_deezer_id
+    return ", ".join(names), names, artist_deezer_id
 
 
 def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -> dict[str, Any]:
@@ -419,7 +407,7 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
         "cover_big": data.get("cover_big"),
         "cover_medium": data.get("cover_medium"),
         "release_date": data.get("release_date"),
-        "artist": {**artist_row, "name": artist} if artist else artist_row,
+        "artist": artist_row,
     }
     tracklist: list[dict[str, Any]] = []
     for row in _deezer_album_tracks(album_id, embedded):

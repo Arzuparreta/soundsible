@@ -6,6 +6,7 @@ import datetime
 from itertools import zip_longest
 import time
 
+from shared.deezer_catalog import main_contributors
 from shared.providers import deezer
 from shared.text_utils import fold_text, identity_key
 
@@ -175,18 +176,7 @@ def build_browse_sections(
                 album = deezer.get(f"album/{album_id}", timeout=min(3, remaining))
             except Exception:
                 return fallback
-            contributors = album.get("contributors") if isinstance(album, dict) else None
-            if not isinstance(contributors, list):
-                return fallback
-            names: list[str] = []
-            seen: set[str] = set()
-            for row in contributors:
-                if not isinstance(row, dict) or str(row.get("role") or "").strip().casefold() != "main":
-                    continue
-                name = str(row.get("name") or "").strip()
-                if name and name.casefold() not in seen:
-                    seen.add(name.casefold())
-                    names.append(name)
+            names = [name for _, name in main_contributors(album)] if isinstance(album, dict) else []
             return ", ".join(names) if len(names) > 1 else fallback
 
         raw_releases.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
