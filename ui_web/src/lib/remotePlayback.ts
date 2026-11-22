@@ -1,3 +1,5 @@
+import type { DeviceCommandAnswer } from './api';
+import { t } from './i18n';
 import type { ContextTrack } from './playbackQueue';
 import { isPodcastTrack } from './track';
 
@@ -8,11 +10,25 @@ export function canPlayOnDevice(track: ContextTrack): boolean {
   return track.source !== 'preview' || /^[A-Za-z0-9_-]{11}$/.test(track.youtube_id || track.id) || Boolean(track.title && track.artist);
 }
 
-export function remotePlayRequest(track: ContextTrack): { track_id: string; track: ContextTrack } {
+export function remotePlayTracksArgs(track: ContextTrack): { tracks: [ContextTrack]; index: 0 } {
   if (track.pendingResolve) track = { ...track, source: 'preview' };
   if (track.source === 'preview' && !isPodcastTrack(track) && !track.pendingResolve &&
     !/^[A-Za-z0-9_-]{11}$/.test(track.youtube_id || track.id)) {
     track = { ...track, pendingResolve: { catalogItemId: track.id, artist: track.artist, title: track.title, duration: track.duration } };
   }
-  return { track_id: track.id, track };
+  return { tracks: [track], index: 0 };
+}
+
+const REASON_KEYS: Record<string, string> = {
+  offline: 'deviceSheet.offline',
+  timeout: 'deviceSheet.timeout',
+  update_required: 'deviceSheet.updateRequired',
+  unsupported: 'deviceSheet.unsupported',
+  needs_gesture: 'deviceSheet.needsGesture',
+  nothing_playing: 'deviceSheet.nothingPlaying',
+};
+
+export function remoteCommandMessage(answer: DeviceCommandAnswer | null | undefined, deviceName: string): string {
+  const key = answer && answer.status !== 'applied' ? REASON_KEYS[answer.reason] : undefined;
+  return t(key ?? 'deviceSheet.failed', { device: deviceName });
 }

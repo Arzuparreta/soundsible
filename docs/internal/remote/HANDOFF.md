@@ -43,7 +43,7 @@ the whole session. Faults found in the old pipeline:
 | Item | Status |
 | --- | --- |
 | Engine: registry, instances, dispatcher, live state events, transfer, wrappers, agent API | open |
-| Web target: executor, instances, names and form factor, `live`, prompt session publishing | open |
+| Web target: executor, instances, names and form factor, `live`, prompt session publishing | done |
 | Android target: executor, transfer, existing callers on the new endpoints | open |
 | Web player read through one accessor (no visible change) | open |
 | Web connected mode: device sheet, controlling another device, states and messages | open |

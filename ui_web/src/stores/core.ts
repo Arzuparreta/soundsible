@@ -12,6 +12,7 @@
 
 import { createSignal } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
+import { detectDeviceName, detectFormFactor, WEB_REMOTE_COMMANDS } from '../lib/deviceIdentity';
 import { randomId } from '../lib/randomId';
 
 import type {
@@ -174,6 +175,9 @@ function initialAutoProfile(): AutoProfile {
 
 export { randomId };
 
+/** Random per page load; distinguishes two tabs sharing a persistent device_id. */
+const INSTANCE_ID = randomId();
+
 function loadDevice(): DeviceRegistration {
   let id = localStorage.getItem('device_id');
   if (!id) {
@@ -182,8 +186,12 @@ function loadDevice(): DeviceRegistration {
   }
   return {
     device_id: id,
-    device_name: localStorage.getItem('device_name') ?? 'Soundsible Web',
+    device_name: localStorage.getItem('device_name') ?? detectDeviceName(),
     device_type: 'web',
+    form_factor: detectFormFactor(),
+    instance_id: INSTANCE_ID,
+    protocol: 1,
+    commands: [...WEB_REMOTE_COMMANDS],
   };
 }
 

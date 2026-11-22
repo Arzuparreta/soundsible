@@ -489,7 +489,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         <button type="button" disabled={busy()} onClick={() => void leave(true)}>{t('android.changeServer')}</button></header>}
     </Show>
     <ResumeBannerView offer={resumeOffer.offer()} busy={resumeOffer.busy()} onDismiss={resumeOffer.dismiss}
-      onResume={() => void resumeOffer.resume().catch(() => setError(t('deviceSheet.failed')))} />
+      onResume={() => void resumeOffer.resume().then(err => { if (err) setError(err); })} />
     <Show when={incomingInvite.selection()}>{invitation => <section class={styles.library} data-testid="android-incoming-invite">
       <h2>{t('invite.title')}</h2><p>{invitation().origin}</p><Show when={user()}><p>{t('android.inviteSignsOut')}</p></Show>
       <button data-invite-connect disabled={busy()} onClick={() => void useIncomingInvite(invitation())}>{t(user() ? 'android.useInvite' : 'android.connect')}</button>

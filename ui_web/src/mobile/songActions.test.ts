@@ -96,14 +96,25 @@ it('lists only other online devices and asks the chosen one to play the library 
     { device_id: 'self', device_name: 'This phone', socket_active: true },
     { device_id: 'laptop', device_name: 'Laptop', socket_active: true },
     { device_id: 'tablet', device_name: 'Tablet', socket_active: false },
-  ] }).mockResolvedValueOnce({ status: 'ok' });
+  ] }).mockResolvedValueOnce({ status: 'applied', rev: 2 });
   const progress = { update: vi.fn(), dismiss: vi.fn() }; mocks.toast.loading.mockReturnValue(progress);
   await openNativePlayOnDevice(song, async () => 'self', () => true);
   const menu = mocks.menu.mock.calls[0][0];
   expect(menu.actions.map((action: { label: string }) => action.label)).toEqual(['Laptop']);
   menu.actions[0].onSelect(); await flush();
-  expect(mocks.request.mock.calls[1]).toEqual(['/api/playback/remote-command', expect.objectContaining({ body: { device_id: 'laptop', command: 'play', track_id: 'song', track: song } })]);
+  expect(mocks.request.mock.calls[1]).toEqual(['/api/devices/laptop/commands', expect.objectContaining({
+    method: 'POST', body: { name: 'play.tracks', args: { tracks: [song], index: 0 } },
+  })]);
   expect(progress.update).toHaveBeenCalledWith('success', 'deviceSheet.playingOn');
+});
+
+it('shows the contract error message when remote playback is rejected', async () => {
+  mocks.request.mockResolvedValueOnce({ devices: [{ device_id: 'laptop', device_name: 'Laptop', socket_active: true }] })
+    .mockRejectedValueOnce({ status: 503, payload: { status: 'unreachable', reason: 'offline' } });
+  const progress = { update: vi.fn(), dismiss: vi.fn() }; mocks.toast.loading.mockReturnValue(progress);
+  await openNativePlayOnDevice(song, async () => 'self', () => true);
+  mocks.menu.mock.calls[0][0].actions[0].onSelect(); await flush();
+  expect(progress.update).toHaveBeenCalledWith('error', 'deviceSheet.offline:Laptop');
 });
 
 it('says so when there is nowhere to play', async () => {
@@ -116,9 +127,10 @@ it.each([
   { ...song, id: 'dQw4w9WgXcQ', source: 'preview' as const },
   { ...song, source: 'preview' as const, media_kind: 'podcast_episode', podcast_enclosure_url: 'https://example.com/episode.mp3' },
 ])('sends portable previews and podcast episodes without acquiring them', async track => {
-  mocks.request.mockResolvedValue({ devices: [{ device_id: 'laptop', socket_active: true }] });
+  mocks.request.mockResolvedValueOnce({ devices: [{ device_id: 'laptop', socket_active: true }] })
+    .mockResolvedValueOnce({ status: 'applied', rev: 1 });
   mocks.toast.loading.mockReturnValue({ update: vi.fn(), dismiss: vi.fn() });
   await openNativePlayOnDevice(track, async () => 'self', () => true);
   mocks.menu.mock.calls[0][0].actions[0].onSelect(); await flush();
-  expect(mocks.request.mock.calls[1][1].body).toEqual({ device_id: 'laptop', command: 'play', track_id: track.id, track });
+  expect(mocks.request.mock.calls[1][1].body).toEqual({ name: 'play.tracks', args: { tracks: [track], index: 0 } });
 });
