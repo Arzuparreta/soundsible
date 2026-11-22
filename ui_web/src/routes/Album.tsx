@@ -182,9 +182,6 @@ export default function Album() {
     }
     return currentProfile()?.duration || tracklist().reduce((sum, item) => sum + (item.duration ?? 0), 0);
   };
-  const genre = () => view() === 'library'
-    ? (membershipRead()?.album.genre || currentProfile()?.genre || '')
-    : (currentProfile()?.genre || '');
   const metaParts = createMemo(() => {
     const parts: string[] = [];
     const date = formatReleaseDate(currentProfile()?.release_date, year());
@@ -193,8 +190,6 @@ export default function Album() {
     if (n) parts.push(trackCount(n));
     const runtime = formatTotalDuration(totalDuration());
     if (runtime) parts.push(runtime);
-    const g = genre().trim();
-    if (g) parts.push(g);
     return parts;
   });
 

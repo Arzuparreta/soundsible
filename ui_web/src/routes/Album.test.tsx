@@ -194,7 +194,7 @@ describe('Album route', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Record');
   });
 
-  it('shows release date, runtime, genre, label credit, and More by artist only in Discover view', async () => {
+  it('shows release date, runtime, label credit, and More by artist only in Discover view, never the genre', async () => {
     apiMock.getAlbumProfile.mockResolvedValue(profile({
       release_date: '2020-05-14',
       duration: 3120,
@@ -210,7 +210,7 @@ describe('Album route', () => {
 
     await screen.findByText('Catalog song 1');
     expect(screen.getByText('52 min')).toBeInTheDocument();
-    expect(screen.getByText('Electronic')).toBeInTheDocument();
+    expect(screen.queryByText('Electronic')).toBeNull();
     expect(screen.getByText('℗ Virgin Records')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'More by Band' })).toBeInTheDocument();
     expect(screen.getByText('Earlier LP')).toBeInTheDocument();

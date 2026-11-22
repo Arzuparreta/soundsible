@@ -86,7 +86,7 @@ describe('native entity composition', () => {
     };
     mount();
     expect(screen.getByText('40 min')).toBeInTheDocument();
-    expect(screen.getByText('Electronic')).toBeInTheDocument();
+    expect(screen.queryByText('Electronic')).toBeNull();
     expect(screen.getByText('℗ Indie Label')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'More by Artist' })).toBeInTheDocument();
 
@@ -107,7 +107,7 @@ describe('native entity composition', () => {
     expect(screen.getByText('2019')).toBeInTheDocument();
     expect(screen.getByText('2 tracks')).toBeInTheDocument();
     expect(screen.getByText('20 min')).toBeInTheDocument();
-    expect(screen.getByText('House')).toBeInTheDocument();
+    expect(screen.queryByText('House')).toBeNull();
   });
 
   it('renders artist latest release spotlight, Start radio button, and DJ options entry', () => {

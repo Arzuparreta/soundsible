@@ -141,8 +141,6 @@ export default function NativeEntityProfile(props: {
       : (record.duration || record.tracklist.reduce((sum, item) => sum + (item.duration ?? 0), 0));
     const runtime = formatTotalDuration(totalSec);
     if (runtime) parts.push(runtime);
-    const genre = (record?.genre || localTracks.find(track => track.genre)?.genre || '').trim();
-    if (genre) parts.push(genre);
     return parts;
   });
   const renderEntityLink = (link: { entity: SavedEntity; class: string; children: import('solid-js').JSX.Element }) => {
