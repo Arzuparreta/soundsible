@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
 from shared.library_dates import parse as _parse_timestamp
 from shared.library_lifecycle import serialized
+from shared.cooperative import off_loop
 from shared.library_fingerprint import TRACK_FIELDS
 from shared.library_write import disk_staging, staged_rows, sync_rows, sync_tracks
 from shared.time_utils import UTC
@@ -224,7 +225,12 @@ class LibraryStore:
         if id_replacements:
             from shared.artwork import artwork_store
             artwork_store().remap(id_replacements)
-        with self._get_connection() as conn, disk_staging(conn):
+        # The transaction runs on a native thread (#492): a whole-library
+        # replace on slow storage can take longer than the loop watchdog
+        # allows, and must stay one atomic revision. Everything below uses
+        # only `conn`; the pool, the lifecycle lock and the loan stay with
+        # this greenlet, which waits for the thread before returning `conn`.
+        def transaction(conn):
             conn.execute("BEGIN IMMEDIATE")
             try:
                 if operation_id and conn.execute("SELECT 1 FROM library_operations WHERE id=?", (operation_id,)).fetchone():
@@ -383,6 +389,9 @@ class LibraryStore:
             except Exception as e:
                 conn.execute("ROLLBACK")
                 raise e
+
+        with self._get_connection() as conn, disk_staging(conn):
+            return off_loop(transaction, conn)
 
     @serialized
     def patch_track_metadata(self, track_id, changes, *, expected_revision, previous_fingerprint, metadata):
