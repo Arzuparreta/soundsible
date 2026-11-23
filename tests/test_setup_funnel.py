@@ -168,18 +168,24 @@ def test_setup_gate_rollup_summarize():
     assert out["median_elapsed_ms_first_play"] == 60_000
 
 
-@pytest.mark.parametrize("command", ["pause", "play", "next", "previous", "seek"])
-def test_agent_command_without_device_keeps_409(tmp_path, monkeypatch, command):
+@pytest.mark.parametrize("payload", [
+    {"command": "pause"},
+    {"command": "play"},
+    {"command": "next"},
+    {"command": "previous"},
+    {"command": "seek", "position_sec": 10},
+])
+def test_agent_command_without_device_rejects_unknown_device(tmp_path, monkeypatch, payload):
     _make_runtime(tmp_path)
     app = Flask(__name__)
     app.register_blueprint(agent_routes.agent_bp)
     monkeypatch.setattr(agent_routes, "_scope", lambda: "test")
     monkeypatch.setattr(agent_routes, "_get_api", lambda: {"list_registered_devices": lambda scope: []})
     token = _agent_play(instance_db())
-    response = app.test_client().post("/api/agent/command", json={"command": command},
+    response = app.test_client().post("/api/agent/command", json=payload,
         headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 409
-    assert response.get_json() == {"error": "No target device registered and local engine is not ready"}
+    assert response.status_code == 404
+    assert response.get_json() == {"status": "rejected", "reason": "unknown_device"}
 
 
 def test_setup_gate_rollup_date_window():

@@ -129,6 +129,79 @@ owner/generation and an exception when rebuilding the queue. The case's assertio
 and deadlines are kept; a green retry alone does not demonstrate
 that the cause has been repaired.
 
+## Device websocket reset after a command on the TLS fixture
+
+On `feat/remote-control` (`38beec30`) and `remote/android-fixes`, shard 2 failed
+`DeviceSessionTest.tlsDeviceSession` and usually `DeviceDjSessionTest.tlsDjDevice`
+in every run (`45041273974`, `45045473052`, `45064901488`, `45066770176`,
+`45068411496`, `45069933938`, `45071615842`, `45073425251`): a command answered
+`503 {"reason":"offline"}` right after `transport.seek` or `transport.next`.
+The HTTP variants never failed.
+
+Temporary fixture logging (socket registrations, engine.io closes, websocket
+read errors with client port and file descriptor, stream requests) showed the
+same sequence in every failure:
+
+1. the engine sends `device_command` (seek or next) to the device websocket;
+2. the app opens the new audio stream and closes the previous audio TLS
+   connection (`request_end` of the old `/api/static/stream/…`);
+3. the app's acknowledgement arrives on the device websocket;
+4. within 7–65 ms the server's read on that same websocket connection (same
+   client port and descriptor) fails with `ConnectionResetError(104)`, so the
+   engine drops the instance and answers `offline`.
+
+The app's Socket.IO client logs no transport error or disconnect for that
+socket: from its side the websocket is still connected. Engine bookkeeping is
+not involved (a later disconnect of an older socket never removes a newer
+registration of the same instance). Per run, the TLS fixture logged 4–7 such
+resets and the HTTP fixture none. Removing the engine's `device_updated`
+broadcasts did not change the result (run `45073425251`). The same fixture
+logging on `main`'s code (run `45075373452`, temporarily on this branch) showed
+three resets in the whole shard, none after an audio stream ended: on `main` the
+device never writes on its websocket while it carries out a command, because
+the old events had no acknowledgement. On the host, a Python client that
+aborts audio TLS streams while acknowledging commands kept its websocket for
+150 commands, so the server's TLS stack alone does not reproduce it.
+
+Cause: the reset only occurred where the engine terminated TLS itself, in
+gevent's in-process TLS server (`socketio.run(..., certfile=..., keyfile=...)`),
+which earlier also dropped idle keep-alive sockets (PRs #353–#355). No
+production engine runs that way: it serves plain HTTP behind `tailscale serve`,
+Caddy or another reverse proxy. Whether gevent's TLS layer or the emulator's
+network resets the connection was not isolated further; the fixture was
+testing a server configuration nobody deploys.
+
+Fix: the 5099 fixture is now a plain engine on `127.0.0.1:15099` behind
+`scripts/android_tls_proxy.py`, a separate asyncio process (stdlib `ssl`, no
+gevent) that terminates TLS on 5099 with the same ephemeral certificate, adds
+`X-Forwarded-For`, `X-Forwarded-Proto: https` and `X-Forwarded-Host` to each
+request head as `tailscale serve` does, relays everything else unchanged
+(websockets included) and closes both sides when either closes. Session
+cookies therefore lose the `Secure` flag on this fixture, as they do behind a
+real proxy (`set_session_cookie` reads `request.is_secure`). The engine's
+in-process TLS option was removed from `scripts/android_fixture.py`.
+
+The proxy exposed two more ways the fixture engine differed from production,
+both fixed in `scripts/android_fixture.py`:
+
+- It never called `shared.cooperative.patch_process()`, which `run.py` and the
+  container entrypoint call first. Unpatched, the preview stream's
+  `time.sleep` while waiting for its fill blocks the gevent hub until a socket
+  write blocks. Writing straight to the emulator, writes blocked soon; behind
+  the proxy, loopback buffers took the whole slow stream, every request waited
+  ~23 s and `PreviewTest.verifiedTlsSavedPreviews` found the stream already
+  finished (run `45095656957`; reproduced on the host with a fast client on
+  the plain port too: 13.4 s per request).
+- It never called `start_analysis_process()`, which `start_api` calls, so DJ
+  beat analysis (onnxruntime) ran in the engine process. Once the process was
+  cooperative, that held the hub for over 15 s during
+  `DeviceDjSessionTest` (a 4 s `faulthandler` dump, run `45098884678`, showed
+  `beat_model.logits` on the main thread). Production measures in the
+  `shared.dj.worker` child; the fixture now does too.
+
+With all three changes no fixture engine stalled 4 s or more in any shard
+(run `45100627331`, temporary `faulthandler` watchdog), and every shard passed.
+
 ## Publisher closed after 30 s in the Android Live fixture
 
 On `main` (`e6bad843`, run `44857843679`, shard 5), `LiveListenerTest.httpCoreRelay`

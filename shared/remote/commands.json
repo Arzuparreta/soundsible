@@ -1,0 +1,83 @@
+{
+  "protocol": 1,
+  "commands": {
+    "transport.play": {},
+    "transport.pause": {},
+    "transport.next": {},
+    "transport.previous": {},
+    "transport.seek": {
+      "position_sec": "number"
+    },
+    "transport.set_shuffle": {
+      "on": "bool"
+    },
+    "transport.set_repeat": {
+      "mode": "enum:off|all|one"
+    },
+    "transport.set_volume": {
+      "level": "number"
+    },
+    "transport.set_muted": {
+      "on": "bool"
+    },
+    "play.tracks": {
+      "tracks": "tracks",
+      "index": "int",
+      "context": "context?"
+    },
+    "queue.add": {
+      "track": "track",
+      "at": "enum:next|end"
+    },
+    "queue.move": {
+      "queue_id": "queue_id",
+      "before_queue_id": "queue_id?"
+    },
+    "queue.remove": {
+      "queue_id": "queue_id"
+    },
+    "queue.play_entry": {
+      "queue_id": "queue_id"
+    },
+    "radio.start": {
+      "track": "track"
+    },
+    "radio.stop": {},
+    "dj.start": {
+      "tracks": "tracks",
+      "label": "string"
+    },
+    "dj.start_from_current": {},
+    "dj.stop": {},
+    "dj.place": {
+      "tracks": "tracks",
+      "before_queue_id": "queue_id?"
+    },
+    "dj.promote": {
+      "queue_id": "queue_id"
+    },
+    "dj.avoid": {
+      "queue_id": "queue_id"
+    },
+    "dj.add_source": {
+      "tracks": "tracks",
+      "label": "string"
+    },
+    "dj.remove_source": {
+      "source_id": "string"
+    },
+    "dj.change_session": {
+      "tracks": "tracks",
+      "label": "string"
+    },
+    "dj.repair": {},
+    "dj.set_mixing": {
+      "on": "bool"
+    },
+    "session.export": {},
+    "session.import": {
+      "state": "state"
+    },
+    "session.release": {}
+  }
+}

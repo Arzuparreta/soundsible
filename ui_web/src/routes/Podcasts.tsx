@@ -11,7 +11,8 @@ import { PodcastCountryPicker } from '../components/PodcastCountryPicker';
 import { desktopShell } from '../lib/shellLayout';
 import { user } from '../lib/session';
 import { api, request } from '../lib/api';
-import { state, actions } from '../stores';
+import { state } from '../stores';
+import { player } from '../stores/player';
 import { ensureDiscover, refreshDiscover, topPodcasts, topEpisodes, chartsCountry, chartFailed, episodesFailed, revalidating } from '../lib/discover';
 import { t } from '../lib/i18n';
 import type { PodcastSearchResult, PopularPodcastEpisode, PodcastEpisode } from '../types/podcast';
@@ -88,20 +89,20 @@ export default function Podcasts() {
   const playPopularEpisode = async (episode: PopularPodcastEpisode, remote = false) => {
     if (playingEpisode()) return;
     const account = user()?.id, country = podcastCountry();
-    const previousTrack = state.playback.currentTrack;
+    const previousTrack = player().playback.currentTrack;
     const controller = new AbortController(); episodeRequest = controller;
     setPlayingEpisode(episode.episode_id);
     try {
       const data = await request<{ episode: PodcastEpisode; show_title: string; feed_url: string }>(
         `/api/discovery/podcasts/episode?show_id=${episode.itunes_collection_id}&episode_id=${episode.episode_id}&country=${country}`,
         { timeoutMs: 25000, signal: controller.signal });
-      if (disposed || controller.signal.aborted || user()?.id !== account || podcastCountry() !== country || state.playback.currentTrack !== previousTrack) return;
+      if (disposed || controller.signal.aborted || user()?.id !== account || podcastCountry() !== country || player().playback.currentTrack !== previousTrack) return;
       const feedId = state.podcastSubscriptions.find(show => show.rss_url === data.feed_url)?.id ?? data.feed_url;
       const local = state.library.find(track => track.podcast_episode_guid === data.episode.guid
         && (track.podcast_feed_id === feedId || track.podcast_feed_id === data.feed_url || track.podcast_rss_url === data.feed_url));
       if (remote) openPlayOnDevice(local ?? podcastEpisodeToTrack(data.episode, data.show_title, feedId, data.episode.image ?? episode.image_url));
-      else if (local) actions.playTrack(local);
-      else await actions.playEpisode(data.episode, data.show_title, feedId, data.episode.image ?? episode.image_url);
+      else if (local) player().actions.playTrack(local);
+      else await player().actions.playEpisode(data.episode, data.show_title, feedId, data.episode.image ?? episode.image_url);
     } catch { if (!disposed && !controller.signal.aborted && user()?.id === account && podcastCountry() === country) toast.error(t('podcasts.episodeUnavailable')); }
     finally { if (episodeRequest === controller) { episodeRequest = undefined; setPlayingEpisode(undefined); } }
   };

@@ -2,23 +2,35 @@ package com.soundsible.android
 
 import android.content.Context
 import android.os.Handler
+import android.os.SystemClock
 import androidx.media3.common.util.UnstableApi
-import io.socket.client.Manager
+import io.socket.client.Ack
 import io.socket.client.IO
+import io.socket.client.Manager
 import io.socket.client.Socket
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Account-scoped device registration and remote transport belong to the service, not the WebView. */
 @UnstableApi
-internal class NativeDeviceSession(context: Context, private val connection: EngineConnection,
-    private val main: Handler, private val snapshot: () -> JSONObject?,
-    private val command: (String, JSONObject) -> Unit, private val publish: (JSONObject) -> Unit) : AutoCloseable {
+internal class NativeDeviceSession(
+    context: Context,
+    private val connection: EngineConnection,
+    private val main: Handler,
+    private val snapshot: () -> JSONObject?,
+    private val command: (String, JSONObject, (String?) -> Unit) -> Unit,
+    private val publish: (JSONObject) -> Unit,
+) : AutoCloseable {
     private val prefs = context.getSharedPreferences("soundsible-device", Context.MODE_PRIVATE)
     private val appContext = context.applicationContext
-    private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "soundsible-device-session").apply { isDaemon = true } }
+    private val instanceId = java.util.UUID.randomUUID().toString()
+    // Keep transfer HTTP off the publication thread: POST /api/devices/transfer calls back into
+    // session.release on this socket, which must publish state before the transfer call returns.
+    private val publishWorker = Executors.newSingleThreadExecutor { task -> Thread(task, "soundsible-device-publish").apply { isDaemon = true } }
+    private val handoffWorker = Executors.newSingleThreadExecutor { task -> Thread(task, "soundsible-device-handoff").apply { isDaemon = true } }
     private var socket: Socket? = null
     private var client: okhttp3.OkHttpClient? = null
     private var epoch = -1L
@@ -26,6 +38,8 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
     private var profile: String? = null
     private var deviceId: String? = null
     private var serial = 0L
+    private var seq = 0L
+    private var lastRev: Long? = null
     private var authRequest: String? = null
     private var stateRequest: String? = null
     @Volatile private var handoffRequest: String? = null
@@ -39,8 +53,13 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
     private var hadTrack = false
     private var lastPositionPing = 0L
     private var stateRetryAfter = 0L
+    /** The device the WebView controls, with the profile it belongs to; watched again on every connect. */
+    private var watched: Pair<String, String>? = null
+    private var activePublishWaiters = mutableListOf<(Long?) -> Unit>()
+    private var nextPublishWaiters = mutableListOf<(Long?) -> Unit>()
     @Volatile private var closed = false
     private val resetListener: () -> Unit = { main.post { reset() } }
+    private val debouncedReport = Runnable { if (!closed) report() }
     private val tick = object : Runnable {
         override fun run() {
             if (closed) return
@@ -49,12 +68,11 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
             main.postDelayed(this, 2000)
         }
     }
-    init { connection.resetListeners.add(resetListener); main.post(tick) }
+    init { connection.resetListeners.add(resetListener); main.post(tick); NativeDeviceEvents.session = this }
+
     /** Debug delivery phases only: never log account, device, media or exception messages. */
-    private fun diagnostic(phase: String, event: String = "", payload: JSONObject? = null, failure: Throwable? = null) {
+    private fun diagnostic(phase: String, event: String = "", failure: Throwable? = null) {
         if (!BuildConfig.DEBUG) return
-        val state = payload?.optJSONObject("state")
-        val session = state?.optJSONObject("session")
         val frame = failure?.stackTrace?.firstOrNull { it.className.startsWith("com.soundsible.android.") }
         val sessionMatches = runCatching { identity != null && connection.sessionIdentity(epoch) == identity }.getOrDefault(false)
         val profileMatches = runCatching { profile != null && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
@@ -65,25 +83,28 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         val message = "phase=$phase event=$event generation=${connection.generation} epoch=$epoch serial=$serial" +
             " owns=${owns()} sessionMatches=$sessionMatches profileMatches=$profileMatches connected=${socket?.connected() == true}" +
             (if (returnedQueue == null) "" else " snapshotQueue=$returnedQueue") +
-            (if (payload == null) "" else " track=${payload.optJSONObject("track") != null} state=${state != null} session=${session != null} queue=${session?.optJSONArray("queue")?.length() ?: 0}") +
             (if (failure == null) "" else " failure=${failure.javaClass.simpleName} frame=${frame?.className}:${frame?.lineNumber}")
         if (failure == null) android.util.Log.d("DeviceSessionDelivery", message) else android.util.Log.w("DeviceSessionDelivery", message)
     }
+
     private fun owns(): Boolean = !closed && identity != null && epoch == connection.generation &&
         runCatching { connection.sessionIdentity(epoch) == identity && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
+
     fun name(): String = DeviceName.get(appContext)
+
     /** A per-install name; a connected session re-registers at once so peers and Core see it without reconnecting. */
     fun rename(value: String): Boolean {
         if (!DeviceName.set(appContext, value)) return false
         if (owns() && socket?.connected() == true) { socket?.emit("playback_register", registration()); changed() } else publish(state())
         return true
     }
+
     fun state(): JSONObject = JSONObject().put("generation", connection.generation).put("device_name", name())
         .put("device_id", if (owns()) deviceId else JSONObject.NULL).put("connected", owns() && socket?.connected() == true)
-        .put("retrying", retryAfter > android.os.SystemClock.elapsedRealtime())
-        .put("can_handoff", owns() && socket?.connected() == true && handoffFuture == null && snapshot() != null)
+        .put("retrying", retryAfter > SystemClock.elapsedRealtime())
+
     private fun connect() {
-        if (closed || connecting || android.os.SystemClock.elapsedRealtime() < retryAfter) return
+        if (closed || connecting || SystemClock.elapsedRealtime() < retryAfter) return
         val generation = connection.generation
         val cookieIdentity = runCatching { connection.sessionIdentity(generation) }.getOrNull() ?: return
         if (cookieIdentity == rejectedIdentity) return
@@ -96,7 +117,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         val requestId = "device-auth-" + java.util.UUID.randomUUID()
         authRequest = requestId
         publish(state())
-        worker.execute {
+        publishWorker.execute {
             // A cached offline profile does not authorize a new Core socket. Verify the cookie without purging offline music.
             var denied = false
             val valid = runCatching {
@@ -110,9 +131,11 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
                 if (token != serial) return@post
                 connecting = false; authRequest = null
                 if (!owns() || epoch != generation || profile != owner) return@post
-                if (!valid) { identity = null; retryAfter = android.os.SystemClock.elapsedRealtime() + 8000
+                if (!valid) {
+                    identity = null; retryAfter = SystemClock.elapsedRealtime() + 8000
                     if (denied) rejectedIdentity = cookieIdentity
-                    publish(state()); return@post }
+                    publish(state()); return@post
+                }
                 try {
                     // This socket owner cancels/shuts down its transport on close;
                     // do not let that lifecycle retire the shared REST pool.
@@ -129,136 +152,331 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
                     next.on(Socket.EVENT_CONNECT) { main.post {
                         if (owns() && socket === next) {
                             next.emit("playback_register", registration()); diagnostic("registration_emitted"); publish(state()); changed()
+                            // Room membership left with the old socket.
+                            watched?.takeIf { it.first == profile }?.let { watchOn(next, it.second, null) }
                         }
                     } }
                     next.io().on(Manager.EVENT_RECONNECT_FAILED) { main.post {
                         if (owns() && socket === next) {
-                            retryAfter = android.os.SystemClock.elapsedRealtime() + 30000
+                            retryAfter = SystemClock.elapsedRealtime() + 30000
                             reset() // Release this exhausted manager; tick starts a verified one after cooldown.
                         }
                     } }
                     for (event in listOf(Socket.EVENT_DISCONNECT, Socket.EVENT_CONNECT_ERROR)) next.on(event) { main.post {
                         if (owns() && socket === next) { diagnostic("transport", event); publish(state()) }
                     } }
-                    for (event in listOf("playback_stop_requested", "playback_start_requested", "playback_next_requested", "playback_previous_requested", "playback_seek_requested")) {
-                        next.on(event) { arguments ->
-                            val payload = (arguments.firstOrNull() as? JSONObject) ?: JSONObject()
-                            if (payload.toString().length <= 256 * 1024) main.post {
-                                diagnostic("received", event, payload)
-                                if (owns() && socket === next) {
-                                    runCatching { command(event, payload) }
-                                        .onSuccess { diagnostic("command_returned", event) }
-                                        .onFailure { diagnostic("command_failed", event, failure = it) }
-                                    changed()
-                                } else diagnostic("obsolete_socket", event)
-                            }
-                        }
+                    next.on("device_command") { arguments ->
+                        handleDeviceCommand(next, arguments)
+                    }
+                    for (event in listOf("device_updated", "device_state")) next.on(event) { arguments ->
+                        val payload = arguments.firstOrNull() as? JSONObject ?: return@on
+                        main.post { if (owns() && socket === next) forward(event, payload) }
                     }
                     next.connect()
                 } catch (_: Exception) { reset() }
             }
         }
     }
-    private fun registration() = JSONObject().put("device_id", deviceId).put("device_name", name()).put("device_type", "android")
-    fun changed() { dirty = true; publish(state()); report() }
-    private fun report() {
-        if (!owns() || socket?.connected() != true || publishing || handoffFuture != null) return
-        val body = snapshot() ?: if (hadTrack) JSONObject().put("track_id", JSONObject.NULL).put("track", JSONObject.NULL)
-            .put("position_sec", 0).put("is_playing", false).put("session", JSONObject.NULL) else return
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (now < stateRetryAfter) return
+
+    private fun handleDeviceCommand(ownerSocket: Socket, arguments: Array<out Any?>) {
+        val ack = arguments.lastOrNull() as? Ack
+        val payload = arguments.firstOrNull() as? JSONObject
+        val replied = AtomicBoolean(false)
+        fun respond(body: JSONObject) {
+            if (replied.compareAndSet(false, true)) ack?.call(body)
+        }
+        if (payload == null || payload.toString().length > 320 * 1024) {
+            respond(RemoteCommandLogic.ackRejected("invalid"))
+            return
+        }
+        main.post {
+            val name = payload.optString("name")
+            val args = payload.optJSONObject("args") ?: JSONObject()
+            diagnostic("received", name)
+            if (!owns() || socket !== ownerSocket) {
+                diagnostic("obsolete_socket", name)
+                respond(RemoteCommandLogic.ackRejected("invalid_state"))
+                return@post
+            }
+            if (name !in RemoteCommandLogic.supportedCommands) {
+                respond(RemoteCommandLogic.ackRejected("unsupported"))
+                return@post
+            }
+            if (name == "session.export") {
+                val exported = exportState()
+                if (exported == null) respond(RemoteCommandLogic.ackRejected("nothing_playing"))
+                else respond(RemoteCommandLogic.ackApplied(state = exported))
+                return@post
+            }
+            val token = serial
+            val startedAt = SystemClock.elapsedRealtime()
+            val deadlineMs = if (name == "session.import") 8800L else 4500L
+            val guard = Runnable {
+                diagnostic("command_timeout", name)
+                respond(RemoteCommandLogic.ackRejected("invalid_state"))
+            }
+            main.postDelayed(guard, deadlineMs)
+            fun finish(body: JSONObject) {
+                main.removeCallbacks(guard)
+                respond(body)
+            }
+            try {
+                command(name, args) { rejection ->
+                    if (replied.get()) return@command
+                    if (token != serial || !owns() || socket !== ownerSocket) {
+                        finish(RemoteCommandLogic.ackRejected("invalid_state"))
+                        return@command
+                    }
+                    if (rejection != null) {
+                        diagnostic("command_rejected", "$name:$rejection")
+                        finish(RemoteCommandLogic.ackRejected(rejection))
+                        return@command
+                    }
+                    diagnostic("command_returned", name)
+                    publish(state())
+                    val remaining = (deadlineMs - (SystemClock.elapsedRealtime() - startedAt)).coerceAtLeast(250L)
+                    publishAndWait(remaining) { rev ->
+                        if (rev != null) finish(RemoteCommandLogic.ackApplied(rev = rev))
+                        else finish(RemoteCommandLogic.ackRejected("invalid_state"))
+                    }
+                }
+            } catch (failure: RemoteCommandRejected) {
+                diagnostic("command_rejected", "$name:${failure.reason}")
+                finish(RemoteCommandLogic.ackRejected(failure.reason))
+            } catch (failure: Exception) {
+                diagnostic("command_failed", name, failure = failure)
+                finish(RemoteCommandLogic.ackRejected("invalid_state"))
+            }
+        }
+    }
+
+    /** Account events reach the WebView tagged with the account they belong to. */
+    private fun forward(event: String, payload: JSONObject) {
+        if (payload.toString().length <= 512 * 1024) NativeDeviceEvents.emit(event, payload.put("generation", epoch))
+    }
+
+    /** Watch another device for the WebView (contract: watching a device); `null` stops. Answers with the
+     * engine's acknowledgement, or `null` when there is no socket yet: the device is then watched on connect. */
+    fun watch(id: String?, done: (JSONObject?) -> Unit) {
+        val owner = profile
+        if (!owns() || owner == null || id != null && (id.isBlank() || id.length > 128)) { done(null); return }
+        val active = socket?.takeIf { it.connected() }
+        val previous = watched?.second
+        watched = id?.let { owner to it }
+        if (active != null && previous != null && previous != id) active.emit("unwatch_device", JSONObject().put("device_id", previous))
+        if (id == null) done(JSONObject().put("ok", true))
+        else if (active == null) done(null)
+        else watchOn(active, id, done)
+    }
+
+    /** Without `done` (a reconnect) the acknowledgement is forwarded as the events it stands for. */
+    private fun watchOn(target: Socket, id: String, done: ((JSONObject?) -> Unit)?) {
+        val token = serial
+        val finished = AtomicBoolean(false)
+        val timeout = Runnable { if (finished.compareAndSet(false, true)) done?.invoke(null) }
+        main.postDelayed(timeout, 8000)
+        target.emit("watch_device", arrayOf<Any>(JSONObject().put("device_id", id)), Ack { arguments -> main.post {
+            main.removeCallbacks(timeout)
+            if (!finished.compareAndSet(false, true)) return@post
+            val ack = arguments.firstOrNull() as? JSONObject
+            val current = token == serial && owns() && socket === target && watched?.second == id
+            if (done != null) { done(if (current) ack else null); return@post }
+            if (!current || ack == null) return@post
+            val now = ack.opt("server_now_ms")
+            ack.optJSONObject("device")?.let { forward("device_updated", JSONObject().put("device", it).put("server_now_ms", now)) }
+            ack.optJSONObject("state")?.let { forward("device_state", it.put("device_id", id).apply { if (!has("server_now_ms")) put("server_now_ms", now) }) }
+        } })
+    }
+
+    private fun exportState(): JSONObject? = snapshot()
+        ?.put("device_id", deviceId)
+        ?.put("device_name", name())
+        ?.put("device_type", "android")
+        ?.put("instance_id", instanceId)
+
+    private fun registration() = RemoteCommandLogic.registration(
+        deviceId = deviceId!!,
+        deviceName = name(),
+        instanceId = instanceId,
+        smallestScreenWidthDp = appContext.resources.configuration.smallestScreenWidthDp,
+    )
+
+    fun changed(immediate: Boolean = true) {
+        dirty = true
+        publish(state())
+        main.removeCallbacks(debouncedReport)
+        if (immediate) report() else main.postDelayed(debouncedReport, 100)
+    }
+
+    private fun publishAndWait(timeoutMs: Long, onResult: (Long?) -> Unit) {
+        if (!owns() || socket?.connected() != true) {
+            onResult(null)
+            return
+        }
+        val done = AtomicBoolean(false)
+        lateinit var waiter: (Long?) -> Unit
+        val timeout = Runnable {
+            if (done.compareAndSet(false, true)) {
+                nextPublishWaiters.remove(waiter)
+                activePublishWaiters.remove(waiter)
+                onResult(null)
+            }
+        }
+        waiter = { rev ->
+            if (done.compareAndSet(false, true)) {
+                main.removeCallbacks(timeout)
+                onResult(rev)
+            }
+        }
+        main.postDelayed(timeout, timeoutMs)
+        main.removeCallbacks(debouncedReport)
+        dirty = true
+        stateRetryAfter = 0L
+        nextPublishWaiters.add(waiter)
+        report(force = true)
+    }
+
+    private fun report(force: Boolean = false) {
+        if (!owns() || socket?.connected() != true || publishing) return
+        val hasWaiters = nextPublishWaiters.isNotEmpty()
+        val body = snapshot() ?: if (hadTrack || force || hasWaiters) {
+            JSONObject().put("track_id", JSONObject.NULL).put("track", JSONObject.NULL)
+                .put("position_sec", 0).put("is_playing", false)
+                .put("live", RemoteCommandLogic.idleLive()).put("session", JSONObject.NULL)
+        } else return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && !hasWaiters && now < stateRetryAfter) return
         val content = body.toString()
-        if (!dirty && content == lastBody && (!body.optBoolean("is_playing") || now - lastPositionPing < 15000)) return
+        if (!force && !hasWaiters && !dirty && content == lastBody && (!body.optBoolean("is_playing") || now - lastPositionPing < 15000)) return
         // Position advances continuously; throttle periodic updates but publish actual transport/queue changes immediately.
-        if (!dirty && now - lastPositionPing < 15000) return
+        if (!force && !hasWaiters && !dirty && now - lastPositionPing < 15000) return
+        val nextSeq = ++seq
         body.put("device_id", deviceId).put("device_name", name()).put("device_type", "android")
+            .put("instance_id", instanceId).put("seq", nextSeq)
         val generation = epoch; val owner = identity; val token = serial
         val requestId = "device-state-" + java.util.UUID.randomUUID()
+        val waiters = nextPublishWaiters.toList()
+        nextPublishWaiters.clear()
+        activePublishWaiters = waiters.toMutableList()
         stateRequest = requestId
         publishing = true; dirty = false
-        worker.execute {
-            val success = runCatching {
-                connection.execute("/api/playback/state", "PUT", body.toString().toRequestBody("application/json".toMediaType()), emptyMap(), generation,
-                    requestId, 8000).use { it.isSuccessful }
-            }.getOrDefault(false)
+        val timeoutMs = if (waiters.isNotEmpty()) 4000L else 8000L
+        publishWorker.execute {
+            val answer = runCatching {
+                connection.execute(
+                    "/api/playback/state", "PUT",
+                    body.toString().toRequestBody("application/json".toMediaType()),
+                    emptyMap(), generation, requestId, timeoutMs,
+                ).use { response ->
+                    val text = response.peekBody(65536).string()
+                    RemoteCommandLogic.parseStatePublishAnswer(response.code, text)
+                }
+            }.getOrDefault(RemoteCommandLogic.PublishAnswer.Failed)
             main.post {
                 if (token != serial) return@post
                 publishing = false; stateRequest = null
+                val settled = activePublishWaiters.toList()
+                activePublishWaiters.clear()
                 if (owns() && generation == epoch && owner == identity) {
-                    if (success) { lastBody = content; lastPositionPing = now; hadTrack = !body.isNull("track_id"); stateRetryAfter = 0 }
-                    else { dirty = true; stateRetryAfter = android.os.SystemClock.elapsedRealtime() + 8000 }
-                    if (dirty) report()
+                    when (answer) {
+                        is RemoteCommandLogic.PublishAnswer.Ok -> {
+                            lastBody = content
+                            lastPositionPing = now
+                            hadTrack = !body.isNull("track_id")
+                            stateRetryAfter = 0L
+                            if (answer.rev != null) lastRev = answer.rev
+                            val resolvedRev = answer.rev ?: lastRev ?: 0L
+                            settled.forEach { it(resolvedRev) }
+                        }
+                        RemoteCommandLogic.PublishAnswer.Stale -> {
+                            settled.forEach { it(lastRev ?: 0L) }
+                        }
+                        RemoteCommandLogic.PublishAnswer.Failed -> {
+                            dirty = true
+                            stateRetryAfter = SystemClock.elapsedRealtime() + 8000
+                            settled.forEach { it(null) }
+                        }
+                    }
+                    if (dirty || nextPublishWaiters.isNotEmpty()) report(force = nextPublishWaiters.isNotEmpty())
+                } else {
+                    settled.forEach { it(null) }
                 }
             }
         }
     }
-    /** Publish fresh native state before Core stops this device and starts its peer. */
+
+    /** Transfer this device's playback to another device through the engine's transfer pipeline. */
     fun handoff(target: String): com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.SessionResult> {
         val future = com.google.common.util.concurrent.SettableFuture.create<androidx.media3.session.SessionResult>()
-        val initial = snapshot()
-        if (!owns() || socket?.connected() != true || handoffFuture != null || initial == null || target == deviceId ||
-            target.isBlank() || target.length > 128) {
-            future.set(androidx.media3.session.SessionResult(androidx.media3.session.SessionError.ERROR_BAD_VALUE)); return future
+        val fromId = deviceId
+        if (!owns() || socket?.connected() != true || handoffFuture != null || fromId == null || snapshot() == null ||
+            target == fromId || target.isBlank() || target.length > 128) {
+            future.set(androidx.media3.session.SessionResult(androidx.media3.session.SessionError.ERROR_BAD_VALUE))
+            return future
         }
         val token = serial; val generation = epoch
-        fun signature(body: JSONObject) = JSONObject(body.toString()).apply { remove("position_sec") }.toString()
-        val source = signature(initial)
-        fun valid() = owns() && serial == token && handoffFuture === future
-        fun unchanged() = valid() && snapshot()?.let { signature(it) == source } == true
-        fun finish(success: Boolean) {
-            if (handoffFuture !== future) return
-            handoffFuture = null; handoffRequest = null
-            future.set(androidx.media3.session.SessionResult(if (success) androidx.media3.session.SessionResult.RESULT_SUCCESS else androidx.media3.session.SessionError.ERROR_IO))
-            publish(state()); dirty = true; report()
-        }
-        fun request(path: String, method: String, body: JSONObject? = null): JSONObject {
-            val id = "device-handoff-" + java.util.UUID.randomUUID()
-            handoffRequest = id
-            return connection.execute(path, method, body?.toString()?.toRequestBody("application/json".toMediaType()), emptyMap(), generation, id, 8000).use {
-                require(it.isSuccessful)
-                val text = it.peekBody(256 * 1024L).string()
-                if (text.isBlank()) JSONObject() else JSONObject(text)
-            }
-        }
-        handoffFuture = future; publish(state())
-        worker.execute {
-            val ready = runCatching {
-                val devices = request("/api/devices", "GET").getJSONArray("devices")
-                (0 until devices.length()).any { devices.getJSONObject(it).let { row -> row.optString("device_id") == target && row.optBoolean("socket_active") } }
+        val requestId = "device-handoff-" + java.util.UUID.randomUUID()
+        handoffRequest = requestId
+        handoffFuture = future
+        publish(state())
+        handoffWorker.execute {
+            val ok = runCatching {
+                connection.execute(
+                    "/api/devices/transfer", "POST",
+                    JSONObject().put("from_device_id", fromId).put("to_device_id", target).toString()
+                        .toRequestBody("application/json".toMediaType()),
+                    emptyMap(), generation, requestId, 18000,
+                ).use { response ->
+                    RemoteCommandLogic.parseTransferOutcome(response.code, response.peekBody(65536).string())
+                }
             }.getOrDefault(false)
             main.post {
-                if (!unchanged() || !ready) { finish(false); return@post }
-                val body = snapshot()!!.put("device_id", deviceId).put("device_name", name()).put("device_type", "android")
-                worker.execute {
-                    val stored = runCatching { request("/api/playback/state", "PUT", body); true }.getOrDefault(false)
-                    main.post {
-                        if (!unchanged() || !stored) { finish(false); return@post }
-                        worker.execute {
-                            val sent = runCatching { request("/api/playback/handoff", "POST", JSONObject().put("from_device_id", deviceId).put("to_device_id", target)); true }.getOrDefault(false)
-                            main.post { if (valid()) finish(sent) }
-                        }
-                    }
-                }
+                if (token != serial || handoffFuture !== future) return@post
+                handoffFuture = null; handoffRequest = null
+                future.set(androidx.media3.session.SessionResult(if (ok) androidx.media3.session.SessionResult.RESULT_SUCCESS else androidx.media3.session.SessionError.ERROR_IO))
+                publish(state()); dirty = true; report()
             }
         }
         return future
     }
+
     private fun reset() {
         diagnostic("reset")
+        main.removeCallbacks(debouncedReport)
         socket?.io()?.off(); socket?.off(); socket?.disconnect(); socket = null
         val previous = client; client = null
-        if (previous != null && !worker.isShutdown) worker.execute {
+        if (previous != null && !publishWorker.isShutdown) publishWorker.execute {
             previous.dispatcher.cancelAll(); previous.connectionPool.evictAll(); previous.dispatcher.executorService.shutdown()
         }
         handoffRequest?.let(connection::cancel); handoffRequest = null
         handoffFuture?.set(androidx.media3.session.SessionResult(androidx.media3.session.SessionError.ERROR_SESSION_DISCONNECTED)); handoffFuture = null
+        val droppedWaiters = activePublishWaiters + nextPublishWaiters
+        activePublishWaiters.clear(); nextPublishWaiters.clear()
+        droppedWaiters.forEach { it(null) }
         serial++; connecting = false; publishing = false
         authRequest?.let(connection::cancel); stateRequest?.let(connection::cancel); authRequest = null; stateRequest = null
-        epoch = -1; identity = null; profile = null; deviceId = null; lastBody = null; hadTrack = false; lastPositionPing = 0; stateRetryAfter = 0; dirty = false
+        epoch = -1; identity = null; profile = null; deviceId = null; lastBody = null; hadTrack = false; lastPositionPing = 0; stateRetryAfter = 0; dirty = false; lastRev = null
         publish(state())
     }
+
     override fun close() {
         if (closed) return
-        closed = true; main.removeCallbacks(tick); connection.resetListeners.remove(resetListener); reset(); worker.shutdown()
+        closed = true
+        if (NativeDeviceEvents.session === this) NativeDeviceEvents.session = null
+        main.removeCallbacks(tick)
+        main.removeCallbacks(debouncedReport)
+        connection.resetListeners.remove(resetListener)
+        reset()
+        publishWorker.shutdown()
+        handoffWorker.shutdown()
     }
+}
+
+/** The service and the WebView's plugin run in one process: the plugin reaches the
+ * device session and its account events here instead of through MediaSession extras. */
+@UnstableApi
+internal object NativeDeviceEvents {
+    @Volatile var session: NativeDeviceSession? = null
+    val listeners = java.util.concurrent.CopyOnWriteArrayList<(String, JSONObject) -> Unit>()
+    fun emit(event: String, payload: JSONObject) = listeners.forEach { it(event, payload) }
 }

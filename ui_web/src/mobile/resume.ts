@@ -1,14 +1,16 @@
 import { createEffect, createSignal, on, onCleanup } from 'solid-js';
-import type { RemotePlaybackState } from '../lib/api';
+import { api, type RemotePlaybackState } from '../lib/api';
 import { request } from '../lib/http';
+import { t } from '../lib/i18n';
+import { remoteCommandMessage } from '../lib/remotePlayback';
 
 const SUPPRESS = 'resume_suppress_until', COOLDOWN = 'resume_cooldown_at';
 const read = (key: string) => { try { return Number(localStorage.getItem(key)) || 0; } catch { return 0; } };
 
 /**
  * Offers, once per account, to continue what another device was playing — the web's resume banner.
- * Accepting asks Core to hand that session to this phone, so the other device stops instead of both playing,
- * and the session arrives through the same native handoff path a transfer uses.
+ * Accepting asks Core to transfer that session to this phone, so the other device stops only once
+ * this phone is playing, and the session arrives through the same transfer path as Devices.
  */
 export function createNativeResume(props: {
   identity: () => number; available: () => boolean; idle: () => boolean; self: () => string | null;
@@ -37,13 +39,18 @@ export function createNativeResume(props: {
   }));
   // Starting anything here answers the question.
   createEffect(on(props.idle, idle => { if (!idle) setOffer(null); }, { defer: true }));
-  async function resume() {
+  async function resume(): Promise<string | null> {
     const remote = offer(), self = props.self(), identity = props.identity();
-    if (!remote?.device_id || !self || busy()) return;
+    if (!remote?.device_id || !self || busy()) return null;
+    const name = remote.device_name ?? t('deviceSheet.fallbackDevice');
     setBusy(true);
     try {
-      await request('/api/playback/handoff', { method: 'POST', body: { from_device_id: remote.device_id, to_device_id: self }, timeoutMs: 8000 });
+      const answer = await api.transfer(remote.device_id, self);
+      if (answer.status !== 'applied') return remoteCommandMessage(answer, name);
       if (identity === props.identity()) setOffer(null);
+      return null;
+    } catch {
+      return remoteCommandMessage(null, name);
     } finally { setBusy(false); }
   }
   function dismiss() {

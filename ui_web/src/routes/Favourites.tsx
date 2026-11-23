@@ -1,6 +1,7 @@
 import { createMemo, Show } from 'solid-js';
 import { A } from '@solidjs/router';
-import { actions, favouriteRows, state } from '../stores';
+import { favouriteRows, state } from '../stores';
+import { player } from '../stores/player';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { ViewHeader } from '../components/ViewHeader';
@@ -44,7 +45,7 @@ export default function Favourites() {
   const play = async (tracks: Track[], index: number) => {
     const row = rows()[index];
     if (!row || savedIsPlayable(row.entry, row.track)) {
-      actions.playFrom(tracks, index, { context: context() });
+      player().actions.playFrom(tracks, index, { context: context() });
       return;
     }
     try {
@@ -57,7 +58,7 @@ export default function Favourites() {
       // Only this row is swapped; its neighbours keep their own identities.
       const queue = tracks.slice();
       queue[index] = { ...row.track, id: resolved.video_id };
-      actions.playFrom(queue, index, { context: context() });
+      player().actions.playFrom(queue, index, { context: context() });
     } catch {
       toast.error(t('search.noPreview'));
     }
@@ -74,7 +75,7 @@ export default function Favourites() {
         <ViewHeader
           title={t('favourites.title')}
           meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
-          actions={state.autoMode.active ? (
+          actions={player().autoMode.active ? (
             <CollectionActions title={t('favourites.title')} tracks={favTracks()} auto />
           ) : undefined}
         />

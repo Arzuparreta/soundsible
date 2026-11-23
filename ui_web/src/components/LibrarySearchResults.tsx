@@ -8,7 +8,8 @@ import { MusicListRow } from './MusicListRow';
 import { openArtistMenu } from './artistActions';
 import { Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { actions, isPlayingTrack } from '../stores';
+import { isPlayingTrack } from '../stores';
+import { player } from '../stores/player';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
@@ -106,7 +107,7 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
                     active={isPlayingTrack(track())}
                     // A search result is a song picked on its own, not a
                     // place in the results: the rest of them do not follow.
-                    onPlay={(played) => actions.playTrack(played)}
+                    onPlay={(played) => player().actions.playTrack(played)}
                     onMenu={openMenu}
                   />
                 </Show>

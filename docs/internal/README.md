@@ -33,6 +33,7 @@ Read the matching handoff before continuing one of these lines of work.
 | Architecture review | [audits/ARCHITECTURE_HANDOFF.md](audits/ARCHITECTURE_HANDOFF.md) |
 | Resource optimization | [audits/ENGINEERING_HANDOFF.md](audits/ENGINEERING_HANDOFF.md) |
 | Web UI architecture review | [audits/WEB_UI_REVIEW_HANDOFF.md](audits/WEB_UI_REVIEW_HANDOFF.md) |
+| Remote control | [remote/HANDOFF.md](remote/HANDOFF.md) — wire contract in [remote/CONTRACT.md](remote/CONTRACT.md) |
 
 ## Folders
 

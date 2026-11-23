@@ -1,12 +1,16 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { actions, nowPlayingOpen, setNowPlayingOpen, state } from '../stores';
+import { nowPlayingOpen, setNowPlayingOpen } from '../stores';
+import { player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import { createTouchMoveLease } from '../lib/touchMoveLease';
+import { Control } from '../design/Control';
+import { connectLabel, openConnect } from './DeviceSheet';
+import { OutputDeviceIcon } from './icons';
 import { ArtworkBackdrop } from './ArtworkBackdrop';
 import { pageVisible } from '../lib/pageVisibility';
 import type { NowPlayingMobilePanel } from './NowPlaying';
@@ -59,8 +63,8 @@ type BackdropState = {
 export function PlayerSurface() {
   const [opened, setOpened] = createSignal(nowPlayingOpen());
   createEffect(() => { if (nowPlayingOpen()) setOpened(true); });
-  const current = createMemo(() => state.playback.currentTrack);
-  const auto = createMemo(() => state.autoMode.active);
+  const current = createMemo(() => player().playback.currentTrack);
+  const auto = createMemo(() => player().autoMode.active);
   const autoAvailable = createMemo(() => !current() || !isPodcastTrack(current()!));
   const art = createMemo(() => {
     const track = current();
@@ -287,13 +291,13 @@ export function PlayerSurface() {
   };
 
   const showNowPlaying = () => {
-    if (auto()) actions.exitAutoMode();
+    if (auto()) player().actions.exitAutoMode();
     setPanel('stage');
   };
 
   const showAuto = () => {
     if (!autoAvailable() || auto()) return;
-    actions.enterAutoMode();
+    player().actions.enterAutoMode();
   };
 
   /** Arrow keys, Home and End walk the mode tabs without choosing one. */
@@ -446,6 +450,7 @@ export function PlayerSurface() {
         }}
         data-player-surface-open={nowPlayingOpen() ? '' : undefined}
         data-surface-animating={surfaceAnimating() ? '' : undefined}
+        data-remote={player().remote ? '' : undefined}
         data-player-stage=""
         aria-hidden={!nowPlayingOpen()}
         tabIndex={-1}
@@ -505,17 +510,46 @@ export function PlayerSurface() {
             </button>
           </div>
 
-          <button
-            classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
-            type="button"
-            aria-label={t('common.close')}
-            onClick={() => closeSurface()}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
+          <div class={styles.chromeRight}>
+            <Control
+              class={styles.deviceButton}
+              classList={{ [styles.deviceButtonActive]: player().remote, [styles.deviceButtonError]: player().unreachable }}
+              aria-label={connectLabel()}
+              title={connectLabel()}
+              data-device-trigger="player-header"
+              onClick={openConnect}
+            >
+              <OutputDeviceIcon size={18} />
+              <Show when={player().remote}>
+                <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
+              </Show>
+            </Control>
+            <button
+              classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
+              type="button"
+              aria-label={t('common.close')}
+              onClick={() => closeSurface()}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* The phone header has no room for the device's name: it gets a line of its own. */}
+        <Show when={mobileLayout() && player().remote}>
+          <Control
+            class={styles.remoteBanner}
+            classList={{ [styles.deviceButtonError]: player().unreachable }}
+            data-no-surface-swipe=""
+            data-device-trigger="player-banner"
+            onClick={openConnect}
+          >
+            <OutputDeviceIcon size={14} />
+            <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
+          </Control>
+        </Show>
 
         <div
           id="now-playing-view"

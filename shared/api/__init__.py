@@ -14,7 +14,7 @@ import time
 from html import escape as html_escape
 from pathlib import Path
 from flask import Flask, g, request, jsonify, send_from_directory, Response, redirect, make_response
-from flask_socketio import join_room
+from flask_socketio import join_room, leave_room
 from flask_cors import CORS
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,10 @@ from shared.playback_state import (  # noqa: F401  # aliases re-exported to blue
     get_state as get_playback_state,
     put_state as put_playback_state,
     get_scope_from_request,
+    get_registered_device,
+    get_watch_state,
     register_device,
-    mark_device_socket_active,
+    register_socket_instance,
     unregister_socket,
 )
 from shared.downloader.settings import setting
@@ -58,7 +60,13 @@ from .errors import register_error_handlers
 from .origins import make_socket_origin_check, rest_origins, socket_origins
 from shared.download_pump import queue_manager_dl, start_downloader_pump
 from shared.orchestrator import orchestrator
-from shared.realtime import socketio, user_room
+from shared.realtime import (
+    emit_device_updated,
+    server_now_ms,
+    socketio,
+    user_room,
+    watch_room,
+)
 from shared.station_addresses import active_endpoints
 from shared.user_cores import get_user_core
 
@@ -262,8 +270,9 @@ def _unbind_request_user(_exc=None):
 
 @socketio.on('playback_register')
 def on_playback_register(data):
-    """Register this socket for playback stop requests. Join room playback:{scope}:{device_id}."""
-    device_id = (data or {}).get('device_id')
+    """Register this socket instance for remote control and broadcast its device row."""
+    payload = data if isinstance(data, dict) else {}
+    device_id = str(payload.get('device_id') or '').strip()
     if not device_id:
         return
     # Socket events bypass Flask's user-binding hooks. Resolve the account for
@@ -276,15 +285,65 @@ def on_playback_register(data):
             return
         with user_context(user_id):
             scope = get_scope_from_request()
-            register_device(
+            row, moved_from = register_socket_instance(
                 scope,
-                device_id=device_id,
-                device_name=(data or {}).get("device_name"),
-                device_type=(data or {}).get("device_type") or "desktop",
+                device_id,
+                request.sid,
+                device_name=payload.get("device_name"),
+                device_type=payload.get("device_type"),
+                form_factor=payload.get("form_factor"),
+                instance_id=payload.get("instance_id"),
+                protocol=payload.get("protocol"),
+                commands=payload.get("commands"),
             )
-            room = f"playback:{scope}:{device_id}"
-            join_room(room, sid=request.sid)
-            mark_device_socket_active(scope, device_id, request.sid)
+            if moved_from:
+                old_scope, old_row = moved_from
+                emit_device_updated(old_scope, old_row)
+            if row:
+                emit_device_updated(scope, row)
+
+
+@socketio.on("watch_device")
+def on_watch_device(data):
+    """Subscribe this socket to live playback updates for one device in its own account."""
+    payload = data if isinstance(data, dict) else {}
+    device_id = str(payload.get("device_id") or "").strip()
+    now_ms = server_now_ms()
+    if not device_id:
+        return {"device": None, "state": None, "server_now_ms": now_ms, "error": "unknown_device"}
+    from shared.user_context import user_context
+
+    with request_scope.request_scope():
+        user_id = _resolve_request_user_id()
+        if not user_id:
+            return {"device": None, "state": None, "server_now_ms": now_ms, "error": "unknown_device"}
+        with user_context(user_id):
+            scope = get_scope_from_request()
+            row = get_registered_device(scope, device_id)
+            if not row:
+                return {"device": None, "state": None, "server_now_ms": now_ms, "error": "unknown_device"}
+            join_room(watch_room(scope, device_id), sid=request.sid)
+            state = get_watch_state(scope, device_id)
+            return {"device": row, "state": state, "server_now_ms": server_now_ms()}
+
+
+@socketio.on("unwatch_device")
+def on_unwatch_device(data):
+    """Unsubscribe this socket from live playback updates for one device."""
+    payload = data if isinstance(data, dict) else {}
+    device_id = str(payload.get("device_id") or "").strip()
+    if not device_id:
+        return {"ok": False}
+    from shared.user_context import user_context
+
+    with request_scope.request_scope():
+        user_id = _resolve_request_user_id()
+        if not user_id:
+            return {"ok": False}
+        with user_context(user_id):
+            scope = get_scope_from_request()
+            leave_room(watch_room(scope, device_id), sid=request.sid)
+            return {"ok": True, "device_id": device_id}
 
 
 #: How often an open socket's credential is checked again. A socket is
@@ -339,7 +398,10 @@ def on_socket_connect(auth=None):
 @socketio.on("disconnect")
 def on_socket_disconnect():
     _admitted_sockets.pop(request.sid, None)
-    unregister_socket(request.sid)
+    updated = unregister_socket(request.sid)
+    if updated:
+        scope, row = updated
+        emit_device_updated(scope, row)
 
 
 def recheck_sockets() -> int:

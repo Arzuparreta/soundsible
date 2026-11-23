@@ -19,6 +19,7 @@ import {
   isPlayingItem,
   isPlayingResult,
 } from '../stores';
+import { player } from '../stores/player';
 import { coverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import { artistPath, albumPath } from '../lib/artistRoute';
@@ -714,7 +715,7 @@ export default function Search() {
         source: 'search',
       }).catch(() => {});
     }
-    actions.playTrack({
+    player().actions.playTrack({
       id: result.id,
       title: result.title,
       ...credit,

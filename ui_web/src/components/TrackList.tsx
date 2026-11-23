@@ -2,7 +2,8 @@ import type { MenuEvent } from '../lib/menuEvent';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { Show, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { actions, isPlayingTrack } from '../stores';
+import { isPlayingTrack } from '../stores';
+import { player } from '../stores/player';
 import SongRow from './SongRow';
 import { CollectionRows } from './CollectionView';
 import { openTrackMenu, type TrackMenuContext } from './trackActions';
@@ -85,7 +86,7 @@ export default function TrackList(props: {
                 onPlay={() =>
                   props.onPlay
                     ? props.onPlay(props.tracks, index())
-                    : actions.playFrom(props.tracks, index(), { context: props.context })
+                    : player().actions.playFrom(props.tracks, index(), { context: props.context })
                 }
                 music={libraryTrackMusic(track())}
                 onMenu={openMenu}

@@ -22,9 +22,9 @@ class DeviceCatalogSessionTest {
     private fun run(origin: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation(); val context = instrumentation.targetContext
         val connection = EngineConnection.shared(context); connection.clearSession(true); val epoch = connection.configure(origin)
-        fun core(path: String, method: String = "GET", body: JSONObject? = null): JSONObject = connection.execute(path, method,
+        fun core(path: String, method: String = "GET", body: JSONObject? = null, expected: Int = 200): JSONObject = connection.execute(path, method,
             body?.toString()?.toRequestBody("application/json".toMediaType()), emptyMap(), epoch, "device-catalog-${java.util.UUID.randomUUID()}", 15000).use {
-                val text = it.body?.string().orEmpty(); assertEquals("$path: $text", 200, it.code); if (text.isBlank()) JSONObject() else JSONObject(text)
+                val text = it.body?.string().orEmpty(); assertEquals("$path: $text", expected, it.code); if (text.isBlank()) JSONObject() else JSONObject(text)
             }
         core("/api/auth/login", "POST", JSONObject().put("username", "member").put("password", "android-test"))
         core("/api/discovery/settings", "PATCH", JSONObject().put("autoplay_enabled", false))
@@ -53,12 +53,12 @@ class DeviceCatalogSessionTest {
             val queue = JSONArray().put(JSONObject().put("id", "member-track").put("title", "Current local").put("queueId", "local").put("queueLane", "manual").put("queueSource", "library"))
                 .put(pending("deezer:track:900001", "fixture resolved song"))
                 .put(pending("deezer:track:900002", "unresolved fixture future"))
-            fun handoff(rows: JSONArray, index: Int) {
+            fun handoff(rows: JSONArray, index: Int, expected: Int = 200) {
                 val session = JSONObject().put("v", 1).put("mode", "now_playing").put("queue", rows).put("index", index).put("shuffle", false).put("repeat", "off")
                     .put("radio", JSONObject().put("active", false).put("seedId", JSONObject.NULL)).put("auto", JSONObject.NULL)
                 core("/api/playback/state", "PUT", JSONObject().put("device_id", peerId).put("track_id", rows.getJSONObject(index).getString("id"))
                     .put("track", rows.getJSONObject(index)).put("position_sec", 0).put("is_playing", false).put("session", session))
-                core("/api/playback/handoff", "POST", JSONObject().put("from_device_id", peerId).put("to_device_id", id))
+                core("/api/devices/transfer", "POST", JSONObject().put("from_device_id", peerId).put("to_device_id", id), expected = expected)
             }
             capture = NativeProgramOutput.subscribe(epoch) { block -> if (block.bytes.any { it != 0.toByte() }) pcm.set(true) }
             handoff(queue, 0)
@@ -97,7 +97,7 @@ class DeviceCatalogSessionTest {
             pcm.set(false); handoff(JSONArray().put(pending("deezer:track:retry", "fixture resolved song")), 0)
             await("Temporary matcher errors did not recover native PCM") { main { active.mediaItemCount == 1 && active.currentMediaItem?.mediaId == "C1111111111" && active.isPlaying } && pcm.get() }
             control(503, -1)
-            handoff(JSONArray().put(pending("deezer:track:exhaust", "fixture resolved song")), 0)
+            handoff(JSONArray().put(pending("deezer:track:exhaust", "fixture resolved song")), 0, expected = 409)
             await("Matcher retry did not exhaust") { main { active.playerError != null } }
             assertEquals(1, main { active.mediaItemCount })
             assertNotNull(main { active.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.PENDING) })
@@ -112,7 +112,10 @@ class DeviceCatalogSessionTest {
             // local selection, without requiring a published handoff session.
             fun remote(track: JSONObject) {
                 pcm.set(false)
-                core("/api/playback/remote-command", "POST", JSONObject().put("device_id", id).put("command", "play").put("track", track))
+                val answer = core("/api/devices/$id/commands", "POST", JSONObject()
+                    .put("name", "play.tracks")
+                    .put("args", JSONObject().put("tracks", JSONArray().put(track)).put("index", 0)))
+                assertEquals("applied", answer.optString("status"))
             }
             remote(JSONObject().put("id", "C1111111111").put("source", "preview").put("title", "Portable stream").put("artist", "fixture artist"))
             await("Portable stream did not replace the native programme") { pcm.get() && main { active.mediaItemCount == 1 && active.isPlaying && active.mediaMetadata.title.toString() == "Portable stream" } }
@@ -124,7 +127,17 @@ class DeviceCatalogSessionTest {
             await("Portable episode did not mint a native podcast source") { pcm.get() && main { active.mediaItemCount == 1 && active.isPlaying && active.mediaMetadata.title.toString() == "Portable episode" && active.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true } }
             // Reset while a real delayed matcher is in flight cannot populate the cleared programme.
             val delayed = JSONArray().put(pending("deezer:track:999999", "fixture review song cancel"))
-            handoff(delayed, 0)
+            val delayedSession = JSONObject().put("v", 1).put("mode", "now_playing").put("queue", delayed).put("index", 0).put("shuffle", false).put("repeat", "off")
+                .put("radio", JSONObject().put("active", false).put("seedId", JSONObject.NULL)).put("auto", JSONObject.NULL)
+            core("/api/playback/state", "PUT", JSONObject().put("device_id", peerId).put("track_id", "deezer:track:999999")
+                .put("track", delayed.getJSONObject(0)).put("position_sec", 0).put("is_playing", false).put("session", delayedSession))
+            Thread {
+                runCatching {
+                    connection.execute("/api/devices/transfer", "POST",
+                        JSONObject().put("from_device_id", peerId).put("to_device_id", id).toString().toRequestBody("application/json".toMediaType()),
+                        emptyMap(), epoch, "device-catalog-delayed", 15000).close()
+                }
+            }.apply { isDaemon = true }.start()
             await("Delayed matcher never started") { val calls = core("/api/android-fixture/catalog-stats").getJSONArray("calls")
                 (0 until calls.length()).any { calls.getJSONObject(it).optString("title") == "fixture review song cancel" } }
             main { connection.clearSession(false) }

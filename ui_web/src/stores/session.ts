@@ -1,6 +1,7 @@
+import { createEffect, createRoot } from 'solid-js';
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { user } from "../lib/session";
-import { api, type RemotePlaybackState } from "../lib/api";
+import { api, type LiveDjState, type LivePlaybackPhase, type LivePlaybackState, type RemotePlaybackState } from "../lib/api";
 import { audioService } from "../lib/audio";
 import { ProgramMediaSession, type MediaSessionSyncReason } from "../lib/mediaSession";
 import { isPodcastTrack } from "../lib/track";
@@ -9,7 +10,7 @@ import { createQueueEntry, futureEntries, isPendingEntry, type PlaybackQueueEntr
 import { buildPlaybackSession, readPlaybackSession, type PlaybackSessionSnapshot } from "../lib/playbackSession";
 import type { Track } from "../types/music";
 import { state, setState, resumeState, setResumeState, type RepeatMode } from "./core";
-import type { PlayerActions, LoadOptions, PublishedPlaybackState } from "./contracts";
+import type { CommittedTransition, PlayerActions, LoadOptions, PublishedPlaybackState } from "./contracts";
 export interface SessionPorts {
   releasePreparation: () => void;
   runWhenAudible: (() => void) | null;
@@ -26,6 +27,7 @@ export interface SessionPorts {
     attemptId: string;
     url: string;
   } | null;
+  committedTransition: CommittedTransition | null;
   autoSessionEpoch: number;
   autoPlaybackPrefs: {
     shuffle: boolean;
@@ -67,30 +69,122 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
     });
   }
   let publishedSession: string | null = null;
-  function sessionOutOfDate(): boolean {
-    return JSON.stringify(sessionSnapshot() ?? null) !== publishedSession;
+  let publishedLive: string | null = null;
+  /** The session as JSON, kept by `startSessionSync` while it runs, so a volume
+   * or phase change never rebuilds and stringifies the whole session. */
+  let trackedSession: string | null = null;
+  let publishSeq = 0;
+  let lastAcceptedSeq = 0;
+  let lastRev: number | null = null;
+  let sessionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const SESSION_PUBLISH_DEBOUNCE_MS = 200;
+
+  function livePhase(override: { track?: Track | null; is_playing?: boolean }): LivePlaybackPhase {
+    const pb = state.playback;
+    const track = override.track !== undefined ? override.track : pb.currentTrack;
+    if (!track) return 'idle';
+    if (pb.needsGesture) return 'needs_gesture';
+    if (pb.phase === 'failed' || pb.loadError) return 'error';
+    if (override.is_playing === false && pb.phase === 'playing') return 'paused';
+    if (pb.phase === 'recovering' || pb.phase === 'starved') return 'buffering';
+    return pb.phase;
   }
+
+  function liveState(override: { track?: Track | null; is_playing?: boolean } = {}): LivePlaybackState {
+    const pb = state.playback;
+    const track = override.track !== undefined ? override.track : pb.currentTrack;
+    const duration = track && Number.isFinite(pb.duration) && pb.duration >= 0 ? pb.duration : 0;
+    let dj: LiveDjState | null = null;
+    if (state.autoMode.active) {
+      const tr = state.autoMode.transition;
+      const nextQueueId = tr.status === 'idle' ? undefined : (ports.committedTransition?.queueId ?? undefined);
+      dj = {
+        phase: state.autoMode.phase,
+        repairing: state.autoMode.repairing,
+        pending_direction: state.autoMode.pendingDirection,
+        mixing: pb.djMixing,
+        transition: {
+          status: tr.status,
+          ...(nextQueueId ? { next_queue_id: nextQueueId } : {}),
+          ...(typeof tr.at === 'number' && Number.isFinite(tr.at) ? { at: tr.at } : {}),
+        },
+      };
+    }
+    return {
+      phase: livePhase(override),
+      duration,
+      volume: { level: pb.volume, muted: pb.muted },
+      dj,
+    };
+  }
+
+  function sessionJson(): string {
+    return trackedSession ?? JSON.stringify(sessionSnapshot() ?? null);
+  }
+
+  function sessionOutOfDate(): boolean {
+    return sessionJson() !== publishedSession;
+  }
+
+  function liveOutOfDate(): boolean {
+    return JSON.stringify(liveState()) !== publishedLive;
+  }
+
+  function cancelSessionDebounce(): void {
+    if (sessionDebounceTimer !== null) {
+      lifetime.clearTimeout(sessionDebounceTimer);
+      sessionDebounceTimer = null;
+    }
+  }
+
+  function scheduleSessionPublish(): void {
+    cancelSessionDebounce();
+    sessionDebounceTimer = lifetime.setTimeout(() => {
+      sessionDebounceTimer = null;
+      if (!state.playback.currentTrack && !state.autoMode.active) return;
+      if (sessionOutOfDate() || liveOutOfDate()) void pushPlaybackState();
+    }, SESSION_PUBLISH_DEBOUNCE_MS);
+  }
+
+  function startSessionSync(): void {
+    createRoot(dispose => {
+      lifetime.own(() => {
+        cancelSessionDebounce();
+        trackedSession = null;
+        dispose();
+      });
+      // Session and live fields are tracked apart (never `currentTime`), so
+      // queue/route/setting edits publish promptly and a volume drag does not
+      // rebuild the session.
+      const changed = (primed: boolean) => {
+        if (primed && (state.playback.currentTrack || state.autoMode.active)) scheduleSessionPublish();
+        return true;
+      };
+      createEffect<boolean>(primed => {
+        trackedSession = JSON.stringify(sessionSnapshot() ?? null);
+        return changed(primed);
+      }, false);
+      createEffect<boolean>(primed => {
+        void JSON.stringify(liveState());
+        return changed(primed);
+      }, false);
+    });
+  }
+
   function playbackStateBody(override: Partial<{
     track: Track | null;
     position_sec: number;
     is_playing: boolean;
-  }> = {}): {
-    track_id: string | null;
-    track: Track | null;
-    position_sec: number;
-    is_playing: boolean;
-    device_id: string;
-    device_name: string;
-    device_type: string;
-    session?: PlaybackSessionSnapshot | null;
-  } {
+    includeSession: boolean;
+    seq: number;
+  }> = {}): PublishedPlaybackState {
     const pb = state.playback;
     const track = override.track !== undefined ? override.track : pb.currentTrack;
     // No track is the end of a session, not a session nobody described: clearing
     // it explicitly is what stops another device offering to resume music this
     // one has already stopped playing.
-    const session = track ? sessionSnapshot() : null;
-    const serialized = JSON.stringify(session ?? null);
+    const includeSession = override.includeSession === true || (track ? sessionJson() : 'null') !== publishedSession;
+    const session = includeSession && track ? sessionSnapshot() : null;
     return {
       track_id: track?.id ?? null,
       track: track ?? null,
@@ -99,9 +193,10 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
       device_id: state.device.device_id,
       device_name: state.device.device_name,
       device_type: state.device.device_type,
-      ...(serialized === publishedSession ? {} : {
-        session
-      })
+      instance_id: state.device.instance_id,
+      seq: override.seq ?? publishSeq,
+      live: liveState(override),
+      ...(includeSession ? { session } : {}),
     };
   }
   function livePosition(): number {
@@ -109,27 +204,40 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
     return Number.isFinite(live) ? live : state.playback.currentTime || 0;
   }
   const KEEPALIVE_BUDGET_BYTES = 56 * 1024;
-  function pushPlaybackState(opts: {
+  async function pushPlaybackState(opts: {
     keepalive?: boolean;
     body?: PublishedPlaybackState;
-  } = {}): void {
-    const body = opts.body ?? playbackStateBody();
+  } = {}): Promise<number | null> {
+    cancelSessionDebounce();
+    const isCurrent = lifetime.capture();
+    const seq = ++publishSeq;
+    const body: PublishedPlaybackState = opts.body ? { ...opts.body, seq } : playbackStateBody({ seq });
     const sent = 'session' in body ? JSON.stringify(body.session ?? null) : null;
+    const sentLive = JSON.stringify(body.live);
     const keepalive = opts.keepalive && JSON.stringify(body).length <= KEEPALIVE_BUDGET_BYTES;
-    void api.putPlaybackState(body, {
-      keepalive
-    })
-    // Only once it is stored. A session dropped by a failed request has to ride
-    // the next ping, or the device that picks this one up gets the song without
-    // anything that was around it.
-    .then(lifetime.guard(() => {
-      if (sent !== null) publishedSession = sent;
-    })).catch(lifetime.guard(() => {}));
+    try {
+      const res = await api.putPlaybackState(body, { keepalive });
+      if (!isCurrent()) return null;
+      // Only once it is stored. A session dropped by a failed request or stale
+      // seq has to ride the next ping, or the device that picks this one up gets
+      // the song without anything that was around it.
+      if (res?.status !== 'stale' && seq >= lastAcceptedSeq) {
+        lastAcceptedSeq = seq;
+        if (sent !== null) publishedSession = sent;
+        publishedLive = sentLive;
+      }
+      if (typeof res?.rev === 'number' && (lastRev === null || res.rev > lastRev)) {
+        lastRev = res.rev;
+      }
+      return typeof res?.rev === 'number' ? res.rev : lastRev;
+    } catch {
+      return isCurrent() ? lastRev : null;
+    }
   }
   function pushEmptyPlaybackState(opts: {
     keepalive?: boolean;
   } = {}): void {
-    pushPlaybackState({
+    void pushPlaybackState({
       keepalive: opts.keepalive,
       body: playbackStateBody({
         track: null,
@@ -368,6 +476,8 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
     updateMediaSession,
     pushEmptyPlaybackState,
     pushPlaybackState,
+    startSessionSync,
+    lastRev: () => lastRev,
     get RESUME_HANDOFF_ATTEMPTS() {
       return RESUME_HANDOFF_ATTEMPTS;
     },

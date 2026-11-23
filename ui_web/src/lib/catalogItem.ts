@@ -6,6 +6,7 @@ import { api } from './api';
 import { toast } from './toast';
 import { t } from './i18n';
 import { actions, isPlayingItem, state } from '../stores';
+import { player } from '../stores/player';
 import { catalogItemKeys } from './playbackIdentity';
 import type { CatalogItem, Track } from '../types/music';
 import type { ContextTrack, PlaybackContextDescriptor } from './playbackQueue';
@@ -57,11 +58,11 @@ export async function playCatalogItem(
 
   const play = (track: Track) => {
     if (!queue) {
-      actions.playTrack(track);
+      player().actions.playTrack(track);
       return;
     }
     const { tracks, index } = catalogContext(queue, item, track);
-    actions.playFrom(tracks, index, { context });
+    player().actions.playFrom(tracks, index, { context });
   };
 
   const existing = itemToTrack(item);
@@ -168,12 +169,12 @@ export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSigna
 }
 
 export async function useCatalogCollection(items: CatalogItem[], label: string, purpose: 'reference' | 'request' | 'change' | 'start', beforeQueueId?: string, isCurrent: () => boolean = () => true, reservedEpoch?: number, onChangeStarted?: () => void): Promise<boolean> {
-  const epoch = reservedEpoch ?? ((purpose === 'change' || purpose === 'start') ? actions.beginAutoSessionChange() : actions.autoSessionToken());
+  const epoch = reservedEpoch ?? ((purpose === 'change' || purpose === 'start') ? player().actions.beginAutoSessionChange() : player().actions.autoSessionToken());
   const progress = toast.loading(t('collection.resolving'));
   const tracks: Track[] = [];
   const failed: string[] = [];
   for (let offset = 0; offset < items.length; offset += 3) {
-    if (!state.autoMode.active || actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
+    if (!player().autoMode.active || player().actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
     const batch = await Promise.all(items.slice(offset, offset + 3).map(async (item) => {
       try {
         const track = await resolveCatalogTrack(item);
@@ -184,26 +185,26 @@ export async function useCatalogCollection(items: CatalogItem[], label: string, 
     }));
     tracks.push(...batch.filter((track): track is Track => track !== null));
   }
-  if (!state.autoMode.active || actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
+  if (!player().autoMode.active || player().actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
   progress.dismiss();
   if (purpose === 'start' || purpose === 'change') {
     if (failed.length) toast.error(t('musicExplorer.collectionFailed', { titles: failed.join(', ') }));
     if (!tracks.length) return false;
-    if (purpose === 'start') return actions.startDjSelection(tracks, label);
-    const changing = actions.changeAutoSession(tracks, label);
+    if (purpose === 'start') return player().actions.startDjSelection(tracks, label);
+    const changing = player().actions.changeAutoSession(tracks, label);
     onChangeStarted?.();
     return changing;
   }
-  if (purpose === 'request') await actions.placeAutoTracks(tracks, beforeQueueId);
-  else if (tracks.length) actions.addAutoSource(tracks, label);
+  if (purpose === 'request') await player().actions.placeAutoTracks(tracks, beforeQueueId);
+  else if (tracks.length) player().actions.addAutoSource(tracks, label);
   if (failed.length) toast.error(t('musicExplorer.collectionFailed', { titles: failed.join(', ') }));
   else if (purpose === 'reference' && tracks.length) toast.success(t('autoMode.source.added', { title: label }));
-  return tracks.length > 0 && isCurrent() && actions.autoSessionToken() === epoch;
+  return tracks.length > 0 && isCurrent() && player().actions.autoSessionToken() === epoch;
 }
 
 /** Whether a catalog row is mid-flight — being matched, or matched and buffering.
  * Both read the same to a listener: it is working. */
 export function itemBusy(item: CatalogItem): boolean {
   if (resolvingItemId() === item.id) return true;
-  return state.playback.isLoading && isPlayingItem(item);
+  return player().playback.isLoading && isPlayingItem(item);
 }

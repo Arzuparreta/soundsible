@@ -1,9 +1,43 @@
 import { io, type Socket } from 'socket.io-client';
 import { apiOrigin } from './config';
-import type { DeviceRegistration } from './api';
+import type { Device, DeviceCommandAnswer, DeviceRegistration, LivePlaybackState } from './api';
 import type { DiscoveryFeedReadyEvent } from './discoveryEvents';
+import type { PlaybackSessionSnapshot } from './playbackSession';
+import type { Track } from '../types/music';
 
-/** Server → client events (mirrors the legacy connection.js contract). */
+export interface DeviceCommandRequest {
+  name: string;
+  args?: Record<string, unknown>;
+}
+
+export type DeviceCommandAck = DeviceCommandAnswer;
+
+export interface DeviceUpdatedEvent {
+  device: Device;
+  server_now_ms?: number;
+}
+
+export interface DeviceStateEvent {
+  device_id: string;
+  rev: number;
+  track_id: string | null;
+  track: Track | null;
+  position_sec: number;
+  is_playing: boolean;
+  measured_at_ms?: number | null;
+  live?: LivePlaybackState | null;
+  session?: PlaybackSessionSnapshot | null;
+  server_now_ms?: number;
+}
+
+export interface WatchDeviceAck {
+  device: Device | null;
+  state: DeviceStateEvent | null;
+  server_now_ms?: number;
+  error?: string;
+}
+
+/** Server → client events. */
 export interface ServerToClientEvents {
   connect: () => void;
   disconnect: () => void;
@@ -15,16 +49,16 @@ export interface ServerToClientEvents {
   downloader_log: (data: unknown) => void;
   downloader_update: (data: unknown) => void;
   discovery_feed_ready: (data: DiscoveryFeedReadyEvent) => void;
-  playback_stop_requested: () => void;
-  playback_start_requested: (data: { state?: { position_sec?: number }; track?: Record<string, unknown> }) => void;
-  playback_next_requested: () => void;
-  playback_previous_requested: () => void;
-  playback_seek_requested: (data: { position_sec?: number }) => void;
+  device_command: (payload: DeviceCommandRequest, ack?: (response: DeviceCommandAck) => void) => void;
+  device_updated: (payload: DeviceUpdatedEvent) => void;
+  device_state: (payload: DeviceStateEvent) => void;
 }
 
 /** Client → server events. */
 export interface ClientToServerEvents {
   playback_register: (registration: DeviceRegistration) => void;
+  watch_device: (payload: { device_id: string }, ack?: (response: WatchDeviceAck) => void) => void;
+  unwatch_device: (payload: { device_id: string }, ack?: (response: { ok?: boolean; device_id?: string }) => void) => void;
 }
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;

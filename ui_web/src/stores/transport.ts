@@ -72,6 +72,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
   let activeAttempt: PlaybackAttempt | null = null;
   let stallRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   let stallBufferedEnd = 0;
+  let startSettled: Promise<void> = Promise.resolve();
   function playbackSourceKind(track: Track): PlaybackSourceKind {
     if (isPodcastTrack(track)) return 'podcast';
     return track.source === 'preview' ? 'preview' : 'local';
@@ -409,7 +410,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       ports.podcastSourcePending = false;
       return audioService.load(podcastStreamUrl(stream_token), 1, resumePosition);
     })) : staged ?? (opts.freshDeck ? audioService.recover(trackUrl(track), resumePosition, level, { requestPlayback: true }) : isPodcastTrack(track) ? audioService.load(trackUrl(track), level, resumePosition) : audioService.load(trackUrl(track), level));
-    void Promise.resolve(start).catch(lifetime.guard((error: unknown) => onStartRejected(generation, error)));
+    startSettled = Promise.resolve(start).then(() => undefined, lifetime.guard((error: unknown) => onStartRejected(generation, error)));
     // `waiting` is not guaranteed for a media element whose play promise never
     // settles. Arm startup supervision from the request itself so an infinite
     // 0:00 spinner has a bounded recovery path.
@@ -848,7 +849,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         isLoading: true,
         phase: 'loading'
       });
-      void audioService.resume(origin).catch(lifetime.guard((error: unknown) => onStartRejected(attempt.generation, error)));
+      startSettled = audioService.resume(origin).then(() => undefined, lifetime.guard((error: unknown) => onStartRejected(attempt.generation, error)));
     },
     pausePlayback(origin: ProgramTransportOrigin = 'ui'): void {
       const pb = state.playback;
@@ -1061,7 +1062,11 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       ++loadGeneration;
       activeAttempt = null;
       runWhenAudible = null;
+      startSettled = Promise.resolve();
       clearStallTimer();
+    },
+    get startSettled() {
+      return startSettled;
     },
     actions: domainActions,
     get runWhenAudible() {

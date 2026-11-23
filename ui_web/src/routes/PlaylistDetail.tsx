@@ -1,7 +1,8 @@
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createMemo, createSignal, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
-import { state, actions, musicLibrary } from '../stores';
+import { actions, state, musicLibrary } from '../stores';
+import { player } from '../stores/player';
 import TrackList from '../components/TrackList';
 import { BackIcon, MoreIcon, PlayIcon } from '../components/icons';
 import { CoverImage } from '../components/CoverImage';
@@ -42,12 +43,12 @@ export default function PlaylistDetail() {
 
   const playAll = () => {
     if (tracks().length > 0) {
-      if (state.autoMode.active) {
+      if (player().autoMode.active) {
         // A playlist is one source for the DJ, never a list of requests.
-        void actions.startDjSelection(tracks(), name());
+        void player().actions.startDjSelection(tracks(), name());
         return;
       }
-      actions.playFrom(tracks(), 0, { context: context() });
+      player().actions.playFrom(tracks(), 0, { context: context() });
     }
   };
 
@@ -84,9 +85,9 @@ export default function PlaylistDetail() {
           <div class={hero.toolbar} data-entity-toolbar>
             <span class={hero.context}>{trackCount(trackIds().length)}</span>
             <button class={hero.play} type="button" onClick={playAll} disabled={tracks().length === 0}
-              aria-label={state.autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}>
+              aria-label={player().autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}>
               <PlayIcon size={16} />
-              <span class={hero.primaryLabel}>{state.autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}</span>
+              <span class={hero.primaryLabel}>{player().autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}</span>
             </button>
               <button class={hero.options} type="button" aria-label={t('playlistDetail.ariaOptions')} aria-haspopup="dialog" onClick={openMenu}>
                 <MoreIcon size={20} />

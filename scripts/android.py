@@ -20,6 +20,8 @@ import ssl
 ROOT = Path(__file__).resolve().parents[1]
 ANDROID = ROOT / "android"
 UI = ROOT / "ui_web"
+# Internal plain-HTTP port of the engine behind the 5099 TLS proxy.
+TLS_UPSTREAM = 15099
 
 
 def run(*args: str, cwd: Path = ROOT, capture: bool = False) -> str:
@@ -229,7 +231,10 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                     )
                 )
                 fixtures = ((5097, False),) if restart_only else ((5097, False), (5098, True), (5099, False))
-                for port, passwordless in fixtures:
+                # Production engines serve plain HTTP behind a TLS proxy, so the
+                # TLS fixture is a plain engine on TLS_UPSTREAM behind
+                # android_tls_proxy.py on 5099; the engine never terminates TLS.
+                for port in [port for port, _ in fixtures] + ([TLS_UPSTREAM] if not restart_only else []):
                     with socket.socket() as probe:
                         probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         try:
@@ -238,13 +243,14 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                             raise RuntimeError(
                                 f"Fixture port {port} is occupied; stop the previous test fixture"
                             ) from None
+                for port, passwordless in fixtures:
                     command = [
                         sys.executable,
                         str(ROOT / "scripts/android_fixture.py"),
                         "--root",
                         str(Path(temporary) / str(port)),
                         "--port",
-                        str(port),
+                        str(TLS_UPSTREAM if port == 5099 else port),
                         "--run-id",
                         Path(temporary).name,
                     ]
@@ -254,21 +260,27 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                     command.extend(("--audio-format", fixture_format))
                     if passwordless:
                         command.append("--passwordless")
-                    if port == 5099:
-                        command.extend(("--tls-cert", str(certificate), "--tls-key", str(key)))
                     # Import project modules independently of the caller's working directory.
                     environment = {**os.environ, "PYTHONPATH": str(ROOT)}
                     if live_fixture is not None:
                         environment.update(SOUNDSIBLE_ANDROID_LIVE_FIXTURE="1", SOUNDSIBLE_COMMUNITY_URL="https://10.0.2.2:28443", REQUESTS_CA_BUNDLE=str(ca_path), NO_PROXY="10.0.2.2,127.0.0.1,localhost")
                     process = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=log, stderr=log)
                     processes.append(process)
+                proxy = None
+                if not restart_only:
+                    proxy = subprocess.Popen(
+                        [sys.executable, str(ROOT / "scripts/android_tls_proxy.py"), "--port", "5099",
+                         "--upstream", str(TLS_UPSTREAM), "--cert", str(certificate), "--key", str(key)],
+                        cwd=ROOT, stdout=log, stderr=log,
+                    )
+                    processes.append(proxy)
                 # Each engine owns a separate database and port. Start all of them
                 # before waiting, so unrelated bootstrap work does not serialize.
-                for (port, _passwordless), process in zip(fixtures, processes, strict=True):
+                for (port, _passwordless), process in zip(fixtures, processes[: len(fixtures)], strict=True):
                     # Includes synthetic audio encoding on a shared CI runner.
                     deadline = time.monotonic() + 240
                     while True:
-                        if process.poll() is not None:
+                        if process.poll() is not None or (proxy is not None and proxy.poll() is not None):
                             raise RuntimeError(
                                 "Fixture failed; see android/build/fixture.log and install requirements.txt"
                             )

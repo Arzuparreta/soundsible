@@ -53,6 +53,7 @@ class PlaybackService : MediaLibraryService() {
     private val catalogCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     private lateinit var installDj: (List<ProgramDjSession.Row>, Long, Int, Set<String>) -> Unit
     private lateinit var deviceSession: NativeDeviceSession
+    private var pendingImport: (() -> Unit)? = null
     private lateinit var liveHost: NativeLiveHost
     private lateinit var carArt: ProgramCarArtwork
     private lateinit var carLibrary: ProgramCarLibrary
@@ -83,6 +84,7 @@ class PlaybackService : MediaLibraryService() {
     }
     /** On the player looper; does not touch account generation, cookie or library. */
     private fun closeProgram() {
+        pendingImport?.invoke(); pendingImport = null
         pendingCarRadio = null
         djRefiner?.clear()
         djRouteEditor?.clear()
@@ -108,7 +110,10 @@ class PlaybackService : MediaLibraryService() {
     private fun publishDj(phase: String, code: Int) {
         djPhase = phase; djError = code
         if (::djPlanner.isInitialized) dj?.let(djPlanner::syncWork)
-        if (::deviceSession.isInitialized) deviceSession.changed()
+        if (::deviceSession.isInitialized) {
+            val mixingNow = dj?.transitionState()?.optString("status") == "mixing"
+            deviceSession.changed(immediate = mixingNow)
+        }
         session?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply {
             putLong("djGeneration", connection.generation); putBoolean("djActive", dj != null)
             putString("djPhase", phase); putInt("djErrorStatus", code)
@@ -248,8 +253,10 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         NativeProgramOutput.bind(pcmTap) { connection.generation }
-        leveling = ProgramAudioPreference(this, connection, main, "volume_leveling", "leveling") { session }
-        mixing = ProgramAudioPreference(this, connection, main, "dj_mixing", "mixing") { session }
+        leveling = ProgramAudioPreference(this, connection, main, "volume_leveling", "leveling", { session })
+        mixing = ProgramAudioPreference(this, connection, main, "dj_mixing", "mixing", { session }) {
+            if (::deviceSession.isInitialized) deviceSession.changed(immediate = false)
+        }
         val processor = ProgramPcmProcessor({ connection.generation }, leveling::active, { leveling.shuffle }, pcmTap)
         val renderers = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
@@ -269,7 +276,9 @@ class PlaybackService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build() }
         player = ProgramPlayerRouter(normalFactory())
         previews = PreviewProgram(connection, player, main, { session }) { key -> cancelAudio(key) }
-        radio = RadioProgram(connection, player, main, session = { session })
+        radio = RadioProgram(connection, player, main, session = { session }, onChanged = {
+            if (::deviceSession.isInitialized) deviceSession.changed(immediate = false)
+        })
         autoplay = AutoplayProgram(connection, player, main, { session }, { radio.active() || dj != null })
         installDj = { rows, position, index, heard ->
             val epoch = connection.generation
@@ -301,11 +310,7 @@ class PlaybackService : MediaLibraryService() {
         djRouteEditor = ProgramDjRouteEditor(connection, main, { dj }, djPlanner) { phase, code -> publishDj(phase, code) }
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
-                // Only matcher 400/404 means this retained recording cannot be played.
-                // Authentication, TLS and temporary failures keep the occurrence for Retry.
-                if (dj != null || player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.PENDING) == null) return
-                val status = generateSequence(error as Throwable) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
-                if (status != 400 && status != 404) return
+                if (!unplayablePending(error)) return
                 val epoch = connection.generation
                 val key = ProgramQueue.key(player, player.currentMediaItemIndex)
                 main.post {
@@ -334,7 +339,17 @@ class PlaybackService : MediaLibraryService() {
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { leveling.shuffle = shuffleModeEnabled }
             override fun onEvents(player: Player, events: Player.Events) {
                 NativeProgramOutput.playbackChanged(player.isPlaying)
-                if (::deviceSession.isInitialized) deviceSession.changed()
+                if (::deviceSession.isInitialized) {
+                    val transport = events.containsAny(
+                        Player.EVENT_IS_PLAYING_CHANGED,
+                        Player.EVENT_PLAY_WHEN_READY_CHANGED,
+                        Player.EVENT_PLAYBACK_STATE_CHANGED,
+                        Player.EVENT_POSITION_DISCONTINUITY,
+                        Player.EVENT_MEDIA_ITEM_TRANSITION,
+                        Player.EVENT_PLAYER_ERROR,
+                    )
+                    deviceSession.changed(immediate = transport)
+                }
                 pendingCarRadio?.let { key ->
                     if (player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.KEY) == key) {
                         pendingCarRadio = null; autoplay.suspend(); radio.start("balanced")
@@ -348,7 +363,10 @@ class PlaybackService : MediaLibraryService() {
         liveHost = NativeLiveHost(this, connection, main, { player }, artwork, { dj?.liveSnapshot() }) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeLiveHost", state.toString()) }) }
         }
-        deviceSession = NativeDeviceSession(this, connection, main, { dj?.let { ProgramDeviceState.snapshotDj(player, it, djPlanner) } ?: ProgramDeviceState.snapshot(player, radio) }, ::remoteDeviceCommand) { state ->
+        deviceSession = NativeDeviceSession(this, connection, main, {
+            dj?.takeIf { it.readable() }?.let { ProgramDeviceState.snapshotDj(player, it, djPlanner, djPhase, mixing.active()) }
+                ?: ProgramDeviceState.snapshot(player, radio)
+        }, ::executeRemoteCommand) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeDevice", state.toString()) }) }
         }
         carArt = ProgramCarArtwork(this, connection)
@@ -511,122 +529,147 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
                 return Futures.immediateFuture(try {
-                    if (args.getString("action") == "djSelection") {
-                        // Refilling a route does not change the programme the listener chose from.
-                        require(args.getLong("generation", -1) == connection.generation &&
-                            args.getString("programToken").orEmpty() == ProgramQueue.programToken(player))
-                        val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")))
-                        startDjSelection(items, args.getString("label") ?: items.first().mediaMetadata.title?.toString().orEmpty())
-                    } else if (args.getString("action") == "djContext") {
-                        require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
-                        if (player.mediaItemCount > 0) require(args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
-                        if (dj != null) require(args.getString("programToken") == ProgramQueue.programToken(player))
-                        require(player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(ProgramQueue.PODCAST) != true)
-                        val requested = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(requested.length() == 1)
-                        val track = ProgramQueue.items(connection, requested, ProgramQueue.programToken(player)).single()
-                        require(track.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
-                        val source = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString())
-                            .put("label", track.mediaMetadata.title?.toString() ?: "").put("activation", 1)
-                            .put("tracks", org.json.JSONArray().put(djPlanner.reference(track)))
-                        djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
-                        if (dj != null) {
-                            dj!!.changeContext(track)
-                            djPlanner.start(org.json.JSONArray().put(source), true, ProgramDjPlanner.Kind.REPLACE)
-                        } else {
-                            djPlanner.start(org.json.JSONArray().put(source), player.mediaItemCount > 0,
-                                lead = track.takeIf { player.mediaItemCount > 0 })
-                        }
-                    } else if (args.getString("action") == "djRequest") {
-                        require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
-                        val rows = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(rows.length() in 1..ProgramQueue.LIMIT)
-                        val before = args.getString("beforeKey")?.takeIf { it.isNotBlank() }
-                        val tracks = ProgramQueue.items(connection, rows, ProgramQueue.programToken(player))
-                        require(tracks.none { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true })
-                        djPlanner.clear(); refillAnchor = ""
-                        if (tracks.size == 1) djRouteEditor!!.place(tracks.single(), before)
-                        else {
-                            // One group per collection request, carried in the route role so it also travels in handoffs.
-                            val group = java.util.UUID.randomUUID().toString()
-                            val route = org.json.JSONObject().put("kind", "user").put("placement", if (before != null) "fixed" else "dj").put("requestGroup", group).toString()
-                            djRouteEditor!!.placeGroup(tracks.map { item -> item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon()
-                                .setExtras(android.os.Bundle(item.mediaMetadata.extras).apply { putString(ProgramQueue.ROUTE, route) }).build()).build() }, before)
-                        }
-                    } else if (args.getString("action") == "djRepair") {
-                        require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
-                        djPlanner.clear(); refillAnchor = ""
-                        djRouteEditor!!.repair()
-                    } else if (args.getString("action") == "djSettings") {
-                        require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player))
-                        refillAnchor = ""
-                        djRouteEditor?.clear()
-                        if (args.getBoolean("resetRequestGroups")) dj!!.dropRequestGroups()
-                        djPlanner.start(args.getString("sources")?.let { org.json.JSONArray(it) } ?: djPlanner.sources,
-                            true, ProgramDjPlanner.Kind.REPLACE)
-                    } else if (args.getString("action") == "dj") {
-                        require(args.getLong("generation", -1) == connection.generation)
-                        if (args.getBoolean("fromCurrent", true)) require(args.getString("queueToken") == ProgramQueue.token(player) && args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
-                        djRouteEditor?.clear()
-                        djPlanner.start(org.json.JSONArray(args.getString("sources") ?: "[]"), args.getBoolean("fromCurrent", true))
-                    } else if (args.getString("action") == "queue") {
-                        require(args.getLong("generation", -1) == connection.generation)
-                        val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"), lane = "context")
-                        val index = args.getInt("index", -1); require(index in items.indices)
-                        if ((dj != null || djPlanner.busy()) && items[index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
-                            startDjSelection(listOf(items[index]), items[index].mediaMetadata.title?.toString().orEmpty())
-                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
-                        }
-                        djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", 0)
-                        autoplay.clear()
-                        radio.clear()
-                        player.shuffleModeEnabled = args.getBoolean("shuffle")
-                        player.setMediaItems(items, index, podcasts.position(items[index])); player.prepare(); player.play()
-                    } else if (args.getString("action") == "metadata") {
-                        ProgramMetadata.apply(player, connection, args, artwork::clear)
-                    } else if (args.getString("action") == "retireSource") {
-                        retireSource(args)
-                    } else if (args.getString("action") == "autoplay") {
-                        require(args.getLong("generation", -1) == connection.generation)
-                        autoplay.settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
-                    } else if (args.getString("action") in listOf("leveling", "mixing")) {
-                        require(args.getLong("generation", -1) == connection.generation)
-                        (if (args.getString("action") == "mixing") mixing else leveling).settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
-                    } else if (args.getString("action") == "radio") {
-                        require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
-                        args.getString("key")?.let { require(it == ProgramQueue.key(player, player.currentMediaItemIndex)) }
-                        if (args.getBoolean("enabled")) {
-                            val profile = args.getString("profile") ?: "balanced"
-                            require(profile in listOf("familiar", "balanced", "explore"))
-                            if (dj != null) {
-                                val seed = player.currentMediaItem ?: error("NO_SEED")
-                                val position = player.currentPosition
-                                val requested = player.playWhenReady
-                                djRouteEditor?.clear(); djPlanner.clear(); refillAnchor = ""
-                                restoreNormal(); publishDj("idle", 0)
-                                player.setMediaItem(seed, position); player.prepare()
-                                if (requested) player.play()
-                            }
-                            autoplay.suspend(); radio.start(profile)
-                        } else { radio.stop(); autoplay.sync() }
-                    } else if (args.getString("action") == "stop") {
-                        require(args.getLong("generation", -1) == connection.generation)
-                        // Refills retain the program identity; replacement starts another.
-                        // Keep the older order-based contract for callers without that identity.
-                        val owner = args.getString("programToken")
-                        if (owner != null) require(owner.isNotBlank() && owner == ProgramQueue.programToken(player))
-                        else require(args.getString("queueToken") == ProgramQueue.token(player))
-                        closeProgram()
-                    } else {
-                        ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position, (radio.manualInsertion() ?: autoplay.manualInsertion()), dj?.editableFrom()?.minus(1), dj?.let { owner -> { action, index, target -> owner.editBlock(action, index, target) } })
-                        if (args.getString("action") == "move") args.getString("key")?.let { dj?.pin(it) }
-                    }
-                    SessionResult(SessionResult.RESULT_SUCCESS) } catch (failure: Exception) {
-                        if (BuildConfig.DEBUG) android.util.Log.w("ProgrammeCommand", "${args.getString("action")}:${failure.javaClass.simpleName}:${failure.stackTrace.firstOrNull { it.className.startsWith("com.soundsible.android") }}")
-                        SessionResult(SessionError.ERROR_BAD_VALUE)
-                    })
+                    applyProgramCommand(args)
+                    SessionResult(SessionResult.RESULT_SUCCESS)
+                } catch (failure: Exception) {
+                    if (BuildConfig.DEBUG) android.util.Log.w("ProgrammeCommand", "${args.getString("action")}:${failure.javaClass.simpleName}:${failure.stackTrace.firstOrNull { it.className.startsWith("com.soundsible.android") }}")
+                    SessionResult(SessionError.ERROR_BAD_VALUE)
+                })
             }
         }).setBitmapLoader(artwork).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
         main.post(progressTicker)
     }
+
+    /** Shared by MediaSession commands from the Android UI and remote commands from other devices. */
+    private fun applyProgramCommand(args: Bundle) {
+        if (args.getString("action") == "djSelection") {
+            // Refilling a route does not change the programme the listener chose from.
+            require(args.getLong("generation", -1) == connection.generation &&
+                args.getString("programToken").orEmpty() == ProgramQueue.programToken(player))
+            val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")))
+            startDjSelection(items, args.getString("label") ?: items.first().mediaMetadata.title?.toString().orEmpty())
+        } else if (args.getString("action") == "djContext") {
+            require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
+            if (player.mediaItemCount > 0) require(args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
+            if (dj != null) require(args.getString("programToken") == ProgramQueue.programToken(player))
+            require(player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(ProgramQueue.PODCAST) != true)
+            val requested = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(requested.length() == 1)
+            val track = ProgramQueue.items(connection, requested, ProgramQueue.programToken(player)).single()
+            require(track.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
+            val source = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString())
+                .put("label", track.mediaMetadata.title?.toString() ?: "").put("activation", 1)
+                .put("tracks", org.json.JSONArray().put(djPlanner.reference(track)))
+            djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
+            if (dj != null) {
+                dj!!.changeContext(track)
+                djPlanner.start(org.json.JSONArray().put(source), true, ProgramDjPlanner.Kind.REPLACE)
+            } else {
+                djPlanner.start(org.json.JSONArray().put(source), player.mediaItemCount > 0,
+                    lead = track.takeIf { player.mediaItemCount > 0 })
+            }
+        } else if (args.getString("action") == "djRequest") {
+            require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
+            val rows = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(rows.length() in 1..ProgramQueue.LIMIT)
+            val before = args.getString("beforeKey")?.takeIf { it.isNotBlank() }
+            val tracks = ProgramQueue.items(connection, rows, ProgramQueue.programToken(player))
+            require(tracks.none { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
+                it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" })
+            djPlanner.clear(); refillAnchor = ""
+            if (tracks.size == 1) djRouteEditor!!.place(tracks.single(), before)
+            else {
+                // One group per collection request, carried in the route role so it also travels in handoffs.
+                val group = java.util.UUID.randomUUID().toString()
+                val route = org.json.JSONObject().put("kind", "user").put("placement", if (before != null) "fixed" else "dj").put("requestGroup", group).toString()
+                djRouteEditor!!.placeGroup(tracks.map { item -> item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon()
+                    .setExtras(android.os.Bundle(item.mediaMetadata.extras).apply { putString(ProgramQueue.ROUTE, route) }).build()).build() }, before)
+            }
+        } else if (args.getString("action") == "djRepair") {
+            require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
+            djPlanner.clear(); refillAnchor = ""
+            djRouteEditor!!.repair()
+        } else if (args.getString("action") == "djSettings") {
+            require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player))
+            refillAnchor = ""
+            djRouteEditor?.clear()
+            if (args.getBoolean("resetRequestGroups")) dj!!.dropRequestGroups()
+            djPlanner.start(args.getString("sources")?.let { org.json.JSONArray(it) } ?: djPlanner.sources,
+                true, ProgramDjPlanner.Kind.REPLACE)
+        } else if (args.getString("action") == "dj") {
+            require(args.getLong("generation", -1) == connection.generation)
+            if (args.getBoolean("fromCurrent", true)) require(args.getString("queueToken") == ProgramQueue.token(player) && args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
+            djRouteEditor?.clear()
+            djPlanner.start(org.json.JSONArray(args.getString("sources") ?: "[]"), args.getBoolean("fromCurrent", true))
+        } else if (args.getString("action") == "queue") {
+            require(args.getLong("generation", -1) == connection.generation)
+            val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"), lane = "context")
+            val index = args.getInt("index", -1); require(index in items.indices)
+            if ((dj != null || djPlanner.busy()) && items[index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
+                startDjSelection(listOf(items[index]), items[index].mediaMetadata.title?.toString().orEmpty())
+                return
+            }
+            djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", 0)
+            autoplay.clear()
+            radio.clear()
+            player.shuffleModeEnabled = args.getBoolean("shuffle")
+            player.setMediaItems(items, index, podcasts.position(items[index])); player.prepare(); player.play()
+        } else if (args.getString("action") == "metadata") {
+            ProgramMetadata.apply(player, connection, args, artwork::clear)
+        } else if (args.getString("action") == "retireSource") {
+            retireSource(args)
+        } else if (args.getString("action") == "autoplay") {
+            require(args.getLong("generation", -1) == connection.generation)
+            autoplay.settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
+        } else if (args.getString("action") in listOf("leveling", "mixing")) {
+            require(args.getLong("generation", -1) == connection.generation)
+            (if (args.getString("action") == "mixing") mixing else leveling).settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
+        } else if (args.getString("action") == "radio") {
+            require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
+            args.getString("key")?.let { require(it == ProgramQueue.key(player, player.currentMediaItemIndex)) }
+            if (args.getBoolean("enabled")) {
+                val profile = args.getString("profile") ?: "balanced"
+                require(profile in listOf("familiar", "balanced", "explore"))
+                if (dj != null) exitDj(keepUserRequests = false)
+                autoplay.suspend(); radio.start(profile)
+            } else { radio.stop(); autoplay.sync() }
+        } else if (args.getString("action") == "stop") {
+            require(args.getLong("generation", -1) == connection.generation)
+            // Refills retain the program identity; replacement starts another.
+            // Keep the older order-based contract for callers without that identity.
+            val owner = args.getString("programToken")
+            if (owner != null) require(owner.isNotBlank() && owner == ProgramQueue.programToken(player))
+            else require(args.getString("queueToken") == ProgramQueue.token(player))
+            closeProgram()
+        } else {
+            ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position, (radio.manualInsertion() ?: autoplay.manualInsertion()), dj?.editableFrom()?.minus(1), dj?.let { owner -> { action, index, target -> owner.editBlock(action, index, target) } })
+            if (args.getString("action") == "move") args.getString("key")?.let { dj?.pin(it) }
+        }
+    }
+
+    private fun exitDj(keepUserRequests: Boolean) {
+        val owner = dj ?: error("NO_DJ")
+        val current = player.currentMediaItem ?: error("NO_SEED")
+        val position = player.currentPosition.coerceAtLeast(0)
+        val requested = player.playWhenReady
+        val survivors = if (keepUserRequests) {
+            owner.routeSnapshot().rows.drop(owner.currentIndex() + 1)
+                .filter { it.kind == "user" }
+                .map { row ->
+                    row.item.buildUpon().setMediaMetadata(row.item.mediaMetadata.buildUpon().setExtras(
+                        Bundle(row.item.mediaMetadata.extras).apply {
+                            putString(ProgramQueue.LANE, "manual")
+                            putString(ProgramQueue.LANE_SOURCE, "library")
+                            remove(ProgramQueue.ROUTE)
+                            remove(ProgramQueue.BRIDGE_OWNER)
+                        },
+                    ).build()).build()
+                }
+        } else emptyList()
+        djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
+        restoreNormal(); publishDj("idle", 0)
+        player.setMediaItems(listOf(current) + survivors, 0, position); player.prepare()
+        if (requested) player.play()
+    }
+
     /** A library selection starts fresh immediately; route edits stay within the shell. */
     private fun startDjSelection(items: List<androidx.media3.common.MediaItem>, label: String) {
         require(items.isNotEmpty() && items.none { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
@@ -636,70 +679,263 @@ class PlaybackService : MediaLibraryService() {
             .put("tracks", org.json.JSONArray(items.map(djPlanner::reference)))
         val sources = org.json.JSONArray().put(source)
         require(sources.toString().length <= 65536)
+        if (liveListener != null) restoreNormal()
         djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
         installDj(listOf(ProgramDjSession.Row(items.first(), kind = "generated")), 0, 0, emptySet())
         djPlanner.start(sources, true)
     }
-    private fun remoteDeviceCommand(event: String, payload: org.json.JSONObject) {
-        when (event) {
-            "playback_stop_requested" -> player.pause()
-            "playback_next_requested" -> if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) player.seekToNextMediaItem()
-            "playback_previous_requested" -> if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)) player.seekToPreviousMediaItem()
-            "playback_seek_requested" -> {
-                val seconds = payload.optDouble("position_sec", Double.NaN)
-                if (seconds.isFinite() && seconds >= 0 && seconds <= 604800 && player.isCurrentMediaItemSeekable) player.seekTo((seconds * 1000).toLong())
+
+    private fun executeRemoteCommand(name: String, args: org.json.JSONObject, done: (String?) -> Unit) {
+        if (liveListener != null && name in RemoteCommandLogic.ownQueueCommands) throw RemoteCommandRejected("invalid_state")
+        if (player.mediaItemCount == 0 && name in RemoteCommandLogic.currentItemCommands) throw RemoteCommandRejected("nothing_playing")
+        if (dj == null && name in RemoteCommandLogic.djSessionCommands) throw RemoteCommandRejected("invalid_state")
+        fun invalid(): Nothing = throw RemoteCommandRejected("invalid")
+        fun queueId(key: String) = args.optString(key).takeIf { !args.isNull(key) && it.isNotBlank() }
+        fun indexOfEntry(queueId: String) = (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == queueId }
+            ?: throw RemoteCommandRejected("not_found")
+        fun on() = args.opt("on") as? Boolean ?: invalid()
+        fun tracks() = args.optJSONArray("tracks")?.takeIf { it.length() > 0 }?.let(RemoteCommandLogic::wireTrackRows) ?: invalid()
+        fun track() = RemoteCommandLogic.wireTrackRow(args.optJSONObject("track") ?: invalid())
+        fun program(action: String, fill: Bundle.() -> Unit = {}) = applyProgramCommand(Bundle().apply {
+            putString("action", action); putLong("generation", connection.generation); fill()
+        })
+        fun entry(action: String, index: Int, fill: Bundle.() -> Unit = {}) = program(action) {
+            putString("queueToken", ProgramQueue.token(player)); putInt("index", index); putString("key", ProgramQueue.key(player, index)); fill()
+        }
+        fun djSettings(sources: org.json.JSONArray, resetRequestGroups: Boolean) = program("djSettings") {
+            putString("programToken", ProgramQueue.programToken(player))
+            putString("sources", sources.toString()); putBoolean("resetRequestGroups", resetRequestGroups)
+        }
+        fun djSource(activation: Int): org.json.JSONObject {
+            val items = ProgramQueue.items(connection, tracks(), ProgramQueue.programToken(player))
+            if (items.any { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
+                    it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" }) throw RemoteCommandRejected("invalid_state")
+            return org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString())
+                .put("label", args.optString("label").trim().ifEmpty { items.first().mediaMetadata.title?.toString().orEmpty() })
+                .put("activation", activation).put("tracks", org.json.JSONArray(items.map(djPlanner::reference)))
+        }
+        when (name) {
+            "transport.play" -> entry("play", player.currentMediaItemIndex)
+            "transport.pause" -> player.pause()
+            "transport.next" -> {
+                if (!player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) throw RemoteCommandRejected("invalid_state")
+                player.seekToNextMediaItem()
             }
-            "playback_start_requested" -> {
-                val restored = ProgramDeviceState.restore(payload)
-                if (restored == null) {
-                    if (!payload.has("track") && payload.optJSONObject("state")?.optJSONObject("session")?.optString("mode") != "auto" && player.mediaItemCount > 0) player.play()
-                    return
+            "transport.previous" -> {
+                if (!player.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)) throw RemoteCommandRejected("invalid_state")
+                player.seekToPreviousMediaItem()
+            }
+            "transport.seek" -> {
+                val seconds = RemoteCommandLogic.parseSeekSeconds(args) ?: invalid()
+                if (!player.isCurrentMediaItemSeekable) throw RemoteCommandRejected("invalid_state")
+                player.seekTo((seconds * 1000.0).toLong())
+            }
+            "transport.set_shuffle" -> {
+                val value = on()
+                if (!player.isCommandAvailable(Player.COMMAND_SET_SHUFFLE_MODE)) throw RemoteCommandRejected("invalid_state")
+                player.shuffleModeEnabled = value
+            }
+            "transport.set_repeat" -> {
+                val mode = RemoteCommandLogic.parseRepeatMode(args.optString("mode")) ?: invalid()
+                if (!player.isCommandAvailable(Player.COMMAND_SET_REPEAT_MODE)) throw RemoteCommandRejected("invalid_state")
+                player.repeatMode = mode
+            }
+            "play.tracks" -> {
+                val rows = tracks()
+                val index = (args.opt("index") as? Number)?.toInt()?.takeIf { it in 0 until rows.length() } ?: invalid()
+                val context = args.optJSONObject("context")
+                val contextKind = context?.optString("kind")?.takeIf { it in listOf("album", "artist", "playlist") }
+                val contextId = context?.optString("id")?.takeIf { contextKind != null && it.isNotBlank() && it.length <= 512 }
+                program("queue") {
+                    putString("tracks", rows.toString()); putInt("index", index)
+                    if (contextId != null) { putString("contextKind", contextKind); putString("contextId", contextId) }
                 }
-                // A remote resume carries our own bounded session. Keep its
-                // occurrence identities and the rest of the native queue.
-                val incoming = payload.optJSONObject("state")?.optJSONObject("session")?.optJSONArray("queue")
-                val firstKey = incoming?.optJSONObject(0)?.optString("queueId")
-                val offset = if (firstKey.isNullOrBlank()) -1 else (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == firstKey } ?: -1
-                val sameQueue = !payload.optBoolean("handoff") && (dj != null) == (restored.workspace != null) && incoming != null && offset >= 0 && offset + incoming.length() <= player.mediaItemCount &&
-                    (0 until incoming.length()).all { i ->
-                        val entry = incoming.getJSONObject(i)
-                        ProgramQueue.key(player, offset + i) == entry.optString("queueId") &&
-                            ProgramDeviceState.track(player.getMediaItemAt(offset + i)).optString("id") == entry.optString("id")
+            }
+            "queue.add" -> {
+                val rows = org.json.JSONArray().put(track())
+                val at = args.optString("at").takeIf { it == "next" || it == "end" } ?: invalid()
+                when {
+                    dj != null -> program("djRequest") {
+                        putString("programToken", ProgramQueue.programToken(player)); putString("queueToken", ProgramQueue.token(player))
+                        putString("tracks", rows.toString())
                     }
-                if (sameQueue) {
-                    player.shuffleModeEnabled = restored.shuffle; player.repeatMode = restored.repeat
-                    player.seekTo(offset + restored.index, restored.positionMs)
-                    if (player.playerError != null || player.playbackState == Player.STATE_ENDED) player.prepare()
-                    player.play(); return
+                    at == "next" && player.mediaItemCount > 0 -> entry("insertAfter", player.currentMediaItemIndex) { putString("tracks", rows.toString()) }
+                    at == "next" -> program("insertAfter") {
+                        putString("queueToken", ProgramQueue.token(player)); putInt("index", -1); putString("key", ""); putString("tracks", rows.toString())
+                    }
+                    else -> program("append") { putString("queueToken", ProgramQueue.token(player)); putString("tracks", rows.toString()) }
                 }
-                if (restored.workspace != null) {
-                    val rows = ProgramDeviceState.djRows(connection, restored, djPlanner)
-                    val heard = restored.workspace.optJSONArray("heard") ?: org.json.JSONArray()
-                    val heardIds = (0 until minOf(15, heard.length())).mapNotNull { heard.optJSONObject(it)?.optString("id")?.takeIf { id -> id.isNotBlank() && id.length <= 512 } }.toSet()
-                    djPlanner.restoreWorkspace(restored.workspace)
-                    djRouteEditor?.clear(); djRefiner?.clear(); refillAnchor = ""
-                    installDj(rows, restored.positionMs, restored.index, heardIds)
-                    player.play(); publishDj("ready", 0)
-                    return
+            }
+            "queue.move" -> {
+                val moving = queueId("queue_id") ?: invalid()
+                val before = queueId("before_queue_id")
+                val from = indexOfEntry(moving)
+                val beforeIndex = before?.let(::indexOfEntry)
+                val owner = dj
+                val target = if (owner == null) RemoteCommandLogic.normalMoveTarget(player.mediaItemCount, from, beforeIndex)
+                else when (val plan = RemoteCommandLogic.djMoveTarget(owner.policyRows(), moving, before, owner.editableFrom(), owner.protectedKeys())) {
+                    RemoteCommandLogic.DjMovePlan.Locked -> throw RemoteCommandRejected("locked")
+                    RemoteCommandLogic.DjMovePlan.NoOp -> null
+                    is RemoteCommandLogic.DjMovePlan.Move -> plan.toIndex
                 }
-                val items = ProgramDeviceState.items(connection, restored)
-                val continuation = restored.radio?.optBoolean("active") == true || items.any { it.mediaMetadata.extras?.getBoolean("autoplayGenerated") == true }
-                if (continuation) require(items[restored.index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
-                djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", 0)
-                autoplay.clear(); radio.clear()
-                player.shuffleModeEnabled = restored.shuffle; player.repeatMode = restored.repeat
-                player.setMediaItems(items, restored.index, restored.positionMs)
-                val entries = restored.entries
-                fun generated(source: String) = items.indices.filter { i -> entries?.optJSONObject(i)?.let { it.optString("queueLane") == "generated" && it.optString("queueSource") == source } == true }
-                    .map { items[it].mediaMetadata.extras!!.getString(ProgramQueue.KEY)!! }.toSet()
-                if (restored.radio?.optBoolean("active") == true) radio.restore(restored.radio, generated("radio"))
-                else autoplay.restoreGenerated(generated("autoplay"))
-                player.prepare(); player.play()
+                if (target != null) entry("move", from) { putInt("toIndex", target) }
+            }
+            "queue.remove" -> {
+                val removed = queueId("queue_id") ?: invalid()
+                val index = indexOfEntry(removed)
+                dj?.let { owner ->
+                    if (RemoteCommandLogic.djRemoveLocked(owner.policyRows(), removed, owner.protectedKeys())) throw RemoteCommandRejected("locked")
+                }
+                entry("remove", index)
+            }
+            "queue.play_entry" -> entry("select", indexOfEntry(queueId("queue_id") ?: invalid()))
+            "radio.start" -> {
+                val item = ProgramQueue.items(connection, org.json.JSONArray().put(track()), lane = "context").single()
+                if (item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true ||
+                    item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" ||
+                    connection.cookieHeader(connection.generation) == null) {
+                    throw RemoteCommandRejected("invalid_state")
+                }
+                val sameCurrent = dj == null && liveListener == null && player.mediaItemCount > 0 &&
+                    player.currentMediaItem?.mediaId == item.mediaId &&
+                    player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) ==
+                        item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)
+                if (!sameCurrent) {
+                    djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
+                    restoreNormal(); publishDj("idle", 0)
+                    autoplay.clear(); radio.clear()
+                    player.setMediaItems(listOf(item), 0, 0); player.prepare(); player.play()
+                } else if (!player.playWhenReady) {
+                    player.play()
+                }
+                entry("radio", player.currentMediaItemIndex) { putBoolean("enabled", true); putString("profile", radio.currentProfile()) }
+            }
+            "radio.stop" -> program("radio") { putBoolean("enabled", false); putString("queueToken", ProgramQueue.token(player)) }
+            "dj.start" -> {
+                val rows = tracks()
+                val label = args.optString("label").trim().takeIf { it.isNotEmpty() }
+                program("djSelection") {
+                    putString("programToken", ProgramQueue.programToken(player)); putString("tracks", rows.toString())
+                    if (label != null) putString("label", label)
+                }
+            }
+            "dj.start_from_current" -> if (dj == null) entry("dj", player.currentMediaItemIndex) { putBoolean("fromCurrent", true) }
+            "dj.stop" -> exitDj(keepUserRequests = true)
+            "dj.place" -> {
+                val before = queueId("before_queue_id")
+                val rows = tracks()
+                if (before != null) {
+                    indexOfEntry(before)
+                    if (dj!!.requestDestination(before) == null) throw RemoteCommandRejected("locked")
+                }
+                program("djRequest") {
+                    putString("programToken", ProgramQueue.programToken(player)); putString("queueToken", ProgramQueue.token(player))
+                    putString("tracks", rows.toString())
+                    if (before != null) putString("beforeKey", before)
+                }
+            }
+            "dj.add_source" -> {
+                val current = djPlanner.sources
+                val added = djSource(0)
+                if (current.length() >= 64) throw RemoteCommandRejected("invalid_state")
+                val activation = (0 until current.length()).maxOfOrNull { current.getJSONObject(it).optInt("activation", 0) } ?: 0
+                djSettings(org.json.JSONArray(current.toString()).put(added.put("activation", activation + 1)), resetRequestGroups = false)
+            }
+            "dj.remove_source" -> {
+                val sourceId = args.optString("source_id").takeIf { it.isNotBlank() } ?: invalid()
+                val current = djPlanner.sources
+                val remaining = org.json.JSONArray((0 until current.length()).map { current.getJSONObject(it) }.filter { it.optString("id") != sourceId })
+                if (remaining.length() == current.length()) throw RemoteCommandRejected("not_found")
+                if (remaining.length() == 0) throw RemoteCommandRejected("invalid_state")
+                djSettings(remaining, resetRequestGroups = false)
+            }
+            "dj.change_session" -> djSettings(org.json.JSONArray().put(djSource(1)), resetRequestGroups = true)
+            "dj.repair" -> program("djRepair") {
+                putString("programToken", ProgramQueue.programToken(player)); putString("queueToken", ProgramQueue.token(player))
+            }
+            "dj.set_mixing" -> { mixing.settings(on()) { ok -> done(if (ok) null else "invalid_state") }; return }
+            "session.import" -> { importRemoteSession(args, done); return }
+            "session.release" -> if (liveListener == null) player.pause()
+            else -> throw RemoteCommandRejected("unsupported")
+        }
+        done(null)
+    }
+
+    private fun importRemoteSession(args: org.json.JSONObject, done: (String?) -> Unit) {
+        val state = args.optJSONObject("state") ?: throw RemoteCommandRejected("invalid")
+        val restored = ProgramDeviceState.restoreState(state) ?: throw RemoteCommandRejected("nothing_playing")
+        if (restored.workspace != null) {
+            val rows = ProgramDeviceState.djRows(connection, restored, djPlanner)
+            val heard = restored.workspace.optJSONArray("heard") ?: org.json.JSONArray()
+            val heardIds = (0 until minOf(15, heard.length())).mapNotNull { heard.optJSONObject(it)?.optString("id")?.takeIf { id -> id.isNotBlank() && id.length <= 512 } }.toSet()
+            djPlanner.restoreWorkspace(restored.workspace)
+            if (liveListener != null) restoreNormal()
+            djRouteEditor?.clear(); djRefiner?.clear(); refillAnchor = ""
+            installDj(rows, restored.positionMs, restored.index, heardIds)
+            player.play(); publishDj("ready", 0)
+        } else {
+            val items = ProgramDeviceState.items(connection, restored)
+            val continuation = restored.radio?.optBoolean("active") == true || items.any { it.mediaMetadata.extras?.getBoolean("autoplayGenerated") == true }
+            if (continuation) require(items[restored.index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
+            djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", 0)
+            autoplay.clear(); radio.clear()
+            player.shuffleModeEnabled = restored.shuffle; player.repeatMode = restored.repeat
+            player.setMediaItems(items, restored.index, restored.positionMs)
+            val entries = restored.entries
+            fun generated(source: String) = items.indices.filter { i -> entries?.optJSONObject(i)?.let { it.optString("queueLane") == "generated" && it.optString("queueSource") == source } == true }
+                .map { items[it].mediaMetadata.extras!!.getString(ProgramQueue.KEY)!! }.toSet()
+            if (restored.radio?.optBoolean("active") == true) radio.restore(restored.radio, generated("radio"))
+            else autoplay.restoreGenerated(generated("autoplay"))
+            player.prepare(); player.play()
+        }
+        awaitImportPlaying(done)
+    }
+
+    /**
+     * Only matcher 400/404 means a retained pending recording cannot be played.
+     * Authentication, TLS and temporary failures keep the occurrence for Retry.
+     */
+    private fun unplayablePending(error: PlaybackException): Boolean {
+        if (dj != null || player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.PENDING) == null) return false
+        val status = generateSequence(error as Throwable) { it.cause }
+            .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
+        return status == 400 || status == 404
+    }
+
+    /** Transfer succeeds only once the target is actually playing, bounded well under the 10 s wire timeout. */
+    private fun awaitImportPlaying(done: (String?) -> Unit) {
+        pendingImport?.invoke(); pendingImport = null
+        val epoch = connection.generation
+        var settled = false
+        lateinit var listener: Player.Listener
+        lateinit var deadline: Runnable
+        fun settle(reason: String?) {
+            if (settled) return
+            settled = true
+            player.removeListener(listener); main.removeCallbacks(deadline); pendingImport = null
+            done(reason)
+        }
+        fun check() {
+            when {
+                connection.generation != epoch -> settle("invalid_state")
+                player.isPlaying -> settle(null)
+                !player.playWhenReady -> settle("invalid_state")
+                // The error listener skips an unplayable pending entry; wait for the next one.
+                player.playerError?.let { unplayablePending(it) && player.nextMediaItemIndex != C.INDEX_UNSET && player.mediaItemCount > 1 } == false ->
+                    settle("invalid_state")
             }
         }
+        listener = object : Player.Listener { override fun onEvents(player: Player, events: Player.Events) = check() }
+        deadline = Runnable { settle(if (player.isPlaying) null else "invalid_state") }
+        pendingImport = { settle("invalid_state") }
+        player.addListener(listener)
+        main.postDelayed(deadline, 7500)
+        check()
     }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
     override fun onDestroy() {
+        pendingImport?.invoke(); pendingImport = null
         savePodcast()
         connection.resetListeners.remove(reset)
         liveHost.close()

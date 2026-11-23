@@ -1,6 +1,6 @@
 import { createContext, createSignal, Show, useContext } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import { actions } from '../stores';
+import { player } from '../stores/player';
 import { useCatalogCollection } from '../lib/catalogItem';
 import { t } from '../lib/i18n';
 import type { CatalogItem, Track } from '../types/music';
@@ -46,10 +46,10 @@ export function CollectionActions(props: {
   const count = () => props.items?.length ?? props.tracks?.length ?? 0;
   const use = async (purpose: 'reference' | 'request' | 'change') => {
     if (busy()) return;
-    const epoch = purpose === 'change' ? actions.beginAutoSessionChange() : actions.autoSessionToken();
+    const epoch = purpose === 'change' ? player().actions.beginAutoSessionChange() : player().actions.autoSessionToken();
     const before = props.beforeQueueId ?? placement.beforeQueueId;
     const intent = placement.intent;
-    const isCurrent = () => actions.autoSessionToken() === epoch && placement.intent === intent && (props.beforeQueueId ?? placement.beforeQueueId) === before;
+    const isCurrent = () => player().actions.autoSessionToken() === epoch && placement.intent === intent && (props.beforeQueueId ?? placement.beforeQueueId) === before;
     const changeStarted = () => {
       if (placement.intent === intent) (props.onCompleted ?? placement.onCompleted)?.();
     };
@@ -57,21 +57,21 @@ export function CollectionActions(props: {
     try {
       if (!placement.shell) {
         if (props.items) await useCatalogCollection(props.items, props.title, 'start', undefined, isCurrent, epoch);
-        else actions.startDjSelection(props.tracks ?? [], props.title);
+        else player().actions.startDjSelection(props.tracks ?? [], props.title);
         return;
       }
       if (props.items) {
         if (!await useCatalogCollection(props.items, props.title, purpose, before, isCurrent, epoch, changeStarted)) return;
       }
       else if (purpose === 'change') {
-        const changing = actions.changeAutoSession(props.tracks ?? [], props.title);
+        const changing = player().actions.changeAutoSession(props.tracks ?? [], props.title);
         changeStarted();
         await changing;
         return;
       }
-      else if (purpose === 'request') await actions.placeAutoTracks(props.tracks ?? [], before);
+      else if (purpose === 'request') await player().actions.placeAutoTracks(props.tracks ?? [], before);
       else if (props.onReference) props.onReference(props.tracks ?? []);
-      else actions.addAutoSource(props.tracks ?? [], props.title);
+      else player().actions.addAutoSource(props.tracks ?? [], props.title);
       if (purpose !== 'change' && isCurrent() && placement.intent === intent) (props.onCompleted ?? placement.onCompleted)?.();
     } finally { setBusy(false); }
   };

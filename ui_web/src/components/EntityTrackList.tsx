@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js';
-import { actions } from '../stores';
+import { player } from '../stores/player';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { trackCoverUrl } from '../lib/media';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
@@ -24,7 +24,7 @@ export function EntityTrackList(props: { tracks: Track[]; context: PlaybackConte
       track={track()} music={libraryTrackMusic(track())}
       index={index() + 1}
       cover={trackCoverUrl(track(), 'thumb')}
-      onPlay={() => actions.playFrom(props.tracks, index(), { context: props.context })}
+      onPlay={() => player().actions.playFrom(props.tracks, index(), { context: props.context })}
     />
   );
   return (

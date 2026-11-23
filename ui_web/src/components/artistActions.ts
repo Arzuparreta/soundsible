@@ -5,7 +5,8 @@ import { artistDestination, navigateMusic } from '../lib/musicNavigation';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
-import { actions, musicLibrary, state } from '../stores';
+import { musicLibrary } from '../stores';
+import { player } from '../stores/player';
 import type { Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { artistKey } from '../lib/artistRoute';
@@ -37,11 +38,11 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
   const list: MenuAction[] = [
     { icon: menuIcons.play(), label: t('artistActions.play'), onSelect: () => {
       const tracks = artistTracks(artist);
-      if (state.autoMode.active) actions.startDjSelection(tracks, artist);
-      else actions.playFrom(tracks, 0, { context: artistContext(artist) });
+      if (player().autoMode.active) player().actions.startDjSelection(tracks, artist);
+      else player().actions.playFrom(tracks, 0, { context: artistContext(artist) });
     } },
     { icon: menuIcons.shuffle(), label: t('artistActions.shuffle'), onSelect: () => {
-      actions.playShuffled(artistTracks(artist), artistContext(artist));
+      player().actions.playShuffled(artistTracks(artist), artistContext(artist));
     } },
   ];
   list.push({ icon: menuIcons.artist(), label: t('artistActions.goToArtist'), onSelect: () => navigateMusic(artistDestination({ artist, view: 'library' }, artist)) });

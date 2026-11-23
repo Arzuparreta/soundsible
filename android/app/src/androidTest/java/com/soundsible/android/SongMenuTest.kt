@@ -30,8 +30,22 @@ class SongMenuTest {
             forceNew = true; reconnection = false; callFactory = client; webSocketFactory = client
             extraHeaders = mapOf("Cookie" to listOf(connection.cookieHeader(epoch)!!))
         })
-        peer.on(Socket.EVENT_CONNECT) { peer.emit("playback_register", JSONObject().put("device_id", peerId).put("device_name", "Song menu laptop").put("device_type", "desktop")); connected.countDown() }
-        peer.on("playback_start_requested") { arguments -> started.set(arguments.firstOrNull() as? JSONObject); received.countDown() }
+        peer.on(Socket.EVENT_CONNECT) {
+            peer.emit("playback_register", JSONObject()
+                .put("device_id", peerId).put("device_name", "Song menu laptop").put("device_type", "desktop")
+                .put("form_factor", "computer").put("instance_id", java.util.UUID.randomUUID().toString()).put("protocol", 1)
+                .put("commands", org.json.JSONArray(listOf("play.tracks"))))
+            connected.countDown()
+        }
+        peer.on("device_command") { arguments ->
+            val payload = arguments.firstOrNull() as? JSONObject ?: return@on
+            val ack = arguments.lastOrNull() as? io.socket.client.Ack
+            if (payload.optString("name") == "play.tracks") {
+                started.set(payload.optJSONObject("args"))
+                received.countDown()
+                ack?.call(JSONObject().put("status", "applied").put("rev", 1))
+            } else ack?.call(JSONObject().put("status", "rejected").put("reason", "unsupported"))
+        }
         val web = StartupTest()
         try {
             peer.connect(); assertTrue(connected.await(15, TimeUnit.SECONDS))
@@ -74,8 +88,10 @@ class SongMenuTest {
                 assertEquals("1", web.evaluate(scenario, "document.querySelectorAll('[role=dialog] button[data-pressable]').length"))
                 web.evaluate(scenario, "${menuButton("Song menu laptop")}.click()")
                 assertTrue("Peer never asked to play", received.await(15, TimeUnit.SECONDS))
-                assertEquals("member-track", started.get().getJSONObject("track").getString("id"))
-                waitFor("document.body.innerText.includes('Playback request sent')")
+                assertEquals("member-track", started.get().getJSONArray("tracks").getJSONObject(0).getString("id"))
+                assertEquals(0, started.get().optInt("index", -1))
+                // The sending toast turns into the success message once the device answers applied.
+                waitFor("Array.from(document.querySelectorAll('[role=status]')).some(s=>s.innerText.includes('Playing'))")
             }
         } finally { peer.off(); peer.disconnect(); connection.clearSession(true) }
     }

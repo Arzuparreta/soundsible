@@ -1,6 +1,7 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import type { MusicMetadata } from '../lib/musicNavigation';
-import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys, state } from '../stores';
+import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
+import { player } from '../stores/player';
 import { catalogContextTrack, resolveCatalogTrack } from '../lib/catalogItem';
 import { savedToTrack, savedVideoId } from '../lib/saved';
 import { api } from '../lib/api';
@@ -93,7 +94,7 @@ async function startCatalogRadio(entry: SavedEntry, item?: CatalogItem): Promise
       toast.error(t('search.noPreview'));
       return;
     }
-    await actions.startRadio(track);
+    await player().actions.startRadio(track);
   } catch {
     toast.error(t('search.noPreview'));
   }
@@ -150,7 +151,7 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
   if (pending) {
     // The same queue pair `buildTrackMenu` gives a matched song, and under the
     // same rule: a DJ session places songs itself.
-    if (!state.autoMode?.active) list.push(...queueActions(pending));
+    if (!player().autoMode.active) list.push(...queueActions(pending));
     list.push({ icon: menuIcons.device(), label: t('trackActions.playOnDevice'), onSelect: () => openPlayOnDevice(pending) });
   }
   if (!track && ctx.music) list.push(...musicLinkActions(ctx.music));
@@ -161,7 +162,7 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
   } else if (!track && entry.title && entry.artist) {
     list.push({
       icon: menuIcons.radio(),
-      label: t(state.autoMode?.active ? 'modeChange.startRadio' : 'trackActions.startRadio'),
+      label: t(player().autoMode?.active ? 'modeChange.startRadio' : 'trackActions.startRadio'),
       onSelect: () => void startCatalogRadio(entry, ctx.item),
     });
   }

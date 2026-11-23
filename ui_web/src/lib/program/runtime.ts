@@ -13,7 +13,13 @@ export interface ProgramState {
   seekable?: boolean;
   preview?: { key: string; preparation: PreviewPreparation | null; retryAttempt: number; retryPending: boolean; retryNotBeforeMs: number } | null;
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
+  /** Set by a program that offers only some optional controls (another device,
+   * which offers what it declares); a native program offers all of them. */
+  controls?: ProgramControl[];
 }
+export type ProgramControl = 'stop' | 'autoplay' | 'radioProfile' | 'seek' | 'shuffle' | 'repeat' | 'queueAdd' | 'queueEdit' | 'radio' | 'dj' | 'djSources' | 'djPlace' | 'djRepair';
+export const offers = (state: Pick<ProgramState, 'controls'> | null | undefined, control: ProgramControl): boolean =>
+  !state?.controls || state.controls.includes(control);
 export interface ProgramContext { kind: 'album' | 'artist' | 'playlist'; id: string }
 export interface ProgramOccurrence extends ProgramTrack { key: string; routeOwnerKey?: string | null; generated?: boolean; generatedSource?: 'radio' | 'autoplay' | null; lane?: 'manual' | 'context' | 'generated' | null }
 export interface ProgramTrack { item_id?: string; loudness_lufs?: number | null; loudness_peak_dbtp?: number | null; duration?: number; offline?: boolean; source: 'local' | 'preview' | 'podcast' | 'pending'; pendingResolve?: import('../playbackQueue').PendingCatalogReference; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string; album_artist?: string | null; track_number?: number | null; disc_number?: number | null; year?: number | null }

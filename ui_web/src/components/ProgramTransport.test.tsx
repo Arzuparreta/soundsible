@@ -176,3 +176,17 @@ it('captures explicit autoplay preference intent and prevents a menu from changi
   setState({ ...state(), generation: 2 }); action.onSelect();
   expect(command).toHaveBeenCalledTimes(1);
 });
+
+it('offers only the controls another device declares: no close, autoplay, shuffle or repeat it cannot take', async () => {
+  const command = vi.fn(async () => {});
+  render(() => <ProgramTransport state={{ ...initial, playWhenReady: true, controls: ['seek'] }} pending={false} command={command} />);
+  expect(document.querySelector('[data-program-close]')).toBeNull();
+  expect(screen.queryByText('nowPlaying.shuffle')).toBeNull();
+  expect(screen.queryByLabelText('nowPlaying.repeat')).toBeNull();
+  await fireEvent.click(document.querySelector('[data-program-menu]')!);
+  const labels = vi.mocked(openContextMenu).mock.calls.at(-1)![0].actions!.map(action => action.label);
+  expect(labels).not.toContain('settings.autoplay');
+  expect(labels).not.toContain('musicExplorer.startDjFromCurrent');
+  await fireEvent.click(screen.getByText('common.pause'));
+  expect(command).toHaveBeenCalledWith({ action: 'pause' });
+});

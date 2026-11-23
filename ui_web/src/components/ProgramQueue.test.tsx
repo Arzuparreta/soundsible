@@ -126,3 +126,8 @@ it('clears only upcoming requests and marks where the playing context continues'
   expect(screen.queryByRole('button', { name: 'nowPlaying.clearManualQueue' })).toBeNull();
   expect(screen.queryByText('nowPlaying.continuationSection')).toBeNull();
 });
+it('does not offer editing on a device that does not declare queue edits', () => {
+  const { container } = render(() => <ProgramQueue state={{ ...initial, controls: [] }} pending={false} command={async () => {}} />);
+  expect(screen.queryByText('musicExplorer.edit')).toBeNull();
+  expect(container.querySelector('[data-queue-action]')).toBeNull();
+});

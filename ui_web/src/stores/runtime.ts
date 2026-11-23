@@ -2,9 +2,9 @@ import { isAppleMobile } from '../lib/audio/appleMobile';
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { syncSavedEntities } from "../lib/savedEntities";
 import { user } from "../lib/session";
-import { createSocket, type AppSocket } from "../lib/socket";
+import { createSocket, type AppSocket, type DeviceCommandAck, type DeviceCommandRequest } from "../lib/socket";
 import { dispatchDiscoveryFeedReady, type DiscoveryFeedReadyEvent } from "../lib/discoveryEvents";
-import { api, type RemotePlaybackState } from "../lib/api";
+import { api } from "../lib/api";
 import { audioService, onProgramEvent, setProgramTransportReporter, type ProgramMediaEventName, type ProgramPlaybackSnapshot } from "../lib/audio";
 import { ProgramMediaSession, type MediaSessionSyncReason } from "../lib/mediaSession";
 import { recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from "../lib/playbackDiagnostics";
@@ -15,7 +15,6 @@ import { isPodcastTrack } from "../lib/track";
 import { createShortcutHandler } from "../lib/shortcuts";
 import { nudgeVolumeGain } from "../lib/volumeScale";
 import { ListeningLearning } from "../lib/listeningLearning";
-import { type PlaybackSessionSnapshot } from "../lib/playbackSession";
 import { liveHandoffPending } from "../lib/liveHandoff";
 import type { Track } from "../types/music";
 import type { DownloadEvent } from "../types/download";
@@ -23,6 +22,7 @@ import { applyVisualPreferences } from "../lib/visualPreferences";
 import { applyDownloadEvent } from "./downloads";
 import { refreshLinkReading } from "../lib/linkQuality";
 import { state, setState, nowPlayingOpen, setNowPlayingOpen } from "./core";
+import { remoteStore, setRemoteStore } from "./remoteLink";
 import { announceTheme, applyTheme } from "./theme";
 import type { PlayerActions, PlaybackAttempt, PublishedPlaybackState } from "./contracts";
 export interface RuntimePorts {
@@ -51,7 +51,9 @@ export interface RuntimePorts {
   pushPlaybackState: (opts?: {
     keepalive?: boolean;
     body?: PublishedPlaybackState;
-  }) => void;
+  }) => Promise<number | null>;
+  startSessionSync: () => void;
+  handleDeviceCommand: (payload: DeviceCommandRequest, ack?: (response: DeviceCommandAck) => void) => Promise<void>;
   unmatchedSelection: {
     queueId: string;
     paused: boolean;
@@ -80,23 +82,12 @@ export interface RuntimePorts {
   actions: Pick<PlayerActions, 'autoSkip' | 'cycleRepeat' | 'enterAutoMode' | 'exitAutoMode' | 'loadDownloads' | 'next' | 'pausePlayback' | 'playTrack' | 'prev' | 'resumePlayback' | 'seek' | 'seekBy' | 'setVolume' | 'syncLibrary' | 'syncLibrarySoon' | 'toggleFavouriteTrack' | 'toggleMute' | 'togglePlay' | 'toggleShuffle'>;
   osSeekStep: () => number;
   loudnessAsked: Set<string>;
-  sessionFor: (remote: RemotePlaybackState) => PlaybackSessionSnapshot | null;
-  playRestoredSession: (session: PlaybackSessionSnapshot, position: number) => boolean;
   sessionOutOfDate: () => boolean;
   playbackStateBody: (override?: Partial<{
     track: Track | null;
     position_sec: number;
     is_playing: boolean;
-  }>) => {
-    track_id: string | null;
-    track: Track | null;
-    position_sec: number;
-    is_playing: boolean;
-    device_id: string;
-    device_name: string;
-    device_type: string;
-    session?: PlaybackSessionSnapshot | null;
-  };
+  }>) => PublishedPlaybackState;
   livePosition: () => number;
   searchForResume: (attempts: number) => Promise<void>;
 }
@@ -457,8 +448,10 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       ports.revalidatePreparation();
       setState('online', true);
       if (state.libraryError) void ports.actions.syncLibrary();
-      socket!.emit('playback_register', state.device);
-      void api.registerDevice(state.device).catch(lifetime.guard(() => {}));
+      const registration = { ...state.device, commands: [...state.device.commands] };
+      socket!.emit('playback_register', registration);
+      void api.registerDevice(registration).catch(lifetime.guard(() => {}));
+      remoteStore()?.onRemoteConnect();
       void ports.actions.loadDownloads(); // re-seed the queue after a (re)connect
       // The station is reachable again: if the music ran out while it was not,
       // this is the moment that ends the silence.
@@ -508,57 +501,22 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     socket.on('discovery_feed_ready', lifetime.guard(data => dispatchDiscoveryFeedReady((data ?? {}) as DiscoveryFeedReadyEvent)));
 
     // ── Remote control: this device acts on commands from another device. ──
-    socket.on('playback_stop_requested', lifetime.guard(() => {
-      if (state.playback.isPlaying) audioService.pause();
+    socket.on('device_command', lifetime.guard((payload, ack) => {
+      void ports.handleDeviceCommand(payload, ack);
     }));
-    socket.on('playback_start_requested', lifetime.guard(data => {
-      const trk = data?.track;
-      // A handoff from another device carries that device's whole session, so
-      // this one continues it rather than starting the same song over on its own.
-      const handedOver = trk && typeof trk.id === 'string' ? ports.sessionFor({
-        ...(data?.state ?? {}),
-        track_id: trk.id
-      }) : null;
-      const handoffPosition = Number(data?.state?.position_sec);
-      if (handedOver && ports.playRestoredSession(handedOver, Number.isFinite(handoffPosition) ? Math.max(0, handoffPosition) : 0)) {
-        return;
-      }
-      if (trk && typeof trk.id === 'string') {
-        const t: Track = {
-          ...trk,
-          id: trk.id,
-          title: typeof trk.title === 'string' ? trk.title : '',
-          artist: typeof trk.artist === 'string' ? trk.artist : '',
-          album: typeof trk.album === 'string' ? trk.album : undefined,
-          duration: typeof trk.duration === 'number' ? trk.duration : undefined,
-          youtube_id: typeof trk.youtube_id === 'string' ? trk.youtube_id : undefined,
-          media_kind: typeof trk.media_kind === 'string' ? trk.media_kind : undefined
-        };
-        // An individual remote selection replaces this receiver's DJ session.
-        // Session-bearing handoffs have already taken the restore path above.
-        if (state.autoMode.active) ports.actions.exitAutoMode();
-        ports.actions.playTrack(t);
-        const pos = Number(data?.state?.position_sec);
-        if (Number.isFinite(pos) && pos > 0) lifetime.setTimeout(() => ports.actions.seek(pos), 400);
-      } else if (state.playback.currentTrack) {
-        void audioService.resume().catch(lifetime.guard(() => {}));
-      }
-    }));
-    socket.on('playback_next_requested', lifetime.guard(() => {
-      if (state.autoMode.active) void ports.actions.autoSkip();else ports.actions.next();
-    }));
-    socket.on('playback_previous_requested', lifetime.guard(() => ports.actions.prev()));
-    socket.on('playback_seek_requested', lifetime.guard(data => {
-      const p = Number(data?.position_sec);
-      if (Number.isFinite(p)) ports.actions.seek(p);
+    // Controlling other devices loads with the socket, not with the first paint.
+    void import('./remote').then(lifetime.guard(m => {
+      m.attachRemoteSocket(ownedSocket, lifetime);
+      setRemoteStore(m);
     }));
 
-    // Keep the published position fresh so other devices resume near where we are
-    // — and the session with it, including while paused: a route reordered or a
-    // source added during a break is part of what a handoff hands over.
+    ports.startSessionSync();
+
+    // Keep the published position fresh while playing (and retry any failed
+    // session publication while paused).
     lifetime.setInterval(() => {
       if (!state.playback.currentTrack) return;
-      if (state.playback.isPlaying || ports.sessionOutOfDate()) ports.pushPlaybackState();
+      if (state.playback.isPlaying || ports.sessionOutOfDate()) void ports.pushPlaybackState();
     }, 15000);
     const pushStateOnUnload = () => {
       ports.savePodcastProgress();
@@ -595,34 +553,46 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     // lib/shortcuts so it can be tested without a DOM; the store only supplies
     // the context snapshot and the callbacks.
     if (typeof window !== 'undefined') {
+      // While another device is controlled the shortcuts act on it, as every player control does.
+      const shown = () => {
+        const m = remoteStore();
+        return m?.remoteTarget()
+          ? { playback: m.remotePlayback, autoMode: m.remoteAutoMode, actions: m.remoteActionsFor(ports.actions as PlayerActions) }
+          : { playback: state.playback, autoMode: state.autoMode, actions: ports.actions };
+      };
+      const can = (command: string) => remoteStore()?.remoteCan(command) ?? true;
       lifetime.listen(window, 'keydown', createShortcutHandler(() => ({
-        autoModeActive: state.autoMode.active,
+        autoModeActive: shown().autoMode.active,
         nowPlayingOpen: nowPlayingOpen(),
-        autoModeAvailable: !state.playback.currentTrack || !isPodcastTrack(state.playback.currentTrack)
+        autoModeAvailable: !shown().playback.currentTrack || !isPodcastTrack(shown().playback.currentTrack!)
       }), {
-        togglePlay: () => ports.actions.togglePlay(),
+        togglePlay: () => shown().actions.togglePlay(),
         // Auto Mode owns the queue: skipping has to go through the generated
         // session coordinator
         // so it can pick a replacement, not walk a queue it is rewriting.
         next: () => {
-          if (state.autoMode.active) void ports.actions.autoSkip();else ports.actions.next();
+          if (shown().autoMode.active) void shown().actions.autoSkip();else shown().actions.next();
         },
-        prev: () => ports.actions.prev(),
-        seekBy: delta => ports.actions.seek(Math.max(0, state.playback.currentTime + delta)),
+        prev: () => shown().actions.prev(),
+        seekBy: delta => shown().actions.seek(Math.max(0, shown().playback.currentTime + delta)),
         // `setVolume` clamps, and already lifts mute when the level goes
         // above zero — turning it up is a request to hear something.
-        nudgeVolume: delta => ports.actions.setVolume(nudgeVolumeGain(state.playback.volume, delta)),
-        toggleMute: () => ports.actions.toggleMute(),
-        toggleShuffle: () => ports.actions.toggleShuffle(),
-        cycleRepeat: () => ports.actions.cycleRepeat(),
+        nudgeVolume: delta => {
+          if (can('transport.set_volume')) shown().actions.setVolume(nudgeVolumeGain(shown().playback.volume, delta));
+        },
+        toggleMute: () => {
+          if (can('transport.set_muted')) shown().actions.toggleMute();
+        },
+        toggleShuffle: () => shown().actions.toggleShuffle(),
+        cycleRepeat: () => shown().actions.cycleRepeat(),
         toggleFavourite: () => {
-          const track = state.playback.currentTrack;
+          const track = shown().playback.currentTrack;
           // Whatever is playing can be saved — owning the file is not a
           // precondition, only being a song is (podcasts have their own shelf).
           if (track && !isPodcastTrack(track)) ports.actions.toggleFavouriteTrack(track);
         },
-        enterAutoMode: () => ports.actions.enterAutoMode(),
-        exitAutoMode: () => ports.actions.exitAutoMode(),
+        enterAutoMode: () => shown().actions.enterAutoMode(),
+        exitAutoMode: () => shown().actions.exitAutoMode(),
         closeNowPlaying: () => setNowPlayingOpen(false),
         // Loaded on use: lib/searchFocus imports the stores, so a static
         // import would close a cycle back into this file.

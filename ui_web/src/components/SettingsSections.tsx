@@ -28,7 +28,6 @@ import {
   type SettingCapabilities,
   type SettingsSectionId,
 } from '../lib/settingsCatalog';
-import { DevicesPanel } from './DeviceSheet';
 import { PairedDevicesPanel } from './PairDevice';
 import { DisplayPreferences } from './DisplayPreferences';
 import { LibrarySettingsView } from './LibrarySettingsView';
@@ -473,10 +472,6 @@ function DevicesSection() {
 
       <SettingsGroup anchor="paired-devices" label={t('settings.pairedDevices')} note={t('settings.pairNote')}>
         <PairedDevicesPanel />
-      </SettingsGroup>
-
-      <SettingsGroup anchor="network-devices" label={t('settings.group.network')} note={t('settings.note.network')}>
-        <DevicesPanel />
       </SettingsGroup>
     </>
   );

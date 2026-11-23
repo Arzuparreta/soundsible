@@ -1,5 +1,5 @@
 import type { MenuAction } from '../components/ActionMenu';
-import type { ProgramCommand, ProgramState } from '../lib/program/runtime';
+import { offers, type ProgramCommand, type ProgramState } from '../lib/program/runtime';
 import type { Track } from '../types/music';
 import { programTrack } from '../lib/program/tracks';
 import { isPodcastTrack } from '../lib/track';
@@ -10,7 +10,7 @@ export function nativeDjSourceActions(_id: string, label: string, tracks: Track[
   current: () => boolean, pending: () => boolean, execute: (command: ProgramCommand) => Promise<void>): MenuAction[] {
   const captured = state();
   const music = tracks.filter(track => !isPodcastTrack(track));
-  if (!captured?.ready || !music.length) return [];
+  if (!captured?.ready || !music.length || !offers(captured, 'dj')) return [];
   const valid = () => current() && !pending() && state()?.generation === captured.generation && state()?.programToken === captured.programToken;
   const requested = music.map(programTrack).filter(track => track !== null);
   const fits = requested.length > 0 && requested.length <= 1000 && JSON.stringify(requested).length <= 65536;

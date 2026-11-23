@@ -204,7 +204,7 @@
    own until they are pointed at, so the bar reads as part of the room rather
    than as three more objects floating over it. */
 .floatingChrome {
-  --player-chrome-side: var(--player-chrome-size);
+  --player-chrome-side: minmax(var(--player-chrome-size), 1fr);
   --player-chrome-column-gap: 12px;
 
   position: absolute;
@@ -224,8 +224,97 @@
 }
 
 .chromeButton,
+.deviceButton,
 .modePill {
   pointer-events: auto;
+}
+
+.chromeRight {
+  grid-column: 3;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+/* Which device plays. Icon only for this device; with another device's name
+   on desktop, where the bar has room for it. */
+.deviceButton,
+.remoteBanner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+.deviceButton {
+  min-width: var(--player-chrome-size);
+  height: var(--player-chrome-size);
+  padding: 0;
+}
+
+.deviceButtonActive {
+  color: var(--accent-ink);
+}
+
+.deviceButtonError {
+  color: var(--danger);
+}
+
+.deviceButtonLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remoteBanner {
+  position: absolute;
+  z-index: 40;
+  top: calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--space-xs));
+  left: 50%;
+  max-width: calc(100% - 2 * var(--space-lg));
+  height: var(--pill-h);
+  padding: 0 var(--space-md);
+  transform: translateX(-50%);
+  background: var(--accent-faint);
+  color: var(--accent-ink);
+  font-weight: var(--fw-medium);
+}
+
+/* The visible pill is shorter than a touch target; its target is not. */
+.remoteBanner::before {
+  position: absolute;
+  inset: calc((var(--control-h) - var(--pill-h)) / -2) 0;
+  content: '';
+}
+
+@media (min-width: 1024px) {
+  .deviceButtonActive {
+    max-width: 32ch;
+    padding: 0 var(--space-md);
+    background: var(--accent-faint);
+  }
+}
+
+@media (max-width: 1023px) {
+  .deviceButton .deviceButtonLabel {
+    display: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .deviceButton:hover {
+    color: var(--ink-primary);
+    background-color: var(--stage-material);
+  }
 }
 
 .chromeButton {
@@ -487,8 +576,16 @@
     --player-chrome-gap: 8px;
   }
 
+  .surface[data-remote] {
+    --player-chrome-gap: calc(var(--pill-h) + var(--space-md));
+  }
+
   .floatingChrome {
     --player-chrome-column-gap: 8px;
+
+    /* Two buttons on the right (device, close): both sides as wide, so the
+       mode pill stays centred. */
+    --player-chrome-side: calc(var(--player-chrome-size) * 2 + var(--space-2xs));
 
     left: max(12px, env(safe-area-inset-left, 0px));
     right: max(12px, env(safe-area-inset-right, 0px));

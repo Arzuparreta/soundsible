@@ -31,11 +31,36 @@ class DeviceRadioSessionTest {
         fun <T> main(work: () -> T): T { val value = AtomicReference<T>(); instrumentation.runOnMainSync { value.set(work()) }; return value.get() }
         fun await(label: String, condition: () -> Boolean) { val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
             while (System.nanoTime() < until) { if (condition()) return; Thread.sleep(50) }; fail(label) }
-        val peerId = java.util.UUID.randomUUID().toString(); val client = connection.client; val transferred = AtomicReference<JSONObject>()
+        val peerId = java.util.UUID.randomUUID().toString()
+        val peerInstance = java.util.UUID.randomUUID().toString()
+        val peerSeq = java.util.concurrent.atomic.AtomicLong(0)
+        val peerState = AtomicReference<JSONObject>()
+        val client = connection.client; val transferred = AtomicReference<JSONObject>()
         val peer = io.socket.client.IO.socket(origin, io.socket.client.IO.Options().apply { forceNew = true; reconnection = false
             callFactory = client; webSocketFactory = client; extraHeaders = mapOf("Cookie" to listOf(connection.cookieHeader(epoch)!!)) })
-        peer.on(io.socket.client.Socket.EVENT_CONNECT) { peer.emit("playback_register", JSONObject().put("device_id", peerId).put("device_name", "Radio peer").put("device_type", "desktop")) }
-        peer.on("playback_start_requested") { args -> transferred.set(args.firstOrNull() as? JSONObject) }
+        peer.on(io.socket.client.Socket.EVENT_CONNECT) {
+            peer.emit("playback_register", JSONObject()
+                .put("device_id", peerId).put("device_name", "Radio peer").put("device_type", "desktop")
+                .put("form_factor", "computer").put("instance_id", peerInstance).put("protocol", 1)
+                .put("commands", JSONArray(listOf("session.export", "session.import", "session.release"))))
+        }
+        peer.on("device_command") { arguments ->
+            val payload = arguments.firstOrNull() as? JSONObject ?: return@on
+            val ack = arguments.lastOrNull() as? io.socket.client.Ack
+            when (payload.optString("name")) {
+                "session.export" -> {
+                    val state = peerState.get()
+                    if (state != null) ack?.call(JSONObject().put("status", "applied").put("state", state))
+                    else ack?.call(JSONObject().put("status", "rejected").put("reason", "nothing_playing"))
+                }
+                "session.import" -> {
+                    transferred.set(payload.optJSONObject("args")?.optJSONObject("state"))
+                    ack?.call(JSONObject().put("status", "applied").put("rev", 1))
+                }
+                "session.release" -> ack?.call(JSONObject().put("status", "applied").put("rev", 2))
+                else -> ack?.call(JSONObject().put("status", "rejected").put("reason", "unsupported"))
+            }
+        }
         var scenario: ActivityScenario<MainActivity>? = null; var browser: MediaBrowser? = null; var capture: ProgramPcmTap.Capture? = null
         val pcm = AtomicBoolean()
         try {
@@ -55,9 +80,12 @@ class DeviceRadioSessionTest {
             val session = JSONObject().put("v", 1).put("mode", "now_playing").put("queue", queue).put("index", 1)
                 .put("shuffle", false).put("repeat", "off").put("radio", radio).put("auto", JSONObject.NULL)
             fun incoming(snapshot: JSONObject, index: Int) {
-                core("/api/playback/state", "PUT", JSONObject().put("device_id", peerId).put("track_id", "member-track")
-                    .put("track", snapshot.getJSONArray("queue").getJSONObject(index)).put("position_sec", 2).put("is_playing", false).put("session", snapshot))
-                core("/api/playback/handoff", "POST", JSONObject().put("from_device_id", peerId).put("to_device_id", id))
+                val state = JSONObject().put("device_id", peerId).put("track_id", "member-track")
+                    .put("track", snapshot.getJSONArray("queue").getJSONObject(index)).put("position_sec", 2).put("is_playing", false).put("session", snapshot)
+                peerState.set(state)
+                core("/api/playback/state", "PUT", JSONObject(state.toString()).put("instance_id", peerInstance).put("seq", peerSeq.incrementAndGet()))
+                val answer = core("/api/devices/transfer", "POST", JSONObject().put("from_device_id", peerId).put("to_device_id", id))
+                assertEquals("applied", answer.optString("status"))
             }
             capture = NativeProgramOutput.subscribe(epoch) { block -> if (block.bytes.any { it != 0.toByte() }) pcm.set(true) }
             incoming(session, 1)
@@ -68,8 +96,8 @@ class DeviceRadioSessionTest {
             transferred.set(null)
             val result = main { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply { putString("action", "deviceHandoff"); putLong("generation", epoch); putString("device_id", peerId) }) }.get(20, TimeUnit.SECONDS)
             assertEquals(0, result.resultCode)
-            await("Radio outgoing intent missing") { transferred.get()?.optJSONObject("state")?.optJSONObject("session")?.optJSONObject("radio")?.optBoolean("active") == true }
-            val returned = transferred.get()!!.getJSONObject("state").getJSONObject("session")
+            await("Radio outgoing intent missing") { transferred.get()?.optJSONObject("session")?.optJSONObject("radio")?.optBoolean("active") == true }
+            val returned = transferred.get()!!.getJSONObject("session")
             assertEquals("explore", returned.getJSONObject("radio").getString("profile")); assertEquals("member-track", returned.getJSONObject("radio").getString("seedId"))
             val wire = returned.getJSONArray("queue")
             assertEquals(8, (0 until wire.length()).count { wire.getJSONObject(it).getString("queueLane") == "generated" })

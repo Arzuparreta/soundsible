@@ -26,8 +26,13 @@ class PlaybackPlugin : Plugin() {
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) { publish() }
     }
+    private val deviceEvents: (String, org.json.JSONObject) -> Unit = { event, payload ->
+        val forwarded = runCatching { JSObject.fromJSONObject(payload) }.getOrNull()
+        if (alive && forwarded != null) bridge.execute { notifyListeners(event, forwarded) }
+    }
     private val ticker = object : Runnable { override fun run() { if (alive && visible) { publish(); main.postDelayed(this, 500) } } }
     override fun load() {
+        NativeDeviceEvents.listeners.add(deviceEvents)
         pending = MediaController.Builder(context, SessionToken(context, ComponentName(context, PlaybackService::class.java))).setListener(object : MediaController.Listener { override fun onExtrasChanged(controller: MediaController, extras: Bundle) { publish() } }).buildAsync().also { future ->
             future.addListener({ try { if (alive) { controller = future.get(); controller?.addListener(listener); if (visible) main.post(ticker) } } catch (_: Exception) {} }, java.util.concurrent.Executor { task -> main.post(task) })
         }
@@ -91,21 +96,17 @@ class PlaybackPlugin : Plugin() {
         return state ?: JSObject().put("generation", generation).put("device_id", org.json.JSONObject.NULL).put("connected", false)
     }
     @PluginMethod fun deviceState(call: PluginCall) { main.post { call.resolve(deviceSnapshot()) } }
-    @PluginMethod fun deviceHandoff(call: PluginCall) { main.post {
-        try {
-            val connection = EngineConnection.shared(context)
-            val generation = call.getInt("generation")?.toLong() ?: -1L
-            require(generation == connection.generation)
-            val active = controller ?: error("NOT_READY")
-            val target = call.getString("device_id") ?: error("NO_DEVICE")
-            val future = active.sendCustomCommand(ProgramQueue.command, Bundle().apply {
-                putString("action", "deviceHandoff"); putLong("generation", generation); putString("device_id", target)
-            })
-            future.addListener({
-                try { require(alive && generation == connection.generation && future.get().resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS); call.resolve(deviceSnapshot()) }
-                catch (_: Exception) { call.reject("Device handoff failed or session changed", "DEVICE_HANDOFF") }
-            }, { task -> main.post(task) })
-        } catch (_: Exception) { call.reject("Device handoff unavailable", "DEVICE_HANDOFF") }
+    /** Watch another device on the service's account socket for connected mode; `device_id: null` stops. */
+    @PluginMethod fun deviceWatch(call: PluginCall) { main.post {
+        val connection = EngineConnection.shared(context)
+        val generation = call.getInt("generation")?.toLong() ?: -1L
+        val session = NativeDeviceEvents.session
+        if (!alive || generation != connection.generation || session == null) { call.reject("Device watch unavailable", "DEVICE_WATCH"); return@post }
+        val id = if (call.data.isNull("device_id")) null else call.getString("device_id")
+        session.watch(id) { ack ->
+            val answer = ack?.let { runCatching { JSObject.fromJSONObject(it) }.getOrNull() }
+            if (answer != null && alive && generation == connection.generation) call.resolve(answer) else call.reject("Device watch failed", "DEVICE_WATCH")
+        }
     } }
     @PluginMethod fun deviceRename(call: PluginCall) { main.post {
         try {
@@ -277,6 +278,7 @@ class PlaybackPlugin : Plugin() {
         main.postDelayed({ awaitClosed(call, player, connection, epoch, deadline) }, 20)
     }
     override fun handleOnDestroy() {
+        NativeDeviceEvents.listeners.remove(deviceEvents)
         alive = false; liveRequests.forEach { EngineConnection.shared(context).cancel(it) }; liveRequests.clear(); liveWorker.shutdownNow(); main.removeCallbacksAndMessages(null); controller?.removeListener(listener)
         pending?.let { MediaController.releaseFuture(it) }; controller = null
     }
