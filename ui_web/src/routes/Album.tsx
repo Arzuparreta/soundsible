@@ -379,7 +379,7 @@ export default function Album() {
                 <span class={hero.primaryLabel}>{t('album.play')}</span>
               </button>
             }>
-              <CollectionActions title={title()} auto iconOnlyOnMobile buttonClass={hero.play}
+              <CollectionActions title={title()} iconOnlyOnMobile buttonClass={hero.play}
                 tracks={view() === 'library' ? libraryTrackList() : undefined}
                 items={view() === 'library' ? undefined : tracklist()} />
             </Show>

@@ -40,11 +40,15 @@ export interface MediaRowProps {
   /** A named action the row carries in the open, beside the overflow menu.
    * Reserved for placement — asking for a song, putting one in the route —
    * where the whole list exists to be acted on and burying the verb in a menu
-   * would cost a tap per item. */
-  primaryAction?: { label: string; onSelect: () => void };
+   * would cost a tap per item. With an `icon` it is drawn as that glyph alone,
+   * named by its label, so a narrow row keeps its width for the title. */
+  primaryAction?: { label: string; onSelect: () => void; icon?: JSX.Element };
   disabled?: boolean;
   onActivate?: () => void;
   onMenu?: (event?: MenuEvent) => void;
+  /** False leaves the menu to a hold, a right-click or the context-menu key,
+   * for a row whose width belongs to its title and its one named action. */
+  menuButton?: boolean;
 
   /** Visible controls are reserved for explicit edit/placement mode. */
   editing?: boolean;
@@ -120,11 +124,16 @@ export function MediaRow(props: MediaRowProps) {
         * control repeating that name verbatim would leave a screen reader with
         * two identical buttons and no way to tell them apart. */}
       <Show when={props.primaryAction}>{(action) => (
-        <Control class={styles.primary} type="button" data-row-primary data-pressable
-          aria-disabled={props.disabled || busy() || undefined}
-          {...primaryTap}>{action().label}</Control>
+        <Show when={action().icon} fallback={
+          <Control class={styles.primary} type="button" data-row-primary data-pressable
+            aria-disabled={props.disabled || busy() || undefined}
+            {...primaryTap}>{action().label}</Control>
+        }>
+          <IconButton class={styles.menu} data-row-primary data-pressable label={`${action().label}: ${props.title}`} title={action().label}
+            aria-disabled={props.disabled || busy() || undefined} {...primaryTap}>{action().icon}</IconButton>
+        </Show>
       )}</Show>
-      <Show when={props.editing && props.editControls} fallback={<Show when={props.onMenu}>
+      <Show when={props.editing && props.editControls} fallback={<Show when={props.onMenu && props.menuButton !== false}>
         <IconButton class={styles.menu} data-row-menu data-pressable
           label={`${t('songRow.ariaMore')}: ${props.title}`} aria-haspopup="dialog" {...menuTap}>
           <OverflowIcon />

@@ -50,7 +50,7 @@ vi.mock('../lib/i18n', () => ({ t: (key: string, params?: Record<string, string 
 vi.mock('./PlayerStage', () => ({ PlayerStage: (props: { mode: string; empty?: unknown }) => (
   <div data-testid="shared-stage" data-mode={props.mode}>{state.playback.currentTrack ? null : props.empty as never}</div>
 ) }));
-vi.mock('./NowPlayingBrowser', () => ({ NowPlayingBrowser: (props: { purpose?: string }) => <aside aria-label="source-browser" data-purpose={props.purpose} /> }));
+vi.mock('./PlayerSearchPanel', () => ({ PlayerSearchPanel: (props: { intent?: string }) => <aside aria-label="source-browser" data-intent={props.intent ?? 'none'} /> }));
 
 import { AutoMode, titleFit } from './AutoMode';
 
@@ -90,7 +90,7 @@ describe('AutoMode workspace', () => {
   it('browses without arming a mode, and offers no button that only highlights a tray', () => {
     renderAuto('browser');
     expect(screen.getByTestId('shared-stage')).toHaveAttribute('data-mode', 'auto');
-    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-neutral');
+    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-intent', 'none');
     // Once, in the references tray. The route rows used to repeat it under every
     // song, which on a 280px panel cost the artist its name.
     expect(screen.getAllByText('Warehouse techno')).toHaveLength(1);
@@ -491,6 +491,6 @@ describe('the stage before the first song', () => {
     expect(stage.getByText('autoMode.noSeed')).toBeInTheDocument();
     fireEvent.click(stage.getByRole('button', { name: 'musicExplorer.referenceEmpty' }));
     expect(onPanelChange).toHaveBeenCalledWith('browser');
-    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-reference');
+    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-intent', 'reference');
   }));
 });

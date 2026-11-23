@@ -1,0 +1,323 @@
+.panel {
+  /* The workspace assigns both dimensions. Descendant text changes must not
+     invalidate the intrinsic size of all three player tiles. */
+  contain: strict;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--topbar-h);
+  /* Clear of the panel grip in this inset, so the grip and the field never
+     compete for a press. */
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-lg);
+}
+
+/* A recessed field in the stage's palette, no outline until it has focus. */
+.search {
+  flex: 1;
+  --search-field-bg: var(--stage-well);
+  --search-field-bg-focus: var(--stage-well);
+  --search-field-border: transparent;
+  --search-field-hover: var(--stage-material);
+}
+
+.close,
+.iconButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  color: var(--ink-secondary);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .close:hover,
+  .iconButton:hover:not(:disabled) {
+    color: var(--ink-primary);
+    background: var(--stage-material);
+  }
+}
+
+/* Side by side with the stage, the panel is never something to close. */
+@media (min-width: 1024px) {
+  .panel:not([data-intent]) .close {
+    display: none;
+  }
+}
+
+.intent {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  margin: 0 var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--ink-primary);
+  font-size: var(--text-caption);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+
+.intent button {
+  min-height: var(--control-h);
+  padding: 0 var(--space-xs);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  contain: layout style;
+  padding: var(--space-sm) var(--space-sm) max(var(--space-2xl), var(--player-mobile-footer-clearance, 0px));
+  /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
+  overscroll-behavior-y: contain;
+}
+
+.section + .section {
+  margin-top: var(--space-lg);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.heading {
+  margin: 0 0 var(--space-xs);
+  padding: 0 var(--space-xs);
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.sectionHead .heading {
+  margin: 0;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  min-height: var(--row-h);
+  padding: var(--space-2xs);
+  padding-right: var(--space-sm);
+  color: var(--ink-primary);
+  font: inherit;
+  text-align: left;
+  background: var(--stage-material-quiet);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover {
+    background: var(--stage-material-hover);
+  }
+}
+
+.tileCover,
+.tileGlyph {
+  flex: 0 0 auto;
+  width: var(--cover-sm);
+  height: var(--cover-sm);
+  border-radius: var(--radius-xs);
+}
+
+.tileGlyph {
+  display: grid;
+  place-items: center;
+  color: var(--accent-ink);
+  background: var(--accent-faint);
+}
+
+.tileTitle {
+  /* Two lines before an ellipsis: a tile is half a phone wide. */
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.group {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--stage-line-soft);
+}
+
+.more {
+  /* Each on its own line, its text aligned with the rows' text. */
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  min-height: var(--control-h);
+  margin-top: var(--space-2xs);
+  padding: 0 var(--space-xs);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.notice {
+  margin: 0 0 var(--space-xs);
+  padding: 0 var(--space-xs);
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  gap: var(--space-sm);
+  min-height: var(--space-3xl);
+  padding: var(--space-lg);
+  color: var(--ink-secondary);
+  text-align: center;
+}
+
+.empty p {
+  margin: 0;
+}
+
+.empty button {
+  color: var(--accent-ink);
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* Entity rows on the desktop list: the whole row is one link-like target. */
+.navRow {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: var(--cover-sm) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  height: var(--row-h);
+  padding: 0 var(--space-xs);
+  border-bottom: 1px solid var(--stage-line-soft);
+}
+
+.rowActivate {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.rowActivate:focus-visible {
+  /* The global ring, drawn inside: the list clips anything outside a row. */
+  outline-offset: -2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rowActivate:hover {
+    background: var(--stage-material);
+  }
+}
+
+.navCover {
+  width: var(--cover-sm);
+  height: var(--cover-sm);
+  border-radius: var(--radius-sm);
+}
+
+.navCover[data-round] {
+  border-radius: var(--radius-full);
+}
+
+.navText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.navText strong,
+.navText small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.navText strong {
+  color: var(--ink-primary);
+  font-size: var(--text-label);
+}
+
+.navText small {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}
+
+.spinning {
+  animation: spin 0.8s linear infinite;
+  animation-play-state: var(--decorative-animation-state, running);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+}

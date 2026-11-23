@@ -6,9 +6,6 @@ Existing imports from `components/Button`, `components/CoverImage` and
 
 - `Control` keeps native button semantics and defaults to `type="button"`.
   `IconButton` requires a label. `Button` adds the standard visual variants.
-- `Field` and `Select` require an accessible name and retain native input and
-  selection behavior. `Tabs` owns one keyboard stop, arrow/Home/End navigation
-  and selected-tab semantics.
 - `MediaRow` is the platform-neutral visual row. Browser and native adapters
   supply state and actions. A reused collection slot reads its item through an
   accessor; any local state must follow musical or occurrence identity.
@@ -45,8 +42,14 @@ locally with `npm test` and in CI's `ui_build` job. To reduce the baseline after
 a migration, run `node scripts/check-design.mjs --update` and review its diff;
 CI never updates it.
 
-`tests/browser/design-system.spec.ts` covers the actual player browser in dark
+`tests/browser/design-system.spec.ts` covers the player's search panel in dark
 and light themes at Compact, Normal and Large on each CI browser profile. Its
-reviewed screenshots cover field, tabs, typography, artwork and visible row
-menus. It also checks menu keyboard anchoring/focus and tab keyboard behavior.
-These fixture views never contact a real engine or library.
+reviewed screenshots cover field, typography, artwork and the row's named
+action. It also checks menu keyboard anchoring/focus. These fixture views never
+contact a real engine or library.
+
+- `MediaRow` (and `SongRow`) take a `primaryAction` with an `icon` to draw that
+  action as a glyph named by its label, where the row's width belongs to the
+  title. `menuButton={false}` (`SongRow`: `mobileMenuButton={false}`) leaves the
+  menu to a hold, a right-click or the context-menu key; use it only where a
+  named action already sits in the row.

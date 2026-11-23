@@ -9,7 +9,7 @@ import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
-import { createMemo, Show } from 'solid-js';
+import { createMemo, Show, type JSX } from 'solid-js';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
 import styles from './SongRow.module.css';
@@ -40,7 +40,8 @@ export interface SongRowProps {
   onPlay?: (track: Track) => void;
   compact?: boolean;
   actionLabel?: string;
-  primaryAction?: { label: string; onSelect: () => void };
+  /** See `MediaRow`: with an `icon`, the action is that glyph alone. */
+  primaryAction?: { label: string; onSelect: () => void; icon?: JSX.Element };
   busy?: boolean;
   onDragStart?: (event: DragEvent) => void;
   /** When set, exposes the context menu (⋯ button, long-press, right-click).
@@ -48,6 +49,9 @@ export interface SongRowProps {
   onMenu?: (track: Track, ev?: MenuEvent) => void;
   /** Pickers have one action and must suppress the default mobile menu too. */
   hideMenu?: boolean;
+  /** False drops the mobile row's ⋯ button; holding the row still opens the
+   * menu. The desktop row keeps it. */
+  mobileMenuButton?: boolean;
 }
 
 /**
@@ -119,7 +123,7 @@ export default function SongRow(props: SongRowProps) {
       // A compact row carries no collection marks — the same trim the desktop
       // row makes — so the shared row is told there is no entry to mark.
       entry={props.compact || props.favouritable === false ? undefined : resolveEntry()}
-      favouritesKnown={props.favouritesKnown} actionLabel={label()} primaryAction={props.primaryAction}
+      favouritesKnown={props.favouritesKnown} actionLabel={label()} primaryAction={props.primaryAction} menuButton={props.mobileMenuButton}
       onActivate={onRowClick} onMenu={props.hideMenu ? undefined : (event) => props.onMenu
         ? props.onMenu(props.track, event)
         : openTrackMenu(props.track, { music: props.music, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor,
@@ -165,7 +169,14 @@ export default function SongRow(props: SongRowProps) {
       </Show>
       <div class={styles.actionStripe}>
         <Show when={props.busy}><Spinner size={14} /></Show>
-        <Show when={props.primaryAction}>{(action) => <Control type="button" class={styles.primaryAction} disabled={props.busy} onClick={(event) => { event.stopPropagation(); action().onSelect(); }}>{action().label}</Control>}</Show>
+        <Show when={props.primaryAction}>{(action) => (
+          <Show when={action().icon} fallback={
+            <Control type="button" class={styles.primaryAction} disabled={props.busy} onClick={(event) => { event.stopPropagation(); action().onSelect(); }}>{action().label}</Control>
+          }>
+            <IconButton class={styles.iconBtn} label={`${action().label}: ${props.track.title}`} title={action().label} disabled={props.busy}
+              onClick={(event) => { event.stopPropagation(); action().onSelect(); }}>{action().icon}</IconButton>
+          </Show>
+        )}</Show>
         <Show when={!props.compact}><span class={styles.duration}>{formatDuration(props.track.duration)}</span></Show>
         {/* Downloaded or not, a song in the library gets a heart — the mark is
           * about which of your songs stand out, not about where they live. What

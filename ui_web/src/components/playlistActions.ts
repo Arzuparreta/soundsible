@@ -17,14 +17,12 @@ export interface PlaylistMenuHooks {
   onRenamed?: (newName: string) => void;
   /** Called after the playlist is deleted (e.g. to navigate away). */
   onDeleted?: () => void;
+  /** Offered where the playlist's songs can be put in a new order. */
   onEdit?: () => void;
-  shell?: boolean;
-  beforeQueueId?: string;
-  onPlaced?: () => void;
 }
 
 /** Resolve a playlist's track ids to library tracks (in order). */
-function playlistTracks(name: string): Track[] {
+export function playlistTracks(name: string): Track[] {
   const ids = state.playlists[name] ?? [];
   const byId = collectionIndex(musicLibrary());
   return ids.map((id) => byId.get(id)).filter((t): t is Track => !!t);
@@ -32,43 +30,28 @@ function playlistTracks(name: string): Track[] {
 
 /** Play / rename / duplicate / change-cover / delete menu definition for a playlist. */
 export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {}): ActionMenuOptions {
-  const inAuto = player().autoMode.active && hooks.shell === true;
   return {
     title: name,
     actions: [
-      // In DJ a playlist is one source: choosing it moves the session onto it.
-      // Only an explicit placement into a seam asks for its songs one by one.
-      ...(inAuto && !hooks.beforeQueueId ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void player().actions.changeAutoSession(playlistTracks(name), name) }] : []),
       {
-        icon: inAuto ? menuIcons.queue() : menuIcons.play(),
-        label: inAuto ? t('musicExplorer.requestAll') : t('playlistActions.play'),
-        onSelect: async () => {
-          const t = playlistTracks(name);
-          if (t.length) {
-            if (inAuto) {
-              const epoch = player().actions.autoSessionToken();
-              await player().actions.placeAutoTracks(t, hooks.beforeQueueId);
-              if (player().actions.autoSessionToken() === epoch) hooks.onPlaced?.();
-            } else if (player().autoMode.active) {
-              player().actions.startDjSelection(t, name);
-            } else {
-              player().actions.playFrom(t, 0, { context: playlistContext(name, t, state.librarySettings) });
-            }
-          }
+        icon: menuIcons.play(),
+        label: t('playlistActions.play'),
+        onSelect: () => {
+          const tracks = playlistTracks(name);
+          if (!tracks.length) return;
+          // In DJ a playlist is one source: playing it starts a session from it.
+          if (player().autoMode.active) player().actions.startDjSelection(tracks, name);
+          else player().actions.playFrom(tracks, 0, { context: playlistContext(name, tracks, state.librarySettings) });
         },
       },
-      ...(inAuto ? [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => { player().actions.addAutoSource(playlistTracks(name), name); hooks.onPlaced?.(); } }] : []),
-      ...(inAuto && hooks.beforeQueueId ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void player().actions.changeAutoSession(playlistTracks(name), name) }] : []),
-      ...(!inAuto ? [{
+      {
         icon: menuIcons.shuffle(),
         label: t('playlistActions.shuffle'),
         onSelect: () => {
-          const t = playlistTracks(name);
-          if (t.length) {
-            player().actions.playShuffled(t, playlistContext(name, t, state.librarySettings));
-          }
+          const tracks = playlistTracks(name);
+          if (tracks.length) player().actions.playShuffled(tracks, playlistContext(name, tracks, state.librarySettings));
         },
-      }] : []),
+      },
       ...(hooks.onEdit ? [{ icon: menuIcons.edit(), label: t('musicExplorer.edit'), onSelect: hooks.onEdit }] : []),
       {
         icon: menuIcons.rename(),

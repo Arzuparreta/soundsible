@@ -23,7 +23,7 @@ import { editableFrom, routeRows } from '../lib/djRoute';
 import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
-import { NowPlayingBrowser } from './NowPlayingBrowser';
+import { PlayerSearchPanel, type SearchPanelIntent } from './PlayerSearchPanel';
 import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
@@ -82,10 +82,14 @@ export function AutoMode(props: {
   const [layout, setLayout] = createSignal(readLayout());
   // Explicit picker intent distinguishes requesting a song at a seam from
   // adding reference material; ordinary browsing remains free of either task.
-  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route' | 'reference' | 'change'; beforeQueueId?: string }>({ kind: 'neutral' });
+  const [destination, setDestination] = createSignal<{ kind: 'neutral' | SearchPanelIntent; beforeQueueId?: string }>({ kind: 'neutral' });
   const [carriedTrack, setCarriedTrack] = createSignal<CarriedTrack | null>(null);
   let destinationOrigin: AutoModePanelId = props.panel;
-  const openDestination = (kind: 'route' | 'reference' | 'change', beforeQueueId?: string) => {
+  const panelIntent = (): SearchPanelIntent | undefined => {
+    const kind = destination().kind;
+    return kind === 'neutral' ? undefined : kind;
+  };
+  const openDestination = (kind: SearchPanelIntent, beforeQueueId?: string) => {
     destinationOrigin = props.panel;
     setDestination({ kind, beforeQueueId });
     props.onPanelChange('browser');
@@ -297,14 +301,13 @@ export function AutoMode(props: {
   const Browser = (dragHandle: JSX.Element) => (
     <section class={styles.sourcePanel}>
       <div class={styles.sourceBrowser}>
-        <NowPlayingBrowser
+        <PlayerSearchPanel
           dragHandle={dragHandle}
           active={panelActive('browser')}
-          purpose={destination().kind === 'change' ? 'auto-change' : destination().kind === 'reference' ? 'auto-reference' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
-          routeBeforeQueueId={destination().beforeQueueId}
-          onPlaced={() => finishDestination('route')}
-          onCarryTrack={(track) => setCarriedTrack({ track })}
-          onCancelPlacement={() => finishDestination(destinationOrigin)}
+          intent={panelIntent()}
+          beforeQueueId={destination().beforeQueueId}
+          onDone={() => finishDestination('route')}
+          onCancelIntent={() => finishDestination(destinationOrigin)}
           onClose={() => finishDestination(destination().kind === 'neutral' ? 'stage' : destinationOrigin)}
         />
       </div>
@@ -395,7 +398,7 @@ export function AutoMode(props: {
           presets={[
             { id: 'balanced', label: t('autoMode.workspace.layoutBalanced') },
             { id: 'stage', label: t('autoMode.workspace.layoutStage') },
-            { id: 'left', label: t('musicExplorer.title') },
+            { id: 'left', label: t('autoMode.panel.browser') },
             { id: 'right', label: t('autoMode.workspace.layoutRoute') },
           ]}
           onSelect={applyLayoutPreset}

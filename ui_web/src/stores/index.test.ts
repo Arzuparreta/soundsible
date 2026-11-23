@@ -3088,7 +3088,7 @@ describe('Solid store favourites', () => {
       duration: 490,
       youtube_id: 'dQw4w9WgXcQ',
     };
-    const { actions, favouriteTracks, favouriteLibraryIds } = await loadStore({
+    const { actions, favouriteTracks } = await loadStore({
       toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
       getLibrary: vi
         .fn()
@@ -3107,13 +3107,11 @@ describe('Solid store favourites', () => {
     await actions.syncLibrary();
     actions.toggleFavouriteTrack(preview);
     expect(favouriteTracks()[0].source).toBe('preview');
-    expect(favouriteLibraryIds().size).toBe(0);
 
     // The download lands; nothing about the favourite is rewritten.
     await actions.syncLibrary();
     expect(favouriteTracks()[0].id).toBe('hash9f2a');
     expect(favouriteTracks()[0].source).toBeUndefined();
-    expect([...favouriteLibraryIds()]).toEqual(['hash9f2a']);
   });
 
   it('saves a whole album in one act, in its order, without flipping a song already saved', async () => {

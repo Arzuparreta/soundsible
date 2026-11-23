@@ -207,7 +207,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Unified row recipe (shared with NowPlayingBrowser): the separator is the
+/* Unified row recipe (shared with the player's search panel): the separator is the
  * row's own bottom hairline and the rounded state fill paints on a ::before
  * layer, so a fill never clips the separator and the rounded corner never
  * wears through the line. */

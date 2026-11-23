@@ -2,7 +2,7 @@ import { snapCarousel, snapPlayerCarousel, holdCarousel, releaseCarousel, holdFo
 import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
 import AxeBuilder from '@axe-core/playwright';
-import { fixtureStream } from './music-browser-fixture';
+import { catalogSearchFixture, fixtureStream } from './music-browser-fixture';
 
 const TRACKS = [
   {
@@ -20,9 +20,12 @@ async function mockEngine(page: Page) {
   await page.routeWebSocket('**/socket.io/**', (socket) => socket.close());
   await page.route('**/socket.io/**', (route) => route.abort());
   await page.route('**/api/**', async (route) => {
-    const path = new URL(route.request().url()).pathname;
+    const url = new URL(route.request().url());
+    const path = url.pathname;
     let body: unknown = {};
-    if (path === '/api/auth/state') {
+    if (path === '/api/catalog/search') {
+      body = catalogSearchFixture(TRACKS, url.searchParams.get('q') ?? '');
+    } else if (path === '/api/auth/state') {
       body = {
         requires_login: true,
         user: { id: 'qa-user', username: 'qa', display_name: 'QA', role: 'admin', has_password: true },
@@ -211,22 +214,10 @@ test('DJ reuses the compact workspace, pager and touch lifecycle', async ({ page
     await expect(autoStage).toHaveAttribute('inert', '');
 
     if (destination === 'browser') {
-      const browserPanel = side.locator('aside[data-purpose="auto-neutral"]');
-      const libraryCard = side.getByRole('button', { name: /^Biblioteca/ });
-      const favouritesCard = side.getByRole('button', { name: /^Favoritos/ });
-      const playlistsCard = side.getByRole('button', { name: /^Listas/ });
-      await expect(libraryCard).toBeVisible();
-      await expect(favouritesCard).toBeVisible();
-      await expect(playlistsCard).toBeVisible();
-      const [libraryBox, favouritesBox, playlistsBox] = await Promise.all([
-        libraryCard.boundingBox(), favouritesCard.boundingBox(), playlistsCard.boundingBox(),
-      ]);
-      expect(libraryBox).not.toBeNull();
-      expect(favouritesBox).not.toBeNull();
-      expect(playlistsBox).not.toBeNull();
-      expect(Math.abs(favouritesBox!.y - playlistsBox!.y)).toBeLessThanOrEqual(1);
-      expect(Math.abs(favouritesBox!.y - libraryBox!.y)).toBeLessThanOrEqual(1);
-
+      // The DJ's panel is the same search panel, filling its tile, with its one field.
+      const browserPanel = side.locator('aside[data-player-search]');
+      await expect(browserPanel.getByRole('searchbox')).toHaveCount(1);
+      await expect(side.getByRole('button', { name: 'Reproducir: Biblioteca aleatoria', exact: true })).toBeVisible();
       const [tileBox, panelBox] = await Promise.all([side.boundingBox(), browserPanel.boundingBox()]);
       expect(tileBox).not.toBeNull();
       expect(panelBox).not.toBeNull();
@@ -316,7 +307,7 @@ test('a route row exposes its menu and still answers a hold', async ({ page }) =
   const browser = page.locator('[data-auto-tile="browser"]');
   await route.getByRole('button', { name: 'Añadir', exact: true }).click();
   await expect(browser).not.toHaveAttribute('inert', '');
-  await browser.getByRole('button', { name: /^Biblioteca/ }).click();
+  await browser.getByRole('searchbox').fill('Luz de verano');
   await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
   await expect(route).not.toHaveAttribute('inert', '');
 
@@ -368,7 +359,8 @@ for (const title of ['Luz de verano', 'Horizonte']) {
     await route.getByRole('button', { name: 'Añadir', exact: true }).click();
     const browser = page.locator('[data-auto-tile="browser"]');
     await expect(browser).not.toHaveAttribute('inert', '');
-    await browser.getByRole('button', { name: /^Biblioteca/ }).click();
+    await browser.getByRole('searchbox').fill(title);
+    // Pressing the song itself does the errand the panel was opened for.
     await browser.getByRole('button', { name: new RegExp(title) }).first().click();
     await expect(route).not.toHaveAttribute('inert', '');
     const insertionTargets = route.locator('button[aria-label^="Insertar una canción antes de"]');

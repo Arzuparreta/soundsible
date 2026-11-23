@@ -133,3 +133,22 @@
   color: var(--ink-tertiary);
   font-variant-numeric: tabular-nums;
 }
+
+.editOrder {
+  min-height: var(--control-h);
+  padding: 0 var(--space-md);
+  color: var(--ink-primary);
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.editOrder[aria-pressed='true'] {
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}

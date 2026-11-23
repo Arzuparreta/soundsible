@@ -448,7 +448,7 @@ export default function Artist() {
                   <span class={hero.primaryLabel}>{t('artist.play')}</span>
                 </button>
               }>
-                <CollectionActions title={name()} auto iconOnlyOnMobile buttonClass={hero.play}
+                <CollectionActions title={name()} iconOnlyOnMobile buttonClass={hero.play}
                   tracks={view() === 'library' ? libraryTrackList() : undefined}
                   items={view() === 'library' ? undefined : topTracks()} />
               </Show>

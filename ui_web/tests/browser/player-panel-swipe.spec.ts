@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mockMusicEngine, openMiniPlayer, restoreQueueSession, TRACKS } from './music-browser-fixture';
+import { mockMusicEngine, openMiniPlayer, restoreQueueSession, searchPlayerPanel, TRACKS } from './music-browser-fixture';
 import { settledBox } from './settle';
 import { snapCarousel } from './playerGestures';
 
@@ -62,6 +62,7 @@ test('a scrolled player panel still hands a sideways swipe to the pager', async 
   // And the same from the browser, whose body scrolls as one piece.
   await snapCarousel(page, 'browser');
   await expect(browser).not.toHaveAttribute('inert', '');
+  await searchPlayerPanel(browser);
   const body = browser.locator('[data-browser-body]').first();
   const bodyBox = (await body.boundingBox())!;
   const bodyPoint = { x: bodyBox.x + bodyBox.width / 2, y: bodyBox.y + Math.min(bodyBox.height / 2, 150) };

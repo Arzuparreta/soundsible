@@ -25,7 +25,7 @@ import { dropIndex, type DropSlot } from '../lib/dragReorder';
 import { isPodcastTrack } from '../lib/track';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
-import { NowPlayingBrowser } from './NowPlayingBrowser';
+import { PlayerSearchPanel } from './PlayerSearchPanel';
 import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import {
@@ -376,7 +376,7 @@ export function NowPlaying(props: {
             presets={[
               { id: 'balanced', label: t('nowPlaying.layoutBalanced') },
               { id: 'stage', label: t('nowPlaying.layoutPlayer') },
-              { id: 'left', label: t('nowPlaying.layoutExplore') },
+              { id: 'left', label: t('nowPlaying.layoutSearch') },
               { id: 'right', label: t('nowPlaying.layoutQueue') },
             ]}
             onSelect={applyLayoutPreset}
@@ -427,7 +427,7 @@ export function NowPlaying(props: {
                       {t('live.chat')}
                     </button>
                   </Show>
-                  <NowPlayingBrowser
+                  <PlayerSearchPanel
                     active={panelActive('browser')}
                     onClose={() => props.onMobilePanelChange('stage')}
                     dragHandle={dragHandle}

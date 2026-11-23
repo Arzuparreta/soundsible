@@ -56,11 +56,8 @@ export function identityMock(read: {
     isPlayingEpisode: (key: string) => keysMatch(podcastEpisodeKeys(key), playing(), links()),
     isQueuedKeys: (keys: string[]) => keysMatch(keys, queued(), links()),
     isQueuedTrack: (track: Track) => keysMatch(trackKeys(track), queued(), links()),
-    isQueuedItem: (item: CatalogItem) => keysMatch(catalogItemKeys(item), queued(), links()),
-    isQueuedResult: (result: SearchResult) => keysMatch(searchResultKeys(result), queued(), links()),
     ownedTrackForKeys: owned,
     ownedTrackForItem: (item: CatalogItem) => owned(catalogItemKeys(item)),
-    ownedTrackForResult: (result: SearchResult) => owned(searchResultKeys(result)),
     isSavedKeys: (keys: string[]) => !!owned(keys) || keysMatch(keys, savedKeys(), links()),
     isSavedTrack: (track: Track) =>
       !!owned(trackKeys(track)) || keysMatch(trackKeys(track), savedKeys(), links()),
@@ -89,19 +86,5 @@ export function identityMock(read: {
       favourites()
         .map((entry) => savedToTrack(entry, buildIdentityIndex(read.library())))
         .filter((track): track is Track => !!track),
-    favouriteLibraryIds: () => {
-      const index = buildIdentityIndex(read.library());
-      const ids = new Set<string>();
-      for (const entry of favourites()) {
-        for (const key of entry.keys) {
-          const track = index.get(key);
-          if (track) {
-            ids.add(track.id);
-            break;
-          }
-        }
-      }
-      return ids as ReadonlySet<string>;
-    },
   };
 }

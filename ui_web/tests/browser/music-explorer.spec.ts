@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer, TRACKS } from './music-browser-fixture';
 import { settle } from './settle';
+import { holdForMenu } from './playerGestures';
 
 test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
@@ -35,7 +36,7 @@ test('opens general music pages and preserves explorer search across player mode
   const mobile = (page.viewportSize()?.width ?? 0) < 1024;
   if (mobile) await selectPanel(page, 'now-playing', 'browser');
   let browser = page.locator('[data-now-playing-tile="browser"]');
-  await expect(browser.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
+  await expect(browser.getByRole('searchbox')).toHaveCount(1);
   await browser.getByRole('searchbox').fill('radiohead');
   await browser.getByRole('link', { name: /Radiohead/ }).click();
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
@@ -91,25 +92,7 @@ test('separates DJ references below Route and picks one from the explorer', asyn
 });
 
 
-test('restores the library scroll after changing section and player mode', async ({ page }) => {
-  await openMusicPlayer(page);
-  const mobile = (page.viewportSize()?.width ?? 0) < 1024;
-  if (mobile) await selectPanel(page, 'now-playing', 'browser');
-  const normal = page.locator('[data-now-playing-tile="browser"]');
-  const body = normal.locator('[data-browser-body]');
-  await expect(normal.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
-  await body.evaluate((element) => { element.scrollTop = 1400; });
-  await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBe(1400);
-  await normal.getByRole('button', { name: 'Favoritos', exact: true }).click();
-  await normal.getByRole('button', { name: 'Biblioteca', exact: true }).click();
-  await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBe(1400);
-  await page.getByRole('tab', { name: 'DJ', exact: true }).click();
-  if (mobile) await selectPanel(page, 'auto', 'browser');
-  const djBody = page.locator('[data-auto-tile="browser"] [data-browser-body]');
-  await expect.poll(() => djBody.evaluate((element) => element.scrollTop)).toBe(1400);
-});
-
-test('Now Playing Explore uses the unified discovery feed and supports Not interested and Undo', async ({ page }, info) => {
+test('the player search panel suggests from the unified discovery feed and supports Not interested and Undo', async ({ page }, info) => {
   const feedbackPayloads: Array<Record<string, unknown>> = [];
   let legacyFeedRequests = 0;
   let undoCount = 0;
@@ -168,7 +151,6 @@ test('Now Playing Explore uses the unified discovery feed and supports Not inter
   const mobile = (page.viewportSize()?.width ?? 0) < 1024;
   if (mobile) await selectPanel(page, 'now-playing', 'browser');
   const browser = page.locator('[data-now-playing-tile="browser"]');
-  await browser.getByRole('button', { name: 'Explorar', exact: true }).click();
 
   const firstTitle = browser.getByText('Tema unificado Deezer', { exact: true });
   await expect(firstTitle).toBeVisible();
@@ -177,7 +159,9 @@ test('Now Playing Explore uses the unified discovery feed and supports Not inter
   const exploreRow = browser
     .locator('[data-song-row], [data-music-list-row]')
     .filter({ hasText: 'Tema unificado Deezer' });
-  await exploreRow.getByRole('button', { name: /^Más opciones/ }).click();
+  // On a phone the panel's rows open their menu with a hold, as every row can.
+  const openRowMenu = () => mobile ? holdForMenu(page, exploreRow) : exploreRow.getByRole('button', { name: /^Más opciones/ }).click();
+  await openRowMenu();
 
   const itemRole = info.project.name.includes('mobile') ? 'button' : 'menuitem';
   const menuContainerRole = info.project.name.includes('mobile') ? 'dialog' : 'menu';
@@ -205,7 +189,7 @@ test('Now Playing Explore uses the unified discovery feed and supports Not inter
 
   // Dismiss again, collapse the player to /search without reloading the app, and
   // confirm Discover reflects the same shared store dismissal.
-  await exploreRow.getByRole('button', { name: /^Más opciones/ }).click();
+  await openRowMenu();
   await page.getByRole(menuContainerRole).getByRole(itemRole, { name: 'No me interesa' }).click();
   await expect(firstTitle).toHaveCount(0);
 

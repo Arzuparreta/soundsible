@@ -54,7 +54,7 @@ function run() {
       const file = relative(root, path);
       if (/\.(test|spec)\./.test(file) || file === 'src/styles/tokens.css') continue;
       if (file.startsWith('src/design/') && (!file.endsWith('.tsx')
-          || ['Control.tsx', 'Field.tsx', 'Button.tsx'].includes(name))) continue;
+          || ['Control.tsx', 'Button.tsx'].includes(name))) continue;
       const source = readFileSync(path, 'utf8');
       const debt = path.endsWith('.tsx') ? { controls: controlDebt(source) }
         : path.endsWith('.css') ? { styles: styleDebt(source) } : {};

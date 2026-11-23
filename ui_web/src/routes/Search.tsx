@@ -42,9 +42,10 @@ import {
   playCatalogItem,
   cancelCatalogResolve,
   catalogReleaseEvidence,
+  reportSearchPlay,
 } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
-import type { CatalogItem, CatalogSection, SearchResult } from '../types/music';
+import type { CatalogItem, SearchResult } from '../types/music';
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
@@ -54,16 +55,14 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { SearchField } from '../components/SearchField';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
-import { readSearchCache, writeSearchCache } from '../lib/searchCache';
 import {
   bodySections,
   itemsForTypes,
   resolveSections,
   topResultItem,
-  CATALOG_CACHE_NS,
-  type CachedCatalog,
   type ResolvedSection,
 } from '../lib/searchSections';
+import { createCatalogSearch } from '../lib/catalogSearch';
 import { TopResultCard } from '../components/TopResultCard';
 
 type SearchDomain = 'music' | 'youtube';
@@ -135,15 +134,11 @@ export default function Search() {
   const [domain, setDomain] = createSignal<SearchDomain>(initialDomain);
   const [q, setQ] = createSignal(initialQuery);
   const [tab, setTab] = createSignal<SearchTab>(initialTab);
-  const [items, setItems] = createSignal<CatalogItem[]>([]);
-  const [sections, setSections] = createSignal<CatalogSection[]>([]);
-  const [interpretedAs, setInterpretedAs] = createSignal('');
-  const [loading, setLoading] = createSignal(false);
-  const [searchError, setSearchError] = createSignal(false);
-  const [youtubeResults, setYoutubeResults] = createSignal<SearchResult[]>([]);
-  const [youtubeDirect, setYoutubeDirect] = createSignal<SearchResult | null>(null);
-  const [youtubeLoading, setYoutubeLoading] = createSignal(false);
-  const [youtubeError, setYoutubeError] = createSignal(false);
+  const search = createCatalogSearch();
+  const {
+    items, sections, interpretedAs, loading, error: searchError,
+    youtubeResults, direct: youtubeDirect, youtubeLoading, youtubeError,
+  } = search;
   const [suggestions, setSuggestions] = createSignal<string[]>([]);
   const [showSuggest, setShowSuggest] = createSignal(false);
   const [searchFocused, setSearchFocused] = createSignal(false);
@@ -159,11 +154,11 @@ export default function Search() {
   const [sharedError, setSharedError] = createSignal(false);
   const [sharedInvalid, setSharedInvalid] = createSignal(false);
 
-  let aborter: AbortController | undefined;
+  let sharedAborter: AbortController | undefined;
   let suggestAborter: AbortController | undefined;
   let debounce: number | undefined;
   let suggestDebounce: number | undefined;
-  let requestId = 0;
+  let sharedRequest = 0;
   let suggestionId = 0;
   // The domain the listener chose, as opposed to one a pasted link or the
   // `yt:` prefix implies for a single query. Only a chosen YouTube mode needs
@@ -210,14 +205,13 @@ export default function Search() {
 
   const sectionTitle = (id: string) => SECTION_TITLE[id]?.() ?? id;
   const openSharedTrack = (capsule: TrackShareCapsuleV1) => {
-    const current = ++requestId;
-    aborter?.abort();
-    aborter = new AbortController();
+    const current = ++sharedRequest;
+    search.reset();
+    sharedAborter?.abort();
+    sharedAborter = new AbortController();
     setSharedCapsule(capsule);
     setQ(`${capsule.title} — ${capsule.artist}`);
     setDomain('music');
-    setItems([]);
-    setSections([]);
     setSharedItem(null);
     setSharedError(false);
     setSharedInvalid(false);
@@ -243,9 +237,9 @@ export default function Search() {
       return;
     }
     api
-      .peekYouTube(`https://www.youtube.com/watch?v=${capsule.yt}`, aborter.signal)
+      .peekYouTube(`https://www.youtube.com/watch?v=${capsule.yt}`, sharedAborter.signal)
       .then((result) => {
-        if (current !== requestId) return;
+        if (current !== sharedRequest) return;
         if (!result || result.id !== capsule.yt) throw new Error('shared-track-unavailable');
         const title = result.title || capsule.title;
         const credit = resultCredit(result);
@@ -275,11 +269,11 @@ export default function Search() {
         });
       })
       .catch((error) => {
-        if (current !== requestId || isAbort(error)) return;
+        if (current !== sharedRequest || isAbort(error)) return;
         setSharedError(true);
       })
       .finally(() => {
-        if (current === requestId) setSharedLoading(false);
+        if (current === sharedRequest) setSharedLoading(false);
       });
   };
 
@@ -299,130 +293,6 @@ export default function Search() {
     focusRequestedSearch(searchInput);
   });
 
-  const runCatalog = (query: string) => {
-    query = query.trim();
-    const current = ++requestId;
-    aborter?.abort();
-    aborter = undefined;
-    setSearchError(false);
-    setInterpretedAs('');
-    setYoutubeError(false);
-    setYoutubeDirect(null);
-    setYoutubeResults([]);
-    setYoutubeLoading(false);
-    if (query.length < 2) {
-      setItems([]);
-      setSections([]);
-      setLoading(false);
-      return;
-    }
-    // Catalog results had no cache at all, so returning to Search re-ran the
-    // query the user had just made. One namespace, not one per tab, so the
-    // Now Playing panel shares the entry too.
-    const cachedCatalog = readSearchCache<CachedCatalog>(CATALOG_CACHE_NS, query);
-    if (cachedCatalog) {
-      setItems(cachedCatalog.items);
-      setSections(cachedCatalog.sections);
-      setInterpretedAs(cachedCatalog.interpretedAs);
-      setLoading(false);
-      return;
-    }
-    aborter = new AbortController();
-    setLoading(true);
-    api
-      .searchCatalog(query, aborter.signal)
-      .then((res) => {
-        if (current !== requestId) return;
-        const items = res.items ?? [];
-        const sections = res.sections ?? [];
-        const interpretedAs = res.interpreted_as ?? '';
-        writeSearchCache(CATALOG_CACHE_NS, query, { items, sections, interpretedAs });
-        setItems(items);
-        setSections(sections);
-        setInterpretedAs(interpretedAs);
-      })
-      .catch((e) => {
-        if (current !== requestId || isAbort(e)) return;
-        setItems([]);
-        setSections([]);
-        setInterpretedAs('');
-        setSearchError(true);
-      })
-      .finally(() => {
-        if (current === requestId) setLoading(false);
-      });
-  };
-
-  const fallbackDirectResult = (videoId: string): SearchResult => ({
-    id: videoId,
-    title: tr('search.ytVideoTitle'),
-    channel: tr('search.ytVideoChannel'),
-    thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-  });
-
-  const runYouTube = (query: string) => {
-    query = query.trim();
-    const current = ++requestId;
-    aborter?.abort();
-    aborter = undefined;
-    setYoutubeError(false);
-    setInterpretedAs('');
-    setLoading(false);
-    setItems([]);
-    setSections([]);
-    const direct = parseYouTubeInput(query, { allowVideoId: true });
-    setYoutubeDirect(null);
-    if (direct) {
-      aborter = new AbortController();
-      setYoutubeLoading(true);
-      setYoutubeResults([]);
-      api
-        .peekYouTube(direct.url, aborter.signal)
-        .then((res) => {
-          if (current !== requestId) return;
-          setYoutubeDirect(res ?? fallbackDirectResult(direct.videoId));
-        })
-        .catch((e) => {
-          if (current !== requestId || isAbort(e)) return;
-          setYoutubeDirect(fallbackDirectResult(direct.videoId));
-        })
-        .finally(() => {
-          if (current === requestId) setYoutubeLoading(false);
-        });
-      return;
-    }
-
-    setYoutubeDirect(null);
-    if (query.length < 2) {
-      setYoutubeResults([]);
-      setYoutubeLoading(false);
-      return;
-    }
-    const cached = readSearchCache<SearchResult[]>('youtube', query);
-    if (cached) {
-      setYoutubeResults(cached);
-      setYoutubeLoading(false);
-      return;
-    }
-    aborter = new AbortController();
-    setYoutubeLoading(true);
-    api
-      .searchYouTube(query, aborter.signal)
-      .then((res) => {
-        if (current !== requestId) return;
-        writeSearchCache('youtube', query, res);
-        setYoutubeResults(res);
-      })
-      .catch((e) => {
-        if (current !== requestId || isAbort(e)) return;
-        setYoutubeResults([]);
-        setYoutubeError(true);
-      })
-      .finally(() => {
-        if (current === requestId) setYoutubeLoading(false);
-      });
-  };
-
   const runSearch = (query: string, nextDomain = domain(), nextTab = tab()) => {
     setLastRun(query.trim());
     setSearchParams(
@@ -434,8 +304,8 @@ export default function Search() {
       },
       { replace: true },
     );
-    if (nextDomain === 'youtube') runYouTube(query);
-    else runCatalog(query);
+    if (nextDomain === 'youtube') search.youtube(query, { allowVideoId: true });
+    else search.catalog(query);
   };
 
   // True while the YouTube box holds a query nobody has confirmed yet. The
@@ -492,17 +362,14 @@ export default function Search() {
   };
 
   const invalidatePending = () => {
-    ++requestId;
+    ++sharedRequest;
     ++suggestionId;
-    aborter?.abort();
+    search.reset();
+    sharedAborter?.abort();
     suggestAborter?.abort();
     clearTimeout(debounce);
     clearTimeout(suggestDebounce);
     setSuggestions([]);
-    setLoading(false);
-    setYoutubeLoading(false);
-    setYoutubeDirect(null);
-    setYoutubeResults([]);
   };
 
   const commit = (value: string) => {
@@ -531,10 +398,6 @@ export default function Search() {
 
   const onInput = (value: string) => {
     invalidatePending();
-    setItems([]);
-    setSections([]);
-    setSearchError(false);
-    setInterpretedAs('');
     if (sharedCapsule() || sharedInvalid()) {
       setSharedCapsule(null);
       setSharedItem(null);
@@ -564,8 +427,7 @@ export default function Search() {
       setShowSuggest(false);
       setSuggestions([]);
       if (parsed.trim().length >= 2) {
-        if (nextDomain === 'music') setLoading(true);
-        else setYoutubeLoading(true);
+        search.markPending(nextDomain);
       }
       debounce = window.setTimeout(() => runSearch(parsed, nextDomain), 220);
     }
@@ -599,23 +461,7 @@ export default function Search() {
 
   const playItem = (item: CatalogItem) => {
     if (item.type === 'track' || item.type === 'library_track') {
-      if (q().trim().length >= 2) {
-        const artist = itemArtist(item);
-        if (artist && item.title) {
-          const youtubeId = item.external_ids?.youtube_id
-            ? String(item.external_ids.youtube_id)
-            : catalogPreviewId(item) || undefined;
-          void api.emitDiscoveryEvent('music_search_played', {
-            media_type: 'music_track',
-            track_id: item.track_id || undefined,
-            title: item.title,
-            artist,
-            album: item.album,
-            youtube_id: youtubeId,
-            source: 'search',
-          }).catch(() => {});
-        }
-      }
+      if (q().trim().length >= 2) reportSearchPlay(item);
       void playCatalogItem(item);
     } else if (item.type === 'artist') {
       const artist = itemArtist(item) || item.title;
@@ -728,8 +574,9 @@ export default function Search() {
 
   onCleanup(() => {
     closeVersions?.();
-    requestId += 1;
-    aborter?.abort();
+    sharedRequest += 1;
+    sharedAborter?.abort();
+    search.cancel();
     cancelCatalogResolve();
     suggestAborter?.abort();
     clearTimeout(debounce);
@@ -925,7 +772,7 @@ export default function Search() {
                   {youtubeError() ? (
                     <>
                       {tr('search.ytErrorHint')}{' '}
-                      <button class={styles.retry} type="button" onClick={() => runYouTube(q())}>
+                      <button class={styles.retry} type="button" onClick={() => search.youtube(parseSearchInput(q()).query, { allowVideoId: true })}>
                         {tr('common.retry')}
                       </button>
                     </>
@@ -972,7 +819,7 @@ export default function Search() {
               <Switch>
                 <Match when={searchError()}>
                   {tr('search.catalogErrorHint')}{' '}
-                  <button class={styles.retry} type="button" onClick={() => runCatalog(q())}>
+                  <button class={styles.retry} type="button" onClick={() => search.catalog(parseSearchInput(q()).query)}>
                     {tr('common.retry')}
                   </button>
                 </Match>

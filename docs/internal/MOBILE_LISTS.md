@@ -4,7 +4,7 @@ Below 1024 CSS pixels, content rows use `MusicListRow`: left-aligned title and s
 
 ## Behaviour
 
-- Library, favourites, artist/album tracks, mixed local search, online search, the player browser, playlists, podcast results/episodes, queue, DJ route and DJ sources use the shared mobile composition.
+- Library, favourites, artist/album tracks, mixed local search, online search, the player's search panel, playlists, podcast results/episodes, queue, DJ route and DJ sources use the shared mobile composition.
 - Collection controls, queue removal and DJ row actions live in the existing action sheet. Catalogue/download adapters retain saved identity keys and surface-specific download handlers. Opening a sheet does not save, resolve or download an item.
 - Favourite artwork marks appear only where they add information. Favourite lists suppress them. Active resolution/download temporarily takes the mark's place; owning a file adds no permanent mark.
 - Functional route state stays in the subtitle. Current playback retains its existing treatment. Artwork placeholders, dimensions and overflow geometry remain stable as state changes.

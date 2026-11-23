@@ -66,7 +66,7 @@ describe('route scroll containment', () => {
 describe('unified player geometry', () => {
   const nowPlaying = path.resolve(process.cwd(), 'src/components/NowPlaying.module.css');
   const workspace = path.resolve(process.cwd(), 'src/components/PlayerWorkspace.module.css');
-  const browser = path.resolve(process.cwd(), 'src/components/NowPlayingBrowser.module.css');
+  const browser = path.resolve(process.cwd(), 'src/components/PlayerSearchPanel.module.css');
   const surface = path.resolve(process.cwd(), 'src/components/PlayerSurface.module.css');
   const tokens = path.resolve(process.cwd(), 'src/styles/tokens.css');
   const trackList = path.resolve(process.cwd(), 'src/components/PlayerTrackList.module.css');
@@ -140,7 +140,7 @@ describe('unified player geometry', () => {
     expect(scopedDeclarations(surface, '.layoutButton', 'min-width: 1024px')).toMatchObject({
       display: 'inline-grid',
     });
-    expect(scopedDeclarations(browser, '.close', 'min-width:1024px')).toMatchObject({
+    expect(scopedDeclarations(browser, '.panel:not([data-intent]) .close', 'min-width: 1024px')).toMatchObject({
       display: 'none',
     });
 

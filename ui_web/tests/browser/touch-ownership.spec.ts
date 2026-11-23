@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { mockMusicEngine, openMusicPlayer, searchPlayerPanel } from './music-browser-fixture';
 
 test.use({ reducedMotion: 'no-preference' });
 
@@ -12,6 +12,7 @@ test('native touches release list scrolling and retain player pull-down dismissa
   const body = surface.locator('[data-now-playing-tile="browser"] [data-browser-body]');
   await expect(body).toBeVisible();
   await expect(surface.locator('[data-now-playing-tile="browser"]')).not.toHaveAttribute('inert', '');
+  await searchPlayerPanel(surface.locator('[data-now-playing-tile="browser"]'));
   await expect.poll(() => body.evaluate(element => Math.abs(element.closest('[data-now-playing-tile]')!.getBoundingClientRect().left
     - element.closest('[data-now-playing-carousel]')!.getBoundingClientRect().left))).toBeLessThan(2);
   const session = await page.context().newCDPSession(page);

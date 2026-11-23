@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { mockMusicEngine, openMusicPlayer, searchPlayerPanel } from './music-browser-fixture';
 
 async function browserPanel(page: Page, mobile: boolean) {
   await openMusicPlayer(page);
@@ -8,7 +8,7 @@ async function browserPanel(page: Page, mobile: boolean) {
   }
   const browser = page.locator('[data-now-playing-tile="browser"]');
   await expect(browser).not.toHaveAttribute('inert', '');
-  await expect(browser.locator('[data-song-row], [data-music-list-row]').first()).toBeVisible();
+  await searchPlayerPanel(browser, 'Canción', false);
   await page.evaluate(async () => {
     const fonts = await document.fonts.load('400 16px "Plus Jakarta Sans"');
     if (!fonts.length) throw new Error('The Soundsible UI font is unavailable');
@@ -32,7 +32,11 @@ for (const theme of ['dark', 'light']) for (const size of ['compact', 'normal', 
     }, { theme, size });
     const row = browser.locator('[data-song-row], [data-music-list-row]').first();
     const menu = row.locator('[data-row-menu], button[aria-label="Más opciones"]');
-    await expect(menu).toBeVisible();
+    // The quick button is in the open; on a phone the menu is a hold, so the
+    // title keeps the width a second button would take.
+    await expect(row.getByRole('button', { name: /^Añadir a la cola: / })).toBeVisible();
+    if (isMobile) await expect(menu).toHaveCount(0);
+    else await expect(menu).toBeVisible();
     const metrics = await row.evaluate(element => ({ height: element.getBoundingClientRect().height,
       expected: parseFloat(getComputedStyle(element).getPropertyValue('--row-h')) }));
     expect(metrics.height).toBeCloseTo(metrics.expected, 0);
@@ -61,20 +65,4 @@ test('Shift+F10 anchors the row menu to the focused control and restores focus',
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(opener).toBeFocused();
-});
-
-test('browser tabs have one keyboard stop and arrow activation', async ({ page, isMobile }) => {
-  const browser = await browserPanel(page, isMobile);
-  const tabs = browser.getByRole('tablist', { name: 'Biblioteca' });
-  const songs = tabs.getByRole('tab', { name: 'Canciones', exact: true });
-  await songs.focus();
-  await songs.press('End');
-  await expect(tabs.getByRole('tab', { name: 'Artistas', exact: true })).toBeFocused();
-  await expect(tabs.getByRole('tab', { selected: true })).toHaveText('Artistas');
-  await page.keyboard.press('Home');
-  await expect(songs).toBeFocused();
-  await expect(songs).toHaveAttribute('aria-selected', 'true');
-  const panel = browser.getByRole('tabpanel', { name: 'Canciones', exact: true });
-  await expect(panel).toBeVisible();
-  await expect(panel).toHaveAttribute('aria-labelledby', (await songs.getAttribute('id'))!);
 });

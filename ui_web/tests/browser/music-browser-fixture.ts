@@ -1,5 +1,5 @@
 import type { PlaybackContextDescriptor } from '../../src/lib/playbackQueue';
-import { expect, type Page, type BrowserContext } from '@playwright/test';
+import { expect, type Page, type BrowserContext, type Locator } from '@playwright/test';
 
 export const TRACKS = Array.from({ length: 320 }, (_, index) => ({
   id: `library-track-${index + 1}`,
@@ -9,13 +9,34 @@ export const TRACKS = Array.from({ length: 320 }, (_, index) => ({
   duration: 180,
 }));
 
+type FixtureSong = { id: string; title: string; artist: string; album?: string; duration?: number };
+
+/** The engine's catalog search over a fixture library: every song whose title
+ * or artist holds the query, answered as library rows the way the engine
+ * answers them, in one songs section. */
+export function catalogSearchFixture(tracks: readonly FixtureSong[], query: string) {
+  const wanted = query.trim().toLowerCase();
+  const items = tracks
+    .filter((track) => `${track.title} ${track.artist}`.toLowerCase().includes(wanted))
+    .slice(0, 36)
+    .map((track) => ({
+      id: `library:${track.id}`, type: 'library_track', source: 'library', title: track.title,
+      artist: track.artist, subtitle: track.artist, album: track.album, duration: track.duration,
+      track_id: track.id, action_state: { in_library: true, playable: true },
+    }));
+  return { items, sections: items.length ? [{ id: 'songs', item_ids: items.map((item) => item.id) }] : [] };
+}
+
 export async function mockMusicEngine(page: Page | BrowserContext) {
   await page.routeWebSocket('**/socket.io/**', (socket) => socket.close());
   await page.route('**/socket.io/**', (route) => route.abort());
   await page.route('**/api/**', async (route) => {
-    const path = new URL(route.request().url()).pathname;
+    const url = new URL(route.request().url());
+    const path = url.pathname;
     let body: unknown = {};
-    if (path === '/api/auth/state') {
+    if (path === '/api/catalog/search') {
+      body = catalogSearchFixture(TRACKS, url.searchParams.get('q') ?? '');
+    } else if (path === '/api/auth/state') {
       body = {
         requires_login: true,
         user: { id: 'library-qa', username: 'library-qa', display_name: 'Library QA', role: 'admin', has_password: true },
@@ -111,6 +132,14 @@ export async function openMusicPlayer(page: Page) {
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await openMiniPlayer(page, /^NORMAL:/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
+}
+
+/** Search the player's panel and list every song it found, so its body has a
+ * long list to scroll. */
+export async function searchPlayerPanel(panel: Locator, query = 'Canción', all = true): Promise<void> {
+  await panel.getByRole('searchbox').fill(query);
+  await expect(panel.locator('[data-song-row], [data-music-list-row]').first()).toBeVisible();
+  if (all) await panel.getByRole('button', { name: 'Más canciones', exact: true }).click();
 }
 
 type FixtureTrack = (typeof TRACKS)[number];

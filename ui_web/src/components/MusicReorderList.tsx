@@ -1,7 +1,7 @@
 import { createSignal, For, type JSX } from 'solid-js';
 import { dropTarget } from '../lib/dragReorder';
 import { t } from '../lib/i18n';
-import styles from './NowPlayingBrowser.module.css';
+import styles from './MusicReorderList.module.css';
 
 /** Explicit edit-mode ordering, shared by playlists and their occurrences. */
 export function MusicReorderList<T>(props: {

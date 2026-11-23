@@ -1,4 +1,4 @@
-import { catalogTrack, itemArtist, releasePosition } from './catalogTrack';
+import { catalogPreviewId, catalogTrack, itemArtist, releasePosition } from './catalogTrack';
 export { catalogReleaseEvidence } from './catalogTrack';
 import { catalogMusic } from './musicNavigation';
 import { createSignal } from 'solid-js';
@@ -87,6 +87,25 @@ export async function playCatalogItem(
   } finally {
     if (!signal.aborted) setResolvingItemId(null);
   }
+}
+
+/** Tell discovery a song was played from a search, which ranks what it
+ * answers next. A row that names no song is not reported. */
+export function reportSearchPlay(item: CatalogItem): void {
+  const artist = itemArtist(item);
+  if (!artist || !item.title) return;
+  const youtubeId = item.external_ids?.youtube_id
+    ? String(item.external_ids.youtube_id)
+    : catalogPreviewId(item) || undefined;
+  void api.emitDiscoveryEvent('music_search_played', {
+    media_type: 'music_track',
+    track_id: item.track_id || undefined,
+    title: item.title,
+    artist,
+    album: item.album,
+    youtube_id: youtubeId,
+    source: 'search',
+  }).catch(() => {});
 }
 
 /**
