@@ -70,6 +70,7 @@ class PlaybackPlugin : Plugin() {
         return JSObject().put("dj", dj).put("leveling", leveling).put("mixing", mixing).put("autoplay", autoplay).put("radio", radio).put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
             .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "").put("programToken", if (p != null) ProgramQueue.programToken(p) else "")
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
+            .put("volume", p?.takeIf { it.isCommandAvailable(Player.COMMAND_GET_VOLUME) && it.isCommandAvailable(Player.COMMAND_SET_VOLUME) }?.volume)
             .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", if (authFailure) "auth" else if (plannerError == 403) "permission" else PlaybackRecovery.kind(p?.playerError))
             .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
             .put("hasNext", p?.hasNextMediaItem() ?: false).put("hasPrevious", p?.hasPreviousMediaItem() ?: false)
@@ -217,6 +218,12 @@ class PlaybackPlugin : Plugin() {
                 }
                 "pause" -> p.pause()
                 "seek" -> p.seekTo((call.getDouble("positionMs") ?: 0.0).toLong().coerceAtLeast(0))
+                "volume" -> {
+                    require(p.isCommandAvailable(Player.COMMAND_SET_VOLUME))
+                    val level = call.getDouble("level") ?: error("NO_VOLUME_LEVEL")
+                    require(level in 0.0..1.0)
+                    p.volume = level.toFloat()
+                }
                 "shuffle" -> {
                     require(p.isCommandAvailable(Player.COMMAND_SET_SHUFFLE_MODE))
                     p.shuffleModeEnabled = call.getBoolean("enabled") ?: error("NO_SHUFFLE_MODE")

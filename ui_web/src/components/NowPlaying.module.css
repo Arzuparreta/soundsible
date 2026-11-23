@@ -605,9 +605,12 @@
   display: contents;
 }
 
-.volume .volumeTrigger,
-.volume .popoverMute {
+.volume .volumeTrigger {
   display: none;
+}
+
+.volume.volumeNoSlider .volumeTrigger {
+  display: inline-flex;
 }
 
 @container player (max-width: 767px) {
@@ -616,29 +619,29 @@
     display: none;
   }
 
-  .volume .volumeTrigger,
-  .volume .popoverMute {
+  .volume .volumeTrigger {
     display: inline-flex;
   }
+}
 
-  /* Reserve a full row below the buttons so volume never covers a control. */
-  .actionsBar:has(> .volume[data-volume-open]) {
-    position: relative;
-    padding-bottom: calc(var(--control-h) + var(--stage-row-gap));
-  }
+.compactVolumePopup {
+  position: absolute;
+  z-index: 40;
+  top: min(calc(var(--volume-top) + var(--space-2xs)), calc(100% - var(--control-h)));
+  right: max(var(--space-sm), env(safe-area-inset-right, 0px));
+  display: flex;
+  height: var(--control-h);
+  align-items: center;
+  padding-inline: var(--space-sm);
+  background: var(--stage-base);
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1px var(--stage-line), var(--stage-shadow-sm);
+}
 
-  .volume[data-volume-open] .volumePopover {
-    position: absolute;
-    inset: auto 0 0;
-    display: flex;
-    height: var(--control-h);
-    align-items: center;
-    gap: var(--space-xs);
-  }
-
-  .volume[data-volume-open] .volRange {
-    flex: 1;
-  }
+.compactVolumePopup .volRange {
+  flex: 1;
+  min-width: 0;
+  touch-action: none;
 }
 
 /* Which of the stage's buttons a layout carries. Declared after `.actBtn`,

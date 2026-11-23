@@ -2,6 +2,7 @@ import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createEffect, createMemo, createSignal, createUniqueId, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { isSavedTrack } from '../stores';
 import { player } from '../stores/player';
 import { clockTime } from '../lib/format';
@@ -16,7 +17,8 @@ import { responsiveTapConstants } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
-import { Control } from '../design/Control';
+import { Control, RangeControl } from '../design/Control';
+import { detectFormFactor } from '../lib/deviceIdentity';
 import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
@@ -110,9 +112,44 @@ export function PlayerStage(props: {
   const volPct = () => Math.round(gainToVolumePosition(player().playback.muted ? 0 : player().playback.volume) * 100);
 
   const [volumeOpen, setVolumeOpen] = createSignal(false);
+  const mobileWeb = detectFormFactor() !== 'computer';
   const volumeId = createUniqueId();
   let volumeRoot: HTMLDivElement | undefined;
   let volumeTrigger: HTMLButtonElement | undefined;
+  let volumePopup: HTMLDivElement | undefined;
+  let volumeDismissTimer: ReturnType<typeof setTimeout> | undefined;
+  const [volumeAnchor, setVolumeAnchor] = createSignal<{ surface: HTMLElement; top: number; left: number }>();
+
+  const cancelVolumeDismiss = () => clearTimeout(volumeDismissTimer);
+  onCleanup(cancelVolumeDismiss);
+  const closeVolume = () => {
+    cancelVolumeDismiss();
+    setVolumeOpen(false);
+  };
+  const openVolume = () => {
+    if (mobileWeb) return;
+    cancelVolumeDismiss();
+    if (volumeOpen()) return;
+    const surface = volumeTrigger?.closest<HTMLElement>('[data-player-stage]');
+    if (!surface || !volumeRoot) return;
+    const button = volumeRoot.getBoundingClientRect();
+    const frame = surface.getBoundingClientRect();
+    setVolumeAnchor({ surface, top: button.bottom - frame.top, left: button.left - frame.left - surface.clientLeft });
+    setVolumeOpen(true);
+  };
+  const leaveVolume = (event: PointerEvent) => {
+    if (event.pointerType !== 'mouse') return;
+    cancelVolumeDismiss();
+    volumeDismissTimer = setTimeout(() => {
+      if (!volumePopup?.contains(document.activeElement)) closeVolume();
+    }, 160);
+  };
+  const escapeVolume = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || !volumeOpen()) return;
+    event.preventDefault();
+    volumeTrigger?.focus({ preventScroll: true });
+    closeVolume();
+  };
 
   createEffect(() => {
     if (!props.surfaceOpen || !player().can('transport.set_volume')) setVolumeOpen(false);
@@ -120,13 +157,17 @@ export function PlayerStage(props: {
   createEffect(() => {
     if (!volumeOpen()) return;
     const dismiss = (event: Event) => {
-      if (event.target instanceof Node && !volumeRoot?.contains(event.target)) setVolumeOpen(false);
+      if (event.target instanceof Node && !volumeRoot?.contains(event.target) && !volumePopup?.contains(event.target)) closeVolume();
     };
     document.addEventListener('pointerdown', dismiss, true);
     document.addEventListener('focusin', dismiss, true);
+    document.addEventListener('scroll', closeVolume, true);
+    window.addEventListener('resize', closeVolume);
     onCleanup(() => {
       document.removeEventListener('pointerdown', dismiss, true);
       document.removeEventListener('focusin', dismiss, true);
+      document.removeEventListener('scroll', closeVolume, true);
+      window.removeEventListener('resize', closeVolume);
     });
   });
 
@@ -144,10 +185,10 @@ export function PlayerStage(props: {
       </svg>
     </Show>
   );
-  const muteButton = (className: string) => (
+  const muteButton = () => (
     <Show when={player().can('transport.set_muted')}>
       <button
-        class={`${styles.actBtn} ${className}`}
+        class={`${styles.actBtn} ${styles.inlineMute}`}
         classList={{ [styles.actOn]: player().playback.muted }}
         type="button"
         aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
@@ -160,6 +201,19 @@ export function PlayerStage(props: {
         {volumeIcon()}
       </button>
     </Show>
+  );
+
+  const volumeSlider = () => (
+    <RangeControl
+      class={styles.volRange}
+      min={0}
+      max={100}
+      value={volPct()}
+      style={{ '--fill': `${volPct()}%` }}
+      aria-label={t('omnibar.volume')}
+      aria-valuetext={`${volPct()}%`}
+      onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
+    />
   );
 
   createEffect(() => {
@@ -541,46 +595,57 @@ export function PlayerStage(props: {
                     </button>
                   </Show>
 
-                  <Show when={player().can('transport.set_volume')}>
+                  <Show when={player().can('transport.set_volume') && (!mobileWeb || player().can('transport.set_muted'))}>
                     <div
                       class={styles.volume}
+                      classList={{ [styles.volumeNoSlider]: mobileWeb }}
                       ref={volumeRoot}
-                      data-volume-open={volumeOpen() ? '' : undefined}
                       data-no-surface-swipe=""
-                      onKeyDown={(event) => {
-                        if (event.key !== 'Escape' || !volumeOpen()) return;
-                        event.preventDefault();
-                        setVolumeOpen(false);
-                        volumeTrigger?.focus();
-                      }}
+                      onKeyDown={escapeVolume}
                     >
                       <Control
                         class={`${styles.actBtn} ${styles.volumeTrigger}`}
                         classList={{ [styles.actOn]: volumeOpen() }}
-                        aria-label={t('omnibar.volume')}
-                        aria-expanded={volumeOpen()}
-                        aria-controls={volumeId}
+                        aria-label={mobileWeb ? t(player().playback.muted ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
+                        aria-expanded={mobileWeb ? undefined : volumeOpen()}
+                        aria-controls={volumeOpen() ? volumeId : undefined}
                         title={t('omnibar.volume')}
                         ref={volumeTrigger}
-                        onClick={() => setVolumeOpen(!volumeOpen())}
+                        onPointerEnter={(event) => { if (event.pointerType === 'mouse') openVolume(); }}
+                        onPointerLeave={leaveVolume}
+                        onFocus={(event) => { if (event.currentTarget.matches(':focus-visible')) openVolume(); }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Tab' && !event.shiftKey && volumeOpen()) {
+                            event.preventDefault();
+                            volumePopup?.querySelector('input')?.focus({ preventScroll: true });
+                          }
+                        }}
+                        onClick={() => { if (player().can('transport.set_muted')) player().actions.toggleMute(); }}
                       >
                         {volumeIcon()}
                       </Control>
-                      {muteButton(styles.inlineMute)}
-                      <span id={volumeId} class={styles.volumePopover}>
-                        {muteButton(styles.popoverMute)}
-                        <input
-                          class={styles.volRange}
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={volPct()}
-                          style={{ '--fill': `${volPct()}%` }}
-                          aria-label={t('omnibar.volume')}
-                          aria-valuetext={`${volPct()}%`}
-                          onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
-                        />
-                      </span>
+                      <Show when={!mobileWeb}>
+                        {muteButton()}
+                        <span class={styles.volumePopover}>{volumeSlider()}</span>
+                      </Show>
+                      <Show when={volumeOpen() && volumeAnchor()}>
+                        {(anchor) => (
+                          <Portal mount={anchor().surface}>
+                            <div
+                              ref={volumePopup}
+                              id={volumeId}
+                              class={styles.compactVolumePopup}
+                              style={{ '--volume-top': `${anchor().top}px`, left: `${anchor().left}px` }}
+                              data-no-surface-swipe=""
+                              onKeyDown={escapeVolume}
+                              onPointerEnter={cancelVolumeDismiss}
+                              onPointerLeave={leaveVolume}
+                            >
+                              {volumeSlider()}
+                            </div>
+                          </Portal>
+                        )}
+                      </Show>
                     </div>
                   </Show>
 

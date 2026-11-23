@@ -11,6 +11,7 @@ export interface ProgramState {
   mixing?: { enabled: boolean | null; settingsPhase: string } | null;
   autoplay?: { enabled: boolean | null; settingsPhase: string; active: boolean; phase: string } | null;
   seekable?: boolean;
+  volume?: number;
   preview?: { key: string; preparation: PreviewPreparation | null; retryAttempt: number; retryPending: boolean; retryNotBeforeMs: number } | null;
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
   /** Set by a program that offers only some optional controls (another device,
@@ -38,6 +39,7 @@ export type ProgramCommand =
   | { action: 'clearManual'; queueToken: string }
   | { action: 'retireSource'; id: string }
   | { action: 'seek'; positionMs: number }
+  | { action: 'volume'; level: number }
   | { action: 'skip'; seconds: -15 | 15; index: number; key: string; queueToken: string }
   | { action: 'shuffle'; enabled: boolean }
   | { action: 'repeat'; mode: 0 | 1 | 2 }
