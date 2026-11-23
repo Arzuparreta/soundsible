@@ -364,7 +364,7 @@ class PlaybackService : MediaLibraryService() {
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeLiveHost", state.toString()) }) }
         }
         deviceSession = NativeDeviceSession(this, connection, main, {
-            dj?.let { ProgramDeviceState.snapshotDj(player, it, djPlanner, djPhase, mixing.active()) }
+            dj?.takeIf { it.readable() }?.let { ProgramDeviceState.snapshotDj(player, it, djPlanner, djPhase, mixing.active()) }
                 ?: ProgramDeviceState.snapshot(player, radio)
         }, ::executeRemoteCommand) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeDevice", state.toString()) }) }

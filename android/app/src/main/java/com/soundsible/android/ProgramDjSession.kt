@@ -83,6 +83,8 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private var plan: ProgramDjPlan.Plan? = null
     @Volatile private var streams = arrayOfNulls<ProgramPcmTap.Stream>(2)
     private fun owns() = !closed && ownsAccount()
+    /** Whether this session may still be read for a state publication: an account change leaves it set until it is closed. */
+    fun readable(): Boolean = owns()
     private val output: ProgramMixOutput = ProgramMixOutput(context, ::owns) { bytes, rate, channels, frame ->
         streams[outputSlot(frame)]?.let { stream -> tap.offer(ByteBuffer.wrap(bytes), rate, channels, stream, frame) }
     }
