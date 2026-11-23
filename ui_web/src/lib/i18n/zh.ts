@@ -75,6 +75,8 @@ export const zh: Dict = {
     startDjFromSong: '从这首歌开始 DJ',
     mixWith: '融入音乐…',
     changeShort: '更换…',
+    changeSession: '更换',
+    chooseOtherMusic: '选择其他音乐…',
 
     reference: '融入当前会话',
     references: '会话',
@@ -228,6 +230,7 @@ export const zh: Dict = {
     shuffle: '随机播放',
     repeat: '循环',
     showLyrics: '显示歌词',
+    lyricsLabel: '歌词',
     showCover: '显示封面',
     movePanel: '移动 {panel} 面板',
     layoutPanel: '面板布局',

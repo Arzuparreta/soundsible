@@ -74,6 +74,8 @@ export const en = {
     startDjFromSong: 'Start DJ from this song',
     mixWith: 'Mix with…',
     changeShort: 'Change…',
+    changeSession: 'Change',
+    chooseOtherMusic: 'Choose other music…',
 
     reference: 'Mix into session',
     references: 'Session',
@@ -228,6 +230,7 @@ export const en = {
     shuffle: 'Shuffle',
     repeat: 'Repeat',
     showLyrics: 'Show lyrics',
+    lyricsLabel: 'Lyrics',
     showCover: 'Show cover art',
     movePanel: 'Move {panel} panel',
     layoutPanel: 'Panel layout',

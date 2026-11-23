@@ -75,6 +75,8 @@ export const es: Dict = {
     startDjFromSong: 'Empezar DJ desde esta canción',
     mixWith: 'Mezclar con…',
     changeShort: 'Cambiar…',
+    changeSession: 'Cambiar',
+    chooseOtherMusic: 'Elegir otra música…',
 
     reference: 'Mezclar con la sesión',
     references: 'Sesión',
@@ -228,6 +230,7 @@ export const es: Dict = {
     shuffle: 'Aleatorio',
     repeat: 'Repetir',
     showLyrics: 'Mostrar letra',
+    lyricsLabel: 'Letra',
     showCover: 'Mostrar portada',
     movePanel: 'Mover panel {panel}',
     layoutPanel: 'Disposición del panel',

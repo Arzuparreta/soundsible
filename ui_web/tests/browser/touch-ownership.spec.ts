@@ -10,7 +10,7 @@ test('native touches release list scrolling and retain player pull-down dismissa
   await restoreQueueSession(page, { current: TRACKS[319], requests: TRACKS.slice(200, 230) });
   await page.goto('/player/#/library?view=songs');
   await openMiniPlayer(page, /Canción de biblioteca 320/);
-  await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(1).tap();
+  await page.locator('[data-player-surface-open] [data-compact-list-toggle]').tap();
   const surface = page.locator('[data-player-surface-open]');
   const body = surface.locator('[data-now-playing-tile="queue"] section[data-section="manual"] [data-section-rows]');
   await expect(body).toBeVisible();

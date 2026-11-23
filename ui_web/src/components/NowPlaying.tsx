@@ -25,6 +25,7 @@ import { isPodcastTrack } from '../lib/track';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import { PlayerStage } from './PlayerStage';
+import { PlayerMiniHeader } from './PlayerMiniHeader';
 import {
   PlayerTrackList,
   type PlayerTrackListCard,
@@ -283,7 +284,10 @@ export function NowPlaying(props: {
   const queueSections = createActivityMemo<PlayerTrackListSection[]>(queueActive, () => {
     const sections: PlayerTrackListSection[] = [];
     const current = currentQueueEntry();
-    if (current) {
+    // In the compact layout the sticky mini-player above the list already
+    // shows the sounding song and returns to the stage; repeating a static
+    // "Now playing" row right beneath it duplicates the track.
+    if (current && !playerCompact()) {
       sections.push({
         id: 'current',
         label: t('nowPlaying.nowPlayingSection'),
@@ -315,6 +319,7 @@ export function NowPlaying(props: {
     });
     return sections;
   }, initialSections, () => [
+    playerCompact(),
     currentQueueEntry(),
     manualQueue(),
     radioQueue(),
@@ -348,42 +353,47 @@ export function NowPlaying(props: {
                 mode="now-playing"
                 surfaceOpen={props.surfaceOpen}
                 onCloseSurface={props.onCloseSurface}
-                onOpenList={() => props.onMobilePanelChange('queue')}
-                listLabel={t('nowPlaying.queue')}
               />
             );
           }
           return (
             <Show when={queueMounted()}>
-              <Show when={hostSession() && queueView() === 'chat'} fallback={
-                <PlayerTrackList
-                  title={t('nowPlaying.queue')}
-                  count={manualQueue().length + radioQueue().length}
-                  sections={queueSections()}
-                  virtualize
-                  empty={t('nowPlaying.queueEmpty')}
-                  onReorder={reorderQueue}
-                  headAction={[
-                    ...(hostSession() ? [{ label: t('live.chat'), onClick: () => setQueueView('chat') }] : []),
-                    {
-                      label: t('nowPlaying.clearManualQueue'),
-                      disabled: manualQueue().length === 0,
-                      onClick: () => player().actions.clearManualQueue(),
-                    },
-                  ]}
-                  setScrollerRef={(element) => { desktopQueueEl = element; }}
-                />
-              }>
-                <section class={styles.liveChat}>
-                  <header>
-                    <button type="button" onClick={() => setQueueView('queue')}>
-                      {t('nowPlaying.queue')}
-                    </button>
-                    <strong>{t('live.chat')}</strong>
-                  </header>
-                  <LiveRoomPanel compact />
-                </section>
-              </Show>
+              <div class={styles.queuePanel}>
+                <Show when={playerCompact()}>
+                  <PlayerMiniHeader mode="now-playing" onBack={() => props.onMobilePanelChange('stage')} />
+                </Show>
+                <div class={styles.queueBody}>
+                  <Show when={hostSession() && queueView() === 'chat'} fallback={
+                    <PlayerTrackList
+                      title={t('nowPlaying.queue')}
+                      count={manualQueue().length + radioQueue().length}
+                      sections={queueSections()}
+                      virtualize
+                      empty={t('nowPlaying.queueEmpty')}
+                      onReorder={reorderQueue}
+                      headAction={[
+                        ...(hostSession() ? [{ label: t('live.chat'), onClick: () => setQueueView('chat') }] : []),
+                        {
+                          label: t('nowPlaying.clearManualQueue'),
+                          disabled: manualQueue().length === 0,
+                          onClick: () => player().actions.clearManualQueue(),
+                        },
+                      ]}
+                      setScrollerRef={(element) => { desktopQueueEl = element; }}
+                    />
+                  }>
+                    <section class={styles.liveChat}>
+                      <header>
+                        <button type="button" onClick={() => setQueueView('queue')}>
+                          {t('nowPlaying.queue')}
+                        </button>
+                        <strong>{t('live.chat')}</strong>
+                      </header>
+                      <LiveRoomPanel compact />
+                    </section>
+                  </Show>
+                </div>
+              </div>
             </Show>
           );
         }}

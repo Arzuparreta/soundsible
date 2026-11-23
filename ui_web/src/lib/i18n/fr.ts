@@ -75,6 +75,8 @@ export const fr: Dict = {
     startDjFromSong: 'Démarrer le DJ à partir de ce titre',
     mixWith: 'Mélanger avec…',
     changeShort: 'Changer…',
+    changeSession: 'Changer',
+    chooseOtherMusic: 'Choisir une autre musique…',
 
     reference: 'Mélanger à la session',
     references: 'Session',
@@ -228,6 +230,7 @@ export const fr: Dict = {
     shuffle: 'Aléatoire',
     repeat: 'Répéter',
     showLyrics: 'Afficher les paroles',
+    lyricsLabel: 'Paroles',
     showCover: 'Afficher la pochette',
     movePanel: 'Déplacer le panneau {panel}',
     layoutPanel: 'Disposition du panneau',

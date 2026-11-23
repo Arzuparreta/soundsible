@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer, TRACKS } from './music-browser-fixture';
+import { showPlayerPanel } from './playerPanels';
 import { settle } from './settle';
 
 test.beforeEach(async ({ page }) => {
@@ -10,16 +11,10 @@ test.beforeEach(async ({ page }) => {
   } }));
 });
 
-const compact = (page: Page) => page.locator('[data-player-surface-open][data-compact]').count().then(Boolean);
-
-/** The route panel, through the same pager the listener uses. */
+/** The route panel, through the same compact dock the listener uses. */
 async function showRoute(page: Page) {
-  if (await compact(page)) {
-    await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(1).click();
-  }
-  const route = page.locator('[data-auto-tile="route"]');
-  await expect(route).not.toHaveAttribute('inert', '');
-  return route;
+  await showPlayerPanel(page, 'route');
+  return page.locator('[data-auto-tile="route"]');
 }
 
 async function openDj(page: Page) {

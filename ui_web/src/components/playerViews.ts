@@ -3,3 +3,4 @@
 // Components still mount separately; loading code does not enter DJ mode.
 export { NowPlaying } from './NowPlaying';
 export { AutoMode } from './AutoMode';
+export { LyricsPanel } from './LyricsPanel';

@@ -106,21 +106,32 @@ describe('AutoMode workspace', () => {
     expect(screen.queryByRole('button', { name: 'autoMode.source.title' })).not.toBeInTheDocument();
   });
 
-  it('starts a new direction from the sounding song in the session actions row', () => {
+  it('starts a new direction from the sounding song via the session Change menu', () => {
     renderAuto('route');
     const section = screen.getByRole('region', { name: 'musicExplorer.references' });
     const header = within(section.querySelector('header')!);
-    expect(header.getAllByRole('button')).toHaveLength(3);
-    fireEvent.click(header.getByRole('button', { name: 'musicExplorer.startFromCurrent' }));
+    expect(header.getByText('autoMode.source.title')).toBeInTheDocument();
+    expect(header.getAllByRole('button')).toHaveLength(2);
+    fireEvent.click(header.getByRole('button', { name: 'musicExplorer.changeSession' }));
+    const options = openContextMenu.mock.calls.at(-1)![0];
+    expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
+      'musicExplorer.chooseOtherMusic',
+      'musicExplorer.startDjFromCurrent',
+    ]);
+    options.actions[1].onSelect();
     expect(actions.startDjFromTrack).toHaveBeenCalledWith(state.playback.currentTrack);
   });
 
-  it('disables the current-song start when there is no playback', () => {
+  it('disables the current-song start in the Change menu when there is no playback', () => {
     const previous = state.playback.currentTrack;
     state.playback.currentTrack = null;
     try {
       renderAuto('route');
-      expect(screen.getByRole('button', { name: 'musicExplorer.startFromCurrent' })).toBeDisabled();
+      const section = screen.getByRole('region', { name: 'musicExplorer.references' });
+      const header = within(section.querySelector('header')!);
+      fireEvent.click(header.getByRole('button', { name: 'musicExplorer.changeSession' }));
+      const options = openContextMenu.mock.calls.at(-1)![0];
+      expect(options.actions[1].disabled).toBe(true);
     } finally { state.playback.currentTrack = previous; }
   });
 
@@ -321,7 +332,7 @@ describe('AutoMode workspace', () => {
     }
   });
 
-  it('shows which joins lost their transition and puts the repair forward', () => {
+  it('shows which joins lost their transition and keeps the repair button understated like Add', () => {
     state.playback.queue.push({
       id: 'later', queueId: 'q-later', title: 'Later song', artist: 'Later artist', source: 'preview' as const,
     });
@@ -329,7 +340,7 @@ describe('AutoMode workspace', () => {
     try {
       const { container } = renderAuto('route');
       const fix = screen.getByRole('button', { name: 'autoMode.route.fix' });
-      expect(fix).toHaveAttribute('data-pending', '');
+      expect(fix).not.toHaveAttribute('data-pending');
       expect(fix).toHaveAttribute('title', 'autoMode.route.mixPending');
       expect(container.querySelector('[data-drag-row="q-later"]')).toHaveAttribute('data-stale', '');
       expect(container.querySelector('[data-drag-row="q-next"]')).not.toHaveAttribute('data-stale');

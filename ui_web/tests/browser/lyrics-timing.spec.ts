@@ -25,12 +25,10 @@ async function mockLyrics(page: Page, extra: Record<string, unknown>) {
 
 async function showLyrics(page: Page) {
   await openMusicPlayer(page);
-  // A phone pages the player; the lyrics live on the stage page, reached
-  // through the same pager the listener uses.
-  const stage = page.locator('[data-now-playing-tile="stage"]');
+  const surface = page.locator('[data-player-surface-open]');
   await showPlayerPanel(page, 'stage');
-  await stage.getByRole('button', { name: 'Mostrar letra' }).click();
-  const panel = stage.locator('[data-lyrics-scroll]').first();
+  await surface.getByRole('button', { name: 'Mostrar letra' }).click();
+  const panel = surface.locator('[data-lyrics-scroll]').first();
   await expect(panel.getByRole('button', { name: 'Line 1', exact: true })).toBeInViewport();
   return panel;
 }
@@ -51,33 +49,33 @@ test('a temporary provider outage recovers in the open panel without a retry cli
     } });
   });
   await openMusicPlayer(page);
-  const stage = page.locator('[data-now-playing-tile="stage"]');
+  const surface = page.locator('[data-player-surface-open]');
   await showPlayerPanel(page, 'stage');
-  await stage.getByRole('button', { name: 'Mostrar letra' }).click();
-  await expect(stage.getByLabel('Cargando letra')).toBeVisible();
-  await expect(stage.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);
-  await expect(stage.getByRole('button', { name: 'Line 1', exact: true })).toBeInViewport();
+  await surface.getByRole('button', { name: 'Mostrar letra' }).click();
+  await expect(surface.getByLabel('Cargando letra')).toBeVisible();
+  await expect(surface.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);
+  await expect(surface.getByRole('button', { name: 'Line 1', exact: true })).toBeInViewport();
   expect(calls).toBe(3);
 });
 
 test('lyrics timed for another cut ask for a tap, then follow it', async ({ page }) => {
   const saved = await mockLyrics(page, { timing_safe: false, synced_duration: 236 });
   const panel = await showLyrics(page);
+  const surface = page.locator('[data-player-surface-open]');
 
-  const notice = page.locator('[data-now-playing-tile="stage"] [data-lyrics-timing]');
+  const notice = surface.locator('[data-lyrics-timing]');
   await expect(notice).toContainText('Puede que esta letra esté sincronizada para otra versión');
   await expect(panel.locator('[aria-current="true"]')).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'Ajustar sincronía' })).toHaveCount(0);
 
-  // The notice is on screen, inside the panel, and clear of the toggle that
-  // floats over the panel's corner.
+  // The notice is on screen, inside the panel, and clear of the toggle.
   await expect(notice).toBeInViewport();
   const noticeBox = (await notice.boundingBox())!;
   const panelBox = (await panel.boundingBox())!;
   expect(noticeBox.x).toBeGreaterThanOrEqual(panelBox.x - 0.5);
   expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 0.5);
   expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(panelBox.y + panelBox.height + 0.5);
-  const toggle = (await page.locator('[data-now-playing-tile="stage"]').getByRole('button', { name: 'Mostrar portada' }).boundingBox())!;
+  const toggle = (await surface.getByRole('button', { name: 'Mostrar portada' }).boundingBox())!;
   const clear = noticeBox.x >= toggle.x + toggle.width || noticeBox.x + noticeBox.width <= toggle.x
     || noticeBox.y >= toggle.y + toggle.height || noticeBox.y + noticeBox.height <= toggle.y;
   expect(clear, 'notice clear of the cover toggle').toBe(true);
@@ -96,7 +94,7 @@ test('lyrics that follow can be re-aligned and reset', async ({ page }) => {
   const saved = await mockLyrics(page, { offset_ms: 4000 });
   const panel = await showLyrics(page);
 
-  const notice = page.locator('[data-now-playing-tile="stage"] [data-lyrics-timing]');
+  const notice = page.locator('[data-player-surface-open] [data-lyrics-timing]');
   await expect(notice).toHaveCount(0);
   await panel.getByRole('button', { name: 'Ajustar sincronía' }).click();
   await expect(notice).toContainText('Toca el verso que está sonando ahora');

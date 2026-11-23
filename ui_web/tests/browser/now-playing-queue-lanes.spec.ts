@@ -57,8 +57,10 @@ test('the library continues as one card, not as a row per song', async ({ page }
   test.skip((page.viewportSize()?.width ?? 0) < 1024, 'the phone gets the same cards on its queue page');
   const queue = await playFromLibrary(page);
 
-  // Only the song that is playing is a row.
-  await expect(queue.locator('[data-drag-row]')).toHaveCount(1);
+  // Compact docked queue shows the sounding song in the sticky mini-player
+  // header instead of duplicating it as a static row in the list.
+  await expect(queue.locator('[data-player-mini-header]')).toContainText('Canción de biblioteca 320');
+  await expect(queue.locator('[data-drag-row]')).toHaveCount(0);
   const context = queue.locator('[data-queue-card="context"]');
   await expect(context).toBeVisible();
   // `text-transform: uppercase` is CSS only, so the DOM keeps the real casing.
@@ -86,8 +88,8 @@ test('removing the context keeps the song and hands over to Autoplay, which swit
 
   await queue.getByRole('button', { name: 'Quitar Tu biblioteca de la cola' }).click();
   await expect(queue.locator('[data-queue-card="context"]')).toHaveCount(0);
-  await expect(queue.locator('[data-drag-row]')).toHaveCount(1);
-  await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 320');
+  await expect(queue.locator('[data-player-mini-header]')).toContainText('Canción de biblioteca 320');
+  await expect(queue.locator('[data-drag-row]')).toHaveCount(0);
 
   // Keyboard, not pointer: the switch is a real control even while dimmed.
   const toggle = queue.getByRole('switch', { name: 'Reproducción automática' });
@@ -156,12 +158,7 @@ test('the library card opens the library and leaves the music playing', async ({
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await page.goto('/player/#/playlists');
   const queue = await openQueuePanel(page);
-  if (isMobile) {
-    // This tests the context action, after navigating with the actual pager.
-    // A raw scroll can race the opening alignment and leaves the queue inert.
-    await page.getByRole('navigation', { name: 'Paneles de NORMAL' }).getByRole('button', { name: 'Cola' }).tap();
-    await expect(queue).not.toHaveAttribute('inert', '');
-  }
+  await expect(queue).not.toHaveAttribute('inert', '');
   // The whole library is a tap away in the navigation: its card never unfolds it.
   await expect(queue.locator('[data-queue-card="context"] [aria-expanded]')).toHaveCount(0);
 
@@ -245,7 +242,7 @@ test('section labels never land on top of each other', async ({ page }) => {
   const queue = await restoreLongQueue(page);
 
   const heads = queue.locator('section[data-head] > div:first-child');
-  await expect.poll(() => heads.count()).toBe(3);
+  await expect.poll(() => heads.count()).toBe(2);
   // The panel settled before the lanes existed. They arrive with an entrance of
   // their own, and a rect read inside it is a rect of something still growing.
   await settle(page, '[data-now-playing-tile="queue"]');
@@ -266,7 +263,7 @@ test('section labels never land on top of each other', async ({ page }) => {
   // is the same collapse seen from the other side. Polled rather than read
   // once: a lane that has not finished laying out measures zero.
   const laneRows = queue.locator('[data-section-rows]');
-  await expect(laneRows).toHaveCount(2);
+  await expect(laneRows).toHaveCount(1);
   await expect
     .poll(async () => {
       const heights = await laneRows.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height));

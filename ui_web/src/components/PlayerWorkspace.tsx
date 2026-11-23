@@ -56,6 +56,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   let carouselProgressFrame = 0;
   let carouselSettleTimer: number | undefined;
   let carouselAligned = false;
+  let carouselOpening = false;
   let carouselHeld = false;
   let carouselTarget: PanelId | null = null;
   let panelFromScroll = false;
@@ -125,6 +126,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     // carousel back to Stage underneath the gesture.
     cancelAnimationFrame(carouselFrame);
     carouselFrame = 0;
+    carouselOpening = false;
     carouselTarget = null;
     window.clearTimeout(carouselSettleTimer);
     carouselSettleTimer = undefined;
@@ -207,11 +209,29 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       queueMicrotask(() => tile.focus({ preventScroll: true }));
     }
     cancelAnimationFrame(carouselFrame);
-    const alignImmediately = !surfaceOpen || opening || !carouselAligned;
+    const reducedMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (opening) carouselOpening = true;
+    const alignImmediately = !surfaceOpen || opening || carouselOpening || !carouselAligned || reducedMotion;
     carouselAligned = surfaceOpen;
-    if (Math.abs(tileOffset(tile) - workspaceEl.scrollLeft) <= 2) { carouselTarget = null; return; }
+    if (Math.abs(tileOffset(tile) - workspaceEl.scrollLeft) <= 2) {
+      carouselTarget = null;
+      if (opening) {
+        // Reopening can immediately target a non-stage panel in the same turn
+        // (e.g. returning from a DJ errand to the route); keep opening active
+        // until the frame settles so that jump does not smooth-scroll sideways.
+        carouselFrame = requestAnimationFrame(() => {
+          carouselFrame = 0;
+          carouselOpening = false;
+        });
+      }
+      return;
+    }
     if (alignImmediately) jumpToTile(tile);
     carouselFrame = requestAnimationFrame(() => {
+      carouselFrame = 0;
+      carouselOpening = false;
       if (!workspaceEl) return;
       if (alignImmediately) jumpToTile(tile);
       else workspaceEl.scrollTo({ left: tileOffset(tile), behavior: 'smooth' });

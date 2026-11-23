@@ -251,57 +251,51 @@ describe('PlayerSurface', () => {
     expect(normal).toHaveFocus();
   });
 
-  it('moves between the two compact panels through accessible indicators', () => {
+  it('toggles between Stage, Queue and Lyrics symmetrically through the compact bottom dock', () => {
     render(() => <PlayerSurface />);
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
 
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.queue' }));
-    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('queue');
+    const queueToggle = screen.getByRole('button', { name: 'nowPlaying.panel.queue' });
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'false');
 
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.stage' }));
+    fireEvent.click(queueToggle);
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('queue');
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(queueToggle).toHaveAttribute('aria-current', 'page');
+
+    // Pressing the active toggle returns straight to Stage.
+    fireEvent.click(queueToggle);
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByRole('button', { name: 'nowPlaying.panel.browser' })).toBeNull();
   });
 
-  it('moves the compact pill when the carousel reports a user swipe', () => {
+  it('keeps the bottom dock toggle synced when the carousel reports a user swipe', () => {
     render(() => <PlayerSurface />);
-    const nav = screen.getByRole('navigation', { name: 'nowPlaying.mobilePanels' });
+    const queueToggle = screen.getByRole('button', { name: 'nowPlaying.panel.queue' });
 
-    expect(nav).toHaveStyle('--carousel-index: 0');
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(screen.getByRole('button', { name: 'simulate swipe' }));
 
-    expect(screen.getByRole('button', { name: 'nowPlaying.panel.queue' })).toHaveAttribute('aria-current', 'page');
-    expect(nav).toHaveStyle('--carousel-index: 1');
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(queueToggle).toHaveAttribute('aria-current', 'page');
   });
 
-  it('tracks a drag between panels without waiting for it to settle', () => {
-    render(() => <PlayerSurface />);
-    const nav = screen.getByRole('navigation', { name: 'nowPlaying.mobilePanels' });
-
-    fireEvent.click(screen.getByRole('button', { name: 'simulate drag' }));
-
-    expect(nav).toHaveStyle('--carousel-index: 0.4');
-    expect(nav).toHaveAttribute('data-live');
-    // The panel itself has not settled yet, so focus and inertness stay put.
-    expect(screen.getByRole('button', { name: 'nowPlaying.panel.stage' })).toHaveAttribute('aria-current', 'page');
-  });
-
-  it('uses the same live pager contract in Auto Mode', async () => {
+  it('uses the same symmetric bottom dock toggle in Auto Mode', async () => {
     render(() => <PlayerSurface />);
     fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
     await screen.findByTestId('auto-mode-view');
-    const nav = screen.getByRole('navigation', { name: 'autoMode.mobile.controls' });
+    const routeToggle = screen.getByRole('button', { name: 'autoMode.panel.route' });
 
-    expect(nav).toHaveStyle('--carousel-index: 0');
-    fireEvent.click(screen.getByRole('button', { name: 'simulate auto drag' }));
-    expect(nav).toHaveStyle('--carousel-index: 0.4');
-    expect(nav).toHaveAttribute('data-live');
-    expect(screen.getByRole('button', { name: 'autoMode.panel.stage' })).toHaveAttribute('aria-current', 'page');
-
+    expect(routeToggle).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(screen.getByRole('button', { name: 'simulate auto swipe' }));
-    expect(nav).toHaveStyle('--carousel-index: 1');
     expect(screen.getByTestId('auto-mode-view')).toHaveTextContent('route');
-    expect(screen.getByRole('button', { name: 'autoMode.panel.route' })).toHaveAttribute('aria-current', 'page');
+    expect(routeToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(routeToggle).toHaveAttribute('aria-current', 'page');
+
+    fireEvent.click(routeToggle);
+    expect(screen.getByTestId('auto-mode-view')).toHaveTextContent('stage');
+    expect(routeToggle).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('resets the compact carousel only once the surface has animated out', () => {

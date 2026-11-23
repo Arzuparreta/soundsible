@@ -60,6 +60,12 @@
 
 @container player (max-width: 1023px) {
   .workspace {
+    /* Compact Stage has no bottom actions row (moved into the shell dock),
+       giving that height back to the cover art. */
+    --stage-height-budget: calc(
+      100cqh - var(--stage-pad-top) - var(--stage-pad-bottom) - var(--stage-gap)
+      - 26px - 44px - 64px - var(--stage-row-gap) * 2 - 12px
+    );
     padding-top:
       calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
     padding-right: env(safe-area-inset-right, 0px);

@@ -2,12 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 import { settle } from './settle';
 
-// Two rows change with the song. Beside the title: the heart appears once it is
-// saved, the save/download slot disappears once it has a file. Under the
-// transport: lyrics, the queue toggle on compact layouts, radio, volume, more.
-// Whatever the combination, the buttons each row is left with must sit evenly —
-// a control that renders nothing must not leave a box behind, or the row gets
-// a double gap beside it.
+// Two groups change with the song. Beside the title: Save/Download (hidden once
+// owned), Heart (once saved), and More (⋯). On compact layouts, Lyrics, Queue,
+// Radio and Volume live in the persistent bottom dock; in full screen, Lyrics,
+// Radio and Volume sit in the stage actions bar. Whatever the combination,
+// no hidden control may leave an empty flex slot behind.
 
 const PREVIEW = {
   id: 'preview-spacing',
@@ -23,13 +22,17 @@ test.beforeEach(async ({ page }) => {
 });
 
 /** Every box a row lays out, looking through layout-transparent wrappers. */
-async function rowItems(page: Page, row: 'actions' | 'song') {
-  const stage = page.locator('[data-player-stage-mode="now-playing"]');
-  const more = stage.getByRole('button', { name: 'Más opciones', exact: true });
-  await expect(more).toBeVisible();
-  return stage.evaluate((root, which) => {
-    const more = [...root.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'Más opciones')!;
-    const container = which === 'actions' ? more.parentElement! : root.querySelector('h1')!.parentElement!.nextElementSibling!;
+async function rowItems(page: Page, row: 'actions' | 'song' | 'dock') {
+  const surface = page.locator('[data-player-surface-open]');
+  const stage = surface.locator('[data-player-stage-mode="now-playing"]');
+  await expect(stage.getByRole('button', { name: 'Más opciones', exact: true })).toBeVisible();
+  return surface.evaluate((root, which) => {
+    const stageEl = root.querySelector('[data-player-stage-mode="now-playing"]')!;
+    const container = which === 'dock'
+      ? root.querySelector('[data-compact-dock]')!
+      : which === 'actions'
+        ? stageEl.querySelector('[data-stage-actions]')!
+        : stageEl.querySelector('h1')!.parentElement!.nextElementSibling!;
     const items: { label: string; left: number; right: number; width: number }[] = [];
     const collect = (element: Element) => {
       const display = getComputedStyle(element).display;
@@ -44,13 +47,18 @@ async function rowItems(page: Page, row: 'actions' | 'song') {
       const label = element.getAttribute('aria-label') ?? labelled?.getAttribute('aria-label') ?? element.tagName;
       items.push({ label, left: rect.left, right: rect.right, width: rect.width });
     };
-    for (const child of container.children) collect(child);
+    if (which === 'dock') {
+      for (const group of container.children) {
+        for (const child of group.children) collect(child);
+      }
+    } else {
+      for (const child of container.children) collect(child);
+    }
     return items;
   }, row);
 }
 
-async function expectEvenRow(page: Page, row: 'actions' | 'song', expected: RegExp[], absent: RegExp[] = []) {
-  // Let any entrance motion settle before measuring.
+async function expectEvenRow(page: Page, row: 'actions' | 'song' | 'dock', expected: RegExp[], absent: RegExp[] = []) {
   await expect.poll(() => page.evaluate(() =>
     document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).length)).toBe(0);
   const items = await rowItems(page, row);
@@ -58,7 +66,7 @@ async function expectEvenRow(page: Page, row: 'actions' | 'song', expected: RegE
   for (const item of items) expect(item.width, `${item.label} has a box with nothing in it`).toBeGreaterThan(0);
   for (const pattern of expected) expect(labels.some((label) => pattern.test(label)), `${pattern} in ${labels.join(' · ')}`).toBe(true);
   for (const pattern of absent) expect(labels.some((label) => pattern.test(label)), `${pattern} not in ${labels.join(' · ')}`).toBe(false);
-  if (items.length < 3) return;
+  if (row === 'dock' || items.length < 3) return;
   const gaps = items.slice(1).map((item, i) => item.left - items[i].right);
   expect(Math.max(...gaps) - Math.min(...gaps), `gaps ${gaps.map((gap) => gap.toFixed(1)).join(', ')} between ${labels.join(' · ')}`).toBeLessThanOrEqual(1);
 }
@@ -74,8 +82,8 @@ async function playPreview(page: Page) {
 
 test('a downloaded song leaves no gap where the download button was', async ({ page, isMobile }) => {
   await openMusicPlayer(page);
-  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, isMobile ? /Silenciar/ : /Volumen/, /Más opciones/]);
-  await expectEvenRow(page, 'song', [/favoritos/i], [/^(Guardar|Descargar)/]);
+  await expectEvenRow(page, 'dock', [/letra/i, /Cola/, /radio/i, isMobile ? /Silenciar/ : /Volumen/]);
+  await expectEvenRow(page, 'song', [/favoritos/i, /Más opciones/], [/^(Guardar|Descargar)/]);
   const stage = page.locator('[data-player-stage-mode="now-playing"]');
   await expect(stage.getByRole('button', { name: /^(Guardar|Descargar)/ })).toHaveCount(0);
 });
@@ -83,35 +91,36 @@ test('a downloaded song leaves no gap where the download button was', async ({ p
 test('an unsaved song spaces its save button like the rest', async ({ page, isMobile }) => {
   await openMusicPlayer(page);
   await playPreview(page);
-  await expectEvenRow(page, 'song', [/^Guardar/], [/favoritos/i]);
-  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, isMobile ? /Silenciar/ : /Volumen/, /Más opciones/]);
+  await expectEvenRow(page, 'song', [/^Guardar/, /Más opciones/], [/favoritos/i]);
+  await expectEvenRow(page, 'dock', [/letra/i, /Cola/, /radio/i, isMobile ? /Silenciar/ : /Volumen/]);
 });
 
-test('a saved song still streaming keeps heart and download side by side', async ({ page, isMobile }) => {
+test('a saved song still streaming keeps heart, download and more evenly spaced', async ({ page, isMobile }) => {
   await openMusicPlayer(page);
   await playPreview(page);
   const stage = page.locator('[data-player-stage-mode="now-playing"]');
   await stage.getByRole('button', { name: /^Guardar/ }).click();
   await expect(stage.getByRole('button', { name: /^Descargar/ })).toBeVisible();
-  await expectEvenRow(page, 'song', [/favoritos/i, /^Descargar/]);
-  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, isMobile ? /Silenciar/ : /Volumen/, /Más opciones/]);
+  await expectEvenRow(page, 'song', [/favoritos/i, /^Descargar/, /Más opciones/]);
+  await expectEvenRow(page, 'dock', [/letra/i, /Cola/, /radio/i, isMobile ? /Silenciar/ : /Volumen/]);
 });
 
-test('compact volume floats beneath the speaker without moving the player', async ({ page, isMobile }) => {
+test('compact volume floats above the bottom dock without moving the player', async ({ page, isMobile }) => {
   test.skip(isMobile, 'the floating slider is a desktop control');
   await openMusicPlayer(page);
   await settle(page, '[data-player-surface-open]');
   const surface = page.locator('[data-player-surface-open]');
   const stage = page.locator('[data-player-stage-mode="now-playing"]');
-  const volume = stage.getByRole('button', { name: 'Volumen', exact: true });
+  const dock = surface.locator('[data-compact-dock]');
+  const volume = dock.getByRole('button', { name: 'Volumen', exact: true });
   const slider = surface.getByRole('slider', { name: 'Volumen', exact: true });
   const controls = [
     stage.locator('[data-player-cover-slot]'),
     stage.locator('h1'),
     stage.getByRole('button', { name: /^(Pausar|Reproducir)$/ }),
-    volume,
     stage.getByRole('button', { name: 'Más opciones', exact: true }),
-    surface.locator('nav'),
+    volume,
+    dock,
   ];
   const positions = () => Promise.all(controls.map((control) => control.boundingBox()));
   const before = await positions();
@@ -122,11 +131,8 @@ test('compact volume floats beneath the speaker without moving the player', asyn
   expect(await positions()).toEqual(before);
   const popup = surface.locator(`[id="${await volume.getAttribute('aria-controls')}"]`);
   const [popupBox, buttonBox] = await Promise.all([popup.boundingBox(), volume.boundingBox()]);
-  expect(popupBox!.y).toBeGreaterThanOrEqual(buttonBox!.y + buttonBox!.height);
+  expect(popupBox!.y + popupBox!.height).toBeLessThanOrEqual(buttonBox!.y);
   await expect(popup.getByRole('button')).toHaveCount(0);
-  const pagerBox = (await surface.locator('nav').boundingBox())!;
-  expect(popupBox!.x).toBeCloseTo(buttonBox!.x, 0);
-  expect(popupBox!.x).toBeGreaterThanOrEqual(pagerBox.x + pagerBox.width);
   await slider.hover();
   await slider.fill('45');
   await expect(slider).toHaveAttribute('aria-valuetext', '45%');
@@ -165,7 +171,6 @@ test('the lyrics dock spaces what it keeps of the row evenly', async ({ page }, 
   // Stretched until the dock has room for the heart beside the title.
   const splitter = page.getByRole('separator', { name: 'Redimensionar paneles' }).first();
   await splitter.focus();
-  // The seam is on the stage's right, before the queue.
   for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowRight');
   await expectEvenRow(page, 'song', [/favoritos/i]);
   await expectEvenRow(page, 'actions', [/Mostrar portada/, /Silenciar/, /Más opciones/]);

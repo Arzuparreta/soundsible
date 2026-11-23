@@ -1,18 +1,13 @@
 import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
-import { createEffect, createMemo, createSignal, createUniqueId, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { isSavedTrack } from '../stores';
 import { player } from '../stores/player';
 import { clockTime } from '../lib/format';
 import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
 import { CoverImage } from './CoverImage';
-import {
-  initialMobileVisualState,
-  toggleMobileLyrics,
-} from '../lib/nowPlayingMobileVisual';
 import { responsiveTapConstants } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { isPodcastTrack } from '../lib/track';
@@ -52,8 +47,6 @@ export function PlayerStage(props: {
   mode: PlayerStageMode;
   surfaceOpen: boolean;
   onCloseSurface?: () => void;
-  onOpenList?: () => void;
-  listLabel?: string;
   onTrackDragStart?: (event: DragEvent, track: Track) => void;
   onCarryTrack?: (track: Track) => void;
   /** What the stage says with no track. Auto tells the story of its opening. */
@@ -61,7 +54,6 @@ export function PlayerStage(props: {
 }) {
   const track = createMemo(() => player().playback.currentTrack);
   const podcast = createMemo(() => Boolean(track() && isPodcastTrack(track()!)));
-  const [mobileVisual, setMobileVisual] = createSignal(initialMobileVisualState);
   const [layoutBusy, setLayoutBusy] = createSignal(false);
   let rootEl: HTMLDivElement | undefined;
   let carryTimer: number | undefined;
@@ -109,66 +101,7 @@ export function PlayerStage(props: {
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   };
   const volPct = () => Math.round(gainToVolumePosition(player().playback.muted ? 0 : player().playback.volume) * 100);
-
-  const [volumeOpen, setVolumeOpen] = createSignal(false);
   const mobileWeb = detectFormFactor() !== 'computer';
-  const volumeId = createUniqueId();
-  let volumeRoot: HTMLDivElement | undefined;
-  let volumeTrigger: HTMLButtonElement | undefined;
-  let volumePopup: HTMLDivElement | undefined;
-  let volumeDismissTimer: ReturnType<typeof setTimeout> | undefined;
-  const [volumeAnchor, setVolumeAnchor] = createSignal<{ surface: HTMLElement; top: number; left: number }>();
-
-  const cancelVolumeDismiss = () => clearTimeout(volumeDismissTimer);
-  onCleanup(cancelVolumeDismiss);
-  const closeVolume = () => {
-    cancelVolumeDismiss();
-    setVolumeOpen(false);
-  };
-  const openVolume = () => {
-    if (mobileWeb) return;
-    cancelVolumeDismiss();
-    if (volumeOpen()) return;
-    const surface = volumeTrigger?.closest<HTMLElement>('[data-player-stage]');
-    if (!surface || !volumeRoot) return;
-    const button = volumeRoot.getBoundingClientRect();
-    const frame = surface.getBoundingClientRect();
-    setVolumeAnchor({ surface, top: button.bottom - frame.top, left: button.left - frame.left - surface.clientLeft });
-    setVolumeOpen(true);
-  };
-  const leaveVolume = (event: PointerEvent) => {
-    if (event.pointerType !== 'mouse') return;
-    cancelVolumeDismiss();
-    volumeDismissTimer = setTimeout(() => {
-      if (!volumePopup?.contains(document.activeElement)) closeVolume();
-    }, 160);
-  };
-  const escapeVolume = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape' || !volumeOpen()) return;
-    event.preventDefault();
-    volumeTrigger?.focus({ preventScroll: true });
-    closeVolume();
-  };
-
-  createEffect(() => {
-    if (!props.surfaceOpen || !player().can('transport.set_volume')) setVolumeOpen(false);
-  });
-  createEffect(() => {
-    if (!volumeOpen()) return;
-    const dismiss = (event: Event) => {
-      if (event.target instanceof Node && !volumeRoot?.contains(event.target) && !volumePopup?.contains(event.target)) closeVolume();
-    };
-    document.addEventListener('pointerdown', dismiss, true);
-    document.addEventListener('focusin', dismiss, true);
-    document.addEventListener('scroll', closeVolume, true);
-    window.addEventListener('resize', closeVolume);
-    onCleanup(() => {
-      document.removeEventListener('pointerdown', dismiss, true);
-      document.removeEventListener('focusin', dismiss, true);
-      document.removeEventListener('scroll', closeVolume, true);
-      window.removeEventListener('resize', closeVolume);
-    });
-  });
 
   const volumeIcon = () => (
     <Show
@@ -186,10 +119,9 @@ export function PlayerStage(props: {
   );
   const muteButton = () => (
     <Show when={player().can('transport.set_muted')}>
-      <button
+      <Control
         class={`${styles.actBtn} ${styles.inlineMute}`}
         classList={{ [styles.actOn]: player().playback.muted }}
-        type="button"
         aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
         aria-pressed={player().playback.muted}
         aria-busy={player().pending('mute') || undefined}
@@ -198,7 +130,7 @@ export function PlayerStage(props: {
         onClick={() => player().actions.toggleMute()}
       >
         {volumeIcon()}
-      </button>
+      </Control>
     </Show>
   );
 
@@ -214,10 +146,6 @@ export function PlayerStage(props: {
       onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
     />
   );
-
-  createEffect(() => {
-    if (!props.surfaceOpen || podcast()) setMobileVisual(initialMobileVisualState);
-  });
 
   const animateRects = (before: Map<Element, DOMRect>) => {
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
@@ -297,10 +225,6 @@ export function PlayerStage(props: {
             onSelect: () => player().playback.radioMode ? void onStopRadio() : void player().actions.startRadio(current),
           },
         ] : []),
-        // The one Auto-native thing to do with the song on air now has a button
-        // of its own in the actions bar — the song playing is not in the route
-        // panel, so a menu entry was the only way to reach it and nothing said
-        // it was there.
         ...buildTrackMenu(current, {
           music: playerTrackMusic(current),
           auto: props.mode === 'auto',
@@ -337,7 +261,6 @@ export function PlayerStage(props: {
                     data-now-playing-cover-slot={props.mode === 'now-playing' ? '' : undefined}
                     data-auto-cover-slot={props.mode === 'auto' ? '' : undefined}
                     data-lyrics-morph=""
-                    data-lyrics-open={mobileVisual().content === 'lyrics' ? '' : undefined}
                   >
                     <div
                       class={styles.art}
@@ -358,17 +281,6 @@ export function PlayerStage(props: {
                     >
                       <CoverImage src={trackCoverUrl(current())} eager={props.surfaceOpen} />
                     </div>
-                    <Show when={!podcast() && mobileVisual().content === 'lyrics'}>
-                      <div class={styles.mobileLyrics}>
-                        <Suspense fallback={
-                          <div class={styles.lyricsPending}>
-                            <Spinner size={22} label={t('lyricsPanel.loading')} />
-                          </div>
-                        }>
-                          <LyricsPanel />
-                        </Suspense>
-                      </div>
-                    </Show>
                     <Show when={desktopLyricsActive()}>
                       <div class={styles.desktopLyrics}>
                         <StageLyrics />
@@ -407,6 +319,23 @@ export function PlayerStage(props: {
                         <FavouriteButton favourite={savedFromTrack(current())} class={styles.actBtn} tooltip />
                       </span>
                     </Show>
+                    <Control
+                      class={`${styles.actBtn} ${styles.compactMoreAction}`}
+                      aria-label={t('common.more')}
+                      title={t('common.more')}
+                      onClick={() => openTrackMenu(current(), {
+                        music: playerTrackMusic(current()),
+                        onAddToPlaylist: openPlaylistPicker,
+                        onEditMetadata: openMetadataEditor,
+                        onPlayOnDevice: openPlayOnDevice,
+                      })}
+                    >
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                        <circle cx="5" cy="12" r="2" />
+                        <circle cx="12" cy="12" r="2" />
+                        <circle cx="19" cy="12" r="2" />
+                      </svg>
+                    </Control>
                   </div>
                 </div>
 
@@ -527,29 +456,14 @@ export function PlayerStage(props: {
                   </Show>
                 </div>
 
-                <div class={styles.actionsBar} data-lyrics-morph="">
+                {/* Wide full-screen actions bar. Compact layouts own lyrics,
+                    queue/route, radio and volume in PlayerSurface's persistent
+                    bottom dock so they stay reachable across every view. */}
+                <div class={styles.actionsBar} data-stage-actions="" data-lyrics-morph="">
                   <Show when={!podcast()}>
-                    <button
-                      classList={{
-                        [styles.actBtn]: true,
-                        [styles.mobileLyricsToggle]: true,
-                        [styles.actOn]: mobileVisual().content === 'lyrics',
-                      }}
-                      type="button"
-                      aria-label={mobileVisual().content === 'lyrics' ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-                      title={mobileVisual().content === 'lyrics' ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-                      aria-pressed={mobileVisual().content === 'lyrics'}
-                      onClick={() => setMobileVisual(toggleMobileLyrics)}
-                    >
-                      <KaraokeMicIcon size={20} />
-                    </button>
-                    <button
-                      classList={{
-                        [styles.actBtn]: true,
-                        [styles.desktopLyricsToggle]: true,
-                        [styles.actOn]: desktopLyricsActive(),
-                      }}
-                      type="button"
+                    <Control
+                      class={`${styles.actBtn} ${styles.desktopLyricsToggle}`}
+                      classList={{ [styles.actOn]: desktopLyricsActive() }}
                       aria-label={desktopLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
                       title={desktopLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
                       aria-pressed={desktopLyricsActive()}
@@ -557,99 +471,40 @@ export function PlayerStage(props: {
                       onClick={toggleDesktopLyrics}
                     >
                       <KaraokeMicIcon size={20} />
-                    </button>
-                  </Show>
-
-                  <Show when={props.onOpenList && player().playback.queue.length > 1}>
-                    <button
-                      classList={{ [styles.actBtn]: true, [styles.mobileQueueToggle]: true }}
-                      type="button"
-                      aria-label={props.listLabel ?? t('nowPlaying.queue')}
-                      title={props.listLabel ?? t('nowPlaying.queue')}
-                      onClick={props.onOpenList}
-                    >
-                      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M11 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
-                        <path d="M17 17V4h4M13 5H3M3 9h10M9 13H3" />
-                      </svg>
-                    </button>
+                    </Control>
                   </Show>
 
                   <Show when={props.mode === 'now-playing' && !podcast()}>
-                    <button
+                    <Control
+                      class={`${styles.actBtn} ${styles.radioAction}`}
                       classList={{
-                        [styles.actBtn]: true,
-                        [styles.radioAction]: true,
                         [styles.actOn]: player().playback.radioMode,
                         [styles.actPulse]: player().playback.radioLoading,
                       }}
-                      type="button"
                       aria-label={player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
                       title={player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
                       aria-pressed={player().playback.radioMode}
                       onClick={() => (player().playback.radioMode ? void onStopRadio() : void player().actions.startRadio(current()))}
                     >
                       <RadioIcon size={20} />
-                    </button>
+                    </Control>
                   </Show>
 
                   <Show when={player().can('transport.set_volume') && (!mobileWeb || player().can('transport.set_muted'))}>
                     <div
                       class={styles.volume}
                       classList={{ [styles.volumeNoSlider]: mobileWeb }}
-                      ref={volumeRoot}
                       data-no-surface-swipe=""
-                      onKeyDown={escapeVolume}
                     >
-                      <Control
-                        class={`${styles.actBtn} ${styles.volumeTrigger}`}
-                        classList={{ [styles.actOn]: volumeOpen() }}
-                        aria-label={mobileWeb ? t(player().playback.muted ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
-                        aria-expanded={mobileWeb ? undefined : volumeOpen()}
-                        aria-controls={volumeOpen() ? volumeId : undefined}
-                        title={t('omnibar.volume')}
-                        ref={volumeTrigger}
-                        onPointerEnter={(event) => { if (event.pointerType === 'mouse') openVolume(); }}
-                        onPointerLeave={leaveVolume}
-                        onFocus={(event) => { if (event.currentTarget.matches(':focus-visible')) openVolume(); }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Tab' && !event.shiftKey && volumeOpen()) {
-                            event.preventDefault();
-                            volumePopup?.querySelector('input')?.focus({ preventScroll: true });
-                          }
-                        }}
-                        onClick={() => { if (player().can('transport.set_muted')) player().actions.toggleMute(); }}
-                      >
-                        {volumeIcon()}
-                      </Control>
+                      {muteButton()}
                       <Show when={!mobileWeb}>
-                        {muteButton()}
                         <span class={styles.volumePopover}>{volumeSlider()}</span>
-                      </Show>
-                      <Show when={volumeOpen() && volumeAnchor()}>
-                        {(anchor) => (
-                          <Portal mount={anchor().surface}>
-                            <div
-                              ref={volumePopup}
-                              id={volumeId}
-                              class={styles.compactVolumePopup}
-                              style={{ '--volume-top': `${anchor().top}px`, left: `${anchor().left}px` }}
-                              data-no-surface-swipe=""
-                              onKeyDown={escapeVolume}
-                              onPointerEnter={cancelVolumeDismiss}
-                              onPointerLeave={leaveVolume}
-                            >
-                              {volumeSlider()}
-                            </div>
-                          </Portal>
-                        )}
                       </Show>
                     </div>
                   </Show>
 
-                  <button
+                  <Control
                     class={styles.actBtn}
-                    type="button"
                     aria-label={t('common.more')}
                     title={t('common.more')}
                     onClick={() => desktopLyricsActive()
@@ -666,7 +521,7 @@ export function PlayerStage(props: {
                       <circle cx="12" cy="12" r="2" />
                       <circle cx="19" cy="12" r="2" />
                     </svg>
-                  </button>
+                  </Control>
                 </div>
               </div>
             </>

@@ -78,11 +78,8 @@ describe('unified player geometry', () => {
       height: 'var(--app-viewport-height, 100dvh)',
       '--player-chrome-top': 'max(12px, env(safe-area-inset-top, 0px))',
       '--player-mobile-safe-bottom': 'env(safe-area-inset-bottom, 0px)',
-      '--player-carousel-bottom':
-        'calc(var(--player-mobile-safe-bottom) + var(--player-carousel-inset))',
-      // The pager has a band of its own: the pager and its air on both sides.
-      '--player-carousel-band':
-        'calc(var(--player-carousel-height) + var(--player-carousel-inset) * 2)',
+      '--player-compact-dock-height': 'calc(var(--control-h) + var(--space-md))',
+      '--player-carousel-band': 'var(--player-compact-dock-height)',
     });
     // The pages stop above that band and the home indicator under it, so no
     // row, card or lyric ever passes beneath the pager.

@@ -147,12 +147,12 @@ test('the column is resized from its edge, by pointer or keyboard, within its bo
   await page.mouse.move(0, handle.y + handle.height / 2, { steps: 4 });
   await page.mouse.up();
   await expect.poll(width).toBeLessThanOrEqual(Math.floor(page.viewportSize()!.width / 2));
-  // A width of the listener's own puts the way back beside the line, at its foot.
+  // A width of the listener's own puts the way back beside the line, near its top.
   const reset = page.getByRole('button', { name: 'Restablecer el ancho del reproductor', exact: true });
   await expect(reset).toBeVisible();
   const [resetBox, edgeBox] = [(await reset.boundingBox())!, (await edge.boundingBox())!];
   expect(resetBox.x - edgeBox.x).toBeLessThanOrEqual(16);
-  expect(resetBox.y + resetBox.height).toBeGreaterThan(edgeBox.y + edgeBox.height - 60);
+  expect(resetBox.y).toBeLessThan(edgeBox.y + 120);
   await reset.click();
   await expect.poll(width).toBe(420);
   await expect(reset).toHaveCount(0);
@@ -183,4 +183,57 @@ test('the column is resized from its edge, by pointer or keyboard, within its bo
   expect(pillBox.x).toBeGreaterThan(deviceBox.x + deviceBox.width);
   expect(pillBox.x + pillBox.width).toBeLessThan(presentationBox.x);
   expect(presentationBox.x + presentationBox.width).toBeLessThan(closeBox.x);
+});
+
+test('compact bottom dock toggles Queue, Route and Lyrics symmetrically with a sticky mini-player', async ({ page }) => {
+  await page.route('**/api/library/tracks/*/lyrics**', (route) => route.fulfill({ json: {
+    status: 'ready', synced: '[00:00.00]First line\n[00:04.00]Second line', plain: null, instrumental: false, cached: true,
+  } }));
+  await openMusicPlayer(page);
+  const surface = page.locator('[data-player-surface-open]');
+  await settle(page, '[data-player-surface-open]');
+  const dock = surface.locator('[data-compact-dock]');
+  const queueToggle = dock.locator('[data-compact-list-toggle]');
+  const lyricsToggle = dock.locator('[data-compact-lyrics-toggle]');
+  const stage = page.locator('[data-now-playing-tile="stage"]');
+  const queue = page.locator('[data-now-playing-tile="queue"]');
+
+  await expect(queueToggle).toHaveAttribute('aria-pressed', 'false');
+  await queueToggle.click();
+  await expect(queueToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(queue).not.toHaveAttribute('inert', '');
+  const mini = queue.locator('[data-player-mini-header]');
+  await expect(mini).toBeVisible();
+  await expect(mini.getByRole('button', { name: /^(Pausar|Reproducir)$/ })).toBeVisible();
+  await expect(mini.getByRole('button', { name: 'Siguiente' })).toBeVisible();
+
+  // Clicking the sticky mini-player returns to Stage.
+  await mini.locator('button').first().click();
+  await expect(stage).not.toHaveAttribute('inert', '');
+  await expect(queueToggle).toHaveAttribute('aria-pressed', 'false');
+
+  // Re-opening Queue and clicking the active pill again also returns to Stage.
+  await queueToggle.click();
+  await expect(queue).not.toHaveAttribute('inert', '');
+  await queueToggle.click();
+  await expect(stage).not.toHaveAttribute('inert', '');
+
+  // Full-height compact Lyrics view with sticky mini-player.
+  await lyricsToggle.click();
+  const compactLyrics = surface.locator('[data-compact-lyrics]');
+  await expect(compactLyrics).toBeVisible();
+  await expect(lyricsToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(compactLyrics.getByRole('button', { name: 'First line', exact: true })).toBeVisible();
+  await compactLyrics.locator('[data-player-mini-header] button').first().click();
+  await expect(compactLyrics).toHaveCount(0);
+  await expect(stage).not.toHaveAttribute('inert', '');
+
+  // DJ Route stays reachable from the bottom dock even when the route has no items yet.
+  await surface.getByRole('tab', { name: 'DJ', exact: true }).click();
+  await expect(queueToggle).toBeVisible();
+  await queueToggle.click();
+  const route = page.locator('[data-auto-tile="route"]');
+  await expect(route).not.toHaveAttribute('inert', '');
+  await expect(route.locator('[data-player-mini-header]')).toBeVisible();
+  await expect(route.getByRole('region', { name: 'Sesión' })).toBeVisible();
 });
