@@ -19,8 +19,6 @@ def main() -> None:
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--passwordless", action="store_true")
     parser.add_argument("--run-id", default="manual-fixture")
-    parser.add_argument("--tls-cert", type=Path)
-    parser.add_argument("--tls-key", type=Path)
     parser.add_argument("--audio-format", choices=("wav", "flac"), default="wav")
     args = parser.parse_args()
     root = args.root.resolve()
@@ -42,6 +40,11 @@ def main() -> None:
     os.environ["SOUNDSIBLE_PORT"] = str(args.port)
     os.environ.pop("SOUNDSIBLE_ADMIN_TOKEN", None)
     os.environ.pop("SOUNDSIBLE_OWNER_TOKEN_FILE", None)
+    # The same cooperative process as run.py. Unpatched, a blocking call in a
+    # request (a stream waiting for its fill) stops every other request.
+    from shared.cooperative import patch_process
+
+    patch_process()
 
     if os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1":
         # Emulator gateway resolves to host loopback only inside this disposable engine.
@@ -287,7 +290,7 @@ def main() -> None:
             return jsonify(error="invalid expiry"), 400
         response = jsonify(ok=True)
         response.set_cookie("sb_session", request.cookies["sb_session"], max_age=seconds,
-                            httponly=True, secure=bool(args.tls_cert), samesite="Lax")
+                            httponly=True, secure=bool(request.is_secure), samesite="Lax")
         return response
 
     @app.route("/__fixture/<action>", methods=["POST"])
@@ -485,8 +488,13 @@ def main() -> None:
             return jsonify({"error": "unknown action"}), 400
         return jsonify({"ok": True})
 
-    tls = {"certfile": str(args.tls_cert), "keyfile": str(args.tls_key)} if args.tls_cert and args.tls_key else {}
-    socketio.run(app, host="127.0.0.1", port=args.port, log_output=False, **tls)
+    # As start_api does: DJ measurements run in their own process, never on
+    # this process's cooperative loop.
+    from shared.dj.store import start_analysis_process
+
+    start_analysis_process()
+    # Plain HTTP only, as in production; scripts/android_tls_proxy.py terminates TLS.
+    socketio.run(app, host="127.0.0.1", port=args.port, log_output=False)
 
 
 if __name__ == "__main__":

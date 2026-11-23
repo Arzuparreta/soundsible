@@ -125,7 +125,10 @@ checking both SDK fields before another release reaches signed APK verification.
   `env 'ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class=com.soundsible.android.A,com.soundsible.android.B' .venv/bin/python scripts/android.py integration`
   (zsh does not accept the name with dots without `env`). The runner starts the fixtures
   5097/5098/5099 (and the Live relay if needed) and at the end builds the normal APK,
-  JVM and lint. JUnit results in `android/app/build/outputs/androidTest-results`.
+  JVM and lint. 5099 is a plain engine on 15099 behind `scripts/android_tls_proxy.py`,
+  which terminates TLS as production proxies do; the engine fixture never serves TLS itself.
+  Each fixture engine runs as production does: `patch_process()` and DJ analysis in its worker process.
+  JUnit results in `android/app/build/outputs/androidTest-results`.
 - UI: `cd ui_web && npm test && npm run typecheck`. Core: `PYTHONPATH=. .venv/bin/pytest -q tests/…`.
 - Disposable fixtures: never the real engine or accounts. A real library wipe
   in the fixture would remove shared audio: do not run it.
