@@ -24,6 +24,7 @@ import { t } from '../lib/i18n';
 import type { AlbumProfile, AlbumSummary, CatalogAlbum, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { startDjFromCatalog, startDjFromTracks } from '../lib/djStart';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Album.module.css';
 import hero from '../components/EntityHero.module.css';
@@ -232,6 +233,12 @@ export default function Album() {
     }
   };
 
+  /** From NORMAL, the same start the DJ's own Play button makes. */
+  const startAlbumDj = () => {
+    if (view() === 'library') startDjFromTracks(libraryTrackList(), title());
+    else void startDjFromCatalog(tracklist(), title());
+  };
+
   const shuffle = () => {
     const context = albumContext();
     if (player().autoMode.active) {
@@ -379,13 +386,16 @@ export default function Album() {
                 <span class={hero.primaryLabel}>{t('album.play')}</span>
               </button>
             }>
-              <CollectionActions title={title()} auto iconOnlyOnMobile buttonClass={hero.play}
+              <CollectionActions title={title()} iconOnlyOnMobile buttonClass={hero.play}
                 tracks={view() === 'library' ? libraryTrackList() : undefined}
                 items={view() === 'library' ? undefined : tracklist()} />
             </Show>
             <CollectionControl
               compact menuActions={() => !player().autoMode.active
-                ? [{ icon: menuIcons.shuffle(), label: t('album.shuffle'), disabled: !playable(), onSelect: shuffle }] : []}
+                ? [
+                    { icon: menuIcons.shuffle(), label: t('album.shuffle'), disabled: !playable(), onSelect: shuffle },
+                    { icon: menuIcons.changeSession(), label: t('autoMode.startDj'), disabled: !playable(), onSelect: startAlbumDj },
+                  ] : []}
               onMenuReady={(open) => { openCollectionMenu = open; }}
               entity={{ kind: 'album', name: title(), artist: artistName(), cover: cover(), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}
               tracklist={tracklist()}

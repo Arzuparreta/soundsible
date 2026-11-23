@@ -11,3 +11,7 @@ export function IconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & 
   const [local, rest] = splitProps(props, ['label']);
   return <Control {...rest} aria-label={local.label} />;
 }
+
+export function RangeControl(props: Omit<JSX.InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  return <input {...props} type="range" />;
+}

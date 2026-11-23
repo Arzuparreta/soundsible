@@ -61,15 +61,22 @@ test('full player artist opens the general page while keeping the current song a
   const queueBefore = await surface.locator('[data-drag-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-drag-row')));
   const link = stage.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await activate(page, link, isMobile);
-  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   // The player names the song, not the list it came from: Discover, and Search
   // is where the page lives.
   await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=discover/);
   await expect(page.locator('[aria-current="page"][data-nav-href="/search"]').filter({ visible: true })).toHaveCount(1);
-  await expect(page.locator('[data-omni-player]')).toContainText(song!);
-  const violations = await new AxeBuilder({ page }).include('[data-omni-player]').analyze();
-  expect(violations.violations).toEqual([]);
-  await page.getByRole('button', { name: /^NORMAL:/ }).click();
+  if (isMobile) {
+    // A phone's player covers the app, so it steps aside for the page.
+    await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+    await expect(page.locator('[data-omni-player]')).toContainText(song!);
+    const violations = await new AxeBuilder({ page }).include('[data-omni-player]').analyze();
+    expect(violations.violations).toEqual([]);
+    await page.getByRole('button', { name: /^NORMAL:/ }).click();
+  } else {
+    // Docked beside the app, the player stays open next to the page.
+    await expect(surface).toBeVisible();
+    await expect(stage.getByRole('heading', { name: song!, exact: true })).toBeVisible();
+  }
   expect(await page.locator('[data-player-surface-open] [data-drag-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-drag-row')))).toEqual(queueBefore);
 });
 
@@ -80,12 +87,21 @@ test('full player names the record under the artist and opens it', async ({ page
   const album = stage.getByRole('link', { name: 'Biblioteca de prueba', exact: true });
   await expect(album).toBeVisible();
   // After the artist on the same line: who, then the record, a step quieter.
-  const [artistBox, albumBox] = [await artist.boundingBox(), await album.boundingBox()];
-  expect(albumBox!.x).toBeGreaterThanOrEqual(artistBox!.x + artistBox!.width);
-  expect(Math.abs((albumBox!.y + albumBox!.height / 2) - (artistBox!.y + artistBox!.height / 2))).toBeLessThanOrEqual(2);
+  // Read once the stage has fitted its title: the line settles over a few
+  // frames after the surface opens, and a reading taken during the fit sees a
+  // line that is still wrapping.
+  await expect.poll(async () => {
+    const [artistBox, albumBox] = [await artist.boundingBox(), await album.boundingBox()];
+    if (!artistBox || !albumBox) return 'not laid out';
+    if (albumBox.x < artistBox.x + artistBox.width) return 'the record is not after the artist';
+    const offset = Math.abs((albumBox.y + albumBox.height / 2) - (artistBox.y + artistBox.height / 2));
+    return offset <= 2 ? 'same line' : `${offset}px apart`;
+  }).toBe('same line');
   await activate(page, album, isMobile);
-  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   await expect(page).toHaveURL(/#\/album\/Biblioteca%20de%20prueba\?artist=Artista\+7&view=discover/);
+  // Over the app on a phone, the player steps aside; docked beside it, it stays.
+  if (isMobile) await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  else await expect(page.locator('[data-player-surface-open]')).toBeVisible();
 });
 
 test('an album card opens the record from the line under its cover', async ({ page, isMobile }) => {

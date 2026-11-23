@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-export async function snapCarousel(page: Page, panel: 'queue' | 'stage' | 'browser') {
+export async function snapCarousel(page: Page, panel: 'queue' | 'stage') {
   await page.locator('[data-now-playing-carousel]').evaluate(async (element, destination) => {
     const carousel = element as HTMLElement;
     const target = carousel.querySelector<HTMLElement>(`[data-now-playing-tile="${destination}"]`)!;

@@ -4,6 +4,7 @@ import type { PlaybackState } from './core';
 import { actions, state } from './index';
 import type { RemoteKey } from './remote';
 import { remoteStore } from './remoteLink';
+import { withDjErrand } from '../lib/djErrand';
 
 export interface PlayerView {
   readonly playback: PlaybackState;
@@ -26,8 +27,9 @@ const localPlayer: PlayerView = {
   get autoMode() {
     return state.autoMode;
   },
+  // What the interface asks of the player answers an open DJ errand first.
   get actions() {
-    return actions;
+    return withDjErrand(actions);
   },
   remote: false,
   unreachable: false,
@@ -47,7 +49,7 @@ export function player(): PlayerView {
     playback: m.remotePlayback,
     autoMode: m.remoteAutoMode,
     get actions() {
-      return m.remoteActionsFor(actions);
+      return withDjErrand(m.remoteActionsFor(actions));
     },
     remote: true,
     get unreachable() {

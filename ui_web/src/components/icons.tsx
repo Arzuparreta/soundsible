@@ -139,6 +139,7 @@ export const SaveIcon = line('M12 5v14M5 12h14');
 export const RemoveIcon = line('M5 12h14');
 /** Put the bytes on disk. The same arrow on rows, menus and episodes. */
 export const RefreshIcon = line('M21 12a9 9 0 11-2.64-6.36L21 8M21 3v5h-5');
+export const UndoIcon = line('m9 4-5 5 5 5M4 9h10a5 5 0 0 1 0 10h-3');
 export const DownloadIcon = line('M12 3v12m0 0 4-4m-4 4-4-4M5 20h14');
 /** Done, owned, subscribed: a statement, not an offer. */
 export const CheckIcon = (props: GlyphProps) => <Glyph {...props} strokeWidth={2.5}><path d="m5 12 5 5L20 7" /></Glyph>;

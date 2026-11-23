@@ -260,7 +260,7 @@ jobs:
       - name: Enforce production rendering budgets
         env:
           DIST: dist
-          SURFACES: songs,albums,player-browser
+          SURFACES: songs,albums,player-queue
           RATES: '1'
           REPEATS: '1'
           SOFTWARE: '1'

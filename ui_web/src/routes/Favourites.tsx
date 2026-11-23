@@ -76,7 +76,7 @@ export default function Favourites() {
           title={t('favourites.title')}
           meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
           actions={player().autoMode.active ? (
-            <CollectionActions title={t('favourites.title')} tracks={favTracks()} auto />
+            <CollectionActions title={t('favourites.title')} tracks={favTracks()} />
           ) : undefined}
         />
       </Show>

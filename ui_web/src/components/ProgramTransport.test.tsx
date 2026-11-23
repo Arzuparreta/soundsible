@@ -66,6 +66,19 @@ it('starts DJ from the captured song and rejects a menu after its occurrence cha
   expect(command).toHaveBeenCalledTimes(1);
 });
 const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ source: 'local', key: 'first', id: 'a', title: 'a', artist: '' }, { source: 'local', key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
+
+it('offers volume when the native player reports it and sends a gain on release', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal<ProgramState>(initial);
+  render(() => <ProgramTransport state={state()} pending={false} command={command} />);
+  expect(screen.queryByRole('slider', { name: 'omnibar.volume' })).toBeNull();
+  setState({ ...initial, volume: 1 });
+  const slider = screen.getByRole('slider', { name: 'omnibar.volume' });
+  fireEvent.input(slider, { target: { value: '50' } });
+  expect(command).not.toHaveBeenCalled();
+  await fireEvent.change(slider);
+  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'volume', level: expect.closeTo(0.1) });
+});
 it('repairs the captured DJ future from the overflow menu and rejects a changed route', async () => {
   const command = vi.fn(async () => {});
   const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0, items: [...initial.items, { ...initial.items[0], key: 'third' }], programToken: 'dj-owner', dj: { active: true, phase: 'ready' } });

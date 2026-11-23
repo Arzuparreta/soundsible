@@ -412,6 +412,9 @@ test.describe('interface scale geometry', () => {
     await expect(page.getByRole('heading', {
       name: 'Una canción con un título deliberadamente largo para probar límites',
     })).toBeVisible();
+    // On a desktop the player slides in from the right edge to dock there;
+    // measured mid-entrance, its controls are still past the window.
+    await settle(page, '[data-player-surface-open]');
     await assertGeometry(page);
   });
 

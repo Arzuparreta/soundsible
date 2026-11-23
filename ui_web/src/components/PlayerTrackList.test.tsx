@@ -6,6 +6,8 @@ import { responsiveTapConstants } from '../lib/responsiveTap';
 
 const layout = vi.hoisted(() => ({ mobile: false }));
 vi.mock('../lib/listLayout', () => ({ mobileListLayout: () => layout.mobile }));
+// The list follows the player's own width.
+vi.mock('../lib/playerDock', () => ({ playerCompact: () => layout.mobile }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 const menu = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: menu.open }));

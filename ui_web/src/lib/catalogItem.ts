@@ -5,6 +5,7 @@ import { createSignal } from 'solid-js';
 import { api } from './api';
 import { toast } from './toast';
 import { t } from './i18n';
+import { guardDjPick } from './djErrand';
 import { actions, isPlayingItem, state } from '../stores';
 import { player } from '../stores/player';
 import { catalogItemKeys } from './playbackIdentity';
@@ -67,6 +68,7 @@ export async function playCatalogItem(
 
   const existing = itemToTrack(item);
   if (existing) {
+    cancelCatalogResolve();
     play(existing);
     return;
   }
@@ -75,14 +77,15 @@ export async function playCatalogItem(
   resolveAborter?.abort();
   resolveAborter = new AbortController();
   const signal = resolveAborter.signal;
+  const pickIsCurrent = guardDjPick();
   setResolvingItemId(item.id);
   try {
     const track = await resolveCatalogTrack(item, signal);
-    if (signal.aborted) return;
+    if (signal.aborted || !pickIsCurrent()) return;
     if (!track) throw new Error('not-found');
     play(track);
   } catch (err) {
-    if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) return;
+    if (signal.aborted || !pickIsCurrent() || (err instanceof Error && err.name === 'AbortError')) return;
     toast.error(t('search.noPreview'));
   } finally {
     if (!signal.aborted) setResolvingItemId(null);
@@ -169,12 +172,13 @@ export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSigna
 }
 
 export async function useCatalogCollection(items: CatalogItem[], label: string, purpose: 'reference' | 'request' | 'change' | 'start', beforeQueueId?: string, isCurrent: () => boolean = () => true, reservedEpoch?: number, onChangeStarted?: () => void): Promise<boolean> {
+  const pickIsCurrent = guardDjPick();
   const epoch = reservedEpoch ?? ((purpose === 'change' || purpose === 'start') ? player().actions.beginAutoSessionChange() : player().actions.autoSessionToken());
   const progress = toast.loading(t('collection.resolving'));
   const tracks: Track[] = [];
   const failed: string[] = [];
   for (let offset = 0; offset < items.length; offset += 3) {
-    if (!player().autoMode.active || player().actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
+    if (!player().autoMode.active || player().actions.autoSessionToken() !== epoch || !isCurrent() || !pickIsCurrent()) { progress.dismiss(); return false; }
     const batch = await Promise.all(items.slice(offset, offset + 3).map(async (item) => {
       try {
         const track = await resolveCatalogTrack(item);
@@ -185,7 +189,7 @@ export async function useCatalogCollection(items: CatalogItem[], label: string, 
     }));
     tracks.push(...batch.filter((track): track is Track => track !== null));
   }
-  if (!player().autoMode.active || player().actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
+  if (!player().autoMode.active || player().actions.autoSessionToken() !== epoch || !isCurrent() || !pickIsCurrent()) { progress.dismiss(); return false; }
   progress.dismiss();
   if (purpose === 'start' || purpose === 'change') {
     if (failed.length) toast.error(t('musicExplorer.collectionFailed', { titles: failed.join(', ') }));

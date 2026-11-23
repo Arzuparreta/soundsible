@@ -20,7 +20,6 @@ import { clearSearchCache } from './searchCache';
 import {
   discoveryBrowseSections,
   discoveryError,
-  discoveryExploreItems,
   discoveryFeed,
   discoveryLoading,
   discoveryRefreshing,
@@ -36,6 +35,7 @@ import {
 } from './discoveryFeedStore';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const shelfItemIds = () => discoveryTrackShelves().flatMap((shelf) => shelf.items.map((item) => item.id));
 
 describe('discoveryFeedStore', () => {
   beforeEach(() => {
@@ -52,7 +52,7 @@ describe('discoveryFeedStore', () => {
     vi.useRealTimers();
   });
 
-  it('fetches once and shares cached sections and Explore items across callers', async () => {
+  it('fetches once and shares cached sections across callers', async () => {
     mocks.getDiscoveryMusicFeed.mockResolvedValueOnce({
       sections: [
         { id: 'more_like_a', title: 'More like A', item_ids: ['deezer:1', 'deezer:2', 'local:1'] },
@@ -78,13 +78,6 @@ describe('discoveryFeedStore', () => {
     expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledWith(expect.any(AbortSignal), false);
     expect(discoveryBrowseSections().map((s) => s.id)).toEqual(['discover_artists']);
     expect(discoveryTrackShelves().map((s) => s.id)).toEqual(['more_like_a', 'more_like_b']);
-    // Round-robin external-first order, deduplicated across shelves, library fallback appended.
-    expect(discoveryExploreItems().map((item) => item.id)).toEqual([
-      'deezer:1',
-      'youtube:yt1',
-      'deezer:2',
-      'local:1',
-    ]);
     expect(discoveryFeed().sections).toHaveLength(2);
   });
 
@@ -107,19 +100,19 @@ describe('discoveryFeedStore', () => {
       });
 
     ensureDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:1']));
     expect(discoveryRefreshing()).toBe(true);
 
     dispatchDiscoveryFeedReady({ limit: 10 });
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:2']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:2']));
     expect(discoveryRefreshing()).toBe(false);
 
     refreshDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:3']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:3']));
     expect(mocks.getDiscoveryMusicFeed).toHaveBeenNthCalledWith(3, expect.any(AbortSignal), true);
   });
 
-  it('synchronizes dismiss and restore across track shelves and Explore items', async () => {
+  it('synchronizes dismiss and restore across track shelves', async () => {
     mocks.getDiscoveryMusicFeed.mockResolvedValueOnce({
       sections: [{ id: 's1', title: 'S1', item_ids: ['deezer:1', 'deezer:2'] }],
       items: [
@@ -129,15 +122,15 @@ describe('discoveryFeedStore', () => {
     });
 
     ensureDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:1', 'deezer:2']));
 
     dismissDiscoveryItem('deezer:1');
     expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:2']);
-    expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:2']);
+    expect(shelfItemIds()).toEqual(['deezer:2']);
 
     restoreDiscoveryItem('deezer:1');
     expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']);
-    expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']);
+    expect(shelfItemIds()).toEqual(['deezer:1', 'deezer:2']);
 
     vi.useRealTimers();
     await flush();
@@ -171,11 +164,11 @@ describe('discoveryFeedStore', () => {
     });
 
     ensureDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1', 'deezer:2', 'deezer:3']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:1', 'deezer:2', 'deezer:3']));
 
     dismissDiscoveryArtist('Blue Oyster Cult');
     expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:3']);
-    expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:3']);
+    expect(shelfItemIds()).toEqual(['deezer:3']);
     expect(discoveryBrowseSections().map((s) => s.id)).toEqual(['artists']);
     expect(discoveryBrowseSections()[0].items.map((i) => i.title)).toEqual(['Thin Lizzy']);
 
@@ -204,7 +197,7 @@ describe('discoveryFeedStore', () => {
     });
 
     ensureDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1', 'deezer:2']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:1', 'deezer:2']));
 
     dismissDiscoveryArtist('Daft Punk');
     expect(discoveryTrackShelves()[0].items.map((i) => i.id)).toEqual(['deezer:2']);
@@ -235,11 +228,11 @@ describe('discoveryFeedStore', () => {
       });
 
     ensureDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:u1']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:u1']));
 
     mocks.currentUserKey = 'u2';
     ensureDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:u2']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:u2']));
     expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(2);
   });
 
@@ -302,7 +295,7 @@ describe('discoveryFeedStore', () => {
     resolveRefresh({});
 
     const releaseAgain = retainDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:2']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:2']));
     expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(3);
     releaseAgain();
   });
@@ -364,7 +357,7 @@ describe('discoveryFeedStore', () => {
       });
 
     const release = retainDiscoveryFeed();
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:1']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:1']));
 
     // Same timestamp is ignored when already settled.
     dispatchDiscoveryFeedReady({ limit: 10, generated_at: 100 });
@@ -372,7 +365,7 @@ describe('discoveryFeedStore', () => {
 
     // Newer server timestamp triggers reload and cache invalidation.
     dispatchDiscoveryFeedReady({ limit: 10, generated_at: 200 });
-    await vi.waitFor(() => expect(discoveryExploreItems().map((i) => i.id)).toEqual(['deezer:2']));
+    await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:2']));
     expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(2);
     release();
   });

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_NOW_PLAYING_LAYOUT,
-  layoutFromPreset,
   movePanel,
   normalizePanelRatios,
   parseNowPlayingLayout,
@@ -10,71 +9,39 @@ import {
 } from './nowPlayingLayout';
 
 describe('nowPlayingLayout', () => {
-  it('migrates the old docking side and rejects corrupt layouts', () => {
-    expect(parseNowPlayingLayout(null, 'right').order).toEqual(['stage', 'queue', 'browser']);
-    expect(parseNowPlayingLayout('{nope', 'left')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
-    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['stage'], ratios: {} }))).toEqual(
-      DEFAULT_NOW_PLAYING_LAYOUT,
-    );
+  it('rejects corrupt layouts and the three-panel layouts saved before the browser panel went', () => {
+    expect(parseNowPlayingLayout('{nope')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
+    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['stage'], ratios: {} }))).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
+    expect(parseNowPlayingLayout(JSON.stringify({
+      version: 1, order: ['browser', 'stage', 'queue'], ratios: { browser: 0.32, stage: 0.36, queue: 0.32 },
+    }))).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
   });
 
-  it('lets the old equal thirds follow the new default, and keeps any layout someone chose', () => {
-    const thirds = { browser: 1 / 3, stage: 1 / 3, queue: 1 / 3 };
-    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['browser', 'stage', 'queue'], ratios: thirds })))
+  it('lets equal halves follow the default, and keeps any layout someone chose', () => {
+    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['stage', 'queue'], ratios: { stage: 0.5, queue: 0.5 } })))
       .toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
-    expect(DEFAULT_NOW_PLAYING_LAYOUT.ratios).toEqual({ browser: 0.32, stage: 0.36, queue: 0.32 });
-    // Reordered, or resized, it was somebody's choice.
-    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['stage', 'browser', 'queue'], ratios: thirds })))
-      .toEqual({ version: 1, order: ['stage', 'browser', 'queue'], ratios: thirds });
-    const chosen = { browser: 0.25, stage: 0.5, queue: 0.25 };
-    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['browser', 'stage', 'queue'], ratios: chosen })).ratios)
-      .toEqual(chosen);
+    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['queue', 'stage'], ratios: { stage: 0.5, queue: 0.5 } })))
+      .toEqual({ version: 1, order: ['queue', 'stage'], ratios: { stage: 0.5, queue: 0.5 } });
+    expect(parseNowPlayingLayout(JSON.stringify({ version: 1, order: ['stage', 'queue'], ratios: { stage: 0.7, queue: 0.3 } })).ratios)
+      .toEqual({ stage: 0.7, queue: 0.3 });
   });
 
-  it('keeps all three panels while moving or dropping one', () => {
-    expect(movePanel(['browser', 'stage', 'queue'], 'stage', -1)).toEqual(['stage', 'browser', 'queue']);
-    expect(reorderPanel(['browser', 'stage', 'queue'], 'queue', 0)).toEqual(['queue', 'browser', 'stage']);
+  it('keeps both panels while moving or dropping one', () => {
+    expect(movePanel(['stage', 'queue'], 'stage', 1)).toEqual(['queue', 'stage']);
+    expect(reorderPanel(['stage', 'queue'], 'queue', 0)).toEqual(['queue', 'stage']);
   });
 
   it('normalizes ratios and clamps adjacent resizing', () => {
-    expect(normalizePanelRatios({ browser: 1, stage: 2, queue: 1 })).toEqual({
-      browser: 0.25,
-      stage: 0.5,
-      queue: 0.25,
-    });
-    const resized = resizeAdjacentPanels(
-      { browser: 0.25, stage: 0.5, queue: 0.25 },
-      'browser',
-      'stage',
-      0.5,
-      { browser: 0.2, stage: 0.4 },
-    );
-    expect(resized.browser).toBeCloseTo(0.35);
-    expect(resized.stage).toBeCloseTo(0.4);
-    expect(resized.queue).toBeCloseTo(0.25);
+    expect(normalizePanelRatios({ stage: 3, queue: 1 })).toEqual({ stage: 0.75, queue: 0.25 });
+    const resized = resizeAdjacentPanels({ stage: 0.5, queue: 0.5 }, 'stage', 'queue', 0.5, { queue: 0.3 });
+    expect(resized.stage).toBeCloseTo(0.7);
+    expect(resized.queue).toBeCloseTo(0.3);
   });
 
-  it('builds independent presets with their intended order and emphasis', () => {
-    expect(layoutFromPreset('balanced')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
-    expect(layoutFromPreset('stage')).toEqual({
-      version: 1,
-      order: ['browser', 'stage', 'queue'],
-      ratios: { browser: 0.2, stage: 0.6, queue: 0.2 },
-    });
-    expect(layoutFromPreset('left')).toEqual({
-      version: 1,
-      order: ['stage', 'browser', 'queue'],
-      ratios: { browser: 0.5, stage: 0.3, queue: 0.2 },
-    });
-    expect(layoutFromPreset('right')).toEqual({
-      version: 1,
-      order: ['browser', 'queue', 'stage'],
-      ratios: { browser: 0.2, stage: 0.3, queue: 0.5 },
-    });
-
-    const first = layoutFromPreset('balanced');
-    first.order.reverse();
-    first.ratios.stage = 1;
-    expect(layoutFromPreset('balanced')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
+  it('migrates the previous default while preserving an explicitly resized split', () => {
+    const old = { version: 1, order: ['stage', 'queue'], ratios: { stage: 0.55, queue: 0.45 } };
+    expect(parseNowPlayingLayout(JSON.stringify(old))).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
+    const custom = { ...old, fitArtwork: false };
+    expect(parseNowPlayingLayout(JSON.stringify(custom))).toEqual(custom);
   });
 });

@@ -7,6 +7,7 @@ import { ConnectionRecovery } from './components/ConnectionRecovery';
 import Invite from './routes/Invite';
 import { applyVisualPreferences, loadVisualPreferences } from './lib/visualPreferences';
 import { installPageVisibility } from './lib/pageVisibility';
+import { installFocusSource } from './lib/focusSource';
 import { initLocale } from './lib/i18n';
 import { registerServiceWorker } from './lib/pwa';
 import { OverlayOutlet } from './lib/overlay';
@@ -49,6 +50,8 @@ function installViewportHeightSync() {
 installViewportHeightSync();
 const stopPageVisibility = installPageVisibility();
 if (import.meta.hot) import.meta.hot.dispose(stopPageVisibility);
+const stopFocusSource = installFocusSource();
+if (import.meta.hot) import.meta.hot.dispose(stopFocusSource);
 // Locale dictionaries other than English load on demand. Nothing renders until
 // the session resolves anyway (see `App`), so this normally finishes first and
 // the interface never flashes English.

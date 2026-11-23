@@ -3,6 +3,7 @@ import type { Navigator } from '@solidjs/router';
 import { setNowPlayingOpen, state } from '../stores';
 import type { CatalogAlbum, CatalogItem, Track } from '../types/music';
 import { artistKey } from './artistRoute';
+import { playerDocked } from './playerDock';
 import { albumDestination, artistDestination as linkedArtistDestination, catalogItemMusic, trackMusic, type MusicMetadata } from './musicLinks';
 
 export type { MusicMetadata } from './musicLinks';
@@ -15,8 +16,10 @@ export function registerMusicNavigator(value: Navigator): () => void {
   return () => { if (navigator === value) navigator = undefined; };
 }
 
+/** Go to a music page. A player over the app closes to show it; one docked
+ * beside the app stays open, since the page opens next to it. */
 export function navigateMusic(path: string): void {
-  setNowPlayingOpen(false);
+  if (!playerDocked()) setNowPlayingOpen(false);
   if (navigator) navigator(path);
   else window.location.hash = path;
 }

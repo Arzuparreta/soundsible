@@ -6,6 +6,22 @@ import { trackCoverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
+import { NOW_PLAYING_PANELS } from '../lib/nowPlayingLayout';
+import {
+  DOCK_WIDTH,
+  PLAYER_COMPACT_BELOW,
+  playerCompact,
+  playerDocked,
+  playerDockMaxWidth,
+  playerDockWidth,
+  playerDockWidthCustom,
+  playerPresentation,
+  setPlayerCompact,
+  setPlayerDockWidth,
+  setPlayerPresentation,
+} from '../lib/playerDock';
+import { desktopShell } from '../lib/shellLayout';
+import { SeamReset } from './SeamReset';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import { createTouchMoveLease } from '../lib/touchMoveLease';
 import { Control } from '../design/Control';
@@ -29,7 +45,6 @@ const AutoMode = deferredComponent<Parameters<typeof import('./AutoMode').AutoMo
   styles.autoLoading,
 );
 
-const MOBILE_QUERY = '(max-width: 1023px)';
 const SWIPE_CLOSE_THRESHOLD = 80;
 const SWIPE_FAST_CLOSE_THRESHOLD = 32;
 const SWIPE_CLOSE_VELOCITY = 0.45;
@@ -46,11 +61,12 @@ const EXIT_DURATION_MIN = 110;
 /** Grace on top of the exit before the fallback timer gives up on `animationend`. */
 const CLOSE_ANIMATION_GRACE = 140;
 /* Controls that own the touch themselves. Plain buttons are deliberately absent:
-   in the mobile layout the queue rows and the browser cards *are* full-width
-   buttons, so excluding them left most of the surface unswipeable. A tap never
+   in the mobile layout the queue rows *are* full-width buttons, so excluding
+   them left most of the surface unswipeable. A tap never
    activates the gesture, and once it does the browser cancels the click. */
 const SWIPE_EXCLUDED = 'input, textarea, select, [data-rail], [data-lyrics-scroll], [data-no-surface-swipe]';
-const NOW_PLAYING_PANELS = ['browser', 'stage', 'queue'] as const;
+/** Arrow keys move the docked column's edge by this much. */
+const DOCK_KEY_STEP = 24;
 type PlayerPanel = NowPlayingMobilePanel | AutoModePanelId;
 
 type BackdropState = {
@@ -59,7 +75,12 @@ type BackdropState = {
   active: 'first' | 'second';
 };
 
-/** One fullscreen player environment shared by Now Playing and Auto Mode. */
+/**
+ * The player environment shared by Now Playing and Auto Mode. On a phone it is
+ * a sheet over the app; on a desktop it is docked as a column beside the app,
+ * or fills the screen (lib/playerDock). Its composition follows its own width,
+ * not the window's: a docked column is laid out the way a phone is.
+ */
 export function PlayerSurface() {
   const [opened, setOpened] = createSignal(nowPlayingOpen());
   createEffect(() => { if (nowPlayingOpen()) setOpened(true); });
@@ -73,16 +94,13 @@ export function PlayerSurface() {
   const [mobilePanel, setMobilePanel] = createSignal<PlayerPanel>('stage');
   /* Fractional carousel position, fed by the scroller itself. The pager marker
      follows it live; `mobilePanel` keeps the settled semantics (inert, focus). */
-  const [carouselProgress, setCarouselProgress] = createSignal(1);
+  // The stage is the first page of either carousel.
+  const [carouselProgress, setCarouselProgress] = createSignal(0);
   const [carouselLive, setCarouselLive] = createSignal(false);
   const [closing, setClosing] = createSignal(false);
   const [surfaceSettled, setSurfaceSettled] = createSignal(untrack(nowPlayingOpen));
   const [surfaceAnimating, setSurfaceAnimating] = createSignal(false);
-  const [mobileLayout, setMobileLayout] = createSignal(
-    typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia(MOBILE_QUERY).matches,
-  );
+  const docked = playerDocked;
   const [backdrops, setBackdrops] = createSignal<BackdropState>({
     first: art(),
     second: '',
@@ -151,7 +169,11 @@ export function PlayerSurface() {
     setSurfaceSettled(true);
     focusTimer = window.setTimeout(() => {
       focusTimer = undefined;
-      if (untrack(nowPlayingOpen)) surfaceEl?.focus({ preventScroll: true });
+      if (!untrack(nowPlayingOpen) || !surfaceEl) return;
+      // Focus that already reached a control in the player stays there: a
+      // listener who tabbed in, or grabbed the docked column's edge, first.
+      if (surfaceEl.contains(document.activeElement)) return;
+      surfaceEl.focus({ preventScroll: true });
     }, 60);
   };
 
@@ -315,10 +337,34 @@ export function PlayerSurface() {
     tabs[to].focus();
   };
 
-  /* The same action in both modes: the first panel of either carousel is the
-     music browser, so the search affordance means "go there" and never "leave
-     DJ" — Auto's own browser is where a session picks up its sources. */
-  const browserAction = () => setPanel('browser');
+  /** Docked beside the app, or over all of it. */
+  const togglePresentation = () => setPlayerPresentation(playerPresentation() === 'docked' ? 'full' : 'docked');
+
+  /** Drag the docked column's left edge to give it more room or less. */
+  const startDockResize = (event: PointerEvent & { currentTarget: HTMLElement }) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const move = (next: PointerEvent) => setPlayerDockWidth(window.innerWidth - next.clientX);
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      delete document.documentElement.dataset.playerResizing;
+    };
+    document.documentElement.dataset.playerResizing = '';
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  };
+
+  let dockEdgeEl: HTMLDivElement | undefined;
+  const resizeDockByKey = (event: KeyboardEvent) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    setPlayerDockWidth(playerDockWidth() + (event.key === 'ArrowLeft' ? DOCK_KEY_STEP : -DOCK_KEY_STEP));
+  };
 
   /** Drop the gesture and every trace of it. Every bail-out goes through here:
       a leftover `data-swiping` pins `transition: none` on the surface forever. */
@@ -333,7 +379,8 @@ export function PlayerSurface() {
 
   const beginTouch = (event: TouchEvent) => {
     resetSwipe();
-    if (!nowPlayingOpen() || event.touches.length !== 1) return;
+    // A docked column is closed from its header, never dragged off.
+    if (!nowPlayingOpen() || docked() || event.touches.length !== 1) return;
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest(SWIPE_EXCLUDED)) return;
     const touch = event.touches.item(0);
@@ -410,10 +457,12 @@ export function PlayerSurface() {
 
   onMount(() => {
     if (!surfaceEl) return;
-    const media = typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_QUERY) : null;
-    const syncLayout = () => setMobileLayout(Boolean(media?.matches));
-    media?.addEventListener('change', syncLayout);
-    syncLayout();
+    // The surface measures itself: its own width, not the window's, decides
+    // between the one-panel and the side-by-side composition.
+    const measure = () => setPlayerCompact((surfaceEl?.getBoundingClientRect().width || window.innerWidth) < PLAYER_COMPACT_BELOW);
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(surfaceEl);
+    measure();
     touchMove = createTouchMoveLease(surfaceEl, moveTouch);
     surfaceEl.addEventListener('touchstart', beginTouch, { passive: true });
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
@@ -422,7 +471,9 @@ export function PlayerSurface() {
       window.clearTimeout(openTimer);
       window.clearTimeout(focusTimer);
       window.clearTimeout(closeTimer);
-      media?.removeEventListener('change', syncLayout);
+      observer?.disconnect();
+      delete document.documentElement.dataset.playerDocked;
+      document.documentElement.style.removeProperty('--player-dock-width');
       surfaceEl?.removeEventListener('transitionend', onOpenTransitionEnd);
       surfaceEl?.removeEventListener('animationend', onCloseAnimationEnd);
       surfaceEl?.removeEventListener('touchstart', beginTouch);
@@ -432,6 +483,16 @@ export function PlayerSurface() {
       delete document.documentElement.dataset.playerSurface;
       delete document.documentElement.dataset.playerSwiping;
     });
+  });
+
+  // The app makes room for a docked player (app.module.css) and stays in use
+  // beside it (app.css): both read these off the root.
+  createEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    if (nowPlayingOpen() && docked()) root.dataset.playerDocked = '';
+    else delete root.dataset.playerDocked;
+    root.style.setProperty('--player-dock-width', `${playerDockWidth()}px`);
   });
 
   return (
@@ -449,12 +510,38 @@ export function PlayerSurface() {
           [styles.auto]: auto(),
         }}
         data-player-surface-open={nowPlayingOpen() ? '' : undefined}
+        data-docked={docked() ? '' : undefined}
+        data-compact={playerCompact() ? '' : undefined}
         data-surface-animating={surfaceAnimating() ? '' : undefined}
         data-remote={player().remote ? '' : undefined}
         data-player-stage=""
         aria-hidden={!nowPlayingOpen()}
         tabIndex={-1}
       >
+        <Show when={docked()}>
+          <div
+            ref={dockEdgeEl}
+            class={styles.dockEdge}
+            role="separator"
+            tabIndex={0}
+            aria-orientation="vertical"
+            aria-label={t('nowPlaying.resizeDock')}
+            aria-valuemin={DOCK_WIDTH.min}
+            aria-valuemax={playerDockMaxWidth()}
+            aria-valuenow={playerDockWidth()}
+            onPointerDown={startDockResize}
+            onKeyDown={resizeDockByKey}
+            onDblClick={() => setPlayerDockWidth(DOCK_WIDTH.default)}
+          />
+          {/* The way back to the default width, beside the line it undoes, in
+              the pager's band: the one stretch of the column nothing else uses. */}
+          <Show when={playerDockWidthCustom()}>
+            <SeamReset class={styles.dockReset} label={t('nowPlaying.resetDock')} onReset={() => {
+              setPlayerDockWidth(DOCK_WIDTH.default);
+              dockEdgeEl?.focus({ preventScroll: true });
+            }} />
+          </Show>
+        </Show>
         <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
           src={backdrops().first} active={backdrops().active === 'first'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
         <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
@@ -463,20 +550,21 @@ export function PlayerSurface() {
         <div class={styles.grain} aria-hidden="true" />
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">
-          <Show when={mobileLayout()}>
-            <button
-              classList={{ [styles.chromeButton]: true, [styles.browserButton]: true }}
-              type="button"
-              aria-label={t('nowPlaying.openSearch')}
-              title={t('nowPlaying.openSearch')}
-              onClick={browserAction}
+          <div class={styles.chromeLeft}>
+            <Control
+              class={styles.deviceButton}
+              classList={{ [styles.deviceButtonActive]: player().remote, [styles.deviceButtonError]: player().unreachable }}
+              aria-label={connectLabel()}
+              title={connectLabel()}
+              data-device-trigger="player-header"
+              onClick={openConnect}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                <circle cx="10.5" cy="10.5" r="5.5" />
-                <path d="m15 15 4 4" />
-              </svg>
-            </button>
-          </Show>
+              <OutputDeviceIcon size={18} />
+              <Show when={player().remote}>
+                <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
+              </Show>
+            </Control>
+          </div>
 
           {/* Choosing a mode starts or ends DJ, so the arrows only move focus
             * between the two (manual activation); Enter, Space or a click
@@ -511,34 +599,36 @@ export function PlayerSurface() {
           </div>
 
           <div class={styles.chromeRight}>
-            <Control
-              class={styles.deviceButton}
-              classList={{ [styles.deviceButtonActive]: player().remote, [styles.deviceButtonError]: player().unreachable }}
-              aria-label={connectLabel()}
-              title={connectLabel()}
-              data-device-trigger="player-header"
-              onClick={openConnect}
-            >
-              <OutputDeviceIcon size={18} />
-              <Show when={player().remote}>
-                <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
-              </Show>
-            </Control>
+            <Show when={desktopShell()}>
+              <button
+                class={styles.chromeButton}
+                type="button"
+                aria-label={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
+                title={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
+                onClick={togglePresentation}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <Show when={playerPresentation() === 'docked'} fallback={<path d="M9 4v5H4m11-5v5h5M4 15h5v5m11-5h-5v5" />}>
+                    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                  </Show>
+                </svg>
+              </button>
+            </Show>
             <button
-              classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
+              class={styles.chromeButton}
               type="button"
               aria-label={t('common.close')}
               onClick={() => closeSurface()}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-                <path d="m6 9 6 6 6-6" />
+                <path d={docked() ? 'm9 6 6 6-6 6' : 'm6 9 6 6 6-6'} />
               </svg>
             </button>
           </div>
         </div>
 
         {/* The phone header has no room for the device's name: it gets a line of its own. */}
-        <Show when={mobileLayout() && player().remote}>
+        <Show when={playerCompact() && player().remote}>
           <Control
             class={styles.remoteBanner}
             classList={{ [styles.deviceButtonError]: player().unreachable }}

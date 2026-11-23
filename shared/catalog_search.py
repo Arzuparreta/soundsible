@@ -79,7 +79,7 @@ _MUSICBRAINZ_HEADERS = {
     "User-Agent": "Soundsible/1.0 (https://github.com/Arzuparreta/soundsible)",
     "Accept": "application/json",
 }
-_SEARCH_WORKERS = 4
+_SEARCH_WORKERS = 5
 # Two rows that agree on artist and title but disagree on length by more than
 # this are different cuts, not duplicates.
 _DEDUPE_DURATION_TOLERANCE_SEC = 10
@@ -326,8 +326,8 @@ def _popularity_scores(items: list[dict[str, Any]]) -> dict[str, float]:
     """Bounded popularity, ranked *within* each (source, type) cohort.
 
     Raw popularity is not comparable across providers: Deezer `rank` tops out at
-    1e6, MusicBrainz `score` at 100, YouTube view counts are unbounded, and
-    Deezer artist rows publish none at all. The absolute term this replaces
+    1e6, YouTube view counts are unbounded, and Deezer artist rows publish
+    none at all. The absolute term this replaces
     (`min(25, popularity/40000)`) was therefore a near-binary +25 for YouTube and
     Deezer *tracks* and 0 for everything else — a flat 25-point thumb on the
     scale that alone was enough to tie an exact artist-name match.
@@ -355,6 +355,39 @@ def _popularity_scores(items: list[dict[str, Any]]) -> dict[str, float]:
             rank = dense[float(item.get("popularity") or 0.0)]
             scores[item["id"]] = _POPULARITY_MAX * (1.0 - rank / span)
     return scores
+
+
+def _attach_listening_evidence(items: list[dict[str, Any]]) -> None:
+    """How much each row is listened to, as `_listened`, in the one unit a
+    search answer carries for songs, albums and artists alike: Deezer's `rank`
+    for its songs.
+
+    An album or artist has no rank of its own in a search answer, so it takes
+    its best song's — among the songs this same search returned, which is the
+    evidence the providers gave for that query. The best song, not the sum: a
+    tribute act with twenty covers of one record would otherwise outweigh the
+    record. Rows with no such evidence get none, never a guess.
+    """
+    best: dict[tuple[str, str], float] = {}
+    for item in items:
+        if item.get("source") != "deezer" or item.get("type") != "track":
+            continue
+        rank = float(item.get("popularity") or 0.0)
+        if rank <= 0:
+            continue
+        item["_listened"] = rank
+        raw = item.get("raw") or {}
+        for kind, key in (("album", "deezer_album_id"), ("artist", "deezer_artist_id")):
+            ref = str(raw.get(key) or "")
+            if ref:
+                best[(kind, ref)] = max(best.get((kind, ref), 0.0), rank)
+    for item in items:
+        kind = str(item.get("type"))
+        key = {"album": "deezer_album_id", "artist": "deezer_artist_id"}.get(kind)
+        ref = str((item.get("external_ids") or {}).get(key) or "") if key else ""
+        if ref and (kind, ref) in best:
+            # A provider may already have measured it (`_deezer_album_search`).
+            item["_listened"] = max(item.get("_listened") or 0.0, best[(kind, ref)])
 
 
 def _entity_key(item: dict[str, Any]) -> str:
@@ -488,6 +521,7 @@ def _dedupe(
     q_tokens = frozenset(match_tokens(query))
     popularity = _popularity_scores(items)
     corroboration = _corroboration_scores(items)
+    _attach_listening_evidence(items)
 
     for item in items:
         item["_rank"] = _rank(
@@ -584,6 +618,11 @@ def collapse_duplicates(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         winner = min(group, key=_sort_key)
         if len(group) > 1:
             winner["_rank"] = max(row["_rank"] for row in group)
+            # The same recording heard on Deezer is as listened to whichever
+            # copy — the owned one, say — represents it.
+            listened = max((row.get("_listened") or 0.0 for row in group), default=0.0)
+            if listened:
+                winner["_listened"] = listened
             _merge_action_state(winner, group)
         survivors.append(winner)
     return survivors
@@ -895,8 +934,71 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
     return out
 
 
+def _deezer_album_search(query: str, limit: int) -> list[dict[str, Any]]:
+    """Deezer's own answer to "which record is this", as album rows.
+
+    The song search finds a record only through songs whose titles match, so a
+    record named like a phrase — "Kind of Blue", "The Dark Side of the Moon" —
+    went missing behind covers that carry its name. The album search returns it
+    first. The album whose title best matches the query is the one that may lead
+    the page, so it alone has its songs read for how listened it is (its best
+    song's `rank`, the unit `_attach_listening_evidence` compares everything
+    in): one more request per new search, never one per album.
+    """
+    rows = deezer.rows("search/album", {"q": query, "limit": min(limit, 10)}, timeout=6)
+    q_folded = fold_text(query)
+    q_tokens = frozenset(match_tokens(query))
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+        title = clean(row.get("title"))
+        artist = clean(artist_row.get("name"))
+        album_id = str(row.get("id") or "")
+        if not title or not artist or not album_id:
+            continue
+        item = catalog_item(
+            item_id=f"deezer:album:{album_id}",
+            item_type="album",
+            source="deezer",
+            title=title,
+            subtitle=artist,
+            artist=artist,
+            album=title,
+            cover=deezer.image(row, "cover"),
+            external_ids={"deezer_album_id": album_id},
+            attribution_url=row.get("link") or "",
+            downloadable=False,
+            raw={"deezer_album_id": album_id, "deezer_artist_id": str(artist_row.get("id") or "")},
+        )
+        out.append(item)
+    if not out:
+        return out
+    matches = (
+        (text_score(q_folded, q_tokens, row["title"], _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=False), row)
+        for row in out
+    )
+    score, candidate = max(matches, key=lambda match: match[0])
+    if score > 0:
+        album_id = candidate["external_ids"]["deezer_album_id"]
+        try:
+            songs = deezer.rows(f"album/{album_id}/tracks", {"limit": 50}, timeout=3)
+            best = max((float(song.get("rank") or 0) for song in songs), default=0.0)
+            if best > 0:
+                candidate["_listened"] = best
+        except (requests.RequestException, deezer.DeezerQuotaError, TypeError, ValueError) as exc:
+            logger.info("Deezer album %s listening evidence unavailable: %s", album_id, exc)
+    return out
+
+
 def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
     """One MusicBrainz request, expanded into recording/artist/album rows.
+
+    Its rows carry no popularity. The `score` MusicBrainz returns is how well a
+    row matched the query, not how much it is listened to; read as popularity
+    it gave every exact-title recording of the database — most of them heard by
+    almost nobody — the full popularity term.
 
     MusicBrainz asks clients to stay near one request per second. A recording
     search already embeds artist credits and releases, so one respectful call
@@ -936,7 +1038,6 @@ def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
                 subtitle=artist,
                 artist=artist,
                 duration=duration_seconds((row.get("length") or 0) / 1000 if row.get("length") else None),
-                popularity=float(row.get("score") or 0),
                 external_ids={"musicbrainz_id": mbid},
                 attribution_url=f"https://musicbrainz.org/recording/{mbid}",
                 raw={"musicbrainz_id": mbid},
@@ -950,7 +1051,6 @@ def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
                 title=artist,
                 subtitle=clean(artist_row.get("disambiguation")) or "Artist",
                 artist=artist,
-                popularity=float(row.get("score") or 0),
                 external_ids={"musicbrainz_artist_id": artist_id},
                 attribution_url=f"https://musicbrainz.org/artist/{artist_id}",
                 downloadable=False,
@@ -970,7 +1070,6 @@ def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
                 subtitle=artist,
                 artist=artist,
                 album=album,
-                popularity=float(row.get("score") or 0),
                 external_ids={"musicbrainz_release_id": album_id},
                 attribution_url=f"https://musicbrainz.org/release/{album_id}",
                 downloadable=False,
@@ -1032,8 +1131,17 @@ def _filter_types(items: list[dict[str, Any]], wanted: set[str]) -> list[dict[st
     return [item for item in items if item.get("type") in wanted]
 
 
-def _top_result(ranked: list[dict[str, Any]]) -> str | None:
+def _top_result(ranked: list[dict[str, Any]], query: str = "") -> str | None:
     """The one row confident enough to lead the page, or nothing at all.
+
+    First, listening: among the rows whose title holds the whole query, the
+    one most listened to leads (`_attach_listening_evidence`). A search for a
+    record or a song names it; when several rows answer to that name — the
+    original, its covers, a tribute act, a recording only a database knows —
+    the one people actually play is the one meant. Text alone could not tell
+    them apart, and put "Bohemian Rhapsody" the tribute band above Queen.
+
+    Without that evidence the text decides, as follows.
 
     A wrong top result costs more than a missing one: it is the largest target on
     the page, and for an artist or album it navigates somewhere else entirely.
@@ -1042,6 +1150,19 @@ def _top_result(ranked: list[dict[str, Any]]) -> str | None:
     """
     if not ranked:
         return None
+    if query:
+        q_folded = fold_text(query)
+        q_tokens = frozenset(match_tokens(query))
+        listened = [
+            row for row in ranked
+            if row.get("_listened") and text_score(
+                q_folded, q_tokens, row.get("title"),
+                _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=False,
+            ) > 0
+        ]
+        if listened:
+            # `max` keeps the first of equals, and `ranked` is a total order.
+            return max(listened, key=lambda row: row["_listened"])["id"]
     head = ranked[0]
     if head.get("_rank", 0.0) < _TOP_FLOOR:
         return None
@@ -1109,6 +1230,8 @@ def _search_uncached(query: str, types: set[str], limit: int) -> dict[str, Any]:
         ("deezer", lambda: _deezer_search(query, limit)),
         ("musicbrainz", lambda: _musicbrainz_search(query, limit)),
     ]
+    if not types or types & {"all", "album"}:
+        providers.append(("deezer_albums", lambda: _deezer_album_search(query, limit)))
     if not types or "all" in types or "track" in types or "library_track" in types:
         providers.append(("youtube", lambda: _youtube_search(query, limit)))
 
@@ -1129,11 +1252,11 @@ def _search_uncached(query: str, types: set[str], limit: int) -> dict[str, Any]:
 
     # Provider completion order is timing-dependent. Merge in a fixed public
     # order so even exact score ties cannot become account/device dependent.
-    for name in ("youtube", "deezer", "musicbrainz", "library"):
+    for name in ("youtube", "deezer", "deezer_albums", "musicbrainz", "library"):
         items.extend(provider_rows.get(name, []))
     intent_creator = _intent_creator(provider_rows.get("youtube", []), query)
     ranked = _filter_types(_dedupe(items, query, intent_creator), types)
-    top = _top_result(ranked)
+    top = _top_result(ranked, query)
     sections = _build_sections(ranked, top)
     # The response used to be unbounded — `limit` only ever sized the provider
     # fan-out — so a single search could ship a few hundred rows the UI then
@@ -1152,9 +1275,10 @@ def _search_uncached(query: str, types: set[str], limit: int) -> dict[str, Any]:
 
 
 def cached_search(query: str, types: set[str], limit: int) -> tuple[dict[str, Any], bool]:
-    # `v2` because the shape gained `top_result` and the sections gained
-    # `layout`/`total`: a hot reload must not serve pre-migration bodies.
-    key = f"v2:{limit}:{','.join(sorted(types))}:{query.casefold()}"
+    # Versioned so a hot reload never serves a body ranked by older rules: `v2`
+    # added `top_result` and the sections' `layout`/`total`; `v3` leads with
+    # listening and stopped reading MusicBrainz scores as popularity.
+    key = f"v3:{limit}:{','.join(sorted(types))}:{query.casefold()}"
     return memo_resolve(catalog_memo, key, lambda: _search_uncached(query, types, limit))
 
 

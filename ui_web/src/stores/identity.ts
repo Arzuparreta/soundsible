@@ -121,23 +121,6 @@ export const identity = createRoot(() => {
     ? state.collectionItems.filter(isMusicTrack)
     : musicLibraryRows(state.library, savedRows().map(row => row.track)));
 
-  // The marked subset that lives on disk, by library id — what the surfaces
-  // that only speak library ids (sort, radio seeds, Auto Mode) already expect.
-  const favouriteLibraryIds = createMemo(() => {
-    const owned = new Set<string>();
-    const index = libraryIndex();
-    for (const entry of state.saved) {
-      if (!entry.favourite) continue;
-      for (const key of entry.item_id ? [`item:${entry.item_id}`] : entry.keys) {
-        const track = index.get(key);
-        if (track) {
-          owned.add(track.id);
-          break;
-        }
-      }
-    }
-    return owned as ReadonlySet<string>;
-  });
   return {
     libraryIndex,
     playingKeys,
@@ -149,7 +132,6 @@ export const identity = createRoot(() => {
     favouriteKeys,
     favouriteRows,
     libraryTracks,
-    favouriteLibraryIds,
   };
 });
 
@@ -173,9 +155,6 @@ export const isQueuedKeys = (keys: string[]): boolean =>
   keysMatch(keys, identity.queuedKeys(), catalogLinks());
 
 export const isQueuedTrack = (track: Track): boolean => isQueuedKeys(trackKeys(track));
-export const isQueuedItem = (item: CatalogItem): boolean => isQueuedKeys(catalogItemKeys(item));
-export const isQueuedResult = (result: SearchResult): boolean =>
-  isQueuedKeys(searchResultKeys(result));
 
 /** The library track this identity is owned as, if it is owned at all. */
 export function ownedTrackForKeys(keys: string[]): Track | null {
@@ -216,8 +195,6 @@ export function claimedAddedAt(keys: string[]): string {
 
 export const ownedTrackForItem = (item: CatalogItem): Track | null =>
   ownedTrackForKeys(catalogItemKeys(item));
-export const ownedTrackForResult = (result: SearchResult): Track | null =>
-  ownedTrackForKeys(searchResultKeys(result));
 
 /**
  * Is anything with these identities in the library?
@@ -281,6 +258,3 @@ export function isDownloadingKeys(keys: string[]): boolean {
 }
 
 export const isDownloadingTrack = (track: Track): boolean => isDownloadingKeys(trackKeys(track));
-
-/** Library ids of the marked songs we hold a file for. */
-export const favouriteLibraryIds = identity.favouriteLibraryIds;

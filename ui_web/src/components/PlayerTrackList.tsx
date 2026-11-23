@@ -1,7 +1,7 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import { ArtistLinks } from './MusicLinks';
 import type { MusicMetadata } from '../lib/musicNavigation';
-import { mobileListLayout } from '../lib/listLayout';
+import { playerCompact } from '../lib/playerDock';
 import { MusicListRow } from './MusicListRow';
 import Button from './Button';
 import { CollectionRows } from './CollectionView';
@@ -125,7 +125,6 @@ export function PlayerTrackList(props: {
   /** Plain copy for ordinary empty queues, or a richer status when emptiness
    * itself is a live state such as the DJ building its first route. */
   empty: JSX.Element;
-  dragHandle?: JSX.Element;
   headAction?: PlayerTrackListHeadAction | PlayerTrackListHeadAction[];
   /** Something dropped on the header. */
   onDrop?: (event: DragEvent) => void;
@@ -250,7 +249,6 @@ export function PlayerTrackList(props: {
     <div class={styles.panel} data-dragging={dragging() || props.placing ? '' : undefined}>
       <header class={styles.head} {...dropTarget(() => Boolean(props.onDrop), (event) => props.onDrop?.(event))}>
         <span class={styles.heading}>
-          {props.dragHandle}
           <h2>{props.title}</h2>
           <span class={styles.count}>{props.count}</span>
         </span>
@@ -459,7 +457,7 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard;
       class={styles.card}
       data-queue-card={props.card.id}
       data-dimmed={props.card.dimmed ? '' : undefined}
-      data-mobile={mobileListLayout() ? '' : undefined}
+      data-mobile={playerCompact() ? '' : undefined}
       onContextMenu={(event) => {
         if (!props.card.menu) return;
         event.preventDefault();
@@ -599,12 +597,12 @@ function PlayerTrackListRow(props: {
       // Keep right-click alongside the visible menu. Mobile rows own their
       // context and hold gestures through MusicListRow.
       onContextMenu={(event) => {
-        if (mobileListLayout()) return;
+        if (playerCompact()) return;
         event.preventDefault();
         openMenu();
       }}
       onPointerDown={(event) => {
-        if ((event.target as Element).closest("a, [data-row-menu]") || mobileListLayout() || !props.entry.onCarry) return;
+        if ((event.target as Element).closest("a, [data-row-menu]") || playerCompact() || !props.entry.onCarry) return;
         cancelCarry();
         carryStart = { x: event.clientX, y: event.clientY };
         // Touch only: a mouse hold has no selection gesture to head off, and
@@ -627,7 +625,7 @@ function PlayerTrackListRow(props: {
       onPointerUp={cancelCarry}
       onPointerCancel={cancelCarry}
     >
-      <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
+      <Show when={!playerCompact()} fallback={<MusicListRow playback title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
         seed={props.entry.id} cover={props.entry.cover} index={props.entry.current ? undefined : props.entry.position}
         active={props.entry.current} disabled={disabled() || props.editing} entry={props.entry.entry}
         annotation={props.entry.current && props.entry.paused ? t('musicList.paused') : props.entry.badge ?? props.entry.annotation}

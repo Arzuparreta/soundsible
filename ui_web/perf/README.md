@@ -21,7 +21,7 @@ only to its own fixture server on a free port, never to an engine.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `SURFACES` | all | Default scroll suite: `songs`, `favourites`, `albums`, `artists`, `album`, `artist`, `playlist`, `player-browser`, `player-queue`. Opt-in extras (pass explicitly in `SURFACES`): `player-open` (2 open/close cycles), `dj-browser`, `dj-idle` |
+| `SURFACES` | all | Default scroll suite: `songs`, `favourites`, `albums`, `artists`, `album`, `artist`, `playlist`, `player-queue`. Opt-in extras (pass explicitly in `SURFACES`): `player-open` (2 open/close cycles), `dj-idle` |
 | `RATES` | `1,6` | CPU throttling rates. 6× on a desktop CPU is a proxy for a slow laptop, not a measurement of one |
 | `PLAYING` | off | `1` starts a track first and keeps it playing |
 | `REPEATS` | `3` | Runs per case. The reported row is the run with the median longest task; every run's frame counts are kept under `runs` |
@@ -94,10 +94,11 @@ exported input, including when the worktree has uncommitted source changes.
 
 - One machine, headless Chromium, 60 Hz. It says nothing about WebKit, an
   iPhone, Android WebView, WebView2 or a 144 Hz display.
-- `player-browser` opens the full player and scrolls its library browser.
-  `player-queue` adds 300 requests through the real song menu before opening
-  the player and scrolling the manual lane. Setup is outside the timed window.
-- CI runs songs, albums and player-browser against the built production bundle
+- `player-queue` adds 300 requests through the real song menu before opening
+  the player and scrolling the manual lane. At the default 1366 px width the
+  player is the column docked beside the app, so the bench pages to the queue
+  as it does on a phone. Setup is outside the timed window.
+- CI runs songs, albums and player-queue against the built production bundle
   with 6,000 tracks. `budget.mjs` requires bounded DOM (≤1,800 elements), actual
   scroll and presented frames. Timing and partial frames are uploaded for
   diagnosis; there is no absolute FPS gate on uneven shared runners.

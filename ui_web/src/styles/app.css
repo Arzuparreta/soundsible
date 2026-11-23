@@ -87,14 +87,15 @@ html[data-page-hidden] {
    and scroll restoration still reads the right numbers. The flip waits out the
    handoff, then the shell simply stops existing for the renderer — and for
    screen readers, which could previously still walk the library underneath. */
-html[data-player-surface] #app {
+html[data-player-surface]:not([data-player-docked]) #app {
   pointer-events: none;
 }
 
 /* Not while a close gesture is dragging the surface off: that uncovers the shell
    progressively, so it has to be there. PlayerSurface sets the flag in the same
    step that claims the drag, before the surface has moved a pixel. */
-html[data-player-surface]:not([data-player-swiping]) #app {
+/* A docked player is a column beside the app, which stays in use. */
+html[data-player-surface]:not([data-player-swiping], [data-player-docked]) #app {
   visibility: hidden;
   /* Hide late (after the surface has landed), reveal immediately on the way back
      — the base rule's 0s delay handles the return. */
@@ -104,7 +105,7 @@ html[data-player-surface]:not([data-player-swiping]) #app {
 /* Reduced motion collapses the durations (tokens.css) but not the delays, and a
    handoff that no longer animates has nothing to wait out. */
 @media (prefers-reduced-motion: reduce) {
-  html[data-player-surface]:not([data-player-swiping]) #app {
+  html[data-player-surface]:not([data-player-swiping], [data-player-docked]) #app {
     transition-delay: 0s;
   }
 }

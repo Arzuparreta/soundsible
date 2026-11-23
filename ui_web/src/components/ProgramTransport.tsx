@@ -7,6 +7,8 @@ import { offers, type ProgramState, type ProgramCommand } from '../lib/program/r
 import styles from './ProgramTransport.module.css';
 import { openContextMenu } from '../lib/contextMenu';
 import { vibrate } from '../lib/haptics';
+import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
+import { RangeControl } from '../design/Control';
 
 /** Stateless ownership: presentation observes a program; commands never create audio here. */
 export default function ProgramTransport(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onLyrics?: () => void }) {
@@ -14,6 +16,8 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
   const timer = setInterval(() => setNow(Date.now()), 500); onCleanup(() => clearInterval(timer));
   const retryBlocked = () => (props.state.preview?.retryNotBeforeMs ?? 0) > now();
   const [seeking, setSeeking] = createSignal<number | null>(null);
+  const [adjustingVolume, setAdjustingVolume] = createSignal<number | null>(null);
+  const volume = () => adjustingVolume() ?? Math.round(gainToVolumePosition(props.state.volume ?? 1) * 100);
   const occurrence = createMemo(() => `${props.state.generation}:${props.state.items[props.state.index]?.key ?? ""}`);
   createEffect(() => { occurrence(); setSeeking(null); });
   const run = (command: ProgramCommand) => { vibrate(); return props.command(command).catch(() => {}); };
@@ -71,6 +75,18 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
     </select></label></Show>
     <input aria-label={t('android.seek')} disabled={disabled() || props.state.durationMs <= 0 || props.state.seekable === false} type="range" min="0" max={props.state.durationMs || 0} value={seeking() ?? props.state.positionMs} step="1000" aria-valuetext={clockTime((seeking() ?? props.state.positionMs) / 1000)} onInput={event => setSeeking(Number(event.currentTarget.value))} onChange={event => { const target = Number(event.currentTarget.value); void run({ action: 'seek', positionMs: target }).finally(() => setSeeking(null)); }} />
     <small>{clockTime(props.state.positionMs / 1000)} / {clockTime(props.state.durationMs / 1000)}</small>
+    <Show when={props.state.volume !== undefined}>
+      <label class={styles.volume}>
+        {t('omnibar.volume')}
+        <RangeControl min="0" max="100" value={volume()} aria-valuetext={`${volume()}%`} disabled={disabled()}
+          onInput={event => setAdjustingVolume(Number(event.currentTarget.value))}
+          onChange={event => {
+            const level = volumePositionToGain(Number(event.currentTarget.value) / 100);
+            void run({ action: 'volume', level }).finally(() => setAdjustingVolume(null));
+          }}
+        />
+      </label>
+    </Show>
     <Show when={props.state.dj?.phase === 'planning'}><p role="status">{t('autoMode.route.preparing')}</p></Show>
     <Show when={props.state.dj?.phase === 'repairing'}><p role="status">{t('autoMode.route.fixing')}</p></Show>
     <Show when={props.state.dj?.phase === 'placing'}><p role="status">{t('autoMode.route.preparing')}</p></Show>

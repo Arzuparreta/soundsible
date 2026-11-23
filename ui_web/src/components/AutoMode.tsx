@@ -1,20 +1,18 @@
 import { ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { savedFromTrack } from '../lib/saved';
-import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { createActivityMemo } from '../lib/activityMemo';
-import { mobileListLayout } from '../lib/listLayout';
+import { playerCompact } from '../lib/playerDock';
 import { pageVisible } from '../lib/pageVisibility';
 import { player } from '../stores/player';
 import {
   AUTO_MODE_LAYOUT_KEY,
   AUTO_MODE_PANELS,
-  autoModeLayoutFromPreset,
   cloneAutoModeLayout,
   DEFAULT_AUTO_MODE_LAYOUT,
   parseAutoModeLayout,
   type AutoModeDesktopLayout,
-  type AutoModeLayoutPresetId,
   type AutoModePanelId,
 } from '../lib/autoModeLayout';
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
@@ -23,8 +21,9 @@ import { editableFrom, routeRows } from '../lib/djRoute';
 import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
-import { NowPlayingBrowser } from './NowPlayingBrowser';
-import { PlayerLayoutControl } from './PlayerLayoutControl';
+import { beginDjErrand, endDjErrand, type DjErrandKind } from '../lib/djErrand';
+import { desktopShell } from '../lib/shellLayout';
+import { setNowPlayingOpen } from '../stores';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
@@ -35,9 +34,8 @@ import { buildTrackMenu } from './trackActions';
 import { SourceIcon, menuIcons } from './icons';
 import styles from './AutoMode.module.css';
 
-// As in Now Playing: the browser's fixed rows fit in 320px, and the three
-// minimums with their seams fit a 1024px window.
-const AUTO_MINIMUMS = { browser: 320, stage: 330, route: 280 };
+// As in Now Playing: the two minimums and their seam fit a 1024px window.
+const AUTO_MINIMUMS = { stage: 330, route: 280 };
 
 type CarriedTrack = {
   track: Track;
@@ -59,41 +57,33 @@ export function AutoMode(props: {
   surfaceOpen: boolean;
   panelsReady?: boolean;
 }) {
+  // The route mounts a frame after the stage, so opening DJ paints the song first.
   const [routeMounted, setRouteMounted] = createSignal(props.panelsReady ?? true);
-  const [browserMounted, setBrowserMounted] = createSignal(props.panelsReady ?? true);
   createEffect(() => {
-    if (!props.panelsReady || (routeMounted() && browserMounted())) return;
-    let firstFrame = 0;
-    let secondFrame = 0;
-    if (typeof requestAnimationFrame === 'function') {
-      firstFrame = requestAnimationFrame(() => {
-        setRouteMounted(true);
-        secondFrame = requestAnimationFrame(() => setBrowserMounted(true));
-      });
-      onCleanup(() => {
-        cancelAnimationFrame(firstFrame);
-        cancelAnimationFrame(secondFrame);
-      });
-    } else {
-      setRouteMounted(true);
-      setBrowserMounted(true);
-    }
+    if (!props.panelsReady || routeMounted()) return;
+    if (typeof requestAnimationFrame !== 'function') { setRouteMounted(true); return; }
+    const frame = requestAnimationFrame(() => setRouteMounted(true));
+    onCleanup(() => cancelAnimationFrame(frame));
   });
   const [layout, setLayout] = createSignal(readLayout());
-  // Explicit picker intent distinguishes requesting a song at a seam from
-  // adding reference material; ordinary browsing remains free of either task.
-  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route' | 'reference' | 'change'; beforeQueueId?: string }>({ kind: 'neutral' });
   const [carriedTrack, setCarriedTrack] = createSignal<CarriedTrack | null>(null);
-  let destinationOrigin: AutoModePanelId = props.panel;
-  const openDestination = (kind: 'route' | 'reference' | 'change', beforeQueueId?: string) => {
-    destinationOrigin = props.panel;
-    setDestination({ kind, beforeQueueId });
-    props.onPanelChange('browser');
+  /**
+   * Ask the listener for music: the next song or collection they play anywhere
+   * in the app answers the errand (lib/djErrand). On a phone the sheet steps
+   * aside so the app can be used, and comes back when the errand ends; on a
+   * desktop the player is docked beside the app while it lasts.
+   */
+  const openErrand = (kind: DjErrandKind, beforeQueueId?: string) => {
+    const sheet = !desktopShell();
+    beginDjErrand({ kind, beforeQueueId }, (done) => {
+      if (!player().autoMode.active) return;
+      if (sheet) setNowPlayingOpen(true);
+      if (done) props.onPanelChange('route');
+    });
+    if (sheet) setNowPlayingOpen(false);
   };
-  const finishDestination = (panel: AutoModePanelId) => {
-    setDestination({ kind: 'neutral' });
-    props.onPanelChange(panel);
-  };
+  // Leaving DJ leaves nothing to answer.
+  onCleanup(() => endDjErrand(false));
   const placeInRoute = (track: Track, beforeQueueId?: string) => {
     void player().actions.placeAutoTrack(track, beforeQueueId);
     setCarriedTrack(null);
@@ -114,14 +104,8 @@ export function AutoMode(props: {
     setLayout(next);
     try { localStorage.setItem(AUTO_MODE_LAYOUT_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
   };
-  const applyLayoutPreset = (preset: AutoModeLayoutPresetId) => setLayoutPersisted(autoModeLayoutFromPreset(preset));
-  const resetDesktopLayout = () => {
-    try { localStorage.removeItem(AUTO_MODE_LAYOUT_KEY); } catch { /* storage unavailable */ }
-    setLayoutPersisted(autoModeLayoutFromPreset('balanced'));
-  };
-
   const panelActive = (panel: AutoModePanelId) => props.surfaceOpen && (props.panelsReady ?? true) && pageVisible()
-    && (!mobileListLayout() || props.panel === panel);
+    && (!playerCompact() || props.panel === panel);
   const routeActive = () => panelActive('route');
   const upcoming = createActivityMemo(
     routeActive,
@@ -163,7 +147,7 @@ export function AutoMode(props: {
         type="button"
         data-placement-active={carriedTrack() ? '' : undefined}
         aria-label={t('autoMode.route.insertBefore', { title: track.title })}
-        onClick={() => carriedTrack() ? placeCarriedInRoute(track.queueId) : openDestination('route', track.queueId)}
+        onClick={() => carriedTrack() ? placeCarriedInRoute(track.queueId) : openErrand('route', track.queueId)}
       ><span>＋</span></button>
     );
     // A cued handoff is already loaded and mixing: taking it out of the route is
@@ -266,7 +250,7 @@ export function AutoMode(props: {
             const activity = player().autoMode.activity;
             return activity?.status === 'error' ? t(activity.key) : t('nowPlaying.nothingPlaying');
           })()}</p>
-          <button type="button" onClick={() => openDestination('reference')}>{t('musicExplorer.referenceEmpty')}</button>
+          <button type="button" onClick={() => openErrand('reference')}>{t('musicExplorer.referenceEmpty')}</button>
         </>}
       >
         <div
@@ -294,28 +278,10 @@ export function AutoMode(props: {
     </div>
   );
 
-  const Browser = (dragHandle: JSX.Element) => (
-    <section class={styles.sourcePanel}>
-      <div class={styles.sourceBrowser}>
-        <NowPlayingBrowser
-          dragHandle={dragHandle}
-          active={panelActive('browser')}
-          purpose={destination().kind === 'change' ? 'auto-change' : destination().kind === 'reference' ? 'auto-reference' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
-          routeBeforeQueueId={destination().beforeQueueId}
-          onPlaced={() => finishDestination('route')}
-          onCarryTrack={(track) => setCarriedTrack({ track })}
-          onCancelPlacement={() => finishDestination(destinationOrigin)}
-          onClose={() => finishDestination(destination().kind === 'neutral' ? 'stage' : destinationOrigin)}
-        />
-      </div>
-    </section>
-  );
-
-  const Stage = (dragHandle: JSX.Element) => (
+  const Stage = () => (
     <PlayerStage
       mode="auto"
       surfaceOpen={props.surfaceOpen}
-      dragHandle={dragHandle}
       onOpenList={() => props.onPanelChange('route')}
       listLabel={t('autoMode.mobile.route')}
       onTrackDragStart={(event, track) => writeAutoTrackTransfer(event, { track })}
@@ -323,12 +289,11 @@ export function AutoMode(props: {
       empty={stageEmpty()}
     />
   );
-  const Route = (dragHandle: JSX.Element) => (
+  const Route = () => (
     <section class={styles.routePanel}><div class={styles.routeList}><PlayerTrackList
       title={t('autoMode.dj.route')}
       count={routeEntries().length}
       empty={routeEmpty()}
-      dragHandle={dragHandle}
       placing={Boolean(carriedTrack())}
       headAction={[
         // Fix mix rebuilds transitions and the bridges that carry them. With
@@ -346,7 +311,7 @@ export function AutoMode(props: {
         }] : []),
         {
           label: t('autoMode.route.add'),
-          onClick: () => carriedTrack() ? placeCarriedInRoute() : openDestination('route'),
+          onClick: () => carriedTrack() ? placeCarriedInRoute() : openErrand('route'),
         },
       ]}
       onDrop={(event) => {
@@ -370,7 +335,7 @@ export function AutoMode(props: {
         if (transfer) placeInRoute(transfer.track, dropBeforeId(upcoming().map((entry) => entry.queueId), slot));
       }}
       sections={[{ id: 'route', entries: routeEntries() }]}
-    /></div><AutoReferences carried={carriedTrack()?.track} onUse={addToSources} onAdd={() => openDestination('reference')} onChange={() => openDestination('change')} /></section>
+    /></div><AutoReferences carried={carriedTrack()?.track} onUse={addToSources} onAdd={() => openErrand('reference')} onChange={() => openErrand('change')} /></section>
   );
 
   return (
@@ -388,24 +353,9 @@ export function AutoMode(props: {
         panelLabel={(panel) => t(`autoMode.panel.${panel}`)}
         ariaLabel={t('autoMode.workspace.aria')}
         dataScope="auto"
-        layoutControl={<PlayerLayoutControl
-          title={t('autoMode.workspace.layoutTitle')}
-          ariaLabel={t('autoMode.workspace.changeLayout')}
-          resetLabel={t('autoMode.workspace.resetLayout')}
-          presets={[
-            { id: 'balanced', label: t('autoMode.workspace.layoutBalanced') },
-            { id: 'stage', label: t('autoMode.workspace.layoutStage') },
-            { id: 'left', label: t('musicExplorer.title') },
-            { id: 'right', label: t('autoMode.workspace.layoutRoute') },
-          ]}
-          onSelect={applyLayoutPreset}
-          onReset={resetDesktopLayout}
-        />}
-        renderPanel={(panel, dragHandle) => panel === 'stage'
-          ? Stage(dragHandle)
-          : panel === 'browser'
-            ? <Show when={browserMounted()}>{Browser(dragHandle)}</Show>
-            : <Show when={routeMounted()}>{Route(dragHandle)}</Show>}
+        renderPanel={(panel) => panel === 'stage'
+          ? Stage()
+          : <Show when={routeMounted()}>{Route()}</Show>}
       />
       <Show when={carriedTrack()}>
         {(track) => (

@@ -3,6 +3,7 @@ import type { MusicMetadata } from '../lib/musicNavigation';
 import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
 import { player } from '../stores/player';
 import { catalogContextTrack, resolveCatalogTrack } from '../lib/catalogItem';
+import { guardDjPick } from '../lib/djErrand';
 import { savedToTrack, savedVideoId } from '../lib/saved';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
@@ -152,6 +153,20 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     // The same queue pair `buildTrackMenu` gives a matched song, and under the
     // same rule: a DJ session places songs itself.
     if (!player().autoMode.active) list.push(...queueActions(pending));
+    // What a matched song offers for DJ, matching this one only once chosen.
+    const resolve = () => (ctx.item ? resolveCatalogTrack(ctx.item) : Promise.resolve(null));
+    if (ctx.item) list.push({
+      icon: menuIcons.changeSession(),
+      label: t('musicExplorer.startDjFromSong'),
+      onSelect: async () => {
+        const pickIsCurrent = guardDjPick();
+        const track = await resolve().catch(() => null);
+        if (!pickIsCurrent()) return;
+        if (!track) toast.error(t('searchPanel.noResolve'));
+        else if (player().autoMode.active) player().actions.startDjSelection([track], track.title);
+        else void player().actions.startDjFromTrack(track);
+      },
+    });
     list.push({ icon: menuIcons.device(), label: t('trackActions.playOnDevice'), onSelect: () => openPlayOnDevice(pending) });
   }
   if (!track && ctx.music) list.push(...musicLinkActions(ctx.music));

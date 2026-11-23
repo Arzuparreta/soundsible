@@ -494,7 +494,7 @@ def test_catalog_search_route_serves_the_same_library_rows(library, monkeypatch)
     search = library(_base())
     lib = SimpleNamespace(db=search.db, metadata=search.metadata, refresh_if_stale=lambda: None)
     monkeypatch.setattr(catalog, "engine_api", lambda: {"get_library": lambda: lib})
-    for name in ("_deezer_search", "_musicbrainz_search", "_youtube_search"):
+    for name in ("_deezer_search", "_deezer_album_search", "_musicbrainz_search", "_youtube_search"):
         monkeypatch.setattr(catalog, name, lambda query, limit: [])
     app = Flask(__name__)
     catalog.catalog_memo.clear()

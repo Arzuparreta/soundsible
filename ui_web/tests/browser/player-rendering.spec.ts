@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { fullScreenPlayer } from './playerPanels';
 
 test.use({ reducedMotion: 'no-preference' });
 
@@ -123,7 +124,8 @@ test('a collapsed player defers wallpaper raster work until it opens again', asy
 });
 
 test('the queue equaliser moves all its bars on the same few frames a second', async ({ page }) => {
-  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'the queue is on screen with the stage only on desktop');
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'the equaliser is the wide queue row\'s, beside the stage');
+  await fullScreenPlayer(page);
   await openMusicPlayer(page);
   const bars = () => page.evaluate(() => document.getAnimations()
     .filter((animation) => animation instanceof CSSAnimation && animation.animationName.includes('playerTrackEq')).length);

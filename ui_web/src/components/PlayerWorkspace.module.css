@@ -3,6 +3,24 @@
    the hairline between them, which is also the handle that resizes them. The
    veil that keeps their text legible is the room's (PlayerSurface `.wash`). */
 .workspace {
+  --panel-grip-height: 24px;
+  --stage-side-min: 18px;
+  --stage-side-max: 44px;
+  --stage-side-rate: 0.06;
+  --stage-title-min: 20px;
+  --stage-title-max: 30px;
+  --stage-title-rate: 0.054;
+  --stage-title-line: 1.25;
+  --stage-art-max: 760px;
+  --stage-pad-top: clamp(8px, 2.6cqh, 28px);
+  --stage-pad-bottom: clamp(8px, 2.6cqh, 24px);
+  --stage-gap: clamp(12px, 2.6cqh, 28px);
+  --stage-row-gap: clamp(6px, 1.5cqh, 16px);
+  --stage-height-budget: calc(
+    100cqh - var(--stage-pad-top) - var(--stage-pad-bottom) - var(--stage-gap)
+    - 26px - 44px - 64px - var(--control-h) - var(--stage-row-gap) * 3 - 12px
+  );
+
   position: relative;
   width: 100%;
   height: 100%;
@@ -35,12 +53,12 @@
   container: stage / size;
 }
 
-.splitter,
+.seam,
 .panelGrip {
   display: none;
 }
 
-@media (max-width: 1023px) {
+@container player (max-width: 1023px) {
   .workspace {
     padding-top:
       calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
@@ -80,8 +98,41 @@
   }
 }
 
-@media (min-width: 1024px) {
+@container player (min-width: 1024px) {
+  .workspace {
+    container: player-workspace / size;
+  }
+
   .main {
+    /* At the limiting width, the horizontal room for the cover equals its
+       height budget after title and transport. Invert the horizontal padding
+       and title clamps so the split uses the same geometry as the stage. */
+    --title-min-line: calc(var(--stage-title-min) * var(--stage-title-line));
+    --title-max-line: calc(var(--stage-title-max) * var(--stage-title-line));
+    --title-line-rate: calc(var(--stage-title-rate) * var(--stage-title-line));
+    --side-rate: calc(1 - 2 * var(--stage-side-rate));
+    --budget-min-side: calc(var(--stage-height-budget) + 2 * var(--stage-side-min));
+    --budget-max-side: calc(var(--stage-height-budget) + 2 * var(--stage-side-max));
+    --fit-at-min-side: clamp(
+      calc(var(--budget-min-side) - var(--title-max-line)),
+      calc(var(--budget-min-side) / (1 + var(--title-line-rate))),
+      calc(var(--budget-min-side) - var(--title-min-line))
+    );
+    --fit-at-fluid-side: clamp(
+      calc((var(--stage-height-budget) - var(--title-max-line)) / var(--side-rate)),
+      calc(var(--stage-height-budget) / (var(--side-rate) + var(--title-line-rate))),
+      calc((var(--stage-height-budget) - var(--title-min-line)) / var(--side-rate))
+    );
+    --fit-at-max-side: clamp(
+      calc(var(--budget-max-side) - var(--title-max-line)),
+      calc(var(--budget-max-side) / (1 + var(--title-line-rate))),
+      calc(var(--budget-max-side) - var(--title-min-line))
+    );
+    --stage-fit-width: min(
+      clamp(var(--fit-at-min-side), var(--fit-at-fluid-side), var(--fit-at-max-side)),
+      var(--stage-art-max) + 2 * var(--stage-side-max)
+    );
+
     display: grid;
     align-items: stretch;
     gap: 0;
@@ -93,12 +144,29 @@
     display: block;
   }
 
-  .splitter {
+  .tile:not([data-player-tile='stage']) {
+    padding-top: var(--panel-grip-height);
+  }
+
+  .seam {
     position: relative;
     z-index: 8;
     display: block;
+  }
+
+  /* On the seam, at its top, as wide as the seam. */
+  .resetSplit {
+    inset: 0 0 auto;
+    width: 100%;
+    height: var(--control-h);
+  }
+
+  .splitter {
+    position: relative;
+    display: block;
     width: 24px;
     min-width: 24px;
+    height: 100%;
     cursor: col-resize;
     touch-action: none;
     background: transparent;
@@ -122,6 +190,10 @@
       box-shadow var(--dur-short);
   }
 
+  .seam[data-custom-split] .splitter::after {
+    top: calc(var(--control-h) + var(--space-2xs));
+  }
+
   .splitter:focus-visible {
     outline: none;
   }
@@ -133,25 +205,20 @@
     box-shadow: 0 0 0 3px var(--accent-faint);
   }
 
-  /* Six dots, faint until the panel they move is pointed at or holds focus.
-     The layout menu (top left) moves panels too, so the grip never has to
-     announce itself to be found. */
-  /* In a panel's header it hangs in the header's left inset, on its own
-     layer, so the title and the search field start where the rows below them
-     do whether the grip is showing or not. */
+  /* The same centered grip sits on the top edge of every panel. */
   .panelGrip {
     position: absolute;
-    z-index: 3;
-    top: 50%;
-    left: 0;
+    z-index: 12;
+    top: 0;
+    left: 50%;
     display: grid;
-    grid-template-columns: repeat(2, 3px);
-    grid-template-rows: repeat(3, 3px);
+    grid-template-columns: repeat(3, 3px);
+    grid-template-rows: repeat(2, 3px);
     place-content: center;
     gap: 3px;
-    width: 14px;
-    height: 32px;
-    transform: translateY(-50%);
+    width: var(--control-h);
+    height: var(--panel-grip-height);
+    transform: translateX(-50%);
     padding: 0;
     color: var(--ink-tertiary);
     background: transparent;
@@ -184,20 +251,6 @@
     height: 3px;
     background: currentColor;
     border-radius: 50%;
-  }
-
-  /* The stage has no header to hold it: it floats over the top edge, turned
-     on its side so it reads as a handle on the panel rather than a control
-     inside it. */
-  .tile[data-player-tile='stage'] > .panelGrip {
-    z-index: 12;
-    top: 0;
-    left: 50%;
-    grid-template-columns: repeat(3, 3px);
-    grid-template-rows: repeat(2, 3px);
-    width: 44px;
-    height: 24px;
-    transform: translateX(-50%);
   }
 
   @media (hover: hover) and (pointer: fine) {

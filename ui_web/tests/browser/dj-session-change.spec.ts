@@ -1,10 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockMusicEngine, openMiniPlayer, TRACKS } from './music-browser-fixture';
+import { showPlayerPanel } from './playerPanels';
 
 async function showRoute(page: Page) {
-  if ((page.viewportSize()?.width ?? 0) < 1024) {
-    await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(2).click();
-  }
+  await showPlayerPanel(page, 'route');
   return page.locator('[data-auto-tile="route"]');
 }
 

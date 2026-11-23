@@ -1,4 +1,5 @@
 import AVKit
+import MediaPlayer
 import SoundsibleKit
 import SwiftUI
 
@@ -17,6 +18,16 @@ struct RoutePickerButton: UIViewRepresentable {
     }
 
     func updateUIView(_ view: AVRoutePickerView, context: Context) {}
+}
+
+private struct SystemVolumeSlider: UIViewRepresentable {
+    func makeUIView(context: Context) -> MPVolumeView {
+        let volume = MPVolumeView()
+        volume.showsRouteButton = false
+        return volume
+    }
+
+    func updateUIView(_ view: MPVolumeView, context: Context) {}
 }
 
 struct NowPlayingView: View {
@@ -78,6 +89,10 @@ struct NowPlayingView: View {
             }
             .buttonStyle(.plain)
             .font(.title3)
+
+            SystemVolumeSlider()
+                .frame(height: 32)
+                .padding(.horizontal, 32)
 
             Spacer(minLength: 0)
         }

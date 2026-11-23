@@ -2,10 +2,10 @@ import type { MenuEvent } from '../lib/menuEvent';
 import { collectionIndex } from '../lib/collectionIdentity';
 import { type ActionMenuOptions } from './ActionMenu';
 import { menuIcons } from './icons';
+import { collectionActions, type MusicCollection } from './collectionCommands';
 import { openContextMenu } from '../lib/contextMenu';
 import { openPlaylistCoverPicker } from './CoverPicker';
 import { actions, state, musicLibrary } from '../stores';
-import { player } from '../stores/player';
 import { promptDialog } from '../lib/prompt';
 import { confirmDialog } from '../lib/confirm';
 import type { Track } from '../types/music';
@@ -17,58 +17,32 @@ export interface PlaylistMenuHooks {
   onRenamed?: (newName: string) => void;
   /** Called after the playlist is deleted (e.g. to navigate away). */
   onDeleted?: () => void;
+  /** Offered where the playlist's songs can be put in a new order. */
   onEdit?: () => void;
-  shell?: boolean;
-  beforeQueueId?: string;
-  onPlaced?: () => void;
 }
 
 /** Resolve a playlist's track ids to library tracks (in order). */
-function playlistTracks(name: string): Track[] {
+export function playlistTracks(name: string): Track[] {
   const ids = state.playlists[name] ?? [];
   const byId = collectionIndex(musicLibrary());
   return ids.map((id) => byId.get(id)).filter((t): t is Track => !!t);
 }
 
+/** A playlist as a collection the shared commands can play. */
+export function playlistCollection(name: string): MusicCollection {
+  return {
+    title: name,
+    get context() { return playlistContext(name, playlistTracks(name), state.librarySettings); },
+    songs: () => ({ tracks: playlistTracks(name) }),
+  };
+}
+
 /** Play / rename / duplicate / change-cover / delete menu definition for a playlist. */
 export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {}): ActionMenuOptions {
-  const inAuto = player().autoMode.active && hooks.shell === true;
   return {
     title: name,
     actions: [
-      // In DJ a playlist is one source: choosing it moves the session onto it.
-      // Only an explicit placement into a seam asks for its songs one by one.
-      ...(inAuto && !hooks.beforeQueueId ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void player().actions.changeAutoSession(playlistTracks(name), name) }] : []),
-      {
-        icon: inAuto ? menuIcons.queue() : menuIcons.play(),
-        label: inAuto ? t('musicExplorer.requestAll') : t('playlistActions.play'),
-        onSelect: async () => {
-          const t = playlistTracks(name);
-          if (t.length) {
-            if (inAuto) {
-              const epoch = player().actions.autoSessionToken();
-              await player().actions.placeAutoTracks(t, hooks.beforeQueueId);
-              if (player().actions.autoSessionToken() === epoch) hooks.onPlaced?.();
-            } else if (player().autoMode.active) {
-              player().actions.startDjSelection(t, name);
-            } else {
-              player().actions.playFrom(t, 0, { context: playlistContext(name, t, state.librarySettings) });
-            }
-          }
-        },
-      },
-      ...(inAuto ? [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => { player().actions.addAutoSource(playlistTracks(name), name); hooks.onPlaced?.(); } }] : []),
-      ...(inAuto && hooks.beforeQueueId ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void player().actions.changeAutoSession(playlistTracks(name), name) }] : []),
-      ...(!inAuto ? [{
-        icon: menuIcons.shuffle(),
-        label: t('playlistActions.shuffle'),
-        onSelect: () => {
-          const t = playlistTracks(name);
-          if (t.length) {
-            player().actions.playShuffled(t, playlistContext(name, t, state.librarySettings));
-          }
-        },
-      }] : []),
+      ...collectionActions(playlistCollection(name)),
       ...(hooks.onEdit ? [{ icon: menuIcons.edit(), label: t('musicExplorer.edit'), onSelect: hooks.onEdit }] : []),
       {
         icon: menuIcons.rename(),

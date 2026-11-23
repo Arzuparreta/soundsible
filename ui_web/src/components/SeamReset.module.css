@@ -1,0 +1,54 @@
+.seamReset {
+  position: absolute;
+  display: block;
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ink-primary);
+  cursor: pointer;
+}
+
+.button:focus-visible {
+  background: var(--stage-material);
+}
+
+/* Opens to the button's right: into the panel after the seam, and into the
+   player beside its docked edge. */
+.tip {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  display: none;
+  align-items: center;
+  height: 100%;
+  margin-left: var(--space-2xs);
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--stage-base);
+  color: var(--ink-primary);
+  font-size: var(--text-label);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.button:focus-visible + .tip {
+  display: flex;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .button:hover {
+    background: var(--stage-material);
+  }
+
+  .button:hover + .tip {
+    display: flex;
+  }
+}

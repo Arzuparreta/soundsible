@@ -41,20 +41,14 @@
    and the cover shrinks a little inside the column instead of pushing the
    transport off the tile. */
 .body {
-  --stage-pad-x: clamp(18px, 6cqw, 44px);
-  --stage-pad-top: clamp(8px, 2.6cqh, 28px);
-  --stage-pad-bottom: clamp(8px, 2.6cqh, 24px);
-  --stage-gap: clamp(12px, 2.6cqh, 28px);
-  --stage-row-gap: clamp(6px, 1.5cqh, 16px);
-  --stage-title: clamp(20px, 5.4cqw, 30px);
+  --stage-pad-x: clamp(var(--stage-side-min), 100cqw * var(--stage-side-rate), var(--stage-side-max));
+  --stage-title: clamp(var(--stage-title-min), 100cqw * var(--stage-title-rate), var(--stage-title-max));
   --stage-icon-inset: calc((var(--control-h) - 20px) / -2);
-  --stage-reserve: calc(
-    var(--stage-pad-top) + var(--stage-pad-bottom) + var(--stage-gap)
-    + var(--stage-title) * 1.25 + 26px
-    + 44px + 64px + var(--control-h)
-    + var(--stage-row-gap) * 3 + 12px
+  --stage-art: min(
+    100cqw - 2 * var(--stage-pad-x),
+    var(--stage-height-budget) - var(--stage-title) * var(--stage-title-line),
+    var(--stage-art-max)
   );
-  --stage-art: min(100cqw - 2 * var(--stage-pad-x), 100cqh - var(--stage-reserve), 760px);
   --stage-col: min(100cqw - 2 * var(--stage-pad-x), max(var(--stage-art), 300px));
 
   display: flex;
@@ -589,6 +583,14 @@
   display: flex;
   align-items: center;
   gap: 2px;
+  /* The one part of the row that can give: a narrow stage shortens the
+     slider instead of pushing the last button past the tile's edge. */
+  min-width: 0;
+}
+
+.volume .volRange {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* Layout-transparent outside the lyrics dock, which is what gives them a box. */
@@ -597,10 +599,43 @@
   display: contents;
 }
 
-@media (max-width: 767px) {
-  .volRange {
+.volume .volumeTrigger {
+  display: none;
+}
+
+.volume.volumeNoSlider .volumeTrigger {
+  display: inline-flex;
+}
+
+@container player (max-width: 767px) {
+  .volume .inlineMute,
+  .volumePopover {
     display: none;
   }
+
+  .volume .volumeTrigger {
+    display: inline-flex;
+  }
+}
+
+.compactVolumePopup {
+  position: absolute;
+  z-index: 40;
+  top: min(calc(var(--volume-top) + var(--space-2xs)), calc(100% - var(--control-h)));
+  right: max(var(--space-sm), env(safe-area-inset-right, 0px));
+  display: flex;
+  height: var(--control-h);
+  align-items: center;
+  padding-inline: var(--space-sm);
+  background: var(--stage-base);
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1px var(--stage-line), var(--stage-shadow-sm);
+}
+
+.compactVolumePopup .volRange {
+  flex: 1;
+  min-width: 0;
+  touch-action: none;
 }
 
 /* Which of the stage's buttons a layout carries. Declared after `.actBtn`,
@@ -622,7 +657,7 @@
 
 /* Below 1024px lyrics take the cover's own square, so phones and tablets
    never lose them and the DJ handoff keeps the exact same rectangle. */
-@media (max-width: 1023px) {
+@container player (max-width: 1023px) {
   .visualSlot[data-lyrics-open] .art {
     display: none;
   }
@@ -641,7 +676,7 @@
   }
 }
 
-@media (min-width: 1024px) {
+@container player (min-width: 1024px) {
   .mobileQueueToggle {
     display: none;
   }
@@ -700,7 +735,7 @@
    actions on one row. The transport keeps the centre; the two sides share
    what is left and give way before it does. Everything is sized against the
    stage tile (a size container), never the window: the tile is resizable. */
-@media (min-width: 1024px) {
+@container player (min-width: 1024px) {
   .desktopLyricsStage {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -893,6 +928,7 @@
   .desktopLyricsStage .volume {
     position: relative;
     gap: 0;
+    min-width: var(--control-h);
   }
 
   .desktopLyricsStage .volumePopover {
@@ -947,7 +983,7 @@
   /* A narrow dock cannot hold the song, the transport and the actions on one
      row without the actions running over the transport. The transport takes
      a row of its own under them instead. */
-  @container stage (max-width: 439px) {
+  @container stage (width < 680px) {
     .desktopLyricsStage {
       grid-template-columns: minmax(0, 1fr) auto;
       grid-template-rows: minmax(0, 1fr) auto 48px 52px;
@@ -969,7 +1005,7 @@
     }
   }
 
-  @container stage (min-width: 640px) {
+  @container stage (min-width: 680px) {
     .desktopLyricsStage .actionsBar {
       gap: 4px;
     }
@@ -1012,55 +1048,23 @@
   color: var(--ink-secondary);
 }
 
-@media (max-width: 1023px) {
+@container player (max-width: 1023px) {
   .emptyWorkspace {
     padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-band));
   }
 }
 
-.browserWithLive,
-.liveBrowser {
+.liveChat {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
 }
 
-.openLiveChat {
-  position: absolute;
-  z-index: 15;
-  top: var(--space-md);
-  right: var(--space-md);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: 32px;
-  padding: 0 var(--space-sm);
-  color: var(--ink-primary);
-  background: var(--stage-material);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-full);
-  font: inherit;
-  font-size: var(--text-micro);
-  font-weight: var(--fw-bold);
-  backdrop-filter: blur(12px);
-}
-
-.openLiveChat span {
-  width: 7px;
-  height: 7px;
-  background: var(--danger);
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 16%, transparent);
-}
-
-.liveBrowser {
-  display: flex;
-  flex-direction: column;
-}
-
-.liveBrowser > header {
+.liveChat > header {
   position: relative;
   display: flex;
   align-items: center;
@@ -1070,7 +1074,7 @@
   border-bottom: 1px solid var(--stage-line);
 }
 
-.liveBrowser > header button {
+.liveChat > header button {
   min-height: 32px;
   padding: 0 var(--space-sm);
   color: var(--ink-secondary);
@@ -1080,7 +1084,7 @@
   font-size: var(--text-caption);
 }
 
-.liveBrowser > header strong {
+.liveChat > header strong {
   margin-left: auto;
   color: var(--accent-ink);
   font-size: var(--text-micro);

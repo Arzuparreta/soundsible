@@ -3,12 +3,14 @@ import { createSignal } from 'solid-js';
 import { cleanup, fireEvent, render } from '@solidjs/testing-library';
 import { setMediaQuery } from '../test-setup';
 import { PlayerWorkspace } from './PlayerWorkspace';
+import { setPlayerCompact } from '../lib/playerDock';
 
 const panels = ['library', 'stage', 'route'] as const;
 const sizes = { library: 200, stage: 200, route: 200 };
 let frames: Map<number, FrameRequestCallback>;
 beforeEach(() => {
-  vi.useFakeTimers(); setMediaQuery('(max-width: 1023px)', true);
+  // The pager is the player's narrow composition: its own width decides it.
+  vi.useFakeTimers(); setMediaQuery('(max-width: 1023px)', true); setPlayerCompact(true);
   frames = new Map(); let serial = 0;
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = ++serial; frames.set(id, callback); return id; });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
@@ -19,7 +21,7 @@ beforeEach(() => {
     return new DOMRect(left, 0, 200, 400);
   });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); setMediaQuery('(max-width: 1023px)', false); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); setMediaQuery('(max-width: 1023px)', false); setPlayerCompact(false); });
 function workspace() {
   const [panel, select] = createSignal<typeof panels[number]>('stage');
   const view = render(() => <PlayerWorkspace panels={panels} activePanel={panel()} onActivePanelChange={select}

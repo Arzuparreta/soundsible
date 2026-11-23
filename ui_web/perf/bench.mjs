@@ -30,16 +30,12 @@ const SURFACES = {
   album: { hash: `#/album/${encodeURIComponent(fixture.albums[0].title)}?artist=${encodeURIComponent(fixture.albums[0].artist.name)}&view=library&album_id=${fixture.albums[0].id}`, ready: '[data-song-row], [data-music-list-row]' },
   artist: { hash: `#/artist/${encodeURIComponent(fixture.artists[0].name)}?view=library&artist_id=${fixture.artists[0].id}`, ready: '[data-song-row], [data-music-list-row]' },
   playlist: { hash: '#/playlists/Playlist%201', ready: '[data-song-row], [data-music-list-row]' },
-  // The full player's own library browser: opened over the Songs view, with
-  // the wheel over its tile.
-  'player-browser': { player: 'browser', ready: '#now-playing-view [data-player-tile="browser"] [data-music-list-row], #now-playing-view [data-player-tile="browser"] [data-song-row]' },
   'player-queue': { player: 'queue', ready: '#now-playing-view [data-player-tile="queue"] [data-drag-row]' },
 };
 
 /** Opt-in surfaces outside the default scroll suite (player transition & DJ mode). */
 const EXTRA_SURFACES = {
   'player-open': { action: 'player-open', ready: '[data-song-row], [data-music-list-row]' },
-  'dj-browser': { player: 'browser', auto: true, ready: '#auto-mode-view [data-player-tile="browser"] [data-music-list-row], #auto-mode-view [data-player-tile="browser"] [data-song-row]' },
   'dj-idle': { player: 'stage', auto: true, idle: true, ready: '#auto-mode-view [data-player-tile="stage"]' },
 };
 const ALL_SURFACES = { ...SURFACES, ...EXTRA_SURFACES };
@@ -200,10 +196,10 @@ async function measure(name, rate) {
         await page.locator('[data-player-tile="stage"]').getByRole('button', { name: 'Pause' }).click().catch(() => {});
         await page.waitForFunction(() => navigator.mediaSession?.playbackState !== 'playing', undefined, { timeout: 15_000 }).catch(() => {});
       }
-      if (width < 1024 && surface.player !== 'stage') {
-        const panelIndex = surface.player === 'browser' ? 0 : 2;
-        await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button')
-          .nth(panelIndex).click();
+      // A compact player — a phone, or the column docked beside the app on a
+      // desktop — shows one panel at a time: the stage first, then the list.
+      if (surface.player !== 'stage' && await page.locator('[data-player-surface-open][data-compact]').count()) {
+        await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(1).click();
         await page.waitForFunction(panel => {
           const tile = document.querySelector(`[data-player-tile="${panel}"]`);
           const carousel = document.querySelector(document.documentElement.dataset.playerSurface === 'auto' ? '[data-auto-carousel]' : '[data-now-playing-carousel]');
