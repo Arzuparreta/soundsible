@@ -1,11 +1,11 @@
 import { createMemo, Match, Show, Switch } from 'solid-js';
 import { player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
-import { isPodcastTrack } from '../lib/track';
+import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
 import { t } from '../lib/i18n';
 import { Control } from '../design/Control';
 import { ArtworkSurface } from '../design/Artwork';
-import { BackIcon } from './icons';
+import { BackIcon, NextFilledIcon, PauseFilledIcon, PlayFilledIcon, RefreshIcon } from './icons';
 import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { Spinner } from './Spinner';
 import styles from './PlayerMiniHeader.module.css';
@@ -28,7 +28,7 @@ export function PlayerMiniHeader(props: {
   );
 
   const next = () => {
-    if (podcast()) player().actions.seekBy(15);
+    if (podcast()) player().actions.seekBy(PODCAST_SKIP_SECONDS);
     else if (props.mode === 'auto') void player().actions.autoSkip();
     else player().actions.next();
   };
@@ -56,6 +56,7 @@ export function PlayerMiniHeader(props: {
             </span>
           </Control>
           <div class={styles.controls}>
+            {/* app.css dims [data-pending] after a 250ms in-flight delay across transport controls. */}
             <Control
               class={styles.ctrl}
               aria-label={loadFailed() ? t('common.retry') : player().playback.isPlaying ? t('common.pause') : t('common.play')}
@@ -66,22 +67,16 @@ export function PlayerMiniHeader(props: {
             >
               <Switch>
                 <Match when={loadFailed()}>
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                    <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
-                  </svg>
+                  <RefreshIcon size={20} />
                 </Match>
                 <Match when={loading()}>
                   <Spinner size={18} />
                 </Match>
                 <Match when={player().playback.isPlaying}>
-                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                    <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
-                  </svg>
+                  <PauseFilledIcon size={20} />
                 </Match>
                 <Match when={true}>
-                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                    <path fill="currentColor" d="M8 5v14l11-7z" />
-                  </svg>
+                  <PlayFilledIcon size={20} />
                 </Match>
               </Switch>
             </Control>
@@ -93,14 +88,7 @@ export function PlayerMiniHeader(props: {
               disabled={player().unreachable}
               onClick={next}
             >
-              <Show
-                when={podcast()}
-                fallback={
-                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                    <path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" />
-                  </svg>
-                }
-              >
+              <Show when={podcast()} fallback={<NextFilledIcon size={20} />}>
                 <PodcastSkipIcon size={20} />
               </Show>
             </Control>

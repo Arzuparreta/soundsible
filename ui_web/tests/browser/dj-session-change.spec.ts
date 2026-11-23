@@ -50,6 +50,24 @@ for (const language of ['es', 'en'] as const) {
     });
     expect(Math.max(...geometry.buttons.map(b => b.y)) - Math.min(...geometry.buttons.map(b => b.y))).toBeLessThan(2);
     expect(geometry.buttons[1].right).toBeLessThanOrEqual(geometry.right + 1);
+    const labels = await header.locator('button span').evaluateAll(elements => elements.map(label => {
+      const button = label.parentElement!;
+      const icon = button.querySelector('svg')!.getBoundingClientRect();
+      const text = label.getBoundingClientRect();
+      const firstChild = button.firstElementChild!;
+      return {
+        width: label.clientWidth,
+        contentWidth: label.scrollWidth,
+        iconBeforeText: firstChild.tagName.toLowerCase() === 'svg' ? text.left >= icon.right - 1 : icon.left >= text.right - 1,
+        gap: Math.abs(firstChild.tagName.toLowerCase() === 'svg' ? text.left - icon.right : icon.left - text.right),
+        expectedGap: Number.parseFloat(getComputedStyle(button).gap),
+      };
+    }));
+    for (const label of labels) {
+      expect(label.contentWidth).toBeLessThanOrEqual(label.width + 1);
+      expect(label.iconBeforeText).toBe(true);
+      expect(label.gap).toBeCloseTo(label.expectedGap, 0);
+    }
     await header.screenshot({ path: test.info().outputPath('session-actions.png') });
     await header.getByRole('button', { name: language === 'es' ? 'Cambiar' : 'Change', exact: true }).click();
     const menu = page.locator('[role="dialog"], [role="menu"]');

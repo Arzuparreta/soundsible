@@ -606,8 +606,9 @@
 }
 
 /* In compact layouts (< 1024px) lyrics, queue/route, radio and volume live in
-   PlayerSurface's persistent bottom dock, giving Stage more room for artwork,
-   while the track overflow button sits beside Save and Heart in .infoActions. */
+   PlayerCompactDock, giving Stage more room for artwork, while track overflow
+   sits beside Save and Heart in .infoActions. On mobileWeb at >= 1024px,
+   .volumeNoSlider still shows the inline mute button in .actionsBar. */
 @container player (max-width: 1023px) {
   .actionsBar {
     display: none;
@@ -659,14 +660,13 @@
 
 /* A tile too short for artwork and controls together — a desktop window a few
    hundred pixels tall — keeps the controls and lets the cover go: the room
-   behind them is already that cover, blurred. Lyrics opened in the cover's
-   square keep it. */
+   behind them is already that cover, blurred. */
 @container stage (max-height: 420px) and (max-aspect-ratio: 5 / 4) {
   .body:not(.desktopLyricsStage) {
     justify-content: center;
   }
 
-  .body:not(.desktopLyricsStage) .media:not(:has([data-lyrics-open])) {
+  .body:not(.desktopLyricsStage) .media {
     display: none;
   }
 }
@@ -992,7 +992,7 @@
 
 @container player (max-width: 1023px) {
   .emptyWorkspace {
-    padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-band));
+    padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-compact-dock-height));
   }
 }
 

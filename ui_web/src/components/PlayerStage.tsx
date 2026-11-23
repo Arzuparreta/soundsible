@@ -9,15 +9,17 @@ import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
 import { CoverImage } from './CoverImage';
 import { responsiveTapConstants } from '../lib/responsiveTap';
+import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { savedFromTrack } from '../lib/saved';
-import { isPodcastTrack } from '../lib/track';
+import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
 import { t } from '../lib/i18n';
 import { Control, RangeControl } from '../design/Control';
 import { detectFormFactor } from '../lib/deviceIdentity';
 import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
+import { playerCompact } from '../lib/playerDock';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
-import { KaraokeMicIcon, RadioIcon, RepeatIcon, ShuffleIcon, menuIcons } from './icons';
+import { KaraokeMicIcon, NextFilledIcon, PauseFilledIcon, PlayFilledIcon, RadioIcon, RefreshIcon, RepeatIcon, ShuffleIcon, VolumeIcon, menuIcons } from './icons';
 import { LyricsPanel } from './LyricsPanel';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
@@ -103,20 +105,6 @@ export function PlayerStage(props: {
   const volPct = () => Math.round(gainToVolumePosition(player().playback.muted ? 0 : player().playback.volume) * 100);
   const mobileWeb = detectFormFactor() !== 'computer';
 
-  const volumeIcon = () => (
-    <Show
-      when={!player().playback.muted}
-      fallback={
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
-        </svg>
-      }
-    >
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
-      </svg>
-    </Show>
-  );
   const muteButton = () => (
     <Show when={player().can('transport.set_muted')}>
       <Control
@@ -129,7 +117,7 @@ export function PlayerStage(props: {
         title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
         onClick={() => player().actions.toggleMute()}
       >
-        {volumeIcon()}
+        <VolumeIcon muted={Boolean(player().playback.muted)} size={20} />
       </Control>
     </Show>
   );
@@ -148,7 +136,7 @@ export function PlayerStage(props: {
   );
 
   const animateRects = (before: Map<Element, DOMRect>) => {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    if (prefersReducedMotion()) return;
     requestAnimationFrame(() => {
       for (const element of rootEl?.querySelectorAll<HTMLElement>('[data-lyrics-morph]') ?? []) {
         const first = before.get(element);
@@ -189,14 +177,18 @@ export function PlayerStage(props: {
   };
 
   onMount(() => {
+    // Capture phase runs after OverlayOutlet (modals/menus first) and before
+    // the global bubble shortcut handler, so Escape folds desktop lyrics
+    // instead of closing the whole player.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && desktopLyricsActive()) {
+      if (event.key === 'Escape' && props.surfaceOpen && !playerCompact() && desktopLyricsActive()) {
         event.preventDefault();
+        event.stopImmediatePropagation();
         toggleDesktopLyrics();
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    onCleanup(() => window.removeEventListener('keydown', onKeyDown));
+    window.addEventListener('keydown', onKeyDown, true);
+    onCleanup(() => window.removeEventListener('keydown', onKeyDown, true));
   });
 
   const openLyricsOverflow = () => {
@@ -389,7 +381,7 @@ export function PlayerStage(props: {
                     aria-label={podcast() ? t('podcasts.skipBack') : t('common.prev')}
                     aria-busy={player().pending('prev') || undefined}
                     data-pending={player().pending('prev') || undefined}
-                    onClick={() => podcast() ? player().actions.seekBy(-15) : player().actions.prev()}
+                    onClick={() => podcast() ? player().actions.seekBy(-PODCAST_SKIP_SECONDS) : player().actions.prev()}
                   >
                     <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>}>
                       <PodcastSkipIcon backward />
@@ -406,22 +398,16 @@ export function PlayerStage(props: {
                   >
                     <Switch>
                       <Match when={loadFailed()}>
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                          <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
-                        </svg>
+                        <RefreshIcon size={30} />
                       </Match>
                       <Match when={loading()}>
                         <Spinner size={26} onAccent />
                       </Match>
                       <Match when={player().playback.isPlaying}>
-                        <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
-                          <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
-                        </svg>
+                        <PauseFilledIcon size={32} />
                       </Match>
                       <Match when={true}>
-                        <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
-                          <path fill="currentColor" d="M8 5v14l11-7z" />
-                        </svg>
+                        <PlayFilledIcon size={32} />
                       </Match>
                     </Switch>
                   </button>
@@ -432,9 +418,9 @@ export function PlayerStage(props: {
                     aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')}
                     aria-busy={player().pending('next') || undefined}
                     data-pending={player().pending('next') || undefined}
-                    onClick={() => podcast() ? player().actions.seekBy(15) : next()}
+                    onClick={() => podcast() ? player().actions.seekBy(PODCAST_SKIP_SECONDS) : next()}
                   >
-                    <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" /></svg>}>
+                    <Show when={podcast()} fallback={<NextFilledIcon size={30} />}>
                       <PodcastSkipIcon />
                     </Show>
                   </button>

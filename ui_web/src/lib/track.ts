@@ -2,6 +2,9 @@ import type { Track } from '../types/music';
 import type { PodcastEpisode } from '../types/podcast';
 import { podcastArtworkPath } from './podcastArtwork';
 
+/** Podcast skip-forward / skip-back interval in seconds across all transport controls. */
+export const PODCAST_SKIP_SECONDS = 15;
+
 /**
  * A track is a podcast episode when it carries podcast provenance — either the
  * library `media_kind` marker (set on downloaded episodes) or an episode guid

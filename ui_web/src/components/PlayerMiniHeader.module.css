@@ -19,6 +19,7 @@
   min-height: var(--control-h);
   padding: 0 var(--space-xs);
   color: inherit;
+  font: inherit;
   text-align: left;
   background: transparent;
   border: 0;

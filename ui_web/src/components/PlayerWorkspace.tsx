@@ -11,6 +11,7 @@ import {
 import { openActionMenu } from './ActionMenu';
 import { SeamReset } from './SeamReset';
 import { playerCompact } from '../lib/playerDock';
+import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { t } from '../lib/i18n';
 import { dropTarget } from '../lib/dragReorder';
 import {
@@ -32,7 +33,6 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   panels: readonly PanelId[];
   activePanel: PanelId;
   onActivePanelChange: (panel: PanelId) => void;
-  onCarouselProgress?: (index: number, live: boolean) => void;
   surfaceOpen: boolean;
   layout: PlayerPanelLayout<PanelId>;
   onLayoutChange: (layout: PlayerPanelLayout<PanelId>) => void;
@@ -53,7 +53,6 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   let workspaceEl: HTMLDivElement | undefined;
   let rootEl: HTMLElement | undefined;
   let carouselFrame = 0;
-  let carouselProgressFrame = 0;
   let carouselSettleTimer: number | undefined;
   let carouselAligned = false;
   let carouselOpening = false;
@@ -154,7 +153,6 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       if (target && Math.abs(tileOffset(target) - workspaceEl.scrollLeft) > 2) return;
       carouselTarget = null;
     }
-    props.onCarouselProgress?.(Math.round(settled.index), false);
     if (settled.panel !== props.activePanel) {
       panelFromScroll = true;
       props.onActivePanelChange(settled.panel);
@@ -171,13 +169,6 @@ export function PlayerWorkspace<PanelId extends string>(props: {
 
   const onCarouselScroll = () => {
     if (!props.surfaceOpen || !mobileLayout()) return;
-    if (props.onCarouselProgress && !carouselProgressFrame) {
-      carouselProgressFrame = requestAnimationFrame(() => {
-        carouselProgressFrame = 0;
-        const live = carouselPosition();
-        if (live) props.onCarouselProgress?.(live.index, true);
-      });
-    }
     window.clearTimeout(carouselSettleTimer);
     carouselSettleTimer = window.setTimeout(settleCarousel, CAROUSEL_SETTLE_MS);
   };
@@ -192,6 +183,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       // A user's settled scroll supersedes a pending initial alignment. Under
       // WebKit load that frame can otherwise run late and return to the stage.
       cancelAnimationFrame(carouselFrame);
+      carouselOpening = false;
       carouselTarget = null;
       panelFromScroll = false;
       carouselAligned = surfaceOpen;
@@ -209,11 +201,9 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       queueMicrotask(() => tile.focus({ preventScroll: true }));
     }
     cancelAnimationFrame(carouselFrame);
-    const reducedMotion = typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (opening) carouselOpening = true;
-    const alignImmediately = !surfaceOpen || opening || carouselOpening || !carouselAligned || reducedMotion;
+    if (!surfaceOpen) carouselOpening = false;
+    else if (opening) carouselOpening = true;
+    const alignImmediately = !surfaceOpen || opening || carouselOpening || !carouselAligned || prefersReducedMotion();
     carouselAligned = surfaceOpen;
     if (Math.abs(tileOffset(tile) - workspaceEl.scrollLeft) <= 2) {
       carouselTarget = null;
@@ -250,7 +240,6 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       window.removeEventListener('pointercancel', releaseOutside);
       workspaceEl?.removeEventListener('scrollend', settleCarousel);
       cancelAnimationFrame(carouselFrame);
-      cancelAnimationFrame(carouselProgressFrame);
       window.clearTimeout(carouselSettleTimer);
     });
   });

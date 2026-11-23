@@ -110,9 +110,6 @@ export interface PlayerTrackListHeadAction {
   label: string;
   title?: string;
   disabled?: boolean;
-  /** There is work waiting on this action. Draws attention to it without
-   * pretending it is the only thing the header does. */
-  pending?: boolean;
   onClick: () => void;
 }
 
@@ -260,7 +257,6 @@ export function PlayerTrackList(props: {
                   class={styles.headAction}
                   type="button"
                   title={action.title}
-                  data-pending={action.pending ? '' : undefined}
                   disabled={action.disabled}
                   onClick={action.onClick}
                 >

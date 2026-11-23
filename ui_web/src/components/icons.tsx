@@ -58,11 +58,42 @@ export function RadioIcon(props: GlyphProps) {
 export const ChangeSessionIcon = line('m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16');
 
 export const PlayIcon = line('m7 4 12 8-12 8z');
+export function PlayFilledIcon(props: GlyphProps) {
+  return (
+    <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+export function PauseFilledIcon(props: GlyphProps) {
+  return (
+    <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
+      <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
+    </svg>
+  );
+}
+export function NextFilledIcon(props: GlyphProps) {
+  return (
+    <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
+      <path d="M16 6h2v12h-2zm-1.5 6L6 6v12z" />
+    </svg>
+  );
+}
+export function VolumeIcon(props: GlyphProps & { muted?: boolean }) {
+  return (
+    <Glyph {...props}>
+      {props.muted
+        ? <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
+        : <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />}
+    </Glyph>
+  );
+}
 export const ShuffleIcon = line('M16 3h5v5M21 3l-7 7M4 20l7-7M16 21h5v-5M4 4l5 5');
 export const RepeatIcon = line('M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3');
 export const PlayNextIcon = line('M5 4v16M9 5l8 7-8 7z');
 /** "A list, plus one": the queue outside DJ, the route inside it. */
 export const QueueAddIcon = line('M3 6h13M3 12h9M3 18h9M16 14v6M19 17h-6');
+export const QueueListIcon = line('M11 17a3 3 0 1 0 6 0 3 3 0 1 0-6 0M17 17V4h4M13 5H3M3 9h10M9 13H3');
 export const PlaylistIcon = line('M3 6h13M3 12h9M3 18h7M17 12v7M21 14l-4-2v7');
 export const ArtistIcon = line('M16 19a4 4 0 00-8 0M12 11a3 3 0 100-6 3 3 0 000 6M12 2a10 10 0 100 20 10 10 0 000-20');
 /** A record: the album, wherever a menu leads to one. */
@@ -132,8 +163,10 @@ export function BookmarkOffIcon(props: GlyphProps) {
     </Glyph>
   );
 }
+/** Add to a collection, mix or list. */
+export const PlusIcon = line('M12 5v14M5 12h14');
 /** Save to the library: claim the song, no file yet. */
-export const SaveIcon = line('M12 5v14M5 12h14');
+export const SaveIcon = PlusIcon;
 /** Take something out of a collection it was added to — the library, a
  * playlist, the queue, the route. Never deletes a file; `TrashIcon` does. */
 export const RemoveIcon = line('M5 12h14');
@@ -156,6 +189,7 @@ export const SubscribeIcon = SaveIcon;
  * album is the same chevron as "back" in a settings section. */
 export const MenuIcon = line('M4 6h16M4 12h16M4 18h16');
 export const BackIcon = line('m15 18-6-6 6-6');
+export const ChevronDownIcon = line('m6 9 6 6 6-6');
 export const CloseIcon = line('M18 6 6 18M6 6l12 12');
 export const SearchIcon = (props: GlyphProps) => <Glyph {...props}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></Glyph>;
 export const SortIcon = line('M3 6h18M6 12h12M10 18h4');

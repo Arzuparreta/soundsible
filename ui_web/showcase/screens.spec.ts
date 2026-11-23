@@ -50,11 +50,8 @@ const SHOTS: Array<{ name: string; project: 'desktop' | 'mobile'; themes?: strin
     project: 'mobile',
     stage: async (page) => {
       await openPlayer(page);
-      await page.locator('[data-player-stage-mode="now-playing"]').getByRole('button', { name: 'Show lyrics' }).click();
-      // In the viewport, not merely rendered: the phone's player is a carousel,
-      // and a busy machine has landed it on the queue page with the lyrics
-      // open one page over.
-      await expect(page.locator('[data-lyrics-open]')).toBeInViewport({ ratio: 1 });
+      await page.locator('[data-compact-lyrics-toggle]').click();
+      await expect(page.locator('[data-compact-lyrics]')).toBeInViewport({ ratio: 1 });
       await settle(page, '[data-player-surface-open]');
     },
   },

@@ -1,6 +1,7 @@
 import { expect, test, type Page, type BrowserContext } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { showPlayerPanel } from './playerPanels';
 import { settledBox } from './settle';
 
 async function activate(page: Page, link: ReturnType<Page['getByRole']>, mobile: boolean) {
@@ -57,8 +58,12 @@ test('full player artist opens the general page while keeping the current song a
   const surface = page.locator('[data-player-surface-open]');
   const stage = surface.locator('[data-now-playing-tile="stage"]');
   const song = await stage.getByRole('heading', { name: 'Canción de biblioteca 320', exact: true }).textContent();
-  await expect(surface.locator('[data-drag-row]').first()).toBeAttached();
-  const queueBefore = await surface.locator('[data-drag-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-drag-row')));
+  await showPlayerPanel(page, 'queue');
+  const queue = surface.locator('[data-now-playing-tile="queue"]');
+  const contextCard = queue.locator('[data-queue-card="context"]');
+  await expect(contextCard).toBeVisible();
+  const contextBefore = await contextCard.textContent();
+  await showPlayerPanel(page, 'stage');
   const link = stage.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await activate(page, link, isMobile);
   // The player names the song, not the list it came from: Discover, and Search
@@ -77,7 +82,8 @@ test('full player artist opens the general page while keeping the current song a
     await expect(surface).toBeVisible();
     await expect(stage.getByRole('heading', { name: song!, exact: true })).toBeVisible();
   }
-  expect(await page.locator('[data-player-surface-open] [data-drag-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-drag-row')))).toEqual(queueBefore);
+  await showPlayerPanel(page, 'queue');
+  await expect(queue.locator('[data-queue-card="context"]')).toHaveText(contextBefore!);
 });
 
 test('full player names the record under the artist and opens it', async ({ page, isMobile }) => {

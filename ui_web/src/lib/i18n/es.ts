@@ -70,7 +70,6 @@ export const es: Dict = {
     "sectionEmpty": "Todavía no hay nada que mostrar en esta sección."
 },
   musicExplorer: {
-    startFromCurrent: 'Desde la actual',
     startDjFromCurrent: 'Empezar DJ desde la canción actual',
     startDjFromSong: 'Empezar DJ desde esta canción',
     mixWith: 'Mezclar con…',
@@ -223,7 +222,7 @@ export const es: Dict = {
     playing: 'Reproduciendo',
     modeLabel: 'NORMAL',
     modeSelector: 'Modo del reproductor',
-    mobilePanels: 'Paneles de NORMAL',
+    compactControls: 'Controles del reproductor',
     panel: { stage: 'Reproductor', queue: 'Cola' },
     nothingPlaying: 'Nada sonando',
     seekLabel: 'Buscar en la pista',
@@ -356,8 +355,7 @@ export const es: Dict = {
       openingHint: 'Leyendo tu biblioteca y lo que has estado poniendo',
     },
     mobile: {
-      controls: 'Paneles de DJ',
-      route: 'Ruta',
+      controls: 'Controles de DJ',
       routeEmpty: 'El DJ aún está preparando lo siguiente',
     },
     note: {

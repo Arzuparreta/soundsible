@@ -130,8 +130,10 @@ test('compact volume floats above the bottom dock without moving the player', as
   await expect(slider).toBeVisible();
   expect(await positions()).toEqual(before);
   const popup = surface.locator(`[id="${await volume.getAttribute('aria-controls')}"]`);
-  const [popupBox, buttonBox] = await Promise.all([popup.boundingBox(), volume.boundingBox()]);
+  const [popupBox, buttonBox, dockBox] = await Promise.all([popup.boundingBox(), volume.boundingBox(), dock.boundingBox()]);
   expect(popupBox!.y + popupBox!.height).toBeLessThanOrEqual(buttonBox!.y);
+  expect(popupBox!.x + popupBox!.width).toBeCloseTo(buttonBox!.x + buttonBox!.width, 1);
+  expect(popupBox!.x).toBeGreaterThanOrEqual(dockBox!.x);
   await expect(popup.getByRole('button')).toHaveCount(0);
   await slider.hover();
   await slider.fill('45');
@@ -140,6 +142,10 @@ test('compact volume floats above the bottom dock without moving the player', as
   await expect(slider).toHaveAttribute('aria-valuetext', '0%');
   await volume.click();
   await expect(slider).toHaveAttribute('aria-valuetext', '45%');
+  await stage.locator('h1').click();
+  await expect(slider).toBeHidden();
+  await volume.hover();
+  await expect(slider).toBeVisible();
   await slider.press('Escape');
   await expect(volume).toBeFocused();
   await expect(slider).toBeHidden();

@@ -346,7 +346,7 @@ test('the queue fills its page, and its cards end above the pager', async ({ pag
     .poll(async () => {
       const air = await page.evaluate(() => {
         const cards = [...document.querySelectorAll('[data-now-playing-tile="queue"] [data-queue-card]')];
-        const pill = document.querySelector('nav[aria-label="Paneles de NORMAL"]');
+        const pill = document.querySelector('[data-compact-dock]');
         if (!cards.length || !pill) return null;
         const bottom = Math.max(...cards.map((card) => card.getBoundingClientRect().bottom));
         return Math.round(pill.getBoundingClientRect().top - bottom);

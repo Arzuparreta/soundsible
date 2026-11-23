@@ -1,5 +1,5 @@
 import { PodcastSkipIcon } from './PodcastSkipIcon';
-import { isPodcastTrack } from '../lib/track';
+import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
 import { ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
@@ -13,7 +13,7 @@ import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
 import { gainToVolumePosition, nudgeVolumeGain, volumePositionToGain } from '../lib/volumeScale';
 import { Control } from '../design/Control';
 import { connectLabel, openConnect } from './DeviceSheet';
-import { OutputDeviceIcon } from './icons';
+import { OutputDeviceIcon, PauseFilledIcon, PlayFilledIcon, RefreshIcon, VolumeIcon } from './icons';
 import { RadioBadge } from './RadioBadge';
 import { Spinner } from './Spinner';
 import styles from './OmniBar.module.css';
@@ -209,22 +209,16 @@ export function OmniBar() {
       >
         <Switch>
           <Match when={failed()}>
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-              <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
-            </svg>
+            <RefreshIcon size={22} />
           </Match>
           <Match when={loading()}>
             <Spinner size={20} />
           </Match>
           <Match when={player().playback.isPlaying}>
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-              <path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z" />
-            </svg>
+            <PauseFilledIcon size={22} />
           </Match>
           <Match when={true}>
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-              <path fill="currentColor" d="M8 5v14l11-7z" />
-            </svg>
+            <PlayFilledIcon size={22} />
           </Match>
         </Switch>
       </button>
@@ -236,7 +230,7 @@ export function OmniBar() {
         aria-busy={player().pending('next') || undefined}
         data-pending={player().pending('next') || undefined}
         disabled={!current() || unreachable()}
-        onClick={() => podcast() ? player().actions.seekBy(15) : player().autoMode.active ? void player().actions.autoSkip() : player().actions.next()}
+        onClick={() => podcast() ? player().actions.seekBy(PODCAST_SKIP_SECONDS) : player().autoMode.active ? void player().actions.autoSkip() : player().actions.next()}
       >
         <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z" /></svg>}>
           <PodcastSkipIcon size={22} />
@@ -269,18 +263,7 @@ export function OmniBar() {
               data-pending={player().pending('mute') || undefined}
               onClick={() => player().actions.toggleMute()}
             >
-              <Show
-                when={!player().playback.muted && player().playback.volume > 0}
-                fallback={
-                  <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
-                  </svg>
-                }
-              >
-                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
-                </svg>
-              </Show>
+              <VolumeIcon muted={Boolean(player().playback.muted || player().playback.volume === 0)} size={19} />
             </button>
           </Show>
 

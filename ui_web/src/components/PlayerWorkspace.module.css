@@ -16,9 +16,17 @@
   --stage-pad-bottom: clamp(8px, 2.6cqh, 24px);
   --stage-gap: clamp(12px, 2.6cqh, 28px);
   --stage-row-gap: clamp(6px, 1.5cqh, 16px);
+  /* Space consumed by non-cover rows inside controlsPanel: track header, seek
+     slider + timestamps, transport controls, and (wide layouts only) actionsBar. */
+  --stage-meta-row: 44px;
+  --stage-seek-row: 26px;
+  --stage-transport-row: 64px;
+  --stage-actions-row: calc(var(--control-h) + var(--stage-row-gap));
+  --stage-budget-buffer: 12px;
   --stage-height-budget: calc(
     100cqh - var(--stage-pad-top) - var(--stage-pad-bottom) - var(--stage-gap)
-    - 26px - 44px - 64px - var(--control-h) - var(--stage-row-gap) * 3 - 12px
+    - var(--stage-seek-row) - var(--stage-meta-row) - var(--stage-transport-row)
+    - var(--stage-actions-row) - var(--stage-row-gap) * 2 - var(--stage-budget-buffer)
   );
 
   position: relative;
@@ -60,16 +68,13 @@
 
 @container player (max-width: 1023px) {
   .workspace {
-    /* Compact Stage has no bottom actions row (moved into the shell dock),
+    /* Compact Stage has no bottom actions row (moved into PlayerCompactDock),
        giving that height back to the cover art. */
-    --stage-height-budget: calc(
-      100cqh - var(--stage-pad-top) - var(--stage-pad-bottom) - var(--stage-gap)
-      - 26px - 44px - 64px - var(--stage-row-gap) * 2 - 12px
-    );
+    --stage-actions-row: 0px;
     padding-top:
       calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
     padding-right: env(safe-area-inset-right, 0px);
-    padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-band));
+    padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-compact-dock-height));
     padding-left: env(safe-area-inset-left, 0px);
   }
 

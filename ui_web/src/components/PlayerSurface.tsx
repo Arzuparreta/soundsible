@@ -1,9 +1,10 @@
-import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount, Show, Suspense, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, Suspense, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
+import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { t } from '../lib/i18n';
 import { type AutoModePanelId } from '../lib/autoModeLayout';
 import {
@@ -20,16 +21,14 @@ import {
   setPlayerPresentation,
 } from '../lib/playerDock';
 import { desktopShell } from '../lib/shellLayout';
-import { detectFormFactor } from '../lib/deviceIdentity';
-import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
 import { SeamReset } from './SeamReset';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import { createTouchMoveLease } from '../lib/touchMoveLease';
-import { Control, RangeControl } from '../design/Control';
+import { Control } from '../design/Control';
 import { connectLabel, openConnect } from './DeviceSheet';
-import { KaraokeMicIcon, OutputDeviceIcon, RadioIcon } from './icons';
-import { onStopRadio } from './RadioBadge';
+import { OutputDeviceIcon } from './icons';
 import { ArtworkBackdrop } from './ArtworkBackdrop';
+import { PlayerCompactDock } from './PlayerCompactDock';
 import { PlayerMiniHeader } from './PlayerMiniHeader';
 import { Spinner } from './Spinner';
 import { pageVisible } from '../lib/pageVisibility';
@@ -114,14 +113,8 @@ export function PlayerSurface() {
     second: '',
     active: 'first',
   });
-  const [volumeOpen, setVolumeOpen] = createSignal(false);
-  const mobileWeb = detectFormFactor() !== 'computer';
-  const volumeId = createUniqueId();
-  let volumeRoot: HTMLDivElement | undefined;
-  let volumeTrigger: HTMLButtonElement | undefined;
-  let volumePopup: HTMLDivElement | undefined;
-  let volumeDismissTimer: ReturnType<typeof setTimeout> | undefined;
   let surfaceEl: HTMLDivElement | undefined;
+  let lyricsToggleEl: HTMLButtonElement | undefined;
   let restoreFocus: HTMLElement | null = null;
   let wasOpen = untrack(nowPlayingOpen);
   let wasAuto = auto();
@@ -138,9 +131,6 @@ export function PlayerSurface() {
 
   const listPanel = createMemo<PlayerPanel>(() => (auto() ? 'route' : 'queue'));
   const isListPanel = createMemo(() => mobilePanel() === listPanel());
-  const compactLyricsActive = createMemo(() =>
-    playerCompact() && compactLyrics() && Boolean(current()) && !podcast(),
-  );
   const listCount = createMemo(() => {
     const queue = player().playback.queue ?? [];
     const index = player().playback.index ?? 0;
@@ -151,11 +141,6 @@ export function PlayerSurface() {
       entry.queueLane === 'manual' || (radioMode && entry.queueLane === 'generated'),
     ).length;
   });
-  const volPct = () => {
-    const muted = Boolean(player().playback.muted);
-    const volume = player().playback.volume ?? 1;
-    return Math.round(gainToVolumePosition(muted ? 0 : volume) * 100);
-  };
 
   createEffect(() => {
     const next = art();
@@ -172,28 +157,32 @@ export function PlayerSurface() {
     setMobilePanel(panel);
   };
 
+  const closeCompactLyrics = () => {
+    setPanel('stage');
+    // Unmounting the compact lyrics overlay would drop focus to <body>; return
+    // focus to its dock toggle (or Stage) so keyboard navigation keeps its place.
+    queueMicrotask(() => {
+      (lyricsToggleEl ?? surfaceEl?.querySelector<HTMLElement>('[data-player-tile="stage"]'))
+        ?.focus({ preventScroll: true });
+    });
+  };
+
   const toggleCompactLyrics = () => {
-    if (!current() || podcast()) return;
-    if (compactLyrics()) {
-      setCompactLyrics(false);
-      setMobilePanel('stage');
-    } else {
-      setCompactLyrics(true);
-    }
+    if (!playerCompact() || !current() || podcast()) return;
+    if (compactLyrics()) closeCompactLyrics();
+    else setCompactLyrics(true);
   };
 
   const toggleListPanel = () => {
     const target = listPanel();
-    if (compactLyrics()) {
-      setCompactLyrics(false);
-      setMobilePanel(target);
-      return;
-    }
-    setMobilePanel(mobilePanel() === target ? 'stage' : target);
+    setPanel(compactLyrics() || mobilePanel() !== target ? target : 'stage');
   };
 
+  // Single source of truth for compact lyrics: leaving compact widths (e.g.
+  // docked -> full screen), losing the track, or playing a podcast clears it
+  // so narrowing again later never unexpectedly reveals a stale lyrics screen.
   createEffect(() => {
-    if (!current() || podcast()) setCompactLyrics(false);
+    if (!playerCompact() || !current() || podcast()) setCompactLyrics(false);
   });
 
   createEffect(() => {
@@ -210,52 +199,6 @@ export function PlayerSurface() {
     // throwing the player up over whatever they opened the app to do.
     if (active !== wasAuto) setPanel('stage');
     wasAuto = active;
-  });
-
-  const cancelVolumeDismiss = () => clearTimeout(volumeDismissTimer);
-  onCleanup(cancelVolumeDismiss);
-  const closeVolume = () => {
-    cancelVolumeDismiss();
-    setVolumeOpen(false);
-  };
-  const openVolume = () => {
-    if (mobileWeb) return;
-    cancelVolumeDismiss();
-    setVolumeOpen(true);
-  };
-  const leaveVolume = (event: PointerEvent) => {
-    if (event.pointerType !== 'mouse') return;
-    cancelVolumeDismiss();
-    volumeDismissTimer = setTimeout(() => {
-      if (!volumePopup?.contains(document.activeElement)) closeVolume();
-    }, 160);
-  };
-  const escapeVolume = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape' || !volumeOpen()) return;
-    event.preventDefault();
-    event.stopPropagation();
-    volumeTrigger?.focus({ preventScroll: true });
-    closeVolume();
-  };
-
-  createEffect(() => {
-    if (!nowPlayingOpen() || !playerCompact() || !player().can('transport.set_volume')) setVolumeOpen(false);
-  });
-  createEffect(() => {
-    if (!volumeOpen()) return;
-    const dismiss = (event: Event) => {
-      if (event.target instanceof Node && !volumeRoot?.contains(event.target) && !volumePopup?.contains(event.target)) closeVolume();
-    };
-    document.addEventListener('pointerdown', dismiss, true);
-    document.addEventListener('focusin', dismiss, true);
-    document.addEventListener('scroll', closeVolume, true);
-    window.addEventListener('resize', closeVolume);
-    onCleanup(() => {
-      document.removeEventListener('pointerdown', dismiss, true);
-      document.removeEventListener('focusin', dismiss, true);
-      document.removeEventListener('scroll', closeVolume, true);
-      window.removeEventListener('resize', closeVolume);
-    });
   });
 
   const clearOpenSettle = () => {
@@ -306,9 +249,7 @@ export function PlayerSurface() {
       setSurfaceAnimating(true);
       setSurfaceSettled(false);
       clearOpenSettle();
-      const reduced = typeof window !== 'undefined'
-        && typeof window.matchMedia === 'function'
-        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const reduced = prefersReducedMotion();
       if (surfaceEl) surfaceEl.addEventListener('transitionend', onOpenTransitionEnd);
       openTimer = window.setTimeout(settleOpen, reduced ? 0 : 340);
     } else if (!open && wasOpen) {
@@ -385,9 +326,22 @@ export function PlayerSurface() {
 
   /**
    * Close the surface, continuing whatever movement brought it here.
+   *
+   * `fromY` is the offset the sheet is already at and `velocity` the speed it
+   * had (px/ms, downward) when the finger left — both zero for the close button,
+   * which starts the travel from rest. The exit covers the distance that is
+   * actually left, in the time that distance is worth: a sheet released halfway
+   * down does not restart a full-height animation, and a flick keeps its speed
+   * instead of dropping into a slow settle. The floor is what stops a release
+   * near the bottom from finishing in a single frame — which is the whole
+   * complaint: an exit too short to see is an exit nobody believes happened.
    */
   const closeSurface = (fromY = 0, velocity = 0) => {
     if (!nowPlayingOpen()) return;
+    // Measured first, on purpose: this is a forced layout, and it has to land
+    // while the drag flags are still up. Between dropping `data-player-swiping`
+    // and dropping `data-player-surface` the app shell is momentarily styled
+    // hidden, and a flush in that gap is the one way it could be seen.
     const height = surfaceEl?.getBoundingClientRect().height || window.innerHeight || 1;
     const from = Math.min(Math.max(0, fromY), height);
     const remaining = height - from;
@@ -395,6 +349,8 @@ export function PlayerSurface() {
     const scaled = Math.min(EXIT_DURATION * (remaining / height), paced);
     pendingExit = { from, duration: Math.max(EXIT_DURATION_MIN, Math.round(scaled)) };
     if (surfaceEl) {
+      // Synchronously, before `.open` goes: an inline transform left over from
+      // the gesture would otherwise outrank the exit for a frame.
       setSwiping(false);
       surfaceEl.style.transform = '';
     }
@@ -474,6 +430,8 @@ export function PlayerSurface() {
     if (target?.closest(SWIPE_EXCLUDED)) return;
     const touch = event.touches.item(0);
     if (!touch) return;
+    // Resolved once: walking the ancestors with getComputedStyle on every move
+    // is a layout read per frame, mid-gesture.
     const scroller = scrollableAncestor(event.target, surfaceEl);
     if (scroller && scroller.scrollTop > 1) return;
     swipeStart = { x: touch.clientX, y: touch.clientY, at: performance.now(), id: touch.identifier, scroller };
@@ -498,11 +456,16 @@ export function PlayerSurface() {
     const dx = touch.clientX - swipeStart.x;
     const dy = touch.clientY - swipeStart.y;
     if (!swipeActive) {
+      // The browser hands the touch to the nearest scroller the moment it sees
+      // an unprevented move, and every preventDefault after that is a silent
+      // no-op. So the first move that clearly reads as a downward drag has to
+      // claim the gesture outright — waiting for 8px was already too late.
       if (Math.abs(dx) > Math.abs(dy)) {
         if (Math.abs(dx) > HORIZONTAL_CANCEL_THRESHOLD) resetSwipe();
         return;
       }
       if (dy < -SWIPE_ACTIVATE_THRESHOLD) {
+        // Upward: this belongs to the list, not to us.
         resetSwipe();
         return;
       }
@@ -528,6 +491,8 @@ export function PlayerSurface() {
     const close = swipeActive
       && (dy > SWIPE_CLOSE_THRESHOLD || (dy > SWIPE_FAST_CLOSE_THRESHOLD && velocity > SWIPE_CLOSE_VELOCITY));
     resetSwipe();
+    // Hand the exit the offset and the speed the finger let go at, so the
+    // surface carries on from where it was instead of snapping back up first.
     if (close) closeSurface(Math.max(0, dy), Math.max(0, velocity));
   };
 
@@ -535,23 +500,10 @@ export function PlayerSurface() {
     resetSwipe();
   };
 
-  const volumeIcon = () => (
-    <Show
-      when={!player().playback.muted}
-      fallback={
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
-        </svg>
-      }
-    >
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
-      </svg>
-    </Show>
-  );
-
   onMount(() => {
     if (!surfaceEl) return;
+    // The surface measures itself: its own width, not the window's, decides
+    // between the one-panel and the side-by-side composition.
     const measure = () => setPlayerCompact((surfaceEl?.getBoundingClientRect().width || window.innerWidth) < PLAYER_COMPACT_BELOW);
     const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
     observer?.observe(surfaceEl);
@@ -560,18 +512,21 @@ export function PlayerSurface() {
     surfaceEl.addEventListener('touchstart', beginTouch, { passive: true });
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
+    // Capture phase runs after OverlayOutlet (menus/dialogs claim Escape first)
+    // and before the global bubble shortcut handler (which closes the player).
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && compactLyricsActive()) {
+      if (event.key === 'Escape' && nowPlayingOpen() && compactLyrics()) {
         event.preventDefault();
-        setCompactLyrics(false);
+        event.stopImmediatePropagation();
+        closeCompactLyrics();
       }
     };
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
     onCleanup(() => {
       window.clearTimeout(openTimer);
       window.clearTimeout(focusTimer);
       window.clearTimeout(closeTimer);
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
       observer?.disconnect();
       delete document.documentElement.dataset.playerDocked;
       document.documentElement.style.removeProperty('--player-dock-width');
@@ -634,12 +589,6 @@ export function PlayerSurface() {
             onKeyDown={resizeDockByKey}
             onDblClick={() => setPlayerDockWidth(DOCK_WIDTH.default)}
           />
-          <Show when={playerDockWidthCustom()}>
-            <SeamReset class={styles.dockReset} label={t('nowPlaying.resetDock')} onReset={() => {
-              setPlayerDockWidth(DOCK_WIDTH.default);
-              dockEdgeEl?.focus({ preventScroll: true });
-            }} />
-          </Show>
         </Show>
         <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
           src={backdrops().first} active={backdrops().active === 'first'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
@@ -663,6 +612,18 @@ export function PlayerSurface() {
                 <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
               </Show>
             </Control>
+            {/* Sits in the reserved second chromeLeft slot beside the device button
+                so it stays in the top bar without overlapping PlayerMiniHeader. */}
+            <Show when={docked() && playerDockWidthCustom()}>
+              <SeamReset
+                class={styles.dockReset}
+                label={t('nowPlaying.resetDock')}
+                onReset={() => {
+                  setPlayerDockWidth(DOCK_WIDTH.default);
+                  dockEdgeEl?.focus({ preventScroll: true });
+                }}
+              />
+            </Show>
           </div>
 
           {/* Choosing a mode starts or ends DJ, so the arrows only move focus
@@ -742,17 +703,17 @@ export function PlayerSurface() {
 
         <div
           id="now-playing-view"
-          classList={{ [styles.view]: true, [styles.viewActive]: !auto() && !compactLyricsActive() }}
+          classList={{ [styles.view]: true, [styles.viewActive]: !auto() && !compactLyrics() }}
           role="tabpanel"
           aria-labelledby="now-playing-mode-normal"
-          aria-hidden={auto() || !nowPlayingOpen() || compactLyricsActive()}
-          inert={auto() || !nowPlayingOpen() || compactLyricsActive() ? true : undefined}
+          aria-hidden={auto() || !nowPlayingOpen() || compactLyrics()}
+          inert={auto() || !nowPlayingOpen() || compactLyrics() ? true : undefined}
         >
           <Show when={opened()}>
             <NowPlaying
               mobilePanel={mobilePanel() as NowPlayingMobilePanel}
               onMobilePanelChange={setPanel}
-              surfaceOpen={nowPlayingOpen() && !auto() && !compactLyricsActive()}
+              surfaceOpen={nowPlayingOpen() && !auto() && !compactLyrics()}
               panelsReady={surfaceSettled()}
               onCloseSurface={() => closeSurface()}
             />
@@ -761,35 +722,29 @@ export function PlayerSurface() {
 
         <div
           id="auto-mode-view"
-          classList={{ [styles.view]: true, [styles.viewActive]: auto() && !compactLyricsActive() }}
+          classList={{ [styles.view]: true, [styles.viewActive]: auto() && !compactLyrics() }}
           role="tabpanel"
           aria-labelledby="now-playing-mode-dj"
-          aria-hidden={!auto() || !nowPlayingOpen() || compactLyricsActive()}
-          inert={!auto() || !nowPlayingOpen() || compactLyricsActive() ? true : undefined}
+          aria-hidden={!auto() || !nowPlayingOpen() || compactLyrics()}
+          inert={!auto() || !nowPlayingOpen() || compactLyrics() ? true : undefined}
         >
           <Show when={auto()}>
             <AutoMode
               panel={mobilePanel() as AutoModePanelId}
               onPanelChange={setPanel}
-              surfaceOpen={nowPlayingOpen() && auto() && !compactLyricsActive()}
+              surfaceOpen={nowPlayingOpen() && auto() && !compactLyrics()}
               panelsReady={surfaceSettled()}
             />
           </Show>
         </div>
 
-        <Show when={opened() && compactLyricsActive()}>
+        <Show when={opened() && playerCompact() && compactLyrics()}>
           <section
             class={styles.compactLyricsView}
             aria-label={t('nowPlaying.lyricsLabel')}
             data-compact-lyrics=""
           >
-            <PlayerMiniHeader
-              mode={auto() ? 'auto' : 'now-playing'}
-              onBack={() => {
-                setCompactLyrics(false);
-                setMobilePanel('stage');
-              }}
-            />
+            <PlayerMiniHeader mode={auto() ? 'auto' : 'now-playing'} onBack={closeCompactLyrics} />
             <div class={styles.compactLyricsBody}>
               <Suspense fallback={
                 <div class={styles.lyricsPending}>
@@ -802,132 +757,19 @@ export function PlayerSurface() {
           </section>
         </Show>
 
-        {/* Single persistent compact bottom dock: symmetric view toggles on the
-            left, playback utilities on the right — stays anchored across Stage,
-            Lyrics and Queue/Route so mouse and touch always have a 1-click path. */}
-        <Show when={current() || auto()}>
-          <nav
-            class={styles.compactDock}
-            aria-label={auto() ? t('autoMode.mobile.controls') : t('nowPlaying.mobilePanels')}
-            data-no-surface-swipe=""
-            data-compact-dock=""
-          >
-            <div class={styles.dockViews}>
-              <Show when={current() && !podcast()}>
-                <Control
-                  class={styles.dockPill}
-                  classList={{ [styles.dockPillActive]: compactLyricsActive() }}
-                  aria-label={compactLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-                  title={compactLyricsActive() ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-                  aria-pressed={compactLyricsActive()}
-                  data-compact-lyrics-toggle=""
-                  onClick={toggleCompactLyrics}
-                >
-                  <KaraokeMicIcon size={16} />
-                  <span>{t('nowPlaying.lyricsLabel')}</span>
-                </Control>
-              </Show>
-
-              <Control
-                class={styles.dockPill}
-                classList={{ [styles.dockPillActive]: !compactLyricsActive() && isListPanel() }}
-                aria-label={auto() ? t('autoMode.panel.route') : t('nowPlaying.panel.queue')}
-                title={auto() ? t('autoMode.panel.route') : t('nowPlaying.panel.queue')}
-                aria-pressed={!compactLyricsActive() && isListPanel()}
-                aria-current={!compactLyricsActive() && isListPanel() ? 'page' : undefined}
-                data-compact-list-toggle=""
-                onClick={toggleListPanel}
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M11 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
-                  <path d="M17 17V4h4M13 5H3M3 9h10M9 13H3" />
-                </svg>
-                <span>{auto() ? t('autoMode.panel.route') : t('nowPlaying.panel.queue')}</span>
-                <Show when={listCount() > 0}>
-                  <span class={styles.dockBadge}>{listCount()}</span>
-                </Show>
-              </Control>
-            </div>
-
-            <div class={styles.dockUtils}>
-              <Show when={!auto() && current() && !podcast()}>
-                <Control
-                  class={styles.dockIconBtn}
-                  classList={{
-                    [styles.dockIconOn]: Boolean(player().playback.radioMode),
-                    [styles.dockIconPulse]: Boolean(player().playback.radioLoading),
-                  }}
-                  aria-label={player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
-                  title={player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
-                  aria-pressed={Boolean(player().playback.radioMode)}
-                  onClick={() => {
-                    const track = current();
-                    if (!track) return;
-                    if (player().playback.radioMode) void onStopRadio();
-                    else void player().actions.startRadio(track);
-                  }}
-                >
-                  <RadioIcon size={18} />
-                </Control>
-              </Show>
-
-              <Show when={player().can('transport.set_volume') && (!mobileWeb || player().can('transport.set_muted'))}>
-                <div
-                  class={styles.dockVolume}
-                  ref={volumeRoot}
-                  data-no-surface-swipe=""
-                  onKeyDown={escapeVolume}
-                >
-                  <Control
-                    class={styles.dockIconBtn}
-                    classList={{ [styles.dockIconOn]: volumeOpen() || Boolean(player().playback.muted) }}
-                    aria-label={mobileWeb ? t(player().playback.muted ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
-                    aria-expanded={mobileWeb ? undefined : volumeOpen()}
-                    aria-controls={!mobileWeb && volumeOpen() ? volumeId : undefined}
-                    aria-pressed={mobileWeb ? Boolean(player().playback.muted) : undefined}
-                    aria-busy={player().pending('mute') || undefined}
-                    data-pending={player().pending('mute') || undefined}
-                    title={mobileWeb ? t(player().playback.muted ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
-                    ref={volumeTrigger}
-                    onPointerEnter={(event) => { if (event.pointerType === 'mouse') openVolume(); }}
-                    onPointerLeave={leaveVolume}
-                    onFocus={(event) => { if (event.currentTarget.matches(':focus-visible')) openVolume(); }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Tab' && !event.shiftKey && volumeOpen()) {
-                        event.preventDefault();
-                        volumePopup?.querySelector('input')?.focus({ preventScroll: true });
-                      }
-                    }}
-                    onClick={() => { if (player().can('transport.set_muted')) player().actions.toggleMute(); }}
-                  >
-                    {volumeIcon()}
-                  </Control>
-                  <Show when={!mobileWeb && volumeOpen()}>
-                    <div
-                      ref={volumePopup}
-                      id={volumeId}
-                      class={styles.dockVolumePopup}
-                      data-no-surface-swipe=""
-                      onKeyDown={escapeVolume}
-                      onPointerEnter={cancelVolumeDismiss}
-                      onPointerLeave={leaveVolume}
-                    >
-                      <RangeControl
-                        class={styles.dockVolRange}
-                        min={0}
-                        max={100}
-                        value={volPct()}
-                        style={{ '--fill': `${volPct()}%` }}
-                        aria-label={t('omnibar.volume')}
-                        aria-valuetext={`${volPct()}%`}
-                        onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
-                      />
-                    </div>
-                  </Show>
-                </div>
-              </Show>
-            </div>
-          </nav>
+        <Show when={playerCompact() && (current() || auto())}>
+          <PlayerCompactDock
+            auto={auto()}
+            hasTrack={Boolean(current())}
+            podcast={podcast()}
+            lyricsActive={compactLyrics()}
+            listActive={!compactLyrics() && isListPanel()}
+            listCount={listCount()}
+            surfaceOpen={nowPlayingOpen()}
+            onToggleLyrics={toggleCompactLyrics}
+            onToggleList={toggleListPanel}
+            lyricsButtonRef={(element) => { lyricsToggleEl = element; }}
+          />
         </Show>
       </div>
     </Portal>

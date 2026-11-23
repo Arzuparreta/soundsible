@@ -1,5 +1,6 @@
 import { expect, test, type Locator } from '@playwright/test';
 import { mockMusicEngine, fixtureWav } from './music-browser-fixture';
+import { showPlayerPanel } from './playerPanels';
 
 // The fixture's silent WAV is the audio here on purpose. These tests are about
 // the transport and the queue, not about a format, and the MP3 fixture kills
@@ -57,13 +58,16 @@ test('a large queue remains bounded and transport updates preserve its rows in t
     .getByRole('button', { name: /^(Pausar|Reproducir|Cancelar|Reintentar)$/ });
   await expect(pill).toHaveAttribute('aria-label', 'Pausar');
   await page.getByRole('button', { name: /^NORMAL:/ }).click();
-  const rows = page.locator('[data-now-playing-tile="queue"] [data-drag-row]');
-  await expect(rows.first()).toBeAttached();
+  await showPlayerPanel(page, 'queue');
+  const queue = page.locator('[data-now-playing-tile="queue"]');
+  const contextCard = queue.locator('[data-queue-card="context"]');
+  await expect(contextCard).toBeVisible();
   // The queue contains the whole library, but only its viewport is mounted.
-  expect(await rows.count()).toBeLessThan(60);
+  expect(await queue.locator('[data-drag-row]').count()).toBeLessThan(60);
+  await showPlayerPanel(page, 'stage');
 
   const toggle = async (button: Locator, label: string) => {
-    const before = await rows.first().elementHandle();
+    const before = await contextCard.elementHandle();
     await button.click();
     await expect(button).toHaveAttribute('aria-label', label);
     expect(await before!.evaluate(node => node.isConnected)).toBe(true);

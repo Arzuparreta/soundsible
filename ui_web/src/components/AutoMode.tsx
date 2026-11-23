@@ -54,7 +54,6 @@ function readLayout(): AutoModeDesktopLayout {
 export function AutoMode(props: {
   panel: AutoModePanelId;
   onPanelChange: (panel: AutoModePanelId) => void;
-  onCarouselProgress?: (index: number, live: boolean) => void;
   surfaceOpen: boolean;
   panelsReady?: boolean;
 }) {
@@ -301,6 +300,8 @@ export function AutoMode(props: {
       headAction={[
         // Fix mix rebuilds transitions and the bridges that carry them. With
         // the mixing off there are none to hear, so there is nothing to fix.
+        // Intentionally keeps the same understated header action weight as Add;
+        // the tooltip explains when stale seams are waiting.
         ...(player().playback.djMixing ? [{
           label: player().autoMode.repairing ? t('autoMode.route.fixing') : t('autoMode.route.fix'),
           title: mixPending() ? t('autoMode.route.mixPending') : t('autoMode.route.fixHint'),
@@ -344,7 +345,6 @@ export function AutoMode(props: {
         panels={AUTO_MODE_PANELS}
         activePanel={props.panel}
         onActivePanelChange={props.onPanelChange}
-        onCarouselProgress={props.onCarouselProgress}
         surfaceOpen={props.surfaceOpen}
         layout={layout()}
         onLayoutChange={setLayoutPersisted}

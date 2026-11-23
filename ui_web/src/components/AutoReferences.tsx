@@ -9,7 +9,7 @@ import { t } from '../lib/i18n';
 import { isPodcastTrack } from '../lib/track';
 import { Control } from '../design/Control';
 import type { Track } from '../types/music';
-import { menuIcons, SaveIcon } from './icons';
+import { ChevronDownIcon, CloseIcon, menuIcons, PlusIcon } from './icons';
 import styles from './AutoMode.module.css';
 
 export function AutoReferences(props: { carried?: Track; onUse: (track: Track) => void; onAdd: () => void; onChange: () => void }) {
@@ -45,7 +45,11 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     draggable={source.tracks.length === 1} onDragStart={(event) => source.tracks[0] && writeAutoTrackTransfer(event, { track: source.tracks[0] })}>
     <span class={styles.referenceCover} style={coverStyle(source.label, source.tracks[0] ? trackCoverUrl(source.tracks[0], 'thumb') : undefined)} />
     <span class={styles.referenceName} title={source.label}>{source.label}</span><small>{source.tracks.length}</small>
-    <Show when={player().autoMode.sources.length > 1}><Control class={styles.referenceRemove} aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => player().actions.removeAutoSource(source.id)}>×</Control></Show>
+    <Show when={player().autoMode.sources.length > 1}>
+      <Control class={styles.referenceRemove} aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => player().actions.removeAutoSource(source.id)}>
+        <CloseIcon size={14} />
+      </Control>
+    </Show>
   </div>}</For>;
   return <section class={styles.references} aria-label={t('musicExplorer.references')}
     data-target={armed() ? '' : undefined} data-over={over() ? '' : undefined}
@@ -61,19 +65,17 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
           title={t('musicExplorer.mixWith')}
           onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}
         >
-          <SaveIcon size={14} />
+          <PlusIcon size={14} />
           <span>{t('musicExplorer.mixWith')}</span>
         </Control>
         <Control
           class={styles.refAction}
           aria-haspopup="menu"
-          title={t('musicExplorer.changeShort')}
+          title={t('musicExplorer.changeSession')}
           onClick={openChangeMenu}
         >
           <span>{t('musicExplorer.changeSession')}</span>
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
+          <ChevronDownIcon size={13} />
         </Control>
       </span>
     </header>

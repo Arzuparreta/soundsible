@@ -70,7 +70,6 @@ export const zh: Dict = {
     "sectionEmpty": "此栏目暂时没有内容。"
 },
   musicExplorer: {
-    startFromCurrent: '从当前曲目',
     startDjFromCurrent: '从当前歌曲开始 DJ',
     startDjFromSong: '从这首歌开始 DJ',
     mixWith: '融入音乐…',
@@ -223,7 +222,7 @@ export const zh: Dict = {
     playing: '正在播放',
     modeLabel: 'NORMAL',
     modeSelector: '播放器模式',
-    mobilePanels: 'NORMAL 面板',
+    compactControls: '播放器控制',
     panel: { stage: '播放器', queue: '队列' },
     nothingPlaying: '未在播放',
     seekLabel: '在曲目中定位',
@@ -356,8 +355,7 @@ export const zh: Dict = {
       openingHint: '读取你的资料库和最近的收听',
     },
     mobile: {
-      controls: 'DJ 面板',
-      route: '路线',
+      controls: 'DJ 控制',
       routeEmpty: 'DJ 正在准备接下来的曲目',
     },
     note: {

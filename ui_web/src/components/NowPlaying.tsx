@@ -48,7 +48,6 @@ const EXPANDING_CONTEXTS: ReadonlySet<PlaybackContextKind> = new Set(['album', '
 export function NowPlaying(props: {
   mobilePanel: NowPlayingMobilePanel;
   onMobilePanelChange: (panel: NowPlayingMobilePanel) => void;
-  onCarouselProgress?: (index: number, live: boolean) => void;
   surfaceOpen: boolean;
   panelsReady?: boolean;
   onCloseSurface?: () => void;
@@ -276,9 +275,10 @@ export function NowPlaying(props: {
   };
 
   // The current occurrence is cheap and keeps a mounted queue's identity even
-  // before the phone first visits it. The full queue is projected on demand.
+  // before the phone first visits it; compact layouts omit it because the
+  // sticky mini-player above the queue already represents the sounding song.
   const initialEntry = player().playback.queue[player().playback.index];
-  const initialSections: PlayerTrackListSection[] = initialEntry
+  const initialSections: PlayerTrackListSection[] = initialEntry && !playerCompact()
     ? [{ id: 'current', label: t('nowPlaying.nowPlayingSection'), entries: [queueRow(initialEntry, undefined, true)] }]
     : [];
   const queueSections = createActivityMemo<PlayerTrackListSection[]>(queueActive, () => {
@@ -337,7 +337,6 @@ export function NowPlaying(props: {
         panels={NOW_PLAYING_PANELS}
         activePanel={props.mobilePanel}
         onActivePanelChange={props.onMobilePanelChange}
-        onCarouselProgress={props.onCarouselProgress}
         surfaceOpen={props.surfaceOpen}
         layout={desktopLayout()}
         onLayoutChange={setDesktopLayout}

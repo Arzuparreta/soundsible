@@ -578,3 +578,55 @@ test('desktop keeps its deck visible and ignores touch swipes', async ({ page })
   await expect(bar).toBeVisible();
   await expect(bar).toContainText('Una canción');
 });
+
+test('compact lyrics keyboard exit keeps focus inside the phone sheet and does not close the player', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
+  await openNowPlaying(page);
+  const surface = page.locator('[data-player-surface-open]');
+  const lyricsToggle = surface.locator('[data-compact-lyrics-toggle]');
+  await lyricsToggle.focus();
+  await lyricsToggle.press('Enter');
+  const compactLyrics = surface.locator('[data-compact-lyrics]');
+  await expect(compactLyrics).toBeVisible();
+
+  const backButton = compactLyrics.locator('[data-player-mini-header] button').first();
+  await backButton.focus();
+  await backButton.press('Enter');
+  await expect(compactLyrics).toHaveCount(0);
+  await expect(surface).toBeVisible();
+  await expect(lyricsToggle).toBeFocused();
+
+  await lyricsToggle.press('Enter');
+  await expect(compactLyrics).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(compactLyrics).toHaveCount(0);
+  await expect(surface).toBeVisible();
+  await expect(lyricsToggle).toBeFocused();
+});
+
+test('the compact dock fits cleanly at 320px large size in French without utility overlap', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
+  await page.addInitScript(() => {
+    localStorage.setItem('lang', 'fr');
+    localStorage.setItem('soundsible:interface-size', 'large');
+  });
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/player/#/library?view=songs');
+  await page.getByRole('button', { name: /Una canción con un título/ }).first().click();
+  await page.getByRole('button', { name: /Una canción con un título/ }).last().click();
+  const surface = page.locator('[data-player-surface-open]');
+  await expect(surface).toBeVisible();
+  const dock = surface.locator('[data-compact-dock]');
+  await expect(dock).toBeVisible();
+  const geometry = await dock.evaluate((nav) => {
+    const navRect = nav.getBoundingClientRect();
+    const buttons = [...nav.querySelectorAll('button')].map((btn) => btn.getBoundingClientRect());
+    const overlap = buttons.some((a, i) => buttons.some((b, j) => i < j && a.right > b.left + 1 && a.left < b.right - 1));
+    return { navRight: navRect.right, navLeft: navRect.left, buttons, overlap };
+  });
+  expect(geometry.overlap).toBe(false);
+  for (const box of geometry.buttons) {
+    expect(box.left).toBeGreaterThanOrEqual(geometry.navLeft - 1);
+    expect(box.right).toBeLessThanOrEqual(geometry.navRight + 1);
+  }
+});

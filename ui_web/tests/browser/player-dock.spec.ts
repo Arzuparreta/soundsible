@@ -147,12 +147,22 @@ test('the column is resized from its edge, by pointer or keyboard, within its bo
   await page.mouse.move(0, handle.y + handle.height / 2, { steps: 4 });
   await page.mouse.up();
   await expect.poll(width).toBeLessThanOrEqual(Math.floor(page.viewportSize()!.width / 2));
-  // A width of the listener's own puts the way back beside the line, near its top.
+  // A width of the listener's own puts the way back in the top chrome beside the
+  // device button, never covering the mini-header beneath it.
+  const queueToggle = surface.locator('[data-compact-list-toggle]');
+  await queueToggle.click();
+  const mini = page.locator('[data-now-playing-tile="queue"] [data-player-mini-header]');
+  await expect(mini).toBeVisible();
   const reset = page.getByRole('button', { name: 'Restablecer el ancho del reproductor', exact: true });
   await expect(reset).toBeVisible();
-  const [resetBox, edgeBox] = [(await reset.boundingBox())!, (await edge.boundingBox())!];
-  expect(resetBox.x - edgeBox.x).toBeLessThanOrEqual(16);
-  expect(resetBox.y).toBeLessThan(edgeBox.y + 120);
+  const deviceBtn = surface.locator('[data-device-trigger="player-header"]');
+  const modePill = surface.getByRole('tablist', { name: 'Modo del reproductor' });
+  const [resetBox, deviceBtnBox, modePillBox, miniBox] = await Promise.all(
+    [reset, deviceBtn, modePill, mini].map(async (element) => (await element.boundingBox())!),
+  );
+  expect(resetBox.x).toBeGreaterThanOrEqual(deviceBtnBox.x + deviceBtnBox.width - 1);
+  expect(resetBox.x + resetBox.width).toBeLessThanOrEqual(modePillBox.x + 1);
+  expect(resetBox.y + resetBox.height).toBeLessThanOrEqual(miniBox.y + 1);
   await reset.click();
   await expect.poll(width).toBe(420);
   await expect(reset).toHaveCount(0);
@@ -218,13 +228,33 @@ test('compact bottom dock toggles Queue, Route and Lyrics symmetrically with a s
   await queueToggle.click();
   await expect(stage).not.toHaveAttribute('inert', '');
 
-  // Full-height compact Lyrics view with sticky mini-player.
-  await lyricsToggle.click();
+  // Full-height compact Lyrics view with sticky mini-player + Escape / focus restoration.
+  await lyricsToggle.focus();
+  await lyricsToggle.press('Enter');
   const compactLyrics = surface.locator('[data-compact-lyrics]');
   await expect(compactLyrics).toBeVisible();
   await expect(lyricsToggle).toHaveAttribute('aria-pressed', 'true');
   await expect(compactLyrics.getByRole('button', { name: 'First line', exact: true })).toBeVisible();
-  await compactLyrics.locator('[data-player-mini-header] button').first().click();
+  const lyricsBack = compactLyrics.locator('[data-player-mini-header] button').first();
+  await lyricsBack.focus();
+  await lyricsBack.press('Enter');
+  await expect(compactLyrics).toHaveCount(0);
+  await expect(stage).not.toHaveAttribute('inert', '');
+  expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
+
+  await lyricsToggle.click();
+  await expect(compactLyrics).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(compactLyrics).toHaveCount(0);
+  await expect(surface).toBeVisible();
+  await expect(lyricsToggle).toBeFocused();
+
+  // Widening to full screen clears compact lyrics rather than resurfacing them on dock.
+  await lyricsToggle.click();
+  await expect(compactLyrics).toBeVisible();
+  await surface.getByRole('button', { name: 'Pantalla completa', exact: true }).click();
+  await expect(compactLyrics).toHaveCount(0);
+  await surface.getByRole('button', { name: 'Junto a la app', exact: true }).click();
   await expect(compactLyrics).toHaveCount(0);
   await expect(stage).not.toHaveAttribute('inert', '');
 
