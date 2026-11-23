@@ -1,7 +1,7 @@
 import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
-import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, createUniqueId, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { isSavedTrack } from '../stores';
 import { player } from '../stores/player';
 import { clockTime } from '../lib/format';
@@ -16,6 +16,7 @@ import { responsiveTapConstants } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
+import { Control } from '../design/Control';
 import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
@@ -108,6 +109,58 @@ export function PlayerStage(props: {
   };
   const volPct = () => Math.round(gainToVolumePosition(player().playback.muted ? 0 : player().playback.volume) * 100);
 
+  const [volumeOpen, setVolumeOpen] = createSignal(false);
+  const volumeId = createUniqueId();
+  let volumeRoot: HTMLDivElement | undefined;
+  let volumeTrigger: HTMLButtonElement | undefined;
+
+  createEffect(() => {
+    if (!props.surfaceOpen || !player().can('transport.set_volume')) setVolumeOpen(false);
+  });
+  createEffect(() => {
+    if (!volumeOpen()) return;
+    const dismiss = (event: Event) => {
+      if (event.target instanceof Node && !volumeRoot?.contains(event.target)) setVolumeOpen(false);
+    };
+    document.addEventListener('pointerdown', dismiss, true);
+    document.addEventListener('focusin', dismiss, true);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', dismiss, true);
+      document.removeEventListener('focusin', dismiss, true);
+    });
+  });
+
+  const volumeIcon = () => (
+    <Show
+      when={!player().playback.muted}
+      fallback={
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
+        </svg>
+      }
+    >
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+      </svg>
+    </Show>
+  );
+  const muteButton = (className: string) => (
+    <Show when={player().can('transport.set_muted')}>
+      <button
+        class={`${styles.actBtn} ${className}`}
+        classList={{ [styles.actOn]: player().playback.muted }}
+        type="button"
+        aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
+        aria-pressed={player().playback.muted}
+        aria-busy={player().pending('mute') || undefined}
+        data-pending={player().pending('mute') || undefined}
+        title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
+        onClick={() => player().actions.toggleMute()}
+      >
+        {volumeIcon()}
+      </button>
+    </Show>
+  );
 
   createEffect(() => {
     if (!props.surfaceOpen || podcast()) setMobileVisual(initialMobileVisualState);
@@ -489,34 +542,33 @@ export function PlayerStage(props: {
                   </Show>
 
                   <Show when={player().can('transport.set_volume')}>
-                    <div class={styles.volume}>
-                      <Show when={player().can('transport.set_muted')}>
-                        <button
-                          class={styles.actBtn}
-                          classList={{ [styles.actOn]: player().playback.muted }}
-                          type="button"
-                          aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
-                          aria-pressed={player().playback.muted}
-                          aria-busy={player().pending('mute') || undefined}
-                          data-pending={player().pending('mute') || undefined}
-                          title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
-                          onClick={() => player().actions.toggleMute()}
-                        >
-                          <Show
-                            when={!player().playback.muted}
-                            fallback={
-                              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6" />
-                              </svg>
-                            }
-                          >
-                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                              <path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
-                            </svg>
-                          </Show>
-                        </button>
-                      </Show>
-                      <span class={styles.volumePopover}>
+                    <div
+                      class={styles.volume}
+                      ref={volumeRoot}
+                      data-volume-open={volumeOpen() ? '' : undefined}
+                      data-no-surface-swipe=""
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Escape' || !volumeOpen()) return;
+                        event.preventDefault();
+                        setVolumeOpen(false);
+                        volumeTrigger?.focus();
+                      }}
+                    >
+                      <Control
+                        class={`${styles.actBtn} ${styles.volumeTrigger}`}
+                        classList={{ [styles.actOn]: volumeOpen() }}
+                        aria-label={t('omnibar.volume')}
+                        aria-expanded={volumeOpen()}
+                        aria-controls={volumeId}
+                        title={t('omnibar.volume')}
+                        ref={volumeTrigger}
+                        onClick={() => setVolumeOpen(!volumeOpen())}
+                      >
+                        {volumeIcon()}
+                      </Control>
+                      {muteButton(styles.inlineMute)}
+                      <span id={volumeId} class={styles.volumePopover}>
+                        {muteButton(styles.popoverMute)}
                         <input
                           class={styles.volRange}
                           type="range"

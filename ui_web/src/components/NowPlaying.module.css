@@ -605,9 +605,39 @@
   display: contents;
 }
 
+.volume .volumeTrigger,
+.volume .popoverMute {
+  display: none;
+}
+
 @container player (max-width: 767px) {
-  .volRange {
+  .volume .inlineMute,
+  .volumePopover {
     display: none;
+  }
+
+  .volume .volumeTrigger,
+  .volume .popoverMute {
+    display: inline-flex;
+  }
+
+  /* Reserve a full row below the buttons so volume never covers a control. */
+  .actionsBar:has(> .volume[data-volume-open]) {
+    position: relative;
+    padding-bottom: calc(var(--control-h) + var(--stage-row-gap));
+  }
+
+  .volume[data-volume-open] .volumePopover {
+    position: absolute;
+    inset: auto 0 0;
+    display: flex;
+    height: var(--control-h);
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .volume[data-volume-open] .volRange {
+    flex: 1;
   }
 }
 

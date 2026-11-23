@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
-import { fullScreenPlayer } from './playerPanels';
 
 // Two rows change with the song. Beside the title: the heart appears once it is
 // saved, the save/download slot disappears once it has a file. Under the
@@ -39,7 +38,9 @@ async function rowItems(page: Page, row: 'actions' | 'song') {
         return;
       }
       const rect = element.getBoundingClientRect();
-      const label = element.getAttribute('aria-label') ?? element.querySelector('[aria-label]')?.getAttribute('aria-label') ?? element.tagName;
+      const labelled = [...element.querySelectorAll('[aria-label]')]
+        .find((child) => child.getClientRects().length > 0);
+      const label = element.getAttribute('aria-label') ?? labelled?.getAttribute('aria-label') ?? element.tagName;
       items.push({ label, left: rect.left, right: rect.right, width: rect.width });
     };
     for (const child of container.children) collect(child);
@@ -72,7 +73,7 @@ async function playPreview(page: Page) {
 
 test('a downloaded song leaves no gap where the download button was', async ({ page }) => {
   await openMusicPlayer(page);
-  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, /Silenciar/, /Más opciones/]);
+  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, /Volumen/, /Más opciones/]);
   await expectEvenRow(page, 'song', [/favoritos/i], [/^(Guardar|Descargar)/]);
   const stage = page.locator('[data-player-stage-mode="now-playing"]');
   await expect(stage.getByRole('button', { name: /^(Guardar|Descargar)/ })).toHaveCount(0);
@@ -82,7 +83,7 @@ test('an unsaved song spaces its save button like the rest', async ({ page }) =>
   await openMusicPlayer(page);
   await playPreview(page);
   await expectEvenRow(page, 'song', [/^Guardar/], [/favoritos/i]);
-  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, /Silenciar/, /Más opciones/]);
+  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, /Volumen/, /Más opciones/]);
 });
 
 test('a saved song still streaming keeps heart and download side by side', async ({ page }) => {
@@ -92,17 +93,41 @@ test('a saved song still streaming keeps heart and download side by side', async
   await stage.getByRole('button', { name: /^Guardar/ }).click();
   await expect(stage.getByRole('button', { name: /^Descargar/ })).toBeVisible();
   await expectEvenRow(page, 'song', [/favoritos/i, /^Descargar/]);
-  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, /Silenciar/, /Más opciones/]);
+  await expectEvenRow(page, 'actions', [/letra/i, /radio/i, /Volumen/, /Más opciones/]);
+});
+
+test('compact volume opens an adjustable slider with its own mute button', async ({ page, isMobile }) => {
+  await openMusicPlayer(page);
+  const stage = page.locator('[data-player-stage-mode="now-playing"]');
+  const volume = stage.getByRole('button', { name: 'Volumen', exact: true });
+  const slider = stage.getByRole('slider', { name: 'Volumen', exact: true });
+  await expect(slider).toBeHidden();
+  if (isMobile) await volume.tap();
+  else await volume.click();
+  await expect(volume).toHaveAttribute('aria-expanded', 'true');
+  await expect(slider).toBeVisible();
+  const more = stage.getByRole('button', { name: 'Más opciones', exact: true });
+  await expect(more).toBeVisible();
+  const [sliderBox, moreBox] = await Promise.all([slider.boundingBox(), more.boundingBox()]);
+  expect(sliderBox!.y).toBeGreaterThanOrEqual(moreBox!.y + moreBox!.height);
+  await expect(stage.getByRole('button', { name: 'Silenciar', exact: true })).toBeVisible();
+  await slider.fill('45');
+  await expect(slider).toHaveAttribute('aria-valuetext', '45%');
+  await stage.getByRole('button', { name: 'Silenciar', exact: true }).click();
+  await expect(slider).toHaveAttribute('aria-valuetext', '0%');
+  await slider.press('Escape');
+  await expect(volume).toBeFocused();
+  await expect(slider).toBeHidden();
+  await expect(stage).toBeVisible();
 });
 
 test('the lyrics dock spaces what it keeps of the row evenly', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.endsWith('mobile'), 'the lyrics dock is the desktop stage');
-  // The lyrics dock and the resizable stage belong to the full-screen player.
-  await fullScreenPlayer(page);
   await page.route('**/api/library/tracks/*/lyrics**', (route) => route.fulfill({ json: {
     status: 'ready', synced: '[00:00.00]Una línea\n[00:04.00]Otra línea', plain: null, instrumental: false, cached: true,
   } }));
   await openMusicPlayer(page);
+  await page.getByRole('button', { name: 'Pantalla completa', exact: true }).click();
   const stage = page.locator('[data-player-stage-mode="now-playing"]');
   await stage.getByRole('button', { name: 'Mostrar letra' }).click();
   await expect(stage).toHaveAttribute('data-lyrics-stage', '');
