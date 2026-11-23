@@ -509,7 +509,6 @@ export function PlayerSurface() {
         data-player-surface-open={nowPlayingOpen() ? '' : undefined}
         data-docked={docked() ? '' : undefined}
         data-compact={playerCompact() ? '' : undefined}
-        data-dockable={desktopShell() ? '' : undefined}
         data-surface-animating={surfaceAnimating() ? '' : undefined}
         data-remote={player().remote ? '' : undefined}
         data-player-stage=""
@@ -539,6 +538,36 @@ export function PlayerSurface() {
         <div class={styles.grain} aria-hidden="true" />
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">
+          <div class={styles.chromeLeft}>
+            <Show when={desktopShell()}>
+              <button
+                class={styles.chromeButton}
+                type="button"
+                aria-label={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
+                title={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
+                onClick={togglePresentation}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <Show when={playerPresentation() === 'docked'} fallback={<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M14 4v16" /></>}>
+                    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                  </Show>
+                </svg>
+              </button>
+            </Show>
+            <Control
+              class={styles.deviceButton}
+              classList={{ [styles.deviceButtonActive]: player().remote, [styles.deviceButtonError]: player().unreachable }}
+              aria-label={connectLabel()}
+              title={connectLabel()}
+              data-device-trigger="player-header"
+              onClick={openConnect}
+            >
+              <OutputDeviceIcon size={18} />
+              <Show when={player().remote}>
+                <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
+              </Show>
+            </Control>
+          </div>
 
           {/* Choosing a mode starts or ends DJ, so the arrows only move focus
             * between the two (manual activation); Enter, Space or a click
@@ -572,46 +601,16 @@ export function PlayerSurface() {
             </button>
           </div>
 
-          <div class={styles.chromeRight}>
-            <Show when={desktopShell()}>
-              <button
-                classList={{ [styles.chromeButton]: true, [styles.presentationButton]: true }}
-                type="button"
-                aria-label={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
-                title={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
-                onClick={togglePresentation}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <Show when={playerPresentation() === 'docked'} fallback={<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M14 4v16" /></>}>
-                    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-                  </Show>
-                </svg>
-              </button>
-            </Show>
-            <Control
-              class={styles.deviceButton}
-              classList={{ [styles.deviceButtonActive]: player().remote, [styles.deviceButtonError]: player().unreachable }}
-              aria-label={connectLabel()}
-              title={connectLabel()}
-              data-device-trigger="player-header"
-              onClick={openConnect}
-            >
-              <OutputDeviceIcon size={18} />
-              <Show when={player().remote}>
-                <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
-              </Show>
-            </Control>
-            <button
-              classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
-              type="button"
-              aria-label={t('common.close')}
-              onClick={() => closeSurface()}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </button>
-          </div>
+          <button
+            classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
+            type="button"
+            aria-label={t('common.close')}
+            onClick={() => closeSurface()}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+              <path d={docked() ? 'm9 6 6 6-6 6' : 'm6 9 6 6 6-6'} />
+            </svg>
+          </button>
         </div>
 
         {/* The phone header has no room for the device's name: it gets a line of its own. */}

@@ -266,10 +266,8 @@
   background-size: 180px 180px;
 }
 
-/* The room's one bar: what the panels are (left), which room this is
-   (centre), and the way out (right). Quiet controls with no plate of their
-   own until they are pointed at, so the bar reads as part of the room rather
-   than as three more objects floating over it. */
+/* Layout and output controls on the left, playback mode in the centre, and
+   the close button on its own on the right. */
 .floatingChrome {
   --player-chrome-side: minmax(var(--player-chrome-size), 1fr);
   --player-chrome-column-gap: 12px;
@@ -296,9 +294,9 @@
   pointer-events: auto;
 }
 
-.chromeRight {
-  grid-column: 3;
-  justify-self: end;
+.chromeLeft {
+  grid-column: 1;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   gap: var(--space-2xs);
@@ -648,8 +646,8 @@
   .floatingChrome {
     --player-chrome-column-gap: 8px;
 
-    /* Two buttons on the right (device, close): both sides as wide, so the
-       mode pill stays centred. */
+    /* Reserve the same space on each side so the mode pill stays centred.
+       The dock has two controls on the left; mobile only needs Devices. */
     --player-chrome-side: calc(var(--player-chrome-size) * 2 + var(--space-2xs));
 
     left: max(12px, env(safe-area-inset-left, 0px));
@@ -660,25 +658,8 @@
     width: min(100%, 56cqw, 232px);
   }
 
-  /* On a desktop a third button sits on the right: docked or full screen. */
-  .surface[data-dockable] .floatingChrome {
-    --player-chrome-side: calc(var(--player-chrome-size) * 3 + var(--space-2xs) * 2);
-  }
-
-  /* Docked, nothing sits on the left to balance the right, and centring the
-     pill between two equal sides left it too narrow for its words. It leads
-     the bar instead, with the width the rule above gives it. */
-  .surface[data-docked] .floatingChrome {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .surface[data-docked] .modePill {
-    grid-column: 1;
-    justify-self: start;
-  }
-
-  .surface[data-docked] .chromeRight {
-    grid-column: 2;
+  .modeOption {
+    padding-inline: var(--space-xs);
   }
 
   .carouselNav {
@@ -687,6 +668,11 @@
 }
 
 @container player (min-width: 1024px) {
+  .chromeLeft {
+    /* The workspace's layout control occupies the first slot at this width. */
+    margin-left: calc(var(--player-chrome-size) + var(--space-2xs));
+  }
+
   .layoutButton {
     display: inline-grid;
   }

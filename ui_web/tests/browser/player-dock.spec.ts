@@ -31,8 +31,11 @@ test('the open player docks beside the app, and the app stays usable', async ({ 
 test('the player fills the screen or docks again, and remembers it', async ({ page }) => {
   await openMusicPlayer(page);
   const surface = page.locator('[data-player-surface-open]');
+  const closeIcon = surface.getByRole('button', { name: 'Cerrar', exact: true }).locator('path');
+  await expect(closeIcon).toHaveAttribute('d', 'm9 6 6 6-6 6');
   await surface.getByRole('button', { name: 'Pantalla completa', exact: true }).click();
   await expect(surface).not.toHaveAttribute('data-docked', '');
+  await expect(closeIcon).toHaveAttribute('d', 'm6 9 6 6 6-6');
   await expect(page.locator('#app')).toBeHidden();
   await page.reload();
   await openMusicPlayer(page);
@@ -73,4 +76,21 @@ test('the column is resized from its edge, by pointer or keyboard, within its bo
   await page.reload();
   await openMusicPlayer(page);
   await expect.poll(width).toBe(420);
+
+  await edge.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(width).toBe(360);
+  const pill = surface.getByRole('tablist', { name: 'Modo del reproductor' });
+  const presentation = surface.getByRole('button', { name: 'Pantalla completa', exact: true });
+  const devices = surface.locator('[data-device-trigger="player-header"]');
+  const close = surface.getByRole('button', { name: 'Cerrar', exact: true });
+  const [surfaceBox, pillBox, presentationBox, deviceBox, closeBox] = await Promise.all(
+    [surface, pill, presentation, devices, close].map(async (element) => (await element.boundingBox())!),
+  );
+  expect(Math.abs(pillBox.x + pillBox.width / 2 - surfaceBox.x - surfaceBox.width / 2)).toBeLessThan(1);
+  expect(deviceBox.x).toBeGreaterThan(presentationBox.x + presentationBox.width);
+  expect(pillBox.x).toBeGreaterThan(deviceBox.x + deviceBox.width);
+  expect(pillBox.x + pillBox.width).toBeLessThan(closeBox.x);
 });
