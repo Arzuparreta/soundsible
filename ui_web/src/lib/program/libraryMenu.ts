@@ -1,16 +1,28 @@
 import { programTrack } from './tracks';
-import type { ActionMenuOptions } from '../../components/ActionMenu';
+import type { ActionMenuOptions, MenuAction } from '../../components/ActionMenu';
 import { t } from '../i18n';
 import type { Track } from '../../types/music';
 import { offers, type ProgramCommand, type ProgramState, type ProgramTrack } from './runtime';
 
+/** The program and the song as they stood when a menu opened. */
+interface MenuCapture {
+  captured: ProgramState | null;
+  candidate: ProgramTrack | null;
+  tracks: ProgramTrack[];
+  disabled: boolean;
+}
+
 /** Capture the occurrence when opening the menu. Native guards reject a stale order/anchor. */
-export function programLibraryMenu(track: Track, state: () => ProgramState | null, pending: () => boolean,
-  execute: (command: ProgramCommand) => Promise<void>, place?: (track: ProgramTrack) => void, shell = false): ActionMenuOptions {
+function captureMenu(track: Track, state: () => ProgramState | null, pending: () => boolean, shell: boolean): MenuCapture {
   const captured = state();
   const candidate = programTrack(track);
   const disabled = !captured?.ready || pending() || captured.items.length >= 1000 && (!captured.dj?.active || shell) || !candidate || captured.dj?.active === true && (candidate.mediaKind === 'podcast_episode' || candidate.source === 'pending');
-  const tracks = candidate ? [candidate] : [];
+  return { captured, candidate, tracks: candidate ? [candidate] : [], disabled };
+}
+
+function queuePair({ captured, tracks, disabled }: MenuCapture, state: () => ProgramState | null, pending: () => boolean,
+  execute: (command: ProgramCommand) => Promise<void>, shell: boolean): MenuAction[] {
+  if (captured?.dj?.active && !shell || !offers(captured, 'queueAdd')) return [];
   const select = (action: 'append' | 'insertAfter') => {
     // A deferred sheet selection must never migrate to a different logged-in account.
     if (disabled || pending() || state()?.generation !== captured?.generation) return;
@@ -21,11 +33,30 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
     };
     void execute(command).catch(() => {});
   };
+  return [
+    { label: t('android.insertAfter'), disabled, onSelect: () => select('insertAfter') },
+    { label: t('trackActions.addToQueue'), disabled, onSelect: () => select('append') },
+  ];
+}
+
+/** "Play next" and "Add to queue" on the native queue: the one pair every
+ * native song menu offers.
+ *
+ * It takes a song whether or not it has been matched to a video yet. A
+ * catalogue row that has not (`pendingResolve`) enters the native queue as a
+ * `pending` item, which the queue matches before it plays, so a song found in
+ * Discover queues exactly like one in the library. */
+export function programQueueActions(track: Track, state: () => ProgramState | null, pending: () => boolean,
+  execute: (command: ProgramCommand) => Promise<void>, shell = false): MenuAction[] {
+  return queuePair(captureMenu(track, state, pending, shell), state, pending, execute, shell);
+}
+
+export function programLibraryMenu(track: Track, state: () => ProgramState | null, pending: () => boolean,
+  execute: (command: ProgramCommand) => Promise<void>, place?: (track: ProgramTrack) => void, shell = false): ActionMenuOptions {
+  const capture = captureMenu(track, state, pending, shell);
+  const { captured, candidate, tracks, disabled } = capture;
   return { title: track.title, subtitle: track.artist, actions: [
-    ...((!captured?.dj?.active || shell) && offers(captured, 'queueAdd') ? [
-      { label: t('android.insertAfter'), disabled, onSelect: () => select('insertAfter') },
-      { label: t('trackActions.addToQueue'), disabled, onSelect: () => select('append') },
-    ] : []),
+    ...queuePair(capture, state, pending, execute, shell),
     ...(candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' && offers(captured, 'dj') ? [{
       label: t(captured?.items[captured.index]?.id === candidate.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
       disabled: disabled || captured?.items[captured.index]?.mediaKind === 'podcast_episode',

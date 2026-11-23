@@ -1641,6 +1641,25 @@ describe('Contextual queue', () => {
     expect(audioService.load).toHaveBeenCalledWith('/preview/vid-c', expect.any(Number));
   });
 
+  it('takes a song asked for before it was matched, and matches it as its turn nears', async () => {
+    const resolveCatalogItem = byTitle({});
+    const { actions, state, audioService, initStore, fireDeckEvent } = await loadStore({ resolveCatalogItem });
+    initStore();
+
+    actions.playFrom([t1], 0);
+    fireDeckEvent('playing');
+    actions.enqueue(unmatched('later'));
+    actions.playNext(unmatched('soon'));
+    await flush();
+
+    expect(state.playback.queue.map((entry) => [entry.id, entry.queueSource])).toEqual([
+      ['t1', expect.anything()], ['vid-soon', 'play_next'], ['vid-later', 'add_to_queue'],
+    ]);
+    expect(state.playback.queue.some((entry) => entry.pendingResolve)).toBe(false);
+    actions.next();
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/vid-soon', expect.any(Number));
+  });
+
   it('skips a context song the engine cannot find, keeping the rest of the context', async () => {
     const resolveCatalogItem = byTitle({ c: null });
     const { actions, state, audioService, toastError } = await loadStore({ resolveCatalogItem });

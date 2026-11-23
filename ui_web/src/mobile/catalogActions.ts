@@ -9,8 +9,19 @@ import { toast } from '../lib/toast';
 import { openContextMenu } from '../lib/contextMenu';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
 import type { MigrationJob } from '../lib/migrationApi';
+import type { ContextTrack } from '../lib/playbackQueue';
 
 export type CatalogPurpose = 'play' | 'save' | 'remove' | 'acquire' | 'radio';
+
+/** A catalogue song not matched to a video yet, as the native queue takes it:
+ * the queue holds it in its place and matches it before it plays. */
+export function pendingCatalogTrack(item: CatalogItem): ContextTrack {
+  return {
+    id: item.id, title: item.title, artist: itemArtist(item), album: item.album, duration: item.duration, cover: item.cover, ...catalogReleaseEvidence(item),
+    item_id: item.item_id ?? undefined,
+    pendingResolve: { catalogItemId: item.id, title: item.title, artist: itemArtist(item), duration: item.duration },
+  };
+}
 
 /** Search, recommendations and entity songs share account-scoped native actions. */
 export function createNativeCatalogActions(props: {
@@ -177,11 +188,7 @@ export function createNativeCatalogActions(props: {
       const selected = trackFor(items[selectedIndex]) ?? (await resolveRecording(items[selectedIndex], request.signal, current)).track;
       if (!current()) return;
       if (!selected || !programTrack(selected)) throw new Error('Selected recording unavailable');
-      const tracks = items.map((item, index): import('../lib/playbackQueue').ContextTrack => index === selectedIndex ? selected : trackFor(item) ?? {
-        id: item.id, title: item.title, artist: itemArtist(item), album: item.album, duration: item.duration, cover: item.cover, ...catalogReleaseEvidence(item),
-        item_id: item.item_id ?? undefined,
-        pendingResolve: { catalogItemId: item.id, title: item.title, artist: itemArtist(item), duration: item.duration },
-      });
+      const tracks = items.map((item, index): ContextTrack => index === selectedIndex ? selected : trackFor(item) ?? pendingCatalogTrack(item));
       if (context || shuffle) await props.onPlayCollection(tracks, selectedIndex, context, shuffle);
       else await props.onPlayCollection(tracks, selectedIndex);
     } catch (failure) {

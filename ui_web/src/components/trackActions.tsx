@@ -2,6 +2,7 @@ import type { MenuEvent } from '../lib/menuEvent';
 import { type MenuAction, type ActionMenuOptions } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import type { Track } from '../types/music';
+import type { ContextTrack } from '../lib/playbackQueue';
 import { actions, isDownloadingTrack, isFavouriteTrack, isSavedTrack, state } from '../stores';
 import { player } from '../stores/player';
 import { savedFromTrack } from '../lib/saved';
@@ -61,6 +62,20 @@ export function musicLinkActions(music: MusicMetadata): MenuAction[] {
   return list;
 }
 
+/** "Play next" and "Add to queue": the one pair every song menu offers.
+ *
+ * It takes a song whether or not it has been matched to a video yet. A
+ * catalogue row that has not (`pendingResolve`) goes into the queue as it is,
+ * and the queue matches it shortly before it plays, so a song found in Discover
+ * queues exactly like one in the library. Callers decide only whether the
+ * queue applies at all — not inside a DJ session, which places songs itself. */
+export function queueActions(track: ContextTrack): MenuAction[] {
+  return [
+    { icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => player().actions.playNext(track) },
+    { icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => player().actions.enqueue(track) },
+  ];
+}
+
 /** Build the action list for a track, given its context. */
 export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAction[] {
   const isFav = isFavouriteTrack(track);
@@ -81,8 +96,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void player().actions.placeAutoTrack(track) });
     list.push({ icon: icons.source(), label: t('musicExplorer.reference'), onSelect: () => player().actions.useAutoTrackAsSource(track) });
   } else if (queueable) {
-    list.push({ icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => player().actions.playNext(track) });
-    list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => player().actions.enqueue(track) });
+    list.push(...queueActions(track));
   }
   if (!isPodcast && !inRoute)
     list.push({

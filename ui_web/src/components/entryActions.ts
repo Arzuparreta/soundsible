@@ -2,14 +2,14 @@ import type { MenuEvent } from '../lib/menuEvent';
 import type { MusicMetadata } from '../lib/musicNavigation';
 import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
 import { player } from '../stores/player';
-import { resolveCatalogTrack } from '../lib/catalogItem';
+import { catalogContextTrack, resolveCatalogTrack } from '../lib/catalogItem';
 import { savedToTrack, savedVideoId } from '../lib/saved';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import { openContextMenu } from '../lib/contextMenu';
 import type { CatalogItem, RecommendationContext, SavedEntry, Track } from '../types/music';
-import { buildTrackMenu, musicLinkActions, sendDiscoveryLessFromArtist, sendDiscoveryNotInterested } from './trackActions';
+import { buildTrackMenu, musicLinkActions, queueActions, sendDiscoveryLessFromArtist, sendDiscoveryNotInterested } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import type { MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
@@ -100,6 +100,21 @@ async function startCatalogRadio(entry: SavedEntry, item?: CatalogItem): Promise
   }
 }
 
+/** The song an entry stands for before it has been matched to a video: a
+ * placeholder the queue, or another device, matches by title and artist when
+ * its turn comes. A catalogue row keys it by the row's id, so the match also
+ * resolves the row itself. */
+function pendingEntryTrack(entry: SavedEntry, item?: CatalogItem): ContextTrack | null {
+  if (item) return catalogContextTrack(item);
+  if (!entry.title || !entry.artist) return null;
+  const base = savedToTrack(entry, new Map());
+  if (!base) return null;
+  return {
+    ...base,
+    pendingResolve: { catalogItemId: entry.keys[0], title: entry.title, artist: entry.artist, duration: entry.duration },
+  };
+}
+
 /** Collection operations use the original saved keys, including unresolved
  * catalogue identities. Merely opening a sheet never resolves or saves it. */
 export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): MenuAction[] {
@@ -132,11 +147,11 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     onLessFromArtist: ctx.onLessFromArtist,
     onUndoLessFromArtist: ctx.onUndoLessFromArtist,
   }));
-  if (!track && entry.title && entry.artist) {
-    const pending: ContextTrack = {
-      ...savedToTrack(entry, new Map())!,
-      pendingResolve: { catalogItemId: entry.keys[0], title: entry.title, artist: entry.artist, duration: entry.duration },
-    };
+  const pending = track ? null : pendingEntryTrack(entry, ctx.item);
+  if (pending) {
+    // The same queue pair `buildTrackMenu` gives a matched song, and under the
+    // same rule: a DJ session places songs itself.
+    if (!player().autoMode.active) list.push(...queueActions(pending));
     list.push({ icon: menuIcons.device(), label: t('trackActions.playOnDevice'), onSelect: () => openPlayOnDevice(pending) });
   }
   if (!track && ctx.music) list.push(...musicLinkActions(ctx.music));
