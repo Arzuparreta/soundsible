@@ -22,17 +22,23 @@ planning and interface are still being refined.
 - From a song's menu in NORMAL or inside the shell, **Start DJ from this song** makes that song the
   session's source. It is the next song the DJ mixes into, the way it mixes any
   other, and the music comes from it after that.
+- From NORMAL, **Start a DJ session** in the menu of an album, an artist or a
+  playlist — or among the actions of one found in the player's search panel —
+  opens a session on that collection.
 - While DJ is active, playing a song anywhere — a library list, a search, or
   the player's own search panel — starts a fresh DJ session immediately from
   that song at 0:00. Its source and route replace the previous session,
   including all previous requests and influences. Playing a collection starts
-  from its first song and uses the collection as the source. To keep the
-  session and only add the song, use its **Add to route** button in the
-  player's search panel.
+  from its first song and uses the collection as the source. Session controls
+  are inside the player: in its search panel a song's **Add to route** button
+  and menu (**Add to route**, **Mix into session**), and a collection's actions
+  (**Mix into session**, **Change session**) edit the session without
+  replacing it.
 - In **Session**, use **Mix with…** to add an influence or **Change…** to
   choose a new direction. Both open the player's search panel with that errand
-  named above the results: pressing a song does the errand, and **Cancel** goes
-  back. The ＋ between two route songs works the same way for that position.
+  named above the results: pressing a song, an album, an artist or a playlist
+  does the errand, and **Cancel** goes back. The ＋ between two route songs
+  works the same way for that position, with songs only.
 
 ### A source is one piece of music
 

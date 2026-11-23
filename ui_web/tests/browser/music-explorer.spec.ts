@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer, TRACKS } from './music-browser-fixture';
 import { settle } from './settle';
-import { holdForMenu } from './playerGestures';
 
 test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
@@ -21,6 +20,13 @@ test.beforeEach(async ({ page }) => {
   } }));
 });
 
+/** Press a found collection, then its page among its actions. */
+async function openFromPanel(page: import('@playwright/test').Page, panel: import('@playwright/test').Locator, name: RegExp, mobile: boolean) {
+  await panel.getByRole('button', { name }).first().click();
+  const actions = page.getByRole(mobile ? 'dialog' : 'menu');
+  await actions.getByRole(mobile ? 'button' : 'menuitem', { name: 'Ir al artista', exact: true }).click();
+}
+
 /** Use the same pager as the listener. Moving scrollLeft alone can leave the
  * visually positioned panel inert while the mode change is still settling. */
 async function selectPanel(page: import('@playwright/test').Page, scope: 'now-playing' | 'auto', panel: 'browser' | 'route') {
@@ -38,7 +44,7 @@ test('opens general music pages and preserves explorer search across player mode
   let browser = page.locator('[data-now-playing-tile="browser"]');
   await expect(browser.getByRole('searchbox')).toHaveCount(1);
   await browser.getByRole('searchbox').fill('radiohead');
-  await browser.getByRole('link', { name: /Radiohead/ }).click();
+  await openFromPanel(page, browser, /Radiohead/, mobile);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   await expect(page).toHaveURL(/#\/artist\/Radiohead/);
   await page.getByRole('link', { name: /In Rainbows/ }).click();
@@ -52,7 +58,7 @@ test('opens general music pages and preserves explorer search across player mode
   if (mobile) await selectPanel(page, 'auto', 'browser');
   browser = page.locator('[data-auto-tile="browser"]');
   await expect(browser.getByRole('searchbox')).toHaveValue('radiohead');
-  await browser.getByRole('link', { name: /Radiohead/ }).click();
+  await openFromPanel(page, browser, /Radiohead/, mobile);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   await page.getByRole('link', { name: /In Rainbows/ }).click();
   await expect(page.getByText('15 Step', { exact: true })).toBeVisible();
@@ -89,114 +95,4 @@ test('separates DJ references below Route and picks one from the explorer', asyn
   await settle(page);
   expect(errors).toEqual([]);
   await page.screenshot({ path: `/tmp/soundsible-route-${info.project.name}.png` });
-});
-
-
-test('the player search panel suggests from the unified discovery feed and supports Not interested and Undo', async ({ page }, info) => {
-  const feedbackPayloads: Array<Record<string, unknown>> = [];
-  let legacyFeedRequests = 0;
-  let undoCount = 0;
-
-  await page.route('**/api/discover/feed*', async (route) => {
-    legacyFeedRequests += 1;
-    await route.fulfill({ json: { request_id: 'legacy', ready: [], pending: [] } });
-  });
-  await page.route('**/api/discovery/music/feed?**', (route) => route.fulfill({
-    json: {
-      sections: [
-        {
-          id: 'more_like_extremoduro',
-          title: 'More like Extremoduro',
-          title_key: 'more_like',
-          title_params: { artist: 'Extremoduro' },
-          item_ids: ['deezer:400', 'deezer:401'],
-        },
-      ],
-      items: [
-        {
-          id: 'deezer:400',
-          title: 'Tema unificado Deezer',
-          artist: 'Platero y Tú',
-          source: 'deezer',
-          duration: 215,
-          external_ids: { deezer_id: '400', isrc: 'ES99999' },
-          recommendation_identity: 'music:deezer:400',
-          reason: 'Conexión de tu grafo musical',
-          reason_code: 'library_graph',
-        },
-        {
-          id: 'deezer:401',
-          title: 'Segunda recomendación',
-          artist: 'Fito & Fitipaldis',
-          source: 'deezer',
-          duration: 205,
-          external_ids: { deezer_id: '401' },
-          recommendation_identity: 'music:deezer:401',
-          reason: 'Conexión de tu grafo musical',
-          reason_code: 'library_graph',
-        },
-      ],
-    },
-  }));
-  await page.route('**/api/discovery/feedback', async (route) => {
-    feedbackPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
-    await route.fulfill({ json: { recorded: true, event_id: 'ev-explore-1' } });
-  });
-  await page.route('**/api/discovery/feedback/*', async (route) => {
-    if (route.request().method() === 'DELETE') undoCount += 1;
-    await route.fulfill({ json: { undone: true } });
-  });
-
-  await openMusicPlayer(page);
-  const mobile = (page.viewportSize()?.width ?? 0) < 1024;
-  if (mobile) await selectPanel(page, 'now-playing', 'browser');
-  const browser = page.locator('[data-now-playing-tile="browser"]');
-
-  const firstTitle = browser.getByText('Tema unificado Deezer', { exact: true });
-  await expect(firstTitle).toBeVisible();
-  expect(legacyFeedRequests).toBe(0);
-
-  const exploreRow = browser
-    .locator('[data-song-row], [data-music-list-row]')
-    .filter({ hasText: 'Tema unificado Deezer' });
-  // On a phone the panel's rows open their menu with a hold, as every row can.
-  const openRowMenu = () => mobile ? holdForMenu(page, exploreRow) : exploreRow.getByRole('button', { name: /^Más opciones/ }).click();
-  await openRowMenu();
-
-  const itemRole = info.project.name.includes('mobile') ? 'button' : 'menuitem';
-  const menuContainerRole = info.project.name.includes('mobile') ? 'dialog' : 'menu';
-  const menu = page.getByRole(menuContainerRole);
-  await expect(menu).toBeVisible();
-  await expect(menu.getByText('Conexión de tu grafo musical')).toBeVisible();
-  await menu.getByRole(itemRole, { name: 'No me interesa' }).click();
-
-  await expect(firstTitle).toHaveCount(0);
-  expect(feedbackPayloads).toHaveLength(1);
-  expect(feedbackPayloads[0]).toMatchObject({
-    feedback: 'not_interested',
-    item: {
-      media_type: 'music_track',
-      deezer_id: '400',
-      isrc: 'ES99999',
-      title: 'Tema unificado Deezer',
-      artist: 'Platero y Tú',
-    },
-  });
-
-  await page.getByRole('button', { name: 'Deshacer' }).click();
-  await expect(firstTitle).toBeVisible();
-  expect(undoCount).toBe(1);
-
-  // Dismiss again, collapse the player to /search without reloading the app, and
-  // confirm Discover reflects the same shared store dismissal.
-  await openRowMenu();
-  await page.getByRole(menuContainerRole).getByRole(itemRole, { name: 'No me interesa' }).click();
-  await expect(firstTitle).toHaveCount(0);
-
-  await page.locator('[data-player-surface-open]').getByRole('button', { name: 'Cerrar', exact: true }).click();
-  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
-  await page.locator('a[href="#/search"]:visible').first().click();
-  const home = page.getByTestId('search-discovery');
-  await expect(home.getByText('Segunda recomendación', { exact: true })).toBeVisible();
-  await expect(home.getByText('Tema unificado Deezer', { exact: true })).toHaveCount(0);
 });

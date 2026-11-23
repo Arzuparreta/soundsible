@@ -462,6 +462,8 @@ export const es: Dict = {
     stop: 'Detener la descarga',
   },
   collection: {
+    play: 'Reproducir',
+    shuffle: 'Reproducir aleatorio',
     save: 'Guardar en tu biblioteca',
     unsave: 'Quitar de tu biblioteca',
     download: 'Descargar',
@@ -863,18 +865,12 @@ export const es: Dict = {
     feedbackFailed: 'No se pudo guardar la preferencia',
   },
   artistActions: {
-    play: 'Reproducir',
-    shuffle: 'Reproducir aleatorio',
     goToArtist: 'Ir al artista',
   },
   albumActions: {
-    play: 'Reproducir',
-    shuffle: 'Reproducir aleatorio',
     goToAlbum: 'Ir al álbum',
   },
   playlistActions: {
-    play: 'Reproducir',
-    shuffle: 'Reproducir aleatorio',
     rename: 'Renombrar',
     renameTitle: 'Renombrar lista',
     renameConfirm: 'Renombrar',
@@ -1288,11 +1284,6 @@ export const es: Dict = {
   playerSearch: {
     aria: 'Buscar música',
     placeholder: 'Busca o pega un enlace',
-    play: 'Reproducir',
-    forYou: 'Para ti',
-    shuffleLibrary: 'Biblioteca aleatoria',
-    allPlaylists: 'Todas las playlists',
-    moreDiscover: 'Más en Descubrir',
     moreSongs: 'Más canciones',
     allResults: 'Ver todos los resultados en Buscar',
     playlist: 'Playlist',

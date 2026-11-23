@@ -17,12 +17,9 @@ const apiMock = vi.hoisted(() => ({
   peekYouTube: vi.fn(),
   resolveCatalogItem: vi.fn(),
   emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
+  getArtistProfile: vi.fn(),
 }));
-const exploreMock = vi.hoisted(() => ({
-  retainDiscoveryFeed: vi.fn(() => vi.fn()),
-  refreshDiscoveryFeed: vi.fn(),
-  items: [] as Array<Record<string, unknown>>,
-}));
+const menuMock = vi.hoisted(() => ({ open: vi.fn() }));
 const storeMock = vi.hoisted(() => {
   const local: Track = { id: 'local-1', title: 'Local Song', artist: 'Local Artist', album: 'Home' };
   return {
@@ -46,6 +43,7 @@ const storeMock = vi.hoisted(() => {
       useAutoTrackAsSource: vi.fn(),
       changeAutoSession: vi.fn().mockResolvedValue(true),
       addAutoSource: vi.fn(),
+      enterAutoMode: vi.fn(),
       autoSessionToken: vi.fn(() => 1),
       beginAutoSessionChange: vi.fn(() => 1),
     },
@@ -53,18 +51,7 @@ const storeMock = vi.hoisted(() => {
 });
 
 vi.mock('../lib/api', () => ({ api: apiMock }));
-vi.mock('../lib/discoveryFeedStore', () => ({
-  retainDiscoveryFeed: exploreMock.retainDiscoveryFeed,
-  refreshDiscoveryFeed: exploreMock.refreshDiscoveryFeed,
-  dismissDiscoveryItem: vi.fn(),
-  restoreDiscoveryItem: vi.fn(),
-  dismissDiscoveryArtist: vi.fn(),
-  restoreDiscoveryArtist: vi.fn(),
-  discoveryExploreItems: () => exploreMock.items,
-  discoveryLoading: () => false,
-  discoveryRefreshing: () => false,
-}));
-vi.mock('../lib/toast', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), loading: vi.fn() } }));
+vi.mock('../lib/toast', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), loading: vi.fn(() => ({ dismiss: vi.fn() })) } }));
 vi.mock('../stores', async () => {
   const { identityMock } = await import('../lib/identityMock');
   return {
@@ -84,6 +71,7 @@ vi.mock('../stores/player', () => ({
   player: () => ({ playback: storeMock.state.playback, autoMode: storeMock.state.autoMode, actions: storeMock.actions, remote: false }),
 }));
 vi.mock('./entryActions', () => ({ openEntryMenu: vi.fn() }));
+vi.mock('../lib/contextMenu', () => ({ openContextMenu: menuMock.open, attachContextMenu: vi.fn() }));
 vi.mock('./trackActions', () => ({ openTrackMenu: vi.fn() }));
 vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
 vi.mock('./MetadataEditor', () => ({ openMetadataEditor: vi.fn() }));
@@ -118,7 +106,6 @@ beforeEach(() => {
   clearSearchCache();
   listLayoutMock.mobile = false;
   storeMock.state.autoMode.active = false;
-  exploreMock.items = [];
   registerMusicNavigator(navigate);
 });
 afterEach(() => {
@@ -135,16 +122,9 @@ describe('PlayerSearchPanel', () => {
     expect(screen.queryByRole('navigation')).toBeNull();
   });
 
-  it('offers collections to play when idle, and starts a DJ session from them during one', () => {
+  it('shows only the field until something is typed', () => {
     render(() => <PlayerSearchPanel onClose={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Play: Running' }));
-    expect(storeMock.actions.playFrom).toHaveBeenCalledWith([storeMock.local], 0, expect.objectContaining({ context: expect.objectContaining({ kind: 'playlist' }) }));
-    fireEvent.click(screen.getByRole('button', { name: 'Play: Shuffle library' }));
-    expect(storeMock.actions.playShuffled).toHaveBeenCalled();
-
-    storeMock.state.autoMode.active = true;
-    fireEvent.click(screen.getByRole('button', { name: 'Play: Favourites' }));
-    expect(storeMock.actions.startDjSelection).toHaveBeenCalledWith([storeMock.local], 'Favourites');
+    expect(screen.queryAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Close panel']);
   });
 
   it('plays a result through the same path as any other list, in a DJ session too', async () => {
@@ -166,7 +146,11 @@ describe('PlayerSearchPanel', () => {
     await type('massive');
     fireEvent.click(screen.getByRole('button', { name: 'Add to queue: Teardrop' }));
     await waitFor(() => expect(storeMock.actions.enqueue).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole('link', { name: /Massive Attack — Artist/ }));
+    // A collection opens its actions here; its page is one of them.
+    fireEvent.click(screen.getByRole('button', { name: /Massive Attack — Artist/ }));
+    const sheet = menuMock.open.mock.calls.at(-1)![0] as { actions: Array<{ label: string; onSelect: () => void }> };
+    expect(sheet.actions.map((action) => action.label)).toEqual(expect.arrayContaining(['Play', 'Shuffle play', 'Start a DJ session', 'Go to artist']));
+    sheet.actions.find((action) => action.label === 'Go to artist')!.onSelect();
     expect(navigate).toHaveBeenCalledWith(expect.stringContaining('/artist'));
     fireEvent.click(screen.getByRole('button', { name: 'See all results in Search' }));
     expect(navigate).toHaveBeenCalledWith('/search?q=massive');
@@ -198,9 +182,33 @@ describe('PlayerSearchPanel', () => {
     await waitFor(() => expect(storeMock.actions.placeAutoTrack).toHaveBeenCalledWith(expect.objectContaining({ title: 'Teardrop' }), 'q-3'));
     expect(onDone).toHaveBeenCalled();
     expect(storeMock.actions.playTrack).not.toHaveBeenCalled();
-    // Leaving for an artist page would abandon the errand.
-    expect(screen.queryByRole('link', { name: /Massive Attack — Artist/ })).toBeNull();
+    // A seam of the route takes one song, never a collection.
+    expect(screen.queryByRole('button', { name: /Massive Attack/ })).toBeNull();
     fireEvent.click(within(banner).getByRole('button'));
     expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('starts a DJ session from a found artist in NORMAL, and mixes one into the session during an errand', async () => {
+    cacheResults('daft');
+    apiMock.getArtistProfile.mockResolvedValue({ top_tracks: [song] });
+    render(() => <PlayerSearchPanel onClose={() => {}} />);
+    await type('daft');
+    fireEvent.click(screen.getByRole('button', { name: /Massive Attack — Artist/ }));
+    const sheet = menuMock.open.mock.calls.at(-1)![0] as { actions: Array<{ label: string; onSelect: () => void }> };
+    sheet.actions.find((action) => action.label === 'Start a DJ session')!.onSelect();
+    // NORMAL enters DJ on the collection's first playable song, then opens on it.
+    await waitFor(() => expect(storeMock.actions.enterAutoMode).toHaveBeenCalledWith(expect.objectContaining({ deferPlanning: true })));
+  });
+
+  it('hands a found collection whole to a Mix with errand', async () => {
+    cacheResults('mix');
+    storeMock.state.autoMode.active = true;
+    apiMock.getArtistProfile.mockResolvedValue({ top_tracks: [song] });
+    const onDone = vi.fn();
+    render(() => <PlayerSearchPanel intent="reference" onDone={onDone} onClose={() => {}} />);
+    await type('mix');
+    fireEvent.click(screen.getByRole('button', { name: 'Mix into session: Massive Attack' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(menuMock.open).not.toHaveBeenCalled();
   });
 });

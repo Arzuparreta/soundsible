@@ -31,8 +31,7 @@
   --search-field-hover: var(--stage-material);
 }
 
-.close,
-.iconButton {
+.close {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -46,14 +45,8 @@
   cursor: pointer;
 }
 
-.iconButton:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 @media (hover: hover) and (pointer: fine) {
-  .close:hover,
-  .iconButton:hover:not(:disabled) {
+  .close:hover {
     color: var(--ink-primary);
     background: var(--stage-material);
   }
@@ -100,88 +93,6 @@
   padding: var(--space-sm) var(--space-sm) max(var(--space-2xl), var(--player-mobile-footer-clearance, 0px));
   /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
   overscroll-behavior-y: contain;
-}
-
-.section + .section {
-  margin-top: var(--space-lg);
-}
-
-.sectionHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xs);
-}
-
-.heading {
-  margin: 0 0 var(--space-xs);
-  padding: 0 var(--space-xs);
-  color: var(--ink-secondary);
-  font-size: var(--text-caption);
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.sectionHead .heading {
-  margin: 0;
-}
-
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-xs);
-}
-
-.tile {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-  min-height: var(--row-h);
-  padding: var(--space-2xs);
-  padding-right: var(--space-sm);
-  color: var(--ink-primary);
-  font: inherit;
-  text-align: left;
-  background: var(--stage-material-quiet);
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .tile:hover {
-    background: var(--stage-material-hover);
-  }
-}
-
-.tileCover,
-.tileGlyph {
-  flex: 0 0 auto;
-  width: var(--cover-sm);
-  height: var(--cover-sm);
-  border-radius: var(--radius-xs);
-}
-
-.tileGlyph {
-  display: grid;
-  place-items: center;
-  color: var(--accent-ink);
-  background: var(--accent-faint);
-}
-
-.tileTitle {
-  /* Two lines before an ellipsis: a tile is half a phone wide. */
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--text-label);
-  font-weight: var(--fw-semibold);
-  line-height: var(--lh-snug);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
 }
 
 .group {
@@ -303,21 +214,4 @@
 .navText small {
   color: var(--ink-secondary);
   font-size: var(--text-caption);
-}
-
-.spinning {
-  animation: spin 0.8s linear infinite;
-  animation-play-state: var(--decorative-animation-state, running);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .spinning {
-    animation: none;
-  }
 }

@@ -4,19 +4,21 @@ import { ArtworkSurface } from '../design/Artwork';
 import { SearchField } from './SearchField';
 import SongRow from './SongRow';
 import { MusicListRow } from './MusicListRow';
-import { MusicLink } from './MusicLinks';
 import { SkeletonRows } from './Skeleton';
-import { CloseIcon, HeartIcon, QueueAddIcon, ShuffleIcon, RefreshIcon } from './icons';
+import { CloseIcon, QueueAddIcon } from './icons';
+import { menuIcons } from './icons';
 import { openEntryMenu } from './entryActions';
 import { openTrackMenu } from './trackActions';
-import { openPlaylistMenu, playlistTracks } from './playlistActions';
+import { playlistCollection } from './playlistActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
+import { savedEntityAction } from './savedEntityActions';
+import { catalogEntityCollection, openCollectionMenu, useCollectionInSession, type MusicCollection } from './collectionCommands';
+import type { MenuAction } from './ActionMenu';
 import {
   intentLabel,
   pickSong,
-  playCollection,
   queueLabel,
   queueSong,
   type IntentContext,
@@ -27,29 +29,16 @@ import { ENTITY_LIMIT, panelResults, SONG_PREVIEW, type PanelSong } from '../lib
 import { parseYouTubeInput } from '../lib/youtube';
 import { itemArtist, itemBusy, itemToTrack } from '../lib/catalogItem';
 import { catalogDestination, catalogMusic, libraryTrackMusic, navigateMusic } from '../lib/musicNavigation';
-import { favouritesContext, libraryContext, playlistContext, playlistDestination } from '../lib/playbackContext';
-import { pickPlaylistCoverTrack } from '../lib/playlists';
-import { collectionIndex } from '../lib/collectionIdentity';
+import { catalogSavedEntity } from '../lib/catalogCollection';
+import { playlistDestination } from '../lib/playbackContext';
 import { coverUrl, trackCoverUrl } from '../lib/media';
 import { savedFromCatalogItem } from '../lib/saved';
-import { isPodcastTrack } from '../lib/track';
 import { mobileListLayout } from '../lib/listLayout';
 import { pageVisible } from '../lib/pageVisibility';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import type { MenuEvent } from '../lib/menuEvent';
-import {
-  discoveryExploreItems,
-  discoveryLoading,
-  discoveryRefreshing,
-  dismissDiscoveryArtist,
-  dismissDiscoveryItem,
-  refreshDiscoveryFeed,
-  restoreDiscoveryArtist,
-  restoreDiscoveryItem,
-  retainDiscoveryFeed,
-} from '../lib/discoveryFeedStore';
-import { favouriteTracks, isPlayingItem, isPlayingTrack, musicLibrary, state } from '../stores';
+import { isPlayingItem, isPlayingTrack, state } from '../stores';
 import { player } from '../stores/player';
 import { t } from '../lib/i18n';
 import type { CatalogItem, RecommendationContext, Track } from '../types/music';
@@ -57,11 +46,9 @@ import styles from './PlayerSearchPanel.module.css';
 
 export type { SearchPanelIntent } from './playerSearchActions';
 
-/** Suggestions the idle panel offers before pointing at Discover. */
-const SUGGESTIONS = 5;
-/** Playlist shortcuts before "All playlists". */
-const PLAYLIST_TILES = 6;
 const SEARCH_DEBOUNCE_MS = 230;
+/** A row's own control, in each of the row recipes the panel lists. */
+const ACTIVATE = '[data-panel-activate], [data-row-main], [role="button"][tabindex="0"]';
 
 // Shared by both players' panels and kept across opening and closing them:
 // a search the listener typed is still there when they come back to it.
@@ -70,13 +57,14 @@ const [query, setQuery] = createSignal('');
 export const clearPlayerSearch = () => setQuery('');
 
 /**
- * The player's one search bar, and the shortcuts under it.
+ * The player's one search bar: find something and act on it, without leaving
+ * the player.
  *
- * It is not a second library. Lists, pages and the full search live in
- * Soundsible's own views; the panel answers "what next" without leaving the
- * player: find a song and play or queue it, start a collection, take a
- * suggestion. Anything bigger — an artist, an album, every result — goes to
- * its real page.
+ * It is not a second library — browsing belongs to Soundsible's own pages.
+ * Whatever the search finds, a song or a collection, offers its actions right
+ * here, in either mode: play it, queue it (in DJ, route it), start a DJ session
+ * from it, mix it into the session or change the session to it. Its page is
+ * one of those actions, not the only one.
  */
 export function PlayerSearchPanel(props: {
   active?: boolean;
@@ -135,26 +123,23 @@ export function PlayerSearchPanel(props: {
     playlistNames: Object.keys(state.playlists),
   }));
   const pending = () => search.loading() || search.youtubeLoading();
+  // A seam of the route takes one song; every other errand can take a
+  // collection whole.
+  const entitiesShown = () => props.intent !== 'route';
   const hasResults = () => {
     const found = results();
     return Boolean(found.lead || found.songs.length || found.entities.length || found.playlists.length);
   };
 
-  /** The first thing the list offers, which Enter in the field takes. */
-  const activateFirst = () => {
-    const found = results();
-    const lead = !props.intent && found.lead ? catalogDestination(found.lead) : undefined;
-    if (lead) navigateMusic(lead);
-    else if (found.songs[0]) void pickSong(found.songs[0], intentContext(), true);
-    else if (!props.intent && found.playlists[0]) navigateMusic(playlistDestination(found.playlists[0]));
-  };
+  /** Enter in the field presses the first row, whatever it is. */
+  const activateFirst = () => bodyEl?.querySelector('[data-panel-option]')
+    ?.querySelector<HTMLElement>(ACTIVATE)?.click();
 
   /** Up and down move between rows, and from the field into the list. */
   const moveFocus = (event: KeyboardEvent) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     const options = [...(bodyEl?.querySelectorAll<HTMLElement>('[data-panel-option]') ?? [])];
-    const target = (option: HTMLElement | undefined) =>
-      option?.querySelector<HTMLElement>('[data-row-main], [role="button"][tabindex="0"], a[href], button');
+    const target = (option: HTMLElement | undefined) => option?.querySelector<HTMLElement>(ACTIVATE);
     const at = options.findIndex((option) => option.contains(document.activeElement));
     if (event.key === 'ArrowUp' && at <= 0) {
       if (at === 0) { event.preventDefault(); inputEl?.focus(); }
@@ -194,7 +179,7 @@ export function PlayerSearchPanel(props: {
         </div>
       )}</Show>
       <div class={styles.body} ref={bodyEl} data-browser-body on:keydown={moveFocus}>
-        <Show when={searching()} fallback={<Shortcuts active={active()} intent={intentContext()} />}>
+        <Show when={searching()}>
           <Show when={search.partial()}><p class={styles.notice} role="status">{t('musicExplorer.partial')}</p></Show>
           <Show when={hasResults()} fallback={
             <Show when={!pending()} fallback={<SkeletonRows count={SONG_PREVIEW} compact />}>
@@ -209,17 +194,17 @@ export function PlayerSearchPanel(props: {
             </Show>
           }>
             <div class={styles.results} aria-busy={pending() || undefined}>
-              <Show when={!props.intent && results().lead}>{(lead) => <div data-panel-option><EntityRow item={lead()} /></div>}</Show>
+              <Show when={entitiesShown() && results().lead}>{(lead) => <div data-panel-option><EntityRow item={lead()} intent={intentContext()} /></div>}</Show>
               <For each={expanded() ? results().songs : results().songs.slice(0, SONG_PREVIEW)}>{(song) => (
                 <div data-panel-option><PanelSongRow song={song} intent={intentContext()} fromSearch /></div>
               )}</For>
               <Show when={!expanded() && results().songs.length > SONG_PREVIEW}>
                 <Control class={styles.more} onClick={() => setExpanded(true)}>{t('playerSearch.moreSongs')}</Control>
               </Show>
-              <Show when={!props.intent && (results().entities.length || results().playlists.length)}>
+              <Show when={entitiesShown() && (results().entities.length || results().playlists.length)}>
                 <div class={styles.group}>
-                  <For each={results().entities}>{(item) => <div data-panel-option><EntityRow item={item} /></div>}</For>
-                  <For each={results().playlists.slice(0, ENTITY_LIMIT)}>{(name) => <div data-panel-option><PlaylistRow name={name} /></div>}</For>
+                  <For each={results().entities}>{(item) => <div data-panel-option><EntityRow item={item} intent={intentContext()} /></div>}</For>
+                  <For each={results().playlists.slice(0, ENTITY_LIMIT)}>{(name) => <div data-panel-option><PlaylistRow name={name} intent={intentContext()} /></div>}</For>
                 </div>
               </Show>
               <Show when={!props.intent && !search.direct()}>
@@ -235,79 +220,8 @@ export function PlayerSearchPanel(props: {
   );
 }
 
-/** The idle panel: collections a press away, and a few suggestions. */
-function Shortcuts(props: { active: boolean; intent: IntentContext }) {
-  createEffect(() => {
-    if (!props.active) return;
-    onCleanup(retainDiscoveryFeed());
-  });
-  const suggestions = createMemo(() => discoveryExploreItems().slice(0, SUGGESTIONS));
-  const busy = () => discoveryLoading() || discoveryRefreshing();
-  // A song for a seam of the route is the one errand a whole collection does
-  // not answer.
-  const showTiles = () => props.intent.intent !== 'route';
-  const favourites = createMemo(() => favouriteTracks().filter((track) => !isPodcastTrack(track)));
-  const library = createMemo(() => musicLibrary().filter((track) => !isPodcastTrack(track)));
-  const playlists = createMemo(() => Object.keys(state.playlists));
-  const byId = createMemo(() => collectionIndex(musicLibrary()));
-  return (
-    <>
-      <Show when={showTiles() && (favourites().length || library().length || playlists().length)}>
-        <section class={styles.section} aria-labelledby="player-search-play">
-          <h2 id="player-search-play" class={styles.heading}>{t('playerSearch.play')}</h2>
-          <div class={styles.tiles}>
-            <Show when={favourites().length}>
-              <CollectionTile title={t('nav.favourites')} glyph={<HeartIcon size={18} />}
-                onPlay={() => playCollection(favourites(), t('nav.favourites'), favouritesContext(t('nav.favourites')), props.intent)} />
-            </Show>
-            <Show when={library().length}>
-              <CollectionTile title={t('playerSearch.shuffleLibrary')} glyph={<ShuffleIcon size={18} />}
-                onPlay={() => playCollection(library(), t('nav.library'), libraryContext(t('nav.library')), { ...props.intent, shuffle: true })} />
-            </Show>
-            <For each={playlists().slice(0, PLAYLIST_TILES)}>{(name) => {
-              const cover = createMemo(() => {
-                const track = pickPlaylistCoverTrack(name, state.playlists[name] ?? [], byId(), state.librarySettings);
-                return track ? trackCoverUrl(track, 'thumb') : undefined;
-              });
-              return (
-                <CollectionTile title={name} cover={cover()}
-                  onMenu={props.intent.intent ? undefined : (event) => openPlaylistMenu(name, {}, event)}
-                  onPlay={() => {
-                    const tracks = playlistTracks(name);
-                    playCollection(tracks, name, playlistContext(name, tracks, state.librarySettings), props.intent);
-                  }} />
-              );
-            }}</For>
-          </div>
-          <Show when={playlists().length > PLAYLIST_TILES && !props.intent.intent}>
-            <Control class={styles.more} onClick={() => navigateMusic('/playlists')}>{t('playerSearch.allPlaylists')}</Control>
-          </Show>
-        </section>
-      </Show>
-      <Show when={discoveryLoading() || suggestions().length}>
-      <section class={styles.section} aria-labelledby="player-search-suggestions">
-        <div class={styles.sectionHead}>
-          <h2 id="player-search-suggestions" class={styles.heading}>{t('playerSearch.forYou')}</h2>
-          <Control class={styles.iconButton} aria-label={t('discoverNodes.refresh')} disabled={busy()} onClick={() => refreshDiscoveryFeed()}>
-            <RefreshIcon size={16} class={busy() ? styles.spinning : undefined} />
-          </Control>
-        </div>
-        <Show when={!discoveryLoading() || suggestions().length} fallback={<SkeletonRows count={3} compact />}>
-          <For each={suggestions()}>{(item) => (
-            <div data-panel-option><PanelSongRow song={{ item }} intent={props.intent} discovery /></div>
-          )}</For>
-        </Show>
-        <Show when={!props.intent.intent}>
-          <Control class={styles.more} onClick={() => navigateMusic('/search')}>{t('playerSearch.moreDiscover')}</Control>
-        </Show>
-      </section>
-      </Show>
-    </>
-  );
-}
-
 /** A song row: press plays it (or does the errand), its button queues it. */
-function PanelSongRow(props: { song: PanelSong; intent: IntentContext; fromSearch?: boolean; discovery?: boolean }) {
+function PanelSongRow(props: { song: PanelSong; intent: IntentContext; fromSearch?: boolean }) {
   const [working, setWorking] = createSignal(false);
   const item = () => ('item' in props.song ? props.song.item : null);
   const track = createMemo<Track>(() => {
@@ -338,7 +252,7 @@ function PanelSongRow(props: { song: PanelSong; intent: IntentContext; fromSearc
     const row = item();
     if (!row) {
       openTrackMenu(track(), { music: libraryTrackMusic(track()), onAddToPlaylist: openPlaylistPicker,
-        onEditMetadata: openMetadataEditor, onPlayOnDevice: openPlayOnDevice }, event);
+        onEditMetadata: openMetadataEditor, onPlayOnDevice: openPlayOnDevice, shell: true }, event);
       return;
     }
     openEntryMenu(savedFromCatalogItem(row), {
@@ -346,12 +260,7 @@ function PanelSongRow(props: { song: PanelSong; intent: IntentContext; fromSearc
       music: catalogMusic(row),
       track: itemToTrack(row) ?? undefined,
       recommendation: row.raw?.recommendation as RecommendationContext | undefined,
-      ...(props.discovery ? {
-        onNotInterested: () => dismissDiscoveryItem(row.id),
-        onUndoNotInterested: () => restoreDiscoveryItem(row.id),
-        onLessFromArtist: (artist: string) => dismissDiscoveryArtist(artist),
-        onUndoLessFromArtist: (artist: string) => restoreDiscoveryArtist(artist),
-      } : {}),
+      shell: true,
     }, event);
   };
   // A song the DJ can plan with can be dragged onto a seam of the route.
@@ -379,52 +288,74 @@ function PanelSongRow(props: { song: PanelSong; intent: IntentContext; fromSearc
   );
 }
 
-/** An artist or album: its page, never a copy of it inside the panel. */
-function EntityRow(props: { item: CatalogItem }) {
+/** An artist or album: its actions, here. */
+function EntityRow(props: { item: CatalogItem; intent: IntentContext }) {
   const subtitle = () => props.item.type === 'artist'
     ? t('searchPanel.chipArtist')
     : [t('searchPanel.chipAlbum'), itemArtist(props.item)].filter(Boolean).join(' · ');
   const cover = () => props.item.cover || (props.item.track_id ? coverUrl(props.item.track_id, 'thumb') : undefined);
+  const extra = (): MenuAction[] => {
+    const destination = catalogDestination(props.item);
+    const saved = catalogSavedEntity(props.item);
+    return [
+      ...(destination ? [{
+        icon: props.item.type === 'artist' ? menuIcons.artist() : menuIcons.album(),
+        label: t(props.item.type === 'artist' ? 'artistActions.goToArtist' : 'albumActions.goToAlbum'),
+        onSelect: () => navigateMusic(destination),
+      }] : []),
+      ...(saved ? [savedEntityAction(saved)] : []),
+    ];
+  };
   return (
-    <Show when={catalogDestination(props.item)}>{(path) => (
-      <NavigationRow path={path()} title={props.item.title} subtitle={subtitle()} cover={cover()} round={props.item.type === 'artist'} />
+    <Show when={catalogEntityCollection(props.item)}>{(collection) => (
+      <CollectionRow collection={collection()} title={props.item.title} subtitle={subtitle()} cover={cover()}
+        round={props.item.type === 'artist'} intent={props.intent} extra={extra} />
     )}</Show>
   );
 }
 
-function PlaylistRow(props: { name: string }) {
+function PlaylistRow(props: { name: string; intent: IntentContext }) {
   return (
-    <NavigationRow path={playlistDestination(props.name)} title={props.name} subtitle={t('playerSearch.playlist')}
-      onMenu={(event) => openPlaylistMenu(props.name, {}, event)} />
+    <CollectionRow collection={playlistCollection(props.name)} title={props.name} subtitle={t('playerSearch.playlist')}
+      intent={props.intent} extra={() => [{
+        icon: menuIcons.open(), label: t('nowPlaying.contextOpen', { name: props.name }),
+        onSelect: () => navigateMusic(playlistDestination(props.name)),
+      }]} />
   );
 }
 
-/** A row that is a link to a page: following it closes the player there. */
-function NavigationRow(props: { path: string; title: string; subtitle: string; cover?: string; round?: boolean; onMenu?: (event?: MenuEvent) => void }) {
+/** A collection in the results. Pressed, it opens its actions; during a DJ
+ * errand that takes collections, pressing it does the errand. */
+function CollectionRow(props: {
+  collection: MusicCollection;
+  title: string;
+  subtitle: string;
+  cover?: string;
+  round?: boolean;
+  intent: IntentContext;
+  extra: () => MenuAction[];
+}) {
+  const errand = () => props.intent.intent === 'reference' || props.intent.intent === 'change' ? props.intent.intent : undefined;
+  const openActions = (event?: MenuEvent) => openCollectionMenu(props.collection, props.extra(), event, props.subtitle);
+  const activate = (event?: MenuEvent) => {
+    const purpose = errand();
+    if (!purpose) { openActions(event); return; }
+    const ctx = props.intent;
+    void useCollectionInSession(props.collection, purpose).then(() => { if (ctx.isCurrent?.() !== false) ctx.onDone?.(); });
+  };
+  const label = () => errand() ? `${intentLabel(errand()!)}: ${props.title}` : `${props.title} — ${props.subtitle}`;
+  const tap = createResponsiveTap({ onTap: (event) => activate(event), onLongPress: errand() ? undefined : () => openActions() });
   return (
     <Show when={!mobileListLayout()} fallback={
-      <MusicListRow title={props.title} titlePath={props.path} subtitle={props.subtitle} seed={props.title} cover={props.cover}
-        round={props.round} onMenu={props.onMenu} />
+      <MusicListRow title={props.title} subtitle={props.subtitle} seed={props.title} cover={props.cover} round={props.round}
+        actionLabel={label()} onActivate={() => activate()} onMenu={errand() ? undefined : openActions} menuButton={false} />
     }>
-      <div class={styles.navRow}>
-        <MusicLink class={styles.rowActivate} path={props.path} label={`${props.title} — ${props.subtitle}`} onMenu={props.onMenu} />
+      <div class={styles.navRow} onContextMenu={(event) => { if (!errand()) { event.preventDefault(); openActions(event); } }}>
+        <Control class={styles.rowActivate} data-panel-activate data-pressable aria-label={label()}
+          aria-haspopup={errand() ? undefined : 'dialog'} {...tap} />
         <ArtworkSurface class={styles.navCover} data-round={props.round ? '' : undefined} seed={props.title} src={props.cover} aria-hidden="true" />
         <span class={styles.navText}><strong>{props.title}</strong><small>{props.subtitle}</small></span>
       </div>
     </Show>
-  );
-}
-
-/** A collection a press away: it plays, it never opens. */
-function CollectionTile(props: { title: string; cover?: string; glyph?: JSX.Element; onPlay: () => void; onMenu?: (event?: MenuEvent) => void }) {
-  const tap = createResponsiveTap({ onTap: props.onPlay, onLongPress: props.onMenu ? () => props.onMenu?.() : undefined });
-  return (
-    <Control class={styles.tile} aria-label={`${t('playlistDetail.play')}: ${props.title}`} data-pressable {...tap}
-      onContextMenu={(event) => { if (props.onMenu) { event.preventDefault(); props.onMenu(event); } }}>
-      <Show when={props.glyph} fallback={<ArtworkSurface class={styles.tileCover} seed={props.title} src={props.cover} aria-hidden="true" />}>
-        <span class={styles.tileGlyph} aria-hidden="true">{props.glyph}</span>
-      </Show>
-      <span class={styles.tileTitle}>{props.title}</span>
-    </Control>
   );
 }

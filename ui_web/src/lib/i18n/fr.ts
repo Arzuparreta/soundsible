@@ -465,6 +465,8 @@ export const fr: Dict = {
     stop: 'Arrêter le téléchargement',
   },
   collection: {
+    play: 'Lire',
+    shuffle: 'Lecture aléatoire',
     save: 'Enregistrer dans votre bibliothèque',
     unsave: 'Retirer de votre bibliothèque',
     download: 'Télécharger',
@@ -870,18 +872,12 @@ export const fr: Dict = {
     feedbackFailed: 'Impossible d’enregistrer cette préférence',
   },
   artistActions: {
-    play: 'Lire',
-    shuffle: 'Lecture aléatoire',
     goToArtist: "Aller à l'artiste",
   },
   albumActions: {
-    play: 'Lire',
-    shuffle: 'Lecture aléatoire',
     goToAlbum: "Aller à l'album",
   },
   playlistActions: {
-    play: 'Lire',
-    shuffle: 'Lecture aléatoire',
     rename: 'Renommer',
     renameTitle: 'Renommer la liste',
     renameConfirm: 'Renommer',
@@ -1294,11 +1290,6 @@ export const fr: Dict = {
   playerSearch: {
     aria: 'Rechercher de la musique',
     placeholder: 'Rechercher ou coller un lien',
-    play: 'Lire',
-    forYou: 'Pour vous',
-    shuffleLibrary: 'Bibliothèque aléatoire',
-    allPlaylists: 'Toutes les playlists',
-    moreDiscover: 'Plus dans Découvrir',
     moreSongs: 'Plus de titres',
     allResults: 'Tous les résultats dans Recherche',
     playlist: 'Playlist',

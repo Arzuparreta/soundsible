@@ -80,9 +80,16 @@ test('full player names the record under the artist and opens it', async ({ page
   const album = stage.getByRole('link', { name: 'Biblioteca de prueba', exact: true });
   await expect(album).toBeVisible();
   // After the artist on the same line: who, then the record, a step quieter.
-  const [artistBox, albumBox] = [await artist.boundingBox(), await album.boundingBox()];
-  expect(albumBox!.x).toBeGreaterThanOrEqual(artistBox!.x + artistBox!.width);
-  expect(Math.abs((albumBox!.y + albumBox!.height / 2) - (artistBox!.y + artistBox!.height / 2))).toBeLessThanOrEqual(2);
+  // Read once the stage has fitted its title: the line settles over a few
+  // frames after the surface opens, and a reading taken during the fit sees a
+  // line that is still wrapping.
+  await expect.poll(async () => {
+    const [artistBox, albumBox] = [await artist.boundingBox(), await album.boundingBox()];
+    if (!artistBox || !albumBox) return 'not laid out';
+    if (albumBox.x < artistBox.x + artistBox.width) return 'the record is not after the artist';
+    const offset = Math.abs((albumBox.y + albumBox.height / 2) - (artistBox.y + artistBox.height / 2));
+    return offset <= 2 ? 'same line' : `${offset}px apart`;
+  }).toBe('same line');
   await activate(page, album, isMobile);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   await expect(page).toHaveURL(/#\/album\/Biblioteca%20de%20prueba\?artist=Artista\+7&view=discover/);

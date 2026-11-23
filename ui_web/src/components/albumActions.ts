@@ -1,9 +1,9 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import { savedEntityAction } from './savedEntityActions';
+import { collectionActions, type MusicCollection } from './collectionCommands';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
-import { player } from '../stores/player';
 import { api } from '../lib/api';
 import { tracksByIds } from '../lib/catalogTracks';
 import { albumDestination, albumMusic, navigateMusic } from '../lib/musicNavigation';
@@ -42,29 +42,22 @@ function albumContext(album: CatalogAlbum): PlaybackContextDescriptor {
   };
 }
 
-/** Play / shuffle / go-to-album menu definition for a catalog album. */
+/** A library album as a collection the shared commands can play. */
+export function albumCollection(album: CatalogAlbum): MusicCollection {
+  return { title: album.title, context: albumContext(album), songs: async () => ({ tracks: await albumTracks(album) }) };
+}
+
+/** The album's collection commands, then go-to-album and bookmark. */
 export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {}): ActionMenuOptions {
-  const play = async (shuffle = false) => {
-    const epoch = player().actions.beginAutoSessionChange();
-    const tracks = await albumTracks(album);
-    if (!tracks.length || player().actions.autoSessionToken() !== epoch) return;
-    if (shuffle) player().actions.playShuffled(tracks, albumContext(album));
-    else if (player().autoMode.active) player().actions.startDjSelection(tracks, album.title);
-    else player().actions.playFrom(tracks, 0, { context: albumContext(album) });
-  };
   const list: MenuAction[] = [
-    { icon: menuIcons.play(), label: t('albumActions.play'), onSelect: () => void play() },
-    { icon: menuIcons.shuffle(), label: t('albumActions.shuffle'), onSelect: () => void play(true) },
-  ];
-  {
-    list.push({
+    ...collectionActions(albumCollection(album)),
+    {
       icon: menuIcons.album(),
       label: t('albumActions.goToAlbum'),
-      onSelect: () =>
-        navigateMusic(albumDestination(albumMusic(album))),
-    });
-  }
-  list.push(savedEntityAction({ kind: 'album', name: album.title, artist: album.album_artist, destination: albumDestination(albumMusic(album)), cover: album.cover_track_id ? coverUrl(album.cover_track_id) : undefined }));
+      onSelect: () => navigateMusic(albumDestination(albumMusic(album))),
+    },
+    savedEntityAction({ kind: 'album', name: album.title, artist: album.album_artist, destination: albumDestination(albumMusic(album)), cover: album.cover_track_id ? coverUrl(album.cover_track_id) : undefined }),
+  ];
   return { title: album.title, subtitle: album.album_artist, actions: list };
 }
 

@@ -9,7 +9,7 @@ import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import { openContextMenu } from '../lib/contextMenu';
 import type { CatalogItem, RecommendationContext, SavedEntry, Track } from '../types/music';
-import { buildTrackMenu, musicLinkActions, queueActions, sendDiscoveryLessFromArtist, sendDiscoveryNotInterested } from './trackActions';
+import { buildTrackMenu, musicLinkActions, queueActions, sendDiscoveryLessFromArtist, sendDiscoveryNotInterested, sessionSongActions } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import type { MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
@@ -28,6 +28,8 @@ export interface EntryMenuContext {
   onLessFromArtist?: (artist: string) => void;
   onUndoLessFromArtist?: (artist: string) => void;
   busy?: boolean;
+  /** Opened inside the player, where a DJ session can be edited. */
+  shell?: boolean;
 }
 
 function catalogFeedbackPayload(entry: SavedEntry, ctx: EntryMenuContext): Record<string, unknown> {
@@ -139,6 +141,7 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
   });
   if (track) list.push(...buildTrackMenu(track, {
     collection: false,
+    shell: ctx.shell,
     onAddToPlaylist: openPlaylistPicker,
     music: ctx.music,
     onPlayOnDevice: openPlayOnDevice,
@@ -152,6 +155,18 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     // The same queue pair `buildTrackMenu` gives a matched song, and under the
     // same rule: a DJ session places songs itself.
     if (!player().autoMode.active) list.push(...queueActions(pending));
+    // What a matched song offers for DJ, matching this one only once chosen.
+    const resolve = () => ctx.item ? resolveCatalogTrack(ctx.item) : Promise.resolve(null);
+    if (ctx.item) list.push({
+      icon: menuIcons.changeSession(),
+      label: t('musicExplorer.startDjFromSong'),
+      onSelect: async () => {
+        const track = await resolve().catch(() => null);
+        if (!track) toast.error(t('searchPanel.noResolve'));
+        else if (player().autoMode.active) player().actions.startDjSelection([track], track.title);
+        else void player().actions.startDjFromTrack(track);
+      },
+    }, ...(ctx.shell ? sessionSongActions(resolve) : []));
     list.push({ icon: menuIcons.device(), label: t('trackActions.playOnDevice'), onSelect: () => openPlayOnDevice(pending) });
   }
   if (!track && ctx.music) list.push(...musicLinkActions(ctx.music));

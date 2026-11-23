@@ -30,16 +30,16 @@ const SURFACES = {
   album: { hash: `#/album/${encodeURIComponent(fixture.albums[0].title)}?artist=${encodeURIComponent(fixture.albums[0].artist.name)}&view=library&album_id=${fixture.albums[0].id}`, ready: '[data-song-row], [data-music-list-row]' },
   artist: { hash: `#/artist/${encodeURIComponent(fixture.artists[0].name)}?view=library&artist_id=${fixture.artists[0].id}`, ready: '[data-song-row], [data-music-list-row]' },
   playlist: { hash: '#/playlists/Playlist%201', ready: '[data-song-row], [data-music-list-row]' },
-  // The full player's own library browser: opened over the Songs view, with
-  // the wheel over its tile.
-  'player-browser': { player: 'browser', ready: '#now-playing-view [data-player-tile="browser"] [data-music-list-row], #now-playing-view [data-player-tile="browser"] [data-song-row]' },
+  // The full player's search panel: opened over the Songs view, searched, and
+  // listing every song it found, with the wheel over its tile.
+  'player-browser': { player: 'browser', search: 'Night', ready: '#now-playing-view [data-player-tile="browser"] [data-music-list-row], #now-playing-view [data-player-tile="browser"] [data-song-row]' },
   'player-queue': { player: 'queue', ready: '#now-playing-view [data-player-tile="queue"] [data-drag-row]' },
 };
 
 /** Opt-in surfaces outside the default scroll suite (player transition & DJ mode). */
 const EXTRA_SURFACES = {
   'player-open': { action: 'player-open', ready: '[data-song-row], [data-music-list-row]' },
-  'dj-browser': { player: 'browser', auto: true, ready: '#auto-mode-view [data-player-tile="browser"] [data-music-list-row], #auto-mode-view [data-player-tile="browser"] [data-song-row]' },
+  'dj-browser': { player: 'browser', auto: true, search: 'Night', ready: '#auto-mode-view [data-player-tile="browser"] [data-music-list-row], #auto-mode-view [data-player-tile="browser"] [data-song-row]' },
   'dj-idle': { player: 'stage', auto: true, idle: true, ready: '#auto-mode-view [data-player-tile="stage"]' },
 };
 const ALL_SURFACES = { ...SURFACES, ...EXTRA_SURFACES };
@@ -211,6 +211,12 @@ async function measure(name, rate) {
         }, surface.player);
       }
       const modeScope = surface.auto ? '#auto-mode-view' : '#now-playing-view';
+      if (surface.search) {
+        const tile = page.locator(`${modeScope} [data-player-tile="${surface.player}"]`);
+        await tile.getByRole('searchbox').fill(surface.search);
+        await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
+        await tile.getByRole('button', { name: 'More songs', exact: true }).click({ timeout: 10_000 });
+      }
       await page.locator(surface.ready).first().waitFor({ timeout: 30_000 });
       over = await page.locator(`${modeScope} [data-player-tile="${surface.player}"]`).boundingBox();
     } else if (name !== 'songs') {

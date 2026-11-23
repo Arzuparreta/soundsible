@@ -217,7 +217,6 @@ test('DJ reuses the compact workspace, pager and touch lifecycle', async ({ page
       // The DJ's panel is the same search panel, filling its tile, with its one field.
       const browserPanel = side.locator('aside[data-player-search]');
       await expect(browserPanel.getByRole('searchbox')).toHaveCount(1);
-      await expect(side.getByRole('button', { name: 'Reproducir: Biblioteca aleatoria', exact: true })).toBeVisible();
       const [tileBox, panelBox] = await Promise.all([side.boundingBox(), browserPanel.boundingBox()]);
       expect(tileBox).not.toBeNull();
       expect(panelBox).not.toBeNull();

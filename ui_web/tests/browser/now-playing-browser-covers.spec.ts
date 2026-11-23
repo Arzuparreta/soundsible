@@ -24,7 +24,7 @@ async function coverBoxes(list: Locator) {
 // The artwork is the row's placeholder too: a cover that never loads still
 // draws its gradient. A box with no height draws neither, and reads as rows
 // that lost their pictures.
-test('collection tiles and search rows in the player search panel show their artwork', async ({ page }) => {
+test('song and playlist rows in the player search panel show their artwork', async ({ page }) => {
   await openMusicPlayer(page);
   if ((page.viewportSize()?.width ?? 0) < 1024) {
     await page.locator('[data-player-surface-open] nav[data-no-surface-swipe]').getByRole('button').first().click();
@@ -38,8 +38,9 @@ test('collection tiles and search rows in the player search panel show their art
       expect(box.height).toBe(box.width);
     }
   };
-  await expect(browser.getByRole('button', { name: 'Reproducir: Lista de prueba', exact: true })).toBeVisible();
-  await check();
   await searchPlayerPanel(browser, 'Canción', false);
+  await check();
+  await browser.getByRole('searchbox').fill('Lista');
+  await expect(browser.getByText('Lista de prueba', { exact: true })).toBeVisible();
   await check();
 });

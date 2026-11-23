@@ -462,6 +462,8 @@ export const zh: Dict = {
     stop: '停止下载',
   },
   collection: {
+    play: '播放',
+    shuffle: '随机播放',
     save: '保存到你的资料库',
     unsave: '从资料库移除',
     download: '下载',
@@ -858,18 +860,12 @@ export const zh: Dict = {
     feedbackFailed: '无法保存此偏好',
   },
   artistActions: {
-    play: '播放',
-    shuffle: '随机播放',
     goToArtist: '前往艺人',
   },
   albumActions: {
-    play: '播放',
-    shuffle: '随机播放',
     goToAlbum: '前往专辑',
   },
   playlistActions: {
-    play: '播放',
-    shuffle: '随机播放',
     rename: '重命名',
     renameTitle: '重命名歌单',
     renameConfirm: '重命名',
@@ -1280,11 +1276,6 @@ export const zh: Dict = {
   playerSearch: {
     aria: '搜索音乐',
     placeholder: '搜索或粘贴链接',
-    play: '播放',
-    forYou: '为你推荐',
-    shuffleLibrary: '随机播放音乐库',
-    allPlaylists: '全部歌单',
-    moreDiscover: '在发现中查看更多',
     moreSongs: '更多歌曲',
     allResults: '在搜索中查看全部结果',
     playlist: '歌单',

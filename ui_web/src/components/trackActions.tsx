@@ -43,6 +43,9 @@ export interface TrackMenuContext {
   onUndoNotInterested?: () => void;
   onLessFromArtist?: (artist: string) => void;
   onUndoLessFromArtist?: (artist: string) => void;
+  /** Opened inside the player. A DJ session is edited only there: outside it,
+   * a song can start a new session but never change the one playing. */
+  shell?: boolean;
 }
 
 /** The links a menu offers into the music itself: one entry per performer, then
@@ -76,6 +79,24 @@ export function queueActions(track: ContextTrack): MenuAction[] {
   ];
 }
 
+/** In a DJ session, and inside the player, a song can join the route or the
+ * session's sources without replacing the session. `resolve` hands over the song itself, matched
+ * to a video first when it is a catalog row; nothing is matched until one of
+ * them is chosen. Outside a session there are none. */
+export function sessionSongActions(resolve: () => Promise<Track | null>): MenuAction[] {
+  if (!player().autoMode.active) return [];
+  const run = (use: (track: Track) => void) => async () => {
+    const epoch = player().actions.autoSessionToken();
+    const track = await resolve().catch(() => null);
+    if (!track) toast.error(t('searchPanel.noResolve'));
+    else if (player().actions.autoSessionToken() === epoch) use(track);
+  };
+  return [
+    { icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: run((track) => void player().actions.placeAutoTrack(track)) },
+    { icon: icons.source(), label: t('musicExplorer.reference'), onSelect: run((track) => player().actions.useAutoTrackAsSource(track)) },
+  ];
+}
+
 /** Build the action list for a track, given its context. */
 export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAction[] {
   const isFav = isFavouriteTrack(track);
@@ -98,7 +119,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   } else if (queueable) {
     list.push(...queueActions(track));
   }
-  if (!isPodcast && !inRoute)
+  if (!isPodcast && !inRoute) {
     list.push({
       icon: icons.changeSession(),
       label: t(player().playback.currentTrack?.id === track.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
@@ -107,6 +128,9 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
         else void player().actions.startDjFromTrack(track);
       },
     });
+    // The menu `ctx.auto` builds already leads with these two.
+    if (ctx.shell && !ctx.auto) list.push(...sessionSongActions(async () => track));
+  }
   if (ctx.onAddToPlaylist && !isPodcast)
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
   if (!isPodcast && !inRoute)

@@ -2,10 +2,10 @@ import type { MenuEvent } from '../lib/menuEvent';
 import { collectionIndex } from '../lib/collectionIdentity';
 import { type ActionMenuOptions } from './ActionMenu';
 import { menuIcons } from './icons';
+import { collectionActions, type MusicCollection } from './collectionCommands';
 import { openContextMenu } from '../lib/contextMenu';
 import { openPlaylistCoverPicker } from './CoverPicker';
 import { actions, state, musicLibrary } from '../stores';
-import { player } from '../stores/player';
 import { promptDialog } from '../lib/prompt';
 import { confirmDialog } from '../lib/confirm';
 import type { Track } from '../types/music';
@@ -28,30 +28,21 @@ export function playlistTracks(name: string): Track[] {
   return ids.map((id) => byId.get(id)).filter((t): t is Track => !!t);
 }
 
+/** A playlist as a collection the shared commands can play. */
+export function playlistCollection(name: string): MusicCollection {
+  return {
+    title: name,
+    get context() { return playlistContext(name, playlistTracks(name), state.librarySettings); },
+    songs: () => ({ tracks: playlistTracks(name) }),
+  };
+}
+
 /** Play / rename / duplicate / change-cover / delete menu definition for a playlist. */
 export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {}): ActionMenuOptions {
   return {
     title: name,
     actions: [
-      {
-        icon: menuIcons.play(),
-        label: t('playlistActions.play'),
-        onSelect: () => {
-          const tracks = playlistTracks(name);
-          if (!tracks.length) return;
-          // In DJ a playlist is one source: playing it starts a session from it.
-          if (player().autoMode.active) player().actions.startDjSelection(tracks, name);
-          else player().actions.playFrom(tracks, 0, { context: playlistContext(name, tracks, state.librarySettings) });
-        },
-      },
-      {
-        icon: menuIcons.shuffle(),
-        label: t('playlistActions.shuffle'),
-        onSelect: () => {
-          const tracks = playlistTracks(name);
-          if (tracks.length) player().actions.playShuffled(tracks, playlistContext(name, tracks, state.librarySettings));
-        },
-      },
+      ...collectionActions(playlistCollection(name)),
       ...(hooks.onEdit ? [{ icon: menuIcons.edit(), label: t('musicExplorer.edit'), onSelect: hooks.onEdit }] : []),
       {
         icon: menuIcons.rename(),

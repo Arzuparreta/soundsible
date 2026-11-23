@@ -159,6 +159,17 @@ function api(request, response, url) {
       return json({ name: url.searchParams.get('name') ?? '', resolved: false, top_tracks: [], albums: [], singles_eps: [], related_artists: [], candidates: [], in_library: true });
     case '/api/discovery/music/feed':
       return json({ sections: [] });
+    // The player's search panel lists what this answers: library songs whose
+    // title holds the query, capped as the engine caps a search.
+    case '/api/catalog/search': {
+      const wanted = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+      const items = data.files.filter((track) => track.title.toLowerCase().includes(wanted)).slice(0, 36).map((track) => ({
+        id: `library:${track.id}`, type: 'library_track', source: 'library', title: track.title, artist: track.artist,
+        subtitle: track.artist, album: track.album, duration: track.duration, track_id: track.id, item_id: track.item_id,
+        action_state: { in_library: true, playable: true },
+      }));
+      return json({ items, sections: [{ id: 'songs', item_ids: items.map((item) => item.id) }] });
+    }
   }
   return json({});
 }

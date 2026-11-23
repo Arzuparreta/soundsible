@@ -94,7 +94,7 @@ exported input, including when the worktree has uncommitted source changes.
 
 - One machine, headless Chromium, 60 Hz. It says nothing about WebKit, an
   iPhone, Android WebView, WebView2 or a 144 Hz display.
-- `player-browser` opens the full player and scrolls its library browser.
+- `player-browser` opens the full player, searches its panel ("Night"), lists every song found and scrolls them. The panel has no list until it is searched.
   `player-queue` adds 300 requests through the real song menu before opening
   the player and scrolling the manual lane. Setup is outside the timed window.
 - CI runs songs, albums and player-browser against the built production bundle

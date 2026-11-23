@@ -32,11 +32,10 @@ vi.mock('../stores/player', () => ({
 vi.mock('../lib/catalogItem', () => mock.catalog);
 vi.mock('../lib/toast', () => ({ toast: { error: mock.toastError } }));
 
-import { pickSong, playCollection, queueSong } from './playerSearchActions';
+import { pickSong, queueSong } from './playerSearchActions';
 
 const track: Track = { id: 'song-1', title: 'Song', artist: 'Artist' };
 const item = { id: 'deezer:1', type: 'track', title: 'Song', artist: 'Artist' } as unknown as CatalogItem;
-const context = { id: 'favourites', kind: 'favourites', label: 'Favourites' } as const;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -105,32 +104,5 @@ describe('queueSong', () => {
     await queueSong({ item });
     expect(mock.catalog.resolveCatalogTrack).toHaveBeenCalledWith(item);
     expect(mock.actions.enqueue).toHaveBeenCalledWith(track);
-  });
-});
-
-describe('playCollection', () => {
-  const songs = [track, { ...track, id: 'song-2' }];
-
-  it('plays in order, or shuffled, outside a DJ session', () => {
-    playCollection(songs, 'Favourites', context);
-    expect(mock.actions.playFrom).toHaveBeenCalledWith(songs, 0, { context });
-    playCollection(songs, 'Favourites', context, { shuffle: true });
-    expect(mock.actions.playShuffled).toHaveBeenCalledWith(songs, context);
-  });
-
-  it('starts a DJ session from the whole collection during one', () => {
-    mock.autoActive = true;
-    playCollection(songs, 'Favourites', context);
-    expect(mock.actions.startDjSelection).toHaveBeenCalledWith(songs, 'Favourites');
-    expect(mock.actions.playFrom).not.toHaveBeenCalled();
-  });
-
-  it('hands the collection to an errand whole', () => {
-    const onDone = vi.fn();
-    playCollection(songs, 'Mix', context, { intent: 'reference', onDone });
-    expect(mock.actions.addAutoSource).toHaveBeenCalledWith(songs, 'Mix');
-    playCollection(songs, 'Mix', context, { intent: 'change', onDone });
-    expect(mock.actions.changeAutoSession).toHaveBeenCalledWith(songs, 'Mix');
-    expect(onDone).toHaveBeenCalledTimes(2);
   });
 });

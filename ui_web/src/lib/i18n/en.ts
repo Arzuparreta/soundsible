@@ -462,6 +462,8 @@ export const en = {
     stop: 'Stop the download',
   },
   collection: {
+    play: 'Play',
+    shuffle: 'Shuffle play',
     save: 'Save to your library',
     unsave: 'Remove from your library',
     download: 'Download',
@@ -864,18 +866,12 @@ export const en = {
     feedbackFailed: 'Could not save that preference',
   },
   artistActions: {
-    play: 'Play',
-    shuffle: 'Shuffle play',
     goToArtist: 'Go to artist',
   },
   albumActions: {
-    play: 'Play',
-    shuffle: 'Shuffle play',
     goToAlbum: 'Go to album',
   },
   playlistActions: {
-    play: 'Play',
-    shuffle: 'Shuffle play',
     rename: 'Rename',
     renameTitle: 'Rename playlist',
     renameConfirm: 'Rename',
@@ -1287,11 +1283,6 @@ export const en = {
   playerSearch: {
     aria: 'Search music',
     placeholder: 'Search or paste a link',
-    play: 'Play',
-    forYou: 'For you',
-    shuffleLibrary: 'Shuffle library',
-    allPlaylists: 'All playlists',
-    moreDiscover: 'More in Discover',
     moreSongs: 'More songs',
     allResults: 'See all results in Search',
     playlist: 'Playlist',

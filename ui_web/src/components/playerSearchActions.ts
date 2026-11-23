@@ -13,7 +13,6 @@
  */
 import { player } from '../stores/player';
 import { catalogContextTrack, playCatalogItem, reportSearchPlay, resolveCatalogTrack } from '../lib/catalogItem';
-import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import type { PanelSong } from '../lib/playerSearchResults';
@@ -103,31 +102,4 @@ export async function queueSong(song: PanelSong): Promise<void> {
 /** The quick button's label for the mode the player is in. */
 export function queueLabel(): string {
   return t(player().autoMode.active ? 'autoMode.dj.routeAction' : 'trackActions.addToQueue');
-}
-
-/** A collection shortcut: play it, or in a DJ session start a session from it
- * — what its own page's Play button does. An errand uses it whole. */
-export function playCollection(
-  tracks: Track[],
-  label: string,
-  context: PlaybackContextDescriptor,
-  ctx: IntentContext & { shuffle?: boolean } = {},
-): void {
-  const music = tracks.filter((track) => !track.unavailable);
-  if (!music.length) return;
-  const actions = player().actions;
-  if (ctx.intent === 'reference') {
-    actions.addAutoSource(music, label);
-    ctx.onDone?.();
-    return;
-  }
-  if (ctx.intent === 'change') {
-    void actions.changeAutoSession(music, label);
-    ctx.onDone?.();
-    return;
-  }
-  // Shuffling already starts a session from the shuffled songs in DJ mode.
-  if (ctx.shuffle) actions.playShuffled(music, context);
-  else if (player().autoMode.active) actions.startDjSelection(music, label);
-  else actions.playFrom(music, 0, { context });
 }
