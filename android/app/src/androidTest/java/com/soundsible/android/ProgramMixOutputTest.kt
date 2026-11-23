@@ -210,8 +210,8 @@ class ProgramMixOutputTest {
                 while (!owner.readyInput(1) && System.nanoTime() < readyDeadline) Thread.sleep(10)
                 assertTrue("Incoming decoder did not prepare actual PCM", owner.readyInput(1))
                 val echoDelay = if (technique == ProgramMixCurve.Technique.ECHO_CUT) 0.5 else null
-                if (cued) owner.arm(2000, technique, if (cancelCue) 3000 else 1500, if (cancelCue) 2000 else 500, echoDelay)
-                else owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else if (longRun) 48000 else 2000, technique, echoDelay)
+                assertTrue("Transition did not start", if (cued) owner.arm(2000, technique, if (cancelCue) 3000 else 1500, if (cancelCue) 2000 else 500, echoDelay)
+                    else owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else if (longRun) 48000 else 2000, technique, echoDelay))
                 var transition = owner.transition() ?: error("Transition window absent")
                 if (cued) {
                     val cueStart = transition.start - if (cancelCue) 96000 else 24000
@@ -257,7 +257,7 @@ class ProgramMixOutputTest {
                     assertTrue("Corrected standby cue did not rebuffer", owner.readyInput(1))
                     assertEquals("Standby phase correction reset master audio", epoch, owner.epoch())
                     assertTrue("Standby source advanced while silent and unarmed", owner.inputPositionUs(1) < 20000)
-                    owner.arm(2000, technique, 300, 200)
+                    assertTrue("Rearmed transition did not start", owner.arm(2000, technique, 300, 200))
                     transition = owner.transition() ?: error("Rearmed transition absent")
                 }
                 val checkpoints = when {

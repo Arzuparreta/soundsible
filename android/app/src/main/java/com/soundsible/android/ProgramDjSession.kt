@@ -231,17 +231,19 @@ internal class ProgramDjSession(private val context: Context, private val genera
         // until the incoming occurrence has made actual buffering progress.
         if (!retryProgress.ready(key(current + 1), decks[standby].bufferedPosition.coerceAtLeast(0) * 1000)) return
         if (resolved.technique == ProgramMixCurve.Technique.DIRECT || outgoing.playbackState == Player.STATE_ENDED) {
-            if (output.drainedInput(slot)) { output.blend(50, ProgramMixCurve.Technique.DIRECT); armed = true; changed() }
+            if (output.drainedInput(slot) && output.blend(50, ProgramMixCurve.Technique.DIRECT)) { armed = true; changed() }
             return
         }
         val queuedUs = output.reservedPositionUs() - output.positionUs()
         val leadMs = ((remainingUs / outgoing.playbackParameters.speed - queuedUs) / 1000).toLong()
-        if (leadMs > 0) {
+        // Not ready any more since the check above: the next tick tries again.
+        val started = if (leadMs > 0) {
             val seekMs = streams[standby]?.positionOffsetUs ?: 0
             val prerollMs = ((resolved.inCueUs - seekMs) / resolved.inSpeed / 1000).toLong().coerceIn(0, minOf(4000, leadMs))
             output.arm(resolved.overlapUs / 1000, resolved.technique, leadMs.coerceAtMost(60000), prerollMs,
                 resolved.echoDelaySeconds?.div(outgoing.playbackParameters.speed.toDouble()))
         } else output.blend(minOf(resolved.overlapUs / 1000, 1500), ProgramMixCurve.Technique.SAFE_FADE)
+        if (!started) return
         armed = true
         changed()
     }
@@ -312,10 +314,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             armed = false; plan = null; ramp = null; pendingSince = 0; recovering = output.restoredAt() != null
             // Before an overlap is armed, releasing the outgoing decoder cannot
             // restore a transition window. Promote its already prepared successor.
-            if (!recovering && output.dominantInput() == slot && output.readyInput(other)) {
-                output.blend(50, ProgramMixCurve.Technique.DIRECT)
-                armed = true
-            }
+            if (!recovering && output.dominantInput() == slot) armed = output.blend(50, ProgramMixCurve.Technique.DIRECT)
             changed()
         }
         return true

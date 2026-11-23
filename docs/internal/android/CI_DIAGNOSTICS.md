@@ -129,6 +129,46 @@ owner/generation and an exception when rebuilding the queue. The case's assertio
 and deadlines are kept; a green retry alone does not demonstrate
 that the cause has been repaired.
 
+## Device websocket reset after a command on the TLS fixture
+
+On `feat/remote-control` (`38beec30`) and `remote/android-fixes`, shard 2 failed
+`DeviceSessionTest.tlsDeviceSession` and usually `DeviceDjSessionTest.tlsDjDevice`
+in every run (`45041273974`, `45045473052`, `45064901488`, `45066770176`,
+`45068411496`, `45069933938`, `45071615842`, `45073425251`): a command answered
+`503 {"reason":"offline"}` right after `transport.seek` or `transport.next`.
+The HTTP variants never failed.
+
+Temporary fixture logging (socket registrations, engine.io closes, websocket
+read errors with client port and file descriptor, stream requests) showed the
+same sequence in every failure:
+
+1. the engine sends `device_command` (seek or next) to the device websocket;
+2. the app opens the new audio stream and closes the previous audio TLS
+   connection (`request_end` of the old `/api/static/stream/…`);
+3. the app's acknowledgement arrives on the device websocket;
+4. within 7–65 ms the server's read on that same websocket connection (same
+   client port and descriptor) fails with `ConnectionResetError(104)`, so the
+   engine drops the instance and answers `offline`.
+
+The app's Socket.IO client logs no transport error or disconnect for that
+socket: from its side the websocket is still connected. Engine bookkeeping is
+not involved (a later disconnect of an older socket never removes a newer
+registration of the same instance). Per run, the TLS fixture logged 4–7 such
+resets and the HTTP fixture none. Removing the engine's `device_updated`
+broadcasts did not change the result (run `45073425251`). The same fixture
+logging on `main`'s code (run `45075373452`, temporarily on this branch) showed
+three resets in the whole shard, none after an audio stream ended: on `main` the
+device never writes on its websocket while it carries out a command, because
+the old events had no acknowledgement. On the host, a Python client that
+aborts audio TLS streams while acknowledging commands kept its websocket for
+150 commands, so the server's TLS stack alone does not reproduce it.
+
+Open: whether the reset comes from the emulator's network or from the app's
+TLS stack has not been established, and no fix is merged. Options under
+consideration: a TLS terminator in front of the plain fixture (the production
+engine serves plain HTTP behind a proxy), a client-side liveness check on the
+device socket, or a different transport for it.
+
 ## Publisher closed after 30 s in the Android Live fixture
 
 On `main` (`e6bad843`, run `44857843679`, shard 5), `LiveListenerTest.httpCoreRelay`

@@ -38,6 +38,23 @@ internal object RemoteCommandLogic {
         "session.release",
     )
 
+    /** Act on this device's own queue, so a Live listening session refuses them. */
+    val ownQueueCommands: Set<String> = setOf(
+        "transport.play", "transport.pause", "transport.next", "transport.previous", "transport.seek",
+        "transport.set_shuffle", "transport.set_repeat", "queue.add", "queue.move", "queue.remove",
+        "queue.play_entry", "radio.stop", "dj.start_from_current", "dj.set_mixing",
+    )
+
+    /** Need a current item: `nothing_playing` without one. */
+    val currentItemCommands: Set<String> = setOf(
+        "transport.play", "transport.pause", "transport.next", "transport.previous", "transport.seek", "dj.start_from_current",
+    )
+
+    /** Need a running DJ session: `invalid_state` without one. */
+    val djSessionCommands: Set<String> = setOf(
+        "dj.stop", "dj.place", "dj.add_source", "dj.remove_source", "dj.change_session", "dj.repair",
+    )
+
     fun formFactor(smallestScreenWidthDp: Int): String =
         if (smallestScreenWidthDp >= 600) "tablet" else "phone"
 
