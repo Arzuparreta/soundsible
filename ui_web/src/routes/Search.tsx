@@ -1006,10 +1006,8 @@ export default function Search() {
                   </p>
                 )}
               </Show>
-              {/* The hero and the songs preview sit side by side on a wide
-                  screen and stack on a narrow one — the one part of the layout
-                  that is fixed, because a search always wants to answer
-                  "which one?" and "what can I play right now?" together. */}
+              {/* Share the row when both sections are present and the results
+                  column has room, including when the player is docked. */}
               <Show when={tab() === 'all' && (topResult() || songsPreview().length > 0)}>
                 <div class={styles.topBlock}>
                   <Show when={topResult()}>

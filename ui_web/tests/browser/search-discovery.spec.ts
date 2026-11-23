@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { mockMusicEngine } from './music-browser-fixture';
+import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 
 const artwork = (index: number) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320"><rect width="320" height="320" fill="hsl(${index * 37},30%,28%)"/><circle cx="160" cy="135" r="75" fill="hsl(${index * 37},35%,55%)"/><path d="M0 280L160 180 320 280V320H0" fill="hsl(${index * 37},30%,15%)"/></svg>`)}`;
 const sections = [
@@ -19,6 +19,44 @@ const items = Array.from({ length: 10 }, (_, index) => ({ id: `song:${index}`, t
 test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
   await page.route('**/api/discovery/music/feed?**', (route) => route.fulfill({ json: { browse_sections: sections, items } }));
+});
+
+test('search uses the available column when songs have no neighbor or the player docks', async ({ page, isMobile }, info) => {
+  test.skip(isMobile, 'desktop player dock');
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const song = { id: 'song:result', type: 'track', source: 'youtube', title: 'Corazón de acero', artist: 'Chiquetete', duration: 172, cover: artwork(2) };
+  const album = { id: 'album:result', type: 'album', source: 'deezer', title: 'Con permiso', artist: 'Chiquetete', cover: artwork(3) };
+  await page.route('**/api/catalog/search?**', (route) => {
+    const withTop = new URL(route.request().url()).searchParams.get('q')?.includes('original');
+    const songs = { id: 'songs', layout: 'rows', item_ids: [song.id] };
+    return route.fulfill({ json: {
+      items: withTop ? [album, song] : [song],
+      sections: withTop ? [{ id: 'top', item_ids: [album.id] }, songs] : [songs],
+    } });
+  });
+  await openMusicPlayer(page);
+  await page.goto('/player/#/search?q=corazon');
+  const surface = page.locator('[data-player-surface-open]');
+  await expect(surface).toHaveAttribute('data-docked', '');
+  const songs = page.getByRole('heading', { name: 'Canciones', exact: true }).locator('..');
+  const field = page.getByRole('searchbox');
+  await expect(songs).toBeVisible();
+  await page.screenshot({ path: info.outputPath('search-docked.png') });
+  await expect(songs.getByText(song.title, { exact: true })).toBeVisible();
+  const width = async () => (await songs.boundingBox())!.width / (await field.boundingBox())!.width;
+  await expect.poll(width).toBeGreaterThan(0.95);
+
+  await field.fill('corazon original');
+  const top = page.getByRole('heading', { name: 'Mejor resultado', exact: true });
+  await expect(top).toBeVisible();
+  await expect.poll(width).toBeGreaterThan(0.95);
+  await surface.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await expect.poll(width).toBeLessThan(0.75);
+  expect((await songs.boundingBox())!.y).toBeCloseTo((await top.boundingBox())!.y, 0);
+
+  await field.fill('corazon');
+  await expect(top).toHaveCount(0);
+  await expect.poll(width).toBeGreaterThan(0.95);
 });
 
 test('home has distinct entities, bounded songs, working sections and restoration', async ({ page }, info) => {

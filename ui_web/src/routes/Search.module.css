@@ -268,6 +268,7 @@
 
 /* Same section rhythm as Discover (SearchDiscovery.module.css). */
 .results {
+  container: search-results / inline-size;
   display: grid;
   gap: var(--space-2xl);
   min-width: 0;
@@ -302,8 +303,8 @@
   min-width: 0;
 }
 
-@media (min-width: 768px) {
-  .topBlock {
+@container search-results (min-width: 768px) {
+  .topBlock:has(> :nth-child(2)) {
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
     align-items: start;
   }
