@@ -103,6 +103,17 @@
   }
 }
 
+/* The reset for the column's width, at the foot of its edge, centred in the
+   pager's band. */
+.dockReset {
+  /* Over the pager, so its name reads over the dots when it shows. */
+  z-index: 46;
+  left: var(--space-sm);
+  bottom: calc(var(--player-carousel-bottom) + (var(--player-carousel-band) - var(--control-h)) / 2);
+  width: var(--control-h);
+  height: var(--control-h);
+}
+
 /* The pointer is captured by the edge for the whole drag, and its press is
    prevented, so no text is selected on the way; the cursor says what it does
    wherever it goes. */
@@ -266,8 +277,8 @@
   background-size: 180px 180px;
 }
 
-/* Layout and output controls on the left, playback mode in the centre, and
-   the close button on its own on the right. */
+/* Output on the left, playback mode in the centre, and window controls on
+   the right. */
 .floatingChrome {
   --player-chrome-side: minmax(var(--player-chrome-size), 1fr);
   --player-chrome-column-gap: 12px;
@@ -299,6 +310,13 @@
   justify-self: start;
   display: inline-flex;
   align-items: center;
+  gap: var(--space-2xs);
+}
+
+.chromeRight {
+  grid-column: 3;
+  justify-self: end;
+  display: inline-flex;
   gap: var(--space-2xs);
 }
 
@@ -427,19 +445,6 @@
 .modePill {
   grid-column: 2;
   justify-self: center;
-}
-
-.closeButton {
-  grid-column: 3;
-  justify-self: end;
-}
-
-.layoutButton {
-  position: absolute;
-  z-index: 42;
-  top: var(--player-chrome-top);
-  left: max(clamp(12px, 1.6vw, 28px), env(safe-area-inset-left, 0px));
-  display: none;
 }
 
 .chromeButton svg {
@@ -646,8 +651,7 @@
   .floatingChrome {
     --player-chrome-column-gap: 8px;
 
-    /* Reserve the same space on each side so the mode pill stays centred.
-       The dock has two controls on the left; mobile only needs Devices. */
+    /* Reserve two controls on each side so the mode pill stays centred. */
     --player-chrome-side: calc(var(--player-chrome-size) * 2 + var(--space-2xs));
 
     left: max(12px, env(safe-area-inset-left, 0px));
@@ -664,17 +668,6 @@
 
   .carouselNav {
     display: flex;
-  }
-}
-
-@container player (min-width: 1024px) {
-  .chromeLeft {
-    /* The workspace's layout control occupies the first slot at this width. */
-    margin-left: calc(var(--player-chrome-size) + var(--space-2xs));
-  }
-
-  .layoutButton {
-    display: inline-grid;
   }
 }
 

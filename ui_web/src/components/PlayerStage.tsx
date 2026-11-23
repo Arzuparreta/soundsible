@@ -51,7 +51,6 @@ function StageLyrics() {
 export function PlayerStage(props: {
   mode: PlayerStageMode;
   surfaceOpen: boolean;
-  dragHandle?: JSX.Element;
   onCloseSurface?: () => void;
   onOpenList?: () => void;
   listLabel?: string;
@@ -320,7 +319,6 @@ export function PlayerStage(props: {
 
   return (
     <>
-      {props.dragHandle}
       <div
         ref={rootEl}
         class={styles.body}

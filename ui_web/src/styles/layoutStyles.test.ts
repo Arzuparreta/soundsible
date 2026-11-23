@@ -115,13 +115,7 @@ describe('unified player geometry', () => {
     ).toMatchObject({ 'padding-bottom': '24px' });
   });
 
-  it('keeps desktop layout controls above the workspace, and gives a docked player its column', () => {
-    expect(scopedDeclarations(surface, '.layoutButton')).toMatchObject({
-      display: 'none',
-    });
-    expect(scopedDeclarations(surface, '.layoutButton', 'min-width: 1024px')).toMatchObject({
-      display: 'inline-grid',
-    });
+  it('gives a docked player its column', () => {
     // Docked, the player is a column the app makes room for, and the bottom
     // player bar steps aside for the column's own controls.
     expect(scopedDeclarations(surface, '.surface[data-docked]')).toMatchObject({

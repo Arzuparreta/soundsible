@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_NOW_PLAYING_LAYOUT,
-  layoutFromPreset,
   movePanel,
   normalizePanelRatios,
   parseNowPlayingLayout,
@@ -39,13 +38,10 @@ describe('nowPlayingLayout', () => {
     expect(resized.queue).toBeCloseTo(0.3);
   });
 
-  it('builds independent presets that give the room to the stage or to the queue', () => {
-    expect(layoutFromPreset('balanced')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
-    expect(layoutFromPreset('stage')).toEqual({ version: 1, order: ['stage', 'queue'], ratios: { stage: 0.7, queue: 0.3 } });
-    expect(layoutFromPreset('list')).toEqual({ version: 1, order: ['stage', 'queue'], ratios: { stage: 0.4, queue: 0.6 } });
-    const first = layoutFromPreset('balanced');
-    first.order.reverse();
-    first.ratios.stage = 1;
-    expect(layoutFromPreset('balanced')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
+  it('migrates the previous default while preserving an explicitly resized split', () => {
+    const old = { version: 1, order: ['stage', 'queue'], ratios: { stage: 0.55, queue: 0.45 } };
+    expect(parseNowPlayingLayout(JSON.stringify(old))).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
+    const custom = { ...old, fitArtwork: false };
+    expect(parseNowPlayingLayout(JSON.stringify(custom))).toEqual(custom);
   });
 });

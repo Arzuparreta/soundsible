@@ -68,6 +68,9 @@ export const playerPresentation = presentation;
 /** The column's width in this window. */
 export const playerDockWidth = (): number => clampDockWidth(dockWidth(), viewport());
 
+/** Whether the listener moved the column off its default width. */
+export const playerDockWidthCustom = (): boolean => dockWidth() !== DOCK_WIDTH.default;
+
 /** The widest the column can be in this window. */
 export const playerDockMaxWidth = (): number => maxDockWidth(viewport());
 

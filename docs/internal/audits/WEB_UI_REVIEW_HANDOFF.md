@@ -248,7 +248,7 @@ Two things that cost time in step 1:
 | 8 Design system (U2, U3, U6, U7; U4 decision) | #468 | Done |
 | 9 P6, X1–X3 (+ remaining A1/DJ activity) | #469 | Done (baseline for this follow-up) |
 | ThinkPad X270 follow-up (scroll, artwork, player/DJ compositing) | #480 | Complete locally; gated by CI checks and merge |
-| Docked Now Playing | `feat/now-playing-docked` | Retires the player browser covered by P3, P4 and A2. The production rendering gate now exercises the player queue. |
+| Docked Now Playing | `feat/now-playing-docked` | Retires the player browser covered by P3, P4 and A2. The production rendering gate now exercises the player queue. The default full-screen split fits the cover to the workspace height, and dragging the divider saves a custom split. |
 
 ## Evidence kept outside the repository
 

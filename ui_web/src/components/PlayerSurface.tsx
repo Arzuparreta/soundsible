@@ -14,12 +14,14 @@ import {
   playerDocked,
   playerDockMaxWidth,
   playerDockWidth,
+  playerDockWidthCustom,
   playerPresentation,
   setPlayerCompact,
   setPlayerDockWidth,
   setPlayerPresentation,
 } from '../lib/playerDock';
 import { desktopShell } from '../lib/shellLayout';
+import { SeamReset } from './SeamReset';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import { createTouchMoveLease } from '../lib/touchMoveLease';
 import { Control } from '../design/Control';
@@ -357,6 +359,7 @@ export function PlayerSurface() {
     handle.addEventListener('pointercancel', end);
   };
 
+  let dockEdgeEl: HTMLDivElement | undefined;
   const resizeDockByKey = (event: KeyboardEvent) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
@@ -517,6 +520,7 @@ export function PlayerSurface() {
       >
         <Show when={docked()}>
           <div
+            ref={dockEdgeEl}
             class={styles.dockEdge}
             role="separator"
             tabIndex={0}
@@ -529,6 +533,14 @@ export function PlayerSurface() {
             onKeyDown={resizeDockByKey}
             onDblClick={() => setPlayerDockWidth(DOCK_WIDTH.default)}
           />
+          {/* The way back to the default width, beside the line it undoes, in
+              the pager's band: the one stretch of the column nothing else uses. */}
+          <Show when={playerDockWidthCustom()}>
+            <SeamReset class={styles.dockReset} label={t('nowPlaying.resetDock')} onReset={() => {
+              setPlayerDockWidth(DOCK_WIDTH.default);
+              dockEdgeEl?.focus({ preventScroll: true });
+            }} />
+          </Show>
         </Show>
         <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
           src={backdrops().first} active={backdrops().active === 'first'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
@@ -539,21 +551,6 @@ export function PlayerSurface() {
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">
           <div class={styles.chromeLeft}>
-            <Show when={desktopShell()}>
-              <button
-                class={styles.chromeButton}
-                type="button"
-                aria-label={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
-                title={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
-                onClick={togglePresentation}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <Show when={playerPresentation() === 'docked'} fallback={<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M14 4v16" /></>}>
-                    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-                  </Show>
-                </svg>
-              </button>
-            </Show>
             <Control
               class={styles.deviceButton}
               classList={{ [styles.deviceButtonActive]: player().remote, [styles.deviceButtonError]: player().unreachable }}
@@ -601,16 +598,33 @@ export function PlayerSurface() {
             </button>
           </div>
 
-          <button
-            classList={{ [styles.chromeButton]: true, [styles.closeButton]: true }}
-            type="button"
-            aria-label={t('common.close')}
-            onClick={() => closeSurface()}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-              <path d={docked() ? 'm9 6 6 6-6 6' : 'm6 9 6 6 6-6'} />
-            </svg>
-          </button>
+          <div class={styles.chromeRight}>
+            <Show when={desktopShell()}>
+              <button
+                class={styles.chromeButton}
+                type="button"
+                aria-label={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
+                title={t(playerPresentation() === 'docked' ? 'nowPlaying.fillScreen' : 'nowPlaying.dockBeside')}
+                onClick={togglePresentation}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <Show when={playerPresentation() === 'docked'} fallback={<path d="M9 4v5H4m11-5v5h5M4 15h5v5m11-5h-5v5" />}>
+                    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                  </Show>
+                </svg>
+              </button>
+            </Show>
+            <button
+              class={styles.chromeButton}
+              type="button"
+              aria-label={t('common.close')}
+              onClick={() => closeSurface()}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                <path d={docked() ? 'm9 6 6 6-6 6' : 'm6 9 6 6 6-6'} />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* The phone header has no room for the device's name: it gets a line of its own. */}

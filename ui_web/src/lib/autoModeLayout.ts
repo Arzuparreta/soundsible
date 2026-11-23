@@ -1,28 +1,20 @@
 import {
-  buildTwoPanelLayoutPresets,
   clonePanelLayout,
   parsePanelLayout,
   type PlayerPanelLayout,
-  type TwoPanelLayoutPresetId,
 } from './playerLayout';
 
 export type AutoModePanelId = 'stage' | 'route';
 export type AutoModeDesktopLayout = PlayerPanelLayout<AutoModePanelId>;
-export type AutoModeLayoutPresetId = TwoPanelLayoutPresetId;
 
 export const AUTO_MODE_LAYOUT_KEY = 'auto:desktopLayout:v2';
 export const AUTO_MODE_PANELS: readonly AutoModePanelId[] = ['stage', 'route'];
 export const DEFAULT_AUTO_MODE_LAYOUT: AutoModeDesktopLayout = {
   version: 1,
   order: ['stage', 'route'],
-  // As in Now Playing: the stage takes the wider share.
+  fitArtwork: true,
   ratios: { stage: 0.55, route: 0.45 },
 };
-export const AUTO_MODE_LAYOUT_PRESETS = buildTwoPanelLayoutPresets(
-  { stage: 'stage', list: 'route' } as const,
-  DEFAULT_AUTO_MODE_LAYOUT.ratios,
-);
-
 function isPanelId(value: unknown): value is AutoModePanelId {
   return value === 'stage' || value === 'route';
 }
@@ -37,10 +29,4 @@ export function cloneAutoModeLayout(
   layout: AutoModeDesktopLayout = DEFAULT_AUTO_MODE_LAYOUT,
 ): AutoModeDesktopLayout {
   return clonePanelLayout(layout);
-}
-
-export function autoModeLayoutFromPreset(
-  preset: AutoModeLayoutPresetId,
-): AutoModeDesktopLayout {
-  return clonePanelLayout(AUTO_MODE_LAYOUT_PRESETS[preset]);
 }

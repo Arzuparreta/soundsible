@@ -14,10 +14,8 @@ import { trackCoverUrl } from '../lib/media';
 import {
   DEFAULT_NOW_PLAYING_LAYOUT,
   NOW_PLAYING_PANELS,
-  layoutFromPreset,
   NOW_PLAYING_LAYOUT_KEY,
   parseNowPlayingLayout,
-  type NowPlayingLayoutPresetId,
   type NowPlayingPanelId,
 } from '../lib/nowPlayingLayout';
 import { contextContinuation, futureEntries, sameQueueSection, type PlaybackContextKind, type PlaybackQueueEntry } from '../lib/playbackQueue';
@@ -26,7 +24,6 @@ import { dropIndex, type DropSlot } from '../lib/dragReorder';
 import { isPodcastTrack } from '../lib/track';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
-import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import {
   PlayerTrackList,
@@ -136,18 +133,6 @@ export function NowPlaying(props: {
     }, 320);
     onCleanup(() => window.clearTimeout(timer));
   });
-
-  const applyLayoutPreset = (preset: NowPlayingLayoutPresetId) =>
-    setDesktopLayout(layoutFromPreset(preset));
-
-  const resetDesktopLayout = () => {
-    try {
-      localStorage.removeItem(NOW_PLAYING_LAYOUT_KEY);
-    } catch {
-      /* storage disabled */
-    }
-    setDesktopLayout(layoutFromPreset('balanced'));
-  };
 
   const removeButton = (entry: PlaybackQueueEntry) => (
     <button
@@ -356,27 +341,12 @@ export function NowPlaying(props: {
         panelLabel={(panel) => t(`nowPlaying.panel.${panel}`)}
         ariaLabel={t('nowPlaying.playing')}
         dataScope="now-playing"
-        layoutControl={
-          <PlayerLayoutControl
-            title={t('nowPlaying.layoutWorkspace')}
-            ariaLabel={t('nowPlaying.changeLayout')}
-            resetLabel={t('nowPlaying.resetLayout')}
-            presets={[
-              { id: 'balanced', label: t('nowPlaying.layoutBalanced') },
-              { id: 'stage', label: t('nowPlaying.layoutPlayer') },
-              { id: 'list', label: t('nowPlaying.layoutQueue') },
-            ]}
-            onSelect={applyLayoutPreset}
-            onReset={resetDesktopLayout}
-          />
-        }
-        renderPanel={(panel, dragHandle) => {
+        renderPanel={(panel) => {
           if (panel === 'stage') {
             return (
               <PlayerStage
                 mode="now-playing"
                 surfaceOpen={props.surfaceOpen}
-                dragHandle={dragHandle}
                 onCloseSurface={props.onCloseSurface}
                 onOpenList={() => props.onMobilePanelChange('queue')}
                 listLabel={t('nowPlaying.queue')}
@@ -392,7 +362,6 @@ export function NowPlaying(props: {
                   sections={queueSections()}
                   virtualize
                   empty={t('nowPlaying.queueEmpty')}
-                  dragHandle={dragHandle}
                   onReorder={reorderQueue}
                   headAction={[
                     ...(hostSession() ? [{ label: t('live.chat'), onClick: () => setQueueView('chat') }] : []),
@@ -407,7 +376,6 @@ export function NowPlaying(props: {
               }>
                 <section class={styles.liveChat}>
                   <header>
-                    {dragHandle}
                     <button type="button" onClick={() => setQueueView('queue')}>
                       {t('nowPlaying.queue')}
                     </button>

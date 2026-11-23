@@ -1,7 +1,7 @@
 import { ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { savedFromTrack } from '../lib/saved';
-import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { createActivityMemo } from '../lib/activityMemo';
 import { playerCompact } from '../lib/playerDock';
 import { pageVisible } from '../lib/pageVisibility';
@@ -9,12 +9,10 @@ import { player } from '../stores/player';
 import {
   AUTO_MODE_LAYOUT_KEY,
   AUTO_MODE_PANELS,
-  autoModeLayoutFromPreset,
   cloneAutoModeLayout,
   DEFAULT_AUTO_MODE_LAYOUT,
   parseAutoModeLayout,
   type AutoModeDesktopLayout,
-  type AutoModeLayoutPresetId,
   type AutoModePanelId,
 } from '../lib/autoModeLayout';
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
@@ -26,7 +24,6 @@ import { t } from '../lib/i18n';
 import { beginDjErrand, endDjErrand, type DjErrandKind } from '../lib/djErrand';
 import { desktopShell } from '../lib/shellLayout';
 import { setNowPlayingOpen } from '../stores';
-import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
@@ -107,12 +104,6 @@ export function AutoMode(props: {
     setLayout(next);
     try { localStorage.setItem(AUTO_MODE_LAYOUT_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
   };
-  const applyLayoutPreset = (preset: AutoModeLayoutPresetId) => setLayoutPersisted(autoModeLayoutFromPreset(preset));
-  const resetDesktopLayout = () => {
-    try { localStorage.removeItem(AUTO_MODE_LAYOUT_KEY); } catch { /* storage unavailable */ }
-    setLayoutPersisted(autoModeLayoutFromPreset('balanced'));
-  };
-
   const panelActive = (panel: AutoModePanelId) => props.surfaceOpen && (props.panelsReady ?? true) && pageVisible()
     && (!playerCompact() || props.panel === panel);
   const routeActive = () => panelActive('route');
@@ -287,11 +278,10 @@ export function AutoMode(props: {
     </div>
   );
 
-  const Stage = (dragHandle: JSX.Element) => (
+  const Stage = () => (
     <PlayerStage
       mode="auto"
       surfaceOpen={props.surfaceOpen}
-      dragHandle={dragHandle}
       onOpenList={() => props.onPanelChange('route')}
       listLabel={t('autoMode.mobile.route')}
       onTrackDragStart={(event, track) => writeAutoTrackTransfer(event, { track })}
@@ -299,12 +289,11 @@ export function AutoMode(props: {
       empty={stageEmpty()}
     />
   );
-  const Route = (dragHandle: JSX.Element) => (
+  const Route = () => (
     <section class={styles.routePanel}><div class={styles.routeList}><PlayerTrackList
       title={t('autoMode.dj.route')}
       count={routeEntries().length}
       empty={routeEmpty()}
-      dragHandle={dragHandle}
       placing={Boolean(carriedTrack())}
       headAction={[
         // Fix mix rebuilds transitions and the bridges that carry them. With
@@ -364,21 +353,9 @@ export function AutoMode(props: {
         panelLabel={(panel) => t(`autoMode.panel.${panel}`)}
         ariaLabel={t('autoMode.workspace.aria')}
         dataScope="auto"
-        layoutControl={<PlayerLayoutControl
-          title={t('autoMode.workspace.layoutTitle')}
-          ariaLabel={t('autoMode.workspace.changeLayout')}
-          resetLabel={t('autoMode.workspace.resetLayout')}
-          presets={[
-            { id: 'balanced', label: t('autoMode.workspace.layoutBalanced') },
-            { id: 'stage', label: t('autoMode.workspace.layoutStage') },
-            { id: 'list', label: t('autoMode.workspace.layoutRoute') },
-          ]}
-          onSelect={applyLayoutPreset}
-          onReset={resetDesktopLayout}
-        />}
-        renderPanel={(panel, dragHandle) => panel === 'stage'
-          ? Stage(dragHandle)
-          : <Show when={routeMounted()}>{Route(dragHandle)}</Show>}
+        renderPanel={(panel) => panel === 'stage'
+          ? Stage()
+          : <Show when={routeMounted()}>{Route()}</Show>}
       />
       <Show when={carriedTrack()}>
         {(track) => (

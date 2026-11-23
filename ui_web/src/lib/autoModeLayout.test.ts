@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { autoModeLayoutFromPreset, DEFAULT_AUTO_MODE_LAYOUT, parseAutoModeLayout } from './autoModeLayout';
+import { cloneAutoModeLayout, DEFAULT_AUTO_MODE_LAYOUT, parseAutoModeLayout } from './autoModeLayout';
 
 describe('Auto Mode desktop layout', () => {
-  it('starts with the stage taking the wider share', () => {
+  it('starts with its artwork fitted', () => {
     expect(parseAutoModeLayout(null)).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
-    expect(DEFAULT_AUTO_MODE_LAYOUT.ratios).toEqual({ stage: 0.55, route: 0.45 });
+    expect(DEFAULT_AUTO_MODE_LAYOUT.fitArtwork).toBe(true);
   });
 
   it('accepts only complete DJ layouts, and drops the ones saved with the browser panel', () => {
@@ -15,11 +15,11 @@ describe('Auto Mode desktop layout', () => {
     }))).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
   });
 
-  it('returns fresh presets so a workspace resize cannot mutate them', () => {
-    const layout = autoModeLayoutFromPreset('stage');
+  it('clones the default without sharing order or ratios', () => {
+    const layout = cloneAutoModeLayout();
     layout.ratios.stage = 0.4;
     layout.order.reverse();
-    expect(autoModeLayoutFromPreset('stage')).toEqual({ version: 1, order: ['stage', 'route'], ratios: { stage: 0.7, route: 0.3 } });
-    expect(autoModeLayoutFromPreset('list')).toEqual({ version: 1, order: ['stage', 'route'], ratios: { stage: 0.4, route: 0.6 } });
+    expect(cloneAutoModeLayout()).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
+    expect(parseAutoModeLayout(JSON.stringify(cloneAutoModeLayout()))).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
   });
 });

@@ -36,6 +36,8 @@ test('the player fills the screen or docks again, and remembers it', async ({ pa
   await surface.getByRole('button', { name: 'Pantalla completa', exact: true }).click();
   await expect(surface).not.toHaveAttribute('data-docked', '');
   await expect(closeIcon).toHaveAttribute('d', 'm6 9 6 6 6-6');
+  await expect(surface.getByRole('button', { name: 'Junto a la app', exact: true }).locator('path'))
+    .toHaveAttribute('d', 'M9 4v5H4m11-5v5h5M4 15h5v5m11-5h-5v5');
   await expect(page.locator('#app')).toBeHidden();
   await page.reload();
   await openMusicPlayer(page);
@@ -43,6 +45,80 @@ test('the player fills the screen or docks again, and remembers it', async ({ pa
   await surface.getByRole('button', { name: 'Junto a la app', exact: true }).click();
   await expect(surface).toHaveAttribute('data-docked', '');
   await expect(page.locator('#app')).toBeVisible();
+});
+
+test('full screen fits the cover and a double-click restores the automatic split', async ({ page }, info) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openMusicPlayer(page);
+  const surface = page.locator('[data-player-surface-open]');
+  await surface.getByRole('button', { name: 'Pantalla completa', exact: true }).click();
+  await expect(surface).not.toHaveAttribute('data-compact', '');
+  for (const mode of ['now-playing', 'auto'] as const) {
+    if (mode === 'auto') await surface.getByRole('tab', { name: 'DJ', exact: true }).click();
+    const stage = surface.locator(`[data-player-stage-mode="${mode}"]`);
+    const stageTile = surface.locator('[data-player-tile="stage"]:visible');
+    const listTile = surface.locator(mode === 'auto' ? '[data-player-tile="route"]' : '[data-player-tile="queue"]');
+    const grip = listTile.getByRole('button', { name: /^Mover panel/ });
+    const cover = stage.locator('[data-player-cover-slot]');
+    const splitter = surface.getByRole('separator', { name: 'Redimensionar paneles' });
+    const reset = surface.getByRole('button', { name: 'Restablecer paneles', exact: true });
+    await expect(cover).toBeVisible();
+    await settle(page, '[data-player-surface-open]');
+    const artWidth = async () => (await cover.boundingBox())!.width;
+    const fitted = await artWidth();
+    const room = () => stage.evaluate((element) => {
+      const { paddingLeft, paddingRight } = getComputedStyle(element);
+      return element.getBoundingClientRect().width - parseFloat(paddingLeft) - parseFloat(paddingRight);
+    });
+    expect(await room()).toBeCloseTo(fitted, 0);
+    await expect(reset).toHaveCount(0);
+    const centerX = async (element: typeof grip) => {
+      const box = (await element.boundingBox())!;
+      return box.x + box.width / 2;
+    };
+    expect(await centerX(grip)).toBeCloseTo(await centerX(listTile), 0);
+    expect((await grip.boundingBox())!.y).toBeCloseTo(
+      (await stageTile.getByRole('button', { name: /^Mover panel/ }).boundingBox())!.y, 0,
+    );
+    await page.screenshot({ path: info.outputPath(`fullscreen-${mode}.png`) });
+
+    await splitter.focus();
+    await page.keyboard.press('ArrowRight');
+    expect(await artWidth()).toBeGreaterThanOrEqual(fitted - 3);
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(artWidth).toBeLessThan(fitted - 5);
+
+    await expect(reset).toBeVisible();
+    await reset.focus();
+    await expect(reset.locator('..').getByText('Restablecer paneles', { exact: true })).toBeVisible();
+    if (mode === 'now-playing') await page.screenshot({ path: info.outputPath('fullscreen-reset.png') });
+    await reset.click();
+    await expect.poll(artWidth).toBeCloseTo(fitted, 0);
+    await expect(reset).toHaveCount(0);
+
+    await splitter.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(reset).toBeVisible();
+    await splitter.dblclick();
+    await expect.poll(artWidth).toBeCloseTo(fitted, 0);
+
+    await page.setViewportSize({ width: 1558, height: 839 });
+    await expect.poll(artWidth).toBeGreaterThan(fitted);
+    expect(await room()).toBeCloseTo(await artWidth(), 0);
+    await page.setViewportSize({ width: 1366, height: 768 });
+
+    await grip.click();
+    await expect(page.getByRole('button', { name: 'Mover a la izquierda', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Mover a la izquierda', exact: true })).toHaveCount(0);
+    if (mode === 'now-playing') {
+      await grip.dragTo(stageTile);
+      await expect.poll(async () => (await centerX(listTile)) < (await centerX(stageTile))).toBe(true);
+      await reset.click();
+      await expect.poll(async () => (await centerX(listTile)) > (await centerX(stageTile))).toBe(true);
+    }
+  }
 });
 
 test('the column is resized from its edge, by pointer or keyboard, within its bounds', async ({ page }) => {
@@ -71,8 +147,22 @@ test('the column is resized from its edge, by pointer or keyboard, within its bo
   await page.mouse.move(0, handle.y + handle.height / 2, { steps: 4 });
   await page.mouse.up();
   await expect.poll(width).toBeLessThanOrEqual(Math.floor(page.viewportSize()!.width / 2));
+  // A width of the listener's own puts the way back beside the line, at its foot.
+  const reset = page.getByRole('button', { name: 'Restablecer el ancho del reproductor', exact: true });
+  await expect(reset).toBeVisible();
+  const [resetBox, edgeBox] = [(await reset.boundingBox())!, (await edge.boundingBox())!];
+  expect(resetBox.x - edgeBox.x).toBeLessThanOrEqual(16);
+  expect(resetBox.y + resetBox.height).toBeGreaterThan(edgeBox.y + edgeBox.height - 60);
+  await reset.click();
+  await expect.poll(width).toBe(420);
+  await expect(reset).toHaveCount(0);
+  await expect(edge).toBeFocused();
+  await edge.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(reset).toBeVisible();
   await edge.dblclick();
   await expect.poll(width).toBe(420);
+  await expect(reset).toHaveCount(0);
   await page.reload();
   await openMusicPlayer(page);
   await expect.poll(width).toBe(420);
@@ -90,7 +180,7 @@ test('the column is resized from its edge, by pointer or keyboard, within its bo
     [surface, pill, presentation, devices, close].map(async (element) => (await element.boundingBox())!),
   );
   expect(Math.abs(pillBox.x + pillBox.width / 2 - surfaceBox.x - surfaceBox.width / 2)).toBeLessThan(1);
-  expect(deviceBox.x).toBeGreaterThan(presentationBox.x + presentationBox.width);
   expect(pillBox.x).toBeGreaterThan(deviceBox.x + deviceBox.width);
-  expect(pillBox.x + pillBox.width).toBeLessThan(closeBox.x);
+  expect(pillBox.x + pillBox.width).toBeLessThan(presentationBox.x);
+  expect(presentationBox.x + presentationBox.width).toBeLessThan(closeBox.x);
 });

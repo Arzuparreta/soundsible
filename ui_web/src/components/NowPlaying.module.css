@@ -41,20 +41,14 @@
    and the cover shrinks a little inside the column instead of pushing the
    transport off the tile. */
 .body {
-  --stage-pad-x: clamp(18px, 6cqw, 44px);
-  --stage-pad-top: clamp(8px, 2.6cqh, 28px);
-  --stage-pad-bottom: clamp(8px, 2.6cqh, 24px);
-  --stage-gap: clamp(12px, 2.6cqh, 28px);
-  --stage-row-gap: clamp(6px, 1.5cqh, 16px);
-  --stage-title: clamp(20px, 5.4cqw, 30px);
+  --stage-pad-x: clamp(var(--stage-side-min), 100cqw * var(--stage-side-rate), var(--stage-side-max));
+  --stage-title: clamp(var(--stage-title-min), 100cqw * var(--stage-title-rate), var(--stage-title-max));
   --stage-icon-inset: calc((var(--control-h) - 20px) / -2);
-  --stage-reserve: calc(
-    var(--stage-pad-top) + var(--stage-pad-bottom) + var(--stage-gap)
-    + var(--stage-title) * 1.25 + 26px
-    + 44px + 64px + var(--control-h)
-    + var(--stage-row-gap) * 3 + 12px
+  --stage-art: min(
+    100cqw - 2 * var(--stage-pad-x),
+    var(--stage-height-budget) - var(--stage-title) * var(--stage-title-line),
+    var(--stage-art-max)
   );
-  --stage-art: min(100cqw - 2 * var(--stage-pad-x), 100cqh - var(--stage-reserve), 760px);
   --stage-col: min(100cqw - 2 * var(--stage-pad-x), max(var(--stage-art), 300px));
 
   display: flex;
@@ -934,6 +928,7 @@
   .desktopLyricsStage .volume {
     position: relative;
     gap: 0;
+    min-width: var(--control-h);
   }
 
   .desktopLyricsStage .volumePopover {
@@ -988,7 +983,7 @@
   /* A narrow dock cannot hold the song, the transport and the actions on one
      row without the actions running over the transport. The transport takes
      a row of its own under them instead. */
-  @container stage (max-width: 439px) {
+  @container stage (width < 680px) {
     .desktopLyricsStage {
       grid-template-columns: minmax(0, 1fr) auto;
       grid-template-rows: minmax(0, 1fr) auto 48px 52px;
@@ -1010,7 +1005,7 @@
     }
   }
 
-  @container stage (min-width: 640px) {
+  @container stage (min-width: 680px) {
     .desktopLyricsStage .actionsBar {
       gap: 4px;
     }

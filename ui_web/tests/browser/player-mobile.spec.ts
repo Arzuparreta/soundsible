@@ -364,7 +364,7 @@ test('mobile route insertion targets stay contextual and aligned', async ({ page
   await expect(insertionTargets).toHaveCount(2);
   await expect(insertionTargets.first()).toBeHidden();
   await expect(insertionTargets.last()).toBeHidden();
-  const carriedRow = route.locator('[draggable="true"]').first();
+  const carriedRow = route.locator('[data-drag-row][draggable="true"]').first();
   await holdForMenu(page, carriedRow);
   await page.getByRole('dialog').getByRole('button', { name: 'Mover', exact: true }).click();
   await expect(insertionTargets.first()).toHaveAttribute('data-placement-active', '');

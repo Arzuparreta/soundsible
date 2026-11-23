@@ -1,36 +1,17 @@
 export interface PlayerPanelLayout<PanelId extends string> {
   version: 1;
+  fitArtwork?: boolean;
   order: PanelId[];
   ratios: Record<PanelId, number>;
 }
-
-/** The full-screen player's two panels: the stage and its list (the queue,
- * or the DJ route). `stage` gives the stage the room, `list` the list. */
-export type TwoPanelLayoutPresetId = 'balanced' | 'stage' | 'list';
 
 export function clonePanelLayout<PanelId extends string>(
   layout: PlayerPanelLayout<PanelId>,
 ): PlayerPanelLayout<PanelId> {
   return {
-    version: 1,
+    ...layout,
     order: [...layout.order],
     ratios: { ...layout.ratios },
-  };
-}
-
-export function buildTwoPanelLayoutPresets<PanelId extends string>(
-  ids: { stage: PanelId; list: PanelId },
-  balancedRatios: Record<PanelId, number>,
-): Record<TwoPanelLayoutPresetId, PlayerPanelLayout<PanelId>> {
-  const layout = (stage: number): PlayerPanelLayout<PanelId> => ({
-    version: 1,
-    order: [ids.stage, ids.list],
-    ratios: { ...balancedRatios, [ids.stage]: stage, [ids.list]: Math.round((1 - stage) * 100) / 100 },
-  });
-  return {
-    balanced: { version: 1, order: [ids.stage, ids.list], ratios: { ...balancedRatios } },
-    stage: layout(0.7),
-    list: layout(0.4),
   };
 }
 
@@ -69,14 +50,14 @@ export function parsePanelLayout<PanelId extends string>(
         && parsed.ratios
       ) {
         const ratios = normalizePanelRatios(ids, parsed.ratios, fallback.ratios);
-        // Three equal thirds in the default order is the layout the player
-        // shipped with before the stage was given the wider middle, saved by
-        // nobody's choice: it follows the default rather than pinning it.
-        const untouched = parsed.order.every((id, index) => id === fallback.order[index])
-          && ids.every((id) => Math.abs(ratios[id] - 1 / ids.length) < 1e-6);
-        if (untouched) return clonePanelLayout(fallback);
+        const inDefaultOrder = parsed.order.every((id, index) => id === fallback.order[index]);
+        const oldDefault = ids.every((id) => Math.abs(ratios[id] - fallback.ratios[id]) < 1e-6);
+        const equalShares = ids.every((id) => Math.abs(ratios[id] - 1 / ids.length) < 1e-6);
+        // Older defaults were persisted as ratios. Keep other saved layouts.
+        if (parsed.fitArtwork === undefined && inDefaultOrder && (oldDefault || equalShares)) return clonePanelLayout(fallback);
         return {
           version: 1,
+          ...(typeof parsed.fitArtwork === 'boolean' ? { fitArtwork: parsed.fitArtwork } : {}),
           order: [...parsed.order],
           ratios,
         };

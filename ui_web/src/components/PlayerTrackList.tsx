@@ -125,7 +125,6 @@ export function PlayerTrackList(props: {
   /** Plain copy for ordinary empty queues, or a richer status when emptiness
    * itself is a live state such as the DJ building its first route. */
   empty: JSX.Element;
-  dragHandle?: JSX.Element;
   headAction?: PlayerTrackListHeadAction | PlayerTrackListHeadAction[];
   /** Something dropped on the header. */
   onDrop?: (event: DragEvent) => void;
@@ -250,7 +249,6 @@ export function PlayerTrackList(props: {
     <div class={styles.panel} data-dragging={dragging() || props.placing ? '' : undefined}>
       <header class={styles.head} {...dropTarget(() => Boolean(props.onDrop), (event) => props.onDrop?.(event))}>
         <span class={styles.heading}>
-          {props.dragHandle}
           <h2>{props.title}</h2>
           <span class={styles.count}>{props.count}</span>
         </span>

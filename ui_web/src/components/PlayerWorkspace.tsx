@@ -9,6 +9,7 @@ import {
   type JSX,
 } from 'solid-js';
 import { openActionMenu } from './ActionMenu';
+import { SeamReset } from './SeamReset';
 import { playerCompact } from '../lib/playerDock';
 import { t } from '../lib/i18n';
 import { dropTarget } from '../lib/dragReorder';
@@ -21,6 +22,7 @@ import {
 import styles from './PlayerWorkspace.module.css';
 
 const CAROUSEL_SETTLE_MS = 80;
+const SPLITTER_WIDTH = 24;
 
 function classes(...values: Array<string | undefined>): string {
   return values.filter(Boolean).join(' ');
@@ -39,8 +41,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   panelLabel: (panel: PanelId) => string;
   ariaLabel: string;
   dataScope: 'now-playing' | 'auto' | 'live';
-  renderPanel: (panel: PanelId, dragHandle: JSX.Element) => JSX.Element;
-  layoutControl?: JSX.Element;
+  renderPanel: (panel: PanelId) => JSX.Element;
   soloPanel?: PanelId | null;
   class?: string;
   mainClass?: string;
@@ -63,6 +64,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   // The player's own width, measured by the surface (lib/playerDock).
   const mobileLayout = playerCompact;
   const [layoutBusy, setLayoutBusy] = createSignal(false);
+  const customLayout = () => !props.layout.fitArtwork || props.layout.order.some((panel, index) => panel !== props.panels[index]);
   const renderedPanels = createMemo<PanelId[]>(() => {
     if (mobileLayout()) return [...props.panels];
     return props.soloPanel ? [props.soloPanel] : [...props.layout.order];
@@ -74,11 +76,15 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       // proportions while keeping the workspace filled across browser zoom and
       // native interface-scale reflows.
       const ratioWeight = props.layout.ratios[panel] * 1000;
+      const neighbor = renderedPanels().find((id) => id !== panel);
+      const fit = props.layout.fitArtwork && panel === 'stage' && neighbor !== undefined;
       return [
         props.soloPanel
           ? 'minmax(0, 1fr)'
-          : `minmax(${props.minimums[panel]}px, ${ratioWeight}fr)`,
-        ...(index < renderedPanels().length - 1 ? ['24px'] : []),
+          : fit
+            ? `clamp(${props.minimums[panel]}px, var(--stage-fit-width), 100% - ${props.minimums[neighbor] + SPLITTER_WIDTH}px)`
+            : `minmax(${props.minimums[panel]}px, ${ratioWeight}fr)`,
+        ...(index < renderedPanels().length - 1 ? [`${SPLITTER_WIDTH}px`] : []),
       ];
     }).join(' '),
   );
@@ -263,6 +269,11 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     animateLayout(before);
   };
 
+  const resetLayout = () => {
+    updateLayout({ version: 1, order: [...props.panels], fitArtwork: true, ratios: { ...props.defaults } });
+    queueMicrotask(() => workspaceEl?.querySelector<HTMLElement>('[role="separator"]')?.focus({ preventScroll: true }));
+  };
+
   const changePanelOrder = (panel: PanelId, target: number) =>
     updateLayout({
       ...props.layout,
@@ -273,7 +284,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     <button
       class={classes(styles.panelGrip, props.panelGripClass)}
       type="button"
-      draggable
+      draggable="true"
       aria-label={t('nowPlaying.movePanel', { panel: props.panelLabel(gripProps.panel) })}
       title={t('nowPlaying.movePanel', { panel: props.panelLabel(gripProps.panel) })}
       onDragStart={(event) => {
@@ -316,6 +327,13 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     let startRatios = props.layout.ratios;
     let width = 1;
     let activePointer: number | null = null;
+    const displayedRatios = (splitter: HTMLElement) => {
+      width = Math.max(1, (workspaceEl?.clientWidth ?? 0) - SPLITTER_WIDTH);
+      if (!props.layout.fitArtwork) return props.layout.ratios;
+      const left = splitter.parentElement?.previousElementSibling?.getBoundingClientRect().width;
+      if (left === undefined) return props.layout.ratios;
+      return { ...props.layout.ratios, [splitterProps.left]: left / width, [splitterProps.right]: 1 - left / width };
+    };
     const resized = (delta: number, ratios = startRatios) => resizeAdjacentPanels(
       props.panels,
       ratios,
@@ -329,40 +347,44 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       } as Partial<Record<PanelId, number>>,
     );
     return (
-      <div
-        class={classes(styles.splitter, props.splitterClass)}
-        role="separator"
-        tabindex="0"
-        aria-orientation="vertical"
-        aria-label={t('nowPlaying.resizePanels')}
-        onDblClick={() => updateLayout({ ...props.layout, ratios: { ...props.defaults } })}
-        onPointerDown={(event) => {
-          if (layoutBusy()) return;
-          activePointer = event.pointerId;
-          startX = event.clientX;
-          startRatios = { ...props.layout.ratios };
-          width = workspaceEl?.clientWidth || 1;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          setLayoutBusy(true);
-        }}
-        onPointerMove={(event) => {
-          if (activePointer !== event.pointerId) return;
-          props.onLayoutChange({ ...props.layout, ratios: resized((event.clientX - startX) / width) });
-        }}
-        onPointerUp={(event) => {
-          if (activePointer !== event.pointerId) return;
-          activePointer = null;
-          setLayoutBusy(false);
-          event.currentTarget.releasePointerCapture(event.pointerId);
-        }}
-        onKeyDown={(event) => {
-          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-          event.preventDefault();
-          width = workspaceEl?.clientWidth || 1;
-          const direction = event.key === 'ArrowLeft' ? -0.02 : 0.02;
-          props.onLayoutChange({ ...props.layout, ratios: resized(direction, props.layout.ratios) });
-        }}
-      />
+      <div class={styles.seam} data-custom-split={customLayout() ? '' : undefined}>
+        <div
+          class={classes(styles.splitter, props.splitterClass)}
+          role="separator"
+          tabindex="0"
+          aria-orientation="vertical"
+          aria-label={t('nowPlaying.resizePanels')}
+          onDblClick={resetLayout}
+          onPointerDown={(event) => {
+            if (layoutBusy()) return;
+            activePointer = event.pointerId;
+            startX = event.clientX;
+            startRatios = displayedRatios(event.currentTarget);
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setLayoutBusy(true);
+          }}
+          onPointerMove={(event) => {
+            if (activePointer !== event.pointerId) return;
+            props.onLayoutChange({ ...props.layout, fitArtwork: false, ratios: resized((event.clientX - startX) / width) });
+          }}
+          onPointerUp={(event) => {
+            if (activePointer !== event.pointerId) return;
+            activePointer = null;
+            setLayoutBusy(false);
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            const ratios = displayedRatios(event.currentTarget);
+            const direction = event.key === 'ArrowLeft' ? -0.02 : 0.02;
+            props.onLayoutChange({ ...props.layout, fitArtwork: false, ratios: resized(direction, ratios) });
+          }}
+        />
+        <Show when={!mobileLayout() && customLayout()}>
+          <SeamReset class={styles.resetSplit} label={t('nowPlaying.resetPanels')} onReset={resetLayout} />
+        </Show>
+      </div>
     );
   };
 
@@ -376,7 +398,6 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       aria-label={props.ariaLabel}
       data-player-workspace={props.dataScope}
     >
-      {props.layoutControl}
       <div
         class={classes(styles.main, props.mainClass)}
         ref={workspaceEl}
@@ -422,7 +443,8 @@ export function PlayerWorkspace<PanelId extends string>(props: {
                   changePanelOrder(dragged, renderedPanels().indexOf(panel));
                 })}
               >
-                {props.renderPanel(panel, <PanelGrip panel={panel} />)}
+                <PanelGrip panel={panel} />
+                {props.renderPanel(panel)}
               </section>
             </>
           )}

@@ -34,9 +34,17 @@ planning and interface are still being refined.
 
 On a computer the open player is a column on the right, beside Soundsible:
 the library, Search and Discover stay usable next to it. Drag its left edge to
-make it wider or narrower (double-click the edge to reset it), and use the
-button at the top of the player to fill the screen or dock it beside the app
-again. Soundsible remembers the choice. On a phone the player fills the screen.
+make it wider or narrower. Once it is no longer at its default width, a reset
+button (↶) appears at the foot of that edge; it, or a double-click on the edge,
+brings the default width back. Use the button at the top of the player to fill
+the screen or dock it beside the app again. Soundsible remembers both choices.
+
+Full screen, the stage and the list sit side by side and the stage is sized to
+fit the cover. Drag the line between them, or a panel's grip (the dots at the
+top of each panel) to swap them; the reset button at the top of that line
+brings the automatic layout back.
+
+On a phone the player fills the screen.
 
 ### Choose music for the session
 
