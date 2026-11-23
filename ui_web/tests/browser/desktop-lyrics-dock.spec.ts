@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer, TRACKS } from './music-browser-fixture';
+import { fullScreenPlayer } from './playerPanels';
 
 // The desktop lyrics view folds the player into a dock under the lyrics. The
 // stage tile is resizable, so the dock has to hold at every width the splitter
@@ -59,6 +60,8 @@ async function resizeStage(page: Page, key: 'ArrowLeft' | 'ArrowRight', presses:
 test.beforeEach(async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.endsWith('mobile'), 'the lyrics dock is the desktop stage');
   await mockMusicEngine(page);
+  // The lyrics dock and the resizable stage belong to the full-screen player.
+  await fullScreenPlayer(page);
   await page.route('**/api/library/tracks/*/lyrics**', (route) => route.fulfill({ json: {
     status: 'ready', synced: LRC, plain: null, instrumental: false, cached: true,
   } }));
@@ -89,10 +92,11 @@ for (const mode of ['now-playing', 'auto'] as const) {
     const stage = page.locator(`[data-player-stage-mode="${mode}"]`);
     await stage.getByRole('button', { name: 'Mostrar letra' }).click();
     await expectDockHolds(page, stage, 'default');
-    // Stage squeezed to its minimum, then stretched as far as it goes.
-    await resizeStage(page, 'ArrowRight', 30);
+    // Stage squeezed to its minimum, then stretched as far as it goes. The
+    // seam is on the stage's right, before the queue.
+    await resizeStage(page, 'ArrowLeft', 30);
     await expectDockHolds(page, stage, 'narrowest');
-    await resizeStage(page, 'ArrowLeft', 60);
+    await resizeStage(page, 'ArrowRight', 60);
     await expectDockHolds(page, stage, 'widest');
   });
 }

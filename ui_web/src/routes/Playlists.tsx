@@ -1,9 +1,9 @@
 import { collectionIndex } from '../lib/collectionIdentity';
 import { SkeletonCards } from '../components/Skeleton';
 import { NEUTRAL_COVER } from '../lib/cover';
-import { createMemo, For, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
-import { state, musicLibrary } from '../stores';
+import { actions, state, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import { trackCoverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
@@ -16,6 +16,9 @@ import styles from './Playlists.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
+import { MusicReorderList } from '../components/MusicReorderList';
+import { Control } from '../design/Control';
+import { CheckIcon, MoveIcon } from '../components/icons';
 
 export default function Playlists() {
   const navigate = useNavigate();
@@ -28,6 +31,7 @@ export default function Playlists() {
   };
 
   const createNew = () => void createPlaylistDialog();
+  const [editing, setEditing] = createSignal(false);
 
   const menu = (e: MouseEvent, name: string) => {
     e.preventDefault();
@@ -37,7 +41,17 @@ export default function Playlists() {
 
   return (
     <div class="view">
-      <ViewHeader title={t('playlists.title')} meta={`${names().length}`} />
+      <ViewHeader title={t('playlists.title')} meta={`${names().length}`}
+        barActions={names().length > 1 ? [{
+          label: t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit'),
+          icon: () => editing() ? <CheckIcon /> : <MoveIcon />,
+          onSelect: () => setEditing(!editing()),
+        }] : []}
+        actions={names().length > 1 ? (
+          <Control class={styles.editOrder} aria-pressed={editing()} onClick={() => setEditing(!editing())}>
+            {t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit')}
+          </Control>
+        ) : undefined} />
       <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
         <button class={styles.newBtn} type="button" onClick={createNew}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -45,6 +59,9 @@ export default function Playlists() {
           </svg>
           {t('playlists.new')}
         </button>
+        <Show when={!editing()} fallback={
+          <MusicReorderList items={names()} label={(name) => name} render={(name) => <span>{name}</span>} onChange={actions.reorderPlaylists} />
+        }>
         <Show when={names().length > 0} fallback={<Show when={state.loading} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}><SkeletonCards /></Show>}>
           <div class={styles.grid}>
             <For each={names()}>
@@ -82,6 +99,7 @@ export default function Playlists() {
               }}
             </For>
           </div>
+        </Show>
         </Show>
       </div>
     </div>

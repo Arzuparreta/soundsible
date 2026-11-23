@@ -1,12 +1,12 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import { savedEntityAction } from './savedEntityActions';
+import { collectionActions, type MusicCollection } from './collectionCommands';
 import { artistPath } from '../lib/artistRoute';
 import { artistDestination, navigateMusic } from '../lib/musicNavigation';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
 import { musicLibrary } from '../stores';
-import { player } from '../stores/player';
 import type { Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { artistKey } from '../lib/artistRoute';
@@ -33,20 +33,18 @@ function artistContext(artist: string): PlaybackContextDescriptor {
   };
 }
 
-/** Play / shuffle / go-to-artist menu definition for an artist. */
+/** A library artist as a collection the shared commands can play. */
+export function artistCollection(artist: string): MusicCollection {
+  return { title: artist, context: artistContext(artist), songs: () => ({ tracks: artistTracks(artist) }) };
+}
+
+/** The artist's collection commands, then go-to-artist and bookmark. */
 export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}): ActionMenuOptions {
   const list: MenuAction[] = [
-    { icon: menuIcons.play(), label: t('artistActions.play'), onSelect: () => {
-      const tracks = artistTracks(artist);
-      if (player().autoMode.active) player().actions.startDjSelection(tracks, artist);
-      else player().actions.playFrom(tracks, 0, { context: artistContext(artist) });
-    } },
-    { icon: menuIcons.shuffle(), label: t('artistActions.shuffle'), onSelect: () => {
-      player().actions.playShuffled(artistTracks(artist), artistContext(artist));
-    } },
+    ...collectionActions(artistCollection(artist)),
+    { icon: menuIcons.artist(), label: t('artistActions.goToArtist'), onSelect: () => navigateMusic(artistDestination({ artist, view: 'library' }, artist)) },
+    savedEntityAction({ kind: 'artist', name: artist, cover: _ctx.cover, destination: artistPath(artist, { view: 'library', artistId: _ctx.artistId }) }),
   ];
-  list.push({ icon: menuIcons.artist(), label: t('artistActions.goToArtist'), onSelect: () => navigateMusic(artistDestination({ artist, view: 'library' }, artist)) });
-  list.push(savedEntityAction({ kind: 'artist', name: artist, cover: _ctx.cover, destination: artistPath(artist, { view: 'library', artistId: _ctx.artistId }) }));
   return { title: artist, actions: list };
 }
 

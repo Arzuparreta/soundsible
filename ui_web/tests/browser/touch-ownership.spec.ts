@@ -1,17 +1,20 @@
 import { expect, test } from '@playwright/test';
-import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { mockMusicEngine, openMiniPlayer, restoreQueueSession, TRACKS } from './music-browser-fixture';
 
 test.use({ reducedMotion: 'no-preference' });
 
 test('native touches release list scrolling and retain player pull-down dismissal', async ({ page, browserName, isMobile }) => {
   test.skip(browserName !== 'chromium' || !isMobile, 'trusted touch injection and listener inspection use CDP');
   await mockMusicEngine(page);
-  await openMusicPlayer(page);
-  await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').first().tap();
+  // A request lane long enough to scroll: the list under the finger.
+  await restoreQueueSession(page, { current: TRACKS[319], requests: TRACKS.slice(200, 230) });
+  await page.goto('/player/#/library?view=songs');
+  await openMiniPlayer(page, /Canción de biblioteca 320/);
+  await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(1).tap();
   const surface = page.locator('[data-player-surface-open]');
-  const body = surface.locator('[data-now-playing-tile="browser"] [data-browser-body]');
+  const body = surface.locator('[data-now-playing-tile="queue"] section[data-section="manual"] [data-section-rows]');
   await expect(body).toBeVisible();
-  await expect(surface.locator('[data-now-playing-tile="browser"]')).not.toHaveAttribute('inert', '');
+  await expect(surface.locator('[data-now-playing-tile="queue"]')).not.toHaveAttribute('inert', '');
   await expect.poll(() => body.evaluate(element => Math.abs(element.closest('[data-now-playing-tile]')!.getBoundingClientRect().left
     - element.closest('[data-now-playing-carousel]')!.getBoundingClientRect().left))).toBeLessThan(2);
   const session = await page.context().newCDPSession(page);
@@ -22,7 +25,7 @@ test('native touches release list scrolling and retain player pull-down dismissa
     return listeners.filter(item => item.type === 'touchmove' && !item.passive).length;
   };
   const box = (await body.boundingBox())!;
-  const point = { x: box.x + box.width / 2, y: box.y + 170 };
+  const point = { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 170) };
   const touch = async (type: 'touchStart' | 'touchMove' | 'touchEnd', dy = 0) => {
     await session.send('Input.dispatchTouchEvent', {
       type, touchPoints: type === 'touchEnd' ? [] : [{ x: point.x, y: point.y + dy }],

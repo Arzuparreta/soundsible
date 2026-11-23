@@ -35,6 +35,7 @@ vi.mock('./toast', () => ({ toast: {
 } }));
 
 import { catalogContextTrack, playCatalogItem, useCatalogCollection } from './catalogItem';
+import { beginDjErrand, endDjErrand } from './djErrand';
 
 const item = (index: number): CatalogItem => ({
   id: `catalog:${index}`, title: `Song ${index}`, artist: 'Artist', type: 'track', source: 'deezer',
@@ -156,6 +157,17 @@ describe('playing a catalog row in its collection', () => {
     const [tracks, index] = mocks.playFrom.mock.calls[0];
     expect(index).toBe(1);
     expect(tracks.map((track: { id: string }) => track.id)).toEqual(['pending:catalog:0', 'owned']);
+  });
+
+  it('discards a song that finishes resolving after its DJ request is cancelled', async () => {
+    let finish!: (value: { video_id: string }) => void;
+    mocks.resolve.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    beginDjErrand({ kind: 'reference' });
+    const pick = playCatalogItem(item(0));
+    endDjErrand(false);
+    finish({ video_id: 'late' });
+    await pick;
+    expect(mocks.playTrack).not.toHaveBeenCalled();
   });
 
   it('plays a row outside the list first, and a row on its own as a selection', async () => {

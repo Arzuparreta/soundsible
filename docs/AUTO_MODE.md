@@ -19,26 +19,51 @@ planning and interface are still being refined.
   the route there.
 - With a track playing, open the player and switch from **NORMAL** to **DJ**.
   The current track becomes the first visible influence in **Session**.
-- From a song's menu in NORMAL or inside the shell, **Start DJ from this song** makes that song the
+- From a song's menu, **Start DJ from this song** makes that song the
   session's source. It is the next song the DJ mixes into, the way it mixes any
-  other, and the music comes from it after that.
-- While DJ is active, playing a song anywhere outside the player shell starts
-  a fresh DJ session immediately from that song at 0:00. Its source and route
-  replace the previous session, including all previous requests and influences.
-  Playing a collection starts from its first song and uses the collection as
-  the source. Session controls are inside the shell.
-- In **Session**, use **Mix with…** to add an influence or **Change…** to
-  choose a new direction using the same music browser.
+  other, and the music comes from it after that. Albums, artists and playlists
+  offer **Start a DJ session** the same way.
+- While DJ is active, playing a song anywhere in Soundsible starts a fresh DJ
+  session immediately from that song at 0:00. Its source and route replace the
+  previous session, including all previous requests and influences. Playing a
+  collection starts from its first song and uses the collection as the source.
+- To change the session that is playing instead, use its own controls (see
+  [Choose music for the session](#choose-music-for-the-session)).
+
+### Where the player sits
+
+On a computer the open player is a column on the right, beside Soundsible:
+the library, Search and Discover stay usable next to it. Drag its left edge to
+make it wider or narrower (double-click the edge to reset it), and use the
+button at the top of the player to fill the screen or dock it beside the app
+again. Soundsible remembers the choice. On a phone the player fills the screen.
+
+### Choose music for the session
+
+**Mix with…** and **Change…** in **Session**, and **＋** between two Route songs
+or at its end, each ask for music. Pressing one leaves the player where you can
+see the app — docked beside it on a computer, closed on a phone — and a bar at
+the top of Soundsible says what it is waiting for. The next song you play, from
+any list, page or search result, answers it instead of playing:
+
+| You pressed | A song | An album, artist or playlist |
+| --- | --- | --- |
+| **Mix with…** | becomes one more influence | becomes one more influence |
+| **Change…** | becomes the new direction | becomes the new direction |
+| **＋** | is placed at that point of the Route | its songs are placed there, in order |
+
+The player then shows the Route again. **Cancel** in the bar, or pressing
+another of these buttons, gives up the first request.
 
 ### A source is one piece of music
 
 A song, an album, an artist, a playlist or the favourites is **one source**.
-Choosing a collection outside the shell starts a new DJ session from it.
-Inside the shell, its primary button moves the current session onto it while
-the playing song continues: the DJ draws the next songs from it. It never turns the collection into a list of requests. Asking for every song
-of a collection is still there, by name (**Add to session**) in the
-collection's menu inside the shell, and those songs travel together: they belong to the session
-they were asked for in.
+Playing a collection starts a new DJ session from it. Picked for **Change…**,
+it moves the current session onto it while the playing song continues: the DJ
+draws the next songs from it. It never turns the collection into a list of
+requests. Asking for every song of a collection is still there: pick it for
+**＋**, and those songs travel together: they belong to the session they were
+asked for in.
 
 The three parts of the workspace have separate jobs:
 
@@ -161,9 +186,9 @@ not prepared yet; a mix already prepared still plays.
 
 ## Make the set yours
 
-- **Add to session** requests specific songs without changing the musical direction.
-- **Mix into session** adds an influence alongside the existing ones.
-- Inside the shell, **Change session** (and **Start DJ from…**) moves the session onto a new
+- **＋** in the Route requests specific songs without changing the musical direction.
+- **Mix with…** adds an influence alongside the existing ones.
+- **Change…** moves the session onto a new
   source at once. The old sources, the DJ's own picks and bridges, and songs
   that were requested as a whole collection go with the old session; songs you
   requested one at a time stay. The current song continues and the DJ mixes out
@@ -188,9 +213,10 @@ not prepared yet; a mix already prepared still plays.
   available by right-click or mobile long press). The menu saves the song to your
   library, downloads it, marks it as a favourite or adds it to a playlist
   without moving it in the route, including the song already cued.
-- **Choose music from anywhere.** Song and collection menus offer the same
-  session actions. **Play now** remains an explicit immediate handoff.
-  Choosing a musical influence does not also request that exact song.
+- **Choose music from anywhere.** Session requests are answered from any list
+  in Soundsible, not from a separate browser inside the player. **Play now**
+  remains an explicit immediate handoff. Choosing a musical influence does not
+  also request that exact song.
 
 
 DJ keeps explicit requests ahead of generated music. Leaving DJ removes its

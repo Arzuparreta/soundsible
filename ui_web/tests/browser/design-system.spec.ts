@@ -1,20 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { mockMusicEngine } from './music-browser-fixture';
 
-async function browserPanel(page: Page, mobile: boolean) {
-  await openMusicPlayer(page);
-  if (mobile) {
-    await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').first().tap();
-  }
-  const browser = page.locator('[data-now-playing-tile="browser"]');
-  await expect(browser).not.toHaveAttribute('inert', '');
-  await expect(browser.locator('[data-song-row], [data-music-list-row]').first()).toBeVisible();
+/** The library's songs: the shared row, artwork and search field, as every
+ * list in the app draws them. */
+async function songsView(page: Page) {
+  await page.goto('/player/#/library?view=songs');
+  const list = page.locator('[data-primary-scroll]:visible').first();
+  await expect(list.locator('[data-song-row], [data-music-list-row]').first()).toBeVisible();
   await page.evaluate(async () => {
     const fonts = await document.fonts.load('400 16px "Plus Jakarta Sans"');
     if (!fonts.length) throw new Error('The Soundsible UI font is unavailable');
     await document.fonts.ready;
   });
-  return browser;
+  return list;
 }
 
 test.beforeEach(async ({ page }) => {
@@ -24,13 +22,13 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const theme of ['dark', 'light']) for (const size of ['compact', 'normal', 'large']) {
-  test(`the player browser keeps its density and row actions: ${theme}, ${size}`, async ({ page, isMobile }) => {
-    const browser = await browserPanel(page, isMobile);
+  test(`library rows keep their density and row actions: ${theme}, ${size}`, async ({ page, isMobile }) => {
+    const list = await songsView(page);
     await page.evaluate(({ theme, size }) => {
       document.documentElement.dataset.theme = theme;
       document.documentElement.dataset.interfaceSize = size;
     }, { theme, size });
-    const row = browser.locator('[data-song-row], [data-music-list-row]').first();
+    const row = list.locator('[data-song-row], [data-music-list-row]').first();
     const menu = row.locator('[data-row-menu], button[aria-label="Más opciones"]');
     await expect(menu).toBeVisible();
     const metrics = await row.evaluate(element => ({ height: element.getBoundingClientRect().height,
@@ -39,18 +37,21 @@ for (const theme of ['dark', 'light']) for (const size of ['compact', 'normal', 
     const cover = await row.locator('[data-artwork-surface]').evaluate(element => ({ height: element.getBoundingClientRect().height,
       expected: parseFloat(getComputedStyle(element).getPropertyValue('--cover-sm')) }));
     expect(cover.height).toBeCloseTo(cover.expected, 0);
-    // The shared SearchField box, border included, is what follows the density.
-    const field = await browser.locator('input[type="search"]').evaluate(element => ({ height: element.parentElement!.getBoundingClientRect().height,
-      expected: parseFloat(getComputedStyle(element).getPropertyValue('--control-h')) }));
-    expect(field.height).toBeCloseTo(field.expected, 0);
-    await expect(browser).toHaveScreenshot(`browser-${theme}-${size}.png`);
+    // A phone reveals the filter with a pull; the desktop shows it under the title.
+    if (!isMobile) {
+      // The shared SearchField box, border included, is what follows the density.
+      const field = await page.locator('input[type="search"]:visible').first().evaluate(element => ({ height: element.parentElement!.getBoundingClientRect().height,
+        expected: parseFloat(getComputedStyle(element).getPropertyValue('--control-h')) }));
+      expect(field.height).toBeCloseTo(field.expected, 0);
+    }
+    await expect(list).toHaveScreenshot(`library-${theme}-${size}.png`);
   });
 }
 
 test('Shift+F10 anchors the row menu to the focused control and restores focus', async ({ page, isMobile }) => {
   test.skip(isMobile, 'the coarse pointer uses the shared action sheet');
-  const browser = await browserPanel(page, false);
-  const opener = browser.getByRole('button', { name: /^Reproducir Canción de biblioteca/ }).first();
+  const list = await songsView(page);
+  const opener = list.getByRole('button', { name: /^Reproducir Canción de biblioteca/ }).first();
   await opener.focus();
   await opener.press('Shift+F10');
   const menu = page.getByRole('menu');
@@ -61,20 +62,4 @@ test('Shift+F10 anchors the row menu to the focused control and restores focus',
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(opener).toBeFocused();
-});
-
-test('browser tabs have one keyboard stop and arrow activation', async ({ page, isMobile }) => {
-  const browser = await browserPanel(page, isMobile);
-  const tabs = browser.getByRole('tablist', { name: 'Biblioteca' });
-  const songs = tabs.getByRole('tab', { name: 'Canciones', exact: true });
-  await songs.focus();
-  await songs.press('End');
-  await expect(tabs.getByRole('tab', { name: 'Artistas', exact: true })).toBeFocused();
-  await expect(tabs.getByRole('tab', { selected: true })).toHaveText('Artistas');
-  await page.keyboard.press('Home');
-  await expect(songs).toBeFocused();
-  await expect(songs).toHaveAttribute('aria-selected', 'true');
-  const panel = browser.getByRole('tabpanel', { name: 'Canciones', exact: true });
-  await expect(panel).toBeVisible();
-  await expect(panel).toHaveAttribute('aria-labelledby', (await songs.getAttribute('id'))!);
 });

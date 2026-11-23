@@ -1,0 +1,28 @@
+.editRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--row-h);
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.editRow > div {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.editRow > button {
+  min-width: var(--cover-sm);
+  min-height: var(--control-h);
+  color: var(--ink-primary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.editRow > button:disabled {
+  opacity: 0.35;
+}

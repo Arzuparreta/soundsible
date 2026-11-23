@@ -11,7 +11,6 @@ import type { CatalogItem } from '../types/music';
 const CACHE = 'search-discovery';
 const REVALIDATE_FALLBACK_MS = 15_000;
 const MAX_REVALIDATE_ATTEMPTS = 4;
-const EXPLORE_MAX_ITEMS = 24;
 
 const [feed, setFeed] = createSignal<DiscoveryMusicFeed>({});
 const [loading, setLoading] = createSignal(true);
@@ -197,7 +196,7 @@ export const discoveryError = error;
 export const discoveryDismissed = dismissed;
 export const discoveryDismissedArtists = dismissedArtists;
 
-const { browseSections, trackShelves, exploreItems } = createRoot(() => {
+const { browseSections, trackShelves } = createRoot(() => {
   const browseSections = createMemo<DiscoveryBrowseSection[]>(() =>
     filterDiscoveryBrowseSections(
       (feed().browse_sections ?? []).map((section) => ({
@@ -216,53 +215,11 @@ const { browseSections, trackShelves, exploreItems } = createRoot(() => {
     filterDiscoveryTrackShelves(rawTrackShelves(), dismissed(), dismissedArtists()),
   );
 
-  /**
-   * Interleave track shelves round-robin for compact panels (Now Playing Explore),
-   * preferring fresh external discoveries first and falling back to library shelves.
-   */
-  const exploreItems = createMemo<CatalogItem[]>(() => {
-    const shelves = trackShelves();
-    if (!shelves.length) return [];
-
-    const roundRobin = (lists: CatalogItem[][]): CatalogItem[] => {
-      const out: CatalogItem[] = [];
-      const seen = new Set<string>();
-      const maxLen = lists.reduce((max, list) => Math.max(max, list.length), 0);
-      for (let idx = 0; idx < maxLen && out.length < EXPLORE_MAX_ITEMS; idx += 1) {
-        for (const list of lists) {
-          const item = list[idx];
-          if (!item || seen.has(item.id)) continue;
-          seen.add(item.id);
-          out.push(item);
-          if (out.length >= EXPLORE_MAX_ITEMS) break;
-        }
-      }
-      return out;
-    };
-
-    const external = roundRobin(shelves.map((shelf) => shelf.items.filter((item) => item.type !== 'library_track')));
-    if (external.length >= EXPLORE_MAX_ITEMS) return external;
-    if (external.length > 0) {
-      const seen = new Set(external.map((item) => item.id));
-      const local = roundRobin(shelves.map((shelf) => shelf.items.filter((item) => item.type === 'library_track')));
-      for (const item of local) {
-        if (external.length >= EXPLORE_MAX_ITEMS) break;
-        if (!seen.has(item.id)) {
-          seen.add(item.id);
-          external.push(item);
-        }
-      }
-      return external;
-    }
-    return roundRobin(shelves.map((shelf) => shelf.items));
-  });
-
-  return { browseSections, trackShelves, exploreItems };
+  return { browseSections, trackShelves };
 });
 
 export const discoveryBrowseSections = browseSections;
 export const discoveryTrackShelves = trackShelves;
-export const discoveryExploreItems = exploreItems;
 
 export function retainDiscoveryFeed(): () => void {
   const token = Symbol('discovery-feed-consumer');

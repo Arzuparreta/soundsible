@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockMusicEngine, openMiniPlayer } from './music-browser-fixture';
 import { settledBox } from './settle';
+import { fullScreenPlayer } from './playerPanels';
 
 /**
  * Cards and rows whose whole surface is one link or button, laid over the
@@ -59,6 +60,9 @@ test('search result cards take a press anywhere on them', async ({ page }) => {
 test('the playing song in the queue answers a click on its equaliser', async ({ page, isMobile }) => {
   test.skip(isMobile, 'the phone lists the queue with its own rows');
   await mockMusicEngine(page);
+  // The wide queue row, with its equaliser, is the full-screen player's; the
+  // docked column lists the queue with the phone's rows.
+  await fullScreenPlayer(page);
   await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await openMiniPlayer(page, /Canción de biblioteca 320/);

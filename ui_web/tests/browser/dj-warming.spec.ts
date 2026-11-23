@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer, TRACKS } from './music-browser-fixture';
+import { showPlayerPanel } from './playerPanels';
 
 test('a cold DJ route warms and arrives automatically without Retry', async ({ page }) => {
   await mockMusicEngine(page);
@@ -29,9 +30,7 @@ test('a cold DJ route warms and arrives automatically without Retry', async ({ p
   });
   await openMusicPlayer(page);
   await page.getByRole('tab', { name: 'DJ', exact: true }).click();
-  if ((page.viewportSize()?.width ?? 0) < 1024) {
-    await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(2).click();
-  }
+  await showPlayerPanel(page, 'route');
   const route = page.locator('[data-auto-tile="route"]');
   try {
     await expect(route).toBeVisible();

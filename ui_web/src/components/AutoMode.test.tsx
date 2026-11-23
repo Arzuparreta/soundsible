@@ -34,7 +34,8 @@ const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPi
   },
 }));
 
-vi.mock('../stores', () => ({ actions, state }));
+const setNowPlayingOpen = vi.hoisted(() => vi.fn());
+vi.mock('../stores', () => ({ actions, state, setNowPlayingOpen }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu }));
 vi.mock('./ActionMenu', () => ({ openActionMenu }));
 // What the track menu offers is `trackActions.test.ts`'s business. Here it is
@@ -50,17 +51,23 @@ vi.mock('../lib/i18n', () => ({ t: (key: string, params?: Record<string, string 
 vi.mock('./PlayerStage', () => ({ PlayerStage: (props: { mode: string; empty?: unknown }) => (
   <div data-testid="shared-stage" data-mode={props.mode}>{state.playback.currentTrack ? null : props.empty as never}</div>
 ) }));
-vi.mock('./NowPlayingBrowser', () => ({ NowPlayingBrowser: (props: { purpose?: string }) => <aside aria-label="source-browser" data-purpose={props.purpose} /> }));
 
 import { AutoMode, titleFit } from './AutoMode';
+import { djErrand, endDjErrand } from '../lib/djErrand';
+import { setPlayerCompact } from '../lib/playerDock';
 
-function renderAuto(panel: 'browser' | 'stage' | 'route' = 'stage') {
+function renderAuto(panel: 'stage' | 'route' = 'stage') {
   return render(() => <AutoMode panel={panel} onPanelChange={vi.fn()} surfaceOpen />);
 }
 
 // `autoTrackDragging` is module state shared by every drop target, so a test
 // that starts a drag has to end it or the next one renders mid-gesture.
-beforeEach(() => vi.useFakeTimers());
+beforeEach(() => {
+  vi.useFakeTimers();
+  // The wide workspace: the route beside the stage, as a full-screen desktop
+  // player shows it. A docked player would start compact.
+  setPlayerCompact(false);
+});
 afterEach(() => {
   fireEvent(window, new Event('dragend'));
   cleanup();
@@ -87,10 +94,10 @@ function routeRow(gapIndex = 0) {
 }
 
 describe('AutoMode workspace', () => {
-  it('browses without arming a mode, and offers no button that only highlights a tray', () => {
-    renderAuto('browser');
+  it('opens without an errand, and offers no button that only highlights a tray', () => {
+    renderAuto('stage');
     expect(screen.getByTestId('shared-stage')).toHaveAttribute('data-mode', 'auto');
-    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-neutral');
+    expect(djErrand()).toBeNull();
     // Once, in the references tray. The route rows used to repeat it under every
     // song, which on a 280px panel cost the artist its name.
     expect(screen.getAllByText('Warehouse techno')).toHaveLength(1);
@@ -490,7 +497,21 @@ describe('the stage before the first song', () => {
     const stage = within(screen.getByTestId('shared-stage'));
     expect(stage.getByText('autoMode.noSeed')).toBeInTheDocument();
     fireEvent.click(stage.getByRole('button', { name: 'musicExplorer.referenceEmpty' }));
-    expect(onPanelChange).toHaveBeenCalledWith('browser');
-    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-reference');
+    // The app is where music is chosen: on a phone the sheet steps aside for
+    // it, and the next pick there answers the errand.
+    expect(djErrand()).toEqual({ kind: 'reference', beforeQueueId: undefined });
+    expect(setNowPlayingOpen).toHaveBeenCalledWith(false);
+    endDjErrand(true);
+    expect(setNowPlayingOpen).toHaveBeenLastCalledWith(true);
+    expect(onPanelChange).toHaveBeenCalledWith('route');
   }));
+
+  it('asks for a song at a seam of the route, and leaves nothing open when DJ ends', () => {
+    const view = renderAuto('route');
+    fireEvent.click(screen.getAllByRole('button', { name: /autoMode\.route\.insertBefore/ })[0]);
+    expect(djErrand()).toMatchObject({ kind: 'route' });
+    expect(djErrand()?.beforeQueueId).toBeTruthy();
+    view.unmount();
+    expect(djErrand()).toBeNull();
+  });
 });

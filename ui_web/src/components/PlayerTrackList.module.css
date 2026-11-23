@@ -207,7 +207,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Unified row recipe (shared with NowPlayingBrowser): the separator is the
+/* Unified row recipe: the separator is the
  * row's own bottom hairline and the rounded state fill paints on a ::before
  * layer, so a fill never clips the separator and the rounded corner never
  * wears through the line. */
@@ -623,7 +623,7 @@
   }
 }
 
-@media (min-width: 1024px) {
+@container player (min-width: 1024px) {
   .section:last-child .sectionRows {
     padding-bottom: 24px;
   }
@@ -660,7 +660,7 @@
   100% { transform: scaleY(0.45); }
 }
 
-@media (max-width: 1023px) {
+@container player (max-width: 1023px) {
   .row { display: block; }
   .row[data-current]::before { background: transparent; }
 }

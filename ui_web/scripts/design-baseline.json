@@ -45,7 +45,7 @@
     "styles": 1
   },
   "src/components/CollectionActions.tsx": {
-    "controls": 2
+    "controls": 1
   },
   "src/components/CollectionButton.module.css": {
     "styles": 6
@@ -132,13 +132,10 @@
     "controls": 2
   },
   "src/components/NowPlaying.module.css": {
-    "styles": 76
+    "styles": 71
   },
   "src/components/NowPlaying.tsx": {
-    "controls": 3
-  },
-  "src/components/NowPlayingBrowser.module.css": {
-    "styles": 28
+    "controls": 2
   },
   "src/components/OmniBar.module.css": {
     "styles": 70

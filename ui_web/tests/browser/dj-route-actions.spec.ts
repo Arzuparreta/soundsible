@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockMusicEngine, restoreQueueSession, TRACKS } from './music-browser-fixture';
+import { showPlayerPanel } from './playerPanels';
 
 /** A song the DJ found outside the library: in the route, not yet kept. */
 const FOUND = { id: 'routeSong01', youtube_id: 'routeSong01', title: 'Canción encontrada', artist: 'Artista externo', duration: 200 };
@@ -62,8 +63,7 @@ async function routeSong(page: Page, alreadySaved = false) {
     actions.enterAutoMode();
   });
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
-  const mobile = (page.viewportSize()?.width ?? 0) < 1024;
-  if (mobile) await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(2).click();
+  await showPlayerPanel(page, 'route');
   const route = page.locator('[data-auto-tile="route"]');
   const row = route.locator('[data-drag-row]').filter({ hasText: FOUND.title });
   await expect(row).toBeVisible();

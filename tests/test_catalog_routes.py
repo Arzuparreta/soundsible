@@ -101,6 +101,16 @@ def _reset(tmp_path, monkeypatch):
     reset_runtime()
 
 
+_REAL_ALBUM_SEARCH = catalog_search._deezer_album_search
+
+
+@pytest.fixture(autouse=True)
+def no_album_search(monkeypatch):
+    """Deezer's album search is a provider of its own; a test that wants it
+    stubs it, and no test reaches Deezer."""
+    monkeypatch.setattr(catalog_search, "_deezer_album_search", lambda q, limit: [])
+
+
 def test_catalog_search_combines_local_deezer_and_sections(monkeypatch):
     metadata = LibraryMetadata(version=1, tracks=[_track("local-1", "Rosalia Local", "Rosalia")], playlists={}, settings={})
     monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
@@ -280,10 +290,11 @@ def test_text_score_folds_accents_and_accepts_reordered_tokens():
     assert score("nothing alike", "In Rainbows") == 0.0
 
 
-def _entity_search(monkeypatch, *, deezer=(), musicbrainz=(), youtube=(), tracks=()):
+def _entity_search(monkeypatch, *, deezer=(), deezer_albums=(), musicbrainz=(), youtube=(), tracks=()):
     metadata = LibraryMetadata(version=1, tracks=list(tracks), playlists={}, settings={})
     monkeypatch.setattr(catalog_search, "engine_api", lambda: _fake_api(metadata))
     monkeypatch.setattr(catalog_search, "_deezer_search", lambda q, limit: list(deezer))
+    monkeypatch.setattr(catalog_search, "_deezer_album_search", lambda q, limit: list(deezer_albums))
     monkeypatch.setattr(catalog_search, "_musicbrainz_search", lambda q, limit: list(musicbrainz))
     monkeypatch.setattr(catalog_search, "_youtube_search", lambda q, limit: list(youtube))
     return lambda query: _make_app().test_client().get(f"/api/catalog/search?q={query}").get_json()
@@ -450,6 +461,169 @@ def test_no_top_result_when_a_type_boost_alone_decided_the_winner(monkeypatch):
     body = search("ambiguous")
 
     assert body["top_result"] is None
+
+
+def _deezer_song(i, title, artist, rank, *, album_id="", artist_id=""):
+    raw = {"deezer_id": str(i)}
+    if album_id:
+        raw["deezer_album_id"] = album_id
+    if artist_id:
+        raw["deezer_artist_id"] = artist_id
+    return catalog_search.catalog_item(
+        item_id=f"deezer:track:{i}", item_type="track", source="deezer",
+        title=title, subtitle=artist, artist=artist, popularity=rank,
+        external_ids={"deezer_id": str(i)}, raw=raw,
+    )
+
+
+def test_the_listened_original_leads_over_a_tribute_act_of_its_name(monkeypatch):
+    """Measured on Deezer and MusicBrainz for "bohemian rhapsody": the text
+    alone put a band called Bohemian Rhapsody above Queen."""
+    search = _entity_search(
+        monkeypatch,
+        deezer=[
+            catalog_search.catalog_item(
+                item_id="deezer:artist:tribute", item_type="artist", source="deezer",
+                title="Bohemian Rhapsody", subtitle="Artist", artist="Bohemian Rhapsody",
+                external_ids={"deezer_artist_id": "tribute"},
+            ),
+            _deezer_song(1, "Bohemian Rhapsody", "Queen", 958949, artist_id="queen"),
+            _deezer_song(2, "Somebody to Love", "Bohemian Rhapsody", 1200, artist_id="tribute"),
+        ],
+    )
+
+    body = search("bohemian%20rhapsody")
+
+    assert body["top_result"] == "deezer:track:1"
+
+
+def test_an_album_leads_with_the_listening_of_its_songs_over_an_unheard_exact_recording(monkeypatch):
+    """For "ok computer" a MusicBrainz recording by that title, heard by almost
+    nobody, led; the record is what its songs in the same answer show."""
+    search = _entity_search(
+        monkeypatch,
+        deezer=[
+            catalog_search.catalog_item(
+                item_id="deezer:album:ok", item_type="album", source="deezer",
+                title="OK Computer", subtitle="Radiohead", artist="Radiohead", album="OK Computer",
+                external_ids={"deezer_album_id": "ok"},
+            ),
+            _deezer_song(1, "Paranoid Android", "Radiohead", 928986, album_id="ok"),
+        ],
+        musicbrainz=[
+            catalog_search.catalog_item(
+                item_id="musicbrainz:track:x", item_type="track", source="musicbrainz",
+                title="ok computer", subtitle="Geai Florè", artist="Geai Florè",
+                external_ids={"musicbrainz_recording_id": "x"},
+            ),
+        ],
+    )
+
+    body = search("ok%20computer")
+
+    assert body["top_result"] == "deezer:album:ok"
+
+
+def test_the_best_song_not_the_sum_says_how_listened_a_collection_is(monkeypatch):
+    """Twenty quiet covers do not outweigh one record people play."""
+    covers = [_deezer_song(10 + i, f"Kind of Blue {i}", "Cover Band", 5000, artist_id="covers") for i in range(20)]
+    search = _entity_search(
+        monkeypatch,
+        deezer=[
+            catalog_search.catalog_item(
+                item_id="deezer:artist:covers", item_type="artist", source="deezer",
+                title="Kind of Blue", subtitle="Artist", artist="Kind of Blue",
+                external_ids={"deezer_artist_id": "covers"},
+            ),
+            catalog_search.catalog_item(
+                item_id="deezer:album:miles", item_type="album", source="deezer",
+                title="Kind of Blue", subtitle="Miles Davis", artist="Miles Davis", album="Kind of Blue",
+                external_ids={"deezer_album_id": "miles"},
+            ),
+            _deezer_song(1, "So What", "Miles Davis", 700000, album_id="miles"),
+            *covers,
+        ],
+    )
+
+    body = search("kind%20of%20blue")
+
+    assert body["top_result"] == "deezer:album:miles"
+
+
+def test_the_record_deezer_names_leads_over_songs_that_only_carry_its_name(monkeypatch):
+    """"The dark side of the moon": the song search found only songs titled
+    after the record; the album search finds the record and how listened its
+    songs are."""
+    record = catalog_search.catalog_item(
+        item_id="deezer:album:pf", item_type="album", source="deezer",
+        title="The Dark Side of the Moon", subtitle="Pink Floyd", artist="Pink Floyd",
+        album="The Dark Side of the Moon", external_ids={"deezer_album_id": "pf"},
+    )
+    record["_listened"] = 900000
+    search = _entity_search(
+        monkeypatch,
+        deezer=[_deezer_song(1, "Dark Side of the Moon", "suisside", 452963)],
+        deezer_albums=[record],
+    )
+
+    body = search("the%20dark%20side%20of%20the%20moon")
+
+    assert body["top_result"] == "deezer:album:pf"
+
+
+@pytest.mark.parametrize("quota_exceeded", [False, True])
+def test_album_search_measures_only_the_best_matching_record(monkeypatch, quota_exceeded):
+    calls = []
+
+    def rows(path, params=None, **kwargs):
+        calls.append(path)
+        if path == "search/album":
+            return [
+                {"id": 7, "title": "Something Else", "artist": {"id": 1, "name": "A"}},
+                {"id": 9, "title": "Kind of Blue (Remastered)", "artist": {"id": 2, "name": "Miles Davis"}},
+                {"id": 8, "title": "Kind Of Blue", "artist": {"id": 2, "name": "Miles Davis"}},
+            ]
+        if quota_exceeded:
+            raise catalog_search.deezer.DeezerQuotaError(path)
+        return [{"rank": 700000}, {"rank": 12}]
+
+    monkeypatch.setattr(catalog_search.deezer, "rows", rows)
+    albums = _REAL_ALBUM_SEARCH("kind of blue", 10)
+
+    assert calls == ["search/album", "album/8/tracks"]
+    assert [album.get("_listened") for album in albums] == [None, None, None if quota_exceeded else 700000]
+    assert all(album["type"] == "album" for album in albums)
+
+
+def test_musicbrainz_scores_are_match_quality_not_popularity(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"recordings": [{
+                "id": "0f9c5e8a-6c76-4d0c-bb1d-8f1b7c3a9a01", "title": "Song", "score": 100,
+                "artist-credit": [{"name": "A", "artist": {"id": "a1", "name": "A"}}],
+                "releases": [{"id": "r1", "title": "Record"}],
+            }]}
+
+    monkeypatch.setattr(catalog_search.requests, "get", lambda *args, **kwargs: Response())
+    rows = catalog_search._musicbrainz_search("song", 10)
+    assert rows
+    assert all(not row.get("popularity") for row in rows)
+
+
+def test_listening_survives_the_collapse_into_the_owned_copy():
+    owned = catalog_search.catalog_item(
+        item_id="library:1", item_type="library_track", source="library",
+        title="Teardrop", subtitle="Massive Attack", artist="Massive Attack", duration=330,
+        external_ids={"deezer_id": "1"},
+    )
+    public = _deezer_song(1, "Teardrop", "Massive Attack", 800000)
+    public["duration"] = 330
+    ranked = catalog_search._dedupe([owned, public], "teardrop")
+    assert len(ranked) == 1
+    assert ranked[0]["_listened"] == 800000
 
 
 def test_owned_song_collapses_with_its_public_copies_without_moving_up(monkeypatch):

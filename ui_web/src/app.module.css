@@ -121,6 +121,20 @@
     box-shadow: 0 -1px 0 var(--hairline-soft);
   }
 
+  /* A docked player takes a column on the right (PlayerSurface): the app
+     gives it the room, and the bottom player bar steps aside, because the
+     column's stage has the same controls. */
+  :global(html[data-player-docked]) .app {
+    padding-right: var(--player-dock-width);
+    grid-template-areas:
+      'sidebar content'
+      'sidebar content';
+  }
+
+  :global(html[data-player-docked]) .dock {
+    display: none;
+  }
+
   /* The sidebar owns navigation on desktop; the bottom tab bar is redundant. */
   .tabbar {
     display: none;

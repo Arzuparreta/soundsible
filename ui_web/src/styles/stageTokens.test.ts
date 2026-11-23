@@ -22,7 +22,6 @@ const src = process.cwd();
 const playerFiles = [
   'src/components/PlayerSurface.module.css',
   'src/components/NowPlaying.module.css',
-  'src/components/NowPlayingBrowser.module.css',
   'src/components/AutoMode.module.css',
   'src/components/LyricsPanel.module.css',
 ].map((file) => path.resolve(src, file));

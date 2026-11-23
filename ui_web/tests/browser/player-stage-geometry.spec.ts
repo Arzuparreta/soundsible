@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { fullScreenPlayer } from './playerPanels';
 
 // The stage is a size container: its artwork follows both of the tile's sides
 // and gives way first. Whatever the tile leaves, every control on it has to sit
@@ -10,6 +11,8 @@ import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 test.beforeEach(async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.endsWith('mobile'), 'the resizable stage and its lyrics dock are the desktop workspace');
   await mockMusicEngine(page);
+  // The lyrics dock and the resizable stage belong to the full-screen player.
+  await fullScreenPlayer(page);
 });
 
 /** Each visible stage button whose centre a press would not reach, or that
@@ -59,17 +62,17 @@ test('the lyrics dock at the narrowest stage keeps its actions off the transport
   const stage = page.locator('[data-player-stage-mode="now-playing"]');
   await stage.getByRole('button', { name: 'Mostrar letra' }).click();
   await expect(stage).toHaveAttribute('data-lyrics-stage', '');
-  // The seam between the browser and the stage, pushed right until the stage
+  // The seam between the stage and the queue, pushed left until the stage
   // stops at its minimum width.
   const splitter = page.getByRole('separator', { name: 'Redimensionar paneles' }).first();
   await splitter.focus();
-  for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowRight');
+  for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowLeft');
   await settle(page, '[data-player-surface-open]');
   const width = await page.locator('[data-player-surface-open] [data-player-tile="stage"]').evaluate((tile) => tile.clientWidth);
   expect(width).toBeLessThan(360);
   expect(await unreachable(page, false)).toEqual([]);
   // And the dock at full width, where everything shares one row.
-  for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowLeft');
+  for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowRight');
   await settle(page, '[data-player-surface-open]');
   expect(await unreachable(page, false)).toEqual([]);
 });

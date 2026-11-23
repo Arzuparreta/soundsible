@@ -4,6 +4,7 @@ import { CollectionControl } from '../components/CollectionControl';
 import Button from '../components/Button';
 import { Control } from '../design/Control';
 import { CollectionActions } from '../components/CollectionActions';
+import { blockedByPodcast, firstPlayable, startDjFromCatalog, startDjFromTracks } from '../lib/djStart';
 import { openActionMenu } from '../components/ActionMenu';
 import { BackIcon, PlayIcon, RadioIcon, menuIcons } from '../components/icons';
 import { EntityViewSelect } from '../components/EntityViewSelect';
@@ -25,7 +26,7 @@ import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMo
 import { t } from '../lib/i18n';
 import type { AlbumSummary, ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
-import { useCatalogCollection, itemArtist, itemToTrack, playCatalogItem, resolveCatalogTrack, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
+import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import hero from '../components/EntityHero.module.css';
@@ -235,23 +236,6 @@ export default function Artist() {
     }
   };
 
-  const resolveFirstCandidate = async (
-    items: readonly CatalogItem[],
-    isCurrent: () => boolean,
-  ): Promise<{ track: Track; index: number } | null> => {
-    for (let i = 0; i < items.length; i++) {
-      const known = itemToTrack(items[i]);
-      if (known && !isPodcastTrack(known)) return { track: known, index: i };
-    }
-    for (let i = 0; i < items.length; i++) {
-      if (!isCurrent()) return null;
-      const resolved = await resolveCatalogTrack(items[i]).catch(() => null);
-      if (!isCurrent()) return null;
-      if (resolved && !isPodcastTrack(resolved)) return { track: resolved, index: i };
-    }
-    return null;
-  };
-
   const startArtistRadio = async () => {
     if (radioBusy()) return;
     const token = ++actionEpoch;
@@ -267,7 +251,7 @@ export default function Artist() {
       }
       const candidates = topTracks().slice(0, 10);
       if (candidates.length === 0) return;
-      const found = await resolveFirstCandidate(candidates, isCurrent);
+      const found = await firstPlayable(candidates, isCurrent);
       if (!isCurrent()) return;
       if (!found) {
         toast.error(t('search.noPreview'));
@@ -284,47 +268,17 @@ export default function Artist() {
   const podcastPlaying = () => Boolean(player().playback.currentTrack && isPodcastTrack(player().playback.currentTrack!));
 
   const startArtistDj = async () => {
-    if (djBusy()) return;
-    if (podcastPlaying()) {
-      toast.info(t('modeChange.podcastMessage'));
-      return;
-    }
+    if (djBusy() || blockedByPodcast()) return;
     if (view() === 'library') {
-      const tracks = libraryTrackList().filter((track) => !isPodcastTrack(track));
-      if (tracks.length === 0) return;
-      player().actions.enterAutoMode({ source: tracks[0], deferPlanning: true });
-      if (!player().remote && !player().autoMode.active) {
-        toast.info(t('modeChange.podcastMessage'));
-        return;
-      }
-      player().actions.startDjSelection(tracks, name());
+      startDjFromTracks(libraryTrackList(), name());
       return;
     }
-    const candidates = topTracks().slice(0, 10);
-    if (candidates.length === 0) return;
     const token = ++actionEpoch;
     const isCurrent = () => !disposed && token === actionEpoch;
-    const artistLabel = name();
     djOwner = token;
     setDjBusy(true);
     try {
-      const found = await resolveFirstCandidate(candidates, isCurrent);
-      if (!isCurrent()) return;
-      if (!found) {
-        toast.error(t('search.noPreview'));
-        return;
-      }
-      player().actions.enterAutoMode({ source: found.track, deferPlanning: true });
-      if (!player().remote && !player().autoMode.active) {
-        toast.info(t('modeChange.podcastMessage'));
-        return;
-      }
-      const seededItems = candidates.map((item, idx) => (
-        idx === found.index && found.track.source === 'preview'
-          ? { ...item, external_ids: { ...item.external_ids, youtube_id: found.track.id } }
-          : item
-      ));
-      await useCatalogCollection(seededItems, artistLabel, 'start', undefined, isCurrent);
+      await startDjFromCatalog(topTracks(), name(), isCurrent);
     } finally {
       if (!disposed && djOwner === token) setDjBusy(false);
     }
@@ -448,7 +402,7 @@ export default function Artist() {
                   <span class={hero.primaryLabel}>{t('artist.play')}</span>
                 </button>
               }>
-                <CollectionActions title={name()} auto iconOnlyOnMobile buttonClass={hero.play}
+                <CollectionActions title={name()} iconOnlyOnMobile buttonClass={hero.play}
                   tracks={view() === 'library' ? libraryTrackList() : undefined}
                   items={view() === 'library' ? undefined : topTracks()} />
               </Show>

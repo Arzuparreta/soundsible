@@ -3,6 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockMusicEngine, openMiniPlayer, restoreQueueSession, TRACKS } from './music-browser-fixture';
 import { settle } from './settle';
 import { snapPlayerCarousel } from './playerGestures';
+import { showPlayerPanel } from './playerPanels';
 
 /**
  * The queue shows what the listener decided — the song playing and the songs
@@ -17,7 +18,7 @@ const REQUESTS = TRACKS.slice(200, 230);
 
 async function openQueuePanel(page: Page, song = /Canción de biblioteca 320/) {
   await openMiniPlayer(page, song);
-  await expect(page.locator('[data-player-surface-open]')).toBeVisible();
+  await showPlayerPanel(page, 'queue');
   const queue = page.locator('[data-now-playing-tile="queue"]');
   await expect(queue).toBeVisible();
   await settle(page, '[data-now-playing-tile="queue"]');
@@ -99,7 +100,6 @@ test('removing the context keeps the song and hands over to Autoplay, which swit
 
 test('expanding the collection keeps the player open and exposes the real queue order', async ({ page, isMobile }) => {
   const queue = await restoreLongQueue(page, PLAYLIST);
-  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
   const card = queue.locator('[data-queue-card="context"]');
   const expand = card.locator('[data-card-expand]');
   await expand.click({ position: { x: 24, y: 24 } });
@@ -168,16 +168,22 @@ test('the library card opens the library and leaves the music playing', async ({
   const open = queue.getByRole('button', { name: 'Abrir Tu biblioteca' });
   if (isMobile) await open.tap();
   else await open.click();
-  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   await expect(page).toHaveURL(/#\/library\?view=songs$/);
-  await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 320');
+  if (isMobile) {
+    // A phone's player covers the app, so it gets out of the way.
+    await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+    await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 320');
+  } else {
+    // Docked beside the app, the player stays where it is.
+    await expect(page.locator('[data-player-surface-open]')).toBeVisible();
+    await expect(page.locator('#now-playing-view [data-player-tile="stage"]')).toContainText('Canción de biblioteca 320');
+  }
 });
 
 test('editing an expanded collection keeps it open with the songs it was showing', async ({ page, isMobile }) => {
   await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40), descriptor: PLAYLIST });
   await page.goto('/player/#/library?view=songs');
   const queue = await openQueuePanel(page);
-  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
   const expand = queue.locator('[data-card-expand]');
   await expand.click({ position: { x: 24, y: 24 } });
   await queue.getByRole('button', { name: 'Mostrar más' }).click();
@@ -216,7 +222,6 @@ for (const kind of ['album', 'artist', 'playlist', 'favourites', 'search'] as co
       descriptor: { id: `fixture-${kind}`, kind, label: `Collection ${kind}` } });
     await page.goto('/player/#/library?view=songs');
     const queue = await openQueuePanel(page);
-    if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
     await queue.locator('[data-card-expand]').click({ position: { x: 24, y: 24 } });
     const songs = queue.locator('[data-card-songs]');
     const rows = songs.locator('[data-drag-row]');
@@ -275,7 +280,6 @@ test('section labels never land on top of each other', async ({ page }) => {
 
 test('NORMAL queue scrolls vertically without sideways drift at every interface size', async ({ page, isMobile }) => {
   const queue = await restoreLongQueue(page, PLAYLIST);
-  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
   await queue.locator('[data-card-expand]').click({ position: { x: 24, y: 24 } });
 
   for (const size of ['compact', 'normal', 'large']) {
@@ -301,8 +305,8 @@ test('NORMAL queue scrolls vertically without sideways drift at every interface 
   }
   if (isMobile) {
     // The queue must still hand horizontal navigation to NORMAL's pager.
-    await snapPlayerCarousel(page, 'now-playing', 'browser');
-    await expect(page.locator('[data-now-playing-tile="browser"]')).not.toHaveAttribute('inert', '');
+    await snapPlayerCarousel(page, 'now-playing', 'stage');
+    await expect(page.locator('[data-now-playing-tile="stage"]')).not.toHaveAttribute('inert', '');
   }
 });
 
@@ -313,10 +317,9 @@ test('NORMAL queue scrolls vertically without sideways drift at every interface 
  * of the page, above the pager's own band — with the lane's air under them and
  * no more.
  */
-test('the queue fills its page the way the browser does, and its cards end above the pager', async ({ page }) => {
+test('the queue fills its page, and its cards end above the pager', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'mobile-only regression');
   await restoreLongQueue(page);
-  await snapPlayerCarousel(page, 'now-playing', 'queue');
   await settle(page, '[data-now-playing-tile="queue"]');
 
   const queue = page.locator('[data-now-playing-tile="queue"]');
@@ -334,16 +337,8 @@ test('the queue fills its page the way the browser does, and its cards end above
     }), { message: 'the queue left a strip of empty panel under its last section' })
     .toBeLessThanOrEqual(1);
 
-  await snapPlayerCarousel(page, 'now-playing', 'browser');
-  await settle(page, '[data-now-playing-tile="browser"]');
-  // The same line, measured the same way on the panel that always reached it.
-  await expect
-    .poll(() => page.locator('[data-now-playing-tile="browser"]').evaluate((tile) => {
-      const body = tile.querySelector('[data-browser-body]') as HTMLElement;
-      return tile.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom;
-    }), { message: 'the browser panel no longer reaches the bottom of its card' })
-    .toBeLessThanOrEqual(1);
-
+  // A trip across the pager and back.
+  await snapPlayerCarousel(page, 'now-playing', 'stage');
   await snapPlayerCarousel(page, 'now-playing', 'queue');
   await settle(page, '[data-now-playing-tile="queue"]');
 

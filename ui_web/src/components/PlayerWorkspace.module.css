@@ -40,7 +40,7 @@
   display: none;
 }
 
-@media (max-width: 1023px) {
+@container player (max-width: 1023px) {
   .workspace {
     padding-top:
       calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap));
@@ -80,7 +80,7 @@
   }
 }
 
-@media (min-width: 1024px) {
+@container player (min-width: 1024px) {
   .main {
     display: grid;
     align-items: stretch;

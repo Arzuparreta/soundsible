@@ -42,6 +42,72 @@
     transform var(--dur-medium) var(--ease-out),
     visibility 0s linear var(--dur-medium);
   isolation: isolate;
+  /* Everything inside lays itself out by the player's width, not the
+     window's: docked beside the app it is as narrow as a phone. */
+  container: player / inline-size;
+}
+
+/* Docked: a column on the right, the app still in use to its left. It slides
+   in and out sideways, and its edge can be dragged to resize it. */
+.surface[data-docked] {
+  left: auto;
+  width: var(--player-dock-width);
+  border-left: 1px solid var(--stage-line);
+  transform: translateX(100%);
+}
+
+.surface[data-docked].open {
+  transform: none;
+}
+
+.surface[data-docked].closing {
+  animation-name: surfaceOutDocked;
+}
+
+@keyframes surfaceOutDocked {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  88% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+.dockEdge {
+  position: absolute;
+  z-index: 45;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--space-xs);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.dockEdge:focus-visible,
+:global(html[data-player-resizing]) .dockEdge {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dockEdge:hover {
+    background: var(--accent-soft);
+  }
+}
+
+/* The pointer is captured by the edge for the whole drag, and its press is
+   prevented, so no text is selected on the way; the cursor says what it does
+   wherever it goes. */
+:global(html[data-player-resizing]) {
+  cursor: col-resize;
 }
 
 .surface:not(.open),
@@ -182,7 +248,8 @@
    side that gets covered. It lived on a `.wash` in AutoMode that no element
    ever had, so it had never once reached the screen. */
 @media (min-width: 600px) and (min-aspect-ratio: 5 / 4) {
-  .auto .wash {
+  /* The window's shape, not a docked column's, which is always upright. */
+  .surface:not([data-docked]).auto .wash {
     background-image: var(--stage-wash-auto-wide);
   }
 }
@@ -296,7 +363,7 @@
   content: '';
 }
 
-@media (min-width: 1024px) {
+@container player (min-width: 1024px) {
   .deviceButtonActive {
     max-width: 32ch;
     padding: 0 var(--space-md);
@@ -304,7 +371,7 @@
   }
 }
 
-@media (max-width: 1023px) {
+@container player (max-width: 1023px) {
   .deviceButton .deviceButtonLabel {
     display: none;
   }
@@ -357,10 +424,6 @@
 
 .chromeButton:last-child {
   justify-self: end;
-}
-
-.browserButton {
-  grid-column: 1;
 }
 
 .modePill {
@@ -569,17 +632,19 @@
   }
 }
 
-@media (max-width: 1023px) {
-  .surface {
-    --player-chrome-top: calc(env(safe-area-inset-top, 0px) + 8px);
-    --player-chrome-size: 40px;
-    --player-chrome-gap: 8px;
-  }
+/* The surface cannot query its own width, so it reads the flag it measures
+   for itself (PlayerSurface); everything inside uses the container query. */
+.surface[data-compact] {
+  --player-chrome-top: calc(env(safe-area-inset-top, 0px) + 8px);
+  --player-chrome-size: 40px;
+  --player-chrome-gap: 8px;
+}
 
-  .surface[data-remote] {
-    --player-chrome-gap: calc(var(--pill-h) + var(--space-md));
-  }
+.surface[data-compact][data-remote] {
+  --player-chrome-gap: calc(var(--pill-h) + var(--space-md));
+}
 
+@container player (max-width: 1023px) {
   .floatingChrome {
     --player-chrome-column-gap: 8px;
 
@@ -592,7 +657,28 @@
   }
 
   .modePill {
-    width: min(100%, 56vw, 232px);
+    width: min(100%, 56cqw, 232px);
+  }
+
+  /* On a desktop a third button sits on the right: docked or full screen. */
+  .surface[data-dockable] .floatingChrome {
+    --player-chrome-side: calc(var(--player-chrome-size) * 3 + var(--space-2xs) * 2);
+  }
+
+  /* Docked, nothing sits on the left to balance the right, and centring the
+     pill between two equal sides left it too narrow for its words. It leads
+     the bar instead, with the width the rule above gives it. */
+  .surface[data-docked] .floatingChrome {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .surface[data-docked] .modePill {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .surface[data-docked] .chromeRight {
+    grid-column: 2;
   }
 
   .carouselNav {
@@ -600,7 +686,7 @@
   }
 }
 
-@media (min-width: 1024px) {
+@container player (min-width: 1024px) {
   .layoutButton {
     display: inline-grid;
   }

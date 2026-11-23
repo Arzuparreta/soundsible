@@ -1,34 +1,34 @@
 import {
-  buildThreePanelLayoutPresets,
+  buildTwoPanelLayoutPresets,
   clonePanelLayout,
   parsePanelLayout,
   type PlayerPanelLayout,
-  type ThreePanelLayoutPresetId,
+  type TwoPanelLayoutPresetId,
 } from './playerLayout';
 
-export type AutoModePanelId = 'browser' | 'stage' | 'route';
+export type AutoModePanelId = 'stage' | 'route';
 export type AutoModeDesktopLayout = PlayerPanelLayout<AutoModePanelId>;
-export type AutoModeLayoutPresetId = ThreePanelLayoutPresetId;
+export type AutoModeLayoutPresetId = TwoPanelLayoutPresetId;
 
 export const AUTO_MODE_LAYOUT_KEY = 'auto:desktopLayout:v2';
-export const AUTO_MODE_PANELS: readonly AutoModePanelId[] = ['browser', 'stage', 'route'];
+export const AUTO_MODE_PANELS: readonly AutoModePanelId[] = ['stage', 'route'];
 export const DEFAULT_AUTO_MODE_LAYOUT: AutoModeDesktopLayout = {
   version: 1,
-  order: ['browser', 'stage', 'route'],
-  // The stage takes the wider middle, the panel whose artwork grows with the
-  // room; at 36 percent a 1536x864 window's cover is already as tall as the
-  // window allows, and the lists keep the width their titles need.
-  ratios: { browser: 0.32, stage: 0.36, route: 0.32 },
+  order: ['stage', 'route'],
+  // As in Now Playing: the stage takes the wider share.
+  ratios: { stage: 0.55, route: 0.45 },
 };
-export const AUTO_MODE_LAYOUT_PRESETS = buildThreePanelLayoutPresets(
-  { left: 'browser', stage: 'stage', right: 'route' } as const,
+export const AUTO_MODE_LAYOUT_PRESETS = buildTwoPanelLayoutPresets(
+  { stage: 'stage', list: 'route' } as const,
   DEFAULT_AUTO_MODE_LAYOUT.ratios,
 );
 
 function isPanelId(value: unknown): value is AutoModePanelId {
-  return value === 'browser' || value === 'stage' || value === 'route';
+  return value === 'stage' || value === 'route';
 }
 
+/** A layout saved with the music browser panel the player used to have no
+ * longer fits its two panels, and falls back to the default. */
 export function parseAutoModeLayout(raw: string | null): AutoModeDesktopLayout {
   return parsePanelLayout(raw, AUTO_MODE_PANELS, DEFAULT_AUTO_MODE_LAYOUT, isPanelId);
 }

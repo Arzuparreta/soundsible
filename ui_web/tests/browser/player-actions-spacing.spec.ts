@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { fullScreenPlayer } from './playerPanels';
 
 // Two rows change with the song. Beside the title: the heart appears once it is
 // saved, the save/download slot disappears once it has a file. Under the
@@ -96,6 +97,8 @@ test('a saved song still streaming keeps heart and download side by side', async
 
 test('the lyrics dock spaces what it keeps of the row evenly', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.endsWith('mobile'), 'the lyrics dock is the desktop stage');
+  // The lyrics dock and the resizable stage belong to the full-screen player.
+  await fullScreenPlayer(page);
   await page.route('**/api/library/tracks/*/lyrics**', (route) => route.fulfill({ json: {
     status: 'ready', synced: '[00:00.00]Una línea\n[00:04.00]Otra línea', plain: null, instrumental: false, cached: true,
   } }));
@@ -107,7 +110,8 @@ test('the lyrics dock spaces what it keeps of the row evenly', async ({ page }, 
   // Stretched until the dock has room for the heart beside the title.
   const splitter = page.getByRole('separator', { name: 'Redimensionar paneles' }).first();
   await splitter.focus();
-  for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowLeft');
+  // The seam is on the stage's right, before the queue.
+  for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowRight');
   await expectEvenRow(page, 'song', [/favoritos/i]);
   await expectEvenRow(page, 'actions', [/Mostrar portada/, /Silenciar/, /Más opciones/]);
 });

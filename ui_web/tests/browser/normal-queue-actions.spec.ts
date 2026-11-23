@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine, openMiniPlayer, restoreQueueSession, TRACKS } from './music-browser-fixture';
+import { showPlayerPanel } from './playerPanels';
 
 const STREAMED = { id: 'normalSong1', youtube_id: 'normalSong1', title: 'Canción en streaming',
   artist: 'Artista externo', album: 'Disco externo', duration: 200, source: 'preview' as const };
@@ -35,9 +36,7 @@ test('NORMAL queue offers collection actions for the selected song without chang
   await restoreQueueSession(page, { current: TRACKS[319], requests: [STREAMED] });
   await page.goto('/player/#/library?view=songs');
   await openMiniPlayer(page, /Canción de biblioteca 320/);
-  if ((page.viewportSize()?.width ?? 0) < 1024) {
-    await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(2).click();
-  }
+  await showPlayerPanel(page, 'queue');
   const queue = page.locator('[data-now-playing-tile="queue"]');
   const row = queue.locator(`[data-drag-row="q-request-${STREAMED.id}"]`);
   const order = () => queue.locator('[data-drag-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-drag-row')));

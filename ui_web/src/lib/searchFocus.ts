@@ -1,5 +1,6 @@
 import { setNowPlayingOpen } from '../stores';
 import { navigateMusic } from './musicNavigation';
+import { playerDocked } from './playerDock';
 import { tabRoot } from './tabMemory';
 
 /**
@@ -23,7 +24,8 @@ function focusField(field: HTMLInputElement): void {
 export function openSearch(): void {
   const field = document.querySelector<HTMLInputElement>('[data-global-search-input]');
   if (field) {
-    setNowPlayingOpen(false);
+    // A docked player leaves the field in sight; one over the app hides it.
+    if (!playerDocked()) setNowPlayingOpen(false);
     focusField(field);
     return;
   }

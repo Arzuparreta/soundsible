@@ -95,16 +95,17 @@ describe('mobile entry menus', () => {
       ['collection.download', false],
       ['trackActions.playNext', false],
       ['trackActions.addToQueue', false],
+      ['musicExplorer.startDjFromSong', false],
       ['trackActions.playOnDevice', false],
       ['trackActions.startRadio', false],
       ['More from Artist', true],
       ['trackActions.notInterested', false],
       ['trackActions.lessFromArtist', false],
     ]);
-    list[5].onSelect();
+    list[6].onSelect();
     await vi.waitFor(() => expect(store.resolveCatalogItem).toHaveBeenCalledWith({ artist: 'Artist', title: 'Unresolved song', duration: undefined }, undefined));
     await vi.waitFor(() => expect(store.actions.startRadio).toHaveBeenCalledWith(expect.objectContaining({ id: 'dQw4w9WgXcQ' })));
-    list[7].onSelect();
+    list[8].onSelect();
     expect(store.sendDiscoveryNotInterested).toHaveBeenCalledWith(
       expect.objectContaining({
         media_type: 'music_track',
@@ -117,7 +118,7 @@ describe('mobile entry menus', () => {
       }),
       { onDismissed: onNotInterested, onUndone: onUndoNotInterested },
     );
-    list[8].onSelect();
+    list[9].onSelect();
     expect(store.sendDiscoveryLessFromArtist).toHaveBeenCalledWith(
       expect.objectContaining({
         deezer_id: '42',

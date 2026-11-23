@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { showPlayerPanel } from './playerPanels';
 
 // Lyrics timed for another cut of the song — a music video with an intro —
 // are shown unhighlighted with a request to tap the line being sung. The tap
@@ -27,10 +28,7 @@ async function showLyrics(page: Page) {
   // A phone pages the player; the lyrics live on the stage page, reached
   // through the same pager the listener uses.
   const stage = page.locator('[data-now-playing-tile="stage"]');
-  if ((page.viewportSize()?.width ?? 0) < 1024) {
-    await page.locator('[data-player-surface-open] nav[data-no-surface-swipe]').locator('button').nth(1).click();
-    await expect(stage).not.toHaveAttribute('inert', '');
-  }
+  await showPlayerPanel(page, 'stage');
   await stage.getByRole('button', { name: 'Mostrar letra' }).click();
   const panel = stage.locator('[data-lyrics-scroll]').first();
   await expect(panel.getByRole('button', { name: 'Line 1', exact: true })).toBeInViewport();
@@ -54,9 +52,7 @@ test('a temporary provider outage recovers in the open panel without a retry cli
   });
   await openMusicPlayer(page);
   const stage = page.locator('[data-now-playing-tile="stage"]');
-  if ((page.viewportSize()?.width ?? 0) < 1024) {
-    await page.locator('[data-player-surface-open] nav[data-no-surface-swipe]').locator('button').nth(1).click();
-  }
+  await showPlayerPanel(page, 'stage');
   await stage.getByRole('button', { name: 'Mostrar letra' }).click();
   await expect(stage.getByLabel('Cargando letra')).toBeVisible();
   await expect(stage.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);

@@ -11,7 +11,7 @@ import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { t } from '../lib/i18n';
 import styles from './LibraryHome.module.css';
 
-/** Main-shell landing page. NORMAL/DJ retain their independent music browser. */
+/** Main-shell landing page. */
 export default function LibraryHome() {
   const [params] = useSearchParams();
   const kind = () => params.saved === 'albums' ? 'album' : params.saved === 'artists' ? 'artist' : undefined;

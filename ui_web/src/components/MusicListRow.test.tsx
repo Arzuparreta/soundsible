@@ -5,6 +5,8 @@ import { MusicListRow } from './MusicListRow';
 import { PlayerTrackList } from './PlayerTrackList';
 
 vi.mock('../lib/listLayout', () => ({ mobileListLayout: () => true }));
+// The queue's rows follow the player's own width.
+vi.mock('../lib/playerDock', () => ({ playerCompact: () => true }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 const menu = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: menu.open }));

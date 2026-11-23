@@ -9,7 +9,10 @@ const harness = vi.hoisted(() => ({
   setOpen: undefined as undefined | ((open: boolean) => void),
   setState: undefined as undefined | ((...args: unknown[]) => void),
   mobileViewport: false,
+  desktop: false,
 }));
+
+vi.mock('../lib/shellLayout', () => ({ desktopShell: () => harness.desktop }));
 
 vi.mock('../stores', async () => {
   const { createSignal } = await vi.importActual<typeof import('solid-js')>('solid-js');
@@ -55,13 +58,13 @@ vi.mock('./NowPlaying', () => ({
       <button
         type="button"
         onClick={() => {
-          props.onCarouselProgress?.(2, false);
+          props.onCarouselProgress?.(1, false);
           props.onMobilePanelChange('queue');
         }}
       >
         simulate swipe
       </button>
-      <button type="button" onClick={() => props.onCarouselProgress?.(1.4, true)}>simulate drag</button>
+      <button type="button" onClick={() => props.onCarouselProgress?.(0.4, true)}>simulate drag</button>
     </div>
   ),
 }));
@@ -76,13 +79,13 @@ vi.mock('./AutoMode', () => ({
       <button
         type="button"
         onClick={() => {
-          props.onCarouselProgress?.(2, false);
+          props.onCarouselProgress?.(1, false);
           props.onPanelChange('route');
         }}
       >
         simulate auto swipe
       </button>
-      <button type="button" onClick={() => props.onCarouselProgress?.(1.4, true)}>
+      <button type="button" onClick={() => props.onCarouselProgress?.(0.4, true)}>
         simulate auto drag
       </button>
     </div>
@@ -118,7 +121,10 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   harness.mobileViewport = false;
+  harness.desktop = false;
+  localStorage.clear();
   delete document.documentElement.dataset.playerSurface;
+  delete document.documentElement.dataset.playerDocked;
 });
 
 /** jsdom has no touch input, so the gesture is fed the shape it reads: an
@@ -245,26 +251,27 @@ describe('PlayerSurface', () => {
     expect(normal).toHaveFocus();
   });
 
-  it('moves between the three compact panels through accessible indicators', () => {
+  it('moves between the two compact panels through accessible indicators', () => {
     render(() => <PlayerSurface />);
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
 
     fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.queue' }));
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('queue');
 
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.browser' }));
-    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.stage' }));
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
+    expect(screen.queryByRole('button', { name: 'nowPlaying.panel.browser' })).toBeNull();
   });
 
   it('moves the compact pill when the carousel reports a user swipe', () => {
     render(() => <PlayerSurface />);
     const nav = screen.getByRole('navigation', { name: 'nowPlaying.mobilePanels' });
 
-    expect(nav).toHaveStyle('--carousel-index: 1');
+    expect(nav).toHaveStyle('--carousel-index: 0');
     fireEvent.click(screen.getByRole('button', { name: 'simulate swipe' }));
 
     expect(screen.getByRole('button', { name: 'nowPlaying.panel.queue' })).toHaveAttribute('aria-current', 'page');
-    expect(nav).toHaveStyle('--carousel-index: 2');
+    expect(nav).toHaveStyle('--carousel-index: 1');
   });
 
   it('tracks a drag between panels without waiting for it to settle', () => {
@@ -273,7 +280,7 @@ describe('PlayerSurface', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'simulate drag' }));
 
-    expect(nav).toHaveStyle('--carousel-index: 1.4');
+    expect(nav).toHaveStyle('--carousel-index: 0.4');
     expect(nav).toHaveAttribute('data-live');
     // The panel itself has not settled yet, so focus and inertness stay put.
     expect(screen.getByRole('button', { name: 'nowPlaying.panel.stage' })).toHaveAttribute('aria-current', 'page');
@@ -285,14 +292,14 @@ describe('PlayerSurface', () => {
     await screen.findByTestId('auto-mode-view');
     const nav = screen.getByRole('navigation', { name: 'autoMode.mobile.controls' });
 
-    expect(nav).toHaveStyle('--carousel-index: 1');
+    expect(nav).toHaveStyle('--carousel-index: 0');
     fireEvent.click(screen.getByRole('button', { name: 'simulate auto drag' }));
-    expect(nav).toHaveStyle('--carousel-index: 1.4');
+    expect(nav).toHaveStyle('--carousel-index: 0.4');
     expect(nav).toHaveAttribute('data-live');
     expect(screen.getByRole('button', { name: 'autoMode.panel.stage' })).toHaveAttribute('aria-current', 'page');
 
     fireEvent.click(screen.getByRole('button', { name: 'simulate auto swipe' }));
-    expect(nav).toHaveStyle('--carousel-index: 2');
+    expect(nav).toHaveStyle('--carousel-index: 1');
     expect(screen.getByTestId('auto-mode-view')).toHaveTextContent('route');
     expect(screen.getByRole('button', { name: 'autoMode.panel.route' })).toHaveAttribute('aria-current', 'page');
   });
@@ -302,13 +309,13 @@ describe('PlayerSurface', () => {
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
 
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.browser' }));
-    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.queue' }));
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('queue');
 
     // Realigning the carousel mid-exit is what used to flush layout on top of
     // the close, so the reset waits for the surface to be off screen.
     fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
-    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('queue');
 
     fireEvent.animationEnd(surface);
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
@@ -408,36 +415,49 @@ describe('PlayerSurface', () => {
     expect(harness.actions.exitAutoMode).not.toHaveBeenCalled();
   });
 
-  it('opens the compact browser from the dedicated mobile search action', () => {
-    harness.mobileViewport = true;
+  it('opens docked beside the app on a desktop, and gives the app back its room', () => {
+    harness.desktop = true;
     render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
 
-    const search = screen.getByRole('button', { name: 'nowPlaying.openSearch' });
-    expect(search).not.toHaveAttribute('aria-pressed');
-    fireEvent.click(search);
+    expect(surface).toHaveAttribute('data-docked');
+    expect(document.documentElement).toHaveAttribute('data-player-docked');
+    expect(screen.getByRole('separator', { name: 'nowPlaying.resizeDock' })).toBeInTheDocument();
 
-    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
+    // Full screen is the other presentation, chosen from the header and kept.
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.fillScreen' }));
+    expect(surface).not.toHaveAttribute('data-docked');
+    expect(document.documentElement).not.toHaveAttribute('data-player-docked');
+    expect(localStorage.getItem('player:presentation:v1')).toBe('full');
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.dockBeside' }));
+    expect(surface).toHaveAttribute('data-docked');
   });
 
-  it('keeps the search action in DJ mode, where it opens DJ\'s own browser', async () => {
-    // The DJ carousel opens on a music browser exactly like Normal's, so the
-    // affordance that reaches it belongs in both modes — and pressing it must
-    // move between DJ's panels, never drop the listener out of the session.
-    harness.mobileViewport = true;
+  it('resizes the docked column from the keyboard, within its bounds', () => {
+    harness.desktop = true;
     render(() => <PlayerSurface />);
-    fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
-    // Auto Mode is loaded lazily; its panel only reads back once it is there.
-    await screen.findByTestId('auto-mode-view');
+    const edge = screen.getByRole('separator', { name: 'nowPlaying.resizeDock' });
+    const before = Number(edge.getAttribute('aria-valuenow'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.openSearch' }));
-
-    expect(screen.getByTestId('auto-mode-view')).toHaveTextContent('browser');
-    expect(harness.actions.exitAutoMode).not.toHaveBeenCalled();
+    fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+    expect(Number(edge.getAttribute('aria-valuenow'))).toBe(before + 24);
+    for (let step = 0; step < 40; step += 1) fireEvent.keyDown(edge, { key: 'ArrowRight' });
+    expect(Number(edge.getAttribute('aria-valuenow'))).toBe(360);
   });
 
-  it('does not expose the mobile search action in the desktop chrome', () => {
+  it('is not dragged off when docked: the header closes it', () => {
+    harness.desktop = true;
     render(() => <PlayerSurface />);
+    const target = screen.getByRole('button', { name: 'simulate swipe' });
 
-    expect(screen.queryByRole('button', { name: 'nowPlaying.openSearch' })).not.toBeInTheDocument();
+    swipeDown(target);
+
+    expect(target.closest('[data-player-stage]')).toHaveAttribute('data-player-surface-open');
+  });
+
+  it('never offers the docked or full-screen choice on a phone', () => {
+    render(() => <PlayerSurface />);
+    expect(screen.queryByRole('button', { name: 'nowPlaying.fillScreen' })).toBeNull();
+    expect(screen.queryByRole('separator')).toBeNull();
   });
 });

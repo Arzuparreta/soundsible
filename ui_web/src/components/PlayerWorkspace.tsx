@@ -9,6 +9,7 @@ import {
   type JSX,
 } from 'solid-js';
 import { openActionMenu } from './ActionMenu';
+import { playerCompact } from '../lib/playerDock';
 import { t } from '../lib/i18n';
 import { dropTarget } from '../lib/dragReorder';
 import {
@@ -19,7 +20,6 @@ import {
 } from '../lib/playerLayout';
 import styles from './PlayerWorkspace.module.css';
 
-const MOBILE_QUERY = '(max-width: 1023px)';
 const CAROUSEL_SETTLE_MS = 80;
 
 function classes(...values: Array<string | undefined>): string {
@@ -60,11 +60,8 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   let panelFromScroll = false;
   let previousSurfaceOpen = props.surfaceOpen;
   let draggedPanel: PanelId | null = null;
-  const [mobileLayout, setMobileLayout] = createSignal(
-    typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia(MOBILE_QUERY).matches,
-  );
+  // The player's own width, measured by the surface (lib/playerDock).
+  const mobileLayout = playerCompact;
   const [layoutBusy, setLayoutBusy] = createSignal(false);
   const renderedPanels = createMemo<PanelId[]>(() => {
     if (mobileLayout()) return [...props.panels];
@@ -216,17 +213,13 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   });
 
   onMount(() => {
-    const media = typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_QUERY) : null;
-    const syncLayout = () => setMobileLayout(Boolean(media?.matches));
     const releaseOutside = () => {
       if (carouselHeld) releaseCarousel();
     };
-    media?.addEventListener('change', syncLayout);
     window.addEventListener('pointerup', releaseOutside);
     window.addEventListener('pointercancel', releaseOutside);
     workspaceEl?.addEventListener('scrollend', settleCarousel);
     onCleanup(() => {
-      media?.removeEventListener('change', syncLayout);
       window.removeEventListener('pointerup', releaseOutside);
       window.removeEventListener('pointercancel', releaseOutside);
       workspaceEl?.removeEventListener('scrollend', settleCarousel);

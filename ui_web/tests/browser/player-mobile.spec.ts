@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
 import AxeBuilder from '@axe-core/playwright';
 import { fixtureStream } from './music-browser-fixture';
+import { fullScreenPlayer } from './playerPanels';
 
 const TRACKS = [
   {
@@ -106,16 +107,16 @@ test.beforeEach(async ({ page }) => {
   await mockEngine(page);
 });
 
-test('Now Playing keeps the visible card interactive after both lateral round trips', async ({ page }) => {
+test('Now Playing keeps the visible card interactive after a lateral round trip', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);
   const carousel = page.locator('[data-now-playing-carousel]');
   const stage = page.locator('[data-now-playing-tile="stage"]');
 
-  for (const destination of ['queue', 'browser']) {
-    const side = page.locator(`[data-now-playing-tile="${destination}"]`);
+  {
+    const side = page.locator('[data-now-playing-tile="queue"]');
     await holdCarousel(page, '[data-now-playing-carousel]');
-    await snapCarousel(page, destination as 'queue' | 'browser');
+    await snapCarousel(page, 'queue');
 
     // During native movement the tile that received the gesture remains the
     // only interactive one. It is never made inert underneath the finger.
@@ -201,40 +202,15 @@ test('DJ reuses the compact workspace, pager and touch lifecycle', async ({ page
   expect(containment.scrollTop).toBe(0);
   expect(containment.overflow).toBe('clip');
 
-  for (const destination of ['browser', 'route'] as const) {
-    const side = page.locator(`[data-auto-tile="${destination}"]`);
+  {
+    const side = page.locator('[data-auto-tile="route"]');
     await holdCarousel(page, '[data-auto-carousel]');
-    await snapPlayerCarousel(page, 'auto', destination);
+    await snapPlayerCarousel(page, 'auto', 'route');
     await expect(autoStage).not.toHaveAttribute('inert', '');
     await releaseCarousel(page, '[data-auto-carousel]');
     await expect(side).not.toHaveAttribute('inert', '');
     await expect(autoStage).toHaveAttribute('inert', '');
-
-    if (destination === 'browser') {
-      const browserPanel = side.locator('aside[data-purpose="auto-neutral"]');
-      const libraryCard = side.getByRole('button', { name: /^Biblioteca/ });
-      const favouritesCard = side.getByRole('button', { name: /^Favoritos/ });
-      const playlistsCard = side.getByRole('button', { name: /^Listas/ });
-      await expect(libraryCard).toBeVisible();
-      await expect(favouritesCard).toBeVisible();
-      await expect(playlistsCard).toBeVisible();
-      const [libraryBox, favouritesBox, playlistsBox] = await Promise.all([
-        libraryCard.boundingBox(), favouritesCard.boundingBox(), playlistsCard.boundingBox(),
-      ]);
-      expect(libraryBox).not.toBeNull();
-      expect(favouritesBox).not.toBeNull();
-      expect(playlistsBox).not.toBeNull();
-      expect(Math.abs(favouritesBox!.y - playlistsBox!.y)).toBeLessThanOrEqual(1);
-      expect(Math.abs(favouritesBox!.y - libraryBox!.y)).toBeLessThanOrEqual(1);
-
-      const [tileBox, panelBox] = await Promise.all([side.boundingBox(), browserPanel.boundingBox()]);
-      expect(tileBox).not.toBeNull();
-      expect(panelBox).not.toBeNull();
-      expect(Math.abs(panelBox!.x - tileBox!.x)).toBeLessThanOrEqual(1);
-      expect(Math.abs(panelBox!.width - tileBox!.width)).toBeLessThanOrEqual(2);
-    } else {
-      await expect(side.getByRole('heading', { name: 'Ruta preparada' })).toBeVisible();
-    }
+    await expect(side.getByRole('heading', { name: 'Ruta preparada' })).toBeVisible();
 
     await holdCarousel(page, '[data-auto-carousel]');
     await snapPlayerCarousel(page, 'auto', 'stage');
@@ -313,11 +289,7 @@ test('a route row exposes its menu and still answers a hold', async ({ page }) =
   await releaseCarousel(page, '[data-auto-carousel]');
   await expect(route).not.toHaveAttribute('inert', '');
 
-  const browser = page.locator('[data-auto-tile="browser"]');
-  await route.getByRole('button', { name: 'Añadir', exact: true }).click();
-  await expect(browser).not.toHaveAttribute('inert', '');
-  await browser.getByRole('button', { name: /^Biblioteca/ }).click();
-  await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
+  await pickForRoute(page, 'Luz de verano');
   await expect(route).not.toHaveAttribute('inert', '');
 
   const row = route.locator('[data-music-list-row]').first();
@@ -335,6 +307,17 @@ test('a route row exposes its menu and still answers a hold', async ({ page }) =
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog').getByRole('button', { name: 'Quitar de la ruta' })).toBeVisible();
 });
+
+/** "Añadir" asks for a song: the sheet steps aside for the library, and the
+ * song played there lands at the end of the route instead of playing. */
+async function pickForRoute(page: Page, title: string) {
+  await page.locator('[data-auto-tile="route"]').getByRole('button', { name: 'Añadir', exact: true }).click();
+  await expect(page.locator('[data-dj-errand]')).toBeVisible();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  await page.getByRole('button', { name: new RegExp(`^Reproducir ${title}`) }).first().click();
+  await expect(page.locator('[data-dj-errand]')).toHaveCount(0);
+  await expect(page.locator('[data-player-surface-open]')).toBeVisible();
+}
 
 async function openRouteForRowChecks(page: Page, withRequests = false) {
   await page.goto('/player/#/library?view=songs');
@@ -362,14 +345,10 @@ async function openRouteForRowChecks(page: Page, withRequests = false) {
 }
 
 for (const title of ['Luz de verano', 'Horizonte']) {
-  test(`mobile route requests return from the browser with contextual insertion targets: ${title}`, async ({ page }) => {
+  test(`mobile route requests picked in the app return with contextual insertion targets: ${title}`, async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
     const route = await openRouteForRowChecks(page);
-    await route.getByRole('button', { name: 'Añadir', exact: true }).click();
-    const browser = page.locator('[data-auto-tile="browser"]');
-    await expect(browser).not.toHaveAttribute('inert', '');
-    await browser.getByRole('button', { name: /^Biblioteca/ }).click();
-    await browser.getByRole('button', { name: new RegExp(title) }).first().click();
+    await pickForRoute(page, title);
     await expect(route).not.toHaveAttribute('inert', '');
     const insertionTargets = route.locator('button[aria-label^="Insertar una canción antes de"]');
     await expect(insertionTargets).toHaveCount(1);
@@ -458,13 +437,6 @@ test('the shared mode pill and DJ workspace stay contained in compact viewports'
       expect(pillBox!.x + pillBox!.width, `${mode} pill must not overlap close`)
         .toBeLessThanOrEqual(closeBox!.x);
 
-      // In both modes now: DJ's first panel is a music browser too, so the
-      // search action sits in the same corner and has to clear the pill there.
-      const searchBox = await page.getByRole('button', { name: /Abrir búsqueda/ }).boundingBox();
-      expect(searchBox, `${mode} search action`).not.toBeNull();
-      expect(searchBox!.x + searchBox!.width, `${mode} pill must not overlap search`)
-        .toBeLessThanOrEqual(pillBox!.x);
-
       const workspace = page.locator(`[data-player-workspace="${mode}"]`);
       await expect(workspace).toBeVisible();
       const box = await workspace.boundingBox();
@@ -481,6 +453,8 @@ test('the shared mode pill and DJ workspace stay contained in compact viewports'
 
 test('NORMAL and DJ share centered desktop Stage geometry through scale reflows', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) <= 1023, 'desktop player regression');
+  // The stage beside its list is the full-screen player's.
+  await fullScreenPlayer(page);
   await page.addInitScript(() => {
     localStorage.setItem('soundsible:interface-size', 'large');
   });
@@ -546,8 +520,9 @@ test('NORMAL and DJ share centered desktop Stage geometry through scale reflows'
     expect(auto.emptyPresentationElements, `${viewport.width}x${viewport.height} Auto separator`).toBe(0);
     expect(nowPlaying.body.bottom).toBeLessThanOrEqual(nowPlaying.tile.bottom + 1);
     expect(auto.body.bottom).toBeLessThanOrEqual(auto.tile.bottom + 1);
-    expect(Math.abs(nowPlaying.body.centerX - viewport.width / 2)).toBeLessThanOrEqual(1);
-    expect(Math.abs(auto.body.centerX - viewport.width / 2)).toBeLessThanOrEqual(1);
+    // Centred in its own tile: the full-screen stage sits beside its list.
+    expect(Math.abs(nowPlaying.body.centerX - nowPlaying.tile.centerX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(auto.body.centerX - auto.tile.centerX)).toBeLessThanOrEqual(1);
     expect(Math.abs(nowPlaying.cover.width - nowPlaying.cover.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(auto.cover.width - auto.cover.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(auto.cover.centerX - nowPlaying.cover.centerX)).toBeLessThanOrEqual(1);

@@ -4,7 +4,9 @@ export interface PlayerPanelLayout<PanelId extends string> {
   ratios: Record<PanelId, number>;
 }
 
-export type ThreePanelLayoutPresetId = 'balanced' | 'stage' | 'left' | 'right';
+/** The full-screen player's two panels: the stage and its list (the queue,
+ * or the DJ route). `stage` gives the stage the room, `list` the list. */
+export type TwoPanelLayoutPresetId = 'balanced' | 'stage' | 'list';
 
 export function clonePanelLayout<PanelId extends string>(
   layout: PlayerPanelLayout<PanelId>,
@@ -16,31 +18,19 @@ export function clonePanelLayout<PanelId extends string>(
   };
 }
 
-export function buildThreePanelLayoutPresets<PanelId extends string>(
-  ids: { left: PanelId; stage: PanelId; right: PanelId },
+export function buildTwoPanelLayoutPresets<PanelId extends string>(
+  ids: { stage: PanelId; list: PanelId },
   balancedRatios: Record<PanelId, number>,
-): Record<ThreePanelLayoutPresetId, PlayerPanelLayout<PanelId>> {
+): Record<TwoPanelLayoutPresetId, PlayerPanelLayout<PanelId>> {
+  const layout = (stage: number): PlayerPanelLayout<PanelId> => ({
+    version: 1,
+    order: [ids.stage, ids.list],
+    ratios: { ...balancedRatios, [ids.stage]: stage, [ids.list]: Math.round((1 - stage) * 100) / 100 },
+  });
   return {
-    balanced: {
-      version: 1,
-      order: [ids.left, ids.stage, ids.right],
-      ratios: { ...balancedRatios },
-    },
-    stage: {
-      version: 1,
-      order: [ids.left, ids.stage, ids.right],
-      ratios: { ...balancedRatios, [ids.left]: 0.2, [ids.stage]: 0.6, [ids.right]: 0.2 },
-    },
-    left: {
-      version: 1,
-      order: [ids.stage, ids.left, ids.right],
-      ratios: { ...balancedRatios, [ids.left]: 0.5, [ids.stage]: 0.3, [ids.right]: 0.2 },
-    },
-    right: {
-      version: 1,
-      order: [ids.left, ids.right, ids.stage],
-      ratios: { ...balancedRatios, [ids.left]: 0.2, [ids.stage]: 0.3, [ids.right]: 0.5 },
-    },
+    balanced: { version: 1, order: [ids.stage, ids.list], ratios: { ...balancedRatios } },
+    stage: layout(0.7),
+    list: layout(0.4),
   };
 }
 

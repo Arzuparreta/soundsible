@@ -1,5 +1,5 @@
 import {
-  buildThreePanelLayoutPresets,
+  buildTwoPanelLayoutPresets,
   clonePanelLayout,
   movePanel as movePlayerPanel,
   normalizePanelRatios as normalizePlayerPanelRatios,
@@ -7,50 +7,47 @@ import {
   reorderPanel as reorderPlayerPanel,
   resizeAdjacentPanels as resizePlayerPanels,
   type PlayerPanelLayout,
-  type ThreePanelLayoutPresetId,
+  type TwoPanelLayoutPresetId,
 } from './playerLayout';
 
-export type NowPlayingPanelId = 'browser' | 'stage' | 'queue';
+export type NowPlayingPanelId = 'stage' | 'queue';
 export type NowPlayingDesktopLayout = PlayerPanelLayout<NowPlayingPanelId>;
 
-export type NowPlayingLayoutPresetId = ThreePanelLayoutPresetId;
+export type NowPlayingLayoutPresetId = TwoPanelLayoutPresetId;
 
 export const NOW_PLAYING_LAYOUT_KEY = 'np:desktopLayout:v1';
+export const NOW_PLAYING_PANELS: readonly NowPlayingPanelId[] = ['stage', 'queue'];
 export const DEFAULT_NOW_PLAYING_LAYOUT: NowPlayingDesktopLayout = {
   version: 1,
-  order: ['browser', 'stage', 'queue'],
-  // The stage takes the wider middle, the panel whose artwork grows with the
-  // room; at 36 percent a 1536x864 window's cover is already as tall as the
-  // window allows, and the lists keep the width their titles need.
-  ratios: { browser: 0.32, stage: 0.36, queue: 0.32 },
+  order: ['stage', 'queue'],
+  // The stage takes the wider share, the panel whose artwork grows with the
+  // room; the queue keeps the width its titles need.
+  ratios: { stage: 0.55, queue: 0.45 },
 };
 
-export const NOW_PLAYING_LAYOUT_PRESETS = buildThreePanelLayoutPresets(
-  { left: 'browser', stage: 'stage', right: 'queue' } as const,
+export const NOW_PLAYING_LAYOUT_PRESETS = buildTwoPanelLayoutPresets(
+  { stage: 'stage', list: 'queue' } as const,
   DEFAULT_NOW_PLAYING_LAYOUT.ratios,
 );
-
-const IDS: NowPlayingPanelId[] = ['browser', 'stage', 'queue'];
 
 export function layoutFromPreset(preset: NowPlayingLayoutPresetId): NowPlayingDesktopLayout {
   return clonePanelLayout(NOW_PLAYING_LAYOUT_PRESETS[preset]);
 }
 
 function isPanelId(value: unknown): value is NowPlayingPanelId {
-  return value === 'browser' || value === 'stage' || value === 'queue';
+  return value === 'stage' || value === 'queue';
 }
 
 export function normalizePanelRatios(
   ratios: Partial<Record<NowPlayingPanelId, number>>,
 ): Record<NowPlayingPanelId, number> {
-  return normalizePlayerPanelRatios(IDS, ratios, DEFAULT_NOW_PLAYING_LAYOUT.ratios);
+  return normalizePlayerPanelRatios(NOW_PLAYING_PANELS, ratios, DEFAULT_NOW_PLAYING_LAYOUT.ratios);
 }
 
-export function parseNowPlayingLayout(raw: string | null, legacySide?: string | null): NowPlayingDesktopLayout {
-  const fallback: NowPlayingDesktopLayout = legacySide === 'right'
-    ? { ...DEFAULT_NOW_PLAYING_LAYOUT, order: ['stage', 'queue', 'browser'] }
-    : DEFAULT_NOW_PLAYING_LAYOUT;
-  return parsePanelLayout(raw, IDS, fallback, isPanelId);
+/** A layout saved with the music browser panel the player used to have no
+ * longer fits its two panels, and falls back to the default. */
+export function parseNowPlayingLayout(raw: string | null): NowPlayingDesktopLayout {
+  return parsePanelLayout(raw, NOW_PLAYING_PANELS, DEFAULT_NOW_PLAYING_LAYOUT, isPanelId);
 }
 
 export function movePanel(
@@ -76,13 +73,5 @@ export function resizeAdjacentPanels(
   deltaRatio: number,
   minRatios: Partial<Record<NowPlayingPanelId, number>> = {},
 ): Record<NowPlayingPanelId, number> {
-  return resizePlayerPanels(
-    IDS,
-    ratios,
-    DEFAULT_NOW_PLAYING_LAYOUT.ratios,
-    left,
-    right,
-    deltaRatio,
-    minRatios,
-  );
+  return resizePlayerPanels(NOW_PLAYING_PANELS, ratios, DEFAULT_NOW_PLAYING_LAYOUT.ratios, left, right, deltaRatio, minRatios);
 }

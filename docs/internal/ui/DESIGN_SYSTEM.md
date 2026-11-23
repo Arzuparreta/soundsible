@@ -6,9 +6,6 @@ Existing imports from `components/Button`, `components/CoverImage` and
 
 - `Control` keeps native button semantics and defaults to `type="button"`.
   `IconButton` requires a label. `Button` adds the standard visual variants.
-- `Field` and `Select` require an accessible name and retain native input and
-  selection behavior. `Tabs` owns one keyboard stop, arrow/Home/End navigation
-  and selected-tab semantics.
 - `MediaRow` is the platform-neutral visual row. Browser and native adapters
   supply state and actions. A reused collection slot reads its item through an
   accessor; any local state must follow musical or occurrence identity.
@@ -45,8 +42,12 @@ locally with `npm test` and in CI's `ui_build` job. To reduce the baseline after
 a migration, run `node scripts/check-design.mjs --update` and review its diff;
 CI never updates it.
 
-`tests/browser/design-system.spec.ts` covers the actual player browser in dark
+`tests/browser/design-system.spec.ts` covers the library's Songs view in dark
 and light themes at Compact, Normal and Large on each CI browser profile. Its
-reviewed screenshots cover field, tabs, typography, artwork and visible row
-menus. It also checks menu keyboard anchoring/focus and tab keyboard behavior.
-These fixture views never contact a real engine or library.
+reviewed screenshots cover rows, typography, artwork and visible row menus; on
+desktop it also measures the shared search field. It checks menu keyboard
+anchoring and focus return. These fixture views never contact a real engine or
+library.
+
+`Field`, `Select` and `Tabs` were removed with the player's music browser, their
+only user. Settings keep their own `SelectRow`.

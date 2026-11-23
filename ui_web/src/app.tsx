@@ -8,6 +8,7 @@ import { ToastOutlet } from './lib/toast';
 import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
 import { OmniBar } from './components/OmniBar';
+import { DjErrandBanner } from './components/DjErrandBanner';
 import { AppBar } from './components/AppBar';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
@@ -58,6 +59,7 @@ export default function Shell(props: RouteSectionProps) {
       <Sidebar />
       <main class={styles.content}>
         <AppBar />
+        <DjErrandBanner />
         {/* The routes scroll here, under a bar that never moves. */}
         <div class={styles.outlet} data-app-outlet>{props.children}</div>
       </main>

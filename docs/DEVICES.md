@@ -6,13 +6,13 @@ When Soundsible is open on more than one device with the same account, you can c
 
 ## Control another device
 
-1. Open the **Devices** sheet from the speaker icon in the desktop player bar or the top bar of the fullscreen player (Now Playing or DJ). In the Android app, use the **Devices** button at the top of the screen.
+1. Open the **Devices** sheet from the speaker icon in the desktop player bar or the top bar of the open player (Now Playing or DJ). In the Android app, use the **Devices** button at the top of the screen.
 2. Select any online device in the list.
 
 While another device is selected:
 
 - Its current song, progress, queue, and DJ route appear in the player as if they were local.
-- The controlled device's name stays visible in the mini-player pill on phones, in the fullscreen player header, and in the desktop player bar. In the Android app, the **Devices** button shows it ("Playing on …").
+- The controlled device's name stays visible in the mini-player pill on phones, in the open player's header, and in the desktop player bar. In the Android app, the **Devices** button shows it ("Playing on …").
 - Every play, queue, radio, and DJ action — from Library, Search, Discover, Podcasts, menus, and keyboard shortcuts — runs on that device instead of starting audio locally.
 - Controls the target device does not support (such as remote volume on Android) are hidden. The Android app also hides the controls that only act on the phone itself while it controls another device: closing the player, autoplay, and the radio style.
 - To return to local playback, open **Devices** and choose **This device**.

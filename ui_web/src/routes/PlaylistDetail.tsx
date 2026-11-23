@@ -17,6 +17,8 @@ import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import hero from '../components/EntityHero.module.css';
 import { EmptyState } from '../components/EmptyState';
+import { MusicReorderList } from '../components/MusicReorderList';
+import { Control } from '../design/Control';
 import { navigateBackOr } from '../lib/scrollHistory';
 import { playlistContext } from '../lib/playbackContext';
 
@@ -52,8 +54,10 @@ export default function PlaylistDetail() {
     }
   };
 
+  const [editing, setEditing] = createSignal(false);
   const openMenu = () =>
     openPlaylistMenu(name(), {
+      onEdit: () => setEditing(true),
       onRenamed: (next) => navigate(`/playlists/${encodeURIComponent(next)}`, { replace: true }),
       onDeleted: () => navigate('/playlists', { replace: true }),
     });
@@ -89,13 +93,16 @@ export default function PlaylistDetail() {
               <PlayIcon size={16} />
               <span class={hero.primaryLabel}>{player().autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}</span>
             </button>
+              <Show when={editing()}>
+                <Control class={hero.secondary} onClick={() => setEditing(false)}>{t('musicExplorer.done')}</Control>
+              </Show>
               <button class={hero.options} type="button" aria-label={t('playlistDetail.ariaOptions')} aria-haspopup="dialog" onClick={openMenu}>
                 <MoreIcon size={20} />
               </button>
           </div>
         </div>
       </header>
-      <TrackList
+      <Show when={editing()} fallback={<TrackList
         tracks={tracks()}
         context={context()}
         loading={state.loading}
@@ -104,7 +111,11 @@ export default function PlaylistDetail() {
           onRemoveFromPlaylist: (t) => void actions.removeFromPlaylist(name(), collectionId(t)),
         }}
         empty={<EmptyState>{t('playlistDetail.empty')}</EmptyState>}
-      />
+      />}>
+        <MusicReorderList items={trackIds()} label={(id) => byId().get(id)?.title ?? id}
+          render={(id) => <span>{byId().get(id)?.title ?? id}</span>}
+          onChange={(ids) => actions.reorderPlaylistTracks(name(), ids)} />
+      </Show>
     </div>
   );
 }

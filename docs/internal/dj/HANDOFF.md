@@ -100,6 +100,7 @@ listening limitations noted in earlier deliveries are historical.
 | P8 | Sections measured and not used | AAC → SQLite → HTTP; common vectors executed by web and Android | Closed (implementation `90b6c7e9`) |
 | P9 | Echo not synchronised with the tempo | AAC → SQLite → HTTP; impulses in real Web Audio and native PCM | Closed (`a8a22618`); automatic activation closed in P7 (`d678f625`) |
 | UI1 | External selection starts a new session from the selection; management inside the shell | Store, browser and native contract tests | Closed (#389) |
+| UI3 | The player's music browser duplicated the app's navigation | User review of the Now Playing shell (2026-11-23) | Closed (`feat/now-playing-docked`): docked player beside the app, session requests answered by a pick anywhere in the app |
 | UI2 | Empty shell when switching from NORMAL to DJ after updating the station | 404 of the DJ module in the journal of 2026-11-08 at 12:52:38–43; reproduction with 404 in Chromium and regression of switching without download, with real WAV | Fixed in PR #431: both views are loaded together when opening the player; initial load recoverable without reloading or stopping the song |
 | P10 | Dead code and outdated documentation | No readers of `automation`; types and contract retired; [later cleanup](../audits/2026-11-03-unused-code.md) of the sweep deactivated in P14 | Closed (#385 and `d678f625`); the P14 module without startup also retired |
 | P11 | Rewrite by responsibilities, contracts and policy coherence | Before/after equality: 7 analyses, 784 plans, 168 routes and bidirectional WAV/AAC cache; contracts and policies inventoried | Closed (implementation `67d086cf`); P11-a closed (branch `dj/p11a-remove-legacy`) |
@@ -267,6 +268,19 @@ requesting/placing songs, changing the material without cutting the current song
 route. External menus offer starting DJ, without actions to edit the current
 session. Entering DJ from NORMAL and the changes requested from the shell itself
 keep their earlier contract.
+
+### Session requests are answered from the app (2026-11-23)
+
+The player no longer carries a music browser of its own. On a desktop it docks
+as a column beside the app (`lib/playerDock.ts`), and **Mix with…**,
+**Change…** and **＋** in the route open a DJ errand (`lib/djErrand.ts`): the
+next song or collection the listener plays anywhere in the app answers it
+instead of starting a new session. `withDjErrand` wraps the actions the
+interface sends through `player().actions`; the store's own calls
+(`ports.actions`) and remote commands do not pass through it, so they are never
+taken for a pick. A banner in the app (`DjErrandBanner`) names the request and
+cancels it. Outside an errand the 2026-10-24 rule holds everywhere, the player
+included: playing music starts a new session.
 
 ### No energy arc
 

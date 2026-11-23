@@ -127,6 +127,8 @@ def install(app):
     catalog._youtube_search = direct
     catalog._deezer_search = recording
     catalog._musicbrainz_search = musicbrainz
+    # The song search above already answers with the fixture's albums.
+    catalog._deezer_album_search = lambda _query, _limit: []
     YouTubeDownloader.search_match_candidates = candidates
 
     @app.before_request

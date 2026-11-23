@@ -44,7 +44,6 @@ test('a scrolled player panel still hands a sideways swipe to the pager', async 
 
   const stage = page.locator('[data-now-playing-tile="stage"]');
   const queue = page.locator('[data-now-playing-tile="queue"]');
-  const browser = page.locator('[data-now-playing-tile="browser"]');
   await expect(stage).not.toHaveAttribute('inert', '');
 
   // The queue, scrolled, is the panel the swipe used to die on.
@@ -59,16 +58,9 @@ test('a scrolled player panel still hands a sideways swipe to the pager', async 
   await expect(stage).not.toHaveAttribute('inert', '');
   await expect(queue).toHaveAttribute('inert', '');
 
-  // And the same from the browser, whose body scrolls as one piece.
-  await snapCarousel(page, 'browser');
-  await expect(browser).not.toHaveAttribute('inert', '');
-  const body = browser.locator('[data-browser-body]').first();
-  const bodyBox = (await body.boundingBox())!;
-  const bodyPoint = { x: bodyBox.x + bodyBox.width / 2, y: bodyBox.y + Math.min(bodyBox.height / 2, 150) };
-  await touchDrag(page, bodyPoint, { dy: -120 }, 10);
-  await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-
-  await touchDrag(page, bodyPoint, { dx: -240 });
-  await expect(stage).not.toHaveAttribute('inert', '');
-  await expect(browser).toHaveAttribute('inert', '');
+  // And back the other way, from the stage to the queue.
+  const stageBox = (await stage.boundingBox())!;
+  await touchDrag(page, { x: stageBox.x + stageBox.width - 40, y: stageBox.y + stageBox.height / 2 }, { dx: -240 });
+  await expect(queue).not.toHaveAttribute('inert', '');
+  await expect(stage).toHaveAttribute('inert', '');
 });
