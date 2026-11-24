@@ -361,10 +361,10 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     // The controller has already said why a command was not applied.
     error: () => {},
   });
-  // Refresh when this phone's account socket becomes ready.
-  // A memo: the native state is republished every half second, and only the change of readiness lists devices.
+  // Retry any explicit selection made before the service could accept a watch.
+  // The native state is published periodically, so react only to readiness changes.
   const devicesReady = createMemo(() => { const state = device(); return !!user() && program() !== null && state?.generation === generation && state.connected === true; });
-  createEffect(on(devicesReady, ready => { if (ready) void remote.control.refreshDevices(); }));
+  createEffect(on(devicesReady, ready => { if (ready) remote.control.onConnect(); }));
   function openDevices() {
     openConnectSheet(remote.control, {
       get name() { return device()?.device_name || t('deviceSheet.fallbackDevice'); },

@@ -86,6 +86,10 @@ it('keeps the chosen device when the service has no socket yet: the service watc
   await Promise.resolve();
   expect(remote.control.target()).toBe('laptop');
   expect(remote.control.unreachable()).toBe(false);
+  mocks.watch.mockResolvedValue({ device: laptop(), state: stateEvent({ rev: 2 }) });
+  remote.control.onConnect();
+  await vi.waitFor(() => expect(remote.control.held()?.rev).toBe(2));
+  expect(mocks.watch).toHaveBeenCalledTimes(2);
   mocks.listeners.get('device_state')!(stateEvent());
   expect(remote.control.held()?.rev).toBe(3);
 });

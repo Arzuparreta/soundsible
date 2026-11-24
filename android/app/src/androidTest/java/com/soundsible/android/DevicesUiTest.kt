@@ -98,10 +98,10 @@ class DevicesUiTest {
             core("/api/devices/register", "POST", JSONObject().put("device_id", peerId).put("device_name", "Remote test laptop").put("device_type", "desktop"))
             publish()
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                fun waitFor(condition: String) {
+                fun waitFor(condition: String, evidence: String = "document.body.innerText") {
                     val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
                     while (System.nanoTime() < until) { if (web.evaluate(scenario, condition) == "true") return; Thread.sleep(100) }
-                    fail("Connected mode: $condition; " + web.evaluate(scenario, "document.body.innerText"))
+                    fail("Connected mode: $condition; " + web.evaluate(scenario, evidence))
                 }
                 fun button(scope: String, label: String) = "Array.from(document.querySelectorAll(${JSONObject.quote(scope)})).find(b=>b.textContent.trim()===${JSONObject.quote(label)}&&!b.disabled)"
                 val program = "[data-testid=android-program] button"
@@ -111,8 +111,10 @@ class DevicesUiTest {
                 waitFor("!!document.querySelector('[data-testid=android-library]')&&!document.documentElement.hasAttribute('data-booting')")
                 web.evaluate(scenario, "window.__deviceStates=[];Capacitor.Plugins.SoundsiblePlayback.addListener('device_state',e=>window.__deviceStates.push({generation:e.generation,id:e.device_id,rev:e.rev,playing:e.is_playing}))")
 
-                // An active laptop and a legacy saved selection still leave the phone in local mode.
-                waitFor("$devices==='Devices'")
+                // Check local startup after the account socket is ready, when the old rule would attach.
+                web.evaluate(scenario, "window.__nativeDevice=null;Capacitor.Plugins.SoundsiblePlayback.addListener('nativeDeviceState',s=>window.__nativeDevice=s).then(()=>Capacitor.Plugins.SoundsiblePlayback.deviceState()).then(s=>{window.__nativeDevice??=s})")
+                waitFor("window.__nativeDevice?.connected===true", "JSON.stringify(window.__nativeDevice)")
+                assertEquals("Startup changed the output device", JSONObject.quote("Devices"), web.evaluate(scenario, devices))
                 web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
                 val laptopRow = "document.querySelector('[data-connect-sheet] [data-device-row='+CSS.escape(${JSONObject.quote(peerId)})+']')"
                 waitFor("!!$laptopRow&&$laptopRow.getAttribute('aria-checked')==='false'")
@@ -124,7 +126,7 @@ class DevicesUiTest {
                 // deviceWatch answers with the engine's acknowledgement for this account only.
                 web.evaluate(scenario, "window.__ack=null;Capacitor.Plugins.SoundsiblePlayback.deviceState().then(s=>{window.__generation=s.generation;return Capacitor.Plugins.SoundsiblePlayback.deviceWatch({generation:s.generation,device_id:${JSONObject.quote(peerId)}})})" +
                     ".then(a=>window.__ack={id:a.device&&a.device.device_id,queue:a.state&&a.state.session&&a.state.session.queue.length},e=>window.__ack={failed:String(e&&e.message)})")
-                waitFor("window.__ack?.id===${JSONObject.quote(peerId)}&&window.__ack.queue===2")
+                waitFor("window.__ack?.id===${JSONObject.quote(peerId)}&&window.__ack.queue===2", "JSON.stringify({ ack:window.__ack, device:window.__nativeDevice })")
                 web.evaluate(scenario, "window.__stale=null;Capacitor.Plugins.SoundsiblePlayback.deviceWatch({generation:window.__generation+1,device_id:${JSONObject.quote(peerId)}}).then(()=>window.__stale='resolved',()=>window.__stale='rejected')")
                 waitFor("window.__stale==='rejected'")
 
