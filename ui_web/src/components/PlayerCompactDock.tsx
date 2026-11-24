@@ -1,9 +1,9 @@
 import { createEffect, createSignal, createUniqueId, onCleanup, Show } from 'solid-js';
-import { isPlaybackSilent, player } from '../stores/player';
+import { isCurrentTrackPodcast, isPlaybackSilent, player } from '../stores/player';
 import { t } from '../lib/i18n';
 import { playerCompact } from '../lib/playerDock';
-import { detectFormFactor } from '../lib/deviceIdentity';
-import { isPodcastTrack } from '../lib/track';
+import { isMobileWeb } from '../lib/deviceIdentity';
+import { isEditableTextControl } from '../lib/shortcuts';
 import { Control } from '../design/Control';
 import { KaraokeMicIcon, QueueListIcon, RadioIcon, VolumeIcon } from './icons';
 import { onStopRadio } from './RadioBadge';
@@ -38,7 +38,7 @@ export function PlayerCompactDock(props: {
   lyricsButtonRef?: (element: HTMLButtonElement) => void;
 }) {
   const [volumeOpen, setVolumeOpen] = createSignal(false);
-  const mobileWeb = detectFormFactor() !== 'computer';
+  const mobileWeb = isMobileWeb();
   const volumeId = createUniqueId();
   let volumeRoot: HTMLDivElement | undefined;
   let volumeTrigger: HTMLButtonElement | undefined;
@@ -46,10 +46,7 @@ export function PlayerCompactDock(props: {
   let volumeDismissTimer: ReturnType<typeof setTimeout> | undefined;
 
   const current = () => player().playback.currentTrack;
-  const podcast = () => {
-    const track = current();
-    return Boolean(track && isPodcastTrack(track));
-  };
+  const podcast = isCurrentTrackPodcast;
   const lyricsLabel = () => (props.lyricsActive ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics'));
   const listLabel = () => (props.auto ? t('autoMode.panel.route') : t('nowPlaying.panel.queue'));
   const radioLabel = () => (player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio'));
@@ -94,10 +91,14 @@ export function PlayerCompactDock(props: {
         dismissKeepingTriggerFocus();
       }
     };
-    // Escape layer order: OverlayOutlet (window capture) > inline volume popover
-    // (document capture while open) > Lyrics (document bubble) > player (window bubble).
+    // See lib/shortcuts.ts for player Escape layering; external editable text controls keep Escape.
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!(target && volumePopup?.contains(target)) && isEditableTextControl(target)) {
+        closeVolume();
+        return;
+      }
       event.preventDefault();
       event.stopImmediatePropagation();
       dismissKeepingTriggerFocus();
@@ -129,7 +130,7 @@ export function PlayerCompactDock(props: {
             ref={props.lyricsButtonRef}
             class={styles.dockPill}
             classList={{ [styles.dockPillActive]: props.lyricsActive }}
-            aria-label={lyricsLabel()}
+            aria-label={t('nowPlaying.lyricsLabel')}
             title={lyricsLabel()}
             aria-pressed={props.lyricsActive}
             data-compact-lyrics-toggle=""
@@ -187,7 +188,7 @@ export function PlayerCompactDock(props: {
           >
             <Control
               class={styles.dockIconBtn}
-              classList={{ [styles.dockIconOn]: volumeOpen() }}
+              classList={{ [styles.dockIconOn]: mobileWeb ? Boolean(player().playback.muted) : volumeOpen() }}
               aria-label={volumeLabel()}
               aria-expanded={mobileWeb ? undefined : volumeOpen()}
               aria-controls={!mobileWeb && volumeOpen() ? volumeId : undefined}

@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from 'solid-js';
-import { player } from '../stores/player';
+import { isCurrentTrackPodcast, player } from '../stores/player';
 import { autoTrackDragging, readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { openContextMenu } from '../lib/contextMenu';
 import { openOverlay } from '../lib/overlay';
@@ -7,7 +7,6 @@ import { coverStyle } from '../lib/cover';
 import { trackCount } from '../lib/format';
 import { trackCoverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
-import { isPodcastTrack } from '../lib/track';
 import { Control } from '../design/Control';
 import type { Track } from '../types/music';
 import { ChevronDownIcon, CloseIcon, menuIcons, PlusIcon } from './icons';
@@ -17,10 +16,7 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
   const [over, setOver] = createSignal(false);
   const armed = () => Boolean(autoTrackDragging() || props.carried);
   let depth = 0;
-  const canStartFromCurrent = () => {
-    const track = player().playback.currentTrack;
-    return Boolean(track && !isPodcastTrack(track));
-  };
+  const canStartFromCurrent = () => Boolean(player().playback.currentTrack && !isCurrentTrackPodcast());
   const openChangeMenu = (event: MouseEvent) => {
     openContextMenu({
       title: t('autoMode.source.title'),
@@ -46,7 +42,10 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     draggable={source.tracks.length === 1} onDragStart={(event) => source.tracks[0] && writeAutoTrackTransfer(event, { track: source.tracks[0] })}>
     <span class={styles.referenceCover} style={coverStyle(source.label, source.tracks[0] ? trackCoverUrl(source.tracks[0], 'thumb') : undefined)} />
     <span class={styles.referenceName} title={source.label}>{source.label}</span>
-    <small title={trackCount(source.tracks.length)} aria-label={trackCount(source.tracks.length)}>{source.tracks.length}</small>
+    <small title={trackCount(source.tracks.length)}>
+      <span aria-hidden="true">{source.tracks.length}</span>
+      <span class={styles.srOnly}>{trackCount(source.tracks.length)}</span>
+    </small>
     <Show when={player().autoMode.sources.length > 1}>
       <Control class={styles.referenceRemove} aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => player().actions.removeAutoSource(source.id)}>
         <CloseIcon size={14} />

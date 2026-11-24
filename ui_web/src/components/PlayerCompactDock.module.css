@@ -89,7 +89,6 @@
   font-family: var(--font-mono);
   font-size: var(--text-micro);
   font-variant-numeric: tabular-nums;
-  opacity: 0.8;
 }
 
 .dockUtils {

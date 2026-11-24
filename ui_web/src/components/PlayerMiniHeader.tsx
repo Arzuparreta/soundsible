@@ -1,7 +1,6 @@
 import { createMemo, Match, Show, Switch } from 'solid-js';
-import { advancePlayback, player } from '../stores/player';
+import { advancePlayback, isCurrentTrackPodcast, player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
-import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { Control } from '../design/Control';
 import { ArtworkSurface } from '../design/Artwork';
@@ -20,7 +19,7 @@ export function PlayerMiniHeader(props: {
   onBack: () => void;
 }) {
   const track = createMemo(() => player().playback.currentTrack);
-  const podcast = createMemo(() => Boolean(track() && isPodcastTrack(track()!)));
+  const podcast = createMemo(isCurrentTrackPodcast);
   const loading = createMemo(() => player().playback.isLoading);
   const loadFailed = createMemo(() => player().playback.loadError);
   const backLabel = createMemo(() =>

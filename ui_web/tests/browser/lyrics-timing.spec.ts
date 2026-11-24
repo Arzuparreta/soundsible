@@ -27,7 +27,7 @@ async function showLyrics(page: Page) {
   await openMusicPlayer(page);
   const surface = page.locator('[data-player-surface-open]');
   await showPlayerPanel(page, 'stage');
-  await surface.getByRole('button', { name: 'Mostrar letra' }).click();
+  await surface.locator('button[data-compact-lyrics-toggle]:visible, button[aria-label="Mostrar letra"]:visible').first().click();
   const panel = surface.locator('[data-lyrics-scroll]').first();
   await expect(panel.getByRole('button', { name: 'Line 1', exact: true })).toBeInViewport();
   return panel;
@@ -51,7 +51,7 @@ test('a temporary provider outage recovers in the open panel without a retry cli
   await openMusicPlayer(page);
   const surface = page.locator('[data-player-surface-open]');
   await showPlayerPanel(page, 'stage');
-  await surface.getByRole('button', { name: 'Mostrar letra' }).click();
+  await surface.locator('button[data-compact-lyrics-toggle]:visible, button[aria-label="Mostrar letra"]:visible').first().click();
   await expect(surface.getByLabel('Cargando letra')).toBeVisible();
   await expect(surface.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);
   await expect(surface.getByRole('button', { name: 'Line 1', exact: true })).toBeInViewport();
@@ -75,7 +75,7 @@ test('lyrics timed for another cut ask for a tap, then follow it', async ({ page
   expect(noticeBox.x).toBeGreaterThanOrEqual(panelBox.x - 0.5);
   expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 0.5);
   expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(panelBox.y + panelBox.height + 0.5);
-  const toggle = (await surface.getByRole('button', { name: 'Mostrar portada' }).boundingBox())!;
+  const toggle = (await surface.locator('button[data-compact-lyrics-toggle]:visible, button[aria-label="Mostrar portada"]:visible').first().boundingBox())!;
   const clear = noticeBox.x >= toggle.x + toggle.width || noticeBox.x + noticeBox.width <= toggle.x
     || noticeBox.y >= toggle.y + toggle.height || noticeBox.y + noticeBox.height <= toggle.y;
   expect(clear, 'notice clear of the cover toggle').toBe(true);

@@ -48,7 +48,7 @@ On a phone the player fills the screen.
 
 ### Choose music for the session
 
-**Mix with…** and **Change…** in **Session**, and **＋** between two Route songs
+**Mix with…** and **Change ▾ → Choose other music…** in **Sources**, and **＋** between two Route songs
 or at its end, each ask for music. Pressing one leaves the player where you can
 see the app — docked beside it on a computer, closed on a phone — and a bar at
 the top of Soundsible says what it is waiting for. The next song you play, from
@@ -57,7 +57,7 @@ any list, page or search result, answers it instead of playing:
 | You pressed | A song | An album, artist or playlist |
 | --- | --- | --- |
 | **Mix with…** | becomes one more influence | becomes one more influence |
-| **Change…** | becomes the new direction | becomes the new direction |
+| **Change ▾ → Choose other music…** | becomes the new direction | becomes the new direction |
 | **＋** | is placed at that point of the Route | its songs are placed there, in order |
 
 The player then shows the Route again. **Cancel** in the bar, or pressing
@@ -66,7 +66,7 @@ another of these buttons, gives up the first request.
 ### A source is one piece of music
 
 A song, an album, an artist, a playlist or the favourites is **one source**.
-Playing a collection starts a new DJ session from it. Picked for **Change…**,
+Playing a collection starts a new DJ session from it. Picked for **Change ▾ → Choose other music…**,
 it moves the current session onto it while the playing song continues: the DJ
 draws the next songs from it. It never turns the collection into a list of
 requests. Asking for every song of a collection is still there: pick it for
@@ -77,7 +77,7 @@ The three parts of the workspace have separate jobs:
 
 | Part | What it controls |
 | --- | --- |
-| **Session** | The musical material and direction DJ should draw from |
+| **Sources** | The musical material and direction DJ should draw from |
 | **Stage / Booth** | What is on air and what comes next |
 | **Route** | The actual upcoming order, including your fixed tracks and DJ's generated bridges |
 
@@ -196,14 +196,14 @@ not prepared yet; a mix already prepared still plays.
 
 - **＋** in the Route requests specific songs without changing the musical direction.
 - **Mix with…** adds an influence alongside the existing ones.
-- **Change…** moves the session onto a new
+- **Change ▾ → Choose other music…** moves the session onto a new
   source at once. The old sources, the DJ's own picks and bridges, and songs
   that were requested as a whole collection go with the old session; songs you
   requested one at a time stay. The current song continues and the DJ mixes out
   of it when it judges best; an already audible blend finishes. The new route is
   then planned like any refill, retrying on its own while the music plays on.
-- The Session block shows the active influences. Remove an influence while
-  another remains, or use **Change…** to replace the last one.
+- The **Sources** block shows the active influences. Remove an influence while
+  another remains, or use **Change ▾** to replace the last one.
 - **Place a must-play track.** Add a song to the Route or drop it into a
   particular gap. Soundsible may insert a bridge when that produces a safer
   path to the request.
@@ -249,9 +249,9 @@ finishes and the most recent selection is mixed next.
 DJ explores the active influences together with the last four automatic songs
 that actually started playing in the current direction. A pending recommendation
 is not a discovery root. Exact requests and bridges do not become roots just
-because they played. **Mix with…** retains this exploration; **Change…** clears
+because they played. **Mix with…** retains this exploration; **Change ▾** clears
 it, without promoting the outgoing song. These discovery roots do not appear as
-additional influences in **Session**.
+additional influences in **Sources**.
 
 A change of direction takes effect at once: the new influences, a new
 exploration revision and the cleared route are committed together, and any

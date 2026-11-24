@@ -64,6 +64,12 @@ export function player(): PlayerView {
   };
 }
 
+/** Whether playback currently has a podcast episode loaded. */
+export function isCurrentTrackPodcast(): boolean {
+  const track = player().playback.currentTrack;
+  return Boolean(track && isPodcastTrack(track));
+}
+
 /**
  * Whether playback reads visually silent across the dock, stage and mini-player:
  * either explicit mute or volume dialed down to zero. Mute/unmute action labels

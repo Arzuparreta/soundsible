@@ -51,10 +51,42 @@ export interface ShortcutActions {
   focusSearch(): void;
 }
 
+const NON_TEXT_INPUT_TYPES = new Set([
+  'button',
+  'checkbox',
+  'color',
+  'file',
+  'image',
+  'radio',
+  'range',
+  'reset',
+  'submit',
+]);
+
 /** Surfaces where a keystroke is text, not a command. */
 export function isTextEntry(el: HTMLElement | null): boolean {
   if (!el) return false;
   return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+}
+
+/**
+ * Editable text controls (`<textarea>`, contenteditable, or text-like `<input>`)
+ * that own Escape while typing, excluding non-text inputs such as `<input type="range">`.
+ *
+ * Player Escape layering across components:
+ * 1. `OverlayOutlet` (window capture)
+ * 2. Compact dock volume popover (`PlayerCompactDock`, document capture while open —
+ *    closes passively without preventing default when Escape starts in an external editable text control)
+ * 3. Compact lyrics (`PlayerSurface`, document bubble) / wide desktop lyrics (`PlayerStage`,
+ *    document bubble) — skipped on editable text controls
+ * 4. Global shortcut handler (`createShortcutHandler`, window bubble)
+ */
+export function isEditableTextControl(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  if (el.tagName === 'TEXTAREA' || el.isContentEditable) return true;
+  if (el.tagName !== 'INPUT') return false;
+  const type = ((el as HTMLInputElement).type || 'text').toLowerCase();
+  return !NON_TEXT_INPUT_TYPES.has(type);
 }
 
 /**

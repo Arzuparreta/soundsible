@@ -101,7 +101,7 @@
     transform var(--dur-micro) var(--ease-out);
 }
 
-.ctrl:active {
+.ctrl:not(:disabled):active {
   transform: scale(0.92);
 }
 

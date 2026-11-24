@@ -409,11 +409,11 @@ describe('PlayerSurface', () => {
   it('lets Escape close only compact lyrics and returns focus to the lyrics toggle', async () => {
     setCompactViewport();
     render(() => <PlayerSurface />);
-    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
+    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' });
     lyricsToggle.focus();
     fireEvent.click(lyricsToggle);
 
-    const lyricsView = await screen.findByLabelText('nowPlaying.lyricsLabel');
+    const lyricsView = await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' });
     expect(lyricsView).toBeInTheDocument();
 
     const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
@@ -421,7 +421,7 @@ describe('PlayerSurface', () => {
     await Promise.resolve();
 
     expect(event.defaultPrevented).toBe(true);
-    expect(screen.queryByLabelText('nowPlaying.lyricsLabel')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
     expect(lyricsView.closest('[data-player-stage]') ?? document.querySelector('[data-player-surface-open]')).not.toBeNull();
     expect(lyricsToggle).toHaveFocus();
   });
@@ -429,9 +429,9 @@ describe('PlayerSurface', () => {
   it('lets Escape close the compact volume popover before closing compact lyrics', async () => {
     setCompactViewport(420);
     render(() => <PlayerSurface />);
-    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
+    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' });
     fireEvent.click(lyricsToggle);
-    expect(await screen.findByLabelText('nowPlaying.lyricsLabel')).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
 
     const volumeButton = screen.getByRole('button', { name: 'omnibar.volume' });
     const enter = new Event('pointerenter', { bubbles: true });
@@ -445,7 +445,7 @@ describe('PlayerSurface', () => {
 
     expect(firstEscape.defaultPrevented).toBe(true);
     expect(screen.queryByRole('slider', { name: 'omnibar.volume' })).toBeNull();
-    expect(screen.getByLabelText('nowPlaying.lyricsLabel')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
     expect(volumeButton).toHaveFocus();
 
     const secondEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
@@ -453,7 +453,7 @@ describe('PlayerSurface', () => {
     await Promise.resolve();
 
     expect(secondEscape.defaultPrevented).toBe(true);
-    expect(screen.queryByLabelText('nowPlaying.lyricsLabel')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
     expect(lyricsToggle).toHaveFocus();
   });
 
@@ -461,8 +461,8 @@ describe('PlayerSurface', () => {
     harness.desktop = true;
     setCompactViewport(420);
     render(() => <PlayerSurface />);
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.showLyrics' }));
-    const lyricsView = await screen.findByLabelText('nowPlaying.lyricsLabel');
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' }));
+    const lyricsView = await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' });
 
     const volumeButton = screen.getByRole('button', { name: 'omnibar.volume' });
     const enter = new Event('pointerenter', { bubbles: true });
@@ -493,9 +493,9 @@ describe('PlayerSurface', () => {
     document.body.appendChild(input);
     try {
       render(() => <PlayerSurface />);
-      const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
+      const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' });
       fireEvent.click(lyricsToggle);
-      expect(await screen.findByLabelText('nowPlaying.lyricsLabel')).toBeInTheDocument();
+      expect(await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
 
       input.focus();
       const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
@@ -503,10 +503,35 @@ describe('PlayerSurface', () => {
       await Promise.resolve();
 
       expect(event.defaultPrevented).toBe(false);
-      expect(screen.getByLabelText('nowPlaying.lyricsLabel')).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
       expect(input).toHaveFocus();
     } finally {
       input.remove();
+    }
+  });
+
+  it('leaves focus on an external button when Escape closes docked compact lyrics', async () => {
+    harness.desktop = true;
+    setCompactViewport(420);
+    const externalButton = document.createElement('button');
+    externalButton.type = 'button';
+    externalButton.textContent = 'Library action';
+    document.body.appendChild(externalButton);
+    try {
+      render(() => <PlayerSurface />);
+      fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' }));
+      expect(await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
+
+      externalButton.focus();
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      externalButton.dispatchEvent(event);
+      await Promise.resolve();
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(screen.queryByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
+      expect(externalButton).toHaveFocus();
+    } finally {
+      externalButton.remove();
     }
   });
 
@@ -514,10 +539,10 @@ describe('PlayerSurface', () => {
     setCompactViewport();
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
-    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
+    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' });
     fireEvent.click(lyricsToggle);
 
-    const lyricsView = await screen.findByLabelText('nowPlaying.lyricsLabel');
+    const lyricsView = await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' });
     const insideButton = lyricsView.querySelector('button')!;
     insideButton.focus();
     expect(insideButton).toHaveFocus();
@@ -530,7 +555,7 @@ describe('PlayerSurface', () => {
     });
     await Promise.resolve();
 
-    expect(screen.queryByLabelText('nowPlaying.lyricsLabel')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
     expect(surface.contains(document.activeElement)).toBe(true);
     expect(document.activeElement).not.toBe(document.body);
   });

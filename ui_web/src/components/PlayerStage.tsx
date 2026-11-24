@@ -3,19 +3,19 @@ import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { isSavedTrack } from '../stores';
-import { advancePlayback, isPlaybackSilent, player } from '../stores/player';
+import { advancePlayback, isCurrentTrackPodcast, isPlaybackSilent, player } from '../stores/player';
 import { clockTime } from '../lib/format';
 import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
 import { CoverImage } from './CoverImage';
 import { responsiveTapConstants } from '../lib/responsiveTap';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
-import { isTextEntry } from '../lib/shortcuts';
+import { isEditableTextControl } from '../lib/shortcuts';
 import { savedFromTrack } from '../lib/saved';
-import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
+import { PODCAST_SKIP_SECONDS } from '../lib/track';
 import { t } from '../lib/i18n';
 import { Control } from '../design/Control';
-import { detectFormFactor } from '../lib/deviceIdentity';
+import { isMobileWeb } from '../lib/deviceIdentity';
 import { playerCompact } from '../lib/playerDock';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
@@ -56,7 +56,7 @@ export function PlayerStage(props: {
   empty?: JSX.Element;
 }) {
   const track = createMemo(() => player().playback.currentTrack);
-  const podcast = createMemo(() => Boolean(track() && isPodcastTrack(track()!)));
+  const podcast = createMemo(isCurrentTrackPodcast);
   const [layoutBusy, setLayoutBusy] = createSignal(false);
   let rootEl: HTMLDivElement | undefined;
   let carryTimer: number | undefined;
@@ -103,7 +103,7 @@ export function PlayerStage(props: {
     const duration = player().playback.duration;
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   };
-  const mobileWeb = detectFormFactor() !== 'computer';
+  const mobileWeb = isMobileWeb();
 
   const muteButton = () => (
     <Show when={player().can('transport.set_muted')}>
@@ -164,11 +164,9 @@ export function PlayerStage(props: {
   };
 
   onMount(() => {
-    // Document bubble runs after OverlayOutlet (window capture) and inline dock
-    // popovers (document capture), and before the global window bubble shortcut
-    // handler, so Escape folds desktop lyrics instead of closing the player.
+    // See lib/shortcuts.ts for player Escape layering; range sliders are skipped so Escape folds desktop lyrics.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isTextEntry(event.target as HTMLElement | null)) return;
+      if (event.defaultPrevented || isEditableTextControl(event.target as HTMLElement | null)) return;
       if (event.key === 'Escape' && props.surfaceOpen && !playerCompact() && desktopLyricsActive()) {
         event.preventDefault();
         event.stopPropagation();

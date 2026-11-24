@@ -1,12 +1,11 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, Suspense, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { nowPlayingOpen, setNowPlayingOpen } from '../stores';
-import { player } from '../stores/player';
+import { isCurrentTrackPodcast, player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
-import { isPodcastTrack } from '../lib/track';
 import { upcomingQueueEntries } from '../lib/playbackQueue';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
-import { isTextEntry } from '../lib/shortcuts';
+import { isEditableTextControl } from '../lib/shortcuts';
 import { t } from '../lib/i18n';
 import { type AutoModePanelId } from '../lib/autoModeLayout';
 import {
@@ -97,7 +96,7 @@ export function PlayerSurface() {
   const [opened, setOpened] = createSignal(nowPlayingOpen());
   createEffect(() => { if (nowPlayingOpen()) setOpened(true); });
   const current = createMemo(() => player().playback.currentTrack);
-  const podcast = createMemo(() => Boolean(current() && isPodcastTrack(current()!)));
+  const podcast = createMemo(isCurrentTrackPodcast);
   const auto = createMemo(() => player().autoMode.active);
   const autoAvailable = createMemo(() => !podcast());
   const art = createMemo(() => {
@@ -169,8 +168,12 @@ export function PlayerSurface() {
   };
 
   const closeCompactLyrics = () => {
+    const active = document.activeElement;
+    const focusOutsidePlayer = Boolean(
+      active instanceof Node && active !== document.body && surfaceEl && !surfaceEl.contains(active),
+    );
     setPanel('stage');
-    restoreCompactLyricsFocus();
+    if (!focusOutsidePlayer) restoreCompactLyricsFocus();
   };
 
   const toggleCompactLyrics = () => {
@@ -525,11 +528,9 @@ export function PlayerSurface() {
     surfaceEl.addEventListener('touchstart', beginTouch, { passive: true });
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
-    // Document bubble runs after OverlayOutlet (window capture) and inline dock
-    // popovers (document capture), and before the global window bubble shortcut
-    // handler; text entries beside a docked player keep their own Escape key.
+    // See lib/shortcuts.ts for player Escape layering; external editable text controls keep Escape.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isTextEntry(event.target as HTMLElement | null)) return;
+      if (event.defaultPrevented || isEditableTextControl(event.target as HTMLElement | null)) return;
       if (event.key === 'Escape' && nowPlayingOpen() && compactLyrics()) {
         event.preventDefault();
         event.stopPropagation();

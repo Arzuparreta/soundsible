@@ -6,41 +6,6 @@
   color: var(--ink-primary);
 }
 
-.sourcePanel {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  flex-direction: column;
-}
-
-/* Armed the moment anything is picked up, anywhere in DJ. Empty, this tray is
- * one line of small print — too slight a thing to aim a drag at unless it says
- * it is a target. */
-
-.sourceBrowser {
-  min-height: 0;
-  flex: 1;
-}
-
-.sourceBrowser > * {
-  height: 100%;
-}
-
-.routeAction {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--ink-tertiary);
-  cursor: pointer;
-}
-
 /* The stage before the first song. Centred in the space the cover will take. */
 .stageOpening {
   display: grid;
@@ -160,18 +125,6 @@
   }
 }
 
-.routeAction:focus-visible {
-  color: var(--ink-primary);
-  background: var(--stage-material-active);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .routeAction:hover {
-    color: var(--ink-primary);
-    background: var(--stage-material-active);
-  }
-}
-
 .routeGap {
   display: grid;
   width: calc(100% - 1.3rem);
@@ -266,11 +219,6 @@
 /* On touch the seam buttons collapse into permanently visible placement rows
  * while a track is being carried, since there is no hover to reveal them. */
 @media (hover: none), (pointer: coarse) {
-  .routeAction {
-    width: 2.5rem;
-    height: 2.5rem;
-  }
-
   .routeGap {
     width: calc(100% - 1.3rem);
     height: 0;
@@ -327,14 +275,18 @@
 .references button:disabled { opacity: 0.4; cursor: default; }
 .references [role="status"] { font-size: var(--text-caption); overflow-wrap: anywhere; }
 .references p { margin: 0 0 var(--space-xs); font-size: var(--text-caption); color: var(--ink-secondary); }
+/* Armed the moment anything is picked up, anywhere in DJ. Empty, this tray is
+ * one line of small print — too slight a thing to aim a drag at unless it says
+ * it is a target. */
 .references[data-target] { background: var(--accent-faint); box-shadow: inset 0 0 0 1px var(--accent); }
 .references[data-over] { box-shadow: inset 0 0 0 2px var(--accent); }
 .referenceEmpty { display: flex; align-items: center; min-height: var(--control-h); width: 100%; text-align: left; padding: var(--space-xs) 0; color: var(--ink-secondary); background: transparent; border: 0; font: inherit; font-size: var(--text-caption); line-height: 1.5; cursor: pointer; }
-.referenceRows { max-height: calc(var(--control-h) * 2); overflow: hidden; }
+.referenceRows { padding: var(--space-xs); margin: calc(var(--space-xs) * -1); max-height: calc(var(--control-h) * 2 + var(--space-xs) * 2); overflow: hidden; }
 .referenceRow { display: flex; align-items: center; gap: var(--space-sm); min-height: var(--control-h); }
 .referenceCover { flex: 0 0 28px; height: 28px; border-radius: var(--radius-xs); }
 .referenceName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-caption); }
 .referenceRow small { color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .referenceRemove { display: inline-flex; align-items: center; justify-content: center; min-width: var(--control-h); min-height: var(--control-h); padding: 0; color: var(--ink-secondary); font: inherit; background: transparent; border: 0; border-radius: var(--radius-full); cursor: pointer; }
 .referenceMore { display: inline-flex; align-items: center; min-height: var(--control-h); color: var(--accent-ink); font: inherit; font-size: var(--text-caption); font-weight: var(--fw-semibold); background: transparent; border: 0; padding: var(--space-xs) 0; cursor: pointer; }
 .referenceSheet { padding: var(--space-lg); }

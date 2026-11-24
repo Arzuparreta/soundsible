@@ -89,7 +89,7 @@ export function NowPlaying(props: {
     queueActive,
     () => upcomingQueueEntries(player().playback.queue, player().playback.index, {
       auto: false,
-      radioMode: player().playback.radioMode,
+      radioMode: Boolean(player().playback.radioMode),
     }),
     [],
     () => [player().playback.radioMode, player().playback.queue, player().playback.index],
