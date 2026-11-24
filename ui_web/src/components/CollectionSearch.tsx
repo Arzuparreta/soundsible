@@ -14,7 +14,14 @@ export function createCollectionSearch() {
     return createMemo(() => filterLocalCollection(items(), query(), fields));
   }
 
-  return { value, setValue, query, filter };
+  /** A row's 1-based place in the unfiltered list, for numbers that mean a
+   * track position or a rank and must not change while filtering. */
+  function positions<T>(items: Accessor<T[]>) {
+    const map = createMemo(() => new Map(items().map((item, index) => [item, index + 1])));
+    return (item: T) => map().get(item) ?? 0;
+  }
+
+  return { value, setValue, query, filter, positions };
 }
 
 export function CollectionSearch(props: {

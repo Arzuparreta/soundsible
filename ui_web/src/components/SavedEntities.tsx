@@ -39,7 +39,7 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
       return <Show when={props.expanded || matches().length}>
         <section class={styles.section} aria-label={heading(kind)}>
           <Show when={!props.expanded}><div class={styles.header}><h2>{heading(kind)}</h2>
-            <Show when={!props.expanded && !props.query && matches().length}>
+            <Show when={!props.query && matches().length}>
               <MusicLink class={styles.more} path={`/?saved=${kind === 'album' ? 'albums' : 'artists'}`} label={`${t('searchHome.seeAll')}: ${heading(kind)}`}>{t('searchHome.seeAll')}</MusicLink>
             </Show>
           </div></Show>

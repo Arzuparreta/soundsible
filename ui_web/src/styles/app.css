@@ -199,17 +199,13 @@ html[data-hold-gesture] *:not(input):not(textarea) {
   overscroll-behavior-y: contain;
 }
 
-/* On touch the mini-player floats over these surfaces instead of sitting in a
-   row of its own (OmniBar.module.css), so the last item of every list would end
-   up underneath it. This is the clearance that buys it back.
+/* Room at the end of every list for the page indicator that overlays the foot
+   of the view (AppBar.tsx), so the last row can scroll clear of it.
 
    A trailing box rather than `padding-bottom`, because each of these scrollers
    already carries an end padding of its own — --space-lg here, --space-2xl
    there — and this has to add to that, not replace it. `flex` for the handful
-   that are flex columns; on the block ones it is simply ignored.
-
-   Scoped to the shell's own attribute because the pill hides itself while
-   nothing is playing: no pill, nothing to clear. */
+   that are flex columns; on the block ones it is simply ignored. */
 main:has(> [data-page-indicator]) [data-primary-scroll]::after {
   display: block;
   flex: 0 0 auto;
@@ -217,8 +213,12 @@ main:has(> [data-page-indicator]) [data-primary-scroll]::after {
   content: '';
 }
 
-/* Same specificity as the rule above and later, so it wins where both apply;
-   the page indicator's room (app.module.css) is added on top of the pill's. */
+/* On touch the mini-player floats over these surfaces instead of sitting in a
+   row of its own (OmniBar.module.css), so the last item of every list would end
+   up underneath it. This box buys that back, plus the indicator's room above
+   the pill. Same specificity as the rule above and later in the file, so it
+   wins where both apply. Scoped to the shell's own attribute because the pill
+   hides itself while nothing is playing: no pill, nothing to clear. */
 @media (max-width: 1023px) {
   [data-mini-player] main [data-primary-scroll]::after {
     display: block;

@@ -1,5 +1,5 @@
-import { Control } from '../design/Control';
 import { createSignal, Show, type JSX } from 'solid-js';
+import { Control } from '../design/Control';
 import { useAppBar } from '../lib/appBar';
 import { coverGradient } from '../lib/cover';
 import { t } from '../lib/i18n';

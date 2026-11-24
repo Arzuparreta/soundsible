@@ -1,6 +1,6 @@
-import { Control } from '../design/Control';
 import { createEffect, createSignal, Index, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { useLocation } from '@solidjs/router';
+import { Control } from '../design/Control';
 import { currentAppBar, type AppBarAction } from '../lib/appBar';
 import { t } from '../lib/i18n';
 import { desktopShell } from '../lib/shellLayout';

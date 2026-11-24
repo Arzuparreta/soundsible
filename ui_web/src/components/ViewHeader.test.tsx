@@ -11,7 +11,7 @@ const DESKTOP = '(min-width: 1024px)';
 afterEach(() => setMediaQuery(DESKTOP, false));
 
 describe('ViewHeader on the desktop shell', () => {
-  it('renders one heading in the footer with the default scroll action', () => {
+  it('renders one heading in the overlaid page indicator with the default scroll action', () => {
     setMediaQuery(DESKTOP, true);
     render(() => <InShell><ViewHeader title="Your library" /></InShell>);
 

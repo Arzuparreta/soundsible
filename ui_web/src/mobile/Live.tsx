@@ -118,13 +118,12 @@ export function NativeLive(props: { generation: () => number; current: () => boo
     <div class={styles.directory}><h3>{t('live.directory')}</h3><button disabled={busy()} onClick={() => void refresh()}>{t('live.refresh')}</button></div>
     <Show when={rooms().length} fallback={<p>{config()?.state === 'available' ? t('live.empty') : t('live.unavailable')}</p>}>
       <CollectionSearch search={search} placeholder={t('library.filterLive')} />
-      <ul><For each={filteredRooms()}>{entry => <li><strong>{entry.title}</strong> · {entry.host.display_name}
+      <Show when={filteredRooms().length} fallback={<NoCollectionMatches />}><ul><For each={filteredRooms()}>{entry => <li><strong>{entry.title}</strong> · {entry.host.display_name}
         <button disabled={busy() || entry.id === host()?.session?.id} onClick={() => {
           const origin = config()?.api_url;
           if (origin) void command({ action: 'liveListen', session: { ...entry, api_url: origin, guest_name: props.username } });
         }}>{entry.id === listening()?.session?.id ? t('live.listening') : t('live.listen')}</button>
-      </li>}</For></ul>
-      <Show when={!filteredRooms().length}><NoCollectionMatches /></Show>
+      </li>}</For></ul></Show>
     </Show>
   </section>;
 }

@@ -279,7 +279,7 @@ export default function Library() {
       <ViewHeader
         title={t(`library.${libraryTab()}` as 'library.songs')}
         desktopField={<div class={styles.desktopSearch}>{searchField()}</div>}
-        commandsBesideField
+        rendersOwnCommands
         barActions={[
           { label: t('library.searchAction'), icon: () => <SearchIcon />, onSelect: revealSearch },
           ...sortCommands(),

@@ -23,11 +23,12 @@ const WHOLE_LIST_ROWS = 60;
 export function EntityTrackList(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
   const search = createCollectionSearch();
   const tracks = search.filter(() => props.tracks, trackSearchFields);
+  const position = search.positions(() => props.tracks);
   createEffect(on(() => props.context.id, () => search.setValue(''), { defer: true }));
   const row = (track: () => Track, index: () => number) => (
     <SongRow
       track={track()} music={libraryTrackMusic(track())}
-      index={index() + 1}
+      index={position(track())}
       cover={trackCoverUrl(track(), 'thumb')}
       onPlay={() => player().actions.playFrom(tracks(), index(), { context: props.context })}
     />

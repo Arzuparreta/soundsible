@@ -750,7 +750,7 @@ export default function Search() {
       <ViewHeader
         title={tr('nav.search')}
         onTitleTap={() => reselectPrimaryTab('/search')}
-        commandsBesideField
+        rendersOwnCommands
         barActions={refreshCommands()}
       />
       {/* Suggestions and recent searches live as long as focus stays anywhere

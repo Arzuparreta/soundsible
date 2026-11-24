@@ -76,3 +76,18 @@ it('renders the latest release spotlight card at the top when present', () => {
   fireEvent.click(card);
   expect(open).toHaveBeenCalledWith(expect.objectContaining({ kind: 'album', name: 'Fresh Drop', destination: expect.stringContaining('deezer_id=99') }));
 });
+
+it('filters only the top tracks on screen and keeps their rank', () => {
+  setLocale('en');
+  const topTracks: CatalogItem[] = Array.from({ length: 12 }, (_, i) => ({
+    id: `song:${i + 1}`, title: i === 8 || i === 11 ? `Echo ${i + 1}` : `Song ${i + 1}`, type: 'track', source: 'deezer',
+  }));
+  const view = render(() => <ArtistDiscoveryView artistName="Artist" topTracks={topTracks} loading={false}
+    albums={[]} singlesEps={[]} related={[]}
+    renderSong={(item, _index, _queue, rank) => <span data-rank={rank}>{item.title}</span>}
+    renderLink={link => <a href={link.entity.destination}>{link.children}</a>} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'echo' } });
+  expect(view.getByText('Echo 9').getAttribute('data-rank')).toBe('9');
+  // Track 12 was never in the list, so filtering must not reveal it.
+  expect(view.queryByText('Echo 12')).toBeNull();
+});

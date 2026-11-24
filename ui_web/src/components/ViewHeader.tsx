@@ -12,8 +12,9 @@ export function ViewHeader(props: {
   desktopField?: JSX.Element;
   actions?: JSX.Element;
   barActions?: AppBarAction[];
-  /** A desktop field and its companion commands share a row on the page. */
-  commandsBesideField?: boolean;
+  /** On desktop the page renders `barActions` itself, next to its own field,
+   * so the header leaves them out. Touch still gets them in the top bar. */
+  rendersOwnCommands?: boolean;
   /** A native control the top bar carries as is — a dropdown keeps its
    * platform keyboard behaviour that a described command would lose. */
   barTrailing?: JSX.Element;
@@ -30,7 +31,7 @@ export function ViewHeader(props: {
     useAppBar({
       title: () => props.title,
       indicator: true,
-      onViewChange: props.onViewChange,
+      get onViewChange() { return props.onViewChange; },
       actions: () => props.barActions ?? [],
       trailing: () => props.barTrailing,
       get onTitleTap() { return props.onTitleTap; },
@@ -41,7 +42,7 @@ export function ViewHeader(props: {
   const field = createMemo(() => showDesktop() ? props.desktopField : undefined);
   const actions = createMemo(() => showDesktop() ? props.actions : undefined);
   const extra = createMemo(() => showDesktop() ? props.children : undefined);
-  const commands = () => props.commandsBesideField ? undefined : props.barActions;
+  const commands = () => props.rendersOwnCommands ? undefined : props.barActions;
   return (
     <Show when={props.compact || (desktopShell() && (props.meta || actions() || extra() || field() || commands()?.length))}>
       <header class={styles.header} data-compact={props.compact ? '' : undefined}>

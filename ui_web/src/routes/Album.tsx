@@ -428,6 +428,7 @@ function DiscoverView(props: {
 }) {
   const search = createCollectionSearch();
   const tracks = search.filter(() => props.tracklist, trackSearchFields);
+  const position = search.positions(() => props.tracklist);
   createEffect(on(() => props.subject, () => search.setValue(''), { defer: true }));
   return (
     <div class={styles.contentView}>
@@ -436,10 +437,10 @@ function DiscoverView(props: {
         <Show when={tracks().length} fallback={<NoCollectionMatches />}>
         <div class={styles.trackList}>
           <For each={tracks()}>
-            {(item, i) => (
+            {(item) => (
               <CatalogResultRow
                 item={item}
-                index={i() + 1}
+                index={position(item)}
                 active={isPlayingItem(item)}
                 saving={props.saving.has(item.id)}
                 onPlay={() => props.onPlayItem(item, props.tracklist)}

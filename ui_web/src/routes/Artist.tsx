@@ -467,7 +467,7 @@ function DiscoverView(props: {
 }) {
   return <ArtistDiscoveryView topTracks={props.topTracks} albums={props.albums} singlesEps={props.singlesEps}
     latestRelease={props.latestRelease} related={props.related} loading={props.loading} artistName={props.artistName}
-    renderSong={(item, index, queue) => <CatalogResultRow item={item} index={index()} active={isPlayingItem(item)}
+    renderSong={(item, _index, queue, rank) => <CatalogResultRow item={item} index={rank} active={isPlayingItem(item)}
       saving={props.saving.has(item.id)} onPlay={() => props.onPlayItem(item, queue())} onDownload={() => props.onSaveItem(item)} />}
     renderLink={link => <MusicLink class={link.class} path={link.entity.destination} onMenu={event => void openSavedEntityMenu(link.entity, event)}>{link.children}</MusicLink>} />;
 }

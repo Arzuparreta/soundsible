@@ -76,13 +76,15 @@ export function ArtistDiscoveryView(props: {
   topTracks: CatalogItem[]; albums: AlbumSummary[]; singlesEps: AlbumSummary[]; related: ArtistSummary[];
   latestRelease?: AlbumSummary | null;
   loading: boolean; artistName: string;
-  renderSong: (item: CatalogItem, index: () => number, queue: () => CatalogItem[]) => JSX.Element;
+  /** `index` is the row's 1-based place in `queue`, the rows on screen; `rank`
+   * is its place among the top tracks, which filtering does not change. */
+  renderSong: (item: CatalogItem, index: () => number, queue: () => CatalogItem[], rank: number) => JSX.Element;
   renderLink: (link: ArtistDiscoveryLink) => JSX.Element;
 }) {
   const search = createCollectionSearch();
   const topTracks = createMemo(() => props.topTracks.slice(0, 10));
-  const matched = search.filter(() => props.topTracks, trackSearchFields);
-  const shown = () => search.query() ? matched() : topTracks();
+  const shown = search.filter(topTracks, trackSearchFields);
+  const rank = search.positions(topTracks);
   createEffect(on(() => props.artistName, () => search.setValue(''), { defer: true }));
   // One honest empty state for the whole profile rather than a "nothing here"
   // line under every heading.
@@ -123,7 +125,7 @@ export function ArtistDiscoveryView(props: {
         <CollectionSearch search={search} />
         <Show when={shown().length} fallback={<NoCollectionMatches />}>
           <div class={styles.trackList}>
-            <For each={shown()}>{(item, index) => props.renderSong(item, () => index() + 1, shown)}</For>
+            <For each={shown()}>{(item, index) => props.renderSong(item, () => index() + 1, shown, rank(item))}</For>
           </div>
         </Show>
       </section>
