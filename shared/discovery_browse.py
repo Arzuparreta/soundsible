@@ -14,7 +14,7 @@ from shared.deezer_catalog import (
 )
 from shared.discovery_intelligence import artist_recommendation_multiplier
 from shared.providers import deezer
-from shared.text_utils import identity_key
+from shared.text_utils import fold_text, identity_key
 
 
 def _artist_mult(name: str, deezer_artist_id: str = "") -> float:
@@ -91,14 +91,15 @@ def build_browse_sections(
 
     def resolve_seed_artist(name: str) -> dict | None:
         wanted = literal_artist_key(name)
-        if not wanted:
+        if not wanted or not fold_text(name):
             return None
         if wanted in resolved_by_name:
             return resolved_by_name[wanted]
         matches = rows("search/artist", {"q": name, "limit": DEEZER_ARTIST_SEARCH_LIMIT})
         # A homonym or approximate search hit must not become a taste seed;
         # keep literal diacritic matches separate from folded fallbacks.
-        exact = select_artist_matches(name, matches, fans_key="nb_fan")
+        valid_matches = [r for r in matches if str(r.get("id") or "").strip().isdigit()]
+        exact = select_artist_matches(name, valid_matches, fans_key="nb_fan")
         match = exact[0] if exact else None
         seed = artist_item(match) if match else None
         resolved_by_name[wanted] = seed

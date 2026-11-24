@@ -212,7 +212,9 @@ def _resolve_deezer_artist_id(
     rows = [
         row
         for row in (search.get("data") if isinstance(search.get("data"), list) else [])
-        if isinstance(row, dict) and row.get("id") and (row.get("name") or "").strip()
+        if isinstance(row, dict)
+        and str(row.get("id") or "").strip().isdigit()
+        and str(row.get("name") or "").strip()
     ]
     if not rows:
         return None

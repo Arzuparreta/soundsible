@@ -114,9 +114,11 @@ def literal_artist_key(value: object) -> str:
     return unicodedata.normalize("NFC", normalize_text(value))
 
 
-def _safe_fans(row: dict[str, Any], fans_key: str) -> int:
+def _safe_nonneg_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
     try:
-        return int(row.get(fans_key) or 0)
+        return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
 
@@ -139,6 +141,7 @@ def select_artist_matches(
     wanted_folded = fold_text(name)
     if not wanted_folded:
         return []
+    wanted_folded_nfc = unicodedata.normalize("NFC", wanted_folded)
 
     literal: list[dict[str, Any]] = []
     folded_only: list[dict[str, Any]] = []
@@ -153,26 +156,45 @@ def select_artist_matches(
         elif fold_text(raw_name) == wanted_folded:
             folded_only.append(row)
 
-    literal.sort(key=lambda row: _safe_fans(row, fans_key), reverse=True)
-    folded_only.sort(key=lambda row: _safe_fans(row, fans_key), reverse=True)
+    literal.sort(key=lambda row: _safe_nonneg_int(row.get(fans_key)), reverse=True)
+    folded_only.sort(key=lambda row: _safe_nonneg_int(row.get(fans_key)), reverse=True)
 
     if not literal:
-        return folded_only
-    if not folded_only:
-        return literal
-    if wanted_literal != wanted_folded:
-        return [*literal, *folded_only]
+        ordered = folded_only
+    elif not folded_only:
+        ordered = literal
+    elif wanted_literal != wanted_folded_nfc:
+        ordered = [*literal, *folded_only]
+    else:
+        best_literal = _safe_nonneg_int(literal[0].get(fans_key))
+        best_folded = _safe_nonneg_int(folded_only[0].get(fans_key))
+        folded_dominates = (
+            best_folded >= _DIACRITIC_OVERRIDE_MIN_FANS
+            and best_folded >= best_literal * _DIACRITIC_OVERRIDE_RATIO
+        ) or (
+            best_literal == 0
+            and best_folded >= _DIACRITIC_STUB_OVERRIDE_MIN_FANS
+        )
+        if folded_dominates:
+            tail = sorted(
+                [*folded_only[1:], *literal],
+                key=lambda row: _safe_nonneg_int(row.get(fans_key)),
+                reverse=True,
+            )
+            ordered = [folded_only[0], *tail]
+        else:
+            ordered = [*literal, *folded_only]
 
-    best_literal = _safe_fans(literal[0], fans_key)
-    best_folded = _safe_fans(folded_only[0], fans_key)
-    folded_dominates = (
-        best_folded >= _DIACRITIC_OVERRIDE_MIN_FANS
-        and best_folded >= best_literal * _DIACRITIC_OVERRIDE_RATIO
-    ) or (
-        best_literal == 0
-        and best_folded >= _DIACRITIC_STUB_OVERRIDE_MIN_FANS
-    )
-    return [*folded_only, *literal] if folded_dominates else [*literal, *folded_only]
+    deduped: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for row in ordered:
+        row_id = str(row.get("deezer_id") or row.get("id") or "").strip()
+        if row_id:
+            if row_id in seen_ids:
+                continue
+            seen_ids.add(row_id)
+        deduped.append(row)
+    return deduped
 
 
 def _artist_search(name: str, limit: int = DEEZER_ARTIST_SEARCH_LIMIT) -> list[dict[str, Any]]:
@@ -183,15 +205,15 @@ def _artist_search(name: str, limit: int = DEEZER_ARTIST_SEARCH_LIMIT) -> list[d
         if not isinstance(row, dict):
             continue
         artist_id = str(row.get("id") or "")
-        artist_name = (row.get("name") or "").strip()
+        artist_name = str(row.get("name") or "").strip()
         if not artist_id or not artist_name:
             continue
         out.append({
             "deezer_id": artist_id,
             "name": artist_name,
             "picture": deezer.image(row, "picture"),
-            "nb_fans": int(row.get("nb_fan") or 0),
-            "nb_album": int(row.get("nb_album") or 0),
+            "nb_fans": _safe_nonneg_int(row.get("nb_fan")),
+            "nb_album": _safe_nonneg_int(row.get("nb_album")),
         })
     return out
 
@@ -208,9 +230,9 @@ def resolve_artist_id(name: str, deezer_id: str | None = None) -> tuple[str | No
     exact = select_artist_matches(name, candidates, fans_key="nb_fans")
     if exact:
         return exact[0]["deezer_id"], exact[1:9]
-    # No exact match — pick most popular, return all others as candidates
-    candidates.sort(key=lambda c: c["nb_fans"], reverse=True)
-    return candidates[0]["deezer_id"], candidates[1:4]
+    # No exact match — pick most popular among the top relevance hits
+    fallback = sorted(candidates[:10], key=lambda c: c["nb_fans"], reverse=True)
+    return fallback[0]["deezer_id"], fallback[1:4]
 
 
 def artist_top_tracks(artist_id: str, limit: int = 50, library_keys: set[str] | None = None) -> list[dict[str, Any]]:

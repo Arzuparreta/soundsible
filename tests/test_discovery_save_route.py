@@ -681,6 +681,22 @@ def test_more_like_resolves_literal_homonym_over_folded_diacritic_with_wider_win
     assert [row["title"] for row in rows] == ["Ezio's Family"]
 
 
+def test_resolve_deezer_artist_id_ignores_non_string_names_and_non_digit_ids():
+    def fake_deezer(path, params=None, ttl_sec=None):
+        if path == "search/artist":
+            return {
+                "data": [
+                    {"id": "not-digits", "name": "Halo", "nb_fan": 999999},
+                    {"id": 100, "name": 12345, "nb_fan": 999999},
+                    {"id": 217605285, "name": "Halo", "nb_fan": 2170},
+                ]
+            }
+        raise AssertionError(path)
+
+    with patch.object(_disc_feed, "_deezer_json", side_effect=fake_deezer):
+        assert _disc_feed._resolve_deezer_artist_id("Halo", allow_approximate=True) == "217605285"
+
+
 def test_more_like_handles_missing_artist_name_owned_full_title_quota_and_non_latin_slugs(tmp_path):
     _make_runtime(tmp_path)
     metadata = LibraryMetadata(

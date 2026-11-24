@@ -301,3 +301,22 @@ def test_taste_and_release_seeds_prevent_diacritic_hijack_and_id_bleed(tmp_path)
     finally:
         clear_recent_seeds(clear_all=True)
         reset_runtime()
+
+
+def test_taste_artists_break_hangul_diacritic_tie_without_nfd_mismatch(tmp_path):
+    _setup_runtime(tmp_path)
+    try:
+        # Tied Hangul + diacritic variants must still prefer the diacritic spelling.
+        tied_hangul = LibraryMetadata(
+            version=1,
+            tracks=[
+                _track("k1", "아이유 Cafe"),
+                _track("k2", "아이유 Café"),
+            ],
+            playlists={},
+            settings={},
+        )
+        assert select_taste_artists(tied_hangul, [], limit=5, user_id="alice") == ["아이유 Café"]
+    finally:
+        clear_recent_seeds(clear_all=True)
+        reset_runtime()

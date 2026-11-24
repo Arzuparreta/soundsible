@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 import threading
+import unicodedata
 
 from shared.deezer_catalog import literal_artist_key
 from shared.discovery_intelligence import (
@@ -235,10 +236,11 @@ def select_taste_artists(
 
     display: dict[str, str] = {}
     for key in scores:
+        key_nfc = unicodedata.normalize("NFC", key)
         v_scores = variant_scores.get(key, {})
         v_disp = variant_display.get(key, {})
         if v_scores:
-            best_lit = max(v_scores, key=lambda lit: (v_scores[lit], lit != key))
+            best_lit = max(v_scores, key=lambda lit: (v_scores[lit], lit != key_nfc))
             display[key] = v_disp.get(best_lit, best_lit)
         elif v_disp:
             first_lit = next(iter(v_disp))

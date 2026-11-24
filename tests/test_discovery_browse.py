@@ -145,6 +145,32 @@ def test_halo_seed_ignores_hal_macron_homonym_and_keeps_memo_keys_distinct(monke
     assert [item["title"] for item in sections_both["new_releases"]] == ["Now Until Forever"]
 
 
+def test_resolve_seed_artist_skips_malformed_ids_and_combining_only_input(monkeypatch):
+    calls = []
+
+    def get(path, params=None, **kwargs):
+        calls.append((path, params))
+        if path == "search/artist":
+            return {"data": [
+                {"id": "bad-id", "name": "Valid Band", "nb_fan": 999999},
+                {"id": 42, "name": "Valid Band", "nb_fan": 10, "picture_big": "https://image.test/42"},
+            ]}
+        if path == "artist/42/related":
+            return {"data": [artist(43, "Related Valid")]}
+        if path == "artist/42/albums":
+            return {"data": []}
+        if path == "artist/43/albums":
+            return {"data": []}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(deezer, "get", get)
+    assert build_browse_sections(["\u0301\u0304"], today=datetime.date(2026, 11, 24))["browse_sections"] == []
+    assert calls == []
+
+    body = build_browse_sections(["Valid Band"], today=datetime.date(2026, 11, 24))
+    assert body["browse_sections"][0]["items"][0]["title"] == "Related Valid"
+
+
 def test_new_releases_sorted_newest_first_with_badge_window_and_dedup(monkeypatch):
     ref_today = datetime.date(2026, 11, 22)
 

@@ -1664,6 +1664,32 @@ def test_select_artist_matches_separates_homonyms_from_diacritic_variants():
     # 0-fan literal stub loses to a 50+ fan accented indie artist.
     assert select("Indie", [{"id": 1, "name": "Indie", "nb_fan": 0}, {"id": 2, "name": "Ïndie", "nb_fan": 75}])[0]["id"] == 2
 
+    # Hangul/Indic scripts (where NFD decomposes without combining marks) must not bypass folded_dominates.
+    hangul_rows = [
+        {"id": 10, "name": "아이유 Cafe", "nb_fan": 0},
+        {"id": 20, "name": "아이유 Café", "nb_fan": 50000},
+    ]
+    assert select("아이유 Cafe", hangul_rows)[0]["id"] == 20
+
+    # When folded_dominates is True, literal artists outrank tiny accented stubs in candidate alternates.
+    zoe_rows = [
+        {"id": 58585, "name": "Zoé", "nb_fan": 1130227},
+        {"id": 99999, "name": "Zöe", "nb_fan": 2},
+        {"id": 5285063, "name": "Zoe", "nb_fan": 562},
+    ]
+    assert [r["id"] for r in select("Zoe", zoe_rows)] == [58585, 5285063, 99999]
+
+    # Duplicate artist IDs are deduplicated and bool/negative/non-numeric fan counts are safe.
+    noisy_rows = [
+        {"id": 1, "name": "Halo", "nb_fan": True},
+        {"id": 2, "name": "Halo", "nb_fan": -50},
+        {"id": 3, "name": "Halo", "nb_fan": "not-a-number"},
+        {"id": 4, "name": "Halo", "nb_fan": 100},
+        {"id": 4, "name": "Halo", "nb_fan": 100},
+        {"id": 5, "name": "HALŌ", "nb_fan": 900},
+    ]
+    assert [r["id"] for r in select("Halo", noisy_rows)] == [4, 1, 2, 3, 5]
+
 
 def test_resolve_artist_id_uses_limit_25_and_caps_candidates_to_8(monkeypatch):
     asked = []
@@ -1682,6 +1708,23 @@ def test_resolve_artist_id_uses_limit_25_and_caps_candidates_to_8(monkeypatch):
     assert resolved == "0"
     assert len(candidates) == 8
     assert [c["deezer_id"] for c in candidates] == [str(i) for i in range(1, 9)]
+
+
+def test_resolve_artist_id_approximate_fallback_only_considers_top_10(monkeypatch):
+    fuzzy_rows = [
+        {"deezer_id": "top-fuzzy", "name": "Daft Punk feat. Friends", "picture": "", "nb_fans": 500, "nb_album": 1},
+        *[
+            {"deezer_id": f"mid-{i}", "name": f"Daft Cover {i}", "picture": "", "nb_fans": 10, "nb_album": 1}
+            for i in range(9)
+        ],
+        {"deezer_id": "tail-mega", "name": "Unrelated Mega Star", "picture": "", "nb_fans": 9999999, "nb_album": 50},
+    ]
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "_artist_search", lambda name, limit=10: fuzzy_rows)
+
+    resolved, candidates = catalog_routes.deezer_catalog.resolve_artist_id("Daft Punk")
+
+    assert resolved == "top-fuzzy"
+    assert all(c["deezer_id"] != "tail-mega" for c in candidates)
 
 
 def test_resolve_album_id_matches_across_diacritics(monkeypatch):
