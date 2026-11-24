@@ -181,7 +181,7 @@ export function createRemoteControl(host: RemoteHost) {
   /** Read the current track and estimate its position from the latest device row. */
   function trackCopy(id: string): { track: Track; positionSec: number } | null {
     const row = deviceRow(id);
-    if (!row || !isOnline(row) || id === host.selfId()) return null;
+    if (!row || !isOnline(row) || id === host.selfId() || row.playing?.mode === 'dj') return null;
     const snapshot = fromRow(row, Date.now() + clockOffsetMs);
     if (!snapshot.track || snapshot.track.unavailable) return null;
     const duration = Number(snapshot.track.duration) || 0;

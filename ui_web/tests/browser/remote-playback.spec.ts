@@ -199,7 +199,16 @@ test('connected mode: device sheet, controlling remote playback, capability hidi
 
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole('radio', { name: /Altavoz Salón/ })).toHaveAttribute('aria-checked', 'true');
-  await expect(sheet.getByRole('button', { name: 'Mover sesión aquí' })).toBeVisible();
+  const deviceAction = sheet.getByRole('button', { name: 'Copiar pista' });
+  await expect(deviceAction).toBeVisible();
+  const [rowBox, actionBox] = await Promise.all([
+    sheet.getByRole('radio', { name: /Altavoz Salón/ }).boundingBox(), deviceAction.boundingBox(),
+  ]);
+  expect(actionBox!.x).toBeGreaterThanOrEqual(rowBox!.x + rowBox!.width);
+  expect(actionBox!.y).toBeLessThan(rowBox!.y + rowBox!.height);
+  sock.emit('device_updated', { device: { ...speakerDevice, playing: { ...speakerDevice.playing, mode: 'dj', rev: 4 } }, server_now_ms: Date.now() });
+  await expect(sheet.getByRole('button', { name: 'Mover DJ aquí' })).toBeVisible();
+  await expect(deviceAction).toHaveCount(0);
   await expect(sheet.locator('[data-device-outdated="legacy-1"]')).toContainText('Actualiza Soundsible en este dispositivo para controlarlo');
 
   // Close sheet with Escape and close Now Playing.
@@ -207,8 +216,11 @@ test('connected mode: device sheet, controlling remote playback, capability hidi
   await expect(sheet).toHaveCount(0);
   await surface.getByRole('button', { name: 'Cerrar' }).click();
 
+  // Return to normal before testing the local and remote normal-player pill.
+  sock.emit('device_updated', { device: { ...speakerDevice, playing: { ...speakerDevice.playing, rev: 5 } }, server_now_ms: Date.now() });
+
   // Controlled device goes offline -> pill shows unreachable; tapping opens sheet with Try again & Use this device.
-  sock.emit('device_updated', { device: { ...speakerDevice, online: false, socket_active: false }, server_now_ms: Date.now() });
+  sock.emit('device_updated', { device: { ...speakerDevice, playing: { ...speakerDevice.playing, rev: 5 }, online: false, socket_active: false }, server_now_ms: Date.now() });
   await expect(omni).toContainText('Altavoz Salón no está accesible');
   if (mobile) {
     await omni.locator('button').first().click();
@@ -281,7 +293,7 @@ test('a fresh player stays local and can copy a remote track without sending a c
     });
   });
   const copiedStream = page.waitForRequest('**/api/static/stream/remote-song**');
-  await sheet.getByRole('button', { name: 'Reproducir una copia aquí' }).click();
+  await sheet.getByRole('button', { name: 'Copiar pista' }).click();
   await copiedStream;
   await expect(sheet).toHaveCount(0);
   await expect(page.locator('[data-omni-player]')).toContainText('Pista del otro dispositivo');

@@ -38,13 +38,13 @@ class DevicesUiTest {
         val peerInstance = java.util.UUID.randomUUID().toString()
         val peerSeq = AtomicLong(0)
         // The peer's own playback, which it publishes after every command like a real target.
-        val peerIndex = AtomicInteger(0); val peerPlaying = AtomicBoolean(true)
+        val peerIndex = AtomicInteger(0); val peerPlaying = AtomicBoolean(true); val peerDj = AtomicBoolean(false)
         val queue = JSONArray().put(entry("peer-a", "Peer first")).put(entry("peer-b", "Peer second"))
         fun peerState(): JSONObject = JSONObject().put("device_id", peerId).put("device_name", "Remote test laptop").put("device_type", "desktop")
             .put("track_id", "member-track").put("track", queue.getJSONObject(peerIndex.get())).put("position_sec", 12).put("is_playing", peerPlaying.get())
             .put("live", JSONObject().put("phase", if (peerPlaying.get()) "playing" else "paused").put("duration", 600).put("dj", JSONObject.NULL))
-            .put("session", JSONObject().put("v", 1).put("mode", "now_playing").put("queue", queue).put("index", peerIndex.get())
-                .put("shuffle", false).put("repeat", "off").put("radio", JSONObject().put("active", false).put("seedId", JSONObject.NULL)).put("auto", JSONObject.NULL))
+            .put("session", JSONObject().put("v", 1).put("mode", if (peerDj.get()) "auto" else "now_playing").put("queue", queue).put("index", peerIndex.get())
+                .put("shuffle", false).put("repeat", "off").put("radio", JSONObject().put("active", false).put("seedId", JSONObject.NULL)).put("auto", if (peerDj.get()) JSONObject().put("profile", "balanced").put("sources", JSONArray()) else JSONObject.NULL))
         fun publish(): Long = core("/api/playback/state", "PUT", peerState().put("instance_id", peerInstance).put("seq", peerSeq.incrementAndGet())).optLong("rev")
         val received = CopyOnWriteArrayList<JSONObject>()
         val released = CountDownLatch(1)
@@ -163,24 +163,28 @@ class DevicesUiTest {
                 while (registered.get() == before && System.nanoTime() < back) Thread.sleep(50)
                 waitFor("$devices==='Playing on Remote test laptop'")
 
-                // "Move session here": the session moves to this phone, the laptop is released, and the player shows this phone.
+                // The remote action follows the laptop's published mode while the player is open.
+                peerDj.set(true)
+                publish()
+                // "Move DJ here" restores the DJ workspace and releases the laptop after the phone starts.
                 web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
-                waitFor("!!${button("[data-connect-sheet] button", "Move session here")}")
-                web.evaluate(scenario, "${button("[data-connect-sheet] button", "Move session here")}.click()")
+                waitFor("!!${button("[data-connect-sheet] button", "Move DJ here")}")
+                web.evaluate(scenario, "${button("[data-connect-sheet] button", "Move DJ here")}.click()")
                 assertTrue("The laptop was never released", released.await(25, TimeUnit.SECONDS))
                 waitFor("$devices==='Devices'")
                 web.evaluate(scenario, "window.__timer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__local=s),100)")
-                waitFor("window.__local?.items?.length===2&&window.__local.index===1&&window.__local.items[1].title==='Peer second'&&window.__local.playWhenReady===true")
+                waitFor("window.__local?.dj?.active===true&&window.__local.index===1&&window.__local.items[1].title==='Peer second'&&window.__local.playWhenReady===true")
 
                 // An independent copy replaces the phone's queue with one track while the laptop keeps playing.
+                peerDj.set(false)
                 peerPlaying.set(true)
                 publish()
                 val beforeCopy = received.size
                 web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
-                val copy = button("[data-connect-sheet] button", "Play a copy here")
+                val copy = button("[data-connect-sheet] button", "Copy track")
                 waitFor("!!$copy")
                 web.evaluate(scenario, "$copy.click()")
-                waitFor("window.__local?.items?.length===1&&window.__local.id==='member-track'&&window.__local.positionMs>=12000&&window.__local.playWhenReady===true")
+                waitFor("window.__local?.items?.length===1&&!window.__local.dj?.active&&window.__local.id==='member-track'&&window.__local.positionMs>=12000&&window.__local.playWhenReady===true")
                 assertEquals("Copy sent a command to the laptop", beforeCopy, received.size)
                 assertTrue("Copy stopped the laptop", peerPlaying.get())
 

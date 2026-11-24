@@ -59,17 +59,18 @@ it('lists this device first, then online devices with their song, and controls t
   expect(mac).toHaveTextContent('Playing');
   expect(group).not.toHaveTextContent('TV');
   // This device has nothing, the Mac has music: the music can come here.
-  expect(screen.getByRole('button', { name: 'Move session here' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Move DJ here' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Copy track' })).toBeNull();
   await fireEvent.click(mac);
   expect(remoteTarget()).toBe('mac');
 });
 
 it('offers one transfer only when its direction is clear', async () => {
   setState('playback', { currentTrack: song, isPlaying: true });
-  const group = await open([device({}), device({ device_id: 'tv', device_name: 'TV', playing })]);
+  const group = await open([device({}), device({ device_id: 'tv', device_name: 'TV', playing: { ...playing, mode: 'normal' } })]);
   await waitFor(() => expect(within(group).getAllByRole('radio')).toHaveLength(3));
   expect(screen.getAllByRole('button', { name: 'Move music here' })).toHaveLength(1);
-  expect(screen.queryByRole('button', { name: 'Move session here' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Move DJ here' })).toBeNull();
 
   mocks.transfer.mockResolvedValue({ status: 'applied', rev: 1 });
   await fireEvent.click(screen.getByRole('button', { name: 'Move music here' }));
@@ -102,9 +103,23 @@ it('can play a copy here with both devices loaded and returns control to this de
   setState('playback', { currentTrack: song, isPlaying: true });
   selectTarget('mac');
   const playCopy = vi.fn(() => true);
-  await open([device({ playing: { ...playing, is_playing: false } })], playCopy);
-  await fireEvent.click(await screen.findByRole('button', { name: 'Play a copy here' }));
+  await open([device({ playing: { ...playing, mode: 'normal', is_playing: false } })], playCopy);
+  await fireEvent.click(await screen.findByRole('button', { name: 'Copy track' }));
   expect(playCopy).toHaveBeenCalledWith(song, 4);
   expect(mocks.transfer).not.toHaveBeenCalled();
   await waitFor(() => expect(remoteTarget()).toBeNull());
+});
+
+it('switches one action from copying a track to moving the DJ session while the sheet is open', async () => {
+  setState('playback', { currentTrack: song });
+  const playCopy = vi.fn(() => true);
+  await open([device({ playing: { ...playing, mode: 'normal' } })], playCopy);
+  const button = await screen.findByRole('button', { name: 'Copy track' });
+  remoteControl.deviceUpdated(device({ playing: { ...playing, rev: 3 } }));
+  expect(screen.getByRole('button', { name: 'Move DJ here' })).toBe(button);
+  expect(screen.queryByRole('button', { name: 'Copy track' })).toBeNull();
+  mocks.transfer.mockResolvedValue({ status: 'applied', rev: 3 });
+  await fireEvent.click(button);
+  expect(playCopy).not.toHaveBeenCalled();
+  expect(mocks.transfer).toHaveBeenCalledWith('mac', state.device.device_id);
 });

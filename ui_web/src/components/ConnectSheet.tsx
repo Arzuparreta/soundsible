@@ -83,11 +83,11 @@ const moveFocus: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (event) => {
 };
 
 /** Which device plays and which one this player controls. Tapping a device
- * controls it; moving the music is the explicit, secondary action. The web
+ * controls it; the trailing action copies a track or moves a session. The web
  * player and the Android app open it with their own controller and device. */
 export function openConnectSheet(control: RemoteControl, self: ConnectSelf): void {
   const { controlledName, devices: remoteDevices, devicesFailed: remoteDevicesFailed, refreshDevices, retryTarget, selectTarget, target: remoteTarget,
-    transferTo, trackCopy, unreachable: remoteUnreachable } = control;
+    transferTo, trackCopy, deviceRow, unreachable: remoteUnreachable } = control;
   const selfId = () => control.host.selfId();
   openOverlay(
     (close) => {
@@ -121,13 +121,20 @@ export function openConnectSheet(control: RemoteControl, self: ConnectSelf): voi
         selectTarget(null);
         return true;
       }
-      // One transfer button, and only when its direction is unambiguous.
-      const transfer = (d: Device) => {
-        const here = Boolean(self.track()), there = Boolean(d.playing?.track), id = selfId();
-        if (here === there || !id) return null;
-        const [from, to] = here ? [id, d.device_id] : [d.device_id, id];
-        return { label: t(here ? 'deviceSheet.moveHere' : 'deviceSheet.listenHere'), run: () => transferTo(from, to) };
-      };
+      function deviceAction(d: Device) {
+        const local = selfId();
+        if (!local) return null;
+        const source = d.playing;
+        if (source?.track) {
+          if (source.mode === 'dj') {
+            return { label: t('deviceSheet.moveDjHere'), run: () => transferTo(d.device_id, local) };
+          }
+          if (source.track.unavailable) return null;
+          return { label: t('deviceSheet.copyTrack'), run: () => copy(d.device_id) };
+        }
+        if (!self.track()) return null;
+        return { label: t('deviceSheet.moveHere'), run: () => transferTo(local, d.device_id) };
+      }
       return (
         <div class={styles.sheet} data-connect-sheet="">
           <h2 class={styles.title}>{t('settings.devices')}</h2>
@@ -162,49 +169,43 @@ export function openConnectSheet(control: RemoteControl, self: ConnectSelf): voi
                 </EmptyState>
               </Show>
             }>
-              <For each={others()} fallback={<EmptyState compact>{t('deviceSheet.emptyOnline')}</EmptyState>}>
-                {(d) => (
-                  <Show when={isControllable(d)} fallback={
-                    <div class={`${styles.row} ${styles.outdated}`} role="radio" aria-checked="false" aria-disabled="true"
-                      data-device-outdated={d.device_id}>
-                      <span class={styles.icon}>{deviceIcon(d.form_factor, d.device_type)}</span>
-                      <span class={styles.body}>
-                        <span class={styles.ellipsis}>{deviceName(d)}</span>
-                        <span class={styles.song}>{t('deviceSheet.updateToControl')}</span>
-                      </span>
-                    </div>
-                  }>
-                    <div class={styles.entry}>
-                      <Row
-                        selected={remoteTarget() === d.device_id}
-                        id={d.device_id}
-                        name={deviceName(d)}
-                        icon={deviceIcon(d.form_factor, d.device_type)}
-                        badge={d.playing?.mode === 'dj' ? t('autoMode.label') : undefined}
-                        track={d.playing?.track}
-                        playing={d.playing?.is_playing}
-                        tabStop={remoteTarget() === d.device_id}
-                        onSelect={() => control(d.device_id)}
-                      />
-                      <Show when={d.playing?.track && !d.playing.track.unavailable || transfer(d)}>
-                        <div class={styles.entryActions}>
-                          <Show when={d.playing?.track && !d.playing.track.unavailable}>
-                            <Button variant="secondary" size="sm" disabled={busy()} aria-busy={busy()}
-                              onClick={() => void run(() => copy(d.device_id))}>
-                              {t('deviceSheet.playCopyHere')}
-                            </Button>
-                          </Show>
-                          <Show when={transfer(d)}>
-                            {(move) => (
-                              <Button variant="ghost" size="sm" disabled={busy()} aria-busy={busy()}
-                                onClick={() => void run(move().run)}>
-                                {move().label}
+              <For each={others().map(d => d.device_id)} fallback={<EmptyState compact>{t('deviceSheet.emptyOnline')}</EmptyState>}>
+                {(id) => (
+                  <Show when={deviceRow(id)}>
+                    {(d) => (
+                      <Show when={isControllable(d())} fallback={
+                        <div class={`${styles.row} ${styles.outdated}`} role="radio" aria-checked="false" aria-disabled="true"
+                          data-device-outdated={d().device_id}>
+                          <span class={styles.icon}>{deviceIcon(d().form_factor, d().device_type)}</span>
+                          <span class={styles.body}>
+                            <span class={styles.ellipsis}>{deviceName(d())}</span>
+                            <span class={styles.song}>{t('deviceSheet.updateToControl')}</span>
+                          </span>
+                        </div>
+                      }>
+                        <div class={styles.entry}>
+                          <Row
+                            selected={remoteTarget() === d().device_id}
+                            id={d().device_id}
+                            name={deviceName(d())}
+                            icon={deviceIcon(d().form_factor, d().device_type)}
+                            badge={d().playing?.mode === 'dj' ? t('autoMode.label') : undefined}
+                            track={d().playing?.track}
+                            playing={d().playing?.is_playing}
+                            tabStop={remoteTarget() === d().device_id}
+                            onSelect={() => control(d().device_id)}
+                          />
+                          <Show when={deviceAction(d())}>
+                            {(action) => (
+                              <Button variant="ghost" size="sm" class={styles.entryAction} disabled={busy()} aria-busy={busy()}
+                                onClick={() => void run(action().run)}>
+                                {action().label}
                               </Button>
                             )}
                           </Show>
                         </div>
                       </Show>
-                    </div>
+                    )}
                   </Show>
                 )}
               </For>
