@@ -329,14 +329,14 @@
 .references p { margin: 0 0 var(--space-xs); font-size: var(--text-caption); color: var(--ink-secondary); }
 .references[data-target] { background: var(--accent-faint); box-shadow: inset 0 0 0 1px var(--accent); }
 .references[data-over] { box-shadow: inset 0 0 0 2px var(--accent); }
-.referenceEmpty { display: block; width: 100%; text-align: left; padding: var(--space-xs) 0; color: var(--ink-secondary); background: transparent; border: 0; font: inherit; font-size: var(--text-caption); line-height: 1.5; cursor: pointer; }
+.referenceEmpty { display: flex; align-items: center; min-height: var(--control-h); width: 100%; text-align: left; padding: var(--space-xs) 0; color: var(--ink-secondary); background: transparent; border: 0; font: inherit; font-size: var(--text-caption); line-height: 1.5; cursor: pointer; }
 .referenceRows { max-height: calc(var(--control-h) * 2); overflow: hidden; }
 .referenceRow { display: flex; align-items: center; gap: var(--space-sm); min-height: var(--control-h); }
 .referenceCover { flex: 0 0 28px; height: 28px; border-radius: var(--radius-xs); }
 .referenceName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-caption); }
 .referenceRow small { color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
 .referenceRemove { display: inline-flex; align-items: center; justify-content: center; min-width: var(--control-h); min-height: var(--control-h); padding: 0; color: var(--ink-secondary); font: inherit; background: transparent; border: 0; border-radius: var(--radius-full); cursor: pointer; }
-.referenceMore { color: var(--accent-ink); font: inherit; font-size: var(--text-caption); font-weight: var(--fw-semibold); background: transparent; border: 0; padding: var(--space-xs) 0; cursor: pointer; }
+.referenceMore { display: inline-flex; align-items: center; min-height: var(--control-h); color: var(--accent-ink); font: inherit; font-size: var(--text-caption); font-weight: var(--fw-semibold); background: transparent; border: 0; padding: var(--space-xs) 0; cursor: pointer; }
 .referenceSheet { padding: var(--space-lg); }
 .referenceSheet button { background: none; border: 0; color: var(--ink-primary); min-width: var(--control-h); min-height: var(--control-h); }
 .routePanel, .routeList { min-width: 0; }

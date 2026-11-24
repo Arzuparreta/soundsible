@@ -279,3 +279,35 @@ describe('whole-pill hold', () => {
   });
 
 });
+
+describe('OmniBar mute button', () => {
+  it('keeps the Mute label and unpressed state at volume 0 while showing a silent icon', () => {
+    const previousVolume = state.playback.volume;
+    const previousMuted = state.playback.muted;
+    try {
+      state.playback.volume = 0.8;
+      state.playback.muted = false;
+      const audible = render(() => <OmniBar />);
+      const audibleSvg = screen.getByRole('button', { name: 'omnibar.mute' }).innerHTML;
+      audible.unmount();
+
+      state.playback.volume = 0.8;
+      state.playback.muted = true;
+      const explicitMute = render(() => <OmniBar />);
+      const mutedSvg = screen.getByRole('button', { name: 'omnibar.unmute' }).innerHTML;
+      explicitMute.unmount();
+
+      state.playback.volume = 0;
+      state.playback.muted = false;
+      render(() => <OmniBar />);
+      const zeroVolume = screen.getByRole('button', { name: 'omnibar.mute' });
+      expect(zeroVolume).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByRole('button', { name: 'omnibar.unmute' })).toBeNull();
+      expect(zeroVolume.innerHTML).toBe(mutedSvg);
+      expect(zeroVolume.innerHTML).not.toBe(audibleSvg);
+    } finally {
+      state.playback.volume = previousVolume;
+      state.playback.muted = previousMuted;
+    }
+  });
+});

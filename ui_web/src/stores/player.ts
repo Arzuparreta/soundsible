@@ -65,10 +65,12 @@ export function player(): PlayerView {
 }
 
 /**
- * Whether playback reads as silent across the dock, stage and mini-player:
- * either explicit mute or volume dialed down to zero.
+ * Whether playback reads visually silent across the dock, stage and mini-player:
+ * either explicit mute or volume dialed down to zero. Mute/unmute action labels
+ * and `aria-pressed` must still read `player().playback.muted`, since `toggleMute()`
+ * toggles the mute flag without changing volume.
  */
-export function isPlaybackMuted(): boolean {
+export function isPlaybackSilent(): boolean {
   const playback = player().playback;
   return Boolean(playback.muted || playback.volume === 0);
 }

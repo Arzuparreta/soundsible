@@ -1,8 +1,9 @@
 import { createEffect, createSignal, createUniqueId, onCleanup, Show } from 'solid-js';
-import { isPlaybackMuted, player } from '../stores/player';
+import { isPlaybackSilent, player } from '../stores/player';
 import { t } from '../lib/i18n';
 import { playerCompact } from '../lib/playerDock';
 import { detectFormFactor } from '../lib/deviceIdentity';
+import { isPodcastTrack } from '../lib/track';
 import { Control } from '../design/Control';
 import { KaraokeMicIcon, QueueListIcon, RadioIcon, VolumeIcon } from './icons';
 import { onStopRadio } from './RadioBadge';
@@ -28,8 +29,6 @@ const VOLUME_DISMISS_MS = 160;
  */
 export function PlayerCompactDock(props: {
   auto: boolean;
-  hasTrack: boolean;
-  podcast: boolean;
   lyricsActive: boolean;
   listActive: boolean;
   listCount: number;
@@ -47,12 +46,27 @@ export function PlayerCompactDock(props: {
   let volumeDismissTimer: ReturnType<typeof setTimeout> | undefined;
 
   const current = () => player().playback.currentTrack;
+  const podcast = () => {
+    const track = current();
+    return Boolean(track && isPodcastTrack(track));
+  };
+  const lyricsLabel = () => (props.lyricsActive ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics'));
+  const listLabel = () => (props.auto ? t('autoMode.panel.route') : t('nowPlaying.panel.queue'));
+  const radioLabel = () => (player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio'));
+  const volumeLabel = () => (mobileWeb ? t(player().playback.muted ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume'));
 
   const cancelVolumeDismiss = () => clearTimeout(volumeDismissTimer);
   onCleanup(cancelVolumeDismiss);
   const closeVolume = () => {
     cancelVolumeDismiss();
     setVolumeOpen(false);
+  };
+  // Focus returns before closeVolume() so :focus-visible on volumeTrigger cannot immediately reopen the popup.
+  const dismissKeepingTriggerFocus = () => {
+    if (volumePopup?.contains(document.activeElement)) {
+      volumeTrigger?.focus({ preventScroll: true });
+    }
+    closeVolume();
   };
   const openVolume = () => {
     if (mobileWeb) return;
@@ -74,28 +88,31 @@ export function PlayerCompactDock(props: {
     const dismiss = (event: Event) => {
       if (event.target instanceof Node && !volumeRoot?.contains(event.target) && !volumePopup?.contains(event.target)) closeVolume();
     };
+    // Only dismiss when the scrolling container moves the dock itself, not sibling panes like synced lyrics.
+    const dismissOnScroll = (event: Event) => {
+      if (!volumeRoot || !(event.target instanceof Node) || event.target.contains(volumeRoot)) {
+        dismissKeepingTriggerFocus();
+      }
+    };
     // Escape layer order: OverlayOutlet (window capture) > inline volume popover
     // (document capture while open) > Lyrics (document bubble) > player (window bubble).
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (volumePopup?.contains(document.activeElement)) {
-        volumeTrigger?.focus({ preventScroll: true });
-      }
-      closeVolume();
+      dismissKeepingTriggerFocus();
     };
     document.addEventListener('pointerdown', dismiss, true);
     document.addEventListener('focusin', dismiss, true);
-    document.addEventListener('scroll', closeVolume, true);
+    document.addEventListener('scroll', dismissOnScroll, true);
     document.addEventListener('keydown', onEscape, true);
-    window.addEventListener('resize', closeVolume);
+    window.addEventListener('resize', dismissKeepingTriggerFocus);
     onCleanup(() => {
       document.removeEventListener('pointerdown', dismiss, true);
       document.removeEventListener('focusin', dismiss, true);
-      document.removeEventListener('scroll', closeVolume, true);
+      document.removeEventListener('scroll', dismissOnScroll, true);
       document.removeEventListener('keydown', onEscape, true);
-      window.removeEventListener('resize', closeVolume);
+      window.removeEventListener('resize', dismissKeepingTriggerFocus);
     });
   });
 
@@ -107,13 +124,13 @@ export function PlayerCompactDock(props: {
       data-compact-dock=""
     >
       <div class={styles.dockViews}>
-        <Show when={props.hasTrack && !props.podcast}>
+        <Show when={current() && !podcast()}>
           <Control
             ref={props.lyricsButtonRef}
             class={styles.dockPill}
             classList={{ [styles.dockPillActive]: props.lyricsActive }}
-            aria-label={props.lyricsActive ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
-            title={props.lyricsActive ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics')}
+            aria-label={lyricsLabel()}
+            title={lyricsLabel()}
             aria-pressed={props.lyricsActive}
             data-compact-lyrics-toggle=""
             onClick={() => props.onToggleLyrics()}
@@ -126,16 +143,14 @@ export function PlayerCompactDock(props: {
         <Control
           class={styles.dockPill}
           classList={{ [styles.dockPillActive]: props.listActive }}
-          aria-label={props.auto ? t('autoMode.panel.route') : t('nowPlaying.panel.queue')}
-          title={props.auto ? t('autoMode.panel.route') : t('nowPlaying.panel.queue')}
+          aria-label={listLabel()}
+          title={listLabel()}
           aria-pressed={props.listActive}
           data-compact-list-toggle=""
           onClick={() => props.onToggleList()}
         >
           <QueueListIcon size={16} />
-          <span class={styles.dockPillLabel}>
-            {props.auto ? t('autoMode.panel.route') : t('nowPlaying.panel.queue')}
-          </span>
+          <span class={styles.dockPillLabel}>{listLabel()}</span>
           <Show when={props.listCount > 0}>
             <span class={styles.dockBadge}>{props.listCount}</span>
           </Show>
@@ -143,15 +158,15 @@ export function PlayerCompactDock(props: {
       </div>
 
       <div class={styles.dockUtils}>
-        <Show when={!props.auto && props.hasTrack && !props.podcast}>
+        <Show when={!props.auto && current() && !podcast()}>
           <Control
             class={styles.dockIconBtn}
             classList={{
               [styles.dockIconOn]: Boolean(player().playback.radioMode),
               [styles.dockIconPulse]: Boolean(player().playback.radioLoading),
             }}
-            aria-label={player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
-            title={player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio')}
+            aria-label={radioLabel()}
+            title={radioLabel()}
             aria-pressed={Boolean(player().playback.radioMode)}
             onClick={() => {
               const track = current();
@@ -173,13 +188,13 @@ export function PlayerCompactDock(props: {
             <Control
               class={styles.dockIconBtn}
               classList={{ [styles.dockIconOn]: volumeOpen() }}
-              aria-label={mobileWeb ? t(isPlaybackMuted() ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
+              aria-label={volumeLabel()}
               aria-expanded={mobileWeb ? undefined : volumeOpen()}
               aria-controls={!mobileWeb && volumeOpen() ? volumeId : undefined}
               aria-pressed={mobileWeb ? Boolean(player().playback.muted) : undefined}
               aria-busy={player().pending('mute') || undefined}
               data-pending={player().pending('mute') || undefined}
-              title={mobileWeb ? t(isPlaybackMuted() ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
+              title={volumeLabel()}
               ref={volumeTrigger}
               onPointerEnter={(event) => { if (event.pointerType === 'mouse') openVolume(); }}
               onPointerLeave={leaveVolume}
@@ -193,7 +208,7 @@ export function PlayerCompactDock(props: {
               }}
               onClick={() => { if (player().can('transport.set_muted')) player().actions.toggleMute(); }}
             >
-              <VolumeIcon muted={isPlaybackMuted()} size={20} />
+              <VolumeIcon muted={isPlaybackSilent()} size={20} />
             </Control>
             <Show when={!mobileWeb && volumeOpen()}>
               <div

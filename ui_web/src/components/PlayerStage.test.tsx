@@ -81,6 +81,27 @@ describe('PlayerStage lyrics transition', () => {
     fireEvent.input(slider, { target: { value: '50' } });
     expect(actions.setVolume).toHaveBeenCalledWith(expect.closeTo(0.1, 10));
   });
+
+  it('keeps the Mute label and unpressed state when volume is 0 but playback is not muted', () => {
+    const previousVolume = state.playback.volume;
+    const previousMuted = state.playback.muted;
+    state.playback.volume = 0;
+    state.playback.muted = false;
+    try {
+      const first = render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+      const muteButton = screen.getByRole('button', { name: 'omnibar.mute' });
+      expect(muteButton).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByRole('button', { name: 'omnibar.unmute' })).toBeNull();
+      first.unmount();
+
+      state.playback.muted = true;
+      render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+      expect(screen.getByRole('button', { name: 'omnibar.unmute' })).toHaveAttribute('aria-pressed', 'true');
+    } finally {
+      state.playback.volume = previousVolume;
+      state.playback.muted = previousMuted;
+    }
+  });
 });
 
 

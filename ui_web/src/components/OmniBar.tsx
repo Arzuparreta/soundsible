@@ -4,7 +4,7 @@ import { ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, setNowPlayingOpen } from '../stores';
-import { advancePlayback, isPlaybackMuted, player } from '../stores/player';
+import { advancePlayback, isPlaybackSilent, player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
 import { mobileListLayout } from '../lib/listLayout';
 import { OmniSeek } from './OmniSeek';
@@ -257,13 +257,13 @@ export function OmniBar() {
             <button
               class={styles.soundBtn}
               type="button"
-              aria-label={isPlaybackMuted() ? t('omnibar.unmute') : t('omnibar.mute')}
+              aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
               aria-pressed={player().playback.muted}
               aria-busy={player().pending('mute') || undefined}
               data-pending={player().pending('mute') || undefined}
               onClick={() => player().actions.toggleMute()}
             >
-              <VolumeIcon muted={isPlaybackMuted()} size={19} />
+              <VolumeIcon muted={isPlaybackSilent()} size={19} />
             </button>
           </Show>
 

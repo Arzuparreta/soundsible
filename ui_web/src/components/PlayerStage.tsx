@@ -3,7 +3,7 @@ import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { isSavedTrack } from '../stores';
-import { advancePlayback, isPlaybackMuted, player } from '../stores/player';
+import { advancePlayback, isPlaybackSilent, player } from '../stores/player';
 import { clockTime } from '../lib/format';
 import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
@@ -110,14 +110,14 @@ export function PlayerStage(props: {
       <Control
         class={styles.actBtn}
         classList={{ [styles.actOn]: player().playback.muted }}
-        aria-label={isPlaybackMuted() ? t('omnibar.unmute') : t('omnibar.mute')}
+        aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
         aria-pressed={player().playback.muted}
         aria-busy={player().pending('mute') || undefined}
         data-pending={player().pending('mute') || undefined}
-        title={isPlaybackMuted() ? t('omnibar.unmute') : t('omnibar.mute')}
+        title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
         onClick={() => player().actions.toggleMute()}
       >
-        <VolumeIcon muted={isPlaybackMuted()} size={20} />
+        <VolumeIcon muted={isPlaybackSilent()} size={20} />
       </Control>
     </Show>
   );

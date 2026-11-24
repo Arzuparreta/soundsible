@@ -457,6 +457,34 @@ describe('PlayerSurface', () => {
     expect(lyricsToggle).toHaveFocus();
   });
 
+  it('keeps the compact volume popover open on sibling lyrics scroll and restores trigger focus on ancestor scroll', async () => {
+    harness.desktop = true;
+    setCompactViewport(420);
+    render(() => <PlayerSurface />);
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.showLyrics' }));
+    const lyricsView = await screen.findByLabelText('nowPlaying.lyricsLabel');
+
+    const volumeButton = screen.getByRole('button', { name: 'omnibar.volume' });
+    const enter = new Event('pointerenter', { bubbles: true });
+    Object.defineProperty(enter, 'pointerType', { value: 'mouse' });
+    volumeButton.dispatchEvent(enter);
+
+    const slider = await screen.findByRole('slider', { name: 'omnibar.volume' });
+    slider.focus();
+    expect(slider).toHaveFocus();
+
+    // Browser scroll events do not bubble; document's capture listener still receives them.
+    lyricsView.dispatchEvent(new Event('scroll'));
+    await Promise.resolve();
+    expect(screen.getByRole('slider', { name: 'omnibar.volume' })).toBeInTheDocument();
+    expect(slider).toHaveFocus();
+
+    document.dispatchEvent(new Event('scroll'));
+    await Promise.resolve();
+    expect(screen.queryByRole('slider', { name: 'omnibar.volume' })).toBeNull();
+    expect(volumeButton).toHaveFocus();
+  });
+
   it('ignores Escape while typing in a text field beside the docked player', async () => {
     harness.desktop = true;
     setCompactViewport(420);

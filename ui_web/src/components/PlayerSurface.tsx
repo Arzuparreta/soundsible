@@ -99,7 +99,7 @@ export function PlayerSurface() {
   const current = createMemo(() => player().playback.currentTrack);
   const podcast = createMemo(() => Boolean(current() && isPodcastTrack(current()!)));
   const auto = createMemo(() => player().autoMode.active);
-  const autoAvailable = createMemo(() => !current() || !isPodcastTrack(current()!));
+  const autoAvailable = createMemo(() => !podcast());
   const art = createMemo(() => {
     const track = current();
     return track ? trackCoverUrl(track, 'thumb') ?? '' : '';
@@ -779,8 +779,6 @@ export function PlayerSurface() {
         <Show when={playerCompact() && (current() || auto())}>
           <PlayerCompactDock
             auto={auto()}
-            hasTrack={Boolean(current())}
-            podcast={podcast()}
             lyricsActive={compactLyrics()}
             listActive={!compactLyrics() && isListPanel()}
             listCount={listCount()}
