@@ -1,9 +1,9 @@
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { trackSearchFields } from '../lib/librarySearch';
 import { createMemo, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { favouriteRows, state } from '../stores';
 import { player } from '../stores/player';
-import { useAppBar } from '../lib/appBar';
-import { desktopShell } from '../lib/shellLayout';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import { trackCount } from '../lib/format';
@@ -33,6 +33,9 @@ const context = () => favouritesContext(t('favourites.title'));
  */
 export default function Favourites() {
   const rows = createMemo(() => favouriteRows().filter((row) => !isPodcastTrack(row.track)));
+  const search = createCollectionSearch();
+  const visibleRows = search.filter(rows, row => trackSearchFields(row.track));
+  const visibleTracks = createMemo(() => visibleRows().map(row => row.track));
   const favTracks = createMemo<Track[]>(() => rows().map((row) => row.track));
 
   /**
@@ -43,7 +46,7 @@ export default function Favourites() {
    * common case is one fast round trip and the rare case is an honest error.
    */
   const play = async (tracks: Track[], index: number) => {
-    const row = rows()[index];
+    const row = visibleRows()[index];
     if (!row || savedIsPlayable(row.entry, row.track)) {
       player().actions.playFrom(tracks, index, { context: context() });
       return;
@@ -64,28 +67,24 @@ export default function Favourites() {
     }
   };
 
-  useAppBar({
-    title: () => t('favourites.title'),
-
-  });
-
   return (
     <div class="view">
-      <Show when={desktopShell()}>
-        <ViewHeader
-          title={t('favourites.title')}
-          meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
-          actions={player().autoMode.active ? (
-            <CollectionActions title={t('favourites.title')} tracks={favTracks()} />
-          ) : undefined}
-        />
+      <ViewHeader
+        title={t('favourites.title')}
+        meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
+        actions={player().autoMode.active ? (
+          <CollectionActions title={t('favourites.title')} tracks={favTracks()} />
+        ) : undefined}
+      />
+      <Show when={rows().length}>
+        <CollectionSearch search={search} inset />
       </Show>
       <TrackList
-        tracks={favTracks()}
+        tracks={visibleTracks()}
         context={context()}
         onPlay={(tracks, index) => void play(tracks, index)}
-        loading={state.loading}
-        empty={(
+        loading={state.loading && !rows().length}
+        empty={rows().length ? <NoCollectionMatches /> : (
           <EmptyState>
             <p>{t('favourites.empty')}</p>
             {/* The hearts are given in the library, so that is the way on. */}

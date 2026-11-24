@@ -1,4 +1,4 @@
-import { createResponsiveTap } from '../lib/responsiveTap';
+import { EntityHero, EntityMenuCover } from '../components/EntityHero';
 import { openSavedEntityMenu } from '../components/savedEntityActions';
 import { CollectionControl } from '../components/CollectionControl';
 import Button from '../components/Button';
@@ -6,10 +6,8 @@ import { Control } from '../design/Control';
 import { CollectionActions } from '../components/CollectionActions';
 import { blockedByPodcast, firstPlayable, startDjFromCatalog, startDjFromTracks } from '../lib/djStart';
 import { openActionMenu } from '../components/ActionMenu';
-import { BackIcon, PlayIcon, RadioIcon, menuIcons } from '../components/icons';
+import { PlayIcon, RadioIcon, menuIcons } from '../components/icons';
 import { EntityViewSelect } from '../components/EntityViewSelect';
-import { useAppBar } from '../lib/appBar';
-import { desktopShell } from '../lib/shellLayout';
 import { CoverImage } from '../components/CoverImage';
 import { MusicLink } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, on, Show, onCleanup } from 'solid-js';
@@ -342,15 +340,6 @@ export default function Artist() {
   // A page with no way back in history sits on the search it belongs to.
   const back = () => navigateBackOr(navigate, tabRoot('/search') ?? '/search');
   let openCollectionMenu = () => {};
-  const coverMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
-  const titleMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
-  const headerContextMenu = (event: MouseEvent) => {
-    event.preventDefault();
-    openCollectionMenu();
-  };
-  const [heading, setHeading] = createSignal<HTMLElement>();
-  useAppBar({ title: name, back, backLabel: () => t('artist.ariaBack'), heading });
-
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;
   const radioLabel = () => t(player().autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');
 
@@ -361,32 +350,16 @@ export default function Artist() {
         class={hero.page}
         data-primary-scroll
       >
-        <header class={hero.header}>
-        <Show when={desktopShell()}>
-          <button class={hero.back} type="button" aria-label={t('artist.ariaBack')} onClick={back}>
-            <BackIcon size={20} />
-          </button>
-        </Show>
-
-        <div class={hero.hero}>
-          <button type="button" classList={{ [hero.art]: true, [hero.round]: true }} data-testid="collection-header-cover"
-            aria-label={`${t('savedEntities.options')}: ${name()}`} aria-haspopup="dialog"
-            {...coverMenuTap} onContextMenu={headerContextMenu} style={{ background: coverGradient(name()) }}>
-            <CoverImage src={cover()} eager />
-            <Show when={!cover()}>
-              <span class={hero.initial} aria-hidden="true">{(name()[0] ?? '?').toUpperCase()}</span>
-            </Show>
-          </button>
-          <div class={hero.identity}>
-            <h1 ref={setHeading} class={hero.title}><button type="button" class={hero.titleButton}
-              data-testid="collection-header-name" aria-haspopup="dialog" title={t('savedEntities.options')}
-              {...titleMenuTap} onContextMenu={headerContextMenu}>{name()}</button></h1>
+        <EntityHero name={name()} back={back} backLabel={t('artist.ariaBack')}
+          openMenu={() => openCollectionMenu()}
+          art={<EntityMenuCover name={name()} cover={cover()} round onOpen={() => openCollectionMenu()} />}
+          metadata={<>
             <span class={hero.meta}>
               <Show when={currentProfile()?.metadata?.nb_fans}>
                 <span>{fansLabel(currentProfile()!.metadata!.nb_fans)}</span>
               </Show>
             </span>
-          </div>
+          </>}>
           <div class={hero.toolbar} data-entity-toolbar>
             <Show when={showToggle()} fallback={<span class={hero.context}>{t('artist.discover')}</span>}>
               <EntityViewSelect label={t('entityView.label')} value={view()} onChange={value => switchView(value as ViewMode)}
@@ -430,9 +403,7 @@ export default function Artist() {
               entity={{ kind: 'artist', name: name(), cover: cover(), destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }) }}
               deezerId={viewParams().deezerId ?? (currentProfile()?.deezer_id || undefined)} />
           </div>
-        </div>
-
-        </header>
+        </EntityHero>
 
         <Show
           when={view() === 'discover' && profile.loading && !currentProfile()}
@@ -496,7 +467,7 @@ function DiscoverView(props: {
 }) {
   return <ArtistDiscoveryView topTracks={props.topTracks} albums={props.albums} singlesEps={props.singlesEps}
     latestRelease={props.latestRelease} related={props.related} loading={props.loading} artistName={props.artistName}
-    renderSong={(item, index, queue) => <CatalogResultRow item={item} index={index} active={isPlayingItem(item)}
-      saving={props.saving.has(item.id)} onPlay={() => props.onPlayItem(item, queue)} onDownload={() => props.onSaveItem(item)} />}
+    renderSong={(item, index, queue) => <CatalogResultRow item={item} index={index()} active={isPlayingItem(item)}
+      saving={props.saving.has(item.id)} onPlay={() => props.onPlayItem(item, queue())} onDownload={() => props.onSaveItem(item)} />}
     renderLink={link => <MusicLink class={link.class} path={link.entity.destination} onMenu={event => void openSavedEntityMenu(link.entity, event)}>{link.children}</MusicLink>} />;
 }

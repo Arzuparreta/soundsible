@@ -7,9 +7,7 @@
 }
 
 /* On the desktop the page header already spaces the top. */
-.bar[data-under-header] {
-  padding-top: 0;
-}
+
 
 .scroll {
   flex: 1;

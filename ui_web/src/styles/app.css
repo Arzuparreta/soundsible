@@ -210,11 +210,20 @@ html[data-hold-gesture] *:not(input):not(textarea) {
 
    Scoped to the shell's own attribute because the pill hides itself while
    nothing is playing: no pill, nothing to clear. */
+main:has(> [data-page-indicator]) [data-primary-scroll]::after {
+  display: block;
+  flex: 0 0 auto;
+  height: var(--page-indicator-room);
+  content: '';
+}
+
+/* Same specificity as the rule above and later, so it wins where both apply;
+   the page indicator's room (app.module.css) is added on top of the pill's. */
 @media (max-width: 1023px) {
-  [data-mini-player] [data-primary-scroll]::after {
+  [data-mini-player] main [data-primary-scroll]::after {
     display: block;
     flex: 0 0 auto;
-    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px);
+    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px + var(--page-indicator-room, 0px));
     content: '';
   }
 }

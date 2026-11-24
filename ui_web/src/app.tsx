@@ -9,7 +9,7 @@ import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
 import { OmniBar } from './components/OmniBar';
 import { DjErrandBanner } from './components/DjErrandBanner';
-import { AppBar } from './components/AppBar';
+import { AppBar, PageIndicator } from './components/AppBar';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
 import { ScrollHistoryManager } from './lib/scrollHistory';
@@ -62,6 +62,7 @@ export default function Shell(props: RouteSectionProps) {
         <DjErrandBanner />
         {/* The routes scroll here, under a bar that never moves. */}
         <div class={styles.outlet} data-app-outlet>{props.children}</div>
+        <PageIndicator />
       </main>
       <div class={styles.dock}>
         <OmniBar />

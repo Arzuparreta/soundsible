@@ -1,3 +1,5 @@
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { trackSearchFields } from '../lib/librarySearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { request } from '../lib/http';
@@ -75,7 +77,7 @@ export default function NativeEntityProfile(props: {
     return props.tracks.filter(track => selected.has(track.id) || !!provider && (props.subject.kind === 'artist' ? track.deezer_artist_id === provider : track.deezer_album_id === provider));
   });
   const view = () => resolveViewMode({ urlView: props.subject.view, override: override(), canToggle: owned().length > 0 });
-  const songs = () => view() === 'library' ? owned().map((track): CatalogItem => ({ id: `library:${track.id}`, type: 'library_track', source: 'library', track_id: track.id, title: track.title, artist: track.artist, raw: { ...track } }))
+  const songs = () => view() === 'library' ? owned().map((track): CatalogItem => ({ id: `library:${track.id}`, type: 'library_track', source: 'library', track_id: track.id, title: track.title, artist: track.artist, album: track.album ?? undefined, raw: { ...track } }))
     : props.subject.kind === 'artist' ? discovered().slice(0, 10) : discovered();
   const bookmark = () => nativeProfileBookmark({ ...props.subject, view: view() }, profile.profile());
   const subject = () => ({ ...props.subject, deezerId: props.subject.deezerId ?? profile.profile()?.deezer_id ?? undefined });
@@ -118,12 +120,12 @@ export default function NativeEntityProfile(props: {
     ? t('collectionControl.downloading', { done: collectionArrivedCount(collection.job()), total: collection.job()?.selected_track_count ?? 0 })
     : step() === 'review' ? t('collectionControl.review', { n: jobReviewCount(collection.job()) })
     : t('collectionControl.missing', { n: jobMissingCount(collection.job()) });
-  const songRow = (item: CatalogItem, index: number, queue: CatalogItem[]) => {
+  const songRow = (item: CatalogItem, index: () => number, queue: () => CatalogItem[]) => {
     const track = () => props.catalog.trackFor(item);
     return <MusicListRowView playback title={item.title} subtitle={itemArtist(item)} seed={item.id}
       cover={track() && track()?.source !== 'preview' ? coverUrl(track()!.id, 'thumb') : item.cover}
       active={!!track() && !!props.isActive?.(track()!)} busy={props.catalog.pending() === item.id}
-      disabled={props.disconnected} onActivate={() => void props.catalog.playCollection(queue, index - 1, context())} onMenu={event => props.onTrackMenu(item, event)} />;
+      disabled={props.disconnected} onActivate={() => void props.catalog.playCollection(queue(), index() - 1, context())} onMenu={event => props.onTrackMenu(item, event)} />;
   };
   const albumArtist = () => album()?.artist || props.subject.artist || '';
   const albumMetaParts = createMemo(() => {
@@ -147,6 +149,10 @@ export default function NativeEntityProfile(props: {
     const tap = createResponsiveTap({ onTap: () => props.onOpen(link.entity.destination), onLongPress: () => props.onEntityMenu?.(link.entity) });
     return <button type="button" class={link.class} aria-label={link.entity.name} data-entity-destination={link.entity.destination} disabled={props.disconnected} {...tap}>{link.children}</button>;
   };
+  const trackSearch = createCollectionSearch();
+  const matches = trackSearch.filter(songs, trackSearchFields);
+  createEffect(on(() => [props.subject, view()] as const, () => trackSearch.setValue(''), { defer: true }));
+
   return <section class={`${styles.library} ${profileStyles.profile}`} data-testid="android-entity-profile">
     <header class={`${hero.header} ${profileStyles.header}`}>
       <button class={`${hero.back} ${profileStyles.back}`} type="button" aria-label={t('artist.ariaBack')} onClick={props.onBack}><BackIcon size={20} /></button>
@@ -198,7 +204,12 @@ export default function NativeEntityProfile(props: {
     <Show when={profile.profile()?.partial_failures?.length}><p role="status">{t('musicExplorer.partial')}</p></Show>
     <Show when={profile.loading() || libraryLoading()}><p role="status">{t('common.loading')}</p></Show>
     <Show when={view() === 'discover' && artist()} fallback={<>
-      <For each={songs()} fallback={<Show when={!profile.loading() && !libraryLoading()}><EmptyState>{t('artist.empty')}</EmptyState></Show>}>{(item, index) => songRow(item, index() + 1, songs())}</For>
+      <Show when={songs().length} fallback={
+        <Show when={!profile.loading() && !libraryLoading() && !profile.error() && !libraryError()}><EmptyState>{t('artist.empty')}</EmptyState></Show>
+      }>
+        <CollectionSearch search={trackSearch} />
+        <For each={matches()} fallback={<NoCollectionMatches />}>{(item, index) => songRow(item, () => index() + 1, matches)}</For>
+      </Show>
       <Show when={view() === 'discover' && album()?.label}>
         <p class={profileStyles.labelCredit}>℗ {album()!.label}</p>
       </Show>

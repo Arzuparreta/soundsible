@@ -92,6 +92,24 @@ describe('PodcastShow feed too long to read at once (#250)', () => {
     expect(screen.queryByRole('button', LOAD_MORE)).not.toBeInTheDocument();
   });
 
+  it('finds a matching episode when another page is loaded with a filter active', async () => {
+    apiMock.browsePodcastFeed
+      .mockResolvedValueOnce({ episodes: [episode(1)], show: { title: 'My Show' }, next: 1 })
+      .mockResolvedValueOnce({ episodes: [{ ...episode(2), title: 'Café del mar' }], next: null });
+    render(() => <PodcastShow />);
+
+    const search = await screen.findByRole('searchbox', { name: 'Search loaded episodes' });
+    fireEvent.input(search, { target: { value: 'CAFE' } });
+    expect(screen.getByText('No matches in this list.')).toBeInTheDocument();
+    expect(apiMock.browsePodcastFeed).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', LOAD_MORE));
+
+    expect(await screen.findByText('Café del mar')).toBeInTheDocument();
+    expect(screen.queryByText('Episode 1')).not.toBeInTheDocument();
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(screen.getByText('Episode 1')).toBeInTheDocument();
+  });
+
   it('continues a followed show from its cached list without listing an episode twice', async () => {
     routerMock.params = { id: 'feed' };
     routerMock.search = {};

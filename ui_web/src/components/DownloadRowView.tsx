@@ -12,6 +12,10 @@ function artistOf(i: DownloadQueueItem): string {
   return i.display_artist || i.podcast_show_title || '';
 }
 
+export function downloadSearchFields(item: DownloadQueueItem): string[] {
+  return [titleOf(item), artistOf(item)];
+}
+
 interface ProgressView {
   failed: boolean;
   percent: number | null;

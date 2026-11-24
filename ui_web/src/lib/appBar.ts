@@ -13,6 +13,11 @@ export interface AppBarAction {
   /** A count worn on the icon — active downloads, for instance. */
   badge?: number;
   disabled?: boolean;
+  busy?: boolean;
+  pressed?: boolean;
+  /** Current value shown as the desktop command label, e.g. the sort order. */
+  desktopLabel?: string;
+  tone?: 'danger';
   /** Set when the command opens a menu or a sheet rather than acting. */
   opensDialog?: boolean;
   /**
@@ -28,6 +33,8 @@ export interface AppBarAction {
  */
 export interface AppBarConfig {
   title: () => string;
+  /** Routine pages label themselves at the foot of the view. */
+  indicator?: boolean;
   /** A detail page returns with this instead of opening the menu. */
   back?: () => void;
   backLabel?: () => string;

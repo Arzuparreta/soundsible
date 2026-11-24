@@ -1,13 +1,13 @@
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { EntityHero } from '../components/EntityHero';
 import Button from '../components/Button';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
 import { openPlayOnDevice } from '../components/DeviceSheet';
 import { podcastEpisodeToTrack } from '../lib/track';
-import { BackIcon, CheckIcon, DownloadIcon, MoreIcon, RefreshIcon, menuIcons } from '../components/icons';
-import { useAppBar } from '../lib/appBar';
-import { desktopShell } from '../lib/shellLayout';
-import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from 'solid-js';
+import { CheckIcon, DownloadIcon, MoreIcon, RefreshIcon, menuIcons } from '../components/icons';
+import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions, isPlayingEpisode } from '../stores';
@@ -269,8 +269,9 @@ export default function PodcastShow() {
     ...(sub() || params.id ? [{ icon: menuIcons.trash(), label: t(leaving() ? 'podcastShow.unsubscribing' : 'podcastShow.unsubscribe'),
       disabled: leaving(), danger: true, onSelect: () => void unsubscribe() }] : []),
   ] });
-  const [heading, setHeading] = createSignal<HTMLElement>();
-  useAppBar({ title, back, backLabel: () => t('podcastShow.ariaBack'), heading });
+  const search = createCollectionSearch();
+  const matchingEpisodes = search.filter(episodes, episode => [episode.title]);
+  createEffect(on(() => params.id, () => search.setValue(''), { defer: true }));
 
   return (
     <div class="view">
@@ -303,20 +304,11 @@ export default function PodcastShow() {
       >
         {/* The show's header scrolls away with its episodes, as an album's
           * does, so a long feed gets the whole height once you are reading. */}
-        <header ref={measureHeader} class={`${hero.header} ${styles.header}`}>
-          <Show when={desktopShell()}>
-            <button class={hero.back} type="button" aria-label={t('podcastShow.ariaBack')} onClick={back}>
-              <BackIcon size={20} />
-            </button>
-          </Show>
-          <div class={`${hero.hero} ${hero.podcast}`}>
-            <div class={hero.art} style={neutralCoverStyle(podcastArtwork(image(), HEADER_ARTWORK))} />
-            <div class={hero.identity}>
-              <h1 ref={setHeading} class={hero.title}>{title()}</h1>
-              <Show when={show()?.author}>
-                <span class={hero.credit}>{show()?.author}</span>
-              </Show>
-            </div>
+        <div ref={measureHeader}>
+        <EntityHero name={title()} back={back} backLabel={t('podcastShow.ariaBack')} variant="podcast"
+          headerClass={styles.header}
+          art={<div class={hero.art} style={neutralCoverStyle(podcastArtwork(image(), HEADER_ARTWORK))} />}
+          metadata={<Show when={show()?.author}><span class={hero.credit}>{show()?.author}</span></Show>}>
           <div class={`${hero.toolbar} ${styles.toolbar}`} data-entity-toolbar classList={{ [styles.followed]: !!sub() || !feedUrl() }}>
             <button
               class={styles.filter}
@@ -335,8 +327,11 @@ export default function PodcastShow() {
             <button class={hero.options} type="button" aria-label={t('songRow.ariaMore')} aria-haspopup="dialog"
               aria-busy={refreshing() || leaving() || undefined} onClick={showMenu}><MoreIcon size={20} /></button>
           </div>
-          </div>
-        </header>
+        </EntityHero>
+        <Show when={episodes().length}>
+          <CollectionSearch search={search} placeholder={t('library.filterLoadedEpisodes')} inset />
+        </Show>
+        </div>
         <Show
           when={!data.loading}
           fallback={<SkeletonRows count={8} compact />}
@@ -356,7 +351,8 @@ export default function PodcastShow() {
             * a cover is a background image the browser downloads the moment
             * its row exists: a whole feed's worth was a gigabyte of 3000px
             * JPEGs that took the connection from playback for minutes (#250). */}
-          <CollectionRows items={episodes()} scrollElement={scroller} scrollMargin={headerHeight()} rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows>
+          <Show when={matchingEpisodes().length} fallback={<NoCollectionMatches />}>
+          <CollectionRows items={matchingEpisodes()} scrollElement={scroller} scrollMargin={headerHeight()} rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows>
             {(ep) => {
               const id = () => ep().guid || ep().enclosure_url;
               const downloaded = () => isDownloaded(ep());
@@ -433,6 +429,7 @@ export default function PodcastShow() {
               );
             }}
           </CollectionRows>
+          </Show>
           </Show>
           <Show when={next() != null}>
             <div class={styles.more}>

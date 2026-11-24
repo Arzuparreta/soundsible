@@ -11,7 +11,7 @@ it('delegates full entity identities and song context through the shared discogr
     albums={[{ deezer_id: '1', title: 'Same album', cover: '', year: 2001 }]}
     singlesEps={[{ deezer_id: '2', title: 'Same album', cover: '' }]}
     related={[{ deezer_id: '3', name: 'Related', picture: '', nb_fans: 12300 }]}
-    renderSong={(item, index, queue) => <button onClick={() => play(item, index, queue)}>{item.title}</button>}
+    renderSong={(item, index, queue) => <button onClick={() => play(item, index(), queue())}>{item.title}</button>}
     renderLink={link => <button onClick={() => open(link.entity)}>{link.children}</button>} />);
   const albums = view.getAllByRole('button', { name: /Same album/ });
   fireEvent.click(albums[0]); fireEvent.click(albums[1]);

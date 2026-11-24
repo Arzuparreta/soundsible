@@ -1,3 +1,4 @@
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { actions, state } from '../stores';
 import { user } from '../lib/session';
@@ -414,6 +415,9 @@ export default function Live() {
     }
   };
 
+  const directorySearch = createCollectionSearch();
+  const rooms = directorySearch.filter(liveSessions, room => [room.title, room.host.display_name]);
+
   return (
     <div class={styles.page}>
       <Show when={!joinedSession()} fallback={<ListenerRoom />}>
@@ -423,7 +427,7 @@ export default function Live() {
           barActions={hostSession()
             ? [
                 { label: copied() ? t('live.linkCopied') : t('live.share'), icon: () => <ShareIcon />, onSelect: () => void share(hostSession()!.id) },
-                { label: t('live.end'), icon: () => null, prominent: true, onSelect: () => void endHostSession() },
+                { label: t('live.end'), icon: () => null, prominent: true, tone: 'danger', onSelect: () => void endHostSession() },
               ]
             : [{
                 label: creating() ? t('common.loading') : t('live.goLive'),
@@ -432,32 +436,6 @@ export default function Live() {
                 disabled: !mediaSecure || creating() || communityError() === 'loading' || !communityConfig()?.enabled,
                 onSelect: () => void create(),
               }]}
-          actions={
-            <Show
-              when={hostSession()}
-              fallback={
-                <button
-                  class={styles.goLive}
-                  type="button"
-                  disabled={!mediaSecure || creating() || communityError() === 'loading' || !communityConfig()?.enabled}
-                  onClick={() => void create()}
-                >
-                  {creating() ? t('common.loading') : t('live.goLive')}
-                </button>
-              }
-            >
-              {(session) => (
-                <>
-                  <button class={styles.share} type="button" onClick={() => void share(session().id)}>
-                    {copied() ? t('live.linkCopied') : t('live.share')}
-                  </button>
-                  <button class={styles.endLive} type="button" onClick={() => void endHostSession()}>
-                    {t('live.end')}
-                  </button>
-                </>
-              )}
-            </Show>
-          }
         />
 
         <Show when={!mediaSecure}>
@@ -520,9 +498,11 @@ export default function Live() {
             <h2>{t('live.directory')}</h2>
             <button type="button" onClick={() => void refreshLiveSessions()}>{t('live.refresh')}</button>
           </div>
-          <Show when={liveSessions().length > 0} fallback={<p class={styles.empty}>{t('live.empty')}</p>}>
+          <Show when={liveSessions().length > 0} fallback={<Show when={!communityError()}><p class={styles.empty}>{t('live.empty')}</p></Show>}>
+            <CollectionSearch search={directorySearch} placeholder={t('library.filterLive')} />
+            <Show when={rooms().length} fallback={<NoCollectionMatches />}>
             <div class={styles.grid}>
-              <For each={liveSessions()}>
+              <For each={rooms()}>
                 {(session) => (
                   <SessionCard
                     session={session}
@@ -532,6 +512,7 @@ export default function Live() {
                 )}
               </For>
             </div>
+            </Show>
           </Show>
         </section>
       </Show>

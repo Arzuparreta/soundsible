@@ -1,4 +1,6 @@
-import { For, Show } from 'solid-js';
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from './CollectionSearch';
+import { trackSearchFields } from '../lib/librarySearch';
+import { createEffect, For, on, Show } from 'solid-js';
 import { player } from '../stores/player';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { trackCoverUrl } from '../lib/media';
@@ -19,17 +21,23 @@ const WHOLE_LIST_ROWS = 60;
  * thousand.
  */
 export function EntityTrackList(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
+  const search = createCollectionSearch();
+  const tracks = search.filter(() => props.tracks, trackSearchFields);
+  createEffect(on(() => props.context.id, () => search.setValue(''), { defer: true }));
   const row = (track: () => Track, index: () => number) => (
     <SongRow
       track={track()} music={libraryTrackMusic(track())}
       index={index() + 1}
       cover={trackCoverUrl(track(), 'thumb')}
-      onPlay={() => player().actions.playFrom(props.tracks, index(), { context: props.context })}
+      onPlay={() => player().actions.playFrom(tracks(), index(), { context: props.context })}
     />
   );
-  return (
-    <Show when={props.tracks.length > WHOLE_LIST_ROWS} fallback={<For each={props.tracks}>{(track, index) => row(() => track, index)}</For>}>
-      <CollectionRows items={props.tracks}>{row}</CollectionRows>
+  return <>
+    <CollectionSearch search={search} />
+    <Show when={tracks().length} fallback={<NoCollectionMatches />}>
+      <Show when={tracks().length > WHOLE_LIST_ROWS} fallback={<For each={tracks()}>{(track, index) => row(() => track, index)}</For>}>
+        <CollectionRows items={tracks()}>{row}</CollectionRows>
+      </Show>
     </Show>
-  );
+  </>;
 }

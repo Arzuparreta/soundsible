@@ -1,25 +1,23 @@
-import { Show, type JSX } from 'solid-js';
+import { createMemo, Show, type JSX } from 'solid-js';
+import { PageCommands } from './AppBar';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { useAppBar, type AppBarAction } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import styles from './ViewHeader.module.css';
 
-/**
- * A page's header. On the desktop shell it is drawn here, in the page; on the
- * touch shell the page's title and commands go up into the shell's top bar
- * (`AppBar`), which is the only header a phone ever shows — `barActions` are
- * the commands it carries there, since a toolbar of worded buttons is desktop
- * furniture. `compact` headers belong to panels inside the player, not to a
- * page, and always draw in place.
- */
+/** Page toolbar on desktop, shell commands on touch. Compact panels have their own heading. */
 export function ViewHeader(props: {
   title: string;
   meta?: JSX.Element;
+  desktopField?: JSX.Element;
   actions?: JSX.Element;
   barActions?: AppBarAction[];
+  /** A desktop field and its companion commands share a row on the page. */
+  commandsBesideField?: boolean;
   /** A native control the top bar carries as is — a dropdown keeps its
    * platform keyboard behaviour that a described command would lose. */
   barTrailing?: JSX.Element;
+  onViewChange?: () => void;
   children?: JSX.Element;
   compact?: boolean;
   onTitleTap?: () => void;
@@ -31,32 +29,37 @@ export function ViewHeader(props: {
   if (!props.compact) {
     useAppBar({
       title: () => props.title,
+      indicator: true,
+      onViewChange: props.onViewChange,
       actions: () => props.barActions ?? [],
       trailing: () => props.barTrailing,
-      onTitleTap: props.onTitleTap,
+      get onTitleTap() { return props.onTitleTap; },
     });
   }
 
+  const showDesktop = () => props.compact || desktopShell();
+  const field = createMemo(() => showDesktop() ? props.desktopField : undefined);
+  const actions = createMemo(() => showDesktop() ? props.actions : undefined);
+  const extra = createMemo(() => showDesktop() ? props.children : undefined);
+  const commands = () => props.commandsBesideField ? undefined : props.barActions;
   return (
-    <Show when={props.compact || desktopShell()}>
+    <Show when={props.compact || (desktopShell() && (props.meta || actions() || extra() || field() || commands()?.length))}>
       <header class={styles.header} data-compact={props.compact ? '' : undefined}>
-        <div class={styles.heading}>
-          <Show
-            when={props.onTitleTap}
-            fallback={<h1 class={styles.title}>{props.title}</h1>}
-          >
+        <div class={styles.heading} data-toolbar-field={field() ? '' : undefined}>
+          {field()}
+          <Show when={props.compact}>
             <h1 class={styles.title}>
-              <button type="button" class={styles.titleButton} data-pressable {...tap}>
-                {props.title}
-              </button>
+              <Show when={props.onTitleTap} fallback={props.title}>
+                <button type="button" class={styles.titleButton} data-pressable {...tap}>{props.title}</button>
+              </Show>
             </h1>
           </Show>
           <Show when={props.meta}>
             <span class={styles.meta}>{props.meta}</span>
           </Show>
         </div>
-        <Show when={props.actions || props.children}>
-          <div class={styles.actions}>{props.actions}{props.children}</div>
+        <Show when={actions() || extra() || commands()?.length}>
+          <div class={styles.actions}>{actions()}{extra()}<PageCommands actions={commands()} desktop /></div>
         </Show>
       </header>
     </Show>

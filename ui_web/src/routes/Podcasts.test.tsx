@@ -1,3 +1,4 @@
+import { PageIndicator } from '../components/AppBar';
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JSX } from 'solid-js';
@@ -131,11 +132,12 @@ describe('Podcasts page header', () => {
 
   it('titles the desktop page like every other root, keeping the country by the search', () => {
     setMediaQuery(DESKTOP, true);
-    render(() => <Podcasts />);
+    render(() => <><Podcasts /><PageIndicator /></>);
 
     const heading = screen.getByRole('heading', { level: 1, name: 'Podcasts' });
     const country = screen.getByRole('combobox', { name: 'Country for discovering podcasts' });
-    expect(heading.closest('header')).not.toContainElement(country);
+    expect(heading).toHaveAttribute('data-page-indicator');
+    expect(heading).not.toContainElement(country);
     expect(country.closest('div')).toContainElement(screen.getByPlaceholderText(/Search podcasts/));
     expect(screen.getAllByRole('combobox', { name: 'Country for discovering podcasts' })).toHaveLength(1);
   });

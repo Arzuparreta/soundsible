@@ -383,6 +383,12 @@ export const en = {
     reason: 'Similar to what you were listening to',
   },
   library: {
+    noCollectionMatches: 'No matches in this list.',
+    filterCollection: 'Filter this list',
+    filterLoadedEpisodes: 'Search loaded episodes',
+    filterSubscriptions: 'Filter subscriptions',
+    filterLive: 'Filter live rooms',
+
     searchAction: 'Search library',
     title: 'Your library',
     favourites: 'Favourites',

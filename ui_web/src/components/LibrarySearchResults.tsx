@@ -1,12 +1,12 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import SavedEntities from './SavedEntities';
-import { savedEntities } from '../lib/savedEntities';
-import { normalizeLibraryQuery } from '../lib/librarySearch';
+import { entitiesError, entitiesLoading, savedEntities } from '../lib/savedEntities';
+import { matchesSavedEntity, normalizeLibraryQuery } from '../lib/librarySearch';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openArtistMenu } from './artistActions';
-import { Show } from 'solid-js';
+import { createMemo, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { isPlayingTrack } from '../stores';
 import { player } from '../stores/player';
@@ -79,6 +79,11 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       event,
     );
 
+  const hasBookmarkMatch = createMemo(() => {
+    const query = normalizeLibraryQuery(props.query ?? '');
+    return !!query && savedEntities().some(entry => matchesSavedEntity(entry, query));
+  });
+
   return (
     <div
       ref={(element) => {
@@ -90,7 +95,7 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       data-primary-scroll
     >
       <Show when={props.query}><SavedEntities query={props.query} /></Show>
-      <Show when={props.results.length > 0} fallback={<Show when={!props.query || !savedEntities().some(entry => normalizeLibraryQuery(`${entry.name} ${entry.artist ?? ''}`).includes(normalizeLibraryQuery(props.query!)))}><EmptyState>{t('library.noSearchResults')}</EmptyState></Show>}>
+      <Show when={props.results.length > 0} fallback={<Show when={!props.query || (!hasBookmarkMatch() && !entitiesLoading() && !entitiesError())}><EmptyState>{t('library.noSearchResults')}</EmptyState></Show>}>
         <CollectionRows items={props.results} scrollElement={() => scrollRef ?? null}>
           {(result) => {
             const track = () => (result() as Extract<LibrarySearchResult, { kind: 'track' }>).track;

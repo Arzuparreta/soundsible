@@ -1,13 +1,14 @@
+import { EntityHero } from '../components/EntityHero';
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { trackSearchFields } from '../lib/librarySearch';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
-import { createMemo, createSignal, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, on, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { actions, state, musicLibrary } from '../stores';
 import { player } from '../stores/player';
 import TrackList from '../components/TrackList';
-import { BackIcon, MoreIcon, PlayIcon } from '../components/icons';
+import { MoreIcon, PlayIcon } from '../components/icons';
 import { CoverImage } from '../components/CoverImage';
-import { useAppBar } from '../lib/appBar';
-import { desktopShell } from '../lib/shellLayout';
 import { openPlaylistMenu } from '../components/playlistActions';
 import { trackCount } from '../lib/format';
 import { trackCoverUrl } from '../lib/media';
@@ -34,6 +35,10 @@ export default function PlaylistDetail() {
   const tracks = createMemo<Track[]>(() => trackIds()
     .map((id) => byId().get(id))
     .filter((t): t is Track => !!t));
+
+  const search = createCollectionSearch();
+  const filteredTracks = search.filter(tracks, trackSearchFields);
+  createEffect(on(name, () => search.setValue(''), { defer: true }));
 
   const context = () => playlistContext(name(), tracks(), state.librarySettings);
   // The sleeve the playlists grid shows: the cover the user picked, else the
@@ -63,29 +68,12 @@ export default function PlaylistDetail() {
     });
 
   const back = () => navigateBackOr(navigate, '/playlists');
-  const [heading, setHeading] = createSignal<HTMLElement>();
-  useAppBar({
-    title: name,
-    back,
-    backLabel: () => t('playlistDetail.ariaBack'),
-    heading,
-  });
-
   return (
     <div class={`view ${hero.collection}`}>
-      <header class={hero.header}>
-        <Show when={desktopShell()}>
-          <button class={hero.back} type="button" aria-label={t('playlistDetail.ariaBack')} onClick={back}>
-            <BackIcon size={20} />
-          </button>
-        </Show>
-        <div class={`${hero.hero} ${hero.compact}`}>
-          <div class={hero.art} style={{ background: NEUTRAL_COVER }} aria-hidden="true">
-            <CoverImage src={cover()} eager />
-          </div>
-          <div class={hero.identity}>
-            <h1 ref={setHeading} class={hero.title}>{name()}</h1>
-          </div>
+      <EntityHero name={name()} back={back} backLabel={t('playlistDetail.ariaBack')} variant="compact"
+        art={<div class={hero.art} style={{ background: NEUTRAL_COVER }} aria-hidden="true">
+          <CoverImage src={cover()} eager />
+        </div>}>
           <div class={hero.toolbar} data-entity-toolbar>
             <span class={hero.context}>{trackCount(trackIds().length)}</span>
             <button class={hero.play} type="button" onClick={playAll} disabled={tracks().length === 0}
@@ -100,17 +88,17 @@ export default function PlaylistDetail() {
                 <MoreIcon size={20} />
               </button>
           </div>
-        </div>
-      </header>
+      </EntityHero>
+      <Show when={!editing() && tracks().length}><CollectionSearch search={search} inset /></Show>
       <Show when={editing()} fallback={<TrackList
-        tracks={tracks()}
+        tracks={filteredTracks()}
         context={context()}
-        loading={state.loading}
+        loading={state.loading && !tracks().length}
         menu={{
           playlistName: name(),
           onRemoveFromPlaylist: (t) => void actions.removeFromPlaylist(name(), collectionId(t)),
         }}
-        empty={<EmptyState>{t('playlistDetail.empty')}</EmptyState>}
+        empty={tracks().length ? <NoCollectionMatches /> : <EmptyState>{t('playlistDetail.empty')}</EmptyState>}
       />}>
         <MusicReorderList items={trackIds()} label={(id) => byId().get(id)?.title ?? id}
           render={(id) => <span>{byId().get(id)?.title ?? id}</span>}

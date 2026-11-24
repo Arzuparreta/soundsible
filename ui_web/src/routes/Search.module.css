@@ -1,17 +1,11 @@
 /* ── Field ────────────────────────────────────────────────────────────────
-   The field sits under the page title on the desktop shell and right under
-   the top bar on the touch shell. It spans the content width like the search
-   of Library, Podcasts and Settings, and the dropdown is anchored to the same
-   box, so the two always line up. */
+   The field and desktop commands stay above the results. The suggestions
+   dropdown follows the same gutters as the field. */
 .searchBox {
   --search-top: var(--view-top, var(--space-lg));
   position: relative;
   flex-shrink: 0;
   z-index: 5;
-}
-
-.underHeader {
-  --search-top: 0px;
 }
 
 .bar {
@@ -524,43 +518,8 @@
   font-size: var(--text-label);
 }
 
-.refresh {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: var(--pill-h);
-  padding: 0 var(--space-md);
-  color: var(--ink-secondary);
-  font: inherit;
-  font-size: var(--text-label);
-  font-weight: var(--fw-semibold);
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
-}
-
-.refresh:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.refresh svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  flex: none;
-}
-
 .spinning {
   animation: search-spin 0.8s linear infinite;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .refresh:not(:disabled):hover {
-    color: var(--ink-primary);
-    background: var(--bg-hover);
-  }
 }
 
 @keyframes search-spin {

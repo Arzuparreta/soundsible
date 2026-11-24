@@ -1,3 +1,5 @@
+import { desktopShell } from '../lib/shellLayout';
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { collectionIndex } from '../lib/collectionIdentity';
 import { SkeletonCards } from '../components/Skeleton';
 import { NEUTRAL_COVER } from '../lib/cover';
@@ -17,13 +19,15 @@ import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { MusicReorderList } from '../components/MusicReorderList';
-import { Control } from '../design/Control';
-import { CheckIcon, MoveIcon } from '../components/icons';
+import { CheckIcon, MoveIcon, PlusIcon } from '../components/icons';
 
 export default function Playlists() {
   const navigate = useNavigate();
   const byId = createMemo(() => collectionIndex(musicLibrary()));
   const names = createMemo(() => Object.keys(state.playlists));
+
+  const search = createCollectionSearch();
+  const filteredNames = search.filter(names, name => [name]);
 
   const cover = (name: string, ids: string[]) => {
     const track = pickPlaylistCoverTrack(name, ids, byId(), state.librarySettings);
@@ -41,30 +45,30 @@ export default function Playlists() {
 
   return (
     <div class="view">
-      <ViewHeader title={t('playlists.title')} meta={`${names().length}`}
-        barActions={names().length > 1 ? [{
-          label: t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit'),
-          icon: () => editing() ? <CheckIcon /> : <MoveIcon />,
-          onSelect: () => setEditing(!editing()),
-        }] : []}
-        actions={names().length > 1 ? (
-          <Control class={styles.editOrder} aria-pressed={editing()} onClick={() => setEditing(!editing())}>
-            {t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit')}
-          </Control>
-        ) : undefined} />
+      <ViewHeader
+        title={t('playlists.title')}
+        desktopField={!editing() && names().length ? <CollectionSearch search={search} toolbar /> : undefined}
+        barActions={[
+          { label: t('playlists.new'), icon: () => <PlusIcon />, prominent: true, opensDialog: true, onSelect: createNew },
+          ...(names().length > 1 ? [{
+            label: t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit'),
+            icon: () => editing() ? <CheckIcon /> : <MoveIcon />,
+            pressed: editing(),
+            onSelect: () => setEditing(!editing()),
+          }] : []),
+        ]}
+      />
+      <Show when={!desktopShell() && !editing() && names().length}>
+        <CollectionSearch search={search} inset />
+      </Show>
       <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
-        <button class={styles.newBtn} type="button" onClick={createNew}>
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          {t('playlists.new')}
-        </button>
         <Show when={!editing()} fallback={
           <MusicReorderList items={names()} label={(name) => name} render={(name) => <span>{name}</span>} onChange={actions.reorderPlaylists} />
         }>
         <Show when={names().length > 0} fallback={<Show when={state.loading} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}><SkeletonCards /></Show>}>
+          <Show when={filteredNames().length} fallback={<NoCollectionMatches />}>
           <div class={styles.grid}>
-            <For each={names()}>
+            <For each={filteredNames()}>
               {(name) => {
                 const ids = () => state.playlists[name] ?? [];
                 const href = `/playlists/${encodeURIComponent(name)}`;
@@ -99,6 +103,7 @@ export default function Playlists() {
               }}
             </For>
           </div>
+          </Show>
         </Show>
         </Show>
       </div>

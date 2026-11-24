@@ -1,3 +1,4 @@
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { createEffect, createSignal, onMount, onCleanup, For, Show } from 'solid-js';
 import { nativeLive, type NativeLiveState, type NativeLiveCommand } from './live';
 import { t } from '../lib/i18n';
@@ -72,6 +73,8 @@ export function NativeLive(props: { generation: () => number; current: () => boo
     refreshTimer = window.setInterval(() => { if (valid() && document.visibilityState === 'visible') void refresh(); }, 10000);
   });
   onCleanup(() => { alive = false; window.clearInterval(refreshTimer); void listener?.remove(); });
+  const search = createCollectionSearch();
+  const filteredRooms = search.filter(rooms, room => [room.title, room.host.display_name]);
   return <section class={styles.panel} data-native-live>
     <Show when={error()}><p role="status">{t('live.unavailable')}</p></Show>
     <Show when={host()} fallback={<form onSubmit={event => { event.preventDefault(); void command({ action: 'liveStart', title: title() }); }}>
@@ -114,12 +117,14 @@ export function NativeLive(props: { generation: () => number; current: () => boo
     </section>}</Show>
     <div class={styles.directory}><h3>{t('live.directory')}</h3><button disabled={busy()} onClick={() => void refresh()}>{t('live.refresh')}</button></div>
     <Show when={rooms().length} fallback={<p>{config()?.state === 'available' ? t('live.empty') : t('live.unavailable')}</p>}>
-      <ul><For each={rooms()}>{entry => <li><strong>{entry.title}</strong> · {entry.host.display_name}
+      <CollectionSearch search={search} placeholder={t('library.filterLive')} />
+      <ul><For each={filteredRooms()}>{entry => <li><strong>{entry.title}</strong> · {entry.host.display_name}
         <button disabled={busy() || entry.id === host()?.session?.id} onClick={() => {
           const origin = config()?.api_url;
           if (origin) void command({ action: 'liveListen', session: { ...entry, api_url: origin, guest_name: props.username } });
         }}>{entry.id === listening()?.session?.id ? t('live.listening') : t('live.listen')}</button>
       </li>}</For></ul>
+      <Show when={!filteredRooms().length}><NoCollectionMatches /></Show>
     </Show>
   </section>;
 }

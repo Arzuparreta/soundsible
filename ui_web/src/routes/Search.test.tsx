@@ -1,3 +1,4 @@
+import { PageIndicator } from '../components/AppBar';
 import type { Track } from '../types/music';
 import { fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -629,11 +630,11 @@ describe('Search route', () => {
 
   it('titles the page with a heading on the desktop shell', () => {
     shellMock.desktop = true;
-    render(() => <Search />);
-    expect(screen.getByRole('heading', { level: 1, name: 'Discover' })).toBeInTheDocument();
+    render(() => <><Search /><PageIndicator /></>);
+    expect(screen.getByRole('heading', { level: 1, name: 'Discover' })).toHaveAttribute('data-page-indicator');
   });
 
-  it('places the Discover refresh control in the top header line on desktop and hides it while searching', async () => {
+  it('places the Discover refresh control beside the search field on desktop and hides it while searching', async () => {
     shellMock.desktop = true;
     apiMock.getDiscoveryMusicFeed
       .mockResolvedValueOnce({
@@ -648,8 +649,8 @@ describe('Search route', () => {
     render(() => <Search />);
     expect(await screen.findByText('Initial Pick')).toBeInTheDocument();
 
-    const header = screen.getByRole('banner');
-    const refreshBtn = within(header).getByRole('button', { name: 'Refresh' });
+    const refreshBtn = screen.getByRole('button', { name: 'Refresh' });
+    expect(refreshBtn.parentElement).toContainElement(screen.getByRole('searchbox'));
     expect(within(screen.getByTestId('search-discovery')).queryByRole('button', { name: 'Refresh' })).toBeNull();
 
     fireEvent.click(refreshBtn);

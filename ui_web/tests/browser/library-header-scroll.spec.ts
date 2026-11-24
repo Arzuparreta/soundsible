@@ -60,7 +60,7 @@ async function mockEngine(page: Page) {
   });
 }
 
-test('tapping the library header returns a scrolled track list to the top', async ({ page }) => {
+test('tapping the library indicator returns a scrolled track list to the top', async ({ page }) => {
   await mockEngine(page);
   await page.addInitScript(() => {
     localStorage.clear();
@@ -68,9 +68,7 @@ test('tapping the library header returns a scrolled track list to the top', asyn
   });
   await page.goto('/player/#/library?view=songs');
 
-  const heading = page.viewportSize()!.width < 1024
-    ? page.getByRole('link', { name: 'Library', exact: true })
-    : page.getByRole('button', { name: 'Your library' });
+  const heading = page.locator('[data-page-indicator]').getByRole('button', { name: 'Songs' });
   await expect(heading).toBeVisible();
   await expect(page.getByText('Track 80')).toBeVisible();
 
@@ -86,19 +84,19 @@ test('tapping the library header returns a scrolled track list to the top', asyn
 });
 
 
-test('desktop library search sits below the title and view changes use the sidebar', async ({ page }) => {
+test('desktop library search sits above the content and view changes use the sidebar', async ({ page }) => {
   test.skip(page.viewportSize()!.width < 1024, 'Desktop layout');
   await mockEngine(page);
   await page.addInitScript(() => localStorage.setItem('lang', 'en'));
   await page.goto('/player/#/library?view=songs');
-  const heading = page.getByRole('heading', { name: 'Your library' });
+  const heading = page.locator('[data-page-indicator]').filter({ hasText: 'Songs' });
   const search = page.getByRole('searchbox', { name: 'Search songs and artists' });
   await expect(search).toBeVisible();
   const titleBox = await heading.boundingBox();
   const searchBox = await search.boundingBox();
-  expect(searchBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height);
+  expect(searchBox!.y + searchBox!.height).toBeLessThan(titleBox!.y);
   for (const name of ['Songs', 'Albums', 'Artists']) {
-    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-app-outlet]').getByRole('button', { name, exact: true })).toHaveCount(0);
     await page.locator('aside').getByRole('link', { name, exact: true }).click();
     await expect(page).toHaveURL(new RegExp('view=' + name.toLowerCase() + '$'));
     await expect(search).toBeVisible();

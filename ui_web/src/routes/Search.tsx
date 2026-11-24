@@ -1,3 +1,6 @@
+import { PageCommands } from '../components/AppBar';
+import type { AppBarAction } from '../lib/appBar';
+import { desktopShell } from '../lib/shellLayout';
 import { syncSavedEntities } from '../lib/savedEntities';
 import { CatalogCollectionStatus } from '../components/CatalogCollectionStatus';
 import { openCatalogEntityMenu } from '../components/savedEntityActions';
@@ -7,9 +10,7 @@ import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { focusRequestedSearch } from '../lib/searchFocus';
 import { ViewHeader } from '../components/ViewHeader';
-import { Control } from '../design/Control';
 import { openOverlay } from '../lib/overlay';
-import { desktopShell } from '../lib/shellLayout';
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
@@ -736,33 +737,26 @@ export default function Search() {
     clearTimeout(suggestDebounce);
   });
 
+  const refreshCommands = (): AppBarAction[] => showDiscoverRefresh() ? [{
+    label: tr('searchHome.refresh'),
+    icon: () => <RefreshIcon class={discoverControl()?.refreshing ? styles.spinning : undefined} />,
+    disabled: Boolean(discoverControl()?.refreshing),
+    busy: Boolean(discoverControl()?.refreshing),
+    onSelect: () => discoverControl()?.refresh(),
+  }] : [];
+
   return (
     <div class="view">
       <ViewHeader
         title={tr('nav.search')}
         onTitleTap={() => reselectPrimaryTab('/search')}
-        barActions={showDiscoverRefresh() ? [{
-          label: tr('searchHome.refresh'),
-          icon: () => <RefreshIcon class={discoverControl()?.refreshing ? styles.spinning : undefined} />,
-          disabled: Boolean(discoverControl()?.refreshing),
-          onSelect: () => discoverControl()?.refresh(),
-        }] : []}
-        actions={showDiscoverRefresh() ? (
-          <Control
-            class={styles.refresh}
-            disabled={Boolean(discoverControl()?.refreshing)}
-            aria-busy={discoverControl()?.refreshing ? 'true' : undefined}
-            onClick={() => discoverControl()?.refresh()}
-          >
-            <RefreshIcon class={discoverControl()?.refreshing ? styles.spinning : undefined} />
-            <span>{tr('searchHome.refresh')}</span>
-          </Control>
-        ) : undefined}
+        commandsBesideField
+        barActions={refreshCommands()}
       />
       {/* Suggestions and recent searches live as long as focus stays anywhere
           in this box, so Tab can reach them from the field. */}
       <div
-        classList={{ [styles.searchBox]: true, [styles.underHeader]: desktopShell() }}
+        class={styles.searchBox}
         onFocusOut={(event) => {
           if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
           setSearchFocused(false);
@@ -791,6 +785,7 @@ export default function Search() {
               if (e.key === 'Escape') { setShowSuggest(false); setSearchFocused(false); }
             }}
           />
+          <Show when={desktopShell()}><PageCommands desktop actions={refreshCommands()} /></Show>
         </div>
         <Show when={searchHistoryEnabled() && searchFocused() && !q().trim() && recents().length > 0}>
           <div class={styles.suggest} role="group" aria-labelledby="search-recents-heading">
