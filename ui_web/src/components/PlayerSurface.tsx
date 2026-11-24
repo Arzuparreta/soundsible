@@ -35,7 +35,7 @@ import { Spinner } from './Spinner';
 import { pageVisible } from '../lib/pageVisibility';
 import type { NowPlayingMobilePanel } from './NowPlaying';
 import { deferredComponent } from '../lib/deferredComponent';
-import { recoverAutoMode, recoverNowPlaying } from './nowPlayingRecovery';
+import { recoverAutoMode, recoverLyricsPanel, recoverNowPlaying } from './nowPlayingRecovery';
 import styles from './PlayerSurface.module.css';
 
 const NowPlaying = deferredComponent<Parameters<typeof import('./NowPlaying').NowPlaying>[0]>(
@@ -52,7 +52,7 @@ const AutoMode = deferredComponent<Parameters<typeof import('./AutoMode').AutoMo
 
 const CompactLyrics = deferredComponent<NonNullable<Parameters<typeof import('./LyricsPanel').LyricsPanel>[0]>>(
   async () => ({ default: (await import('./playerViews')).LyricsPanel }),
-  async () => ({ default: (await import('./LyricsPanel')).LyricsPanel }),
+  async () => ({ default: await recoverLyricsPanel() }),
   styles.autoLoading,
 );
 

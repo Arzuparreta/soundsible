@@ -6,3 +6,7 @@ export const recoverNowPlaying = import.meta.glob<typeof import('./NowPlaying').
 export const recoverAutoMode = import.meta.glob<typeof import('./AutoMode').AutoMode>('./AutoMode.tsx', {
   query: '?recovery', import: 'AutoMode',
 })['./AutoMode.tsx'];
+
+export const recoverLyricsPanel = import.meta.glob<typeof import('./LyricsPanel').LyricsPanel>('./LyricsPanel.tsx', {
+  query: '?recovery', import: 'LyricsPanel',
+})['./LyricsPanel.tsx'];

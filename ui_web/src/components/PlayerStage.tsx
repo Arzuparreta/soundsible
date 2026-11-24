@@ -15,7 +15,7 @@ import { savedFromTrack } from '../lib/saved';
 import { PODCAST_SKIP_SECONDS } from '../lib/track';
 import { t } from '../lib/i18n';
 import { Control } from '../design/Control';
-import { isMobileWeb } from '../lib/deviceIdentity';
+import { isTouchFormFactor } from '../lib/deviceIdentity';
 import { playerCompact } from '../lib/playerDock';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
@@ -103,7 +103,7 @@ export function PlayerStage(props: {
     const duration = player().playback.duration;
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   };
-  const mobileWeb = isMobileWeb();
+  const mobileWeb = isTouchFormFactor();
 
   const muteButton = () => (
     <Show when={player().can('transport.set_muted')}>

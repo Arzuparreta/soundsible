@@ -32,7 +32,7 @@ export function PlayerMiniHeader(props: {
         <div class={styles.bar} data-player-mini-header="" data-no-surface-swipe="">
           <Control
             class={styles.back}
-            aria-label={backLabel()}
+            aria-label={`${current().title}${current().artist ? ` — ${current().artist}` : ''} · ${backLabel()}`}
             title={backLabel()}
             onClick={() => props.onBack()}
           >

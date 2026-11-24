@@ -109,7 +109,7 @@ export function detectFormFactor(env: DeviceEnvironment = readEnvironment()): De
   return 'computer';
 }
 
-export function isMobileWeb(): boolean {
+export function isTouchFormFactor(): boolean {
   return detectFormFactor() !== 'computer';
 }
 

@@ -2,7 +2,7 @@ import { createEffect, createSignal, createUniqueId, onCleanup, Show } from 'sol
 import { isCurrentTrackPodcast, isPlaybackSilent, player } from '../stores/player';
 import { t } from '../lib/i18n';
 import { playerCompact } from '../lib/playerDock';
-import { isMobileWeb } from '../lib/deviceIdentity';
+import { isTouchFormFactor } from '../lib/deviceIdentity';
 import { isEditableTextControl } from '../lib/shortcuts';
 import { Control } from '../design/Control';
 import { KaraokeMicIcon, QueueListIcon, RadioIcon, VolumeIcon } from './icons';
@@ -38,7 +38,7 @@ export function PlayerCompactDock(props: {
   lyricsButtonRef?: (element: HTMLButtonElement) => void;
 }) {
   const [volumeOpen, setVolumeOpen] = createSignal(false);
-  const mobileWeb = isMobileWeb();
+  const mobileWeb = isTouchFormFactor();
   const volumeId = createUniqueId();
   let volumeRoot: HTMLDivElement | undefined;
   let volumeTrigger: HTMLButtonElement | undefined;
@@ -46,7 +46,6 @@ export function PlayerCompactDock(props: {
   let volumeDismissTimer: ReturnType<typeof setTimeout> | undefined;
 
   const current = () => player().playback.currentTrack;
-  const podcast = isCurrentTrackPodcast;
   const lyricsLabel = () => (props.lyricsActive ? t('nowPlaying.showCover') : t('nowPlaying.showLyrics'));
   const listLabel = () => (props.auto ? t('autoMode.panel.route') : t('nowPlaying.panel.queue'));
   const radioLabel = () => (player().playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio'));
@@ -125,7 +124,7 @@ export function PlayerCompactDock(props: {
       data-compact-dock=""
     >
       <div class={styles.dockViews}>
-        <Show when={current() && !podcast()}>
+        <Show when={current() && !isCurrentTrackPodcast()}>
           <Control
             ref={props.lyricsButtonRef}
             class={styles.dockPill}
@@ -144,7 +143,7 @@ export function PlayerCompactDock(props: {
         <Control
           class={styles.dockPill}
           classList={{ [styles.dockPillActive]: props.listActive }}
-          aria-label={listLabel()}
+          aria-label={props.listCount > 0 ? `${listLabel()} ${props.listCount}` : listLabel()}
           title={listLabel()}
           aria-pressed={props.listActive}
           data-compact-list-toggle=""
@@ -159,7 +158,7 @@ export function PlayerCompactDock(props: {
       </div>
 
       <div class={styles.dockUtils}>
-        <Show when={!props.auto && current() && !podcast()}>
+        <Show when={!props.auto && current() && !isCurrentTrackPodcast()}>
           <Control
             class={styles.dockIconBtn}
             classList={{

@@ -8,7 +8,7 @@ const harness = vi.hoisted(() => ({
     toggleMute: vi.fn(),
     setVolume: vi.fn(),
   },
-  mobileWeb: false,
+  touchFormFactor: false,
   setState: undefined as undefined | ((...args: unknown[]) => void),
 }));
 
@@ -20,7 +20,8 @@ vi.mock('../stores', async () => {
         id: string;
         title: string;
         artist: string;
-        podcast_guid?: string;
+        podcast_episode_guid?: string;
+        media_kind?: 'track' | 'podcast_episode';
       } | null,
       volume: 0.8,
       muted: false,
@@ -35,11 +36,7 @@ vi.mock('../stores', async () => {
   };
 });
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
-vi.mock('../lib/deviceIdentity', () => ({ isMobileWeb: () => harness.mobileWeb }));
-vi.mock('../lib/track', () => ({
-  PODCAST_SKIP_SECONDS: 15,
-  isPodcastTrack: (track: { podcast_guid?: string }) => Boolean(track.podcast_guid),
-}));
+vi.mock('../lib/deviceIdentity', () => ({ isTouchFormFactor: () => harness.touchFormFactor }));
 vi.mock('./RadioBadge', () => ({ onStopRadio: vi.fn() }));
 
 import { PlayerCompactDock } from './PlayerCompactDock';
@@ -47,7 +44,7 @@ import styles from './PlayerCompactDock.module.css';
 
 beforeEach(() => {
   setPlayerCompact(true);
-  harness.mobileWeb = false;
+  harness.touchFormFactor = false;
   harness.setState?.('playback', {
     currentTrack: { id: 'track-1', title: 'Track', artist: 'Artist' },
     volume: 0.8,
@@ -152,7 +149,7 @@ describe('PlayerCompactDock', () => {
   });
 
   it('acts as a direct mute toggle on mobile web and keeps Mute at volume 0', () => {
-    harness.mobileWeb = true;
+    harness.touchFormFactor = true;
     harness.setState?.('playback', 'volume', 0);
     harness.setState?.('playback', 'muted', false);
 
@@ -172,22 +169,22 @@ describe('PlayerCompactDock', () => {
     expect(unmuteBtn).toHaveClass(styles.dockIconOn);
   });
 
-  it('hides Lyrics and Radio for podcasts and shows Route count in DJ mode', () => {
-    harness.setState?.('playback', 'currentTrack', {
-      id: 'ep-1',
-      title: 'Episode',
-      artist: 'Show',
-      podcast_guid: 'guid-1',
-    });
-    const podcastView = renderDock();
-    expect(screen.queryByRole('button', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'trackActions.startRadio' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'nowPlaying.panel.queue' })).toBeInTheDocument();
-    podcastView.unmount();
+  it('hides Lyrics and Radio for podcasts and includes the Route count in its accessible name', () => {
+    for (const episode of [
+      { id: 'ep-1', title: 'Episode', artist: 'Show', podcast_episode_guid: 'guid-1' },
+      { id: 'ep-2', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode' as const },
+    ]) {
+      harness.setState?.('playback', 'currentTrack', episode);
+      const podcastView = renderDock();
+      expect(screen.queryByRole('button', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'trackActions.startRadio' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'nowPlaying.panel.queue' })).toBeInTheDocument();
+      podcastView.unmount();
+    }
 
     harness.setState?.('playback', 'currentTrack', { id: 'track-1', title: 'Track', artist: 'Artist' });
     renderDock({ auto: true, listCount: 4 });
-    expect(screen.getByRole('button', { name: 'autoMode.panel.route' })).toHaveTextContent('4');
+    expect(screen.getByRole('button', { name: 'autoMode.panel.route 4' })).toHaveTextContent('4');
     expect(screen.queryByRole('button', { name: 'trackActions.startRadio' })).toBeNull();
   });
 });

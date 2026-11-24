@@ -120,3 +120,14 @@
     background: var(--stage-material-hover);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .back,
+  .ctrl {
+    transition-duration: 1ms;
+  }
+
+  .ctrl:not(:disabled):active {
+    transform: none;
+  }
+}

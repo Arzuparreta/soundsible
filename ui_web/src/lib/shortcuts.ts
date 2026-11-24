@@ -64,7 +64,7 @@ const NON_TEXT_INPUT_TYPES = new Set([
 ]);
 
 /** Surfaces where a keystroke is text, not a command. */
-export function isTextEntry(el: HTMLElement | null): boolean {
+function isTextEntry(el: HTMLElement | null): boolean {
   if (!el) return false;
   return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contextContinuation, createQueueEntry, isPendingEntry, type PlaybackContextDescriptor } from './playbackQueue';
+import { contextContinuation, createQueueEntry, isPendingEntry, upcomingQueueEntries, type PlaybackContextDescriptor } from './playbackQueue';
 import type { Track } from '../types/music';
 
 const album: PlaybackContextDescriptor = { id: 'album:record', kind: 'album', label: 'Record' };
@@ -45,5 +45,21 @@ describe('unmatched context songs', () => {
     expect(isPendingEntry(entry)).toBe(true);
     expect(isPendingEntry({ ...entry, pendingResolve: undefined })).toBe(false);
     expect(isPendingEntry(null)).toBe(false);
+  });
+});
+
+describe('upcomingQueueEntries', () => {
+  it('keeps manual requests in Normal mode, includes generated picks in Radio mode, returns the full route in Auto mode, and treats omitted index as -1', () => {
+    const manual = request('m1');
+    const ctx = createQueueEntry(song('c1'), 'context', 'album', album, 0);
+    const radio = createQueueEntry(song('r1'), 'generated', 'radio');
+    const autoplay = createQueueEntry(song('a1'), 'generated', 'autoplay');
+    const playing = request('cur');
+    const queue = [playing, manual, ctx, radio, autoplay];
+
+    expect(upcomingQueueEntries(queue, 0, { auto: false, radioMode: false })).toEqual([manual]);
+    expect(upcomingQueueEntries(queue, 0, { auto: false, radioMode: true })).toEqual([manual, radio, autoplay]);
+    expect(upcomingQueueEntries(queue, 0, { auto: true })).toEqual([manual, ctx, radio, autoplay]);
+    expect(upcomingQueueEntries([manual, ctx], undefined, { auto: false, radioMode: false })).toEqual([manual]);
   });
 });

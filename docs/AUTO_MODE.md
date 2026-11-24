@@ -18,7 +18,7 @@ planning and interface are still being refined.
   choose music. The DJ chooses an opening from that selection and starts
   the route there.
 - With a track playing, open the player and switch from **NORMAL** to **DJ**.
-  The current track becomes the first visible influence in **Session**.
+  The current track becomes the first visible influence in **Sources**.
 - From a song's menu, **Start DJ from this song** makes that song the
   session's source. It is the next song the DJ mixes into, the way it mixes any
   other, and the music comes from it after that. Albums, artists and playlists
@@ -35,8 +35,8 @@ planning and interface are still being refined.
 On a computer the open player is a column on the right, beside Soundsible:
 the library, Search and Discover stay usable next to it. Drag its left edge to
 make it wider or narrower. Once it is no longer at its default width, a reset
-button (↶) appears at the foot of that edge; it, or a double-click on the edge,
-brings the default width back. Use the button at the top of the player to fill
+button (↶) appears in the player's top bar beside the device button; it, or a
+double-click on the edge, brings the default width back. Use the button at the top of the player to fill
 the screen or dock it beside the app again. Soundsible remembers both choices.
 
 Full screen, the stage and the list sit side by side and the stage is sized to

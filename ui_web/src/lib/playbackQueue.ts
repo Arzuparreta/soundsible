@@ -139,7 +139,7 @@ export function upcomingQueueEntries(
   index: number | undefined,
   options: { auto: true } | { auto: false; radioMode: boolean },
 ): PlaybackQueueEntry[] {
-  const upcoming = futureEntries(queue ?? [], index ?? 0);
+  const upcoming = futureEntries(queue ?? [], index ?? -1);
   if (options.auto) return upcoming;
   return upcoming.filter((entry) =>
     entry.queueLane === 'manual' || (options.radioMode && entry.queueLane === 'generated'),

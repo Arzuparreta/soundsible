@@ -308,13 +308,12 @@ test('NORMAL queue scrolls vertically without sideways drift at every interface 
 });
 
 /**
- * On a phone the queue is one page of the pager, and the box holding its
- * sections fills with them and then almost never scrolls. The requests lane is
- * the one that gives way and scrolls; the cards close the list at the bottom
- * of the page, above the pager's own band — with the lane's air under them and
- * no more.
+ * On a phone the queue is one page, and the box holding its sections fills with
+ * them and then almost never scrolls. The requests lane is the one that gives
+ * way and scrolls; the cards close the list at the bottom of the page, above
+ * the compact dock — with the lane's air under them and no more.
  */
-test('the queue fills its page, and its cards end above the pager', async ({ page }) => {
+test('the queue fills its page, and its cards end above the compact dock', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'mobile-only regression');
   await restoreLongQueue(page);
   await settle(page, '[data-now-playing-tile="queue"]');
