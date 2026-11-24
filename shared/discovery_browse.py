@@ -6,7 +6,12 @@ import datetime
 from itertools import zip_longest
 import time
 
-from shared.deezer_catalog import main_contributors
+from shared.deezer_catalog import (
+    DEEZER_ARTIST_SEARCH_LIMIT,
+    literal_artist_key,
+    main_contributors,
+    select_artist_matches,
+)
 from shared.discovery_intelligence import artist_recommendation_multiplier
 from shared.providers import deezer
 from shared.text_utils import fold_text, identity_key
@@ -50,7 +55,7 @@ def build_browse_sections(
     deadline = time.monotonic() + 20
     failed = False
     ref_today = today or datetime.date.today()
-    resolved_by_folded: dict[str, dict | None] = {}
+    resolved_by_name: dict[str, dict | None] = {}
     albums_by_artist: dict[str, list[dict]] = {}
 
     def rows(path: str, params: dict | None = None) -> list[dict]:
@@ -85,19 +90,19 @@ def build_browse_sections(
         }
 
     def resolve_seed_artist(name: str) -> dict | None:
-        wanted = fold_text(name)
-        if not wanted:
+        wanted = literal_artist_key(name)
+        if not wanted or not fold_text(name):
             return None
-        if wanted in resolved_by_folded:
-            return resolved_by_folded[wanted]
-        matches = rows("search/artist", {"q": name, "limit": 8})
-        # A homonym or an approximate search hit must not become a taste seed;
-        # fold diacritics and break exact-match ties by fan count.
-        exact = [r for r in matches if fold_text(r.get("name")) == wanted]
-        exact.sort(key=lambda r: int(r.get("nb_fan") or 0), reverse=True)
+        if wanted in resolved_by_name:
+            return resolved_by_name[wanted]
+        matches = rows("search/artist", {"q": name, "limit": DEEZER_ARTIST_SEARCH_LIMIT})
+        # A homonym or approximate search hit must not become a taste seed;
+        # keep literal diacritic matches separate from folded fallbacks.
+        valid_matches = [r for r in matches if str(r.get("id") or "").strip().isdigit()]
+        exact = select_artist_matches(name, valid_matches, fans_key="nb_fan")
         match = exact[0] if exact else None
         seed = artist_item(match) if match else None
-        resolved_by_folded[wanted] = seed
+        resolved_by_name[wanted] = seed
         return seed
 
     def artist_albums(aid: str) -> list[dict]:

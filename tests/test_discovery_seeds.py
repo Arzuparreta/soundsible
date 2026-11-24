@@ -246,3 +246,77 @@ def test_less_from_artist_excludes_taste_and_release_seeds_and_backfills_limit(t
     finally:
         clear_recent_seeds(clear_all=True)
         reset_runtime()
+
+
+def test_taste_and_release_seeds_prevent_diacritic_hijack_and_id_bleed(tmp_path):
+    from player import saved_entities
+
+    _setup_runtime(tmp_path)
+    try:
+        # Dominant "Halo" library + 1 newly added "HALŌ" track must keep "Halo" as display seed.
+        tracks = [
+            _track("h1", "Halo"),
+            _track("h2", "Halo"),
+            _track("h3", "Halo"),
+            _track("edm1", "HALŌ"),
+        ]
+        metadata = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})
+        emit_discovery_event("music_played_30s", {"title": "A Walk in the Woods", "artist": "Halo"})
+        emit_discovery_event("music_played_30s", {"title": "Under Cover of Night", "artist": "Halo"})
+
+        taste = select_taste_artists(metadata, ["h1"], limit=5, user_id="alice")
+        assert taste == ["Halo"]
+
+        # Bookmarked "HALŌ" (deezer_id=422708332) and bookmarked "Halo" (no deezer_id) stay
+        # distinct without cross-attaching HALŌ's deezer_id onto Halo.
+        with user_context("alice"):
+            saved_entities.set_saved(
+                {
+                    "kind": "artist",
+                    "name": "Halo",
+                    "destination": "/artist/Halo?artist_id=lib-halo&view=discover",
+                },
+                True,
+            )
+            saved_entities.set_saved(
+                {
+                    "kind": "artist",
+                    "name": "HALŌ",
+                    "destination": "/artist/HAL%C5%8C?deezer_id=422708332&view=discover",
+                },
+                True,
+            )
+
+        extracted = load_saved_entity_artists("alice")
+        assert extracted == [
+            {"name": "HALŌ", "deezer_id": "422708332", "kind": "artist"},
+            {"name": "Halo", "deezer_id": "", "kind": "artist"},
+        ]
+
+        release_seeds = select_release_seed_artists(metadata, ["h1"], limit=5, user_id="alice")
+        assert release_seeds == [
+            {"name": "HALŌ", "deezer_id": "422708332"},
+            {"name": "Halo", "deezer_id": ""},
+        ]
+    finally:
+        clear_recent_seeds(clear_all=True)
+        reset_runtime()
+
+
+def test_taste_artists_break_hangul_diacritic_tie_without_nfd_mismatch(tmp_path):
+    _setup_runtime(tmp_path)
+    try:
+        # Tied Hangul + diacritic variants must still prefer the diacritic spelling.
+        tied_hangul = LibraryMetadata(
+            version=1,
+            tracks=[
+                _track("k1", "아이유 Cafe"),
+                _track("k2", "아이유 Café"),
+            ],
+            playlists={},
+            settings={},
+        )
+        assert select_taste_artists(tied_hangul, [], limit=5, user_id="alice") == ["아이유 Café"]
+    finally:
+        clear_recent_seeds(clear_all=True)
+        reset_runtime()

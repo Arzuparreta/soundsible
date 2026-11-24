@@ -1630,6 +1630,103 @@ def test_resolve_artist_id_matches_across_diacritics(monkeypatch):
     assert [c["deezer_id"] for c in candidates] == ["412304431"]
 
 
+def test_select_artist_matches_separates_homonyms_from_diacritic_variants():
+    select = catalog_routes.deezer_catalog.select_artist_matches
+
+    # 1. Undecorated query with real literal matches: HALŌ must never beat Halo.
+    halo_rows = [
+        {"id": 89290162, "name": "Halo", "nb_fan": 2},
+        {"id": 139303402, "name": "Halo", "nb_fan": 24},
+        {"id": 422708332, "name": "HALŌ", "nb_fan": 39},
+        {"id": 217605285, "name": "Halo", "nb_fan": 2170},
+    ]
+    assert [r["id"] for r in select("Halo", halo_rows)] == [217605285, 139303402, 89290162, 422708332]
+
+    # Even in a degraded window without the 2170-fan OST, real literal "Halo" (24 fans)
+    # still leads over folded "HALŌ" (39 fans; ratio < 100x and < 1000 fans).
+    degraded_halo_rows = [
+        {"id": 139303402, "name": "Halo", "nb_fan": 24},
+        {"id": 422708332, "name": "HALŌ", "nb_fan": 39},
+    ]
+    assert select("Halo", degraded_halo_rows)[0]["id"] == 139303402
+
+    # 2. Query with explicit diacritics: HALŌ leads and Halo cannot crush it.
+    assert select("HALŌ", halo_rows)[0]["id"] == 422708332
+
+    # 3. NFC vs NFD equivalence for explicit diacritics.
+    assert select("HALO\u0304", [{"id": 422708332, "name": "HAL\u014c", "nb_fan": 39}, {"id": 217605285, "name": "Halo", "nb_fan": 2170}])[0]["id"] == 422708332
+
+    # 4. Undecorated queries for canonical artists with diacritics still win.
+    assert select("Jose Gonzalez", [{"id": 1, "name": "Jose Gonzalez", "nb_fan": 1}, {"id": 1169, "name": "José González", "nb_fan": 121665}])[0]["id"] == 1169
+    assert select("Rosalia", [{"id": 637, "name": "Rosalia", "nb_fan": 34}, {"id": 554792, "name": "ROSALÍA", "nb_fan": 1072880}])[0]["id"] == 554792
+    assert select("Zoe", [{"id": 528, "name": "Zoe", "nb_fan": 562}, {"id": 58585, "name": "Zoé", "nb_fan": 1130227}])[0]["id"] == 58585
+    assert select("Motorhead", [{"id": 2996, "name": "Motörhead", "nb_fan": 1123385}])[0]["id"] == 2996
+    # 0-fan literal stub loses to a 50+ fan accented indie artist.
+    assert select("Indie", [{"id": 1, "name": "Indie", "nb_fan": 0}, {"id": 2, "name": "Ïndie", "nb_fan": 75}])[0]["id"] == 2
+
+    # Hangul/Indic scripts (where NFD decomposes without combining marks) must not bypass folded_dominates.
+    hangul_rows = [
+        {"id": 10, "name": "아이유 Cafe", "nb_fan": 0},
+        {"id": 20, "name": "아이유 Café", "nb_fan": 50000},
+    ]
+    assert select("아이유 Cafe", hangul_rows)[0]["id"] == 20
+
+    # When folded_dominates is True, literal artists outrank tiny accented stubs in candidate alternates.
+    zoe_rows = [
+        {"id": 58585, "name": "Zoé", "nb_fan": 1130227},
+        {"id": 99999, "name": "Zöe", "nb_fan": 2},
+        {"id": 5285063, "name": "Zoe", "nb_fan": 562},
+    ]
+    assert [r["id"] for r in select("Zoe", zoe_rows)] == [58585, 5285063, 99999]
+
+    # Duplicate artist IDs are deduplicated and bool/negative/non-numeric fan counts are safe.
+    noisy_rows = [
+        {"id": 1, "name": "Halo", "nb_fan": True},
+        {"id": 2, "name": "Halo", "nb_fan": -50},
+        {"id": 3, "name": "Halo", "nb_fan": "not-a-number"},
+        {"id": 4, "name": "Halo", "nb_fan": 100},
+        {"id": 4, "name": "Halo", "nb_fan": 100},
+        {"id": 5, "name": "HALŌ", "nb_fan": 900},
+    ]
+    assert [r["id"] for r in select("Halo", noisy_rows)] == [4, 1, 2, 3, 5]
+
+
+def test_resolve_artist_id_uses_limit_25_and_caps_candidates_to_8(monkeypatch):
+    asked = []
+
+    def fake_search(name, limit=10):
+        asked.append((name, limit))
+        return [
+            {"deezer_id": str(i), "name": "Halo", "picture": "", "nb_fans": 100 - i, "nb_album": 1}
+            for i in range(15)
+        ]
+
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "_artist_search", fake_search)
+    resolved, candidates = catalog_routes.deezer_catalog.resolve_artist_id("Halo")
+
+    assert asked == [("Halo", 25)]
+    assert resolved == "0"
+    assert len(candidates) == 8
+    assert [c["deezer_id"] for c in candidates] == [str(i) for i in range(1, 9)]
+
+
+def test_resolve_artist_id_approximate_fallback_only_considers_top_10(monkeypatch):
+    fuzzy_rows = [
+        {"deezer_id": "top-fuzzy", "name": "Daft Punk feat. Friends", "picture": "", "nb_fans": 500, "nb_album": 1},
+        *[
+            {"deezer_id": f"mid-{i}", "name": f"Daft Cover {i}", "picture": "", "nb_fans": 10, "nb_album": 1}
+            for i in range(9)
+        ],
+        {"deezer_id": "tail-mega", "name": "Unrelated Mega Star", "picture": "", "nb_fans": 9999999, "nb_album": 50},
+    ]
+    monkeypatch.setattr(catalog_routes.deezer_catalog, "_artist_search", lambda name, limit=10: fuzzy_rows)
+
+    resolved, candidates = catalog_routes.deezer_catalog.resolve_artist_id("Daft Punk")
+
+    assert resolved == "top-fuzzy"
+    assert all(c["deezer_id"] != "tail-mega" for c in candidates)
+
+
 def test_resolve_album_id_matches_across_diacritics(monkeypatch):
     rows = [
         {"id": 1, "title": "Something Else", "artist": {"name": "Víctor Manuel"}},

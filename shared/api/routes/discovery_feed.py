@@ -31,6 +31,7 @@ from shared.discovery_seeds import (
     select_release_seed_artists,
     select_taste_artists,
 )
+from shared.deezer_catalog import DEEZER_ARTIST_SEARCH_LIMIT, select_artist_matches
 from shared.discovery_signals import register_discovery_signal_handler
 from shared.hardening import rate_limit
 from shared.music_identity import youtube_music_metadata
@@ -202,23 +203,23 @@ def _resolve_deezer_artist_id(
     artist_name: str,
     *,
     allow_approximate: bool = False,
-    search_limit: int = 8,
+    search_limit: int = DEEZER_ARTIST_SEARCH_LIMIT,
 ) -> str | None:
-    """Resolve an artist name to a Deezer artist id, folding diacritics and ranking by fans."""
-    wanted = fold_text(artist_name)
-    if not wanted:
+    """Resolve an artist name to a Deezer artist id, preferring literal matches and ranking by fans."""
+    if not fold_text(artist_name):
         return None
     search = _deezer_json("search/artist", {"q": artist_name, "limit": search_limit})
     rows = [
         row
         for row in (search.get("data") if isinstance(search.get("data"), list) else [])
-        if isinstance(row, dict) and row.get("id") and (row.get("name") or "").strip()
+        if isinstance(row, dict)
+        and str(row.get("id") or "").strip().isdigit()
+        and str(row.get("name") or "").strip()
     ]
     if not rows:
         return None
-    exact = [row for row in rows if fold_text(row.get("name")) == wanted]
+    exact = select_artist_matches(artist_name, rows, fans_key="nb_fan")
     if exact:
-        exact.sort(key=lambda row: int(row.get("nb_fan") or 0), reverse=True)
         return str(exact[0]["id"])
     if allow_approximate:
         return str(rows[0]["id"])
@@ -228,7 +229,7 @@ def _resolve_deezer_artist_id(
 def _deezer_artist_top_rows(artist_name: str, limit: int) -> list[dict]:
     """The artist's top tracks, found through a plain artist search: Deezer's
     `artist:"…"` field syntax stopped answering in October 2026."""
-    artist_id = _resolve_deezer_artist_id(artist_name, allow_approximate=True, search_limit=8)
+    artist_id = _resolve_deezer_artist_id(artist_name, allow_approximate=True)
     if not artist_id:
         return []
     top = _deezer_json(f"artist/{artist_id}/top", {"limit": max(limit, 12)})
@@ -249,7 +250,7 @@ def _deezer_related_artist_rows(
     """Top tracks from artists related to `artist_name`, round-robin interleaved."""
     if deadline is not None and time.monotonic() >= deadline:
         return []
-    seed_id = _resolve_deezer_artist_id(artist_name, allow_approximate=False, search_limit=5)
+    seed_id = _resolve_deezer_artist_id(artist_name, allow_approximate=False)
     if not seed_id:
         return []
     if deadline is not None and time.monotonic() >= deadline:
