@@ -645,6 +645,42 @@ def test_more_like_folds_diacritics_skips_owned_and_never_falls_back_to_seed_art
         assert _disc_feed._deezer_related_artist_rows("Blue Oyster Cult", 10) == []
 
 
+def test_more_like_resolves_literal_homonym_over_folded_diacritic_with_wider_window(tmp_path):
+    _make_runtime(tmp_path)
+    asked = []
+
+    def fake_deezer(path, params=None, ttl_sec=None):
+        asked.append((path, params))
+        if path == "search/artist":
+            # Simulates Deezer returning low-fan literal "Halo" rows and "HALŌ"
+            # ahead of the 2,170-fan soundtrack entity beyond index 5.
+            return {
+                "data": [
+                    {"id": 89290162, "name": "Halo", "nb_fan": 2},
+                    {"id": 139303402, "name": "Halo", "nb_fan": 24},
+                    {"id": 422708332, "name": "HALŌ", "nb_fan": 39},
+                    {"id": 89289852, "name": "Halo", "nb_fan": 13},
+                    {"id": 89289952, "name": "Halo", "nb_fan": 9},
+                    {"id": 217605285, "name": "Halo", "nb_fan": 2170},
+                ]
+            }
+        if path == "artist/217605285/related":
+            return {"data": [{"id": 15902, "name": "Jesper Kyd"}]}
+        if path == "artist/15902/top":
+            return {
+                "data": [
+                    {"id": 701, "title": "Ezio's Family", "artist": {"id": 15902, "name": "Jesper Kyd"}, "album": {"title": "AC2"}}
+                ]
+            }
+        raise AssertionError(f"Unexpected Deezer call: {path}")
+
+    with patch.object(_disc_feed, "_deezer_json", side_effect=fake_deezer):
+        rows = _disc_feed._deezer_related_artist_rows("Halo", 10)
+
+    assert asked[0] == ("search/artist", {"q": "Halo", "limit": 25})
+    assert [row["title"] for row in rows] == ["Ezio's Family"]
+
+
 def test_more_like_handles_missing_artist_name_owned_full_title_quota_and_non_latin_slugs(tmp_path):
     _make_runtime(tmp_path)
     metadata = LibraryMetadata(
@@ -2486,7 +2522,7 @@ def test_an_artists_top_tracks_are_found_through_a_plain_artist_search():
 
     assert [row["title"] for row in rows] == ["One More Time"]
     # No field syntax: Deezer stopped answering `artist:"…"` in October 2026.
-    assert asked[0] == ("search/artist", {"q": "daft punk", "limit": 8})
+    assert asked[0] == ("search/artist", {"q": "daft punk", "limit": 25})
 
 
 def test_an_artist_deezer_does_not_know_has_no_top_tracks():

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 import threading
 
+from shared.deezer_catalog import literal_artist_key
 from shared.discovery_intelligence import (
     is_artist_demoted,
     load_listening_event_rollups,
@@ -103,7 +104,8 @@ def load_saved_entity_artists(user_id: str | None = None) -> list[dict[str, str]
         return []
 
     out: list[dict[str, str]] = []
-    by_folded: dict[str, dict[str, str]] = {}
+    by_literal: dict[str, dict[str, str]] = {}
+    by_deezer_id: dict[str, dict[str, str]] = {}
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -122,19 +124,25 @@ def load_saved_entity_artists(user_id: str | None = None) -> list[dict[str, str]
             deezer_id = ""
         else:
             continue
-        folded = fold_text(name)
-        if not folded:
+        lit = literal_artist_key(name)
+        if not lit:
             continue
-        existing = by_folded.get(folded)
+        existing = by_literal.get(lit)
+        if existing is None and deezer_id:
+            existing = by_deezer_id.get(deezer_id)
         if existing is not None:
             if kind == "artist" and existing["kind"] != "artist":
                 existing["kind"] = "artist"
                 existing["name"] = name
             if deezer_id and not existing["deezer_id"]:
                 existing["deezer_id"] = deezer_id
+                by_deezer_id[deezer_id] = existing
+            by_literal.setdefault(lit, existing)
             continue
         item = {"name": name, "deezer_id": deezer_id, "kind": kind}
-        by_folded[folded] = item
+        by_literal[lit] = item
+        if deezer_id:
+            by_deezer_id[deezer_id] = item
         out.append(item)
     return out
 
@@ -154,15 +162,33 @@ def select_taste_artists(
     saved_artists = load_saved_entity_artists(user_id)
     by_id = {track.id: track for track in tracks}
     scores: dict[str, float] = {}
-    display: dict[str, str] = {}
+    variant_scores: dict[str, dict[str, float]] = {}
+    variant_display: dict[str, dict[str, str]] = {}
+    variant_has_real_display: dict[str, set[str]] = {}
 
-    def add_artist(raw: object, score: float, *, title_fallback: bool = False) -> None:
+    def record_variant(raw: object, score: float, *, title_fallback: bool = False) -> tuple[str, str]:
         name = str(raw or "").strip()
         key = fold_text(name)
-        if not key:
-            return
-        scores[key] = scores.get(key, 0.0) + score
-        display.setdefault(key, name.title() if title_fallback else name)
+        lit = literal_artist_key(name)
+        if not key or not lit:
+            return "", ""
+        v_disp = variant_display.setdefault(key, {})
+        real_set = variant_has_real_display.setdefault(key, set())
+        if not title_fallback:
+            if lit not in real_set:
+                v_disp[lit] = name
+                real_set.add(lit)
+        elif lit not in v_disp:
+            v_disp[lit] = name.title()
+        if score:
+            v_scores = variant_scores.setdefault(key, {})
+            v_scores[lit] = v_scores.get(lit, 0.0) + score
+        return key, lit
+
+    def add_artist(raw: object, score: float, *, title_fallback: bool = False) -> None:
+        key, _ = record_variant(raw, score, title_fallback=title_fallback)
+        if key:
+            scores[key] = scores.get(key, 0.0) + score
 
     for idx, tid in enumerate(fav_ids):
         track = by_id.get(str(tid))
@@ -186,31 +212,49 @@ def select_taste_artists(
             add_artist(track.album_artist or track.artist, 3.0)
 
     artist_counts: dict[str, int] = {}
+    variant_track_counts: dict[str, dict[str, int]] = {}
     for track in tracks:
         name = str(track.album_artist or track.artist or "").strip()
-        key = fold_text(name)
+        key, lit = record_variant(name, 0.0)
         if not key:
             continue
         artist_counts[key] = artist_counts.get(key, 0) + 1
-        display.setdefault(key, name)
+        v_counts = variant_track_counts.setdefault(key, {})
+        v_counts[lit] = v_counts.get(lit, 0) + 1
     for key, count in artist_counts.items():
-        scores[key] = scores.get(key, 0.0) + min(8.0, count * 1.4)
+        lib_score = min(8.0, count * 1.4)
+        scores[key] = scores.get(key, 0.0) + lib_score
+        v_scores = variant_scores.setdefault(key, {})
+        for lit, vcount in variant_track_counts.get(key, {}).items():
+            v_scores[lit] = v_scores.get(lit, 0.0) + lib_score * (vcount / count)
 
     for raw_key, count in rollup.artist_plays.items():
         add_artist(raw_key, min(12.0, count * 2.0), title_fallback=True)
     for raw_key, count in rollup.artist_saves.items():
         add_artist(raw_key, min(10.0, count * 3.0), title_fallback=True)
 
-    deezer_by_folded = {
-        fold_text(item["name"]): item["deezer_id"]
+    display: dict[str, str] = {}
+    for key in scores:
+        v_scores = variant_scores.get(key, {})
+        v_disp = variant_display.get(key, {})
+        if v_scores:
+            best_lit = max(v_scores, key=lambda lit: (v_scores[lit], lit != key))
+            display[key] = v_disp.get(best_lit, best_lit)
+        elif v_disp:
+            first_lit = next(iter(v_disp))
+            display[key] = v_disp[first_lit]
+
+    deezer_by_literal = {
+        literal_artist_key(item["name"]): item["deezer_id"]
         for item in saved_artists
-        if fold_text(item["name"]) and item["deezer_id"]
+        if literal_artist_key(item["name"]) and item["deezer_id"]
     }
     for key in list(scores):
+        chosen_name = display.get(key, key)
         if _is_artist_excluded(
-            display.get(key, key),
+            chosen_name,
             user_id,
-            deezer_artist_id=deezer_by_folded.get(key, ""),
+            deezer_artist_id=deezer_by_literal.get(literal_artist_key(chosen_name), ""),
         ):
             scores.pop(key, None)
 
@@ -243,21 +287,27 @@ def select_release_seed_artists(
 ) -> list[dict[str, str]]:
     """Return unrotated artist seeds for release-radar checks, prioritizing bookmarks."""
     saved_artists = load_saved_entity_artists(user_id)
-    deezer_by_folded = {
-        fold_text(item["name"]): item["deezer_id"]
+    deezer_by_literal = {
+        literal_artist_key(item["name"]): item["deezer_id"]
         for item in saved_artists
-        if fold_text(item["name"]) and item["deezer_id"]
+        if literal_artist_key(item["name"]) and item["deezer_id"]
     }
 
     candidates: list[dict[str, str]] = []
-    seen: set[str] = set()
+    seen_names: set[str] = set()
+    seen_ids: set[str] = set()
 
     def push(name: str, deezer_id: str = "") -> None:
-        folded = fold_text(name)
-        if not folded or folded in seen:
+        lit = literal_artist_key(name)
+        if not lit or lit in seen_names:
             return
-        seen.add(folded)
-        candidates.append({"name": name, "deezer_id": deezer_id or deezer_by_folded.get(folded, "")})
+        resolved_id = deezer_id or deezer_by_literal.get(lit, "")
+        if resolved_id and resolved_id in seen_ids:
+            return
+        seen_names.add(lit)
+        if resolved_id:
+            seen_ids.add(resolved_id)
+        candidates.append({"name": name, "deezer_id": resolved_id})
 
     for kind in ("artist", "album"):
         for item in saved_artists:

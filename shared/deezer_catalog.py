@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import re
 from typing import Any
+import unicodedata
 
 from shared.providers import deezer
-from shared.text_utils import collapse_text, fold_text, identity_key
+from shared.text_utils import collapse_text, fold_text, identity_key, normalize_text
 
 
 def _clean(value: object, max_len: int = 240) -> str:
@@ -102,7 +103,79 @@ def deezer_get(path: str, params: dict[str, Any] | None = None, timeout: int = 8
     return deezer.get(path, params, timeout=timeout)
 
 
-def _artist_search(name: str, limit: int = 10) -> list[dict[str, Any]]:
+DEEZER_ARTIST_SEARCH_LIMIT = 25
+_DIACRITIC_OVERRIDE_MIN_FANS = 1000
+_DIACRITIC_OVERRIDE_RATIO = 100
+_DIACRITIC_STUB_OVERRIDE_MIN_FANS = 50
+
+
+def literal_artist_key(value: object) -> str:
+    """Normalized artist name preserving diacritics (NFC) for exact vs folded disambiguation."""
+    return unicodedata.normalize("NFC", normalize_text(value))
+
+
+def _safe_fans(row: dict[str, Any], fans_key: str) -> int:
+    try:
+        return int(row.get(fans_key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def select_artist_matches(
+    name: str,
+    rows: list[dict[str, Any]],
+    *,
+    fans_key: str = "nb_fan",
+) -> list[dict[str, Any]]:
+    """Rank exact Deezer artist matches, keeping literal matches distinct from folded ones.
+
+    Literal matches lead when the query already has diacritics or when a real
+    literal artist exists (preventing small homonyms like ``HALŌ`` from matching
+    ``Halo``), while undecorated queries (``Blue Oyster Cult``, ``Rosalia``,
+    ``Motorhead``) still resolve to the decorated canonical artist when no
+    literal match exists or the literal row is a zero/negligible stub.
+    """
+    wanted_literal = literal_artist_key(name)
+    wanted_folded = fold_text(name)
+    if not wanted_folded:
+        return []
+
+    literal: list[dict[str, Any]] = []
+    folded_only: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        raw_name = row.get("name")
+        if not str(raw_name or "").strip():
+            continue
+        if literal_artist_key(raw_name) == wanted_literal:
+            literal.append(row)
+        elif fold_text(raw_name) == wanted_folded:
+            folded_only.append(row)
+
+    literal.sort(key=lambda row: _safe_fans(row, fans_key), reverse=True)
+    folded_only.sort(key=lambda row: _safe_fans(row, fans_key), reverse=True)
+
+    if not literal:
+        return folded_only
+    if not folded_only:
+        return literal
+    if wanted_literal != wanted_folded:
+        return [*literal, *folded_only]
+
+    best_literal = _safe_fans(literal[0], fans_key)
+    best_folded = _safe_fans(folded_only[0], fans_key)
+    folded_dominates = (
+        best_folded >= _DIACRITIC_OVERRIDE_MIN_FANS
+        and best_folded >= best_literal * _DIACRITIC_OVERRIDE_RATIO
+    ) or (
+        best_literal == 0
+        and best_folded >= _DIACRITIC_STUB_OVERRIDE_MIN_FANS
+    )
+    return [*folded_only, *literal] if folded_dominates else [*literal, *folded_only]
+
+
+def _artist_search(name: str, limit: int = DEEZER_ARTIST_SEARCH_LIMIT) -> list[dict[str, Any]]:
     data = deezer_get("search/artist", {"q": name, "limit": min(limit, 25)})
     rows = data.get("data") if isinstance(data.get("data"), list) else []
     out: list[dict[str, Any]] = []
@@ -128,18 +201,13 @@ def resolve_artist_id(name: str, deezer_id: str | None = None) -> tuple[str | No
     if deezer_id:
         return deezer_id, []
 
-    candidates = _artist_search(name, limit=10)
+    candidates = _artist_search(name, limit=DEEZER_ARTIST_SEARCH_LIMIT)
     if not candidates:
         return None, []
 
-    # Tags drop diacritics as often as they keep them: "Blue Oyster Cult" is
-    # Deezer's "Blue Öyster Cult", while an undecorated namesake with no fans
-    # and no picture also exists. Match folded, then let popularity decide.
-    name_folded = fold_text(name)
-    exact = [c for c in candidates if fold_text(c["name"]) == name_folded]
+    exact = select_artist_matches(name, candidates, fans_key="nb_fans")
     if exact:
-        exact.sort(key=lambda c: c["nb_fans"], reverse=True)
-        return exact[0]["deezer_id"], exact[1:]
+        return exact[0]["deezer_id"], exact[1:9]
     # No exact match — pick most popular, return all others as candidates
     candidates.sort(key=lambda c: c["nb_fans"], reverse=True)
     return candidates[0]["deezer_id"], candidates[1:4]

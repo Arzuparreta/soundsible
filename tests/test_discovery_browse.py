@@ -96,6 +96,55 @@ def test_diacritic_folded_artist_resolution_prefers_highest_fan_count(monkeypatc
     assert any(item["record_type"] == "ep" and item["release_date"] == "2024-10-01" for item in albums["items"])
 
 
+def test_halo_seed_ignores_hal_macron_homonym_and_keeps_memo_keys_distinct(monkeypatch):
+    asked_limits = []
+
+    def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            asked_limits.append(params.get("limit"))
+            return {"data": [
+                {"id": 89290162, "name": "Halo", "nb_fan": 2, "picture_big": "https://image.test/1"},
+                {"id": 139303402, "name": "Halo", "nb_fan": 24, "picture_big": "https://image.test/2"},
+                {"id": 422708332, "name": "HALŌ", "nb_fan": 39, "picture_big": "https://image.test/3"},
+                {"id": 89289852, "name": "Halo", "nb_fan": 13, "picture_big": "https://image.test/4"},
+                {"id": 89289952, "name": "Halo", "nb_fan": 9, "picture_big": "https://image.test/5"},
+                {"id": 111851312, "name": "Halo", "nb_fan": 2, "picture_big": "https://image.test/6"},
+                {"id": 124279882, "name": "Halo", "nb_fan": 3, "picture_big": "https://image.test/7"},
+                {"id": 89289972, "name": "Halo", "nb_fan": 17, "picture_big": "https://image.test/8"},
+                {"id": 217605285, "name": "Halo", "nb_fan": 2170, "picture_big": "https://image.test/2170"},
+            ]}
+        if path == "artist/217605285/related":
+            return {"data": [artist(15902, "Jesper Kyd")]}
+        if path == "artist/422708332/related":
+            return {"data": [artist(1032901, "Matisse & Sadko")]}
+        if path == "artist/217605285/albums":
+            return {"data": [{"id": 6629, "title": "Halo Season 1 Original Soundtrack", "record_type": "album", "release_date": "2024-11-12"}]}
+        if path == "artist/15902/albums":
+            return {"data": []}
+        if path == "artist/422708332/albums":
+            return {"data": [{"id": 1134, "title": "Now Until Forever", "record_type": "single", "release_date": "2026-11-13"}]}
+        if path == "artist/1032901/albums":
+            return {"data": []}
+        if path == "album/1134":
+            return {"id": 1134, "title": "Now Until Forever", "contributors": [{"id": 422708332, "name": "HALŌ", "role": "Main"}]}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(deezer, "get", get)
+
+    # Resolving "Halo" alone picks the 2170-fan OST artist, never HALŌ's 2026 single.
+    body_halo = build_browse_sections(["Halo"], today=datetime.date(2026, 11, 24))
+    assert asked_limits == [25]
+    sections_halo = {sec["id"]: sec["items"] for sec in body_halo["browse_sections"]}
+    assert "new_releases" not in sections_halo
+    assert [item["title"] for item in sections_halo["artists"]] == ["Jesper Kyd"]
+
+    # Resolving both "Halo" and "HALŌ" in the same call must not collide in the per-call memo.
+    body_both = build_browse_sections(["Halo", "HALŌ"], today=datetime.date(2026, 11, 24))
+    sections_both = {sec["id"]: sec["items"] for sec in body_both["browse_sections"]}
+    assert [item["title"] for item in sections_both["artists"]] == ["Jesper Kyd", "Matisse & Sadko"]
+    assert [item["title"] for item in sections_both["new_releases"]] == ["Now Until Forever"]
+
+
 def test_new_releases_sorted_newest_first_with_badge_window_and_dedup(monkeypatch):
     ref_today = datetime.date(2026, 11, 22)
 
