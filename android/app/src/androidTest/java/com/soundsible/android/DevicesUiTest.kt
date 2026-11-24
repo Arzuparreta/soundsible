@@ -107,11 +107,16 @@ class DevicesUiTest {
                 val program = "[data-testid=android-program] button"
                 val devices = "document.querySelector('[data-android-devices]')?.textContent.trim()"
                 waitFor("!!document.querySelector('[data-testid=android-library]')&&!document.documentElement.hasAttribute('data-booting')")
-                web.evaluate(scenario, "localStorage.setItem('lang','en');localStorage.removeItem('android:remote:target')"); scenario.recreate()
+                web.evaluate(scenario, "localStorage.setItem('lang','en');localStorage.setItem('android:remote:target',${JSONObject.quote(peerId)})"); scenario.recreate()
                 waitFor("!!document.querySelector('[data-testid=android-library]')&&!document.documentElement.hasAttribute('data-booting')")
                 web.evaluate(scenario, "window.__deviceStates=[];Capacitor.Plugins.SoundsiblePlayback.addListener('device_state',e=>window.__deviceStates.push({generation:e.generation,id:e.device_id,rev:e.rev,playing:e.is_playing}))")
 
-                // Startup: this phone has nothing loaded and the laptop is playing, so the player attaches to it.
+                // An active laptop and a legacy saved selection still leave the phone in local mode.
+                waitFor("$devices==='Devices'")
+                web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
+                val laptopRow = "document.querySelector('[data-connect-sheet] [data-device-row='+CSS.escape(${JSONObject.quote(peerId)})+']')"
+                waitFor("!!$laptopRow&&$laptopRow.getAttribute('aria-checked')==='false'")
+                web.evaluate(scenario, "$laptopRow.click()")
                 waitFor("$devices==='Playing on Remote test laptop'")
                 waitFor("document.querySelector('[data-testid=android-program]')?.innerText.includes('Peer first')===true&&!!${button(program, "Pause")}")
                 assertTrue("The phone played locally", commands("play.tracks").isEmpty())
@@ -156,15 +161,26 @@ class DevicesUiTest {
                 while (registered.get() == before && System.nanoTime() < back) Thread.sleep(50)
                 waitFor("$devices==='Playing on Remote test laptop'")
 
-                // "Listen here": the session moves to this phone, the laptop is released, and the player shows this phone.
+                // "Move session here": the session moves to this phone, the laptop is released, and the player shows this phone.
                 web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
-                waitFor("!!${button("[data-connect-sheet] button", "Listen here")}")
-                web.evaluate(scenario, "${button("[data-connect-sheet] button", "Listen here")}.click()")
+                waitFor("!!${button("[data-connect-sheet] button", "Move session here")}")
+                web.evaluate(scenario, "${button("[data-connect-sheet] button", "Move session here")}.click()")
                 assertTrue("The laptop was never released", released.await(25, TimeUnit.SECONDS))
                 waitFor("$devices==='Devices'")
                 web.evaluate(scenario, "window.__timer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__local=s),100)")
                 waitFor("window.__local?.items?.length===2&&window.__local.index===1&&window.__local.items[1].title==='Peer second'&&window.__local.playWhenReady===true")
-                assertNull("The choice of device outlived the transfer", web.evaluate(scenario, "localStorage.getItem('android:remote:target')").takeIf { it != "null" })
+
+                // An independent copy replaces the phone's queue with one track while the laptop keeps playing.
+                peerPlaying.set(true)
+                publish()
+                val beforeCopy = received.size
+                web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
+                val copy = button("[data-connect-sheet] button", "Play a copy here")
+                waitFor("!!$copy")
+                web.evaluate(scenario, "$copy.click()")
+                waitFor("window.__local?.items?.length===1&&window.__local.id==='member-track'&&window.__local.positionMs>=12000&&window.__local.playWhenReady===true")
+                assertEquals("Copy sent a command to the laptop", beforeCopy, received.size)
+                assertTrue("Copy stopped the laptop", peerPlaying.get())
 
                 val rows = core("/api/devices").getJSONArray("devices")
                 assertEquals("WebView registered an extra native playback owner", 1, (0 until rows.length()).count { rows.getJSONObject(it).optString("device_type") == "android" })

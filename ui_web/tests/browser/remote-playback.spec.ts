@@ -1,5 +1,5 @@
 import { expect, test, type Page, type WebSocketRoute } from '@playwright/test';
-import { mockMusicEngine } from './music-browser-fixture';
+import { fixtureWav, mockMusicEngine } from './music-browser-fixture';
 
 for (const keys of [['yt:dQw4w9WgXcQ'], ['deezer:42']]) {
   test(`send a saved song without downloading or playing it locally (${keys[0]})`, async ({ page }) => {
@@ -146,10 +146,13 @@ test('connected mode: device sheet, controlling remote playback, capability hidi
       : null,
   }));
 
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/settings/devices');
   const mobile = (page.viewportSize()?.width ?? 1280) < 1024;
-
-  // Startup auto-attach selects the playing remote device automatically.
+  const sheet = page.locator('[data-connect-sheet]');
+  await page.getByRole('button', { name: 'Dispositivos de reproducción' }).click();
+  await expect(sheet.getByRole('radio', { name: /Este dispositivo/ })).toHaveAttribute('aria-checked', 'true');
+  await sheet.getByRole('radio', { name: /Altavoz Salón/ }).click();
+  await page.evaluate(() => { window.location.hash = '/library?view=songs'; });
   const omni = page.locator('[data-omni-player]');
   await expect(omni).toContainText('Pista 1');
   await expect(omni).toContainText('Altavoz Salón');
@@ -194,10 +197,9 @@ test('connected mode: device sheet, controlling remote playback, capability hidi
     await surface.locator('[data-device-trigger="player-header"]').click();
   }
 
-  const sheet = page.locator('[data-connect-sheet]');
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole('radio', { name: /Altavoz Salón/ })).toHaveAttribute('aria-checked', 'true');
-  await expect(sheet.getByRole('button', { name: 'Escuchar aquí' })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Mover sesión aquí' })).toBeVisible();
   await expect(sheet.locator('[data-device-outdated="legacy-1"]')).toContainText('Actualiza Soundsible en este dispositivo para controlarlo');
 
   // Close sheet with Escape and close Now Playing.
@@ -228,4 +230,62 @@ test('connected mode: device sheet, controlling remote playback, capability hidi
     expect(localPillBox).not.toBeNull();
     expect(Math.abs(localPillBox!.height - remotePillBox.height)).toBeLessThanOrEqual(0.5);
   }
+});
+
+
+test('a fresh player stays local and can copy a remote track without sending a command', async ({ page }) => {
+  await mockMusicEngine(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('remote:target', 'speaker-1');
+    sessionStorage.setItem('music-fixture-initialized', 'true');
+  });
+  const remoteTrack = { id: 'remote-song', title: 'Pista del otro dispositivo', artist: 'Artista remoto', duration: 180 };
+  const now = Date.now();
+  const remote = {
+    device_id: 'speaker-1', device_name: 'ThinkPad', online: true, protocol: 1, form_factor: 'computer',
+    playing: { track: remoteTrack, is_playing: true, position_sec: 30, measured_at_ms: now, mode: 'normal', rev: 1 },
+  };
+  const peerWrites: string[] = [];
+  const localPublishes: Array<{ track_id: string; position_sec: number; is_playing: boolean }> = [];
+  await page.route('**/api/devices', route => route.fulfill({ json: { devices: [remote], server_now_ms: Date.now() } }));
+  await page.route('**/api/devices/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() === 'POST' && (/\/commands$/.test(path) || path === '/api/devices/transfer')) peerWrites.push(path);
+    return route.fulfill({ json: { status: 'applied', rev: 2 } });
+  });
+  await page.route('**/api/playback/state**', route => {
+    if (route.request().method() === 'PUT') localPublishes.push(route.request().postDataJSON());
+    return route.fulfill({ json: { status: 'ok', rev: 1 } });
+  });
+  await stubSocketIo(page, () => ({ device: remote, state: null }));
+
+  await page.goto('/player/#/library?view=songs');
+  const firstLocalStream = page.waitForRequest('**/api/static/stream/library-track-320**');
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  await firstLocalStream;
+  await page.evaluate(() => { window.location.hash = '/settings/devices'; });
+  await page.getByRole('button', { name: 'Dispositivos de reproducción' }).click();
+  const sheet = page.locator('[data-connect-sheet]');
+  await expect(sheet.getByRole('radio', { name: /Este dispositivo/ })).toHaveAttribute('aria-checked', 'true');
+  await expect(sheet.getByRole('radio', { name: /ThinkPad/ })).toContainText('Pista del otro dispositivo');
+  // Core serves byte ranges. A plain WAV response starts at zero on Chromium.
+  await page.route('**/api/static/stream/remote-song**', route => {
+    const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers().range ?? '');
+    const headers = { 'accept-ranges': 'bytes' };
+    if (!range) return route.fulfill({ headers, contentType: 'audio/wav', body: fixtureWav });
+    const start = Number(range[1]);
+    const end = range[2] ? Math.min(Number(range[2]), fixtureWav.length - 1) : fixtureWav.length - 1;
+    return route.fulfill({
+      status: 206, contentType: 'audio/wav', body: fixtureWav.subarray(start, end + 1),
+      headers: { ...headers, 'content-range': `bytes ${start}-${end}/${fixtureWav.length}` },
+    });
+  });
+  const copiedStream = page.waitForRequest('**/api/static/stream/remote-song**');
+  await sheet.getByRole('button', { name: 'Reproducir una copia aquí' }).click();
+  await copiedStream;
+  await expect(sheet).toHaveCount(0);
+  await expect(page.locator('[data-omni-player]')).toContainText('Pista del otro dispositivo');
+  await expect.poll(() => localPublishes.some(({ track_id, position_sec, is_playing }) =>
+    track_id === remoteTrack.id && position_sec >= 30 && is_playing)).toBe(true);
+  expect(peerWrites).toEqual([]);
 });

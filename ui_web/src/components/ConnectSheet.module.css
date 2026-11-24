@@ -44,8 +44,15 @@
 
 .entry {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.entryActions {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-xs);
+  padding: 0 var(--space-md) var(--space-xs);
 }
 
 .row {
@@ -151,10 +158,4 @@
 .check {
   display: inline-flex;
   flex: none;
-}
-
-.move {
-  flex: none;
-  min-height: var(--control-h);
-  white-space: nowrap;
 }

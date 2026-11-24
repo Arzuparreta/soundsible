@@ -21,6 +21,7 @@ export interface ConnectSelf {
   readonly deviceType?: string;
   track(): Track | null;
   playing(): boolean;
+  playCopy(track: Track, positionSec: number): boolean | Promise<boolean>;
 }
 
 function Row(props: {
@@ -86,7 +87,7 @@ const moveFocus: JSX.EventHandler<HTMLDivElement, KeyboardEvent> = (event) => {
  * player and the Android app open it with their own controller and device. */
 export function openConnectSheet(control: RemoteControl, self: ConnectSelf): void {
   const { controlledName, devices: remoteDevices, devicesFailed: remoteDevicesFailed, refreshDevices, retryTarget, selectTarget, target: remoteTarget,
-    transferTo, unreachable: remoteUnreachable } = control;
+    transferTo, trackCopy, unreachable: remoteUnreachable } = control;
   const selfId = () => control.host.selfId();
   openOverlay(
     (close) => {
@@ -114,6 +115,12 @@ export function openConnectSheet(control: RemoteControl, self: ConnectSelf): voi
         setBusy(false);
         if (done) close();
       };
+      async function copy(id: string): Promise<boolean> {
+        const source = trackCopy(id);
+        if (!source || !await self.playCopy(source.track, source.positionSec)) return false;
+        selectTarget(null);
+        return true;
+      }
       // One transfer button, and only when its direction is unambiguous.
       const transfer = (d: Device) => {
         const here = Boolean(self.track()), there = Boolean(d.playing?.track), id = selfId();
@@ -179,13 +186,23 @@ export function openConnectSheet(control: RemoteControl, self: ConnectSelf): voi
                         tabStop={remoteTarget() === d.device_id}
                         onSelect={() => control(d.device_id)}
                       />
-                      <Show when={transfer(d)}>
-                        {(move) => (
-                          <Button variant="ghost" size="sm" class={styles.move} disabled={busy()} aria-busy={busy()}
-                            onClick={() => void run(move().run)}>
-                            {move().label}
-                          </Button>
-                        )}
+                      <Show when={d.playing?.track && !d.playing.track.unavailable || transfer(d)}>
+                        <div class={styles.entryActions}>
+                          <Show when={d.playing?.track && !d.playing.track.unavailable}>
+                            <Button variant="secondary" size="sm" disabled={busy()} aria-busy={busy()}
+                              onClick={() => void run(() => copy(d.device_id))}>
+                              {t('deviceSheet.playCopyHere')}
+                            </Button>
+                          </Show>
+                          <Show when={transfer(d)}>
+                            {(move) => (
+                              <Button variant="ghost" size="sm" disabled={busy()} aria-busy={busy()}
+                                onClick={() => void run(move().run)}>
+                                {move().label}
+                              </Button>
+                            )}
+                          </Show>
+                        </div>
                       </Show>
                     </div>
                   </Show>

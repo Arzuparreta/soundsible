@@ -603,7 +603,8 @@ class PlaybackService : MediaLibraryService() {
             require(args.getLong("generation", -1) == connection.generation)
             val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"), lane = "context")
             val index = args.getInt("index", -1); require(index in items.indices)
-            if ((dj != null || djPlanner.busy()) && items[index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
+            val position = args.getLong("positionMs", -1)
+            if (position < 0 && (dj != null || djPlanner.busy()) && items[index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
                 startDjSelection(listOf(items[index]), items[index].mediaMetadata.title?.toString().orEmpty())
                 return
             }
@@ -611,7 +612,7 @@ class PlaybackService : MediaLibraryService() {
             autoplay.clear()
             radio.clear()
             player.shuffleModeEnabled = args.getBoolean("shuffle")
-            player.setMediaItems(items, index, podcasts.position(items[index])); player.prepare(); player.play()
+            player.setMediaItems(items, index, if (position >= 0) position else podcasts.position(items[index])); player.prepare(); player.play()
         } else if (args.getString("action") == "metadata") {
             ProgramMetadata.apply(player, connection, args, artwork::clear)
         } else if (args.getString("action") == "retireSource") {

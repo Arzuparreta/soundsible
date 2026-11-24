@@ -34,6 +34,8 @@ the whole session. Faults found in the old pipeline:
 | --- | --- |
 | Who owns playback | The playing device. The engine relays and copies state; it keeps no queue (see architecture review point 4). |
 | Library, Search and Discover while controlling another device | They act on the controlled device, as player controls do. "This device" is one tap away in the device sheet. |
+| Starting a player | Start on this device. An explicit remote selection lasts for the current player session and survives socket reconnects. |
+| Play a copy here | Start the other device’s current track at its estimated position on this device. The source keeps its playback and this device controls its own copy. |
 | Android apps older than the engine | Listed as needing an update. The two old endpoints stay one release as wrappers. |
 | Volume | `transport.set_volume` for web targets; Android does not declare it yet. |
 | Native iOS | Out of scope: never installed. The PWA is the iPhone client. |

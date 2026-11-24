@@ -29,17 +29,16 @@ const stateEvent = (over: Partial<DeviceStateEvent & { generation: number }> = {
 });
 
 let dispose: () => void = () => {};
-function setup(hasMusic = false) {
+function setup() {
   return createRoot(done => {
     dispose = done;
     return createNativeRemote({
       generation: () => 4,
       device: () => ({ generation: 4, device_id: 'phone', connected: true, device_name: 'Pixel' }),
-      hasMusic: () => hasMusic,
     });
   });
 }
-const self = (track: typeof song | null) => ({ name: 'Pixel', formFactor: 'phone', deviceType: 'android', track: () => track, playing: () => Boolean(track) });
+const self = (track: typeof song | null) => ({ name: 'Pixel', formFactor: 'phone', deviceType: 'android', track: () => track, playing: () => Boolean(track), playCopy: vi.fn() });
 
 beforeEach(() => {
   localStorage.clear();
@@ -55,8 +54,10 @@ it('watches through the service for this account and takes only this account’s
   const remote = setup();
   await vi.waitFor(() => expect(mocks.listeners.size).toBe(2));
   expect(remote.label()).toBe('Devices');
-  // Startup: this phone has nothing loaded and the laptop is playing.
   await remote.control.refreshDevices();
+  expect(remote.label()).toBe('Devices');
+  expect(mocks.watch).not.toHaveBeenCalled();
+  remote.control.selectTarget('laptop');
   expect(mocks.watch).toHaveBeenCalledWith({ generation: 4, device_id: 'laptop' });
   await vi.waitFor(() => expect(remote.control.held()?.rev).toBe(2));
   expect(remote.label()).toBe('Playing on Laptop');
@@ -79,7 +80,7 @@ it('watches through the service for this account and takes only this account’s
 it('keeps the chosen device when the service has no socket yet: the service watches it on connect', async () => {
   mocks.listDevices.mockResolvedValue({ devices: [laptop()] });
   mocks.watch.mockRejectedValue(new Error('not connected'));
-  const remote = setup(true);
+  const remote = setup();
   await remote.control.refreshDevices();
   remote.control.selectTarget('laptop');
   await Promise.resolve();
@@ -93,7 +94,7 @@ it('opens the shared device sheet for the phone and moves its music to an idle d
   mocks.listDevices.mockResolvedValue({ devices: [laptop({ device_id: 'phone', device_name: 'Pixel' }), laptop()] });
   mocks.watch.mockResolvedValue({ device: laptop(), state: null });
   mocks.transfer.mockResolvedValue({ status: 'applied', rev: 4 });
-  const remote = setup(true);
+  const remote = setup();
   render(() => <OverlayOutlet />);
   openConnectSheet(remote.control, self(song));
   const group = await screen.findByRole('radiogroup');

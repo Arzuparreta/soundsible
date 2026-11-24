@@ -298,6 +298,13 @@ failure.
 
 ## Controller behaviour
 
+- Each player session starts on this device. An explicit remote selection
+  survives socket reconnects during that session.
+- "Play a copy here" reads the peer’s current track and estimates its position
+  from the device row. The local player loads that track independently. The
+  action sends no playback command or transfer to the source device.
+
+
 - A control is pending from the request until the answer. On `applied` it
   stays pending until the controller holds a state with `rev` ≥ the answer's
   `rev` (at most 3 s), so the interface never jumps back.

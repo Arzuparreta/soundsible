@@ -200,6 +200,7 @@ class PlaybackPlugin : Plugin() {
                         putString("id", call.getString("id"))
                         putString("action", call.getString("action")); putString("queueToken", if (call.getString("action") in listOf("play", "queue")) ProgramQueue.token(p) else call.getString("queueToken")); putString("key", if (call.getString("action") == "play" && p.mediaItemCount > 0) ProgramQueue.key(p, p.currentMediaItemIndex) else call.getString("key"))
                         putString("tracks", call.getArray("tracks")?.toString())
+                        call.getDouble("positionMs")?.let { putLong("positionMs", it.toLong().coerceAtLeast(0)) }
                         putString("contextKind", call.getObject("context")?.getString("kind")); putString("contextId", call.getObject("context")?.getString("id"))
                         putInt("index", if (call.getString("action") == "play") p.currentMediaItemIndex else call.getInt("index") ?: if (call.getString("action") == "queue") 0 else -1); putInt("toIndex", call.getInt("toIndex") ?: -1)
                     }

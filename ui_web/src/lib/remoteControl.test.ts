@@ -24,7 +24,7 @@ const stateEvent = (over: Partial<DeviceStateEvent> = {}): DeviceStateEvent => (
 function setup(host: Partial<RemoteHost> = {}) {
   const watches: { id: string; ack: (answer: WatchDeviceAck | null | undefined) => void }[] = [];
   const unwatched: string[] = [];
-  const control = createRemoteControl({ selfId: () => 'phone', selfName: () => 'Pixel', hasMusic: () => false, storageKey: 'test:target', ...host });
+  const control = createRemoteControl({ selfId: () => 'phone', selfName: () => 'Pixel', ...host });
   control.attach({ watch: (id, ack) => watches.push({ id, ack }), unwatch: id => unwatched.push(id) });
   return { control, watches, unwatched };
 }
@@ -36,22 +36,39 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('shared remote control with an injected link', () => {
-  it('attaches on startup to a device playing elsewhere only when this device has nothing loaded', async () => {
-    mocks.listDevices.mockResolvedValue({ devices: [device({ device_id: 'phone' }), device({ playing })], server_now_ms: Date.now() });
-    const idle = setup();
-    await idle.control.refreshDevices();
-    expect(idle.control.target()).toBe('speaker');
-    expect(idle.watches.map(w => w.id)).toEqual(['speaker']);
-    expect(localStorage.getItem('test:target')).toBeNull();
-    // Never later: choosing this device sticks.
-    idle.control.selectTarget(null);
-    await idle.control.refreshDevices();
-    expect(idle.control.target()).toBeNull();
-    expect(idle.unwatched).toEqual(['speaker']);
+  it('starts local even with active playback or a remembered choice and rewatches only an explicit target', async () => {
+    localStorage.setItem('test:target', 'speaker');
+    mocks.listDevices.mockResolvedValue({ devices: [device({ playing })], server_now_ms: Date.now() });
+    const { control, watches } = setup();
+    await control.refreshDevices();
+    expect(control.target()).toBeNull();
+    expect(watches).toEqual([]);
 
-    const busy = setup({ hasMusic: () => true });
-    await busy.control.refreshDevices();
-    expect(busy.control.target()).toBeNull();
+    control.selectTarget('speaker');
+    control.onConnect();
+    expect(watches.map(w => w.id)).toEqual(['speaker', 'speaker']);
+    expect(control.target()).toBe('speaker');
+    control.reset();
+    await control.refreshDevices();
+    expect(control.target()).toBeNull();
+  });
+
+  it('projects the current track position using server time without sending a command', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10000);
+    mocks.listDevices.mockResolvedValue({
+      devices: [device({ playing: { ...playing, position_sec: 20, measured_at_ms: 88000 } })],
+      server_now_ms: 90000,
+    });
+    const { control, watches } = setup();
+    await control.refreshDevices();
+    vi.setSystemTime(11000);
+    expect(control.trackCopy('speaker')).toEqual({ track: playing.track, positionSec: 23 });
+    expect(watches).toEqual([]);
+    expect(mocks.deviceCommand).not.toHaveBeenCalled();
+    expect(control.target()).toBeNull();
+    control.deviceUpdated(device({ online: false, playing }));
+    expect(control.trackCopy('speaker')).toBeNull();
   });
 
   it('takes the watch acknowledgement, keeps rev order, and treats choosing itself as this device', async () => {
