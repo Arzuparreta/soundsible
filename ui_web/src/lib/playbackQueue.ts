@@ -129,6 +129,22 @@ export function futureEntries(
   return lane ? upcoming.filter((entry) => entry.queueLane === lane) : upcoming;
 }
 
+/**
+ * Upcoming rows shown by Queue or DJ Route counts and lists. Shared between
+ * `PlayerCompactDock` and the panel headers so both stay in sync.
+ */
+export function upcomingQueueEntries(
+  queue: readonly PlaybackQueueEntry[],
+  index: number,
+  options: { auto: boolean; radioMode: boolean },
+): PlaybackQueueEntry[] {
+  const upcoming = futureEntries(queue, index);
+  if (options.auto) return upcoming;
+  return upcoming.filter((entry) =>
+    entry.queueLane === 'manual' || (options.radioMode && entry.queueLane === 'generated'),
+  );
+}
+
 export function manualInsertIndex(
   queue: readonly PlaybackQueueEntry[],
   currentIndex: number,

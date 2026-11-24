@@ -18,7 +18,7 @@ import {
   parseNowPlayingLayout,
   type NowPlayingPanelId,
 } from '../lib/nowPlayingLayout';
-import { contextContinuation, futureEntries, sameQueueSection, type PlaybackContextKind, type PlaybackQueueEntry } from '../lib/playbackQueue';
+import { contextContinuation, futureEntries, sameQueueSection, upcomingQueueEntries, type PlaybackContextKind, type PlaybackQueueEntry } from '../lib/playbackQueue';
 import { contextDestination } from '../lib/playbackContext';
 import { dropIndex, type DropSlot } from '../lib/dragReorder';
 import { isPodcastTrack } from '../lib/track';
@@ -85,22 +85,19 @@ export function NowPlaying(props: {
     undefined,
     () => [player().playback.queue, player().playback.index],
   );
-  const manualQueue = createActivityMemo(
+  const upcomingList = createActivityMemo(
     queueActive,
-    () => player().playback.queue.slice(player().playback.index + 1).filter((entry) => entry.queueLane === 'manual'),
-    [],
-    () => [player().playback.queue, player().playback.index],
-  );
-  // The radio's picks are still songs to look through. Autoplay's are not: it
-  // is a continuation, drawn as its card, however many it has prepared.
-  const radioQueue = createActivityMemo(
-    queueActive,
-    () => player().playback.radioMode
-      ? player().playback.queue.slice(player().playback.index + 1).filter((entry) => entry.queueLane === 'generated')
-      : [],
+    () => upcomingQueueEntries(player().playback.queue, player().playback.index, {
+      auto: false,
+      radioMode: player().playback.radioMode,
+    }),
     [],
     () => [player().playback.radioMode, player().playback.queue, player().playback.index],
   );
+  const manualQueue = () => upcomingList().filter((entry) => entry.queueLane === 'manual');
+  // The radio's picks are still songs to look through. Autoplay's are not: it
+  // is a continuation, drawn as its card, however many it has prepared.
+  const radioQueue = () => upcomingList().filter((entry) => entry.queueLane === 'generated');
   const continuation = createActivityMemo(
     queueActive,
     () => player().playback.radioMode
@@ -274,20 +271,17 @@ export function NowPlaying(props: {
     };
   };
 
-  // The current occurrence is cheap and keeps a mounted queue's identity even
-  // before the phone first visits it; compact layouts omit it because the
-  // sticky mini-player above the queue already represents the sounding song.
+  // Compact layouts show the sounding song in the sticky mini-player above the
+  // queue instead of repeating a static "Now playing" row inside the list.
+  const showCurrentRow = () => !playerCompact();
   const initialEntry = player().playback.queue[player().playback.index];
-  const initialSections: PlayerTrackListSection[] = initialEntry && !playerCompact()
+  const initialSections: PlayerTrackListSection[] = initialEntry && showCurrentRow()
     ? [{ id: 'current', label: t('nowPlaying.nowPlayingSection'), entries: [queueRow(initialEntry, undefined, true)] }]
     : [];
   const queueSections = createActivityMemo<PlayerTrackListSection[]>(queueActive, () => {
     const sections: PlayerTrackListSection[] = [];
     const current = currentQueueEntry();
-    // In the compact layout the sticky mini-player above the list already
-    // shows the sounding song and returns to the stage; repeating a static
-    // "Now playing" row right beneath it duplicates the track.
-    if (current && !playerCompact()) {
+    if (current && showCurrentRow()) {
       sections.push({
         id: 'current',
         label: t('nowPlaying.nowPlayingSection'),
@@ -319,10 +313,9 @@ export function NowPlaying(props: {
     });
     return sections;
   }, initialSections, () => [
-    playerCompact(),
+    showCurrentRow(),
     currentQueueEntry(),
-    manualQueue(),
-    radioQueue(),
+    upcomingList(),
     continuation(),
     player().playback.radioMode,
     player().playback.currentTrack,
@@ -365,7 +358,7 @@ export function NowPlaying(props: {
                   <Show when={hostSession() && queueView() === 'chat'} fallback={
                     <PlayerTrackList
                       title={t('nowPlaying.queue')}
-                      count={manualQueue().length + radioQueue().length}
+                      count={upcomingList().length}
                       sections={queueSections()}
                       virtualize
                       empty={t('nowPlaying.queueEmpty')}

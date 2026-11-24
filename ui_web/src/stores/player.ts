@@ -5,6 +5,7 @@ import { actions, state } from './index';
 import type { RemoteKey } from './remote';
 import { remoteStore } from './remoteLink';
 import { withDjErrand } from '../lib/djErrand';
+import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
 
 export interface PlayerView {
   readonly playback: PlaybackState;
@@ -61,4 +62,21 @@ export function player(): PlayerView {
     can: m.remoteCan,
     pending: m.remotePending,
   };
+}
+
+/**
+ * Advance playback consistently across `OmniBar`, `PlayerStage` and
+ * `PlayerMiniHeader`: podcasts skip forward, DJ skips in Auto Mode, and
+ * regular music moves to the next queue track.
+ */
+export function advancePlayback(mode?: 'now-playing' | 'auto'): void {
+  const view = player();
+  const track = view.playback.currentTrack;
+  if (track && isPodcastTrack(track)) {
+    view.actions.seekBy(PODCAST_SKIP_SECONDS);
+    return;
+  }
+  const auto = mode ? mode === 'auto' : view.autoMode.active;
+  if (auto) void view.actions.autoSkip();
+  else view.actions.next();
 }

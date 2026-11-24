@@ -3,14 +3,14 @@ import { player } from '../stores/player';
 import { t } from '../lib/i18n';
 import { playerCompact } from '../lib/playerDock';
 import { detectFormFactor } from '../lib/deviceIdentity';
-import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
-import { Control, RangeControl } from '../design/Control';
+import { Control } from '../design/Control';
 import { KaraokeMicIcon, QueueListIcon, RadioIcon, VolumeIcon } from './icons';
 import { onStopRadio } from './RadioBadge';
+import { VolumeRange } from './VolumeRange';
 import styles from './PlayerCompactDock.module.css';
 
 /**
- * Persistent compact bottom bar shared by Stage, Queue/Route and Lyrics (< 1024px).
+ * Persistent compact bottom bar shared by Stage, Queue/Route and Lyrics (below `PLAYER_COMPACT_BELOW`).
  *
  * View toggles sit on the left; playback utilities sit on the right. On
  * `mobileWeb` phones the volume button is a direct mute toggle; on desktop
@@ -40,11 +40,6 @@ export function PlayerCompactDock(props: {
   let volumeDismissTimer: ReturnType<typeof setTimeout> | undefined;
 
   const current = () => player().playback.currentTrack;
-  const volPct = () => {
-    const muted = Boolean(player().playback.muted);
-    const volume = player().playback.volume ?? 1;
-    return Math.round(gainToVolumePosition(muted ? 0 : volume) * 100);
-  };
 
   const cancelVolumeDismiss = () => clearTimeout(volumeDismissTimer);
   onCleanup(cancelVolumeDismiss);
@@ -64,14 +59,6 @@ export function PlayerCompactDock(props: {
       if (!volumePopup?.contains(document.activeElement)) closeVolume();
     }, 160);
   };
-  const escapeVolume = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape' || !volumeOpen()) return;
-    event.preventDefault();
-    event.stopPropagation();
-    volumeTrigger?.focus({ preventScroll: true });
-    closeVolume();
-  };
-
   createEffect(() => {
     if (!props.surfaceOpen || !playerCompact() || !player().can('transport.set_volume')) setVolumeOpen(false);
   });
@@ -80,14 +67,27 @@ export function PlayerCompactDock(props: {
     const dismiss = (event: Event) => {
       if (event.target instanceof Node && !volumeRoot?.contains(event.target) && !volumePopup?.contains(event.target)) closeVolume();
     };
+    // Escape layer order: OverlayOutlet (window capture) > inline volume popover
+    // (document capture while open) > Lyrics (document bubble) > player (window bubble).
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (volumePopup?.contains(document.activeElement)) {
+        volumeTrigger?.focus({ preventScroll: true });
+      }
+      closeVolume();
+    };
     document.addEventListener('pointerdown', dismiss, true);
     document.addEventListener('focusin', dismiss, true);
     document.addEventListener('scroll', closeVolume, true);
+    document.addEventListener('keydown', onEscape, true);
     window.addEventListener('resize', closeVolume);
     onCleanup(() => {
       document.removeEventListener('pointerdown', dismiss, true);
       document.removeEventListener('focusin', dismiss, true);
       document.removeEventListener('scroll', closeVolume, true);
+      document.removeEventListener('keydown', onEscape, true);
       window.removeEventListener('resize', closeVolume);
     });
   });
@@ -162,7 +162,6 @@ export function PlayerCompactDock(props: {
             class={styles.dockVolume}
             ref={volumeRoot}
             data-no-surface-swipe=""
-            onKeyDown={escapeVolume}
           >
             <Control
               class={styles.dockIconBtn}
@@ -194,20 +193,10 @@ export function PlayerCompactDock(props: {
                 id={volumeId}
                 class={styles.dockVolumePopup}
                 data-no-surface-swipe=""
-                onKeyDown={escapeVolume}
                 onPointerEnter={cancelVolumeDismiss}
                 onPointerLeave={leaveVolume}
               >
-                <RangeControl
-                  class={styles.dockVolRange}
-                  min={0}
-                  max={100}
-                  value={volPct()}
-                  style={{ '--fill': `${volPct()}%` }}
-                  aria-label={t('omnibar.volume')}
-                  aria-valuetext={`${volPct()}%`}
-                  onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
-                />
+                <VolumeRange class={styles.dockVolRange} />
               </div>
             </Show>
           </div>

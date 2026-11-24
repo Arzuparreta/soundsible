@@ -100,6 +100,8 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
     }
   };
 
+  // Filter to touch pointers: WebKit mouse hover updates can reuse pointerId 1
+  // during an active touch hold and would otherwise cancel the long-press.
   const onPointerMove = (event: PointerEvent) => {
     if (event.pointerType !== 'touch' || pointerId !== event.pointerId) return;
     if (

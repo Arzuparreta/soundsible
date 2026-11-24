@@ -1,10 +1,10 @@
 import { PodcastSkipIcon } from './PodcastSkipIcon';
-import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
+import { isPodcastTrack } from '../lib/track';
 import { ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, setNowPlayingOpen } from '../stores';
-import { player } from '../stores/player';
+import { advancePlayback, player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
 import { mobileListLayout } from '../lib/listLayout';
 import { OmniSeek } from './OmniSeek';
@@ -13,7 +13,7 @@ import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
 import { gainToVolumePosition, nudgeVolumeGain, volumePositionToGain } from '../lib/volumeScale';
 import { Control } from '../design/Control';
 import { connectLabel, openConnect } from './DeviceSheet';
-import { OutputDeviceIcon, PauseFilledIcon, PlayFilledIcon, RefreshIcon, VolumeIcon } from './icons';
+import { NextFilledIcon, OutputDeviceIcon, PauseFilledIcon, PlayFilledIcon, RefreshIcon, VolumeIcon } from './icons';
 import { RadioBadge } from './RadioBadge';
 import { Spinner } from './Spinner';
 import styles from './OmniBar.module.css';
@@ -230,9 +230,9 @@ export function OmniBar() {
         aria-busy={player().pending('next') || undefined}
         data-pending={player().pending('next') || undefined}
         disabled={!current() || unreachable()}
-        onClick={() => podcast() ? player().actions.seekBy(PODCAST_SKIP_SECONDS) : player().autoMode.active ? void player().actions.autoSkip() : player().actions.next()}
+        onClick={() => advancePlayback()}
       >
-        <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z" /></svg>}>
+        <Show when={podcast()} fallback={<NextFilledIcon size={22} />}>
           <PodcastSkipIcon size={22} />
         </Show>
       </button>

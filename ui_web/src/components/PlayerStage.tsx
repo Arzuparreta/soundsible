@@ -3,7 +3,7 @@ import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { isSavedTrack } from '../stores';
-import { player } from '../stores/player';
+import { advancePlayback, player } from '../stores/player';
 import { clockTime } from '../lib/format';
 import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
@@ -13,19 +13,19 @@ import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { savedFromTrack } from '../lib/saved';
 import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
 import { t } from '../lib/i18n';
-import { Control, RangeControl } from '../design/Control';
+import { Control } from '../design/Control';
 import { detectFormFactor } from '../lib/deviceIdentity';
-import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
 import { playerCompact } from '../lib/playerDock';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
-import { KaraokeMicIcon, NextFilledIcon, PauseFilledIcon, PlayFilledIcon, RadioIcon, RefreshIcon, RepeatIcon, ShuffleIcon, VolumeIcon, menuIcons } from './icons';
+import { KaraokeMicIcon, MoreIcon, NextFilledIcon, PauseFilledIcon, PlayFilledIcon, PrevFilledIcon, RadioIcon, RefreshIcon, RepeatIcon, ShuffleIcon, VolumeIcon, menuIcons } from './icons';
 import { LyricsPanel } from './LyricsPanel';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { onStopRadio } from './RadioBadge';
 import { Spinner } from './Spinner';
+import { VolumeRange } from './VolumeRange';
 import { buildTrackMenu, openTrackMenu } from './trackActions';
 import type { Track } from '../types/music';
 import { openActionMenu } from './ActionMenu';
@@ -102,13 +102,12 @@ export function PlayerStage(props: {
     const duration = player().playback.duration;
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   };
-  const volPct = () => Math.round(gainToVolumePosition(player().playback.muted ? 0 : player().playback.volume) * 100);
   const mobileWeb = detectFormFactor() !== 'computer';
 
   const muteButton = () => (
     <Show when={player().can('transport.set_muted')}>
       <Control
-        class={`${styles.actBtn} ${styles.inlineMute}`}
+        class={styles.actBtn}
         classList={{ [styles.actOn]: player().playback.muted }}
         aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
         aria-pressed={player().playback.muted}
@@ -120,19 +119,6 @@ export function PlayerStage(props: {
         <VolumeIcon muted={Boolean(player().playback.muted)} size={20} />
       </Control>
     </Show>
-  );
-
-  const volumeSlider = () => (
-    <RangeControl
-      class={styles.volRange}
-      min={0}
-      max={100}
-      value={volPct()}
-      style={{ '--fill': `${volPct()}%` }}
-      aria-label={t('omnibar.volume')}
-      aria-valuetext={`${volPct()}%`}
-      onInput={(event) => player().actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
-    />
   );
 
   const animateRects = (before: Map<Element, DOMRect>) => {
@@ -177,19 +163,29 @@ export function PlayerStage(props: {
   };
 
   onMount(() => {
-    // Capture phase runs after OverlayOutlet (modals/menus first) and before
-    // the global bubble shortcut handler, so Escape folds desktop lyrics
-    // instead of closing the whole player.
+    // Document bubble runs after OverlayOutlet (window capture) and inline dock
+    // popovers (document capture), and before the global window bubble shortcut
+    // handler, so Escape folds desktop lyrics instead of closing the player.
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape' && props.surfaceOpen && !playerCompact() && desktopLyricsActive()) {
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
         toggleDesktopLyrics();
       }
     };
-    window.addEventListener('keydown', onKeyDown, true);
-    onCleanup(() => window.removeEventListener('keydown', onKeyDown, true));
+    document.addEventListener('keydown', onKeyDown);
+    onCleanup(() => document.removeEventListener('keydown', onKeyDown));
   });
+
+  const openStageTrackMenu = (item: Track) => {
+    openTrackMenu(item, {
+      music: playerTrackMusic(item),
+      onAddToPlaylist: openPlaylistPicker,
+      onEditMetadata: openMetadataEditor,
+      onPlayOnDevice: openPlayOnDevice,
+    });
+  };
 
   const openLyricsOverflow = () => {
     const current = track();
@@ -226,11 +222,6 @@ export function PlayerStage(props: {
         }).filter((action) => action.label !== t('trackActions.startRadio')),
       ],
     });
-  };
-
-  const next = () => {
-    if (props.mode === 'auto') void player().actions.autoSkip();
-    else player().actions.next();
   };
 
   return (
@@ -315,18 +306,9 @@ export function PlayerStage(props: {
                       class={`${styles.actBtn} ${styles.compactMoreAction}`}
                       aria-label={t('common.more')}
                       title={t('common.more')}
-                      onClick={() => openTrackMenu(current(), {
-                        music: playerTrackMusic(current()),
-                        onAddToPlaylist: openPlaylistPicker,
-                        onEditMetadata: openMetadataEditor,
-                        onPlayOnDevice: openPlayOnDevice,
-                      })}
+                      onClick={() => openStageTrackMenu(current())}
                     >
-                      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-                        <circle cx="5" cy="12" r="2" />
-                        <circle cx="12" cy="12" r="2" />
-                        <circle cx="19" cy="12" r="2" />
-                      </svg>
+                      <MoreIcon size={20} />
                     </Control>
                   </div>
                 </div>
@@ -383,7 +365,7 @@ export function PlayerStage(props: {
                     data-pending={player().pending('prev') || undefined}
                     onClick={() => podcast() ? player().actions.seekBy(-PODCAST_SKIP_SECONDS) : player().actions.prev()}
                   >
-                    <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>}>
+                    <Show when={podcast()} fallback={<PrevFilledIcon size={30} />}>
                       <PodcastSkipIcon backward />
                     </Show>
                   </button>
@@ -418,7 +400,7 @@ export function PlayerStage(props: {
                     aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')}
                     aria-busy={player().pending('next') || undefined}
                     data-pending={player().pending('next') || undefined}
-                    onClick={() => podcast() ? player().actions.seekBy(PODCAST_SKIP_SECONDS) : next()}
+                    onClick={() => advancePlayback(props.mode)}
                   >
                     <Show when={podcast()} fallback={<NextFilledIcon size={30} />}>
                       <PodcastSkipIcon />
@@ -484,7 +466,7 @@ export function PlayerStage(props: {
                     >
                       {muteButton()}
                       <Show when={!mobileWeb}>
-                        <span class={styles.volumePopover}>{volumeSlider()}</span>
+                        <span class={styles.volumePopover}><VolumeRange class={styles.volRange} /></span>
                       </Show>
                     </div>
                   </Show>
@@ -495,18 +477,9 @@ export function PlayerStage(props: {
                     title={t('common.more')}
                     onClick={() => desktopLyricsActive()
                       ? openLyricsOverflow()
-                      : openTrackMenu(current(), {
-                          music: playerTrackMusic(current()),
-                          onAddToPlaylist: openPlaylistPicker,
-                          onEditMetadata: openMetadataEditor,
-                          onPlayOnDevice: openPlayOnDevice,
-                        })}
+                      : openStageTrackMenu(current())}
                   >
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-                      <circle cx="5" cy="12" r="2" />
-                      <circle cx="12" cy="12" r="2" />
-                      <circle cx="19" cy="12" r="2" />
-                    </svg>
+                    <MoreIcon size={20} />
                   </Control>
                 </div>
               </div>

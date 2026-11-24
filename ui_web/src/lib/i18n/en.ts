@@ -72,7 +72,6 @@ export const en = {
     startDjFromCurrent: 'Start DJ from current song',
     startDjFromSong: 'Start DJ from this song',
     mixWith: 'Mix with…',
-    changeShort: 'Change…',
     changeSession: 'Change',
     chooseOtherMusic: 'Choose other music…',
 

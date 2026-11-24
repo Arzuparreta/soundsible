@@ -147,3 +147,64 @@ test('an external song click starts a new DJ session immediately and its menu ca
   expect(requests[1].session_id).not.toBe(requests[0].session_id);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
 });
+
+test('DJ Sources header stays inside a 320px large-scale French viewport without overlap', async ({ page }) => {
+  await mockMusicEngine(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('lang', 'fr');
+    localStorage.setItem('soundsible:interface-size', 'large');
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.route('**/api/discovery/music/dj-plan', async (route) => {
+    await route.fulfill({ json: plan(route.request().postDataJSON(), false) });
+  });
+  await page.goto('/player/#/library?view=songs');
+  await page.getByRole('button', { name: /Canción de biblioteca 320/ }).first().click();
+  await openMiniPlayer(page, /^NORMAL:/);
+  await page.getByRole('tab', { name: 'DJ', exact: true }).click();
+  const route = await showRoute(page);
+  const session = route.getByRole('region', { name: 'Session' });
+  const header = session.locator('header');
+  await expect(header).toBeVisible();
+  await expect(header.getByRole('button')).toHaveCount(2);
+
+  const metrics = await header.evaluate((element) => {
+    const headerRect = element.getBoundingClientRect();
+    const headingRect = element.firstElementChild!.getBoundingClientRect();
+    const buttons = [...element.querySelectorAll('button')].map((btn) => {
+      const rect = btn.getBoundingClientRect();
+      const iconRect = btn.querySelector('svg')!.getBoundingClientRect();
+      const span = btn.querySelector('span')!;
+      return {
+        rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+        iconRight: iconRect.right,
+        iconLeft: iconRect.left,
+        spanClientWidth: span.clientWidth,
+        spanScrollWidth: span.scrollWidth,
+      };
+    });
+    const rects = [headingRect, ...buttons.map((b) => b.rect)];
+    const overlap = rects.some((a, i) => rects.some((b, j) =>
+      i < j
+      && a.right > b.left + 1 && a.left < b.right - 1
+      && a.bottom > b.top + 1 && a.top < b.bottom - 1,
+    ));
+    return {
+      headerLeft: headerRect.left,
+      headerRight: headerRect.right,
+      headingRect: { left: headingRect.left, right: headingRect.right },
+      buttons,
+      overlap,
+    };
+  });
+
+  expect(metrics.overlap).toBe(false);
+  expect(metrics.headingRect.left).toBeGreaterThanOrEqual(metrics.headerLeft - 1);
+  expect(metrics.headingRect.right).toBeLessThanOrEqual(metrics.headerRight + 1);
+  for (const button of metrics.buttons) {
+    expect(button.rect.left).toBeGreaterThanOrEqual(metrics.headerLeft - 1);
+    expect(button.rect.right).toBeLessThanOrEqual(metrics.headerRight + 1);
+    expect(button.iconLeft).toBeGreaterThanOrEqual(button.rect.left - 1);
+    expect(button.iconRight).toBeLessThanOrEqual(button.rect.right + 1);
+  }
+});

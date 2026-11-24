@@ -310,12 +310,15 @@
 
 .routePanel { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
 .routeList { flex: 1; min-height: 0; }
-.references { container-type: inline-size; flex: 0 0 auto; max-height: 35%; overflow: auto; padding: var(--space-sm) var(--space-md) var(--space-sm); box-shadow: inset 0 1px var(--stage-line-soft); }
-.sessionActions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); min-height: var(--pill-h); }
-.referencesHeading { color: var(--ink-secondary); font-size: var(--text-caption); font-weight: var(--fw-semibold); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
-.referencesButtons { display: inline-flex; align-items: center; gap: var(--space-2xs); min-width: 0; }
-.refAction { display: inline-flex; align-items: center; gap: var(--space-xs); min-width: 0; min-height: var(--pill-h); padding: 0 var(--space-sm); color: var(--ink-secondary); font: inherit; font-size: var(--text-caption); font-weight: var(--fw-semibold); background: transparent; border: 0; border-radius: var(--radius-xs); cursor: pointer; white-space: nowrap; transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out); }
+.references { container-type: inline-size; flex: 0 0 auto; max-height: 35%; overflow: auto; padding: var(--space-xs) var(--space-md) var(--space-sm); box-shadow: inset 0 1px var(--stage-line-soft); }
+.sessionActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2xs) var(--space-sm); min-height: var(--pill-h); }
+.referencesHeading { flex: 0 0 auto; color: var(--ink-secondary); font-size: var(--text-caption); font-weight: var(--fw-semibold); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
+.referencesButtons { display: inline-flex; flex: 0 1 auto; align-items: center; gap: var(--space-2xs); min-width: 0; max-width: 100%; }
+.refAction { position: relative; display: inline-flex; flex: 0 1 auto; align-items: center; gap: var(--space-xs); min-width: 0; min-height: var(--pill-h); padding: 0 var(--space-sm); color: var(--ink-secondary); font: inherit; font-size: var(--text-caption); font-weight: var(--fw-semibold); background: transparent; border: 0; border-radius: var(--radius-xs); cursor: pointer; white-space: nowrap; transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out); }
+/* Extend touch target vertically to --control-h without inflating the quiet row height. */
+.refAction::before { position: absolute; inset: calc((var(--control-h) - var(--pill-h)) / -2) 0; content: ''; }
 .refAction svg { flex: 0 0 auto; }
+.refAction span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .refActionPrimary { color: var(--accent-ink); }
 @media (hover: hover) and (pointer: fine) {
   .refAction:hover { color: var(--ink-primary); background: var(--stage-row-hover); }

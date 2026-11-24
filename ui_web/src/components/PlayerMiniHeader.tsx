@@ -1,7 +1,7 @@
 import { createMemo, Match, Show, Switch } from 'solid-js';
-import { player } from '../stores/player';
+import { advancePlayback, player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
-import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
+import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { Control } from '../design/Control';
 import { ArtworkSurface } from '../design/Artwork';
@@ -26,12 +26,6 @@ export function PlayerMiniHeader(props: {
   const backLabel = createMemo(() =>
     props.mode === 'auto' ? t('autoMode.panel.stage') : t('nowPlaying.panel.stage'),
   );
-
-  const next = () => {
-    if (podcast()) player().actions.seekBy(PODCAST_SKIP_SECONDS);
-    else if (props.mode === 'auto') void player().actions.autoSkip();
-    else player().actions.next();
-  };
 
   return (
     <Show when={track()}>
@@ -86,7 +80,7 @@ export function PlayerMiniHeader(props: {
               aria-busy={player().pending('next') || undefined}
               data-pending={player().pending('next') || undefined}
               disabled={player().unreachable}
-              onClick={next}
+              onClick={() => advancePlayback(props.mode)}
             >
               <Show when={podcast()} fallback={<NextFilledIcon size={20} />}>
                 <PodcastSkipIcon size={20} />

@@ -73,7 +73,6 @@ export const fr: Dict = {
     startDjFromCurrent: 'Démarrer le DJ à partir du titre actuel',
     startDjFromSong: 'Démarrer le DJ à partir de ce titre',
     mixWith: 'Mélanger avec…',
-    changeShort: 'Changer…',
     changeSession: 'Changer',
     chooseOtherMusic: 'Choisir une autre musique…',
 

@@ -75,13 +75,16 @@ vi.mock('./AutoMode', () => ({
     </div>
   ),
 }));
+vi.mock('./LyricsPanel', () => ({
+  LyricsPanel: () => <div data-testid="lyrics-panel" />,
+}));
 
 import { PlayerSurface } from './PlayerSurface';
 
 beforeEach(() => {
-  vi.stubGlobal('matchMedia', vi.fn(() => ({
-    matches: harness.mobileViewport,
-    media: '(max-width: 1023px)',
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    matches: query.includes('pointer: coarse') ? false : harness.mobileViewport,
+    media: query,
     onchange: null,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -414,13 +417,69 @@ describe('PlayerSurface', () => {
     expect(lyricsView).toBeInTheDocument();
 
     const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
-    window.dispatchEvent(event);
+    lyricsToggle.dispatchEvent(event);
     await Promise.resolve();
 
     expect(event.defaultPrevented).toBe(true);
     expect(screen.queryByLabelText('nowPlaying.lyricsLabel')).toBeNull();
     expect(lyricsView.closest('[data-player-stage]') ?? document.querySelector('[data-player-surface-open]')).not.toBeNull();
     expect(lyricsToggle).toHaveFocus();
+  });
+
+  it('lets Escape close the compact volume popover before closing compact lyrics', async () => {
+    setCompactViewport(420);
+    render(() => <PlayerSurface />);
+    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
+    fireEvent.click(lyricsToggle);
+    expect(await screen.findByLabelText('nowPlaying.lyricsLabel')).toBeInTheDocument();
+
+    const volumeButton = screen.getByRole('button', { name: 'omnibar.volume' });
+    const enter = new Event('pointerenter', { bubbles: true });
+    Object.defineProperty(enter, 'pointerType', { value: 'mouse' });
+    volumeButton.dispatchEvent(enter);
+
+    const slider = await screen.findByRole('slider', { name: 'omnibar.volume' });
+    slider.focus();
+    const firstEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    slider.dispatchEvent(firstEscape);
+
+    expect(firstEscape.defaultPrevented).toBe(true);
+    expect(screen.queryByRole('slider', { name: 'omnibar.volume' })).toBeNull();
+    expect(screen.getByLabelText('nowPlaying.lyricsLabel')).toBeInTheDocument();
+    expect(volumeButton).toHaveFocus();
+
+    const secondEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    volumeButton.dispatchEvent(secondEscape);
+    await Promise.resolve();
+
+    expect(secondEscape.defaultPrevented).toBe(true);
+    expect(screen.queryByLabelText('nowPlaying.lyricsLabel')).toBeNull();
+    expect(lyricsToggle).toHaveFocus();
+  });
+
+  it('moves focus back inside the player when a podcast replaces compact lyrics', async () => {
+    setCompactViewport();
+    render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
+    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
+    fireEvent.click(lyricsToggle);
+
+    const lyricsView = await screen.findByLabelText('nowPlaying.lyricsLabel');
+    const insideButton = lyricsView.querySelector('button')!;
+    insideButton.focus();
+    expect(insideButton).toHaveFocus();
+
+    harness.setState?.('playback', 'currentTrack', {
+      id: 'ep-1',
+      title: 'Episode',
+      artist: 'Show',
+      podcast_guid: 'guid-1',
+    });
+    await Promise.resolve();
+
+    expect(screen.queryByLabelText('nowPlaying.lyricsLabel')).toBeNull();
+    expect(surface.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(document.body);
   });
 
   it('opens docked beside the app on a desktop, and gives the app back its room', () => {

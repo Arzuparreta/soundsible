@@ -72,6 +72,13 @@ export function PauseFilledIcon(props: GlyphProps) {
     </svg>
   );
 }
+export function PrevFilledIcon(props: GlyphProps) {
+  return (
+    <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
+      <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+    </svg>
+  );
+}
 export function NextFilledIcon(props: GlyphProps) {
   return (
     <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">

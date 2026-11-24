@@ -4,6 +4,7 @@ import { nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
+import { upcomingQueueEntries } from '../lib/playbackQueue';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { t } from '../lib/i18n';
 import { type AutoModePanelId } from '../lib/autoModeLayout';
@@ -131,16 +132,12 @@ export function PlayerSurface() {
 
   const listPanel = createMemo<PlayerPanel>(() => (auto() ? 'route' : 'queue'));
   const isListPanel = createMemo(() => mobilePanel() === listPanel());
-  const listCount = createMemo(() => {
-    const queue = player().playback.queue ?? [];
-    const index = player().playback.index ?? 0;
-    const upcoming = queue.slice(Math.max(0, index + 1));
-    if (auto()) return upcoming.length;
-    const radioMode = Boolean(player().playback.radioMode);
-    return upcoming.filter((entry) =>
-      entry.queueLane === 'manual' || (radioMode && entry.queueLane === 'generated'),
-    ).length;
-  });
+  const listCount = createMemo(() =>
+    upcomingQueueEntries(player().playback.queue ?? [], player().playback.index ?? 0, {
+      auto: auto(),
+      radioMode: Boolean(player().playback.radioMode),
+    }).length,
+  );
 
   createEffect(() => {
     const next = art();
@@ -157,14 +154,21 @@ export function PlayerSurface() {
     setMobilePanel(panel);
   };
 
+  const restoreCompactLyricsFocus = () => {
+    // Unmounting the compact lyrics overlay would drop focus to <body>; return
+    // focus to its dock toggle (or Stage/surface when unmounted) so keyboard
+    // navigation keeps its place.
+    queueMicrotask(() => {
+      const target = (lyricsToggleEl?.isConnected ? lyricsToggleEl : null)
+        ?? surfaceEl?.querySelector<HTMLElement>('[data-player-tile="stage"]')
+        ?? surfaceEl;
+      target?.focus({ preventScroll: true });
+    });
+  };
+
   const closeCompactLyrics = () => {
     setPanel('stage');
-    // Unmounting the compact lyrics overlay would drop focus to <body>; return
-    // focus to its dock toggle (or Stage) so keyboard navigation keeps its place.
-    queueMicrotask(() => {
-      (lyricsToggleEl ?? surfaceEl?.querySelector<HTMLElement>('[data-player-tile="stage"]'))
-        ?.focus({ preventScroll: true });
-    });
+    restoreCompactLyricsFocus();
   };
 
   const toggleCompactLyrics = () => {
@@ -182,7 +186,14 @@ export function PlayerSurface() {
   // docked -> full screen), losing the track, or playing a podcast clears it
   // so narrowing again later never unexpectedly reveals a stale lyrics screen.
   createEffect(() => {
-    if (!playerCompact() || !current() || podcast()) setCompactLyrics(false);
+    if ((!playerCompact() || !current() || podcast()) && untrack(compactLyrics)) {
+      const lyricsEl = surfaceEl?.querySelector('[data-compact-lyrics]');
+      const focusedInside = Boolean(
+        document.activeElement instanceof Node && lyricsEl?.contains(document.activeElement),
+      );
+      setCompactLyrics(false);
+      if (focusedInside && untrack(nowPlayingOpen)) restoreCompactLyricsFocus();
+    }
   });
 
   createEffect(() => {
@@ -512,21 +523,23 @@ export function PlayerSurface() {
     surfaceEl.addEventListener('touchstart', beginTouch, { passive: true });
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
-    // Capture phase runs after OverlayOutlet (menus/dialogs claim Escape first)
-    // and before the global bubble shortcut handler (which closes the player).
+    // Document bubble runs after OverlayOutlet (window capture) and inline dock
+    // popovers (document capture), and before the global window bubble shortcut
+    // handler (which closes the whole player).
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape' && nowPlayingOpen() && compactLyrics()) {
         event.preventDefault();
-        event.stopImmediatePropagation();
+        event.stopPropagation();
         closeCompactLyrics();
       }
     };
-    window.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('keydown', onKeyDown);
     onCleanup(() => {
       window.clearTimeout(openTimer);
       window.clearTimeout(focusTimer);
       window.clearTimeout(closeTimer);
-      window.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('keydown', onKeyDown);
       observer?.disconnect();
       delete document.documentElement.dataset.playerDocked;
       document.documentElement.style.removeProperty('--player-dock-width');

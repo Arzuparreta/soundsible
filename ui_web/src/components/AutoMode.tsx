@@ -18,6 +18,7 @@ import {
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { dropBeforeId, isNoopMove } from '../lib/dragReorder';
 import { editableFrom, routeRows } from '../lib/djRoute';
+import { upcomingQueueEntries } from '../lib/playbackQueue';
 import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
@@ -109,7 +110,7 @@ export function AutoMode(props: {
   const routeActive = () => panelActive('route');
   const upcoming = createActivityMemo(
     routeActive,
-    () => player().playback.queue.slice(Math.max(0, player().playback.index + 1)),
+    () => upcomingQueueEntries(player().playback.queue, player().playback.index, { auto: true, radioMode: false }),
     [],
     () => [player().playback.queue, player().playback.index],
   );
@@ -299,9 +300,9 @@ export function AutoMode(props: {
       placing={Boolean(carriedTrack())}
       headAction={[
         // Fix mix rebuilds transitions and the bridges that carry them. With
-        // the mixing off there are none to hear, so there is nothing to fix.
-        // Intentionally keeps the same understated header action weight as Add;
-        // the tooltip explains when stale seams are waiting.
+        // mixing off there are none to hear, so the action is omitted.
+        // Reordering opens joins the DJ never chose; the tooltip calls out
+        // stale seams when present while keeping the button quiet beside Add.
         ...(player().playback.djMixing ? [{
           label: player().autoMode.repairing ? t('autoMode.route.fixing') : t('autoMode.route.fix'),
           title: mixPending() ? t('autoMode.route.mixPending') : t('autoMode.route.fixHint'),

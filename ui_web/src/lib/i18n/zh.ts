@@ -73,7 +73,6 @@ export const zh: Dict = {
     startDjFromCurrent: '从当前歌曲开始 DJ',
     startDjFromSong: '从这首歌开始 DJ',
     mixWith: '融入音乐…',
-    changeShort: '更换…',
     changeSession: '更换',
     chooseOtherMusic: '选择其他音乐…',
 
