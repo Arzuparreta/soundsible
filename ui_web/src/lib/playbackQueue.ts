@@ -131,14 +131,14 @@ export function futureEntries(
 
 /**
  * Upcoming rows shown by Queue or DJ Route counts and lists. Shared between
- * `PlayerCompactDock` and the panel headers so both stay in sync.
+ * `PlayerSurface` (dock badge), `NowPlaying`, and `AutoMode` so all stay in sync.
  */
 export function upcomingQueueEntries(
-  queue: readonly PlaybackQueueEntry[],
-  index: number,
-  options: { auto: boolean; radioMode: boolean },
+  queue: readonly PlaybackQueueEntry[] | undefined,
+  index: number | undefined,
+  options: { auto: true } | { auto: false; radioMode: boolean },
 ): PlaybackQueueEntry[] {
-  const upcoming = futureEntries(queue, index);
+  const upcoming = futureEntries(queue ?? [], index ?? 0);
   if (options.auto) return upcoming;
   return upcoming.filter((entry) =>
     entry.queueLane === 'manual' || (options.radioMode && entry.queueLane === 'generated'),

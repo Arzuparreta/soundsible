@@ -4,8 +4,9 @@ import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
 import { RangeControl } from '../design/Control';
 
 /**
- * Shared volume slider binding `player().playback.volume` / `muted` to a linear
- * perceptually-scaled range control across PlayerStage and PlayerCompactDock.
+ * Shared volume slider binding `player().playback.volume` / `muted` to a
+ * perceptually-scaled range control (via `volumeScale`) across `PlayerStage`
+ * and `PlayerCompactDock`.
  */
 export function VolumeRange(props: { class?: string }) {
   const volPct = () => {

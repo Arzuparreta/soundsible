@@ -110,7 +110,7 @@ export function AutoMode(props: {
   const routeActive = () => panelActive('route');
   const upcoming = createActivityMemo(
     routeActive,
-    () => upcomingQueueEntries(player().playback.queue, player().playback.index, { auto: true, radioMode: false }),
+    () => upcomingQueueEntries(player().playback.queue, player().playback.index, { auto: true }),
     [],
     () => [player().playback.queue, player().playback.index],
   );

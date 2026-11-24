@@ -6,6 +6,7 @@ import { trackCoverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
 import { upcomingQueueEntries } from '../lib/playbackQueue';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
+import { isTextEntry } from '../lib/shortcuts';
 import { t } from '../lib/i18n';
 import { type AutoModePanelId } from '../lib/autoModeLayout';
 import {
@@ -53,7 +54,7 @@ const AutoMode = deferredComponent<Parameters<typeof import('./AutoMode').AutoMo
 const CompactLyrics = deferredComponent<NonNullable<Parameters<typeof import('./LyricsPanel').LyricsPanel>[0]>>(
   async () => ({ default: (await import('./playerViews')).LyricsPanel }),
   async () => ({ default: (await import('./LyricsPanel')).LyricsPanel }),
-  styles.lyricsPending,
+  styles.autoLoading,
 );
 
 const SWIPE_CLOSE_THRESHOLD = 80;
@@ -133,10 +134,11 @@ export function PlayerSurface() {
   const listPanel = createMemo<PlayerPanel>(() => (auto() ? 'route' : 'queue'));
   const isListPanel = createMemo(() => mobilePanel() === listPanel());
   const listCount = createMemo(() =>
-    upcomingQueueEntries(player().playback.queue ?? [], player().playback.index ?? 0, {
-      auto: auto(),
-      radioMode: Boolean(player().playback.radioMode),
-    }).length,
+    upcomingQueueEntries(
+      player().playback.queue,
+      player().playback.index,
+      auto() ? { auto: true } : { auto: false, radioMode: Boolean(player().playback.radioMode) },
+    ).length,
   );
 
   createEffect(() => {
@@ -525,9 +527,9 @@ export function PlayerSurface() {
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
     // Document bubble runs after OverlayOutlet (window capture) and inline dock
     // popovers (document capture), and before the global window bubble shortcut
-    // handler (which closes the whole player).
+    // handler; text entries beside a docked player keep their own Escape key.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || isTextEntry(event.target as HTMLElement | null)) return;
       if (event.key === 'Escape' && nowPlayingOpen() && compactLyrics()) {
         event.preventDefault();
         event.stopPropagation();
@@ -759,8 +761,9 @@ export function PlayerSurface() {
           >
             <PlayerMiniHeader mode={auto() ? 'auto' : 'now-playing'} onBack={closeCompactLyrics} />
             <div class={styles.compactLyricsBody}>
+              {/* deferredComponent handles chunk fetch; Suspense covers async lyrics lookup. */}
               <Suspense fallback={
-                <div class={styles.lyricsPending}>
+                <div class={styles.autoLoading}>
                   <Spinner size={22} label={t('lyricsPanel.loading')} />
                 </div>
               }>

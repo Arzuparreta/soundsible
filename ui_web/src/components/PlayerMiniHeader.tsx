@@ -80,7 +80,7 @@ export function PlayerMiniHeader(props: {
               aria-busy={player().pending('next') || undefined}
               data-pending={player().pending('next') || undefined}
               disabled={player().unreachable}
-              onClick={() => advancePlayback(props.mode)}
+              onClick={() => advancePlayback()}
             >
               <Show when={podcast()} fallback={<NextFilledIcon size={20} />}>
                 <PodcastSkipIcon size={20} />

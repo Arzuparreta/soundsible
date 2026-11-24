@@ -1,5 +1,5 @@
 import { createEffect, createSignal, createUniqueId, onCleanup, Show } from 'solid-js';
-import { player } from '../stores/player';
+import { isPlaybackMuted, player } from '../stores/player';
 import { t } from '../lib/i18n';
 import { playerCompact } from '../lib/playerDock';
 import { detectFormFactor } from '../lib/deviceIdentity';
@@ -9,15 +9,22 @@ import { onStopRadio } from './RadioBadge';
 import { VolumeRange } from './VolumeRange';
 import styles from './PlayerCompactDock.module.css';
 
+// Brief grace delay so the pointer can cross from the trigger to the popup.
+const VOLUME_DISMISS_MS = 160;
+
 /**
  * Persistent compact bottom bar shared by Stage, Queue/Route and Lyrics (below `PLAYER_COMPACT_BELOW`).
  *
  * View toggles sit on the left; playback utilities sit on the right. On
  * `mobileWeb` phones the volume button is a direct mute toggle; on desktop
  * docked columns hover or keyboard focus opens a slider popover above the
- * button while clicks still toggle mute. The popover lives inline rather than
- * in `openOverlay` because hover intent needs uninterrupted pointer travel
- * between trigger and slider without a full-screen backdrop intercepting it.
+ * button while clicks still toggle mute.
+ *
+ * Unlike `PlayerStage`'s wide fullscreen slider (CSS `:hover` / `:focus-within`),
+ * this bottom-edge popover uses explicit JS state: it needs `aria-expanded` /
+ * `Tab`-into-slider keyboard flow, dismissal on outside clicks/scroll/resize,
+ * and layered `Escape` handling above compact lyrics without `openOverlay`'s
+ * backdrop blocking pointer hover travel.
  */
 export function PlayerCompactDock(props: {
   auto: boolean;
@@ -57,7 +64,7 @@ export function PlayerCompactDock(props: {
     cancelVolumeDismiss();
     volumeDismissTimer = setTimeout(() => {
       if (!volumePopup?.contains(document.activeElement)) closeVolume();
-    }, 160);
+    }, VOLUME_DISMISS_MS);
   };
   createEffect(() => {
     if (!props.surfaceOpen || !playerCompact() || !player().can('transport.set_volume')) setVolumeOpen(false);
@@ -165,17 +172,18 @@ export function PlayerCompactDock(props: {
           >
             <Control
               class={styles.dockIconBtn}
-              classList={{ [styles.dockIconOn]: volumeOpen() || Boolean(player().playback.muted) }}
-              aria-label={mobileWeb ? t(player().playback.muted ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
+              classList={{ [styles.dockIconOn]: volumeOpen() }}
+              aria-label={mobileWeb ? t(isPlaybackMuted() ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
               aria-expanded={mobileWeb ? undefined : volumeOpen()}
               aria-controls={!mobileWeb && volumeOpen() ? volumeId : undefined}
               aria-pressed={mobileWeb ? Boolean(player().playback.muted) : undefined}
               aria-busy={player().pending('mute') || undefined}
               data-pending={player().pending('mute') || undefined}
-              title={mobileWeb ? t(player().playback.muted ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
+              title={mobileWeb ? t(isPlaybackMuted() ? 'omnibar.unmute' : 'omnibar.mute') : t('omnibar.volume')}
               ref={volumeTrigger}
               onPointerEnter={(event) => { if (event.pointerType === 'mouse') openVolume(); }}
               onPointerLeave={leaveVolume}
+              // Open only on keyboard focus; pointer clicks toggle mute instead.
               onFocus={(event) => { if (event.currentTarget.matches(':focus-visible')) openVolume(); }}
               onKeyDown={(event) => {
                 if (event.key === 'Tab' && !event.shiftKey && volumeOpen()) {
@@ -185,7 +193,7 @@ export function PlayerCompactDock(props: {
               }}
               onClick={() => { if (player().can('transport.set_muted')) player().actions.toggleMute(); }}
             >
-              <VolumeIcon muted={Boolean(player().playback.muted)} size={20} />
+              <VolumeIcon muted={isPlaybackMuted()} size={20} />
             </Control>
             <Show when={!mobileWeb && volumeOpen()}>
               <div

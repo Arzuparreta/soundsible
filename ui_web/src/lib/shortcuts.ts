@@ -52,7 +52,7 @@ export interface ShortcutActions {
 }
 
 /** Surfaces where a keystroke is text, not a command. */
-function isTextEntry(el: HTMLElement | null): boolean {
+export function isTextEntry(el: HTMLElement | null): boolean {
   if (!el) return false;
   return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
 }

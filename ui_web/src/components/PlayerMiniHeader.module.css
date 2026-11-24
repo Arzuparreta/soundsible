@@ -33,6 +33,14 @@
   color: var(--ink-secondary);
 }
 
+/* On ultra-narrow players the whole bar remains the back control; hide the
+   decorative chevron so track metadata keeps readable space at large scale. */
+@container player (max-width: 359px) {
+  .chevron {
+    display: none;
+  }
+}
+
 .cover {
   flex: none;
   width: var(--segment-h);

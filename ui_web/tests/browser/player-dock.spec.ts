@@ -244,6 +244,16 @@ test('compact bottom dock toggles Queue, Route and Lyrics symmetrically with a s
 
   await lyricsToggle.click();
   await expect(compactLyrics).toBeVisible();
+  // Escape inside an app text field beside the docked player belongs to that
+  // field rather than closing compact lyrics or stealing focus back.
+  const appSearch = page.locator('#app').getByRole('searchbox');
+  await appSearch.click();
+  await appSearch.fill('abc');
+  await page.keyboard.press('Escape');
+  await expect(compactLyrics).toBeVisible();
+  await expect(appSearch).toBeFocused();
+
+  await lyricsToggle.focus();
   await page.keyboard.press('Escape');
   await expect(compactLyrics).toHaveCount(0);
   await expect(surface).toBeVisible();

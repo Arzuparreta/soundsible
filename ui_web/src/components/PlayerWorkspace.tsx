@@ -250,7 +250,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   );
 
   const animateLayout = (before: Map<Element, DOMRect>) => {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    if (prefersReducedMotion()) return;
     requestAnimationFrame(() => {
       for (const element of rootEl?.querySelectorAll<HTMLElement>('[data-player-tile]') ?? []) {
         const first = before.get(element);

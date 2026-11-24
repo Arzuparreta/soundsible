@@ -568,14 +568,6 @@
   overflow: hidden;
 }
 
-.lyricsPending {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  place-items: center;
-}
-
 @media (hover: hover) and (pointer: fine) {
   .chromeButton:hover {
     color: var(--ink-primary);

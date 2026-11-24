@@ -65,18 +65,26 @@ export function player(): PlayerView {
 }
 
 /**
+ * Whether playback reads as silent across the dock, stage and mini-player:
+ * either explicit mute or volume dialed down to zero.
+ */
+export function isPlaybackMuted(): boolean {
+  const playback = player().playback;
+  return Boolean(playback.muted || playback.volume === 0);
+}
+
+/**
  * Advance playback consistently across `OmniBar`, `PlayerStage` and
  * `PlayerMiniHeader`: podcasts skip forward, DJ skips in Auto Mode, and
  * regular music moves to the next queue track.
  */
-export function advancePlayback(mode?: 'now-playing' | 'auto'): void {
+export function advancePlayback(): void {
   const view = player();
   const track = view.playback.currentTrack;
   if (track && isPodcastTrack(track)) {
     view.actions.seekBy(PODCAST_SKIP_SECONDS);
     return;
   }
-  const auto = mode ? mode === 'auto' : view.autoMode.active;
-  if (auto) void view.actions.autoSkip();
+  if (view.autoMode?.active) void view.actions.autoSkip();
   else view.actions.next();
 }

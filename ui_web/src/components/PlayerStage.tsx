@@ -3,13 +3,14 @@ import { AlbumLink, ArtistLinks } from './MusicLinks';
 import { playerTrackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { isSavedTrack } from '../stores';
-import { advancePlayback, player } from '../stores/player';
+import { advancePlayback, isPlaybackMuted, player } from '../stores/player';
 import { clockTime } from '../lib/format';
 import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
 import { CoverImage } from './CoverImage';
 import { responsiveTapConstants } from '../lib/responsiveTap';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
+import { isTextEntry } from '../lib/shortcuts';
 import { savedFromTrack } from '../lib/saved';
 import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
 import { t } from '../lib/i18n';
@@ -109,14 +110,14 @@ export function PlayerStage(props: {
       <Control
         class={styles.actBtn}
         classList={{ [styles.actOn]: player().playback.muted }}
-        aria-label={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
+        aria-label={isPlaybackMuted() ? t('omnibar.unmute') : t('omnibar.mute')}
         aria-pressed={player().playback.muted}
         aria-busy={player().pending('mute') || undefined}
         data-pending={player().pending('mute') || undefined}
-        title={player().playback.muted ? t('omnibar.unmute') : t('omnibar.mute')}
+        title={isPlaybackMuted() ? t('omnibar.unmute') : t('omnibar.mute')}
         onClick={() => player().actions.toggleMute()}
       >
-        <VolumeIcon muted={Boolean(player().playback.muted)} size={20} />
+        <VolumeIcon muted={isPlaybackMuted()} size={20} />
       </Control>
     </Show>
   );
@@ -167,7 +168,7 @@ export function PlayerStage(props: {
     // popovers (document capture), and before the global window bubble shortcut
     // handler, so Escape folds desktop lyrics instead of closing the player.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || isTextEntry(event.target as HTMLElement | null)) return;
       if (event.key === 'Escape' && props.surfaceOpen && !playerCompact() && desktopLyricsActive()) {
         event.preventDefault();
         event.stopPropagation();
@@ -400,7 +401,7 @@ export function PlayerStage(props: {
                     aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')}
                     aria-busy={player().pending('next') || undefined}
                     data-pending={player().pending('next') || undefined}
-                    onClick={() => advancePlayback(props.mode)}
+                    onClick={() => advancePlayback()}
                   >
                     <Show when={podcast()} fallback={<NextFilledIcon size={30} />}>
                       <PodcastSkipIcon />

@@ -38,6 +38,11 @@ function Glyph(props: GlyphProps & { children: JSX.Element; strokeWidth?: number
 }
 
 const line = (d: string) => (props: GlyphProps) => <Glyph {...props}><path d={d} /></Glyph>;
+const filled = (d: string) => (props: GlyphProps) => (
+  <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
+    <path d={d} />
+  </svg>
+);
 
 /** Radio mode: a portable set — antenna, speaker grille, tuning dial. Drawn
  * as the object on purpose; the old broadcast arcs read as Wi-Fi or a signal
@@ -58,34 +63,10 @@ export function RadioIcon(props: GlyphProps) {
 export const ChangeSessionIcon = line('m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16');
 
 export const PlayIcon = line('m7 4 12 8-12 8z');
-export function PlayFilledIcon(props: GlyphProps) {
-  return (
-    <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
-      <path d="M8 5v14l11-7z" />
-    </svg>
-  );
-}
-export function PauseFilledIcon(props: GlyphProps) {
-  return (
-    <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
-      <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
-    </svg>
-  );
-}
-export function PrevFilledIcon(props: GlyphProps) {
-  return (
-    <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
-      <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-    </svg>
-  );
-}
-export function NextFilledIcon(props: GlyphProps) {
-  return (
-    <svg viewBox="0 0 24 24" width={props.size} height={props.size} fill="currentColor" class={props.class} aria-hidden="true">
-      <path d="M16 6h2v12h-2zm-1.5 6L6 6v12z" />
-    </svg>
-  );
-}
+export const PlayFilledIcon = filled('M8 5v14l11-7z');
+export const PauseFilledIcon = filled('M7 5h4v14H7zM13 5h4v14h-4z');
+export const PrevFilledIcon = filled('M6 6h2v12H6zm3.5 6l8.5 6V6z');
+export const NextFilledIcon = filled('M16 6h2v12h-2zm-1.5 6L6 6v12z');
 export function VolumeIcon(props: GlyphProps & { muted?: boolean }) {
   return (
     <Glyph {...props}>

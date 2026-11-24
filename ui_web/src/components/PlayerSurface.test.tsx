@@ -457,6 +457,31 @@ describe('PlayerSurface', () => {
     expect(lyricsToggle).toHaveFocus();
   });
 
+  it('ignores Escape while typing in a text field beside the docked player', async () => {
+    harness.desktop = true;
+    setCompactViewport(420);
+    const input = document.createElement('input');
+    input.type = 'search';
+    document.body.appendChild(input);
+    try {
+      render(() => <PlayerSurface />);
+      const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.showLyrics' });
+      fireEvent.click(lyricsToggle);
+      expect(await screen.findByLabelText('nowPlaying.lyricsLabel')).toBeInTheDocument();
+
+      input.focus();
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      input.dispatchEvent(event);
+      await Promise.resolve();
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(screen.getByLabelText('nowPlaying.lyricsLabel')).toBeInTheDocument();
+      expect(input).toHaveFocus();
+    } finally {
+      input.remove();
+    }
+  });
+
   it('moves focus back inside the player when a podcast replaces compact lyrics', async () => {
     setCompactViewport();
     render(() => <PlayerSurface />);
