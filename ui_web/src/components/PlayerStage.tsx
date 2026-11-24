@@ -303,14 +303,16 @@ export function PlayerStage(props: {
                         <FavouriteButton favourite={savedFromTrack(current())} class={styles.actBtn} tooltip />
                       </span>
                     </Show>
-                    <Control
-                      class={`${styles.actBtn} ${styles.compactMoreAction}`}
-                      aria-label={t('common.more')}
-                      title={t('common.more')}
-                      onClick={() => openStageTrackMenu(current())}
-                    >
-                      <MoreIcon size={20} />
-                    </Control>
+                    <Show when={playerCompact()}>
+                      <Control
+                        class={styles.actBtn}
+                        aria-label={t('common.more')}
+                        title={t('common.more')}
+                        onClick={() => openStageTrackMenu(current())}
+                      >
+                        <MoreIcon size={20} />
+                      </Control>
+                    </Show>
                   </div>
                 </div>
 
@@ -462,7 +464,6 @@ export function PlayerStage(props: {
                   <Show when={player().can('transport.set_volume') && (!mobileWeb || player().can('transport.set_muted'))}>
                     <div
                       class={styles.volume}
-                      classList={{ [styles.volumeNoSlider]: mobileWeb }}
                       data-no-surface-swipe=""
                     >
                       {muteButton()}

@@ -130,8 +130,9 @@ export function futureEntries(
 }
 
 /**
- * Upcoming rows shown by Queue or DJ Route counts and lists. Shared between
- * `PlayerSurface` (dock badge), `NowPlaying`, and `AutoMode` so all stay in sync.
+ * Upcoming rows counted and listed by the dock badge and panel headers: in
+ * Normal mode this returns explicit manual requests plus active radio picks
+ * (excluding context continuation cards), and in Auto mode the whole planned route.
  */
 export function upcomingQueueEntries(
   queue: readonly PlaybackQueueEntry[] | undefined,

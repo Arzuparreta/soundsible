@@ -600,22 +600,17 @@
 }
 
 /* Which of the stage's buttons a layout carries. */
-.desktopLyricsToggle,
-.compactMoreAction {
+.desktopLyricsToggle {
   display: none;
 }
 
 /* In compact layouts (< 1024px) lyrics, queue/route, radio and volume live in
    PlayerCompactDock, giving Stage more room for artwork, while track overflow
-   sits beside Save and Heart in .infoActions. On mobileWeb at >= 1024px,
-   .volumeNoSlider still shows the inline mute button in .actionsBar. */
+   is mounted beside Save and Heart in .infoActions. On mobileWeb at >= 1024px,
+   .actionsBar omits the slider and renders only the inline mute button. */
 @container player (max-width: 1023px) {
   .actionsBar {
     display: none;
-  }
-
-  .compactMoreAction {
-    display: inline-flex;
   }
 
   .body {

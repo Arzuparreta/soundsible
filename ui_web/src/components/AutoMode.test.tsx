@@ -47,7 +47,10 @@ vi.mock('../lib/media', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/media')>()),
   coverUrl: (id: string) => `/cover/${id}`,
 }));
-vi.mock('../lib/i18n', () => ({ t: (key: string, params?: Record<string, string | number>) => params ? `${key}:${Object.values(params).join(',')}` : key }));
+vi.mock('../lib/i18n', () => ({
+  locale: () => 'en',
+  t: (key: string, params?: Record<string, string | number>) => params ? `${key}:${Object.values(params).join(',')}` : key,
+}));
 vi.mock('./PlayerStage', () => ({ PlayerStage: (props: { mode: string; empty?: unknown }) => (
   <div data-testid="shared-stage" data-mode={props.mode}>{state.playback.currentTrack ? null : props.empty as never}</div>
 ) }));

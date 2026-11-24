@@ -3,15 +3,12 @@ import { useLocation } from '@solidjs/router';
 import { currentAppBar, type AppBarAction } from '../lib/appBar';
 import { t } from '../lib/i18n';
 import { desktopShell } from '../lib/shellLayout';
+import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { BackIcon } from './icons';
 import { NavigationMenuButton } from './NavigationMenu';
 import styles from './AppBar.module.css';
 
 const SCROLLER = '[data-primary-scroll], [data-app-outlet]';
-
-function prefersReducedMotion(): boolean {
-  return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-}
 
 /** The scroller the page on screen reads from — its own, or the shell's. */
 function pageScroller(from: HTMLElement): HTMLElement | null {

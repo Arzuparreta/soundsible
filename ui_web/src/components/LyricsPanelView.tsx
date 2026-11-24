@@ -4,6 +4,7 @@ import { pageVisible } from '../lib/pageVisibility';
 import { activeLineIndex, parseLrc, timingFits } from '../lib/lrc';
 import { lookupLyrics } from '../lib/lyricsLookup';
 import { isPodcastTrack } from '../lib/track';
+import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
 import { toast } from '../lib/toast';
@@ -168,7 +169,7 @@ export function LyricsPanelView(props: {
 
   const glideTo = (el: HTMLDivElement, top: number, smooth: boolean) => {
     stopFollow();
-    if (!smooth || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (!smooth || prefersReducedMotion()) {
       el.scrollTop = top;
       ownScrollTop = el.scrollTop;
       return;

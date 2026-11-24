@@ -46,8 +46,12 @@ vi.mock('./LyricsPanel', () => ({
 }));
 
 import { PlayerStage } from './PlayerStage';
+import { setPlayerCompact } from '../lib/playerDock';
 
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  setPlayerCompact(false);
+  localStorage.clear();
+});
 
 describe('PlayerStage lyrics transition', () => {
   it('keeps the stage mounted while lyrics are still loading inside Auto', () => {
@@ -95,5 +99,32 @@ describe('podcast transport', () => {
     render(() => <PlayerStage mode="now-playing" surfaceOpen />);
     fireEvent.click(screen.getByRole('button', { name: 'common.next' }));
     expect(actions.next).toHaveBeenCalled();
+  });
+
+  it('omits the compact info overflow button for podcasts at wide fullscreen', () => {
+    const original = state.playback.currentTrack;
+    state.playback.currentTrack = { ...original, media_kind: 'podcast_episode' } as typeof original;
+    try {
+      setPlayerCompact(false);
+      const { container, unmount } = render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+      expect(screen.getAllByRole('button', { name: 'common.more' })).toHaveLength(1);
+      const infoButtons = container.querySelectorAll('[data-player-stage-mode="now-playing"] button');
+      const compactMoreCount = Array.from(infoButtons).filter(
+        (btn) => btn.getAttribute('aria-label') === 'common.more' && !btn.closest('[data-stage-actions]'),
+      ).length;
+      expect(compactMoreCount).toBe(0);
+      unmount();
+
+      setPlayerCompact(true);
+      const compact = render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+      const compactBtns = Array.from(
+        compact.container.querySelectorAll('[data-player-stage-mode="now-playing"] button'),
+      ).filter(
+        (btn) => btn.getAttribute('aria-label') === 'common.more' && !btn.closest('[data-stage-actions]'),
+      );
+      expect(compactBtns).toHaveLength(1);
+    } finally {
+      state.playback.currentTrack = original;
+    }
   });
 });

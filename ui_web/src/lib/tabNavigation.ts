@@ -1,8 +1,6 @@
-const PRIMARY_SCROLL_SELECTOR = '[data-primary-scroll]';
+import { prefersReducedMotion } from './prefersReducedMotion';
 
-function prefersReducedMotion(): boolean {
-  return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-}
+const PRIMARY_SCROLL_SELECTOR = '[data-primary-scroll]';
 
 /**
  * Native-app tab re-selection: the active root tab returns its own surface to

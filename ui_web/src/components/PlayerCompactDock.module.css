@@ -226,6 +226,8 @@
    back to icon + count pills so utilities never crowd or wrap; aria-label keeps names. */
 @container player (max-width: 359px) {
   .dockPill {
+    min-width: var(--pill-h);
+    justify-content: center;
     padding-inline: var(--space-sm);
   }
 
@@ -258,5 +260,9 @@
   .dockPill,
   .dockIconBtn {
     transition-duration: 1ms;
+  }
+
+  .dockIconPulse {
+    animation: none;
   }
 }

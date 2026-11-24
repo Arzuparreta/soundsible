@@ -4,6 +4,7 @@ import { autoTrackDragging, readAutoTrackTransfer, writeAutoTrackTransfer } from
 import { openContextMenu } from '../lib/contextMenu';
 import { openOverlay } from '../lib/overlay';
 import { coverStyle } from '../lib/cover';
+import { trackCount } from '../lib/format';
 import { trackCoverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import { isPodcastTrack } from '../lib/track';
@@ -22,7 +23,7 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
   };
   const openChangeMenu = (event: MouseEvent) => {
     openContextMenu({
-      title: t('musicExplorer.references'),
+      title: t('autoMode.source.title'),
       actions: [
         {
           icon: menuIcons.changeSession(),
@@ -44,7 +45,8 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
   const rows = () => <For each={player().autoMode.sources}>{(source) => <div class={styles.referenceRow}
     draggable={source.tracks.length === 1} onDragStart={(event) => source.tracks[0] && writeAutoTrackTransfer(event, { track: source.tracks[0] })}>
     <span class={styles.referenceCover} style={coverStyle(source.label, source.tracks[0] ? trackCoverUrl(source.tracks[0], 'thumb') : undefined)} />
-    <span class={styles.referenceName} title={source.label}>{source.label}</span><small>{source.tracks.length}</small>
+    <span class={styles.referenceName} title={source.label}>{source.label}</span>
+    <small title={trackCount(source.tracks.length)} aria-label={trackCount(source.tracks.length)}>{source.tracks.length}</small>
     <Show when={player().autoMode.sources.length > 1}>
       <Control class={styles.referenceRemove} aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => player().actions.removeAutoSource(source.id)}>
         <CloseIcon size={14} />
@@ -81,7 +83,7 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     </header>
     <Show when={player().autoMode.sources.length} fallback={<Control class={styles.referenceEmpty} onClick={props.onAdd}>{t('musicExplorer.referenceEmpty')}</Control>}>
       <div class={styles.referenceRows}>{rows()}</div>
-      <Show when={player().autoMode.sources.length > 2}><Control class={styles.referenceMore} onClick={() => openOverlay(() => <section class={styles.referenceSheet}><h2>{t('musicExplorer.references')}</h2>{rows()}</section>, { ariaLabel: () => t('musicExplorer.references') })}>{t('musicExplorer.viewReferences')} ({player().autoMode.sources.length})</Control></Show>
+      <Show when={player().autoMode.sources.length > 2}><Control class={styles.referenceMore} onClick={() => openOverlay(() => <section class={styles.referenceSheet}><h2>{t('autoMode.source.title')}</h2>{rows()}</section>, { ariaLabel: () => t('autoMode.source.title') })}>{t('musicExplorer.viewReferences')} ({player().autoMode.sources.length})</Control></Show>
     </Show>
   </section>;
 }

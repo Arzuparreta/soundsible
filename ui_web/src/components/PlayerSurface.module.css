@@ -98,7 +98,8 @@
 }
 
 /* Reset sits in the reserved second chromeLeft slot beside the device button
-   so it stays in the top bar without overlapping PlayerMiniHeader. */
+   so it stays in the top bar without overlapping PlayerMiniHeader; relative
+   positioning and auto offsets undo .seamReset's default absolute placement. */
 .chromeLeft .dockReset {
   position: relative;
   top: auto;

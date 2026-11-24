@@ -566,6 +566,9 @@ export function PlayerSurface() {
     root.style.setProperty('--player-dock-width', `${playerDockWidth()}px`);
   });
 
+  const normalHidden = () => auto() || !nowPlayingOpen() || compactLyrics();
+  const autoHidden = () => !auto() || !nowPlayingOpen() || compactLyrics();
+
   return (
     <Portal mount={typeof document !== 'undefined' ? document.body : undefined}>
       {/* `data-player-stage` hands the whole room its material palette: the
@@ -721,14 +724,14 @@ export function PlayerSurface() {
           classList={{ [styles.view]: true, [styles.viewActive]: !auto() && !compactLyrics() }}
           role="tabpanel"
           aria-labelledby="now-playing-mode-normal"
-          aria-hidden={auto() || !nowPlayingOpen() || compactLyrics()}
-          inert={auto() || !nowPlayingOpen() || compactLyrics() ? true : undefined}
+          aria-hidden={normalHidden()}
+          inert={normalHidden() ? true : undefined}
         >
           <Show when={opened()}>
             <NowPlaying
               mobilePanel={mobilePanel() as NowPlayingMobilePanel}
               onMobilePanelChange={setPanel}
-              surfaceOpen={nowPlayingOpen() && !auto() && !compactLyrics()}
+              surfaceOpen={!normalHidden()}
               panelsReady={surfaceSettled()}
               onCloseSurface={() => closeSurface()}
             />
@@ -740,14 +743,14 @@ export function PlayerSurface() {
           classList={{ [styles.view]: true, [styles.viewActive]: auto() && !compactLyrics() }}
           role="tabpanel"
           aria-labelledby="now-playing-mode-dj"
-          aria-hidden={!auto() || !nowPlayingOpen() || compactLyrics()}
-          inert={!auto() || !nowPlayingOpen() || compactLyrics() ? true : undefined}
+          aria-hidden={autoHidden()}
+          inert={autoHidden() ? true : undefined}
         >
           <Show when={auto()}>
             <AutoMode
               panel={mobilePanel() as AutoModePanelId}
               onPanelChange={setPanel}
-              surfaceOpen={nowPlayingOpen() && auto() && !compactLyrics()}
+              surfaceOpen={!autoHidden()}
               panelsReady={surfaceSettled()}
             />
           </Show>
