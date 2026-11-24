@@ -355,18 +355,16 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   const remote = createNativeRemote({
     generation: () => generation,
     device: () => { const state = device(); return state?.generation === generation ? state : null; },
-    hasMusic: () => !!program()?.queue.length,
   });
   const remoteRuntime = createProgramRuntime(createRemoteProgramTransport(remote.control, () => generation), {
     state: setRemoteProgram, pending: setRemotePending,
     // The controller has already said why a command was not applied.
     error: () => {},
   });
-  // Devices are listed once this phone is on the account socket and its own program is known,
-  // so the startup rule (attach to a device playing elsewhere) sees whether this phone has music.
-  // A memo: the native state is republished every half second, and only the change of readiness lists devices.
+  // Retry any explicit selection made before the service could accept a watch.
+  // The native state is published periodically, so react only to readiness changes.
   const devicesReady = createMemo(() => { const state = device(); return !!user() && program() !== null && state?.generation === generation && state.connected === true; });
-  createEffect(on(devicesReady, ready => { if (ready) void remote.control.refreshDevices(); }));
+  createEffect(on(devicesReady, ready => { if (ready) remote.control.onConnect(); }));
   function openDevices() {
     openConnectSheet(remote.control, {
       get name() { return device()?.device_name || t('deviceSheet.fallbackDevice'); },
@@ -374,6 +372,14 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       deviceType: 'android',
       track: () => { const local = program(); const item = local?.items[local.index]; return item ? queueTrack(item) : null; },
       playing: () => !!program()?.playing,
+      playCopy: async (track, positionSec) => {
+        const queue = mixedProgram([track], 0);
+        if (!user() || stale() || queue.index < 0) return false;
+        try {
+          await runtime.execute({ action: 'queue', tracks: queue.tracks, index: queue.index, positionMs: Math.round(positionSec * 1000) });
+          return true;
+        } catch { return false; }
+      },
     });
   }
   const resumeOffer = createNativeResume({

@@ -401,7 +401,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     ports.updateMediaSession(track);
     const previewId = track.source === 'preview' ? playbackYoutubeId(track) : null;
     ports.currentPreparation.update(previewId ? [previewId] : []);
-    const resumePosition = ports.podcastProgress.position(track, user()?.id);
+    const resumePosition = opts.positionSec ?? ports.podcastProgress.position(track, user()?.id);
     const start = track.source === 'preview' && isPodcastTrack(track) && track.podcast_enclosure_url ? api.podcastPeek(track.podcast_enclosure_url).then(lifetime.guard(({
       stream_token
     }) => {
@@ -409,7 +409,11 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       if (!stream_token) throw new Error('no podcast stream token');
       ports.podcastSourcePending = false;
       return audioService.load(podcastStreamUrl(stream_token), 1, resumePosition);
-    })) : staged ?? (opts.freshDeck ? audioService.recover(trackUrl(track), resumePosition, level, { requestPlayback: true }) : isPodcastTrack(track) ? audioService.load(trackUrl(track), level, resumePosition) : audioService.load(trackUrl(track), level));
+    })) : staged ?? (opts.freshDeck
+      ? audioService.recover(trackUrl(track), resumePosition, level, { requestPlayback: true })
+      : opts.positionSec !== undefined || isPodcastTrack(track)
+        ? audioService.load(trackUrl(track), level, resumePosition)
+        : audioService.load(trackUrl(track), level));
     startSettled = Promise.resolve(start).then(() => undefined, lifetime.guard((error: unknown) => onStartRejected(generation, error)));
     // `waiting` is not guaranteed for a media element whose play promise never
     // settles. Arm startup supervision from the request itself so an infinite
@@ -715,6 +719,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       context?: PlaybackContextDescriptor;
       shuffled?: boolean;
       preserveManual?: boolean;
+      positionSec?: number;
     }): void {
       if (!tracks[i] || tracks[i].unavailable) return;
       i = tracks.slice(0, i).filter(track => !track.unavailable).length;
@@ -750,7 +755,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         radioLoading: isRadio ? state.playback.radioLoading : false,
         radioSeedId: isRadio ? tracks[i]?.id ?? null : null
       });
-      loadIndex(i);
+      loadIndex(i, { positionSec: opts?.positionSec });
     },
     playTrack(track: Track): void {
       ports.actions.playFrom([track], 0);

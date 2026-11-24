@@ -38,10 +38,6 @@ export interface RemotePending { id: number; value?: number; rev?: number }
 export interface RemoteHost {
   selfId(): string | null;
   selfName(): string;
-  /** This device has music loaded: the startup rule and the transfer direction read it. */
-  hasMusic(): boolean;
-  /** Where the chosen device is remembered for the next start. */
-  storageKey: string;
 }
 
 /** How a device is watched: `watch` calls back with the engine's acknowledgement. */
@@ -89,20 +85,14 @@ export function createRemoteControl(host: RemoteHost) {
   const [pending, setPending] = createSignal<ReadonlyMap<RemoteKey, RemotePending>>(new Map());
 
   let link: RemoteLink | null = null;
-  let startupChecked = false;
+  let clockOffsetMs = 0;
   let pendingSeq = 0;
   /** Commands waiting for the state that carries their answer's rev. */
   let waiters: { rev: number; done: () => void }[] = [];
 
-  const remember = (id: string | null) => {
-    try {
-      if (id) localStorage.setItem(host.storageKey, id);
-      else localStorage.removeItem(host.storageKey);
-    } catch { /* storage disabled */ }
-  };
-  const remembered = (): string | null => {
-    try { return localStorage.getItem(host.storageKey); } catch { return null; }
-  };
+  function updateClock(serverNowMs?: number): void {
+    if (typeof serverNowMs === 'number') clockOffsetMs = serverNowMs - Date.now();
+  }
 
   const deviceRow = (id: string | null): Device | undefined => (id ? devices()?.find(d => d.device_id === id) : undefined);
 
@@ -174,38 +164,30 @@ export function createRemoteControl(host: RemoteHost) {
     });
   }
 
-  /** Control a device, or this one (`null`). Never called on a failure: only the
-   * listener switches (decision 7 of the remote handoff). */
-  function selectTarget(id: string | null, persist = true): void {
-    startupChecked = true;
+  /** Control a device, or this one (`null`), for the current session. */
+  function selectTarget(id: string | null): void {
     const next = id === host.selfId() ? null : id;
     const prev = target();
     if (prev && prev !== next) link?.unwatch(prev);
     setPending(new Map());
     releaseAll();
     setTarget(next);
-    if (persist) remember(next);
     const row = deviceRow(next);
     setHeld(row ? fromRow(row) : null);
     setUnreachable(Boolean(next && row && !isOnline(row)));
     if (next) watch(next);
   }
 
-  /** Startup only: a remembered device that is online, otherwise a device that is
-   * playing while this one has nothing loaded — as when a music app opens while
-   * music plays elsewhere. Never at any other time. */
-  function startupSelection(rows: Device[], serverNowMs?: number): void {
-    if (startupChecked) return;
-    startupChecked = true;
-    const self = host.selfId();
-    const others = rows.filter(d => d.device_id !== self && isControllable(d));
-    const saved = remembered();
-    const pick = saved
-      ? others.find(d => d.device_id === saved)
-      : host.hasMusic() ? undefined : others.find(d => d.playing?.is_playing);
-    if (!pick) return;
-    selectTarget(pick.device_id, false);
-    setHeld(fromRow(pick, serverNowMs));
+  /** Read the current track and estimate its position from the latest device row. */
+  function trackCopy(id: string): { track: Track; positionSec: number } | null {
+    const row = deviceRow(id);
+    if (!row || !isOnline(row) || id === host.selfId() || row.playing?.mode === 'dj') return null;
+    const snapshot = fromRow(row, Date.now() + clockOffsetMs);
+    if (!snapshot.track || snapshot.track.unavailable) return null;
+    const duration = Number(snapshot.track.duration) || 0;
+    // Leave enough room to hear the track even when the estimate reaches its end.
+    const position = heldPosition(snapshot, duration);
+    return { track: snapshot.track, positionSec: duration > 0 ? Math.min(position, Math.max(0, duration - 1)) : position };
   }
 
   async function refreshDevices(): Promise<void> {
@@ -214,7 +196,7 @@ export function createRemoteControl(host: RemoteHost) {
       const rows = res.devices ?? [];
       setDevices(rows);
       setDevicesFailed(false);
-      startupSelection(rows, res.server_now_ms);
+      updateClock(res.server_now_ms);
       const row = deviceRow(target());
       if (target() && (!row || !isOnline(row))) setUnreachable(true);
     } catch {
@@ -233,8 +215,9 @@ export function createRemoteControl(host: RemoteHost) {
   }
 
   /** A `device_updated` row from the account room. */
-  function deviceUpdated(row: Device | null | undefined): void {
+  function deviceUpdated(row: Device | null | undefined, serverNowMs?: number): void {
     if (!row?.device_id) return;
+    updateClock(serverNowMs);
     upsert(row);
     if (row.device_id !== target()) return;
     if (!isOnline(row)) setUnreachable(true);
@@ -254,7 +237,7 @@ export function createRemoteControl(host: RemoteHost) {
 
   /** The account (or the whole player) is going away: so is whatever it controlled. */
   function reset(): void {
-    startupChecked = false;
+    clockOffsetMs = 0;
     link = null;
     setDevices(null);
     setDevicesFailed(false);
@@ -362,5 +345,6 @@ export function createRemoteControl(host: RemoteHost) {
     markPending,
     sendCommand,
     transferTo,
+    trackCopy,
   };
 }

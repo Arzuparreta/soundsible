@@ -29,6 +29,7 @@ import {
   type SettingsSectionId,
 } from '../lib/settingsCatalog';
 import { PairedDevicesPanel } from './PairDevice';
+import { openConnect } from './DeviceSheet';
 import { DisplayPreferences } from './DisplayPreferences';
 import { LibrarySettingsView } from './LibrarySettingsView';
 import { DownloadsSettingsView, type DownloadQuality } from './DownloadsSettingsView';
@@ -460,6 +461,7 @@ function DevicesSection() {
           value={state.device.device_name}
           onInput={(value) => actions.setDeviceName(value)}
         />
+        <ActionRow label={t('deviceSheet.managePlayback')} onClick={openConnect} />
         <Show when={sharedLinks}>
           <ActionRow
             anchor="shared-links"

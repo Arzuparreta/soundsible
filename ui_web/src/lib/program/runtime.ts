@@ -47,7 +47,7 @@ export type ProgramCommand =
   | { action: 'move'; index: number; toIndex: number; key: string; queueToken: string }
   | { action: 'append'; tracks: ProgramTrack[]; queueToken: string }
   | { action: 'insertAfter'; tracks: ProgramTrack[]; queueToken: string; index: number; key: string }
-  | { action: 'queue'; tracks: ProgramTrack[]; index: number; context?: ProgramContext; shuffle?: boolean };
+  | { action: 'queue'; tracks: ProgramTrack[]; index: number; context?: ProgramContext; shuffle?: boolean; positionMs?: number };
 export interface ProgramTransport {
   state(): Promise<ProgramState>;
   command(command: ProgramCommand & { generation: number }): Promise<ProgramState>;

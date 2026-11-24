@@ -265,35 +265,17 @@ describe('commands', () => {
 });
 
 describe('target', () => {
-  it('remembers the chosen device and restores it on startup only while it is online', async () => {
-    await controlSpeaker();
-    expect(localStorage.getItem('remote:target')).toBe('speaker');
-    resetRemoteState();
-    mocks.listDevices.mockResolvedValue({ devices: [device({ online: false })] });
-    socket();
-    await refreshDevices();
-    expect(remoteTarget()).toBeNull();
-    resetRemoteState();
-    mocks.listDevices.mockResolvedValue({ devices: [device()] });
-    socket();
-    await refreshDevices();
-    expect(remoteTarget()).toBe('speaker');
-  });
-
-  it('on startup shows a device that is playing when this one has nothing loaded, and never later', async () => {
+  it('ignores a previously saved web target and active remote playback on a fresh page', async () => {
+    localStorage.setItem('remote:target', 'speaker');
     const playing = { track: t1, is_playing: true, position_sec: 1, measured_at_ms: Date.now(), mode: 'normal' as const, rev: 1 };
-    mocks.listDevices.mockResolvedValue({ devices: [device({ device_id: state.device.device_id }), device({ playing })] });
+    mocks.listDevices.mockResolvedValue({ devices: [device({ playing })] });
     socket();
     await refreshDevices();
-    expect(remoteTarget()).toBe('speaker');
-    expect(localStorage.getItem('remote:target')).toBeNull();
-
-    selectTarget(null);
-    await refreshDevices();
     expect(remoteTarget()).toBeNull();
-
+    selectTarget('speaker');
+    await refreshDevices();
+    expect(remoteTarget()).toBe('speaker');
     resetRemoteState();
-    setState('playback', { currentTrack: t3 });
     socket();
     await refreshDevices();
     expect(remoteTarget()).toBeNull();

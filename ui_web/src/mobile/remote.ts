@@ -7,12 +7,10 @@ import { nativeDevices, type NativeDeviceState } from './devices';
 /** Controlling another device from the Android app: lib/remoteControl, with this
  * phone as the device and the playback service's account socket as the watch
  * link (the WebView has no socket of its own). Must be created inside a component. */
-export function createNativeRemote(props: { generation: () => number; device: () => NativeDeviceState | null; hasMusic: () => boolean }) {
+export function createNativeRemote(props: { generation: () => number; device: () => NativeDeviceState | null }) {
   const control = createRemoteControl({
     selfId: () => props.device()?.device_id ?? null,
     selfName: () => props.device()?.device_name || t('deviceSheet.fallbackDevice'),
-    hasMusic: props.hasMusic,
-    storageKey: 'android:remote:target',
   });
   const link: RemoteLink = {
     watch: (id, ack) => {
@@ -30,7 +28,7 @@ export function createNativeRemote(props: { generation: () => number; device: ()
   const handles: PluginListenerHandle[] = [];
   const keep = (handle: PluginListenerHandle) => { if (alive) handles.push(handle); else void handle.remove(); };
   void nativeDevices.addListener('device_updated', event => {
-    if (event.generation === props.generation()) control.deviceUpdated(event.device);
+    if (event.generation === props.generation()) control.deviceUpdated(event.device, event.server_now_ms);
   }).then(keep).catch(() => {});
   void nativeDevices.addListener('device_state', event => {
     if (event.generation === props.generation()) control.applyDeviceState(event);

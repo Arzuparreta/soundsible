@@ -38,13 +38,13 @@ class DevicesUiTest {
         val peerInstance = java.util.UUID.randomUUID().toString()
         val peerSeq = AtomicLong(0)
         // The peer's own playback, which it publishes after every command like a real target.
-        val peerIndex = AtomicInteger(0); val peerPlaying = AtomicBoolean(true)
+        val peerIndex = AtomicInteger(0); val peerPlaying = AtomicBoolean(true); val peerDj = AtomicBoolean(false)
         val queue = JSONArray().put(entry("peer-a", "Peer first")).put(entry("peer-b", "Peer second"))
         fun peerState(): JSONObject = JSONObject().put("device_id", peerId).put("device_name", "Remote test laptop").put("device_type", "desktop")
             .put("track_id", "member-track").put("track", queue.getJSONObject(peerIndex.get())).put("position_sec", 12).put("is_playing", peerPlaying.get())
             .put("live", JSONObject().put("phase", if (peerPlaying.get()) "playing" else "paused").put("duration", 600).put("dj", JSONObject.NULL))
-            .put("session", JSONObject().put("v", 1).put("mode", "now_playing").put("queue", queue).put("index", peerIndex.get())
-                .put("shuffle", false).put("repeat", "off").put("radio", JSONObject().put("active", false).put("seedId", JSONObject.NULL)).put("auto", JSONObject.NULL))
+            .put("session", JSONObject().put("v", 1).put("mode", if (peerDj.get()) "auto" else "now_playing").put("queue", queue).put("index", peerIndex.get())
+                .put("shuffle", false).put("repeat", "off").put("radio", JSONObject().put("active", false).put("seedId", JSONObject.NULL)).put("auto", if (peerDj.get()) JSONObject().put("profile", "balanced").put("sources", JSONArray()) else JSONObject.NULL))
         fun publish(): Long = core("/api/playback/state", "PUT", peerState().put("instance_id", peerInstance).put("seq", peerSeq.incrementAndGet())).optLong("rev")
         val received = CopyOnWriteArrayList<JSONObject>()
         val released = CountDownLatch(1)
@@ -98,20 +98,27 @@ class DevicesUiTest {
             core("/api/devices/register", "POST", JSONObject().put("device_id", peerId).put("device_name", "Remote test laptop").put("device_type", "desktop"))
             publish()
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                fun waitFor(condition: String) {
+                fun waitFor(condition: String, evidence: String = "document.body.innerText") {
                     val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
                     while (System.nanoTime() < until) { if (web.evaluate(scenario, condition) == "true") return; Thread.sleep(100) }
-                    fail("Connected mode: $condition; " + web.evaluate(scenario, "document.body.innerText"))
+                    fail("Connected mode: $condition; " + web.evaluate(scenario, evidence))
                 }
                 fun button(scope: String, label: String) = "Array.from(document.querySelectorAll(${JSONObject.quote(scope)})).find(b=>b.textContent.trim()===${JSONObject.quote(label)}&&!b.disabled)"
                 val program = "[data-testid=android-program] button"
                 val devices = "document.querySelector('[data-android-devices]')?.textContent.trim()"
                 waitFor("!!document.querySelector('[data-testid=android-library]')&&!document.documentElement.hasAttribute('data-booting')")
-                web.evaluate(scenario, "localStorage.setItem('lang','en');localStorage.removeItem('android:remote:target')"); scenario.recreate()
+                web.evaluate(scenario, "localStorage.setItem('lang','en');localStorage.setItem('android:remote:target',${JSONObject.quote(peerId)})"); scenario.recreate()
                 waitFor("!!document.querySelector('[data-testid=android-library]')&&!document.documentElement.hasAttribute('data-booting')")
                 web.evaluate(scenario, "window.__deviceStates=[];Capacitor.Plugins.SoundsiblePlayback.addListener('device_state',e=>window.__deviceStates.push({generation:e.generation,id:e.device_id,rev:e.rev,playing:e.is_playing}))")
 
-                // Startup: this phone has nothing loaded and the laptop is playing, so the player attaches to it.
+                // Check local startup after the account socket is ready, when the old rule would attach.
+                web.evaluate(scenario, "window.__nativeDevice=null;Capacitor.Plugins.SoundsiblePlayback.addListener('nativeDeviceState',s=>window.__nativeDevice=s).then(()=>Capacitor.Plugins.SoundsiblePlayback.deviceState()).then(s=>{window.__nativeDevice??=s})")
+                waitFor("window.__nativeDevice?.connected===true", "JSON.stringify(window.__nativeDevice)")
+                assertEquals("Startup changed the output device", JSONObject.quote("Devices"), web.evaluate(scenario, devices))
+                web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
+                val laptopRow = "document.querySelector('[data-connect-sheet] [data-device-row='+CSS.escape(${JSONObject.quote(peerId)})+']')"
+                waitFor("!!$laptopRow&&$laptopRow.getAttribute('aria-checked')==='false'")
+                web.evaluate(scenario, "$laptopRow.click()")
                 waitFor("$devices==='Playing on Remote test laptop'")
                 waitFor("document.querySelector('[data-testid=android-program]')?.innerText.includes('Peer first')===true&&!!${button(program, "Pause")}")
                 assertTrue("The phone played locally", commands("play.tracks").isEmpty())
@@ -119,7 +126,7 @@ class DevicesUiTest {
                 // deviceWatch answers with the engine's acknowledgement for this account only.
                 web.evaluate(scenario, "window.__ack=null;Capacitor.Plugins.SoundsiblePlayback.deviceState().then(s=>{window.__generation=s.generation;return Capacitor.Plugins.SoundsiblePlayback.deviceWatch({generation:s.generation,device_id:${JSONObject.quote(peerId)}})})" +
                     ".then(a=>window.__ack={id:a.device&&a.device.device_id,queue:a.state&&a.state.session&&a.state.session.queue.length},e=>window.__ack={failed:String(e&&e.message)})")
-                waitFor("window.__ack?.id===${JSONObject.quote(peerId)}&&window.__ack.queue===2")
+                waitFor("window.__ack?.id===${JSONObject.quote(peerId)}&&window.__ack.queue===2", "JSON.stringify({ ack:window.__ack, device:window.__nativeDevice })")
                 web.evaluate(scenario, "window.__stale=null;Capacitor.Plugins.SoundsiblePlayback.deviceWatch({generation:window.__generation+1,device_id:${JSONObject.quote(peerId)}}).then(()=>window.__stale='resolved',()=>window.__stale='rejected')")
                 waitFor("window.__stale==='rejected'")
 
@@ -156,15 +163,30 @@ class DevicesUiTest {
                 while (registered.get() == before && System.nanoTime() < back) Thread.sleep(50)
                 waitFor("$devices==='Playing on Remote test laptop'")
 
-                // "Listen here": the session moves to this phone, the laptop is released, and the player shows this phone.
+                // The remote action follows the laptop's published mode while the player is open.
+                peerDj.set(true)
+                publish()
+                // "Move DJ here" restores the DJ workspace and releases the laptop after the phone starts.
                 web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
-                waitFor("!!${button("[data-connect-sheet] button", "Listen here")}")
-                web.evaluate(scenario, "${button("[data-connect-sheet] button", "Listen here")}.click()")
+                waitFor("!!${button("[data-connect-sheet] button", "Move DJ here")}")
+                web.evaluate(scenario, "${button("[data-connect-sheet] button", "Move DJ here")}.click()")
                 assertTrue("The laptop was never released", released.await(25, TimeUnit.SECONDS))
                 waitFor("$devices==='Devices'")
                 web.evaluate(scenario, "window.__timer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__local=s),100)")
-                waitFor("window.__local?.items?.length===2&&window.__local.index===1&&window.__local.items[1].title==='Peer second'&&window.__local.playWhenReady===true")
-                assertNull("The choice of device outlived the transfer", web.evaluate(scenario, "localStorage.getItem('android:remote:target')").takeIf { it != "null" })
+                waitFor("window.__local?.dj?.active===true&&window.__local.index===1&&window.__local.items[1].title==='Peer second'&&window.__local.playWhenReady===true")
+
+                // An independent copy replaces the phone's queue with one track while the laptop keeps playing.
+                peerDj.set(false)
+                peerPlaying.set(true)
+                publish()
+                val beforeCopy = received.size
+                web.evaluate(scenario, "document.querySelector('[data-android-devices]').click()")
+                val copy = button("[data-connect-sheet] button", "Copy track")
+                waitFor("!!$copy")
+                web.evaluate(scenario, "$copy.click()")
+                waitFor("window.__local?.items?.length===1&&!window.__local.dj?.active&&window.__local.id==='member-track'&&window.__local.positionMs>=12000&&window.__local.playWhenReady===true")
+                assertEquals("Copy sent a command to the laptop", beforeCopy, received.size)
+                assertTrue("Copy stopped the laptop", peerPlaying.get())
 
                 val rows = core("/api/devices").getJSONArray("devices")
                 assertEquals("WebView registered an extra native playback owner", 1, (0 until rows.length()).count { rows.getJSONObject(it).optString("device_type") == "android" })

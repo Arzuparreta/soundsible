@@ -24,8 +24,6 @@ export { deviceName, heldPosition, isControllable, isOnline, type HeldState, typ
 export const remoteControl = createRemoteControl({
   selfId: () => state.device.device_id,
   selfName: () => state.device.device_name,
-  hasMusic: () => Boolean(state.playback.currentTrack),
-  storageKey: 'remote:target',
 });
 const control = remoteControl;
 const { held, target, unreachable, pending, sendCommand } = control;
@@ -56,7 +54,7 @@ export function attachRemoteSocket(owned: AppSocket, lifetime: RuntimeLifetime):
     watch: (id, ack) => void owned.emit('watch_device', { device_id: id }, ack),
     unwatch: id => void owned.emit('unwatch_device', { device_id: id }),
   });
-  owned.on('device_updated', lifetime.guard(payload => control.deviceUpdated(payload?.device)));
+  owned.on('device_updated', lifetime.guard(payload => control.deviceUpdated(payload?.device, payload?.server_now_ms)));
   owned.on('device_state', lifetime.guard(payload => applyDeviceState(payload)));
   // The account (or the whole store) is going away: so is whatever it controlled.
   lifetime.own(() => {

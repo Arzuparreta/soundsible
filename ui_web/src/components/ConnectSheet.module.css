@@ -45,7 +45,13 @@
 .entry {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-2xs);
+}
+
+.entry .entryAction {
+  flex: none;
+  padding-inline: var(--space-xs);
+  margin-inline-end: var(--space-2xs);
 }
 
 .row {
@@ -153,8 +159,18 @@
   flex: none;
 }
 
-.move {
-  flex: none;
-  min-height: var(--control-h);
-  white-space: nowrap;
+@media (max-width: 480px) {
+  .row {
+    gap: var(--space-sm);
+    padding-inline: var(--space-xs);
+  }
+
+  .entry .entryAction {
+    padding-inline: var(--space-2xs);
+    margin-inline-end: 0;
+  }
+
+  .entry .state {
+    font-size: var(--text-tiny);
+  }
 }

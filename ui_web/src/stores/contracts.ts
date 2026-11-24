@@ -63,6 +63,7 @@ export type LoadOptions = {
   restart?: boolean;
   trigger?: PlaybackTrigger;
   freshDeck?: boolean;
+  positionSec?: number;
 };
 export interface CommittedTransition {
   queueId: string;
@@ -117,6 +118,7 @@ export interface PlayerActions {
     context?: PlaybackContextDescriptor;
     shuffled?: boolean;
     preserveManual?: boolean;
+    positionSec?: number;
   }) => void;
   playTrack: (track: Track) => void;
   playShuffled: (tracks: Track[], context?: PlaybackContextDescriptor) => void;

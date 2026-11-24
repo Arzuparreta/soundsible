@@ -1,4 +1,4 @@
-import { state } from '../stores';
+import { actions, state } from '../stores';
 import { remoteControl } from '../stores/remote';
 import { openConnectSheet, type ConnectSelf } from './ConnectSheet';
 
@@ -9,6 +9,13 @@ export const webConnectSelf: ConnectSelf = {
   get deviceType() { return state.device.device_type; },
   track: () => state.playback.currentTrack,
   playing: () => state.playback.isPlaying,
+  playCopy: (track, positionSec) => {
+    const local = state.library.find(item => item.id === track.id) ?? track;
+    if (local.unavailable) return false;
+    if (state.autoMode.active) actions.exitAutoMode();
+    actions.playFrom([local], 0, { positionSec, preserveManual: false });
+    return true;
+  },
 };
 
 /** The web player's device sheet, loaded on use with the controller it shows. */

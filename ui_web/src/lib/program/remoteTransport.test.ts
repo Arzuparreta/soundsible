@@ -120,7 +120,7 @@ describe('the remote transport in the program runtime', () => {
 
   it('stays pending until the device publishes the answer’s rev, then shows that state', async () => {
     mocks.listDevices.mockResolvedValue({ devices: [device()] });
-    const control = createRemoteControl({ selfId: () => 'phone', selfName: () => 'Pixel', hasMusic: () => true, storageKey: 'k' });
+    const control = createRemoteControl({ selfId: () => 'phone', selfName: () => 'Pixel' });
     control.attach({ watch: (_id, ack) => ack({ device: device(), state: event() }), unwatch: () => {} });
     await control.refreshDevices();
     control.selectTarget('speaker');

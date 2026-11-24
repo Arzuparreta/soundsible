@@ -211,7 +211,15 @@ public class ConnectionTest {
             scenario.recreate();
             web.revealLibraryTitle(scenario, "member private song");
             awaitText(web, scenario, "member private song");
-            web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Sign out').click()");
+            // The restored library can render while identity revalidation still disables Sign out.
+            String clickSignOut = "(()=>{const button=Array.from(document.querySelectorAll('button:not(:disabled)')).find(b=>b.textContent==='Sign out');if(!button)return false;button.click();return true})()";
+            long signOutDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            boolean signedOut = false;
+            while (System.nanoTime() < signOutDeadline) {
+                if ("true".equals(web.evaluate(scenario, clickSignOut))) { signedOut = true; break; }
+                Thread.sleep(100);
+            }
+            assertTrue("Sign out never became enabled after recreation", signedOut);
             awaitText(web, scenario, "Sign in");
             assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('member private song')"));
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='owner';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
