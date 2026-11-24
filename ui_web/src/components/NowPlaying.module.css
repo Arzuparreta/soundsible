@@ -599,76 +599,18 @@
   display: contents;
 }
 
-.volume .volumeTrigger {
-  display: none;
-}
-
-.volume.volumeNoSlider .volumeTrigger {
-  display: inline-flex;
-}
-
-@container player (max-width: 767px) {
-  .volume .inlineMute,
-  .volumePopover {
-    display: none;
-  }
-
-  .volume .volumeTrigger {
-    display: inline-flex;
-  }
-}
-
-.compactVolumePopup {
-  position: absolute;
-  z-index: 40;
-  top: min(calc(var(--volume-top) + var(--space-2xs)), calc(100% - var(--control-h)));
-  right: max(var(--space-sm), env(safe-area-inset-right, 0px));
-  display: flex;
-  height: var(--control-h);
-  align-items: center;
-  padding-inline: var(--space-sm);
-  background: var(--stage-base);
-  border-radius: var(--radius-full);
-  box-shadow: inset 0 0 0 1px var(--stage-line), var(--stage-shadow-sm);
-}
-
-.compactVolumePopup .volRange {
-  flex: 1;
-  min-width: 0;
-  touch-action: none;
-}
-
-/* Which of the stage's buttons a layout carries. Declared after `.actBtn`,
-   which would otherwise show them all. */
-.mobileLyrics,
-.mobileLyricsToggle,
+/* Which of the stage's buttons a layout carries. */
 .desktopLyricsToggle {
   display: none;
 }
 
-.mobileLyrics {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--stage-well);
-  border-radius: var(--radius-lg);
-}
-
-/* Below 1024px lyrics take the cover's own square, so phones and tablets
-   never lose them and the DJ handoff keeps the exact same rectangle. */
+/* In compact layouts (< 1024px) lyrics, queue/route, radio and volume live in
+   PlayerCompactDock, giving Stage more room for artwork, while track overflow
+   is mounted beside Save and Heart in .infoActions. On mobileWeb at >= 1024px,
+   .actionsBar omits the slider and renders only the inline mute button. */
 @container player (max-width: 1023px) {
-  .visualSlot[data-lyrics-open] .art {
+  .actionsBar {
     display: none;
-  }
-
-  .visualSlot[data-lyrics-open] .mobileLyrics {
-    display: flex;
-  }
-
-  .mobileLyricsToggle,
-  .mobileQueueToggle {
-    display: inline-flex;
   }
 
   .body {
@@ -677,10 +619,6 @@
 }
 
 @container player (min-width: 1024px) {
-  .mobileQueueToggle {
-    display: none;
-  }
-
   .desktopLyricsToggle {
     display: inline-flex;
   }
@@ -717,14 +655,13 @@
 
 /* A tile too short for artwork and controls together — a desktop window a few
    hundred pixels tall — keeps the controls and lets the cover go: the room
-   behind them is already that cover, blurred. Lyrics opened in the cover's
-   square keep it. */
+   behind them is already that cover, blurred. */
 @container stage (max-height: 420px) and (max-aspect-ratio: 5 / 4) {
   .body:not(.desktopLyricsStage) {
     justify-content: center;
   }
 
-  .body:not(.desktopLyricsStage) .media:not(:has([data-lyrics-open])) {
+  .body:not(.desktopLyricsStage) .media {
     display: none;
   }
 }
@@ -1050,7 +987,7 @@
 
 @container player (max-width: 1023px) {
   .emptyWorkspace {
-    padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-band));
+    padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-compact-dock-height));
   }
 }
 
@@ -1090,4 +1027,20 @@
   font-size: var(--text-micro);
   letter-spacing: .1em;
   text-transform: uppercase;
+}
+
+.queuePanel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.queueBody {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }

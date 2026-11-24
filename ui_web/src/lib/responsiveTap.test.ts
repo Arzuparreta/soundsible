@@ -288,4 +288,20 @@ describe('responsive touch activation', () => {
 
     expect(onTap).not.toHaveBeenCalled();
   });
+
+  it('ignores mouse pointer events that share the touch pointerId during a hold', () => {
+    vi.useFakeTimers();
+    const onTap = vi.fn();
+    const onLongPress = vi.fn();
+    const target = document.createElement('button');
+    const handlers = createResponsiveTap({ onTap, onLongPress });
+
+    handlers.onPointerDown(pointerEvent(target, { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 30 }));
+    handlers.onPointerMove(pointerEvent(target, { pointerId: 1, pointerType: 'mouse', clientX: 20, clientY: 120 }));
+    vi.advanceTimersByTime(responsiveTapConstants.LONG_PRESS_MS);
+    handlers.onPointerUp(pointerEvent(target, { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 30 }));
+
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+    expect(onTap).not.toHaveBeenCalled();
+  });
 });

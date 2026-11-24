@@ -29,8 +29,9 @@ function workspace() {
     minimums={sizes} defaults={sizes} onLayoutChange={() => {}} panelLabel={value => value}
     ariaLabel="Test panels" dataScope="auto" renderPanel={value => <p>{value}</p>} />);
   const carousel = view.container.querySelector<HTMLElement>('[data-player-carousel]')!;
-  Object.defineProperty(carousel, 'scrollTo', { value: (options: ScrollToOptions) => { carousel.scrollLeft = options.left ?? 0; } });
-  return { view, carousel, panel, select };
+  const scrollTo = vi.fn((options: ScrollToOptions) => { carousel.scrollLeft = options.left ?? 0; });
+  Object.defineProperty(carousel, 'scrollTo', { value: scrollTo, configurable: true });
+  return { view, carousel, panel, select, scrollTo };
 }
 it('a stale scroll settle cannot supersede a requested panel before its alignment frame', async () => {
   const { carousel, panel, select, view } = workspace(); await Promise.resolve();
@@ -52,4 +53,52 @@ it('a real carousel gesture cancels the pending destination and owns the settled
   expect(panel()).toBe('library');
   for (const [id, callback] of [...frames]) { frames.delete(id); callback(100); }
   expect(carousel.scrollLeft).toBe(0);
+});
+it('reopening and targeting another panel in the same turn jumps immediately instead of smooth-scrolling', async () => {
+  const [open, setOpen] = createSignal(false);
+  const [panel, select] = createSignal<typeof panels[number]>('stage');
+  const view = render(() => <PlayerWorkspace panels={panels} activePanel={panel()} onActivePanelChange={select}
+    surfaceOpen={open()} layout={{ version: 1, order: [...panels], ratios: { library: 1 / 3, stage: 1 / 3, route: 1 / 3 } }}
+    minimums={sizes} defaults={sizes} onLayoutChange={() => {}} panelLabel={value => value}
+    ariaLabel="Test panels" dataScope="auto" renderPanel={value => <p>{value}</p>} />);
+  const carousel = view.container.querySelector<HTMLElement>('[data-player-carousel]')!;
+  const scrollTo = vi.fn((options: ScrollToOptions) => { carousel.scrollLeft = options.left ?? 0; });
+  Object.defineProperty(carousel, 'scrollTo', { value: scrollTo });
+  await Promise.resolve();
+  setOpen(true);
+  select('route');
+  expect(carousel.scrollLeft).toBe(400);
+  expect(scrollTo).not.toHaveBeenCalled();
+});
+it('respects prefers-reduced-motion when switching panels programmatically', async () => {
+  setMediaQuery('(prefers-reduced-motion: reduce)', true);
+  try {
+    const { carousel, select, scrollTo } = workspace(); await Promise.resolve();
+    select('route');
+    expect(carousel.scrollLeft).toBe(400);
+    expect(scrollTo).not.toHaveBeenCalled();
+  } finally {
+    setMediaQuery('(prefers-reduced-motion: reduce)', false);
+  }
+});
+it('clears the opening fast-path once the surface closes so a later switch still smooth-scrolls', async () => {
+  const [open, setOpen] = createSignal(false);
+  const [panel, select] = createSignal<typeof panels[number]>('stage');
+  const view = render(() => <PlayerWorkspace panels={panels} activePanel={panel()} onActivePanelChange={select}
+    surfaceOpen={open()} layout={{ version: 1, order: [...panels], ratios: { library: 1 / 3, stage: 1 / 3, route: 1 / 3 } }}
+    minimums={sizes} defaults={sizes} onLayoutChange={() => {}} panelLabel={value => value}
+    ariaLabel="Test panels" dataScope="auto" renderPanel={value => <p>{value}</p>} />);
+  const carousel = view.container.querySelector<HTMLElement>('[data-player-carousel]')!;
+  const scrollTo = vi.fn((options: ScrollToOptions) => { carousel.scrollLeft = options.left ?? 0; });
+  Object.defineProperty(carousel, 'scrollTo', { value: scrollTo, configurable: true });
+  await Promise.resolve();
+  setOpen(true);
+  setOpen(false);
+  for (const [id, callback] of [...frames]) { frames.delete(id); callback(100); }
+  setOpen(true);
+  for (const [id, callback] of [...frames]) { frames.delete(id); callback(100); }
+  scrollTo.mockClear();
+  select('route');
+  for (const [id, callback] of [...frames]) { frames.delete(id); callback(100); }
+  expect(scrollTo).toHaveBeenCalledOnce();
 });

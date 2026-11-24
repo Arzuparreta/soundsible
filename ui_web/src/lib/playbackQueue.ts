@@ -129,6 +129,23 @@ export function futureEntries(
   return lane ? upcoming.filter((entry) => entry.queueLane === lane) : upcoming;
 }
 
+/**
+ * Upcoming rows counted and listed by the dock badge and panel headers: in
+ * Normal mode this returns explicit manual requests plus active radio picks
+ * (excluding context continuation cards), and in Auto mode the whole planned route.
+ */
+export function upcomingQueueEntries(
+  queue: readonly PlaybackQueueEntry[] | undefined,
+  index: number | undefined,
+  options: { auto: true } | { auto: false; radioMode: boolean },
+): PlaybackQueueEntry[] {
+  const upcoming = futureEntries(queue ?? [], index ?? -1);
+  if (options.auto) return upcoming;
+  return upcoming.filter((entry) =>
+    entry.queueLane === 'manual' || (options.radioMode && entry.queueLane === 'generated'),
+  );
+}
+
 export function manualInsertIndex(
   queue: readonly PlaybackQueueEntry[],
   currentIndex: number,

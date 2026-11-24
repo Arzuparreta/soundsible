@@ -46,8 +46,12 @@ vi.mock('./LyricsPanel', () => ({
 }));
 
 import { PlayerStage } from './PlayerStage';
+import { setPlayerCompact } from '../lib/playerDock';
 
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  setPlayerCompact(false);
+  localStorage.clear();
+});
 
 describe('PlayerStage lyrics transition', () => {
   it('keeps the stage mounted while lyrics are still loading inside Auto', () => {
@@ -77,6 +81,27 @@ describe('PlayerStage lyrics transition', () => {
     fireEvent.input(slider, { target: { value: '50' } });
     expect(actions.setVolume).toHaveBeenCalledWith(expect.closeTo(0.1, 10));
   });
+
+  it('keeps the Mute label and unpressed state when volume is 0 but playback is not muted', () => {
+    const previousVolume = state.playback.volume;
+    const previousMuted = state.playback.muted;
+    state.playback.volume = 0;
+    state.playback.muted = false;
+    try {
+      const first = render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+      const muteButton = screen.getByRole('button', { name: 'omnibar.mute' });
+      expect(muteButton).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByRole('button', { name: 'omnibar.unmute' })).toBeNull();
+      first.unmount();
+
+      state.playback.muted = true;
+      render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+      expect(screen.getByRole('button', { name: 'omnibar.unmute' })).toHaveAttribute('aria-pressed', 'true');
+    } finally {
+      state.playback.volume = previousVolume;
+      state.playback.muted = previousMuted;
+    }
+  });
 });
 
 
@@ -95,5 +120,32 @@ describe('podcast transport', () => {
     render(() => <PlayerStage mode="now-playing" surfaceOpen />);
     fireEvent.click(screen.getByRole('button', { name: 'common.next' }));
     expect(actions.next).toHaveBeenCalled();
+  });
+
+  it('omits the compact info overflow button for podcasts at wide fullscreen', () => {
+    const original = state.playback.currentTrack;
+    state.playback.currentTrack = { ...original, media_kind: 'podcast_episode' } as typeof original;
+    try {
+      setPlayerCompact(false);
+      const { container, unmount } = render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+      expect(screen.getAllByRole('button', { name: 'common.more' })).toHaveLength(1);
+      const infoButtons = container.querySelectorAll('[data-player-stage-mode="now-playing"] button');
+      const compactMoreCount = Array.from(infoButtons).filter(
+        (btn) => btn.getAttribute('aria-label') === 'common.more' && !btn.closest('[data-stage-actions]'),
+      ).length;
+      expect(compactMoreCount).toBe(0);
+      unmount();
+
+      setPlayerCompact(true);
+      const compact = render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+      const compactBtns = Array.from(
+        compact.container.querySelectorAll('[data-player-stage-mode="now-playing"] button'),
+      ).filter(
+        (btn) => btn.getAttribute('aria-label') === 'common.more' && !btn.closest('[data-stage-actions]'),
+      );
+      expect(compactBtns).toHaveLength(1);
+    } finally {
+      state.playback.currentTrack = original;
+    }
   });
 });

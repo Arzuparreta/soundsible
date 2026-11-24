@@ -228,10 +228,10 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   await snapCarousel(page, 'queue');
   await releaseCarousel(page, '[data-now-playing-carousel]');
   await expect(queue).not.toHaveAttribute('inert', '');
-  const second = queue.locator('[data-drag-row]').nth(1);
-  const id = await second.getAttribute('data-drag-row');
+  const first = queue.locator('[data-drag-row]').nth(0);
+  const id = await first.getAttribute('data-drag-row');
   // The visible menu and a hold share the same occurrence actions.
-  await holdForMenu(page, second);
+  await holdForMenu(page, first);
   await page.getByRole('dialog').getByRole('button', { name: 'Mover', exact: true }).click();
   // A late initial alignment must not undo the selected queue panel while
   // opening its menu, leaving the editing controls inert (WebKit).
@@ -239,14 +239,14 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   await expect(queue).not.toHaveAttribute('inert', '');
   const editing = queue.locator(`[data-drag-row="${id}"]`);
   await editing.getByRole('button', { name: 'Bajar', exact: true }).click();
-  await expect(queue.locator('[data-drag-row]').nth(2)).toHaveAttribute('data-drag-row', id!);
+  await expect(queue.locator('[data-drag-row]').nth(1)).toHaveAttribute('data-drag-row', id!);
   await expect(editing.locator('[data-editing]')).toBeVisible();
   await editing.getByRole('button', { name: 'Subir', exact: true }).click();
-  await expect(queue.locator('[data-drag-row]').nth(1)).toHaveAttribute('data-drag-row', id!);
+  await expect(queue.locator('[data-drag-row]').nth(0)).toHaveAttribute('data-drag-row', id!);
   // The last request cannot go below the requests.
   await editing.getByRole('button', { name: 'Bajar', exact: true }).click();
   await editing.getByRole('button', { name: 'Bajar', exact: true }).click();
-  await expect(queue.locator('[data-drag-row]').nth(3)).toHaveAttribute('data-drag-row', id!);
+  await expect(queue.locator('[data-drag-row]').nth(2)).toHaveAttribute('data-drag-row', id!);
   await expect(editing.getByRole('button', { name: 'Bajar', exact: true })).toBeDisabled();
   await editing.getByRole('button', { name: 'Listo', exact: true }).click();
   // Return to the visible menu of the occurrence that was being moved.

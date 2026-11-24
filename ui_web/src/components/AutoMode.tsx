@@ -18,6 +18,7 @@ import {
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { dropBeforeId, isNoopMove } from '../lib/dragReorder';
 import { editableFrom, routeRows } from '../lib/djRoute';
+import { upcomingQueueEntries } from '../lib/playbackQueue';
 import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
@@ -25,6 +26,7 @@ import { beginDjErrand, endDjErrand, type DjErrandKind } from '../lib/djErrand';
 import { desktopShell } from '../lib/shellLayout';
 import { setNowPlayingOpen } from '../stores';
 import { PlayerStage } from './PlayerStage';
+import { PlayerMiniHeader } from './PlayerMiniHeader';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
 import { AutoReferences } from './AutoReferences';
@@ -53,7 +55,6 @@ function readLayout(): AutoModeDesktopLayout {
 export function AutoMode(props: {
   panel: AutoModePanelId;
   onPanelChange: (panel: AutoModePanelId) => void;
-  onCarouselProgress?: (index: number, live: boolean) => void;
   surfaceOpen: boolean;
   panelsReady?: boolean;
 }) {
@@ -109,7 +110,7 @@ export function AutoMode(props: {
   const routeActive = () => panelActive('route');
   const upcoming = createActivityMemo(
     routeActive,
-    () => player().playback.queue.slice(Math.max(0, player().playback.index + 1)),
+    () => upcomingQueueEntries(player().playback.queue, player().playback.index, { auto: true }),
     [],
     () => [player().playback.queue, player().playback.index],
   );
@@ -282,28 +283,29 @@ export function AutoMode(props: {
     <PlayerStage
       mode="auto"
       surfaceOpen={props.surfaceOpen}
-      onOpenList={() => props.onPanelChange('route')}
-      listLabel={t('autoMode.mobile.route')}
       onTrackDragStart={(event, track) => writeAutoTrackTransfer(event, { track })}
       onCarryTrack={(track) => setCarriedTrack({ track })}
       empty={stageEmpty()}
     />
   );
   const Route = () => (
-    <section class={styles.routePanel}><div class={styles.routeList}><PlayerTrackList
+    <section class={styles.routePanel}>
+      <Show when={playerCompact()}>
+        <PlayerMiniHeader mode="auto" onBack={() => props.onPanelChange('stage')} />
+      </Show>
+      <div class={styles.routeList}><PlayerTrackList
       title={t('autoMode.dj.route')}
       count={routeEntries().length}
       empty={routeEmpty()}
       placing={Boolean(carriedTrack())}
       headAction={[
         // Fix mix rebuilds transitions and the bridges that carry them. With
-        // the mixing off there are none to hear, so there is nothing to fix.
+        // mixing off there are none to hear, so the action is omitted.
+        // Reordering opens joins the DJ never chose; the tooltip calls out
+        // stale seams when present while keeping the button quiet beside Add.
         ...(player().playback.djMixing ? [{
           label: player().autoMode.repairing ? t('autoMode.route.fixing') : t('autoMode.route.fix'),
-          // Reordering opens joins the DJ never chose. The button says so
-          // rather than waiting for a plain fade to announce it on arrival.
           title: mixPending() ? t('autoMode.route.mixPending') : t('autoMode.route.fixHint'),
-          pending: mixPending(),
           disabled: player().autoMode.repairing
             || player().autoMode.pendingDirection
             || routeEntries().filter((entry) => !entry.locked).length < 2,
@@ -344,7 +346,6 @@ export function AutoMode(props: {
         panels={AUTO_MODE_PANELS}
         activePanel={props.panel}
         onActivePanelChange={props.onPanelChange}
-        onCarouselProgress={props.onCarouselProgress}
         surfaceOpen={props.surfaceOpen}
         layout={layout()}
         onLayoutChange={setLayoutPersisted}

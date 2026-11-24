@@ -62,9 +62,12 @@ test('NORMAL queue offers collection actions for the selected song without chang
   await expect.poll(() => downloads.flatMap((body) => body.items.map((item) => item.video_id))).toEqual([STREAMED.id]);
   expect(await order()).toEqual(originalOrder);
 
-  // The current song also keeps its menu, despite having no play-row action.
-  const current = queue.locator('[data-current]');
-  await current.locator('[data-row-menu]').click();
+  // Returning to Stage via the mini-player header exposes the current song's
+  // menu beside its title, without duplicating a static row inside the queue.
+  await queue.locator('[data-player-mini-header] button').first().click();
+  const stage = page.locator('[data-now-playing-tile="stage"]');
+  await expect(stage).not.toHaveAttribute('inert', '');
+  await stage.getByRole('button', { name: 'Más opciones', exact: true }).click();
   await expect(page.getByRole('dialog').getByText('Añadir a playlist', { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('Editar datos', { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('Descargar', { exact: true })).toHaveCount(0);

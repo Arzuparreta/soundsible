@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setPlayerCompact } from '../lib/playerDock';
 
 const harness = vi.hoisted(() => ({
   actions: {
@@ -43,28 +44,21 @@ vi.mock('../stores', async () => {
 });
 
 vi.mock('../lib/config', () => ({ apiOrigin: () => '', mediaOrigin: () => '', artworkUrl: (url?: string | null) => url || undefined }));
-vi.mock('../lib/track', () => ({ isPodcastTrack: (track: { podcast_guid?: string }) => Boolean(track.podcast_guid) }));
+vi.mock('../lib/track', () => ({
+  PODCAST_SKIP_SECONDS: 15,
+  isPodcastTrack: (track: { podcast_guid?: string }) => Boolean(track.podcast_guid),
+}));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('./NowPlaying', () => ({
   NowPlaying: (props: {
     mobilePanel: string;
     onMobilePanelChange: (panel: string) => void;
-    onCarouselProgress?: (index: number, live: boolean) => void;
   }) => (
     <div data-testid="now-playing-view">
       {props.mobilePanel}
-      {/* The real carousel reports the scroll position and the settled panel on
-          two separate channels: the marker follows the finger, the panel waits. */}
-      <button
-        type="button"
-        onClick={() => {
-          props.onCarouselProgress?.(1, false);
-          props.onMobilePanelChange('queue');
-        }}
-      >
+      <button type="button" onClick={() => props.onMobilePanelChange('queue')}>
         simulate swipe
       </button>
-      <button type="button" onClick={() => props.onCarouselProgress?.(0.4, true)}>simulate drag</button>
     </div>
   ),
 }));
@@ -72,32 +66,25 @@ vi.mock('./AutoMode', () => ({
   AutoMode: (props: {
     panel: string;
     onPanelChange: (panel: string) => void;
-    onCarouselProgress?: (index: number, live: boolean) => void;
   }) => (
     <div data-testid="auto-mode-view">
       {props.panel}
-      <button
-        type="button"
-        onClick={() => {
-          props.onCarouselProgress?.(1, false);
-          props.onPanelChange('route');
-        }}
-      >
+      <button type="button" onClick={() => props.onPanelChange('route')}>
         simulate auto swipe
-      </button>
-      <button type="button" onClick={() => props.onCarouselProgress?.(0.4, true)}>
-        simulate auto drag
       </button>
     </div>
   ),
+}));
+vi.mock('./LyricsPanel', () => ({
+  LyricsPanel: () => <div data-testid="lyrics-panel" />,
 }));
 
 import { PlayerSurface } from './PlayerSurface';
 
 beforeEach(() => {
-  vi.stubGlobal('matchMedia', vi.fn(() => ({
-    matches: harness.mobileViewport,
-    media: '(max-width: 1023px)',
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    matches: query.includes('pointer: coarse') ? false : harness.mobileViewport,
+    media: query,
     onchange: null,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -122,10 +109,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
   harness.mobileViewport = false;
   harness.desktop = false;
+  Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+  setPlayerCompact(false);
   localStorage.clear();
   delete document.documentElement.dataset.playerSurface;
   delete document.documentElement.dataset.playerDocked;
 });
+
+function setCompactViewport(width = 390) {
+  harness.mobileViewport = true;
+  Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
+  setPlayerCompact(true);
+}
 
 /** jsdom has no touch input, so the gesture is fed the shape it reads: an
     identified touch on `touches`, and the same one on `changedTouches`. */
@@ -251,61 +246,57 @@ describe('PlayerSurface', () => {
     expect(normal).toHaveFocus();
   });
 
-  it('moves between the two compact panels through accessible indicators', () => {
+  it('toggles between Stage, Queue and Lyrics symmetrically through the compact bottom dock', () => {
+    setCompactViewport();
     render(() => <PlayerSurface />);
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
 
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.queue' }));
-    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('queue');
+    const queueToggle = screen.getByRole('button', { name: 'nowPlaying.panel.queue' });
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(queueToggle).not.toHaveAttribute('aria-current');
 
-    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.panel.stage' }));
+    fireEvent.click(queueToggle);
+    expect(screen.getByTestId('now-playing-view')).toHaveTextContent('queue');
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(queueToggle).not.toHaveAttribute('aria-current');
+
+    // Pressing the active toggle returns straight to Stage.
+    fireEvent.click(queueToggle);
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByRole('button', { name: 'nowPlaying.panel.browser' })).toBeNull();
   });
 
-  it('moves the compact pill when the carousel reports a user swipe', () => {
+  it('keeps the bottom dock toggle synced when the carousel reports a user swipe', () => {
+    setCompactViewport();
     render(() => <PlayerSurface />);
-    const nav = screen.getByRole('navigation', { name: 'nowPlaying.mobilePanels' });
+    const queueToggle = screen.getByRole('button', { name: 'nowPlaying.panel.queue' });
 
-    expect(nav).toHaveStyle('--carousel-index: 0');
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(screen.getByRole('button', { name: 'simulate swipe' }));
 
-    expect(screen.getByRole('button', { name: 'nowPlaying.panel.queue' })).toHaveAttribute('aria-current', 'page');
-    expect(nav).toHaveStyle('--carousel-index: 1');
+    expect(queueToggle).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('tracks a drag between panels without waiting for it to settle', () => {
-    render(() => <PlayerSurface />);
-    const nav = screen.getByRole('navigation', { name: 'nowPlaying.mobilePanels' });
-
-    fireEvent.click(screen.getByRole('button', { name: 'simulate drag' }));
-
-    expect(nav).toHaveStyle('--carousel-index: 0.4');
-    expect(nav).toHaveAttribute('data-live');
-    // The panel itself has not settled yet, so focus and inertness stay put.
-    expect(screen.getByRole('button', { name: 'nowPlaying.panel.stage' })).toHaveAttribute('aria-current', 'page');
-  });
-
-  it('uses the same live pager contract in Auto Mode', async () => {
+  it('uses the same symmetric bottom dock toggle in Auto Mode', async () => {
+    setCompactViewport();
     render(() => <PlayerSurface />);
     fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
     await screen.findByTestId('auto-mode-view');
-    const nav = screen.getByRole('navigation', { name: 'autoMode.mobile.controls' });
+    const routeToggle = screen.getByRole('button', { name: 'autoMode.panel.route' });
 
-    expect(nav).toHaveStyle('--carousel-index: 0');
-    fireEvent.click(screen.getByRole('button', { name: 'simulate auto drag' }));
-    expect(nav).toHaveStyle('--carousel-index: 0.4');
-    expect(nav).toHaveAttribute('data-live');
-    expect(screen.getByRole('button', { name: 'autoMode.panel.stage' })).toHaveAttribute('aria-current', 'page');
-
+    expect(routeToggle).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(screen.getByRole('button', { name: 'simulate auto swipe' }));
-    expect(nav).toHaveStyle('--carousel-index: 1');
     expect(screen.getByTestId('auto-mode-view')).toHaveTextContent('route');
-    expect(screen.getByRole('button', { name: 'autoMode.panel.route' })).toHaveAttribute('aria-current', 'page');
+    expect(routeToggle).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(routeToggle);
+    expect(screen.getByTestId('auto-mode-view')).toHaveTextContent('stage');
+    expect(routeToggle).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('resets the compact carousel only once the surface has animated out', () => {
-    harness.mobileViewport = true;
+    setCompactViewport();
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
 
@@ -325,7 +316,7 @@ describe('PlayerSurface', () => {
   });
 
   it('gives a button close the whole travel to animate', () => {
-    harness.mobileViewport = true;
+    setCompactViewport();
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]') as HTMLElement;
 
@@ -338,7 +329,7 @@ describe('PlayerSurface', () => {
   });
 
   it('continues a released drag from where the finger left it', () => {
-    harness.mobileViewport = true;
+    setCompactViewport();
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]') as HTMLElement;
 
@@ -354,7 +345,7 @@ describe('PlayerSurface', () => {
   });
 
   it('drops the exit values once the surface is off screen', () => {
-    harness.mobileViewport = true;
+    setCompactViewport();
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]') as HTMLElement;
 
@@ -369,7 +360,7 @@ describe('PlayerSurface', () => {
   it('closes on a swipe that starts on a button', () => {
     // The queue rows and the browser cards are full-width buttons, so excluding
     // buttons from the gesture left most of the surface unswipeable.
-    harness.mobileViewport = true;
+    setCompactViewport();
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
 
@@ -379,7 +370,7 @@ describe('PlayerSurface', () => {
   });
 
   it('leaves the gesture alone on controls that opted out', () => {
-    harness.mobileViewport = true;
+    setCompactViewport();
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
 
@@ -389,7 +380,7 @@ describe('PlayerSurface', () => {
   });
 
   it('ignores a swipe that reads as a horizontal panel change', () => {
-    harness.mobileViewport = true;
+    setCompactViewport();
     render(() => <PlayerSurface />);
     const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
     const target = screen.getByRole('button', { name: 'simulate swipe' });
@@ -403,7 +394,7 @@ describe('PlayerSurface', () => {
   });
 
   it('inherits the surface swipe-down gesture in Auto Mode', async () => {
-    harness.mobileViewport = true;
+    setCompactViewport();
     render(() => <PlayerSurface />);
     fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
     const target = await screen.findByRole('button', { name: 'simulate auto swipe' });
@@ -413,6 +404,160 @@ describe('PlayerSurface', () => {
 
     expect(surface).not.toHaveAttribute('data-player-surface-open');
     expect(harness.actions.exitAutoMode).not.toHaveBeenCalled();
+  });
+
+  it('lets Escape close only compact lyrics and returns focus to the lyrics toggle', async () => {
+    setCompactViewport();
+    render(() => <PlayerSurface />);
+    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' });
+    lyricsToggle.focus();
+    fireEvent.click(lyricsToggle);
+
+    const lyricsView = await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' });
+    expect(lyricsView).toBeInTheDocument();
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    lyricsToggle.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(screen.queryByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
+    expect(lyricsView.closest('[data-player-stage]') ?? document.querySelector('[data-player-surface-open]')).not.toBeNull();
+    expect(lyricsToggle).toHaveFocus();
+  });
+
+  it('lets Escape close the compact volume popover before closing compact lyrics', async () => {
+    setCompactViewport(420);
+    render(() => <PlayerSurface />);
+    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' });
+    fireEvent.click(lyricsToggle);
+    expect(await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
+
+    const volumeButton = screen.getByRole('button', { name: 'omnibar.volume' });
+    const enter = new Event('pointerenter', { bubbles: true });
+    Object.defineProperty(enter, 'pointerType', { value: 'mouse' });
+    volumeButton.dispatchEvent(enter);
+
+    const slider = await screen.findByRole('slider', { name: 'omnibar.volume' });
+    slider.focus();
+    const firstEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    slider.dispatchEvent(firstEscape);
+
+    expect(firstEscape.defaultPrevented).toBe(true);
+    expect(screen.queryByRole('slider', { name: 'omnibar.volume' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
+    expect(volumeButton).toHaveFocus();
+
+    const secondEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    volumeButton.dispatchEvent(secondEscape);
+    await Promise.resolve();
+
+    expect(secondEscape.defaultPrevented).toBe(true);
+    expect(screen.queryByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
+    expect(lyricsToggle).toHaveFocus();
+  });
+
+  it('keeps the compact volume popover open on sibling lyrics scroll and restores trigger focus on ancestor scroll', async () => {
+    harness.desktop = true;
+    setCompactViewport(420);
+    render(() => <PlayerSurface />);
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' }));
+    const lyricsView = await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' });
+
+    const volumeButton = screen.getByRole('button', { name: 'omnibar.volume' });
+    const enter = new Event('pointerenter', { bubbles: true });
+    Object.defineProperty(enter, 'pointerType', { value: 'mouse' });
+    volumeButton.dispatchEvent(enter);
+
+    const slider = await screen.findByRole('slider', { name: 'omnibar.volume' });
+    slider.focus();
+    expect(slider).toHaveFocus();
+
+    // Browser scroll events do not bubble; document's capture listener still receives them.
+    lyricsView.dispatchEvent(new Event('scroll'));
+    await Promise.resolve();
+    expect(screen.getByRole('slider', { name: 'omnibar.volume' })).toBeInTheDocument();
+    expect(slider).toHaveFocus();
+
+    document.dispatchEvent(new Event('scroll'));
+    await Promise.resolve();
+    expect(screen.queryByRole('slider', { name: 'omnibar.volume' })).toBeNull();
+    expect(volumeButton).toHaveFocus();
+  });
+
+  it('ignores Escape while typing in a text field beside the docked player', async () => {
+    harness.desktop = true;
+    setCompactViewport(420);
+    const input = document.createElement('input');
+    input.type = 'search';
+    document.body.appendChild(input);
+    try {
+      render(() => <PlayerSurface />);
+      const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' });
+      fireEvent.click(lyricsToggle);
+      expect(await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
+
+      input.focus();
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      input.dispatchEvent(event);
+      await Promise.resolve();
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(screen.getByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
+      expect(input).toHaveFocus();
+    } finally {
+      input.remove();
+    }
+  });
+
+  it('leaves focus on an external button when Escape closes docked compact lyrics', async () => {
+    harness.desktop = true;
+    setCompactViewport(420);
+    const externalButton = document.createElement('button');
+    externalButton.type = 'button';
+    externalButton.textContent = 'Library action';
+    document.body.appendChild(externalButton);
+    try {
+      render(() => <PlayerSurface />);
+      fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' }));
+      expect(await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeInTheDocument();
+
+      externalButton.focus();
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      externalButton.dispatchEvent(event);
+      await Promise.resolve();
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(screen.queryByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
+      expect(externalButton).toHaveFocus();
+    } finally {
+      externalButton.remove();
+    }
+  });
+
+  it('moves focus back inside the player when a podcast replaces compact lyrics', async () => {
+    setCompactViewport();
+    render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]')!;
+    const lyricsToggle = screen.getByRole('button', { name: 'nowPlaying.lyricsLabel' });
+    fireEvent.click(lyricsToggle);
+
+    const lyricsView = await screen.findByRole('region', { name: 'nowPlaying.lyricsLabel' });
+    const insideButton = lyricsView.querySelector('button')!;
+    insideButton.focus();
+    expect(insideButton).toHaveFocus();
+
+    harness.setState?.('playback', 'currentTrack', {
+      id: 'ep-1',
+      title: 'Episode',
+      artist: 'Show',
+      podcast_guid: 'guid-1',
+    });
+    await Promise.resolve();
+
+    expect(screen.queryByRole('region', { name: 'nowPlaying.lyricsLabel' })).toBeNull();
+    expect(surface.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(document.body);
   });
 
   it('opens docked beside the app on a desktop, and gives the app back its room', () => {

@@ -1,0 +1,267 @@
+/* Persistent compact bottom bar. Vertical padding is derived from the reserved
+   --player-compact-dock-height so content panels never clip or leave gaps. */
+.compactDock {
+  --dock-pad-y: calc((var(--player-compact-dock-height) - var(--control-h)) / 2);
+
+  position: absolute;
+  z-index: 45;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: calc(var(--player-compact-dock-height) + var(--player-mobile-safe-bottom));
+  padding-top: var(--dock-pad-y);
+  padding-right: max(var(--space-md), env(safe-area-inset-right, 0px));
+  padding-bottom: calc(var(--player-mobile-safe-bottom) + var(--dock-pad-y));
+  padding-left: max(var(--space-md), env(safe-area-inset-left, 0px));
+  border-top: 1px solid var(--stage-line-soft);
+  background: var(--stage-panel);
+}
+
+.dockViews {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.dockPill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  height: var(--pill-h);
+  padding: 0 var(--space-md);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid var(--stage-line);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.dockPillLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Expand touch target vertically to match --control-h without inflating the pill. */
+.dockPill::before {
+  position: absolute;
+  inset: calc((var(--control-h) - var(--pill-h)) / -2) 0;
+  content: '';
+}
+
+.dockPill:active {
+  transform: scale(0.96);
+}
+
+.dockPill svg {
+  flex: none;
+}
+
+.dockPillActive {
+  color: var(--ink-primary);
+  background: var(--stage-material-active);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--stage-line));
+}
+
+.dockPillActive svg {
+  color: var(--accent-ink);
+}
+
+.dockBadge {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.dockUtils {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.dockIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.dockIconBtn:active {
+  transform: scale(0.92);
+}
+
+.dockIconOn {
+  color: var(--accent-ink);
+}
+
+.dockIconPulse {
+  animation: dockRadioPulse 1.2s var(--ease-out) infinite;
+  animation-play-state: var(--decorative-animation-state, running);
+}
+
+@keyframes dockRadioPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.dockVolume {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.dockVolumePopup {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-sm));
+  z-index: 46;
+  display: flex;
+  align-items: center;
+  height: var(--control-h);
+  padding-inline: var(--space-md);
+  background: var(--stage-base);
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1px var(--stage-line), var(--stage-shadow-sm);
+}
+
+/* Bridge the hover gap between the trigger and the popup above it. */
+.dockVolumePopup::after {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  height: var(--space-sm);
+  content: '';
+}
+
+.dockVolRange {
+  --fill: 0%;
+  --vol-track: var(--space-xs);
+  --vol-thumb: var(--space-md);
+  appearance: none;
+  -webkit-appearance: none;
+  width: calc(var(--control-h) * 2.5);
+  height: var(--space-lg);
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.dockVolRange::-webkit-slider-runnable-track {
+  height: var(--vol-track);
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--fill),
+    var(--stage-line-strong) var(--fill)
+  );
+}
+
+.dockVolRange::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: var(--vol-thumb);
+  height: var(--vol-thumb);
+  margin-top: calc((var(--vol-track) - var(--vol-thumb)) / 2);
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--ink-primary);
+  box-shadow: var(--stage-shadow-sm);
+}
+
+.dockVolRange::-moz-range-track {
+  height: var(--vol-track);
+  border-radius: var(--radius-full);
+  background: var(--stage-line-strong);
+}
+
+.dockVolRange::-moz-range-progress {
+  height: var(--vol-track);
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+
+.dockVolRange::-moz-range-thumb {
+  width: var(--vol-thumb);
+  height: var(--vol-thumb);
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--ink-primary);
+  box-shadow: var(--stage-shadow-sm);
+}
+
+/* Very narrow phones (320px SE, large interface scale, or long locales): fall
+   back to icon + count pills so utilities never crowd or wrap; aria-label keeps names. */
+@container player (max-width: 359px) {
+  .dockPill {
+    min-width: var(--pill-h);
+    justify-content: center;
+    padding-inline: var(--space-sm);
+  }
+
+  .dockPillLabel {
+    display: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dockIconBtn:hover {
+    color: var(--ink-primary);
+    background-color: var(--stage-material);
+  }
+
+  .dockPill:hover {
+    color: var(--ink-primary);
+    background-color: var(--stage-material);
+  }
+
+  .dockPillActive:hover {
+    background-color: var(--stage-material-active);
+  }
+
+  .dockIconOn:hover {
+    color: var(--accent-ink-hover);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dockPill,
+  .dockIconBtn {
+    transition-duration: 1ms;
+  }
+
+  .dockIconPulse {
+    animation: none;
+  }
+}

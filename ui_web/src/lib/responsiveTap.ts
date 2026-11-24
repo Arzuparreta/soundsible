@@ -100,8 +100,10 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
     }
   };
 
+  // Filter to touch pointers: WebKit mouse hover updates can reuse pointerId 1
+  // during an active touch hold and would otherwise cancel the long-press.
   const onPointerMove = (event: PointerEvent) => {
-    if (pointerId !== event.pointerId) return;
+    if (event.pointerType !== 'touch' || pointerId !== event.pointerId) return;
     if (
       Math.abs(event.clientX - startX) > TAP_SLOP ||
       Math.abs(event.clientY - startY) > TAP_SLOP
@@ -117,7 +119,7 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
   };
 
   const onPointerUp = (event: PointerEvent) => {
-    if (pointerId !== event.pointerId) return;
+    if (event.pointerType !== 'touch' || pointerId !== event.pointerId) return;
     const shouldTap = !cancelled && !longPressed && !options.disabled?.();
     reset();
     // Whatever this press did — activated the control, or opened a menu that is
@@ -131,7 +133,7 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
   };
 
   const onPointerCancel = (event: PointerEvent) => {
-    if (pointerId === event.pointerId) {
+    if (event.pointerType === 'touch' && pointerId === event.pointerId) {
       shieldGhostClicks();
       reset();
     }

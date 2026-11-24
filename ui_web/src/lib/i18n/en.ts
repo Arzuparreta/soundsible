@@ -69,11 +69,11 @@ export const en = {
     "sectionEmpty": "Nothing to show in this section yet."
 },
   musicExplorer: {
-    startFromCurrent: 'From current',
     startDjFromCurrent: 'Start DJ from current song',
     startDjFromSong: 'Start DJ from this song',
     mixWith: 'Mix with…',
-    changeShort: 'Change…',
+    changeSession: 'Change',
+    chooseOtherMusic: 'Choose other music…',
 
     reference: 'Mix into session',
     references: 'Session',
@@ -221,13 +221,14 @@ export const en = {
     playing: 'Playing',
     modeLabel: 'NORMAL',
     modeSelector: 'Player mode',
-    mobilePanels: 'NORMAL panels',
+    compactControls: 'Player controls',
     panel: { stage: 'Player', queue: 'Queue' },
     nothingPlaying: 'Nothing playing',
     seekLabel: 'Seek',
     shuffle: 'Shuffle',
     repeat: 'Repeat',
     showLyrics: 'Show lyrics',
+    lyricsLabel: 'Lyrics',
     showCover: 'Show cover art',
     movePanel: 'Move {panel} panel',
     layoutPanel: 'Panel layout',
@@ -353,8 +354,7 @@ export const en = {
       openingHint: 'Reading your library and what you have been playing',
     },
     mobile: {
-      controls: 'DJ panels',
-      route: 'Route',
+      controls: 'DJ controls',
       routeEmpty: 'The DJ is still preparing what comes next',
     },
     note: {

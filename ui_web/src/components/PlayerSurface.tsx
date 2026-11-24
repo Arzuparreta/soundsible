@@ -1,12 +1,13 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, Suspense, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { nowPlayingOpen, setNowPlayingOpen } from '../stores';
-import { player } from '../stores/player';
+import { isCurrentTrackPodcast, player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
-import { isPodcastTrack } from '../lib/track';
+import { upcomingQueueEntries } from '../lib/playbackQueue';
+import { prefersReducedMotion } from '../lib/prefersReducedMotion';
+import { isEditableTextControl } from '../lib/shortcuts';
 import { t } from '../lib/i18n';
-import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
-import { NOW_PLAYING_PANELS } from '../lib/nowPlayingLayout';
+import { type AutoModePanelId } from '../lib/autoModeLayout';
 import {
   DOCK_WIDTH,
   PLAYER_COMPACT_BELOW,
@@ -28,20 +29,30 @@ import { Control } from '../design/Control';
 import { connectLabel, openConnect } from './DeviceSheet';
 import { OutputDeviceIcon } from './icons';
 import { ArtworkBackdrop } from './ArtworkBackdrop';
+import { PlayerCompactDock } from './PlayerCompactDock';
+import { PlayerMiniHeader } from './PlayerMiniHeader';
+import { Spinner } from './Spinner';
 import { pageVisible } from '../lib/pageVisibility';
 import type { NowPlayingMobilePanel } from './NowPlaying';
 import { deferredComponent } from '../lib/deferredComponent';
-import { recoverAutoMode, recoverNowPlaying } from './nowPlayingRecovery';
+import { recoverAutoMode, recoverLyricsPanel, recoverNowPlaying } from './nowPlayingRecovery';
+import styles from './PlayerSurface.module.css';
+
 const NowPlaying = deferredComponent<Parameters<typeof import('./NowPlaying').NowPlaying>[0]>(
   async () => ({ default: (await import('./playerViews')).NowPlaying }),
   async () => ({ default: await recoverNowPlaying() }),
   styles.autoLoading,
 );
-import styles from './PlayerSurface.module.css';
 
 const AutoMode = deferredComponent<Parameters<typeof import('./AutoMode').AutoMode>[0]>(
   async () => ({ default: (await import('./playerViews')).AutoMode }),
   async () => ({ default: await recoverAutoMode() }),
+  styles.autoLoading,
+);
+
+const CompactLyrics = deferredComponent<NonNullable<Parameters<typeof import('./LyricsPanel').LyricsPanel>[0]>>(
+  async () => ({ default: (await import('./playerViews')).LyricsPanel }),
+  async () => ({ default: await recoverLyricsPanel() }),
   styles.autoLoading,
 );
 
@@ -85,18 +96,15 @@ export function PlayerSurface() {
   const [opened, setOpened] = createSignal(nowPlayingOpen());
   createEffect(() => { if (nowPlayingOpen()) setOpened(true); });
   const current = createMemo(() => player().playback.currentTrack);
+  const podcast = createMemo(isCurrentTrackPodcast);
   const auto = createMemo(() => player().autoMode.active);
-  const autoAvailable = createMemo(() => !current() || !isPodcastTrack(current()!));
+  const autoAvailable = createMemo(() => !podcast());
   const art = createMemo(() => {
     const track = current();
     return track ? trackCoverUrl(track, 'thumb') ?? '' : '';
   });
   const [mobilePanel, setMobilePanel] = createSignal<PlayerPanel>('stage');
-  /* Fractional carousel position, fed by the scroller itself. The pager marker
-     follows it live; `mobilePanel` keeps the settled semantics (inert, focus). */
-  // The stage is the first page of either carousel.
-  const [carouselProgress, setCarouselProgress] = createSignal(0);
-  const [carouselLive, setCarouselLive] = createSignal(false);
+  const [compactLyrics, setCompactLyrics] = createSignal(false);
   const [closing, setClosing] = createSignal(false);
   const [surfaceSettled, setSurfaceSettled] = createSignal(untrack(nowPlayingOpen));
   const [surfaceAnimating, setSurfaceAnimating] = createSignal(false);
@@ -107,6 +115,7 @@ export function PlayerSurface() {
     active: 'first',
   });
   let surfaceEl: HTMLDivElement | undefined;
+  let lyricsToggleEl: HTMLButtonElement | undefined;
   let restoreFocus: HTMLElement | null = null;
   let wasOpen = untrack(nowPlayingOpen);
   let wasAuto = auto();
@@ -121,6 +130,16 @@ export function PlayerSurface() {
      gesture behind it — the keyboard shortcut — which then gets the full exit. */
   let pendingExit: { from: number; duration: number } | null = null;
 
+  const listPanel = createMemo<PlayerPanel>(() => (auto() ? 'route' : 'queue'));
+  const isListPanel = createMemo(() => mobilePanel() === listPanel());
+  const listCount = createMemo(() =>
+    upcomingQueueEntries(
+      player().playback.queue,
+      player().playback.index,
+      auto() ? { auto: true } : { auto: false, radioMode: Boolean(player().playback.radioMode) },
+    ).length,
+  );
+
   createEffect(() => {
     const next = art();
     const currentState = backdrops();
@@ -131,12 +150,56 @@ export function PlayerSurface() {
       : { ...value, first: next, active: 'first' });
   });
 
-  const panels = createMemo<readonly PlayerPanel[]>(() => auto() ? AUTO_MODE_PANELS : NOW_PLAYING_PANELS);
   const setPanel = (panel: PlayerPanel) => {
+    setCompactLyrics(false);
     setMobilePanel(panel);
-    setCarouselLive(false);
-    setCarouselProgress(panels().indexOf(panel));
   };
+
+  const restoreCompactLyricsFocus = () => {
+    // Unmounting the compact lyrics overlay would drop focus to <body>; return
+    // focus to its dock toggle (or Stage/surface when unmounted) so keyboard
+    // navigation keeps its place.
+    queueMicrotask(() => {
+      const target = (lyricsToggleEl?.isConnected ? lyricsToggleEl : null)
+        ?? surfaceEl?.querySelector<HTMLElement>('[data-player-tile="stage"]')
+        ?? surfaceEl;
+      target?.focus({ preventScroll: true });
+    });
+  };
+
+  const closeCompactLyrics = () => {
+    const active = document.activeElement;
+    const focusOutsidePlayer = Boolean(
+      active instanceof Node && active !== document.body && surfaceEl && !surfaceEl.contains(active),
+    );
+    setPanel('stage');
+    if (!focusOutsidePlayer) restoreCompactLyricsFocus();
+  };
+
+  const toggleCompactLyrics = () => {
+    if (!playerCompact() || !current() || podcast()) return;
+    if (compactLyrics()) closeCompactLyrics();
+    else setCompactLyrics(true);
+  };
+
+  const toggleListPanel = () => {
+    const target = listPanel();
+    setPanel(compactLyrics() || mobilePanel() !== target ? target : 'stage');
+  };
+
+  // Single source of truth for compact lyrics: leaving compact widths (e.g.
+  // docked -> full screen), losing the track, or playing a podcast clears it
+  // so narrowing again later never unexpectedly reveals a stale lyrics screen.
+  createEffect(() => {
+    if ((!playerCompact() || !current() || podcast()) && untrack(compactLyrics)) {
+      const lyricsEl = surfaceEl?.querySelector('[data-compact-lyrics]');
+      const focusedInside = Boolean(
+        document.activeElement instanceof Node && lyricsEl?.contains(document.activeElement),
+      );
+      setCompactLyrics(false);
+      if (focusedInside && untrack(nowPlayingOpen)) restoreCompactLyricsFocus();
+    }
+  });
 
   createEffect(() => {
     const active = auto();
@@ -202,9 +265,7 @@ export function PlayerSurface() {
       setSurfaceAnimating(true);
       setSurfaceSettled(false);
       clearOpenSettle();
-      const reduced = typeof window !== 'undefined'
-        && typeof window.matchMedia === 'function'
-        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const reduced = prefersReducedMotion();
       if (surfaceEl) surfaceEl.addEventListener('transitionend', onOpenTransitionEnd);
       openTimer = window.setTimeout(settleOpen, reduced ? 0 : 340);
     } else if (!open && wasOpen) {
@@ -467,10 +528,21 @@ export function PlayerSurface() {
     surfaceEl.addEventListener('touchstart', beginTouch, { passive: true });
     surfaceEl.addEventListener('touchend', finishSwipe, { passive: true });
     surfaceEl.addEventListener('touchcancel', cancelSwipe, { passive: true });
+    // See lib/shortcuts.ts for player Escape layering; external editable text controls keep Escape.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isEditableTextControl(event.target as HTMLElement | null)) return;
+      if (event.key === 'Escape' && nowPlayingOpen() && compactLyrics()) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeCompactLyrics();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
     onCleanup(() => {
       window.clearTimeout(openTimer);
       window.clearTimeout(focusTimer);
       window.clearTimeout(closeTimer);
+      document.removeEventListener('keydown', onKeyDown);
       observer?.disconnect();
       delete document.documentElement.dataset.playerDocked;
       document.documentElement.style.removeProperty('--player-dock-width');
@@ -494,6 +566,9 @@ export function PlayerSurface() {
     else delete root.dataset.playerDocked;
     root.style.setProperty('--player-dock-width', `${playerDockWidth()}px`);
   });
+
+  const normalHidden = () => auto() || !nowPlayingOpen() || compactLyrics();
+  const autoHidden = () => !auto() || !nowPlayingOpen() || compactLyrics();
 
   return (
     <Portal mount={typeof document !== 'undefined' ? document.body : undefined}>
@@ -533,14 +608,6 @@ export function PlayerSurface() {
             onKeyDown={resizeDockByKey}
             onDblClick={() => setPlayerDockWidth(DOCK_WIDTH.default)}
           />
-          {/* The way back to the default width, beside the line it undoes, in
-              the pager's band: the one stretch of the column nothing else uses. */}
-          <Show when={playerDockWidthCustom()}>
-            <SeamReset class={styles.dockReset} label={t('nowPlaying.resetDock')} onReset={() => {
-              setPlayerDockWidth(DOCK_WIDTH.default);
-              dockEdgeEl?.focus({ preventScroll: true });
-            }} />
-          </Show>
         </Show>
         <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
           src={backdrops().first} active={backdrops().active === 'first'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
@@ -564,6 +631,18 @@ export function PlayerSurface() {
                 <span class={styles.deviceButtonLabel}>{connectLabel()}</span>
               </Show>
             </Control>
+            {/* Sits in the reserved second chromeLeft slot beside the device button
+                so it stays in the top bar without overlapping PlayerMiniHeader. */}
+            <Show when={docked() && playerDockWidthCustom()}>
+              <SeamReset
+                class={styles.dockReset}
+                label={t('nowPlaying.resetDock')}
+                onReset={() => {
+                  setPlayerDockWidth(DOCK_WIDTH.default);
+                  dockEdgeEl?.focus({ preventScroll: true });
+                }}
+              />
+            </Show>
           </div>
 
           {/* Choosing a mode starts or ends DJ, so the arrows only move focus
@@ -643,74 +722,73 @@ export function PlayerSurface() {
 
         <div
           id="now-playing-view"
-          classList={{ [styles.view]: true, [styles.viewActive]: !auto() }}
+          classList={{ [styles.view]: true, [styles.viewActive]: !auto() && !compactLyrics() }}
           role="tabpanel"
           aria-labelledby="now-playing-mode-normal"
-          aria-hidden={auto() || !nowPlayingOpen()}
-          inert={auto() || !nowPlayingOpen() ? true : undefined}
+          aria-hidden={normalHidden()}
+          inert={normalHidden() ? true : undefined}
         >
           <Show when={opened()}>
-          <NowPlaying
-            mobilePanel={mobilePanel() as NowPlayingMobilePanel}
-            onMobilePanelChange={setPanel}
-            onCarouselProgress={(index, live) => {
-              setCarouselLive(live);
-              setCarouselProgress(index);
-            }}
-            surfaceOpen={nowPlayingOpen() && !auto()}
-            panelsReady={surfaceSettled()}
-            onCloseSurface={() => closeSurface()}
-          />
+            <NowPlaying
+              mobilePanel={mobilePanel() as NowPlayingMobilePanel}
+              onMobilePanelChange={setPanel}
+              surfaceOpen={!normalHidden()}
+              panelsReady={surfaceSettled()}
+              onCloseSurface={() => closeSurface()}
+            />
           </Show>
         </div>
 
         <div
           id="auto-mode-view"
-          classList={{ [styles.view]: true, [styles.viewActive]: auto() }}
+          classList={{ [styles.view]: true, [styles.viewActive]: auto() && !compactLyrics() }}
           role="tabpanel"
           aria-labelledby="now-playing-mode-dj"
-          aria-hidden={!auto() || !nowPlayingOpen()}
-          inert={!auto() || !nowPlayingOpen() ? true : undefined}
+          aria-hidden={autoHidden()}
+          inert={autoHidden() ? true : undefined}
         >
           <Show when={auto()}>
             <AutoMode
               panel={mobilePanel() as AutoModePanelId}
               onPanelChange={setPanel}
-              onCarouselProgress={(index, live) => {
-                setCarouselLive(live);
-                setCarouselProgress(index);
-              }}
-              surfaceOpen={nowPlayingOpen() && auto()}
+              surfaceOpen={!autoHidden()}
               panelsReady={surfaceSettled()}
             />
           </Show>
         </div>
 
-        <nav
-          class={styles.carouselNav}
-          aria-label={auto() ? t('autoMode.mobile.controls') : t('nowPlaying.mobilePanels')}
-          data-no-surface-swipe=""
-          data-live={carouselLive() ? '' : undefined}
-          style={`--carousel-index: ${carouselProgress()}`}
-        >
-          <span class={styles.carouselMarker} aria-hidden="true" />
-          <For each={panels()}>
-            {(panel, index) => (
-              <button
-                type="button"
-                classList={{
-                  [styles.carouselDot]: true,
-                  // Visually the dot follows the scroll, so it clears the moment
-                  // the marker covers it; `aria-current` waits for the settle.
-                  [styles.carouselDotActive]: Math.round(carouselProgress()) === index(),
-                }}
-                aria-label={auto() ? t(`autoMode.panel.${panel}`) : t(`nowPlaying.panel.${panel}`)}
-                aria-current={mobilePanel() === panel ? 'page' : undefined}
-                onClick={() => setPanel(panel)}
-              />
-            )}
-          </For>
-        </nav>
+        <Show when={opened() && playerCompact() && compactLyrics()}>
+          <section
+            class={styles.compactLyricsView}
+            aria-label={t('nowPlaying.lyricsLabel')}
+            data-compact-lyrics=""
+          >
+            <PlayerMiniHeader mode={auto() ? 'auto' : 'now-playing'} onBack={closeCompactLyrics} />
+            <div class={styles.compactLyricsBody}>
+              {/* deferredComponent handles chunk fetch; Suspense covers async lyrics lookup. */}
+              <Suspense fallback={
+                <div class={styles.autoLoading}>
+                  <Spinner size={22} label={t('lyricsPanel.loading')} />
+                </div>
+              }>
+                <CompactLyrics />
+              </Suspense>
+            </div>
+          </section>
+        </Show>
+
+        <Show when={playerCompact() && (current() || auto())}>
+          <PlayerCompactDock
+            auto={auto()}
+            lyricsActive={compactLyrics()}
+            listActive={!compactLyrics() && isListPanel()}
+            listCount={listCount()}
+            surfaceOpen={nowPlayingOpen()}
+            onToggleLyrics={toggleCompactLyrics}
+            onToggleList={toggleListPanel}
+            lyricsButtonRef={(element) => { lyricsToggleEl = element; }}
+          />
+        </Show>
       </div>
     </Portal>
   );

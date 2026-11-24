@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { createShortcutHandler, SEEK_STEP_SEC, VOLUME_STEP, type ShortcutContext } from './shortcuts';
+import { createShortcutHandler, isEditableTextControl, SEEK_STEP_SEC, VOLUME_STEP, type ShortcutContext } from './shortcuts';
 
 function makeActions() {
   return {
@@ -218,5 +218,30 @@ describe('Escape and Auto Mode', () => {
     context = { ...idle, nowPlayingOpen: true, autoModeAvailable: false };
     press({ key: 'a' });
     expect(actions.enterAutoMode).not.toHaveBeenCalled();
+  });
+});
+
+describe('isEditableTextControl', () => {
+  it('identifies text inputs, textareas and contenteditables while skipping non-text controls', () => {
+    const search = document.createElement('input');
+    search.type = 'search';
+    expect(isEditableTextControl(search)).toBe(true);
+
+    expect(isEditableTextControl(document.createElement('textarea'))).toBe(true);
+
+    const editable = document.createElement('div');
+    Object.defineProperty(editable, 'isContentEditable', { value: true });
+    expect(isEditableTextControl(editable)).toBe(true);
+
+    const range = document.createElement('input');
+    range.type = 'range';
+    expect(isEditableTextControl(range)).toBe(false);
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    expect(isEditableTextControl(checkbox)).toBe(false);
+
+    expect(isEditableTextControl(document.createElement('button'))).toBe(false);
+    expect(isEditableTextControl(null)).toBe(false);
   });
 });

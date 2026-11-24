@@ -3,8 +3,9 @@ import { expect, type Page } from '@playwright/test';
 /**
  * Show one of the open player's panels the way the listener does. A compact
  * player — a phone, or the column docked beside the app on a desktop — shows
- * one panel at a time behind a pager: the stage first, then its list (the
- * queue, or the DJ route). A full-screen desktop player shows both at once.
+ * one panel at a time with a persistent bottom dock: the stage by default, or
+ * its list (the queue, or the DJ route). A full-screen desktop player shows
+ * both at once.
  */
 export async function showPlayerPanel(page: Page, panel: 'stage' | 'queue' | 'route'): Promise<void> {
   const surface = page.locator('[data-player-surface-open]');
@@ -12,8 +13,16 @@ export async function showPlayerPanel(page: Page, panel: 'stage' | 'queue' | 'ro
   const auto = panel === 'route' || (panel === 'stage' && await page.evaluate(() => document.documentElement.dataset.playerSurface === 'auto'));
   const tile = page.locator(auto ? `[data-auto-tile="${panel}"]` : `[data-now-playing-tile="${panel}"]`);
   if (await surface.evaluate((element) => element.getBoundingClientRect().width < 1024)) {
-    await surface.locator('nav[data-no-surface-swipe] button').nth(panel === 'stage' ? 0 : 1).click();
-    // Settled where the pager put it, not on its way there: a row measured
+    const lyricsToggle = surface.locator('[data-compact-lyrics-toggle]');
+    if (await lyricsToggle.count() && await lyricsToggle.getAttribute('aria-pressed') === 'true') {
+      await lyricsToggle.click();
+    }
+    const listToggle = surface.locator('[data-compact-list-toggle]');
+    const listOpen = await listToggle.getAttribute('aria-pressed') === 'true';
+    if ((panel === 'stage' && listOpen) || (panel !== 'stage' && !listOpen)) {
+      await listToggle.click();
+    }
+    // Settled where the carousel put it, not on its way there: a row measured
     // mid-scroll is somewhere else by the time the pointer gets to it.
     await expect.poll(() => tile.evaluate((element) => {
       const carousel = element.closest('[data-now-playing-carousel], [data-auto-carousel]');

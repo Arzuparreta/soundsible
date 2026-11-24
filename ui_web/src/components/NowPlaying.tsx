@@ -18,13 +18,14 @@ import {
   parseNowPlayingLayout,
   type NowPlayingPanelId,
 } from '../lib/nowPlayingLayout';
-import { contextContinuation, futureEntries, sameQueueSection, type PlaybackContextKind, type PlaybackQueueEntry } from '../lib/playbackQueue';
+import { contextContinuation, futureEntries, sameQueueSection, upcomingQueueEntries, type PlaybackContextKind, type PlaybackQueueEntry } from '../lib/playbackQueue';
 import { contextDestination } from '../lib/playbackContext';
 import { dropIndex, type DropSlot } from '../lib/dragReorder';
 import { isPodcastTrack } from '../lib/track';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import { PlayerStage } from './PlayerStage';
+import { PlayerMiniHeader } from './PlayerMiniHeader';
 import {
   PlayerTrackList,
   type PlayerTrackListCard,
@@ -47,7 +48,6 @@ const EXPANDING_CONTEXTS: ReadonlySet<PlaybackContextKind> = new Set(['album', '
 export function NowPlaying(props: {
   mobilePanel: NowPlayingMobilePanel;
   onMobilePanelChange: (panel: NowPlayingMobilePanel) => void;
-  onCarouselProgress?: (index: number, live: boolean) => void;
   surfaceOpen: boolean;
   panelsReady?: boolean;
   onCloseSurface?: () => void;
@@ -85,22 +85,19 @@ export function NowPlaying(props: {
     undefined,
     () => [player().playback.queue, player().playback.index],
   );
-  const manualQueue = createActivityMemo(
+  const upcomingList = createActivityMemo(
     queueActive,
-    () => player().playback.queue.slice(player().playback.index + 1).filter((entry) => entry.queueLane === 'manual'),
-    [],
-    () => [player().playback.queue, player().playback.index],
-  );
-  // The radio's picks are still songs to look through. Autoplay's are not: it
-  // is a continuation, drawn as its card, however many it has prepared.
-  const radioQueue = createActivityMemo(
-    queueActive,
-    () => player().playback.radioMode
-      ? player().playback.queue.slice(player().playback.index + 1).filter((entry) => entry.queueLane === 'generated')
-      : [],
+    () => upcomingQueueEntries(player().playback.queue, player().playback.index, {
+      auto: false,
+      radioMode: Boolean(player().playback.radioMode),
+    }),
     [],
     () => [player().playback.radioMode, player().playback.queue, player().playback.index],
   );
+  const manualQueue = () => upcomingList().filter((entry) => entry.queueLane === 'manual');
+  // The radio's picks are still songs to look through. Autoplay's are not: it
+  // is a continuation, drawn as its card, however many it has prepared.
+  const radioQueue = () => upcomingList().filter((entry) => entry.queueLane === 'generated');
   const continuation = createActivityMemo(
     queueActive,
     () => player().playback.radioMode
@@ -274,16 +271,17 @@ export function NowPlaying(props: {
     };
   };
 
-  // The current occurrence is cheap and keeps a mounted queue's identity even
-  // before the phone first visits it. The full queue is projected on demand.
+  // Compact layouts show the sounding song in the sticky mini-player above the
+  // queue instead of repeating a static "Now playing" row inside the list.
+  const showCurrentRow = () => !playerCompact();
   const initialEntry = player().playback.queue[player().playback.index];
-  const initialSections: PlayerTrackListSection[] = initialEntry
+  const initialSections: PlayerTrackListSection[] = initialEntry && showCurrentRow()
     ? [{ id: 'current', label: t('nowPlaying.nowPlayingSection'), entries: [queueRow(initialEntry, undefined, true)] }]
     : [];
   const queueSections = createActivityMemo<PlayerTrackListSection[]>(queueActive, () => {
     const sections: PlayerTrackListSection[] = [];
     const current = currentQueueEntry();
-    if (current) {
+    if (current && showCurrentRow()) {
       sections.push({
         id: 'current',
         label: t('nowPlaying.nowPlayingSection'),
@@ -315,9 +313,9 @@ export function NowPlaying(props: {
     });
     return sections;
   }, initialSections, () => [
+    showCurrentRow(),
     currentQueueEntry(),
-    manualQueue(),
-    radioQueue(),
+    upcomingList(),
     continuation(),
     player().playback.radioMode,
     player().playback.currentTrack,
@@ -332,7 +330,6 @@ export function NowPlaying(props: {
         panels={NOW_PLAYING_PANELS}
         activePanel={props.mobilePanel}
         onActivePanelChange={props.onMobilePanelChange}
-        onCarouselProgress={props.onCarouselProgress}
         surfaceOpen={props.surfaceOpen}
         layout={desktopLayout()}
         onLayoutChange={setDesktopLayout}
@@ -348,42 +345,47 @@ export function NowPlaying(props: {
                 mode="now-playing"
                 surfaceOpen={props.surfaceOpen}
                 onCloseSurface={props.onCloseSurface}
-                onOpenList={() => props.onMobilePanelChange('queue')}
-                listLabel={t('nowPlaying.queue')}
               />
             );
           }
           return (
             <Show when={queueMounted()}>
-              <Show when={hostSession() && queueView() === 'chat'} fallback={
-                <PlayerTrackList
-                  title={t('nowPlaying.queue')}
-                  count={manualQueue().length + radioQueue().length}
-                  sections={queueSections()}
-                  virtualize
-                  empty={t('nowPlaying.queueEmpty')}
-                  onReorder={reorderQueue}
-                  headAction={[
-                    ...(hostSession() ? [{ label: t('live.chat'), onClick: () => setQueueView('chat') }] : []),
-                    {
-                      label: t('nowPlaying.clearManualQueue'),
-                      disabled: manualQueue().length === 0,
-                      onClick: () => player().actions.clearManualQueue(),
-                    },
-                  ]}
-                  setScrollerRef={(element) => { desktopQueueEl = element; }}
-                />
-              }>
-                <section class={styles.liveChat}>
-                  <header>
-                    <button type="button" onClick={() => setQueueView('queue')}>
-                      {t('nowPlaying.queue')}
-                    </button>
-                    <strong>{t('live.chat')}</strong>
-                  </header>
-                  <LiveRoomPanel compact />
-                </section>
-              </Show>
+              <div class={styles.queuePanel}>
+                <Show when={playerCompact()}>
+                  <PlayerMiniHeader mode="now-playing" onBack={() => props.onMobilePanelChange('stage')} />
+                </Show>
+                <div class={styles.queueBody}>
+                  <Show when={hostSession() && queueView() === 'chat'} fallback={
+                    <PlayerTrackList
+                      title={t('nowPlaying.queue')}
+                      count={upcomingList().length}
+                      sections={queueSections()}
+                      virtualize
+                      empty={t('nowPlaying.queueEmpty')}
+                      onReorder={reorderQueue}
+                      headAction={[
+                        ...(hostSession() ? [{ label: t('live.chat'), onClick: () => setQueueView('chat') }] : []),
+                        {
+                          label: t('nowPlaying.clearManualQueue'),
+                          disabled: manualQueue().length === 0,
+                          onClick: () => player().actions.clearManualQueue(),
+                        },
+                      ]}
+                      setScrollerRef={(element) => { desktopQueueEl = element; }}
+                    />
+                  }>
+                    <section class={styles.liveChat}>
+                      <header>
+                        <button type="button" onClick={() => setQueueView('queue')}>
+                          {t('nowPlaying.queue')}
+                        </button>
+                        <strong>{t('live.chat')}</strong>
+                      </header>
+                      <LiveRoomPanel compact />
+                    </section>
+                  </Show>
+                </div>
+              </div>
             </Show>
           );
         }}

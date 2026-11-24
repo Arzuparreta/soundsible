@@ -5,6 +5,7 @@ import { actions, state } from './index';
 import type { RemoteKey } from './remote';
 import { remoteStore } from './remoteLink';
 import { withDjErrand } from '../lib/djErrand';
+import { isPodcastTrack, PODCAST_SKIP_SECONDS } from '../lib/track';
 
 export interface PlayerView {
   readonly playback: PlaybackState;
@@ -61,4 +62,37 @@ export function player(): PlayerView {
     can: m.remoteCan,
     pending: m.remotePending,
   };
+}
+
+/** Whether playback currently has a podcast episode loaded. */
+export function isCurrentTrackPodcast(): boolean {
+  const track = player().playback.currentTrack;
+  return Boolean(track && isPodcastTrack(track));
+}
+
+/**
+ * Whether playback reads visually silent across the dock, stage and mini-player:
+ * either explicit mute or volume dialed down to zero. Mute/unmute action labels
+ * and `aria-pressed` must still read `player().playback.muted`, since `toggleMute()`
+ * toggles the mute flag without changing volume.
+ */
+export function isPlaybackSilent(): boolean {
+  const playback = player().playback;
+  return Boolean(playback.muted || playback.volume === 0);
+}
+
+/**
+ * Advance playback consistently across `OmniBar`, `PlayerStage` and
+ * `PlayerMiniHeader`: podcasts skip forward, DJ skips in Auto Mode, and
+ * regular music moves to the next queue track.
+ */
+export function advancePlayback(): void {
+  const view = player();
+  const track = view.playback.currentTrack;
+  if (track && isPodcastTrack(track)) {
+    view.actions.seekBy(PODCAST_SKIP_SECONDS);
+    return;
+  }
+  if (view.autoMode?.active) void view.actions.autoSkip();
+  else view.actions.next();
 }

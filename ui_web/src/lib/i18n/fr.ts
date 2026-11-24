@@ -70,11 +70,11 @@ export const fr: Dict = {
     "sectionEmpty": "Rien à afficher dans cette section pour l’instant."
 },
   musicExplorer: {
-    startFromCurrent: 'Depuis ce titre',
     startDjFromCurrent: 'Démarrer le DJ à partir du titre actuel',
     startDjFromSong: 'Démarrer le DJ à partir de ce titre',
     mixWith: 'Mélanger avec…',
-    changeShort: 'Changer…',
+    changeSession: 'Changer',
+    chooseOtherMusic: 'Choisir une autre musique…',
 
     reference: 'Mélanger à la session',
     references: 'Session',
@@ -221,13 +221,14 @@ export const fr: Dict = {
     playing: 'En lecture',
     modeLabel: 'NORMAL',
     modeSelector: 'Mode du lecteur',
-    mobilePanels: 'Panneaux NORMAL',
+    compactControls: 'Commandes du lecteur',
     panel: { stage: 'Lecteur', queue: 'File' },
     nothingPlaying: 'Rien en lecture',
     seekLabel: 'Chercher dans le titre',
     shuffle: 'Aléatoire',
     repeat: 'Répéter',
     showLyrics: 'Afficher les paroles',
+    lyricsLabel: 'Paroles',
     showCover: 'Afficher la pochette',
     movePanel: 'Déplacer le panneau {panel}',
     layoutPanel: 'Disposition du panneau',
@@ -353,8 +354,7 @@ export const fr: Dict = {
       openingHint: 'Lecture de votre bibliothèque et de vos écoutes',
     },
     mobile: {
-      controls: 'Panneaux DJ',
-      route: 'Parcours',
+      controls: 'Commandes DJ',
       routeEmpty: 'Le DJ prépare encore la suite',
     },
     note: {

@@ -3,6 +3,7 @@ import { Portal } from 'solid-js/web';
 import { createDismissSwipe, dismissExitTiming, type DismissAxis } from './dismissSwipe';
 import { createTouchMoveLease } from './touchMoveLease';
 import { shieldGhostClicks } from './ghostClick';
+import { prefersReducedMotion } from './prefersReducedMotion';
 import { scrollableAncestor, scrollOffset } from './scrollableAncestor';
 import styles from './overlay.module.css';
 
@@ -279,8 +280,7 @@ function attachDismissSwipe(
       : element.getBoundingClientRect().width;
     const exit = dismissExitTiming(result.offset, extent, result.velocity);
     release();
-    if (typeof window !== 'undefined'
-      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (prefersReducedMotion()) {
       close();
       return;
     }

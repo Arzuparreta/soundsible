@@ -109,6 +109,10 @@ export function detectFormFactor(env: DeviceEnvironment = readEnvironment()): De
   return 'computer';
 }
 
+export function isTouchFormFactor(): boolean {
+  return detectFormFactor() !== 'computer';
+}
+
 export function detectDeviceName(env: DeviceEnvironment = readEnvironment()): string {
   const app = env.desktop ? 'Soundsible' : detectBrowser(env.userAgent);
   const platform = detectPlatform(env.userAgent, env.maxTouchPoints);

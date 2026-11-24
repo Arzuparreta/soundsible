@@ -1,0 +1,133 @@
+.bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: var(--space-2xs) var(--space-md) var(--space-xs);
+  padding: var(--space-xs);
+  background: var(--stage-material);
+  border: 1px solid var(--stage-line-soft);
+  border-radius: var(--radius-md);
+}
+
+.back {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  min-height: var(--control-h);
+  padding: 0 var(--space-xs);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
+}
+
+.chevron {
+  flex: none;
+  color: var(--ink-secondary);
+}
+
+/* On ultra-narrow players the whole bar remains the back control; hide the
+   decorative chevron so track metadata keeps readable space at large scale. */
+@container player (max-width: 359px) {
+  .chevron {
+    display: none;
+  }
+}
+
+.cover {
+  flex: none;
+  width: var(--segment-h);
+  height: var(--segment-h);
+  border-radius: var(--radius-xs);
+  background: var(--stage-material);
+}
+
+.meta {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--space-2xs);
+}
+
+.title,
+.artist {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--ink-primary);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+}
+
+.artist {
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  line-height: var(--lh-tight);
+}
+
+.controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.ctrl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  color: var(--ink-primary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition:
+    background var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.ctrl:not(:disabled):active {
+  transform: scale(0.92);
+}
+
+.ctrl:disabled {
+  color: var(--ink-tertiary);
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .back:hover {
+    background: var(--stage-material-hover);
+  }
+
+  .ctrl:not(:disabled):hover {
+    background: var(--stage-material-hover);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back,
+  .ctrl {
+    transition-duration: 1ms;
+  }
+
+  .ctrl:not(:disabled):active {
+    transform: none;
+  }
+}
