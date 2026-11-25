@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { createSignal, createEffect, on, For, Show } from 'solid-js';
 import { downloadSearchFields, DownloadRowView } from '../components/DownloadRowView';
 import { request } from '../lib/http';
@@ -36,7 +36,7 @@ export default function NativeDownloads(props: { items: DownloadQueueItem[]; dis
     <Show when={props.disconnected}><p role="status">{t('library.unreachable')}</p></Show>
     <Show when={error()}><p role="alert">{t('common.loadFailed')} <button onClick={() => void props.onChanged()}>{t('common.retry')}</button></p></Show>
     <Show when={props.items.length}><CollectionSearch search={search} /></Show>
-    <For each={items()} fallback={props.items.length ? <NoCollectionMatches /> : <p>{t('downloads.emptyTitle')}</p>}>{item => <DownloadRowView item={item}
+    <For each={items()} fallback={<CollectionEmpty source={props.items.length}><p>{t('downloads.emptyTitle')}</p></CollectionEmpty>}>{item => <DownloadRowView item={item}
       disabled={props.disconnected || pending().length > 0} retry={id => void mutate(id, 'retry')} remove={id => void mutate(id, 'remove')} />}</For>
     <Show when={props.items.some(row => row.status === 'failed' || row.status === 'interrupted')}><button disabled={props.disconnected || pending().length > 0} onClick={() => void mutate('__failed', 'clearFailed')}>{t('downloads.clearErrors')}</button></Show>
     <Show when={props.items.some(row => row.status !== 'downloading')}><button disabled={props.disconnected || pending().length > 0} onClick={() => void mutate('__all', 'clear')}>{t('downloads.clearQueue')}</button></Show>

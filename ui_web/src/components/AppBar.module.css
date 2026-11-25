@@ -235,6 +235,10 @@
   outline-offset: -2px;
 }
 
+.command[data-command-tone='danger'] {
+  color: var(--danger);
+}
+
 .prominent[data-command-tone='danger'] {
   color: var(--ink-on-danger);
   background: var(--danger);

@@ -58,7 +58,7 @@ export default function Downloads() {
         title={t('downloads.title')}
         meta={summary()}
         barActions={counts().failed > 0
-          ? [{ label: t('downloads.clearErrors'), icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]
+          ? [{ label: t('downloads.clearErrors'), tone: 'danger', icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]
           : []}
       />
       <Show when={hasDownloads()}><CollectionSearch search={search} inset /></Show>

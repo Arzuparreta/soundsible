@@ -443,7 +443,7 @@ function DiscoverView(props: {
                 index={position(item)}
                 active={isPlayingItem(item)}
                 saving={props.saving.has(item.id)}
-                onPlay={() => props.onPlayItem(item, props.tracklist)}
+                onPlay={() => props.onPlayItem(item, tracks())}
                 onDownload={() => props.onSaveItem(item)}
               />
             )}

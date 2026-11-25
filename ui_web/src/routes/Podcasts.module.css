@@ -6,9 +6,6 @@
   padding: var(--view-top, var(--space-lg)) var(--gutter) var(--space-md);
 }
 
-/* On the desktop the page header already spaces the top. */
-
-
 .scroll {
   flex: 1;
   min-height: 0;

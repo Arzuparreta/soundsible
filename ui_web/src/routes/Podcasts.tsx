@@ -1,3 +1,4 @@
+import { podcastShowSearchFields } from '../lib/librarySearch';
 import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { ViewHeader } from '../components/ViewHeader';
 import { mobileListLayout } from '../lib/listLayout';
@@ -49,7 +50,7 @@ export default function Podcasts() {
   const [subscribing, setSubscribing] = createSignal<Set<string>>(new Set());
 
   const subscriptionsSearch = createCollectionSearch();
-  const subscriptions = subscriptionsSearch.filter(() => state.podcastSubscriptions, show => [show.title, show.author]);
+  const subscriptions = subscriptionsSearch.filter(() => state.podcastSubscriptions, podcastShowSearchFields);
   const subscribedFeeds = createMemo(() => new Set(state.podcastSubscriptions.map((s) => s.rss_url)));
   const [genre, setGenre] = createSignal('');
   const matchesGenre = (row: PodcastSearchResult) => !genre() || row.genres?.some(g => g.id === genre());

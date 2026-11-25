@@ -1,4 +1,4 @@
-import { createMemo, createSignal, type Accessor } from 'solid-js';
+import { createMemo, createSignal, Show, type Accessor, type JSX } from 'solid-js';
 import { t } from '../lib/i18n';
 import { filterLocalCollection, normalizeLibraryQuery, type SearchFieldValue } from '../lib/librarySearch';
 import { EmptyState } from './EmptyState';
@@ -47,4 +47,12 @@ export function CollectionSearch(props: {
 
 export function NoCollectionMatches() {
   return <EmptyState compact>{t('library.noCollectionMatches')}</EmptyState>;
+}
+
+/** For a filtered list that came out empty: "no matches" when the unfiltered
+ * source has rows (so a query hid them all), otherwise the view's own empty
+ * state. A filter returns the source whole without a query, so the source's
+ * size alone tells the two apart. */
+export function CollectionEmpty(props: { source: number; children: JSX.Element }) {
+  return <Show when={props.source > 0} fallback={props.children}><NoCollectionMatches /></Show>;
 }

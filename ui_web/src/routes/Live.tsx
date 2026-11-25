@@ -1,3 +1,4 @@
+import { liveRoomSearchFields } from '../lib/librarySearch';
 import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { actions, state } from '../stores';
@@ -416,7 +417,7 @@ export default function Live() {
   };
 
   const directorySearch = createCollectionSearch();
-  const rooms = directorySearch.filter(liveSessions, room => [room.title, room.host.display_name]);
+  const rooms = directorySearch.filter(liveSessions, liveRoomSearchFields);
 
   return (
     <div class={styles.page}>

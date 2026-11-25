@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from './CollectionSearch';
+import { CollectionSearch, CollectionEmpty, createCollectionSearch } from './CollectionSearch';
 import { matchesSavedEntity, normalizeLibraryQuery } from '../lib/librarySearch';
 import { createEffect, createMemo, on, For, Show, onMount } from 'solid-js';
 import { entitiesError, entitiesLoading, savedEntities, syncSavedEntities, type SavedEntity } from '../lib/savedEntities';
@@ -45,9 +45,7 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
           </div></Show>
           <Show when={props.expanded && source(kind).length}><CollectionSearch search={search} /></Show>
           <Show when={matches().length} fallback={<Show when={!entitiesLoading() && !entitiesError()}>
-            <Show when={source(kind).length && query()} fallback={<p class={styles.empty}>{t('savedEntities.empty')}</p>}>
-              <NoCollectionMatches />
-            </Show>
+            <CollectionEmpty source={query() ? source(kind).length : 0}><p class={styles.empty}>{t('savedEntities.empty')}</p></CollectionEmpty>
           </Show>}>
             <div class={styles.rail} data-horizontal-scroll={props.expanded ? undefined : ''} classList={{ [styles.expanded]: props.expanded || !!props.query }}>
               <For each={matches()}>{entry => <article class={styles.card}>

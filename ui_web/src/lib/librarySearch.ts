@@ -6,11 +6,16 @@ export type LibrarySearchResult =
   | { kind: 'track'; track: Track; score: number; order: number }
   | { kind: 'artist'; artist: ArtistEntry; score: number; order: number };
 
+/**
+ * NFKD folds compatibility forms (the `ﬃ` ligature, full-width letters);
+ * stripping only `Diacritic` marks lets `bjork` find `Björk` while keeping the
+ * vowel signs that tell Devanagari or Thai words apart.
+ */
 export function normalizeLibraryQuery(value: string): string {
   return value
     .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase()
     .trim()
     .replace(/\s+/g, ' ');
 }
@@ -23,7 +28,7 @@ function matchedField(field: SearchFieldValue, query: string): string | undefine
   return value.includes(query) ? value : undefined;
 }
 
-export function matchesLocalQuery(query: string, fields: readonly SearchFieldValue[]): boolean {
+function matchesLocalQuery(query: string, fields: readonly SearchFieldValue[]): boolean {
   return !query || fields.some(field => matchedField(field, query) !== undefined);
 }
 
@@ -33,6 +38,14 @@ export function filterLocalCollection<T>(items: T[], query: string, fields: (ite
 
 export function trackSearchFields(track: Partial<Pick<Track, 'title' | 'artist' | 'album' | 'album_artist'>>): SearchFieldValue[] {
   return [track.title, track.artist, track.album, track.album_artist];
+}
+
+export function podcastShowSearchFields(show: { title: string; author?: string | null }): SearchFieldValue[] {
+  return [show.title, show.author];
+}
+
+export function liveRoomSearchFields(room: { title: string; host: { display_name: string } }): SearchFieldValue[] {
+  return [room.title, room.host.display_name];
 }
 
 export function matchesSavedEntity(entry: SavedEntity, query: string): boolean {

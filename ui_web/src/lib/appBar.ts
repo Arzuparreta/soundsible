@@ -1,7 +1,9 @@
 import { createSignal, onCleanup, type JSX } from 'solid-js';
 
 /**
- * One command in the top bar's trailing slot.
+ * One page command. The touch top bar draws it as an icon in its trailing
+ * slot; the desktop toolbar draws the same definition with its label
+ * (PageCommands in AppBar.tsx).
  *
  * Commands are described, not drawn: the bar decides their size, spacing,
  * colour and feedback, so every page's buttons are the same buttons.
@@ -17,6 +19,7 @@ export interface AppBarAction {
   pressed?: boolean;
   /** Current value shown as the desktop command label, e.g. the sort order. */
   desktopLabel?: string;
+  /** A destructive command: red text, or a red fill when `prominent`. */
   tone?: 'danger';
   /** Set when the command opens a menu or a sheet rather than acting. */
   opensDialog?: boolean;

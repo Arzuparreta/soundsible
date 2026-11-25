@@ -1,3 +1,4 @@
+import { liveRoomSearchFields } from '../lib/librarySearch';
 import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { createEffect, createSignal, onMount, onCleanup, For, Show } from 'solid-js';
 import { nativeLive, type NativeLiveState, type NativeLiveCommand } from './live';
@@ -74,7 +75,7 @@ export function NativeLive(props: { generation: () => number; current: () => boo
   });
   onCleanup(() => { alive = false; window.clearInterval(refreshTimer); void listener?.remove(); });
   const search = createCollectionSearch();
-  const filteredRooms = search.filter(rooms, room => [room.title, room.host.display_name]);
+  const filteredRooms = search.filter(rooms, liveRoomSearchFields);
   return <section class={styles.panel} data-native-live>
     <Show when={error()}><p role="status">{t('live.unavailable')}</p></Show>
     <Show when={host()} fallback={<form onSubmit={event => { event.preventDefault(); void command({ action: 'liveStart', title: title() }); }}>

@@ -1,5 +1,6 @@
+import { podcastShowSearchFields } from '../lib/librarySearch';
 import Button from '../components/Button';
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { registerNativeBack } from './backNavigation';
@@ -17,7 +18,7 @@ import type { Track } from '../types/music';
 export default function PodcastBrowser(props: { generation: number; subscriptions: PodcastSubscription[]; acquired: Track[]; disconnected?: boolean; activeId?: string; onPlay(track: Track): Promise<void>; onPlayOnDevice?(track: Track): void; onChanged?(): Promise<void> }) {
   const subscriptionsSearch = createCollectionSearch();
   const episodeSearch = createCollectionSearch();
-  const subscriptions = subscriptionsSearch.filter(() => props.subscriptions, item => [item.title, item.author]);
+  const subscriptions = subscriptionsSearch.filter(() => props.subscriptions, podcastShowSearchFields);
   const [show, setShow] = createSignal<PodcastShowInfo | null>(null);
   const [followResult, setFollowResult] = createSignal<{ url: string; subscription: PodcastShowInfo | null } | null>(null);
   const followed = createMemo(() => followResult()?.url === show()?.rss_url ? followResult()?.subscription : props.subscriptions.find(row => row.rss_url === show()?.rss_url));
@@ -156,7 +157,7 @@ export default function PodcastBrowser(props: { generation: number; subscription
   return <section data-testid="android-podcasts">
     <Show when={selected()} fallback={<><PodcastDirectory generation={props.generation} activeId={props.activeId} disconnected={props.disconnected} onOpen={open} onPlay={playChart} subscribed={feed => props.subscriptions.some(row => row.rss_url === feed)} onSubscribe={subscribe} /><h2>{t('podcasts.yourShows')}</h2>
       <Show when={props.subscriptions.length}><CollectionSearch search={subscriptionsSearch} placeholder={t('library.filterSubscriptions')} /></Show>
-      <For each={subscriptions()} fallback={props.subscriptions.length ? <NoCollectionMatches /> : <EmptyState>{t('podcasts.hint')}</EmptyState>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
+      <For each={subscriptions()} fallback={<CollectionEmpty source={props.subscriptions.length}><EmptyState>{t('podcasts.hint')}</EmptyState></CollectionEmpty>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
       {selected => <><button onClick={closeShow}>{t('common.back')}</button><h2>{selected().title}</h2><button data-podcast-show-menu aria-label={t('songRow.ariaMore')} disabled={mutation()} onClick={showMenu}>⋯</button>
         <button disabled={busy() || props.disconnected} onClick={() => void load(selected(), false, true)}>{t('podcastShow.refresh')}</button>
         <button data-podcast-downloaded-only aria-pressed={downloadedOnly()} onClick={() => setDownloadedOnly(value => !value)}>{t('podcastShow.downloadedOnly')}</button>
@@ -165,11 +166,11 @@ export default function PodcastBrowser(props: { generation: number; subscription
         <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
         <Show when={shownEpisodes().length}><CollectionSearch search={episodeSearch} placeholder={t('library.filterLoadedEpisodes')} /></Show>
         <For each={matchingEpisodes()} fallback={<Show when={!busy() && !error()}>
-          <Show when={shownEpisodes().length} fallback={
+          <CollectionEmpty source={shownEpisodes().length}>
             <Show when={downloadedOnly()} fallback={<EmptyState>{t('podcastShow.empty')}</EmptyState>}>
               <EmptyState compact>{t('podcastShow.noDownloaded')} <Button variant="secondary" size="sm" onClick={() => setDownloadedOnly(false)}>{t('podcastShow.showAll')}</Button></EmptyState>
             </Show>
-          }><NoCollectionMatches /></Show>
+          </CollectionEmpty>
         </Show>}>{episode => <MusicListRowView title={episode.title} subtitle={episode.published ?? ''} seed={episode.guid || episode.enclosure_url}
           annotation={track(episode).source !== 'preview' ? t('podcastShow.ariaDownloaded') : episodeJob(episode)?.status === 'failed' || episodeJob(episode)?.status === 'interrupted' ? t('common.loadFailed') : episodeJob(episode) ? t('collection.downloading') : undefined} downloading={episodeJob(episode)?.status === 'pending' || episodeJob(episode)?.status === 'downloading'} busy={mutation()} onMenu={event => episodeMenu(episode, event)} active={props.activeId === track(episode).id} disabled={props.disconnected} onActivate={() => void props.onPlay(track(episode)).catch(() => setError(true))} />}</For>
         <Show when={next() !== null}><button disabled={busy() || props.disconnected} onClick={() => void load(selected(), true)}>{t('podcastShow.loadMore')}</button></Show>

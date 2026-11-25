@@ -1,5 +1,5 @@
 import { EntityHero } from '../components/EntityHero';
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createEffect, createMemo, createSignal, on, Show } from 'solid-js';
@@ -98,7 +98,7 @@ export default function PlaylistDetail() {
           playlistName: name(),
           onRemoveFromPlaylist: (t) => void actions.removeFromPlaylist(name(), collectionId(t)),
         }}
-        empty={tracks().length ? <NoCollectionMatches /> : <EmptyState>{t('playlistDetail.empty')}</EmptyState>}
+        empty={<CollectionEmpty source={tracks().length}><EmptyState>{t('playlistDetail.empty')}</EmptyState></CollectionEmpty>}
       />}>
         <MusicReorderList items={trackIds()} label={(id) => byId().get(id)?.title ?? id}
           render={(id) => <span>{byId().get(id)?.title ?? id}</span>}

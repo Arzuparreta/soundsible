@@ -1,7 +1,7 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
-import { createMemo, createResource, createSignal, createEffect, on, For, Show, onCleanup } from 'solid-js';
+import { createMemo, createResource, createSignal, createEffect, on, For, Show, onCleanup, type JSX } from 'solid-js';
 import { registerNativeBack } from './backNavigation';
 import { request } from '../lib/http';
 import { coverUrl, registerArtworkMetadata } from '../lib/media';
@@ -76,8 +76,8 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
   const visibleNames = search.filter(names, name => [name]);
   const visibleAlbums = search.filter(albumRows, album => [album.title, album.album_artist]);
   const visibleArtists = search.filter(artistRows, artist => [artist.name]);
-  const empty = (source: readonly unknown[], label: string) =>
-    source.length && search.query() ? <NoCollectionMatches /> : <EmptyState>{label}</EmptyState>;
+  const empty = (source: readonly unknown[], label: JSX.Element) =>
+    <CollectionEmpty source={source.length}><EmptyState>{label}</EmptyState></CollectionEmpty>;
   let detailEpoch = 0;
   let detailController: AbortController | undefined;
   const cancelDetail = () => { detailEpoch++; detailController?.abort(); detailController = undefined; };
@@ -157,7 +157,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
                 onMenu={props.onEntityMenu && !props.disconnected && !onlyAvailable() ? event => props.onEntityMenu?.(artistBookmark(artist), event) : undefined}
                 onActivate={() => void open('artists', artist.id, artist.name, artistBookmark(artist))} />
             }</For>}>
-              <For each={visibleAlbums()} fallback={<Show when={!albumRows().length || !search.query()} fallback={<NoCollectionMatches />}><EmptyState>{albumFilter().kind === 'none' ? t('library.emptyAlbums') : t('library.emptyAlbumFilter')}<Show when={albumFilter().kind !== 'none'}> <button type="button" onClick={() => setAlbumFilter(NO_ALBUM_FILTER)}>{t('library.albumFilterAll')}</button></Show></EmptyState></Show>}>{album => <MusicListRowView title={album.title}
+              <For each={visibleAlbums()} fallback={empty(albumRows(), <>{albumFilter().kind === 'none' ? t('library.emptyAlbums') : t('library.emptyAlbumFilter')}<Show when={albumFilter().kind !== 'none'}> <button type="button" onClick={() => setAlbumFilter(NO_ALBUM_FILTER)}>{t('library.albumFilterAll')}</button></Show></>)}>{album => <MusicListRowView title={album.title}
                 subtitle={`${album.album_artist} · ${trackCount(album.track_count)}`} seed={album.id}
                 cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined}
                 onMenu={props.onEntityMenu && !props.disconnected && !onlyAvailable() ? event => props.onEntityMenu?.(albumBookmark(album), event) : undefined}

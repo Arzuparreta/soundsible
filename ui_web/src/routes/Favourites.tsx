@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { createMemo, Show } from 'solid-js';
 import { A } from '@solidjs/router';
@@ -84,13 +84,13 @@ export default function Favourites() {
         context={context()}
         onPlay={(tracks, index) => void play(tracks, index)}
         loading={state.loading && !rows().length}
-        empty={rows().length ? <NoCollectionMatches /> : (
+        empty={<CollectionEmpty source={rows().length}>
           <EmptyState>
             <p>{t('favourites.empty')}</p>
             {/* The hearts are given in the library, so that is the way on. */}
             <A href="/library" class={`${button.btn} ${button.secondary} ${button.sm} ${styles.link}`}>{t('nav.library')}</A>
           </EmptyState>
-        )}
+        </CollectionEmpty>}
       />
     </div>
   );
