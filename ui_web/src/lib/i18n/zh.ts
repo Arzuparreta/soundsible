@@ -626,7 +626,6 @@ export const zh: Dict = {
     customColors: '自定义颜色',
     canvasColor: '背景',
     accentColor: '强调色',
-    colorContrast: '更改即时生效。色调会自动调整以确保对比度。',
     resetColors: '重置颜色',
     colorInvalid: '输入十六进制颜色，例如 #78dcca。',
     themeDark: '深色',

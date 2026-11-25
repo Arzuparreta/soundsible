@@ -626,7 +626,6 @@ export const es: Dict = {
     customColors: 'Colores personalizados',
     canvasColor: 'Fondo',
     accentColor: 'Acento',
-    colorContrast: 'Los cambios se aplican al instante. Los tonos se ajustan para mantener el contraste.',
     resetColors: 'Restablecer colores',
     colorInvalid: 'Introduce un color hexadecimal, como #78dcca.',
     themeDark: 'Oscuro',

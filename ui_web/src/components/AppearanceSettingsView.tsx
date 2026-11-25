@@ -82,13 +82,10 @@ export function AppearanceSettingsView(props: {
               <ColorField label={t('settings.accentColor')} value={props.colors.accent} update={value => update('accent', value)} />
             </>}</For>
           </div>
-          <div class={styles.footer}>
-            <p>{t('settings.colorContrast')}</p>
-            <Control class={styles.reset} onClick={() => {
-              props.onTheme('custom', DEFAULT_CUSTOM_COLORS);
-              setReset(reset() + 1);
-            }}>{t('settings.resetColors')}</Control>
-          </div>
+          <Control class={styles.reset} onClick={() => {
+            props.onTheme('custom', DEFAULT_CUSTOM_COLORS);
+            setReset(reset() + 1);
+          }}>{t('settings.resetColors')}</Control>
         </div>
       </SettingsGroup>
     </Show>

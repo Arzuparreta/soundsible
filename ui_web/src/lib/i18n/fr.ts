@@ -630,7 +630,6 @@ export const fr: Dict = {
     customColors: 'Couleurs personnalisées',
     canvasColor: 'Arrière-plan',
     accentColor: 'Accent',
-    colorContrast: 'Les changements sont immédiats. Les teintes s’adaptent pour préserver le contraste.',
     resetColors: 'Réinitialiser les couleurs',
     colorInvalid: 'Saisissez une couleur hexadécimale, comme #78dcca.',
     themeDark: 'Sombre',

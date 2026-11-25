@@ -62,22 +62,8 @@
 .hex[aria-invalid='true'] { border-color: var(--danger); }
 .error { color: var(--danger); font-size: var(--text-caption); }
 
-.footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm) var(--space-md);
-}
-
-.footer p {
-  margin: 0;
-  flex: 1 1 min(100%, calc(var(--control-h) * 5));
-  color: var(--ink-secondary);
-  font-size: var(--text-label);
-}
-
 .reset {
+  justify-self: end;
   padding-inline: var(--space-md);
   background: var(--bg-raised);
   font: var(--fw-semibold) var(--text-label) var(--font-sans);

@@ -630,7 +630,6 @@ export const en = {
     customColors: 'Custom colors',
     canvasColor: 'Background',
     accentColor: 'Accent',
-    colorContrast: 'Changes apply live. Shades adapt for contrast.',
     resetColors: 'Reset colors',
     colorInvalid: 'Enter a hex color such as #78dcca.',
     themeDark: 'Dark',
