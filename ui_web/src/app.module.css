@@ -105,7 +105,7 @@
 @media (min-width: 1024px) {
   .app {
     display: grid;
-    grid-template-columns: clamp(208px, 18vw, 248px) minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
       'sidebar content'

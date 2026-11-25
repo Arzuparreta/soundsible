@@ -1,15 +1,15 @@
-/* Desktop-only rail. Hidden by default; the grid shell reveals it at ≥1024px. */
+/* Desktop-only stage-matched rail. Hidden by default; the grid shell reveals it at >=1024px. */
 .sidebar {
+  position: relative;
+  isolation: isolate;
   display: none;
   height: 100%;
   flex-direction: column;
-  gap: var(--space-2xs);
-  padding: var(--space-lg) var(--space-md);
-  background:
-    linear-gradient(180deg, var(--ambient-highlight), transparent 220px),
-    var(--bg-base);
-  border-right: 1px solid var(--hairline-soft);
-  overflow-y: auto;
+  padding: var(--space-lg) var(--space-md) var(--space-md);
+  color: var(--ink-primary);
+  background: var(--stage-base);
+  border-right: 1px solid var(--stage-line);
+  overflow: hidden;
 }
 
 @media (min-width: 1024px) {
@@ -19,51 +19,91 @@
   }
 }
 
-/* Same column rhythm as a navigation row (icon slot + space-md gap) so the mark
-   sits on the nav icons' axis and the wordmark starts where the labels start. */
-.brand {
-  display: grid;
-  grid-template-columns: var(--icon-md) 1fr;
+.header {
+  display: flex;
   align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md) var(--space-lg);
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex: none;
+  padding: var(--space-2xs) var(--space-xs) var(--space-lg) var(--space-md);
+}
+
+/* Flush lowercase wordmark aligned to the nav column's left axis. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--sidebar-toggle-size);
+  font-size: var(--sidebar-brand-size);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.035em;
+  line-height: var(--lh-tight);
+  color: var(--ink-primary);
   text-decoration: none;
+  border-radius: var(--radius-xs);
+  transition: opacity var(--dur-short) var(--ease-out);
+}
+
+.brand:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: var(--space-2xs);
+}
+
+.collapseBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--sidebar-toggle-size);
+  height: var(--sidebar-toggle-size);
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-sm);
-  transition: background var(--dur-short) var(--ease-out);
+  background: transparent;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+
+.collapseBtn svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+.collapseBtn:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
 }
 
 @media (hover: hover) and (pointer: fine) {
-
-.brand:hover {
-  background: var(--bg-raised);
-}
-}
-
-/* 18px wide inside the icon slot: the air per side matches the optical inset
-   the stroked nav icons carry inside their own boxes. */
-.mark {
-  justify-self: center;
-  width: 18px;
-  height: 26px;
-  color: var(--accent-ink);
-}
-
-.wordmark {
-  font-size: var(--text-title);
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.01em;
-  color: var(--ink-primary);
-}
-
-.spacer {
-  flex: 1;
-}
-
-@media (min-width: 1280px) {
-  .sidebar {
-    padding-right: var(--space-lg);
-    padding-left: var(--space-lg);
+  .brand:hover {
+    opacity: 0.82;
   }
+  .collapseBtn:hover {
+    background: var(--sidebar-hover);
+    color: var(--ink-primary);
+  }
+}
+
+.sidebar[data-collapsed] {
+  padding: var(--space-lg) var(--space-sm) var(--space-md);
+  align-items: center;
+}
+
+.sidebar[data-collapsed] .header {
+  justify-content: center;
+  width: 100%;
+  padding: 0 0 var(--space-lg);
+}
+
+.sidebar[data-collapsed] .collapseBtn {
+  width: var(--sidebar-collapsed-item);
+  height: var(--sidebar-collapsed-item);
+  color: var(--sidebar-icon-ink);
+}
+
+.sidebar[data-collapsed] .collapseBtn svg {
+  width: var(--sidebar-icon-size);
+  height: var(--sidebar-icon-size);
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {

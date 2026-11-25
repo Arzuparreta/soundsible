@@ -109,8 +109,8 @@ export function CollectionGrid<T>(props: {
       return defaultRangeExtractor(range);
     },
   });
-  // A different column count or measured caption height changes row heights once per layout pass.
-  createEffect(on([() => tracks().columns, captionExtra], () => virtualizer.measure(), { defer: true }));
+  // A different column count, card width or measured caption height changes row heights once per layout pass.
+  createEffect(on([tracks, captionExtra], () => virtualizer.measure(), { defer: true }));
 
   const rows = () => virtualizer.getVirtualItems();
   const first = () => rows()[0];

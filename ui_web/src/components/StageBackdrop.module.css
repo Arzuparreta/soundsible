@@ -1,0 +1,87 @@
+/* Shared ambient cover stage layers. One veil, one grain plate and a single
+   cached wallpaper raster shared by both the player stage and the sidebar rail. */
+.backdrop,
+.wash,
+.grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.backdrop {
+  z-index: -3;
+  inset: -9%;
+  opacity: 0;
+  visibility: hidden;
+  background-position: center;
+  background-size: cover;
+  filter: var(--stage-backdrop);
+  transform: scale(1.26);
+  will-change: transform;
+  transition: opacity 720ms var(--ease-out), visibility 0s linear 720ms;
+}
+
+.backdropActive {
+  opacity: var(--stage-backdrop-opacity);
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.backdrop[data-rasterized] {
+  filter: none;
+}
+
+.backdropHidden {
+  display: none;
+}
+
+.backdrop canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.backdropDrift {
+  animation: surfaceDrift 38s steps(76, end) infinite alternate;
+  animation-play-state: var(--decorative-animation-state, running);
+}
+
+.wash {
+  z-index: -2;
+  background-color: var(--stage-panel);
+  background-image: var(--stage-wash);
+}
+
+.washAuto {
+  background-image: var(--stage-wash-auto);
+}
+
+@media (min-width: 600px) and (min-aspect-ratio: 5 / 4) {
+  .washAutoWide {
+    background-image: var(--stage-wash-auto-wide);
+  }
+}
+
+.grain {
+  z-index: -1;
+  opacity: var(--stage-grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: var(--stage-grain-size) var(--stage-grain-size);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop {
+    transition-duration: 1ms;
+  }
+
+  .backdropDrift {
+    animation: none;
+  }
+}
+
+@keyframes surfaceDrift {
+  from { transform: scale(1.26) translate3d(-1.3%, -0.8%, 0); }
+  to { transform: scale(1.26) translate3d(1.3%, 0.8%, 0); }
+}
