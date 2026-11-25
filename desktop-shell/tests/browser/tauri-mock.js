@@ -50,7 +50,7 @@ export async function mockTauri(page, overrides = {}) {
           return { phase: 'idle', log_lines: [] };
         }
         if (command === 'get_autostart') return false;
-        if (command === 'get_shell_theme') return 'dark';
+        if (command === 'get_shell_theme') return { theme: 'dark', colors: {} };
         if (command === 'get_startup_profile') {
           return {
             mode: "local",

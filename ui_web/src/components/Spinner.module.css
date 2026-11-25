@@ -18,8 +18,8 @@
 
 /* On a filled accent surface the hairline ring disappears — invert it. */
 .onAccent {
-  border-color: rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
+  border-color: color-mix(in srgb, var(--ink-on-accent) 35%, transparent);
+  border-top-color: var(--ink-on-accent);
 }
 
 @keyframes spin {

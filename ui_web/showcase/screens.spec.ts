@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { THEMES } from '../src/boot/themes';
+import { THEME_COLORS } from '../src/boot/themes';
 import { settle } from '../tests/browser/settle';
 import { mockShowcaseEngine, NOW_PLAYING } from './engine';
 import { stillFrame, writePicture } from './picture';
@@ -8,12 +8,11 @@ import { stillFrame, writePicture } from './picture';
 /**
  * Every screenshot, in every theme. Written to
  * `docs/images/screenshots/<theme>/<name>.webp`, where the README and the site
- * pick them up; a theme added to `THEMES` is photographed without touching
- * this file.
+ * pick them up. These pictures represent the built-in light and dark modes.
  */
 
 const SCREENSHOTS = join(import.meta.dirname, '..', '..', 'docs', 'images', 'screenshots');
-const PALETTES = THEMES.filter((theme) => theme !== 'system');
+const PALETTES = Object.keys(THEME_COLORS);
 
 async function startup(page: Page, route: string) {
   await page.goto(`/player/#${route}`);

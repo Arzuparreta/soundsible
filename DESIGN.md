@@ -60,12 +60,10 @@ Created by `/design-consultation` on 2026-05-19. Unblocks T4/T6 (Tauri consumer 
 | `--status-ready` | `#34c759` | Engine healthy |
 | `--status-error` | `#ff453a` | Engine failed |
 
-- **Dark mode:** Default, and the bare `:root` of both surfaces.
-- **Every other palette:** The shell carries the same set as the player — `light`,
-  `slate`, `pure-black`, `forest-green` — as `[data-theme]` blocks over its own
-  eleven tokens. The listener chooses in the player; the engine writes the choice
-  to `theme.json` in the config directory and Rust reads it before first paint.
-  The table above is therefore the dark palette, not the only one.
+The shell has built-in light and dark tokens. For Custom, the player sends
+its resolved semantic colors through the authenticated desktop bridge. The
+shell stores them in `desktop-appearance.json` and applies the same canvas to
+its native window, including during launch and connection recovery.
 
 ## Spacing
 
@@ -171,19 +169,22 @@ Implementation target: `desktop-shell/` (T4, T6, DT2–DT5).
 
 ## Relationship to Existing Player
 
-The webview player (`ui_web/`) owns its tokens in `src/styles/tokens.css`. The two
-surfaces hand off at `#0c0c0e` and, in every palette but one, `#f97a12`.
+The player owns the semantic tokens in `ui_web/src/styles/tokens.css`.
+Custom appearance takes two sRGB seeds, canvas and accent. The shared generator
+derives a surface ramp, contrast-safe type and controls, and distinct warning,
+success and danger colors. The canvas establishes the light or dark appearance.
+It is shaded only as much as required for readable layers above it. The primary
+button fill and accent used as ink have separate contrast targets.
 
-**Accent is a palette's to choose, not a surface's.** The original rule — no third
-accent on shell CTAs — was written when shell and player were one palette, and it
-still holds *within* a palette: shell and player must never disagree about the
-accent at the moment the webview navigates. What a palette may do is carry its own,
-as `forest-green` carries amber `#f2a43a`. A palette that moves `--accent` moves
-everything derived from it in the same breath; `src/styles/accentTokens.test.ts`
-refuses the half-move, and refuses the literal anywhere but `tokens.css`.
+Artwork is the projection behind the player, sidebar and playback chrome. The
+canvas tints the glass through which the artwork is seen. The generator gives
+foregrounds enough contrast against the worst-case light or dark projection.
+Enhanced contrast increases the density of the tint and strengthens the ink and
+edges. Forced-colors mode uses the host color scheme.
 
-Brand gold appears only on badge/accent bar, never on buttons. On a pale palette the
-badge *label* burns down through `--brand-gold-ink`; the mark keeps `#E0BC00`.
+The startup document uses the same generator before the styles or application
+runtime arrive. The desktop shell paints the generated colors as semantic tokens
+so its launch surfaces match the player as the WebView navigates.
 
 ## Preview Artifact
 
@@ -277,5 +278,5 @@ preference migration and WCAG AA checks for the accessibility dialog.
 | --- | --- | --- |
 | 2026-09-15 | Every player palette exists on the desktop shell too | The shell owns the window during first run, engine boot and engine failure; staying dark-only meant the theme a listener chose was ignored for exactly the screens they meet first |
 | 2026-09-15 | The palette crosses through a file in the config directory | Shell and player are different origins, so no `localStorage` is shared, and the shell paints before the engine exists, so no API can answer in time; both sides already read that directory |
-| 2026-09-15 | A palette may carry its own accent | `forest-green` is amber, not the signature orange; the no-third-accent rule was about shell and player disagreeing, which is still forbidden |
+| 2026-11-25 | Custom colors replace named presets | Two colors drive the accessible palette and tinted glass across the player and desktop shell |
 | 2026-09-15 | Launcher and setup follow the OS only | They run before sign-in and outside the player's origin, so they cannot know the preference; light/dark is what they can honestly offer |

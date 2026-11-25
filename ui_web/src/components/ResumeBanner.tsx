@@ -1,7 +1,9 @@
-import { Show } from 'solid-js';
+import { lazy, Show } from 'solid-js';
 import { resumeState, actions } from '../stores';
 import { player } from '../stores/player';
-import { ResumeBannerView } from './ResumeBannerView';
+
+const ResumeBannerView = lazy(() => import('./ResumeBannerView')
+  .then(module => ({ default: module.ResumeBannerView })));
 
 /**
  * Top banner offering to pick up playback that's active on another device.
@@ -10,8 +12,8 @@ import { ResumeBannerView } from './ResumeBannerView';
  */
 export function ResumeBanner() {
   return (
-    <Show when={!player().remote}>
-      <ResumeBannerView offer={resumeState()} onResume={() => actions.resumeHere()} onDismiss={() => actions.dismissResume()} />
+    <Show when={!player().remote && resumeState()}>
+      {offer => <ResumeBannerView offer={offer()} onResume={() => actions.resumeHere()} onDismiss={() => actions.dismissResume()} />}
     </Show>
   );
 }

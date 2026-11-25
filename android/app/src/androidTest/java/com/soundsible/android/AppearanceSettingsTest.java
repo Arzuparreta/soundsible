@@ -39,18 +39,25 @@ public class AppearanceSettingsTest {
     private void bars(ActivityScenario<MainActivity> scenario, boolean light) throws Exception {
         long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         var matched = new AtomicBoolean();
+        var actual = new java.util.concurrent.atomic.AtomicReference<String>();
         int expectedBackground = android.graphics.Color.parseColor(new org.json.JSONArray("[" + web.evaluate(scenario, "document.querySelector('meta[name=theme-color]').content") + "]").getString(0));
         while (System.nanoTime() < until) {
             scenario.onActivity(activity -> {
                 var controller = WindowCompat.getInsetsController(activity.getWindow(), activity.getWindow().getDecorView());
                 var background = activity.getWindow().getDecorView().getBackground();
-                matched.set(controller.isAppearanceLightStatusBars() == light && controller.isAppearanceLightNavigationBars() == light
-                    && background instanceof android.graphics.drawable.ColorDrawable && ((android.graphics.drawable.ColorDrawable) background).getColor() == expectedBackground);
+                boolean statusLight = controller.isAppearanceLightStatusBars();
+                boolean navigationLight = controller.isAppearanceLightNavigationBars();
+                Integer color = background instanceof android.graphics.drawable.ColorDrawable
+                    ? ((android.graphics.drawable.ColorDrawable) background).getColor() : null;
+                matched.set(statusLight == light && navigationLight == light && color != null && color == expectedBackground);
+                actual.set("statusLight=" + statusLight + ", navigationLight=" + navigationLight
+                    + ", background=" + (color == null ? "unset" : Integer.toHexString(color)));
             });
             if (matched.get()) return;
             Thread.sleep(100);
         }
-        fail("Native bars and window background must follow the selected palette");
+        fail("Expected light bars=" + light + ", background=" + Integer.toHexString(expectedBackground)
+            + "; actual " + actual.get());
     }
     private void theme(ActivityScenario<MainActivity> scenario, String theme) throws Exception {
         waitFor(scenario, "!!document.querySelector('[data-setting=theme] input[value=" + theme + "]')");
@@ -58,6 +65,14 @@ public class AppearanceSettingsTest {
         String resolved = theme.equals("system") ? web.evaluate(scenario, "matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'") : JSONObject.quote(theme);
         waitFor(scenario, "document.documentElement.dataset.theme===" + resolved);
         bars(scenario, resolved.equals("\"light\""));
+    }
+    private void custom(ActivityScenario<MainActivity> scenario, String canvas, String scheme) throws Exception {
+        web.evaluate(scenario, "document.querySelector('[data-setting=theme] input[value=custom]').click()");
+        waitFor(scenario, "!!document.querySelector('input[aria-label$=\"(HEX)\"]')");
+        web.evaluate(scenario, "(()=>{const field=document.querySelector('input[aria-label$=\"(HEX)\"]');field.value="
+            + JSONObject.quote(canvas) + ";field.dispatchEvent(new Event('input',{bubbles:true}));})()");
+        waitFor(scenario, "document.documentElement.hasAttribute('data-custom-colors')&&document.documentElement.dataset.theme===" + JSONObject.quote(scheme));
+        bars(scenario, scheme.equals("light"));
     }
     private String shell(String command) throws Exception {
         try (var descriptor = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command);
@@ -102,15 +117,16 @@ public class AppearanceSettingsTest {
             waitFor(scenario, "!window.__appearanceState.playWhenReady&&Math.abs(window.__appearanceState.positionMs-20000)<1000");
             String key = web.evaluate(scenario, "window.__appearanceState.items[0].key"), program = web.evaluate(scenario, "window.__appearanceState.programToken");
             open(scenario, "appearance");
-            for (String palette : new String[]{"light", "dark", "slate", "pure-black", "forest-green", "system"}) theme(scenario, palette);
+            for (String palette : new String[]{"light", "dark", "system"}) theme(scenario, palette);
             shell("cmd uimode night no");
             waitFor(scenario, "!matchMedia('(prefers-color-scheme: dark)').matches");
             waitFor(scenario, "document.documentElement.dataset.theme==='light'"); bars(scenario, true);
             shell("cmd uimode night yes");
             waitFor(scenario, "matchMedia('(prefers-color-scheme: dark)').matches&&document.documentElement.dataset.theme==='dark'"); bars(scenario, false);
-            theme(scenario, "slate"); shell("cmd uimode night no");
+            custom(scenario, "#172335", "dark");
+            shell("cmd uimode night no");
             waitFor(scenario, "!matchMedia('(prefers-color-scheme: dark)').matches");
-            assertEquals("\"slate\"", web.evaluate(scenario, "document.documentElement.dataset.theme")); bars(scenario, false);
+            assertEquals("\"dark\"", web.evaluate(scenario, "document.documentElement.dataset.theme")); bars(scenario, false);
             theme(scenario, "light");
             web.evaluate(scenario, "(()=>{const input=document.querySelector('[data-setting=language] select');input.value='es';input.dispatchEvent(new Event('change',{bubbles:true}))})()");
             waitFor(scenario, "document.documentElement.lang==='es'&&document.querySelector('[data-android-settings-appearance]').textContent==='Apariencia'");
@@ -126,7 +142,7 @@ public class AppearanceSettingsTest {
             bars(scenario, true); assertEquals(key, web.evaluate(scenario, "window.__appearanceState.items[0].key"));
             control(connection, origin, true); scenario.recreate(); waitFor(scenario, "!!document.querySelector('[data-testid=android-configured]')&&!document.documentElement.hasAttribute('data-booting')"); observe(scenario);
             waitFor(scenario, "!!document.querySelector('[data-android-settings]')");
-            open(scenario, "appearance"); theme(scenario, "pure-black");
+            open(scenario, "appearance"); custom(scenario, "#fff1f4", "light");
             assertEquals("\"large\"", web.evaluate(scenario, "document.documentElement.dataset.interfaceSize"));
             assertEquals(program, web.evaluate(scenario, "window.__appearanceState.programToken"));
             assertEquals(key, web.evaluate(scenario, "window.__appearanceState.items[0].key"));

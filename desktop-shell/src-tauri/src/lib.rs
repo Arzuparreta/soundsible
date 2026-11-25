@@ -66,14 +66,14 @@ fn apply_window_appearance(app: &AppHandle) {
             let _ = window.set_background_color(Some(color));
         }
     }
-    let _ = app.emit("shell://appearance", &appearance.theme);
+    let _ = app.emit("shell://appearance", &appearance);
 }
 
 /// Kept apart from `get_startup_profile`, which consumes the skip-autostart
 /// flag and so must be called exactly once.
 #[tauri::command]
-fn get_shell_theme(app: AppHandle) -> String {
-    state::load_appearance(os_prefers_dark(&app)).theme
+fn get_shell_theme(app: AppHandle) -> state::Appearance {
+    state::load_appearance(os_prefers_dark(&app))
 }
 
 #[tauri::command]

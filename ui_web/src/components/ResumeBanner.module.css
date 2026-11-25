@@ -97,7 +97,7 @@
 }
 
 .yes {
-  color: #fff;
+  color: var(--ink-on-accent);
   background: var(--accent);
   border: 1px solid var(--accent);
 }

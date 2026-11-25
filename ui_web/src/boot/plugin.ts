@@ -4,11 +4,23 @@ import type { Plugin } from 'vite';
 import { THEME_COLORS, THEMES } from './themes';
 
 const read = (name: string) => readFileSync(new URL(name, import.meta.url), 'utf8');
+const colorExports = (source: string) =>
+  Array.from(source.matchAll(/^export (?:const|function) (\w+)/gm), ([, name]) => name).join(', ');
+const colorRuntime = 'window.soundsibleBootColors';
+
+/** Both HTML and the application use the same implementation. The generated
+ * module imports from the already evaluated boot script in production. */
+export function bootColorModule(source: string): string {
+  return `export const { ${colorExports(source)} } = ${colorRuntime};`;
+}
 
 /** The pre-paint theme script, with the one palette table inlined into it.
  *  Exported so the store's tests can run the very script the page gets. */
 export function themeBootScript(): string {
+  const colorModule = read('./customColors.js');
   return read('./theme.js')
+    .replace('__CUSTOM_COLORS__', () => `${colorModule.replace(/^export /gm, '')}
+  ${colorRuntime} = { ${colorExports(colorModule)} };`)
     .replace('__THEMES__', JSON.stringify(THEMES))
     .replace('__THEME_COLORS__', JSON.stringify(THEME_COLORS));
 }
@@ -19,6 +31,11 @@ export function themeBootScript(): string {
 export function startupScreen(): Plugin {
   return {
     name: 'soundsible-startup-screen',
+    transform(source, id) {
+      if (this.environment.config.command === 'build' && id.endsWith('/src/boot/customColors.js')) {
+        return bootColorModule(source);
+      }
+    },
     transformIndexHtml: {
       order: 'post',
       handler(html) {
@@ -38,7 +55,7 @@ export function startupScreen(): Plugin {
 
         const themeBackgrounds = Object.entries(THEME_COLORS)
           .map(([theme, background]) =>
-            `html[data-booting][data-theme='${theme}'], html[data-booting][data-theme='${theme}'] body { background: ${background}; }`)
+            `html[data-booting][data-theme='${theme}'], html[data-booting][data-theme='${theme}'] body { background: var(--custom-bg-base, ${background}); }`)
           .join('\n');
         const logo = Buffer.from(read('../../../branding/logo-mark.svg')).toString('base64');
         const script = read('./startup.js').replace('__BOOT_STYLE_COUNT__', String(styles));

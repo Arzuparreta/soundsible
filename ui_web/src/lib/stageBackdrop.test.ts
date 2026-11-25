@@ -71,7 +71,7 @@ describe('rasterizeStageBackdrop', () => {
     expect(drawImage).toHaveBeenCalledTimes(2);
   });
 
-  it('skips rasterization when filter is none (e.g. pure-black theme)', () => {
+  it('skips rasterization when filter is none', () => {
     const image = { naturalWidth: 640, naturalHeight: 640, currentSrc: '/cover-a.jpg' } as HTMLImageElement;
     expect(rasterizeStageBackdrop('/cover-a.jpg', image, 'none')).toBeNull();
     expect(rasterizeStageBackdrop('/cover-a.jpg', image, '')).toBeNull();

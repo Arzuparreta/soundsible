@@ -77,7 +77,7 @@ export function ArtworkBackdrop(props: {
     const theme = typeof MutationObserver === 'function'
       ? new MutationObserver(() => { if (props.visible) schedule(); })
       : null;
-    theme?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    theme?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-custom-colors'] });
     schedule();
     onCleanup(() => {
       resize?.disconnect();

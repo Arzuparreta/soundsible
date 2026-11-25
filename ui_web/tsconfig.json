@@ -5,7 +5,7 @@
     "moduleResolution": "bundler",
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
-    "allowJs": false,
+    "allowJs": true,
     "strict": true,
     "noEmit": true,
     "isolatedModules": true,

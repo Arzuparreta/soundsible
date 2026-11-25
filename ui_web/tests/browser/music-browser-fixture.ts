@@ -65,7 +65,7 @@ export async function mockMusicEngine(page: Page | BrowserContext) {
  * actionable, spends the full 30s test budget, and the teardown that follows
  * makes the pending click report "Target page, context or browser has been
  * closed". That reads like a browser crash and is not one. It is why
- * additional-themes and player-panel-swipe both flaked in the
+ * the old theme walk and player-panel-swipe both flaked in the
  * same place.
  *
  * Three minutes of PCM outlasts any test, so playback simply stays put.

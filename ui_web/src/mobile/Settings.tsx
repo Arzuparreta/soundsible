@@ -94,7 +94,7 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
       <Show when={current()}><PodcastCountrySettings state={country} disabled={props.busy} /></Show>
     </Show>
     <Show when={section() === 'subsonic' && props.subsonic}>{settings => <NativeSettingsSubsonic {...settings()} />}</Show>
-    <Show when={section() === 'appearance'}><AppearanceSettingsView theme={props.appearance.theme()} onTheme={props.appearance.setTheme} /></Show>
+    <Show when={section() === 'appearance'}><AppearanceSettingsView theme={props.appearance.theme()} colors={props.appearance.colors()} onTheme={props.appearance.setTheme} /></Show>
     <Show when={section() === 'accessibility'}><DisplayPreferencesView interfaceSize={props.appearance.interfaceSize()} highContrast={props.appearance.highContrast()}
       onSize={props.appearance.setInterfaceSize} onContrast={props.appearance.setHighContrast} />
       <HapticSettingsView enabled={props.feedback.enabled()} onChange={props.feedback.setEnabled} /></Show>

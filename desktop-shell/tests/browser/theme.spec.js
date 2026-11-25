@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-import { THEMES, THEME_COLORS } from '../../../ui_web/src/boot/themes';
+import { THEME_COLORS } from '../../../ui_web/src/boot/themes';
+import { deriveCustomColors } from '../../../ui_web/src/boot/customColors.js';
 import { mockTauri } from './tauri-mock.js';
 
 /*
@@ -13,7 +14,7 @@ import { mockTauri } from './tauri-mock.js';
  */
 
 /** The dark palette is the bare :root, so it has no [data-theme] of its own. */
-const PAINTED = THEMES.filter((theme) => theme !== 'system');
+const PAINTED = Object.keys(THEME_COLORS);
 
 function luminance([r, g, b]) {
   const channel = (value) => {
@@ -33,7 +34,7 @@ const hex = (value) => [1, 3, 5].map((at) => parseInt(value.slice(at, at + 2), 1
 
 for (const theme of PAINTED) {
   test(`${theme}: the shell paints the palette the player chose`, async ({ page }) => {
-    await mockTauri(page, { get_shell_theme: theme });
+    await mockTauri(page, { get_shell_theme: { theme, colors: {} } });
     await page.goto('/');
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -58,4 +59,13 @@ test('an answer the shell cannot use leaves it on the default palette', async ({
 
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', /./);
   await expect(page.getByRole('button', { name: 'Choose folder…' })).toBeVisible();
+});
+
+test('custom colors are painted from the same resolved tokens as the player', async ({ page }) => {
+  const { scheme, tokens } = deriveCustomColors({ canvas: '#052740', accent: '#44ffaa' });
+  await mockTauri(page, { get_shell_theme: { theme: scheme, colors: tokens } });
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-custom-colors', '');
+  const painted = await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor);
+  expect(rgb(painted)).toEqual(hex(tokens['bg-base']));
 });

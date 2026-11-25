@@ -71,8 +71,7 @@
   --download-ink: var(--success);
   --warning: #e0a72b;
   --danger: #ff453a;
-  /* Text on a --danger fill. White is 3.4:1 on this red and 1.8:1 on the
-     pale red of the slate and forest themes; near-black is 5.7:1 and 10.7:1. */
+  /* Near-black keeps 5.7:1 on the dark theme’s danger fill. */
   --ink-on-danger: #1f0503;
 
   /* ── Typography ── */
@@ -359,102 +358,6 @@
   --shadow-accent: 0 8px 22px rgba(249, 122, 18, 0.16);
 }
 
-:root[data-theme='slate'] {
-  color-scheme: dark;
-  --bg-base: #252d38;
-  --bg-raised: #2d3744;
-  --bg-elevated: #354150;
-  --bg-inset: #202731;
-  --bg-hover: #3a4757;
-  --bg-active: #404e60;
-  --ink-primary: #f4f6fa;
-  --ink-secondary: #d3dbe5;
-  --ink-tertiary: #bdcadb;
-  --hairline: #64778d;
-  --hairline-strong: #91a4bb;
-  --hairline-soft: #526378;
-  --accent-ink: #ffad69;
-  --accent-ink-hover: #ffc18f;
-  --info: #8bc4ff;
-  --success: #76e695;
-  --warning: #f5ce70;
-  --danger: #ffaaa5;
-  --skeleton-base: #2d3744;
-  --skeleton-highlight: #404e60;
-  --glass-fill: #2d3744;
-  --glass-line: #64778d;
-  --glass-rim: #526378;
-}
-
-:root[data-theme='pure-black'] {
-  color-scheme: dark;
-  --bg-base: #000000;
-  --bg-raised: #000000;
-  --bg-elevated: #0a0a0a;
-  --bg-inset: #000000;
-  --bg-hover: #171717;
-  --bg-active: #242424;
-  --ink-primary: #ffffff;
-  --ink-secondary: #d6d6d6;
-  --ink-tertiary: #b5b5b5;
-  --hairline: #666666;
-  --hairline-strong: #909090;
-  --hairline-soft: #444444;
-  --info: #78baff;
-  --ambient-accent: transparent;
-  --ambient-highlight: transparent;
-  /* No glow anywhere on the OLED palette; --selection-bg is inherited, so
-     selected text keeps its wash. */
-  --accent-glow: transparent;
-  --shadow-accent: none;
-  --skeleton-base: #0a0a0a;
-  --skeleton-highlight: #242424;
-  --glass-fill: #000000;
-  --glass-gloss: transparent;
-  --glass-line: #666666;
-  --glass-rim: transparent;
-  --glass-filter: none;
-}
-
-/* Deep forest: a near-black sibling of the dark palette, tinted green, and the
-   one theme that does not wear the signature orange. Amber (38° hue) instead —
-   far enough from --brand-gold (50°) that a gold badge never reads as a button.
-   Every accent alpha is restated because the base ones are orange literals. */
-:root[data-theme='forest-green'] {
-  color-scheme: dark;
-  --bg-base: #0b110d;
-  --bg-raised: #111a14;
-  --bg-elevated: #17241b;
-  --bg-inset: #070c09;
-  --bg-hover: #1d2c22;
-  --bg-active: #243729;
-  --hairline: #27342b;
-  --hairline-strong: #72857a;
-  --hairline-soft: #1d2c22;
-  --ink-primary: #f2f5f3;
-  --ink-secondary: #a3b0a7;
-  --ink-tertiary: #9aa89e;
-  --accent: #f2a43a;
-  --accent-hover: #ffba5e;
-  --accent-press: #d88a22;
-  --ink-on-accent: #1a1004;
-  --accent-soft: rgba(242, 164, 58, 0.14);
-  --accent-faint: rgba(242, 164, 58, 0.075);
-  --accent-glow: rgba(242, 164, 58, 0.24);
-  --selection-bg: rgba(242, 164, 58, 0.24);
-  --ambient-accent: rgba(242, 164, 58, 0.055);
-  --shadow-accent: 0 8px 24px rgba(242, 164, 58, 0.2);
-  /* The dark palette's blue and red sit on darker surfaces than this one has:
-     both fall under 4.5:1 on --bg-active here. Green and amber clear it. */
-  --info: #8fc6ff;
-  --danger: #ffaaa5;
-  --skeleton-base: #111a14;
-  --skeleton-highlight: #243729;
-  --glass-fill: #111a14;
-  --glass-line: #3a4c40;
-  --glass-rim: #27342b;
-}
-
 /* Explicit low-vision palette. The regular themes remain visually untouched;
    this mode spends subtlety on stronger text, control and focus separation. */
 :root[data-high-contrast='true'] {
@@ -665,99 +568,6 @@
   --stage-sheet: #ffffff;
 }
 
-/* Extra themes own stage materials as well as the surrounding shell. */
-:root[data-theme='slate'] [data-player-stage],
-:root[data-theme='slate'] [data-stage-surface] {
-  /* Slate is the foundation, not an opaque coat over the artwork. Keep the
-     wallpaper chromatic; bound its brightness so pale covers remain readable. */
-  --stage-base: #252d38;
-  --stage-backdrop: blur(62px) saturate(1.7) brightness(0.42);
-  --stage-backdrop-opacity: 0.9;
-  --stage-wash: linear-gradient(180deg, #252d382e, #252d381f 48%, #252d3866);
-  --stage-wash-auto: var(--stage-wash);
-  --stage-wash-auto-wide: linear-gradient(96deg, #252d382e, #252d381f 46%, #252d3866);
-  --ink-tertiary: #d3dbe5;
-  --stage-material-quiet: rgba(41, 50, 62, 0.25);
-  --stage-material: rgba(45, 55, 68, 0.38);
-  --stage-material-hover: rgba(58, 71, 87, 0.58);
-  --stage-material-active: rgba(64, 78, 96, 0.72);
-  --stage-panel: rgba(45, 55, 68, 0.48);
-  --stage-sheet: rgba(53, 65, 80, 0.94);
-  --stage-line: var(--hairline);
-  --stage-line-strong: var(--hairline-strong);
-  --stage-media-filter: blur(30px) saturate(1.7) brightness(0.42);
-  --stage-media-veil: linear-gradient(#252d3840, #252d3866);
-}
-
-:root[data-theme='slate'][data-high-contrast='true'] [data-player-stage],
-:root[data-theme='slate'][data-high-contrast='true'] [data-stage-surface] {
-  --stage-material-quiet: rgba(41, 50, 62, 0.65);
-  --stage-material: rgba(45, 55, 68, 0.78);
-  --stage-material-hover: #3a4757;
-  --stage-material-active: #404e60;
-  --stage-panel: rgba(45, 55, 68, 0.85);
-}
-
-:root[data-theme='pure-black'] [data-player-stage],
-:root[data-theme='pure-black'] [data-stage-surface] {
-  --stage-base: #000000;
-  --stage-backdrop: none;
-  --stage-backdrop-opacity: 0;
-  --stage-wash: linear-gradient(#000000, #000000);
-  --stage-wash-auto: var(--stage-wash);
-  --stage-wash-auto-wide: var(--stage-wash);
-  --stage-grain-opacity: 0;
-  --stage-media-filter: opacity(0);
-  --stage-media-veil: linear-gradient(#000000, #000000);
-  --stage-material-quiet: #000000;
-  --stage-material: #000000;
-  --stage-material-hover: #171717;
-  --stage-material-active: #242424;
-  --stage-panel: #000000;
-  --stage-sheet: #0a0a0a;
-  --stage-well: #000000;
-  --stage-line: var(--hairline);
-  --stage-line-soft: var(--hairline-soft);
-  --stage-line-strong: var(--hairline-strong);
-  --stage-text-halo: none;
-}
-
-/* Same contract as slate: the record stays the wallpaper, the room stays the
-   colour of the theme. Brightness is bounded so a pale cover cannot wash the
-   glass out from underneath the ink. */
-:root[data-theme='forest-green'] [data-player-stage],
-:root[data-theme='forest-green'] [data-stage-surface] {
-  --stage-base: #0b110d;
-  /* The veil is greener and lighter than --bg-base on purpose. A near-black
-     wash has no chroma to give, so over a saturated cover it only greys the
-     room down; #12301f has enough green in it to actually tint. */
-  --stage-backdrop: blur(62px) saturate(1.3) brightness(0.26);
-  --stage-backdrop-opacity: 0.9;
-  --stage-wash: linear-gradient(180deg, #12301fc7, #12301f9e 48%, #0b110deb);
-  --stage-wash-auto: var(--stage-wash);
-  --stage-wash-auto-wide: linear-gradient(96deg, #12301fc7, #12301f9e 46%, #0b110deb);
-  --ink-tertiary: #b2c0b7;
-  --stage-material-quiet: rgba(17, 26, 20, 0.3);
-  --stage-material: rgba(23, 36, 27, 0.42);
-  --stage-material-hover: rgba(29, 44, 34, 0.6);
-  --stage-material-active: rgba(36, 55, 41, 0.74);
-  --stage-panel: rgba(17, 26, 20, 0.52);
-  --stage-sheet: rgba(23, 36, 27, 0.94);
-  --stage-line: var(--hairline);
-  --stage-line-strong: var(--hairline-strong);
-  --stage-media-filter: blur(30px) saturate(1.25) brightness(0.24);
-  --stage-media-veil: linear-gradient(#12301fb3, #0b110dd9);
-}
-
-:root[data-theme='forest-green'][data-high-contrast='true'] [data-player-stage],
-:root[data-theme='forest-green'][data-high-contrast='true'] [data-stage-surface] {
-  --stage-material-quiet: rgba(17, 26, 20, 0.7);
-  --stage-material: rgba(23, 36, 27, 0.82);
-  --stage-material-hover: #1d2c22;
-  --stage-material-active: #243729;
-  --stage-panel: rgba(17, 26, 20, 0.88);
-}
-
 /* Desktop stage-backed sidebar maps its interactive surfaces to --stage-* tokens. */
 [data-stage-surface] {
   --sidebar-hover: var(--stage-row-hover);
@@ -774,48 +584,96 @@
   --sidebar-section-ink: var(--ink-secondary);
 }
 
-:root[data-theme='slate'] [data-stage-surface],
-:root[data-theme='forest-green'] [data-stage-surface] {
-  --sidebar-hover: var(--stage-material-hover);
-  --sidebar-active: var(--stage-material-active);
-}
-
-:root[data-theme='pure-black'] [data-stage-surface] {
-  --sidebar-hover: var(--stage-material-hover);
-  --sidebar-active: var(--stage-material-active);
-  --sidebar-active-border: var(--stage-line);
-}
-
 [data-high-contrast='true'] [data-stage-surface] {
   --sidebar-active-border: var(--stage-line-strong);
   --sidebar-section-ink: var(--ink-secondary);
 }
 
-:root[data-theme='slate'][data-high-contrast='true'] {
-  --ink-secondary: #e3eaf3;
-  --ink-tertiary: #d3dbe5;
-  --hairline: #a0b3ca;
-  --hairline-strong: #c0cfe2;
-  --hairline-soft: #91a4bb;
-  --glass-fill: #2d3744;
-  --glass-line: #a0b3ca;
-  --glass-rim: #91a4bb;
-}
+/* Custom colors share one contrast envelope. The cover stays visible through
+   a bounded layer of tinted glass. Foreground colors are computed against a
+   more extreme composite than the cover or any interactive material can make. */
+@media not all and (forced-colors: active) {
+  :root[data-theme][data-custom-colors] {
+    --bg-base: var(--custom-bg-base);
+    --bg-raised: var(--custom-bg-raised);
+    --bg-elevated: var(--custom-bg-elevated);
+    --bg-inset: var(--custom-bg-inset);
+    --bg-hover: var(--custom-bg-hover);
+    --bg-active: var(--custom-bg-active);
+    --hairline: var(--custom-hairline);
+    --hairline-strong: var(--custom-hairline-strong);
+    --ink-primary: var(--custom-ink-primary);
+    --ink-secondary: var(--custom-ink-secondary);
+    --ink-tertiary: var(--custom-ink-tertiary);
+    --ink-on-accent: var(--custom-ink-on-accent);
+    --accent: var(--custom-accent);
+    --accent-hover: var(--custom-accent-hover);
+    --accent-press: var(--custom-accent-press);
+    --accent-ink: var(--custom-accent-ink);
+    --accent-ink-hover: var(--custom-accent-ink-hover);
+    --selection-bg: var(--custom-selection-bg);
+    --info: var(--custom-info);
+    --success: var(--custom-success);
+    --warning: var(--custom-warning);
+    --danger: var(--custom-danger);
+    --ink-on-danger: var(--custom-ink-on-danger);
+    --hairline-soft: color-mix(in srgb, var(--hairline) 60%, transparent);
+    --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+    --accent-faint: color-mix(in srgb, var(--accent) 5%, transparent);
+    --accent-glow: color-mix(in srgb, var(--accent) 28%, transparent);
+    --ambient-accent: var(--accent-faint);
+    --ambient-highlight: color-mix(in srgb, var(--ink-primary) 4%, transparent);
+    --shadow-accent: 0 8px 24px var(--accent-glow);
+    --download-ink: var(--success);
+    --skeleton-base: var(--bg-raised);
+    --skeleton-highlight: var(--bg-active);
+    --glass-fill: color-mix(in srgb, var(--bg-base) 91%, transparent);
+    --glass-gloss: var(--ambient-highlight);
+    --glass-line: var(--hairline);
+    --glass-rim: var(--hairline-soft);
+    --glass-filter: blur(24px) saturate(1.55);
+    --cover-glass-tint: color-mix(in srgb, var(--bg-base) 84%, transparent);
+    --cover-glass-filter: blur(22px) saturate(1.75);
+    --switch-knob-on: var(--ink-on-accent);
+    --settings-switch-knob-off: var(--ink-on-accent);
+    --player-switch-knob-off: var(--ink-primary);
+  }
 
-:root[data-theme='pure-black'][data-high-contrast='true'] {
-  --glass-fill: #000000;
-  --glass-rim: transparent;
-}
+  :root[data-custom-colors][data-high-contrast='true'] {
+    --hairline: var(--hairline-strong);
+    --ink-secondary: var(--ink-primary);
+    --ink-tertiary: var(--ink-primary);
+    --glass-fill: color-mix(in srgb, var(--bg-base) 96%, transparent);
+    --cover-glass-tint: color-mix(in srgb, var(--bg-base) 95%, transparent);
+  }
 
-:root[data-theme='forest-green'][data-high-contrast='true'] {
-  --ink-secondary: #cfdad3;
-  --ink-tertiary: #b2c0b7;
-  --hairline: #5c7066;
-  --hairline-strong: #8fa396;
-  --hairline-soft: #3a4c40;
-  --glass-fill: #111a14;
-  --glass-line: #5c7066;
-  --glass-rim: #3a4c40;
+  :root[data-theme][data-custom-colors] :is([data-player-stage], [data-stage-surface]) {
+    --stage-base: var(--bg-base);
+    --stage-backdrop: blur(62px) saturate(1.75);
+    --stage-backdrop-opacity: 1;
+    --stage-grain-opacity: 0;
+    --stage-wash: linear-gradient(150deg, var(--cover-glass-tint), var(--glass-fill));
+    --stage-wash-auto: var(--stage-wash);
+    --stage-wash-auto-wide: var(--stage-wash);
+    --stage-wash-fill: transparent;
+    --stage-media-filter: blur(30px) saturate(1.55);
+    --stage-media-veil: var(--stage-wash);
+    --stage-material-quiet: color-mix(in srgb, var(--ink-primary) 3%, transparent);
+    --stage-material: color-mix(in srgb, var(--ink-primary) 6%, transparent);
+    --stage-material-hover: color-mix(in srgb, var(--ink-primary) 8%, transparent);
+    --stage-material-active: color-mix(in srgb, var(--ink-primary) 10%, transparent);
+    --stage-panel: color-mix(in srgb, var(--bg-raised) 28%, transparent);
+    --stage-sheet: var(--bg-elevated);
+    --stage-well: var(--bg-inset);
+    --stage-row-hover: var(--stage-material-hover);
+    --stage-line: var(--hairline);
+    --stage-line-soft: var(--hairline-soft);
+    --stage-line-strong: var(--hairline-strong);
+    --stage-rail: var(--hairline-strong);
+    --stage-text-halo: none;
+    --sidebar-active: var(--stage-material-active);
+    --sidebar-active-border: var(--hairline-strong);
+  }
 }
 
 /* Theme cross-fade. `data-theme-transition` is set on <html> for the duration of a
@@ -948,6 +806,33 @@
     --accent-ink-hover: LinkText;
     --ink-on-accent: HighlightText;
   }
+
+  :root:is([data-theme], [data-theme][data-high-contrast]) :is([data-stage-surface], [data-player-stage]) {
+    --stage-base: Canvas;
+    --stage-backdrop: none;
+    --stage-backdrop-opacity: 0;
+    --stage-wash: none;
+    --stage-wash-auto: none;
+    --stage-wash-auto-wide: none;
+    --stage-media-filter: opacity(0);
+    --stage-media-veil: Canvas;
+    --stage-grain-opacity: 0;
+    --stage-panel: Canvas;
+    --stage-well: Canvas;
+    --stage-sheet: Canvas;
+    --stage-line: CanvasText;
+    --stage-line-soft: CanvasText;
+    --stage-line-strong: CanvasText;
+    --stage-row-hover: Canvas;
+    --stage-material-quiet: Canvas;
+    --stage-material: Canvas;
+    --stage-material-hover: Canvas;
+    --stage-material-active: Canvas;
+    --stage-rail: CanvasText;
+    --stage-text-halo: none;
+    --sidebar-active-border: Highlight;
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

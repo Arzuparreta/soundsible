@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { themeBootScript } from '../boot/plugin';
+import { CUSTOM_COLORS_KEY, deriveCustomColors } from '../boot/customColors.js';
 import { THEME_COLORS } from '../boot/themes';
 import type { ResolvedTheme } from './core';
 
@@ -40,6 +41,8 @@ async function loadTheme(preference: string) {
 }
 
 beforeEach(() => {
+  document.documentElement.removeAttribute('style');
+  document.documentElement.removeAttribute('data-custom-colors');
   document.documentElement.removeAttribute('data-theme');
   document.documentElement.removeAttribute('data-theme-transition');
   document.head.innerHTML = '<meta name="theme-color" content="#0c0c0e" />';
@@ -108,28 +111,34 @@ describe('system theme', () => {
 });
 
 
-describe('additional themes', () => {
-  it.each([['slate', '#252d38'], ['pure-black', '#000000']] as const)('applies %s before the app boots', (theme, color) => {
+describe('custom colors', () => {
+  it.each(['slate', 'pure-black', 'forest-green'])('resets retired %s to system', async (mode) => {
     installMatchMedia(false);
-    localStorage.setItem('theme', theme);
+    const { state } = await loadTheme(mode);
     new Function(themeBootScript())();
-    expect(document.documentElement.dataset.theme).toBe(theme);
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(color);
+    expect(state.theme).toBe('system');
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement).not.toHaveAttribute('data-custom-colors');
   });
-  it.each([['slate', '#252d38'], ['pure-black', '#000000']] as const)('persists %s independently of the OS', async (theme, color) => {
+
+  it('agrees before and after boot, ignores OS changes and clears its custom tokens on exit', async () => {
     const os = installMatchMedia(false);
-    const { actions, state, applyTheme } = await loadTheme(theme);
-    expect(state.theme).toBe(theme);
-    applyTheme(state.theme);
-    expect(document.documentElement.dataset.theme).toBe(theme);
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(color);
-    os.set(true);
-    expect(document.documentElement.dataset.theme).toBe(theme);
-    actions.setTheme('system');
+    const { actions, applyTheme, state } = await loadTheme('custom');
+    const colors = { canvas: '#201a5b', accent: '#ff6050' };
+    actions.setTheme('custom', colors);
+    expect(JSON.parse(localStorage.getItem(CUSTOM_COLORS_KEY)!)).toEqual(colors);
+    const base = deriveCustomColors(colors).tokens['bg-base'];
+    new Function(themeBootScript())();
     expect(document.documentElement.dataset.theme).toBe('dark');
-    actions.setTheme(theme);
-    expect(localStorage.getItem('theme')).toBe(theme);
+    expect(document.querySelector('meta')?.getAttribute('content')).toBe(base);
+    applyTheme(state.theme);
+    expect(document.querySelector('meta')?.getAttribute('content')).toBe(base);
     expect(os.listenerCount()).toBe(0);
+    os.set(true);
+    actions.setTheme('system');
+    expect(document.documentElement).not.toHaveAttribute('data-custom-colors');
+    expect(document.documentElement.style.getPropertyValue('--custom-bg-base')).toBe('');
+    expect(document.querySelector('meta')?.getAttribute('content')).toBe(THEME_COLORS.dark);
   });
 });
 
@@ -179,13 +188,20 @@ describe('telling the desktop shell', () => {
 
   afterEach(() => vi.doUnmock('../lib/api'));
 
-  it('hands the shell the whole palette table, not just the colour', async () => {
+  it('hands the shell the generated palette and resolves edits to the latest seeds', async () => {
+    vi.useFakeTimers();
     installMatchMedia(false);
     const { store, setDesktopAppearance } = await loadWithApi('dark', 'owner-token');
 
-    store.actions.setTheme('forest-green');
+    store.actions.setTheme('custom');
 
-    expect(setDesktopAppearance).toHaveBeenCalledWith('forest-green', THEME_COLORS);
+    const seeds = { canvas: '#ffffff', accent: '#000fff' };
+    store.actions.setTheme('custom', seeds);
+    await vi.runAllTimersAsync();
+    const { tokens } = deriveCustomColors(seeds);
+    expect(setDesktopAppearance).toHaveBeenCalledExactlyOnceWith('custom', {
+      ...THEME_COLORS, ...tokens, 'custom-light': tokens['bg-base'],
+    });
   });
 
   it('sends the preference, so the shell resolves `system` against its own desktop', async () => {
@@ -201,19 +217,22 @@ describe('telling the desktop shell', () => {
     installMatchMedia(false);
     const { store, setDesktopAppearance } = await loadWithApi('dark', null);
 
-    store.actions.setTheme('forest-green');
+    store.actions.setTheme('custom');
 
     expect(setDesktopAppearance).not.toHaveBeenCalled();
   });
 
   it('still changes the theme when the engine refuses the news', async () => {
+    vi.useFakeTimers();
     installMatchMedia(false);
     const { store, setDesktopAppearance } = await loadWithApi('dark', 'owner-token');
     setDesktopAppearance.mockRejectedValue(new Error('offline'));
 
-    store.actions.setTheme('forest-green');
+    store.actions.setTheme('custom');
 
-    expect(document.documentElement.dataset.theme).toBe('forest-green');
-    expect(localStorage.getItem('theme')).toBe('forest-green');
+    expect(document.documentElement).toHaveAttribute('data-custom-colors');
+    expect(localStorage.getItem('theme')).toBe('custom');
+    await vi.runAllTimersAsync();
+    expect(setDesktopAppearance).toHaveBeenCalledTimes(1);
   });
 });

@@ -22,7 +22,7 @@ describe('boot plugin', () => {
   it('paints a first-paint background for every theme the boot script can stamp', () => {
     const html = transform();
     for (const [theme, background] of Object.entries(THEME_COLORS)) {
-      expect(html).toContain(`html[data-booting][data-theme='${theme}'], html[data-booting][data-theme='${theme}'] body { background: ${background}; }`);
+      expect(html).toContain(`html[data-booting][data-theme='${theme}'], html[data-booting][data-theme='${theme}'] body { background: var(--custom-bg-base, ${background}); }`);
     }
     expect(html).not.toContain('__THEME_BACKGROUNDS__');
   });

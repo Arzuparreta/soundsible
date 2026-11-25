@@ -96,14 +96,10 @@ html[data-booting] #app { visibility: hidden; }
 @media (forced-colors: active) {
   #startup-screen .startup-waves span { background: CanvasText; }
 }
-
-[data-theme='slate'] #startup-screen { --startup-bg: #252d38; --startup-muted: #d3dbe5; }
-/* Flat, not the orange wash the other palettes get: nothing glows on the OLED theme. */
-[data-theme='pure-black'] #startup-screen { --startup-bg: #000000; --startup-muted: #d6d6d6; --startup-glow: transparent; }
-/* Amber, not the signature orange: the forest palette carries its own accent. */
-[data-theme='forest-green'] #startup-screen {
-  --startup-bg: #0b110d;
-  --startup-muted: #a3b0a7;
-  --startup-accent: #f2a43a;
-  --startup-glow: rgba(242, 164, 58, 0.06);
+[data-custom-colors] #startup-screen {
+  --startup-bg: var(--custom-bg-base);
+  --startup-ink: var(--custom-ink-primary);
+  --startup-muted: var(--custom-ink-secondary);
+  --startup-accent: var(--custom-accent-ink);
+  --startup-glow: color-mix(in srgb, var(--custom-accent) 6%, transparent);
 }

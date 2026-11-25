@@ -12,6 +12,28 @@ On LAN or Tailscale, replace `localhost` with the Station host IP or hostname.
 
 In desktop-engine mode, the base URL is not assumed to be `:5005`. Read the readiness JSON emitted by `python3 run.py --desktop-engine` / `soundsible_engine.py`, or query `/api/health` from the known loopback URL and use its reported `base_url`.
 
+## Change colors in an open player
+
+Use the browser automation context for the running player to evaluate this
+JavaScript. The change applies immediately to that browser or installation and
+is saved for the next launch. Other open player tabs sharing the same storage
+update as well.
+
+```js
+window.soundsibleAppearance.set({
+  theme: 'custom',
+  colors: { canvas: '#17243d', accent: '#81e5bc' },
+});
+```
+
+Use `window.soundsibleAppearance.get()` to read the current mode and saved pair.
+Pass the result of `get()` to `set()` to restore both the mode and its saved pair.
+The accepted modes are `system`, `dark`, `light` and `custom`. Choose `custom`
+without a colors object to reactivate the saved pair. Each seed accepts RGB or
+RRGGBB hex, with an optional leading `#`. The player normalizes the seeds and
+derives the readable shades. An invalid update throws a `TypeError` and preserves
+the current appearance.
+
 ## Agent Rules
 
 1. Use the Agent API for playback control: `/api/agent/*`, or the general device command endpoints `/api/devices/<device_id>/commands` and `/api/devices/transfer` (with `playback:control` scope).

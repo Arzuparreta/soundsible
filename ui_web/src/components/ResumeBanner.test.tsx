@@ -61,30 +61,30 @@ beforeEach(() => {
 });
 
 describe('resume banner', () => {
-  it('offers a DJ session as the DJ session it is', () => {
+  it('offers a DJ session as the DJ session it is', async () => {
     store.offered = offer(true);
 
     render(() => <ResumeBanner />);
 
-    expect(screen.getByText('Resume your DJ session?')).toBeVisible();
+    expect(await screen.findByText('Resume your DJ session?')).toBeVisible();
     expect(screen.getByText(/DJ session · from Phone/)).toBeVisible();
   });
 
-  it('offers ordinary playback as ordinary playback', () => {
+  it('offers ordinary playback as ordinary playback', async () => {
     store.offered = offer(false);
 
     render(() => <ResumeBanner />);
 
-    expect(screen.getByText('Resume playback?')).toBeVisible();
+    expect(await screen.findByText('Resume playback?')).toBeVisible();
     expect(screen.queryByText(/DJ session/)).not.toBeInTheDocument();
   });
 
-  it('still offers a state published without a session at all', () => {
+  it('still offers a state published without a session at all', async () => {
     store.offered = { device_name: 'Phone', track_id: 't1', track: entry, position_sec: 30 };
 
     render(() => <ResumeBanner />);
 
-    expect(screen.getByText('Resume playback?')).toBeVisible();
+    expect(await screen.findByText('Resume playback?')).toBeVisible();
     expect(screen.getByText(/Hyperballad/)).toBeVisible();
   });
 });

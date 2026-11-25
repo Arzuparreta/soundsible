@@ -1,0 +1,29 @@
+.glass { display: none; }
+
+@media not all and (forced-colors: active) {
+  :global([data-custom-colors]) .glass {
+    display: block;
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--bg-base);
+  }
+
+  .glass > span {
+    position: absolute;
+    inset: calc(-1 * var(--space-2xl));
+    filter: var(--cover-glass-filter);
+  }
+
+  .glass::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, var(--glass-gloss), transparent),
+      linear-gradient(150deg, var(--cover-glass-tint), var(--glass-fill));
+    box-shadow: inset 0 1px var(--glass-rim);
+  }
+}

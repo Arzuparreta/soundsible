@@ -182,7 +182,7 @@ export interface PlayerActions {
   reorderPlaylists: (order: string[]) => Promise<void>;
   setPlaylistCover: (name: string, coverTrackId: string | null) => Promise<void>;
   setDeviceName: (name: string) => void;
-  setTheme: (theme: Theme) => void;
+  setTheme: (theme: Theme, colors?: import('../lib/colorPreferences').CustomColors) => void;
   setInterfaceSize: (interfaceSize: InterfaceSize) => void;
   setHighContrast: (highContrast: boolean) => void;
   setHaptics: (on: boolean) => void;

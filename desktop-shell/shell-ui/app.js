@@ -11,20 +11,36 @@ import {
 
 applyStaticTranslations();
 
-/*
- * Which palette this window is in.
- *
- * The listener chooses a theme in the player, which lives at the engine's
- * origin; the engine writes it where Rust can read it, and Rust hands it over
- * here. The window background is already painted by then — that is the half
- * that stops the webview flashing white — so this only has to dress the DOM.
- */
-function applyShellTheme(theme) {
-  if (typeof theme === 'string' && theme) document.documentElement.dataset.theme = theme;
+// Rust also applies the canvas to the native window behind this WebView.
+const shellColors = {
+  'bg-base': 'bg-base', 'bg-elevated': 'bg-elevated', 'bg-inset': 'bg-inset',
+  hairline: 'hairline', 'ink-primary': 'ink-primary', 'ink-secondary': 'ink-secondary',
+  'ink-tertiary': 'ink-tertiary', accent: 'accent', 'accent-hover': 'accent-hover',
+  'accent-ink': 'accent-ink', 'ink-on-accent': 'ink-on-accent', danger: 'status-error',
+  success: 'status-ready', warning: 'status-warning',
+};
+
+function applyShellTheme(appearance) {
+  if (appearance?.theme !== 'light' && appearance?.theme !== 'dark') return;
+  const root = document.documentElement;
+  root.dataset.theme = appearance.theme;
+  const custom = Object.keys(shellColors).every(source => /^#[0-9a-f]{6}$/i.test(appearance.colors?.[source]));
+  root.toggleAttribute('data-custom-colors', custom);
+  for (const [source, token] of Object.entries(shellColors)) {
+    const value = appearance.colors?.[source];
+    if (custom) root.style.setProperty(`--custom-${token}`, value);
+    else root.style.removeProperty(`--custom-${token}`);
+  }
 }
 
-listen('shell://appearance', (event) => applyShellTheme(event.payload));
-invoke('get_shell_theme').then(applyShellTheme).catch(() => {});
+// An appearance event can race the initial query. The event wins once seen.
+let receivedAppearance = false;
+void listen('shell://appearance', ({ payload }) => {
+  receivedAppearance = true;
+  applyShellTheme(payload);
+}).then(() => invoke('get_shell_theme')).then(appearance => {
+  if (!receivedAppearance) applyShellTheme(appearance);
+}).catch(() => {});
 
 const viewConnection = document.getElementById('view-connection');
 const serverAddress = document.getElementById('server-address');
