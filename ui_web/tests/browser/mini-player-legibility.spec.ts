@@ -101,21 +101,21 @@ test('entity rows never read through the mini-player', async ({ page }) => {
   expect(through).toBeLessThan(45);
 });
 
-test('the page indicator and last library row clear the floating mini-player', async ({ page }) => {
+test('the last library row clears the floating mini-player with the name in the mobile header', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'the floating pill is the compact layout');
   await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción 39/ }).click();
 
   const pill = page.locator('[data-omni-player]');
-  const indicator = page.locator('[data-page-indicator]');
+  const title = page.locator('[data-app-bar]').getByRole('heading', { name: 'Canciones', exact: true });
   const scroller = page.locator('[data-primary-scroll]');
   await expect(pill).toBeVisible();
-  await expect(indicator).toHaveText('Canciones');
+  await expect(title).toBeVisible();
+  await expect(page.locator('[data-page-indicator]')).toHaveCount(0);
 
   await scroller.evaluate(element => { element.scrollTop = element.scrollHeight; });
   const last = scroller.getByText('Canción 0', { exact: true });
   await expect(last).toBeInViewport();
-  const [labelBox, playerBox, rowBox] = await Promise.all([indicator.boundingBox(), pill.boundingBox(), last.boundingBox()]);
-  expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(labelBox!.y);
-  expect(labelBox!.y + labelBox!.height).toBeLessThanOrEqual(playerBox!.y);
+  const [playerBox, rowBox] = await Promise.all([pill.boundingBox(), last.boundingBox()]);
+  expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(playerBox!.y);
 });

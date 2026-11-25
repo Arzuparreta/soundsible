@@ -30,8 +30,8 @@ function returnToTop(from: HTMLElement) {
 /**
  * The top bar of the touch shell: one instance, mounted by the shell, never by
  * a page. The leading control is Menu or Back, with page commands at the
- * other end. Routine page names belong to PageIndicator. Entity names can
- * echo here after the heading scrolls away. Desktop toolbars use PageCommands
+ * other end. The page title follows the leading control. Entity names echo
+ * here after the heading scrolls away. Desktop toolbars use PageCommands
  * with the same definitions.
  */
 export function AppBar() {
@@ -84,7 +84,7 @@ export function AppBar() {
 
   const toTop = () => root && returnToTop(root);
 
-  const title = () => bar()?.indicator ? '' : bar()?.title() ?? '';
+  const title = () => bar()?.title() ?? '';
   const echoed = () => !!bar()?.heading;
 
   return (
@@ -142,7 +142,7 @@ export function AppBar() {
 /** Stays inside the view's column, including when a docked player narrows it. */
 export function PageIndicator() {
   const bar = currentAppBar;
-  const title = () => bar()?.indicator ? bar()?.title() : undefined;
+  const title = () => desktopShell() && bar()?.indicator ? bar()?.title() : undefined;
   const toTop = (event: MouseEvent & { currentTarget: HTMLButtonElement }) => returnToTop(event.currentTarget);
   return <Show when={title()}>
     <h1 class={styles.indicator} data-page-indicator>

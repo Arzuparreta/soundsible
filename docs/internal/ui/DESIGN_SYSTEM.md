@@ -22,6 +22,9 @@ Existing imports from `components/Button`, `components/CoverImage` and
   Trailing items wrap when the pane is too narrow. Use the default page gutter,
   or `contained` when the section supplies its own inset. Entity sections put
   the field between the hero and the list it filters.
+- Routine routes show one page name. On touch it sits left-aligned after the
+  leading top-bar control. On desktop the page indicator sits at the foot of
+  the pane. Entity pages keep their heading next to their artwork.
 - Context popovers, sheets, drawers and dialogs belong to the single overlay
   registry. They share disposal, stacking, navigation dismissal and focus return.
   Popovers retain cursor/control placement and arrow-key navigation. Pass the

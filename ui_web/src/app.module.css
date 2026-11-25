@@ -76,15 +76,9 @@
 }
 
 @media (max-width: 1023px) {
-  /* The mini-player floats over the foot of the view; the indicator sits on
-     top of it rather than under it. */
-  .app[data-mini-player] .content > :global([data-page-indicator]) {
-    bottom: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + var(--space-xs));
-  }
-
   .app[data-mini-player] .content > .outlet:not(:has(:global(.view)))::after {
     display: block;
-    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px + var(--page-indicator-room, 0px));
+    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px);
     content: '';
   }
 }

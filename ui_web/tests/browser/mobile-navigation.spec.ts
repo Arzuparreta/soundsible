@@ -129,6 +129,8 @@ for (const width of [320, 390, 430]) {
       await page.evaluate((size) => document.documentElement.dataset.interfaceSize = size, size);
       const header = page.locator('[data-app-bar]');
       await expect(header).toBeVisible();
+      await expect(header.getByRole('heading', { level: 1, name: 'Canciones' })).toBeVisible();
+      await expect(page.locator('[data-page-indicator]')).toHaveCount(0);
       const buttons = header.getByRole('button');
       // The bar re-renders for the new size; measure the buttons it settles on.
       await expect(buttons.first()).toBeVisible();
@@ -139,14 +141,18 @@ for (const width of [320, 390, 430]) {
         const boxes = Array.from(element.querySelectorAll('button')).map(button => button.getBoundingClientRect())
           .filter(box => box.width > 0 && box.height > 0);
         const centers = boxes.map(box => box.y + box.height / 2);
+        const title = element.querySelector('h1 button')!;
+        const leading = boxes[0];
+        const titleBox = title.getBoundingClientRect();
         return {
+          titleNextToMenu: titleBox.left >= leading.right && titleBox.left - leading.right <= 16 && getComputedStyle(title).textAlign === 'start',
           controls: boxes.length >= 2,
           aligned: Math.max(...centers) - Math.min(...centers) < 2,
           touchTargets: boxes.every(box => box.height >= 43.9),
           insideViewport: boxes.every(box => box.x >= 0 && box.right <= viewportWidth),
           documentWidth: document.documentElement.scrollWidth,
         };
-      }, width)).toEqual({ controls: true, aligned: true, touchTargets: true, insideViewport: true, documentWidth: width });
+      }, width)).toEqual({ titleNextToMenu: true, controls: true, aligned: true, touchTargets: true, insideViewport: true, documentWidth: width });
       await page.screenshot({ path: info.outputPath(`mobile-library-${width}-${size}.png`) });
     });
   }
