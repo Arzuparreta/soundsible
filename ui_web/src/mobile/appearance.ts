@@ -37,11 +37,11 @@ export function createNativeAppearance(notify: (theme: ResolvedTheme, color: str
       sending = false;
     }
   }
-  function apply() {
+  function apply(forceNative = false) {
     const paint = paintTheme(theme(), colors());
     applyVisualPreferences({ interfaceSize: interfaceSize(), highContrast: highContrast() });
     const stamp = paint.scheme + paint.color;
-    if (stamp === last) return;
+    if (!forceNative && stamp === last) return;
     last = stamp;
     latest = paint;
     void notifyNative();
@@ -56,8 +56,11 @@ export function createNativeAppearance(notify: (theme: ResolvedTheme, color: str
     apply();
   }
   const removeAutomation = installAppearanceAutomation(() => ({ theme: theme(), colors: colors() }), update);
-  const visible = () => { if (document.visibilityState === 'visible') apply(); };
-  media?.addEventListener('change', apply);
+  // Android can reset its window chrome during a configuration change even
+  // when an explicit palette leaves the WebView colors unchanged.
+  const systemChanged = () => apply(true);
+  const visible = () => { if (document.visibilityState === 'visible') apply(true); };
+  media?.addEventListener('change', systemChanged);
   document.addEventListener('visibilitychange', visible);
   apply();
   return {
@@ -67,7 +70,7 @@ export function createNativeAppearance(notify: (theme: ResolvedTheme, color: str
     dispose() {
       latest = undefined;
       removeAutomation();
-      media?.removeEventListener('change', apply);
+      media?.removeEventListener('change', systemChanged);
       document.removeEventListener('visibilitychange', visible);
     },
   };

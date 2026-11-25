@@ -34,6 +34,18 @@ describe('installation appearance independent of engine/account', () => {
     dark = false; document.dispatchEvent(new Event('visibilitychange')); await Promise.resolve();
     expect(notify).toHaveBeenLastCalledWith('light', '#f6f6f7');
   });
+  it('restamps native chrome when Android changes mode under the same custom palette', async () => {
+    localStorage.setItem('theme', 'custom');
+    localStorage.setItem('soundsible:custom-colors', JSON.stringify({ canvas: '#ffffff', accent: '#440055' }));
+    const { notify } = setup();
+    await Promise.resolve();
+    expect(notify).toHaveBeenCalledExactlyOnceWith('light', '#ffffff');
+    dark = false;
+    changed?.();
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenLastCalledWith('light', '#ffffff');
+  });
   it('supports denied storage and detaches resume notifications on disposal', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied'); });

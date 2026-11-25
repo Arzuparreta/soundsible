@@ -39,18 +39,25 @@ public class AppearanceSettingsTest {
     private void bars(ActivityScenario<MainActivity> scenario, boolean light) throws Exception {
         long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         var matched = new AtomicBoolean();
+        var actual = new java.util.concurrent.atomic.AtomicReference<String>();
         int expectedBackground = android.graphics.Color.parseColor(new org.json.JSONArray("[" + web.evaluate(scenario, "document.querySelector('meta[name=theme-color]').content") + "]").getString(0));
         while (System.nanoTime() < until) {
             scenario.onActivity(activity -> {
                 var controller = WindowCompat.getInsetsController(activity.getWindow(), activity.getWindow().getDecorView());
                 var background = activity.getWindow().getDecorView().getBackground();
-                matched.set(controller.isAppearanceLightStatusBars() == light && controller.isAppearanceLightNavigationBars() == light
-                    && background instanceof android.graphics.drawable.ColorDrawable && ((android.graphics.drawable.ColorDrawable) background).getColor() == expectedBackground);
+                boolean statusLight = controller.isAppearanceLightStatusBars();
+                boolean navigationLight = controller.isAppearanceLightNavigationBars();
+                Integer color = background instanceof android.graphics.drawable.ColorDrawable
+                    ? ((android.graphics.drawable.ColorDrawable) background).getColor() : null;
+                matched.set(statusLight == light && navigationLight == light && color != null && color == expectedBackground);
+                actual.set("statusLight=" + statusLight + ", navigationLight=" + navigationLight
+                    + ", background=" + (color == null ? "unset" : Integer.toHexString(color)));
             });
             if (matched.get()) return;
             Thread.sleep(100);
         }
-        fail("Native bars and window background must follow the selected palette");
+        fail("Expected light bars=" + light + ", background=" + Integer.toHexString(expectedBackground)
+            + "; actual " + actual.get());
     }
     private void theme(ActivityScenario<MainActivity> scenario, String theme) throws Exception {
         waitFor(scenario, "!!document.querySelector('[data-setting=theme] input[value=" + theme + "]')");
