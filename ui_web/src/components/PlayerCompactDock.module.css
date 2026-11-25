@@ -140,18 +140,22 @@
   align-items: center;
 }
 
+/* A vertical pill centred over the volume button, so the slider rises out of
+   the icon instead of crossing the transport row above the dock. */
 .dockVolumePopup {
   position: absolute;
-  right: 0;
   bottom: calc(100% + var(--space-sm));
+  left: 50%;
   z-index: 46;
   display: flex;
   align-items: center;
-  height: var(--control-h);
-  padding-inline: var(--space-md);
+  justify-content: center;
+  width: var(--control-h);
+  padding-block: var(--space-md);
   background: var(--stage-base);
   border-radius: var(--radius-full);
   box-shadow: inset 0 0 0 1px var(--stage-line), var(--stage-shadow-sm);
+  transform: translateX(-50%);
 }
 
 /* Bridge the hover gap between the trigger and the popup above it. */
@@ -164,14 +168,19 @@
   content: '';
 }
 
+/* A native vertical range: the vertical writing mode turns the track upright
+   and `direction: rtl` puts the minimum at the bottom, so arrow keys, Home/End
+   and pointer drags keep their meaning without a rotated box. */
 .dockVolRange {
   --fill: 0%;
   --vol-track: var(--space-xs);
   --vol-thumb: var(--space-md);
   appearance: none;
   -webkit-appearance: none;
-  width: calc(var(--control-h) * 2.5);
-  height: var(--space-lg);
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: var(--space-lg);
+  height: calc(var(--control-h) * 2.5);
   margin: 0;
   background: transparent;
   cursor: pointer;
@@ -179,10 +188,11 @@
 }
 
 .dockVolRange::-webkit-slider-runnable-track {
-  height: var(--vol-track);
+  width: var(--vol-track);
+  height: 100%;
   border-radius: var(--radius-full);
   background: linear-gradient(
-    to right,
+    to top,
     var(--accent) var(--fill),
     var(--stage-line-strong) var(--fill)
   );
@@ -193,7 +203,7 @@
   -webkit-appearance: none;
   width: var(--vol-thumb);
   height: var(--vol-thumb);
-  margin-top: calc((var(--vol-track) - var(--vol-thumb)) / 2);
+  margin-left: calc((var(--vol-track) - var(--vol-thumb)) / 2);
   border: none;
   border-radius: var(--radius-full);
   background: var(--ink-primary);
@@ -201,13 +211,13 @@
 }
 
 .dockVolRange::-moz-range-track {
-  height: var(--vol-track);
+  width: var(--vol-track);
   border-radius: var(--radius-full);
   background: var(--stage-line-strong);
 }
 
 .dockVolRange::-moz-range-progress {
-  height: var(--vol-track);
+  width: var(--vol-track);
   border-radius: var(--radius-full);
   background: var(--accent);
 }

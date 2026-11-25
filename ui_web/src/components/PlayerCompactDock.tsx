@@ -18,7 +18,7 @@ const VOLUME_DISMISS_MS = 160;
  *
  * View toggles sit on the left; playback utilities sit on the right. On
  * `mobileWeb` phones the volume button is a direct mute toggle; on desktop
- * docked columns hover or keyboard focus opens a slider popover above the
+ * docked columns hover or keyboard focus opens a vertical slider popover above the
  * button while clicks still toggle mute.
  *
  * Unlike `PlayerStage`'s wide fullscreen slider (CSS `:hover` / `:focus-within`),
