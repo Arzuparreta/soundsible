@@ -17,7 +17,7 @@ library, playlists and listening history on that computer. It needs no
 streaming subscription and no account with any service, and it is free and
 open source (MIT).
 
-<picture><source media="(prefers-color-scheme: light)" srcset="docs/images/readme-light.png"><img src="docs/images/readme-dark.png" alt="Soundsible desktop player with album artwork and queue, with the mobile music library overlapping its lower left corner" width="100%"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/images/readme-light.png"><img src="docs/images/readme-dark.png" alt="Soundsible desktop library with the player docked on the right, and the mobile music library overlapping its lower left corner" width="100%"></picture>
 
 <details>
 <summary>More screenshots: search, library and mobile lyrics</summary>

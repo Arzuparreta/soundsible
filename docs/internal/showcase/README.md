@@ -8,8 +8,8 @@ upper corners clear of the library header, with vector signal, Wi-Fi and
 battery icons. The library capture retains its original aspect ratio below
 that area. No swipe indicator overlays the capture.
 The transparent canvas follows the README background.
-The phone overlaps only the lower part of the desktop's left library pane,
-leaving the player and the entire right queue panel visible.
+The phone overlaps only the lower part of the desktop's left sidebar,
+leaving the song list and the entire docked player column visible.
 
 After installing the dependencies in `ui_web/`, run
 `node scripts/render_readme.mjs` from the repository root to compose both PNGs
