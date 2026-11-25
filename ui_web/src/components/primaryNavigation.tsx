@@ -1,4 +1,3 @@
-import { createSignal } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { t } from '../lib/i18n';
 import { DownloadIcon, menuIcons } from './icons';
@@ -102,15 +101,18 @@ export const libraryViews: PrimaryNavItem[] = [
 ];
 export const navigationItems = [...primaryNavigation, ...libraryShortcuts, ...libraryViews];
 export const defaultBottomNavigation = ['/', '/favourites', '/search', '/settings'];
-const [detailGroup, setDetailGroup] = createSignal('/search');
-export { detailGroup, setDetailGroup };
+
+export function isEntityPath(path: string): boolean {
+  return /^\/(album|artist)\//.test(path);
+}
 
 export function mobileNavGroup(path: string, search = ''): string {
+  // Artist and album pages are neutral detail views: no primary destination owns them.
+  if (isEntityPath(path)) return '';
   const params = new URLSearchParams(search);
   if (path === '/library' && ['songs', 'albums', 'artists'].includes(params.get('view') ?? '')) return `/library?view=${params.get('view')}`;
   if (['/', '/library'].includes(path) && ['bookmarks', 'albums', 'artists'].includes(params.get('saved') ?? '')) return '/?saved=bookmarks';
   if (path === '/' || path === '/library') return '/';
-  if (/^\/(album|artist)\//.test(path)) return detailGroup();
   return navigationItems.find(item => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)))?.href ?? path;
 }
 

@@ -34,7 +34,7 @@ test('artist links navigate without playing and preserve browser history', async
   await expect(page.getByRole('link', { name: 'Artista 7', exact: true }).first()).toBeVisible();
 });
 
-test('a library detail and the previous search restore independently', async ({ page, isMobile }) => {
+test('artist and album details stay neutral and leave tab memory intact', async ({ page, isMobile }) => {
   await page.route('**/api/catalog/artist**', route => route.fulfill({ json: {
     artist: 'Artista 7', resolved: true, in_library: true,
     top_tracks: [], albums: [{ title: 'Disco del catálogo', deezer_id: '20' }],
@@ -46,59 +46,61 @@ test('a library detail and the previous search restore independently', async ({ 
   await page.goto('/player/#/library?view=songs');
   await activate(page, page.getByRole('link', { name: 'Artista 7', exact: true }).first(), isMobile);
   await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
+  const activeNav = page.locator('[aria-current="page"][data-nav-href]').filter({ visible: true });
   const searchTab = page.locator('[data-nav-href="/search"]').filter({ visible: true });
   const libraryTab = page.locator('[data-nav-href="/"]').filter({ visible: true });
   const libraryOwner = isMobile ? libraryTab : page.locator('[data-nav-href="/library?view=songs"]');
-  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+  await expect(activeNav).toHaveCount(0);
 
   const scope = page.getByRole('combobox', { name: 'Contenido mostrado' });
   await scope.selectOption('discover');
   await activate(page, page.getByRole('link', { name: 'Disco del catálogo', exact: true }), isMobile);
   await expect(page.getByRole('heading', { name: 'Disco del catálogo', exact: true })).toBeVisible();
-  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+  await expect(activeNav).toHaveCount(0);
 
   await page.goBack();
   await expect(scope).toHaveValue('discover');
-  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+  await expect(activeNav).toHaveCount(0);
+
   await activate(page, searchTab, isMobile);
   await expect(page).toHaveURL(/#\/search\?q=disco$/);
   await expect(page.getByRole('searchbox')).toHaveValue('disco');
+  await expect(searchTab).toHaveAttribute('aria-current', 'page');
+
   await activate(page, libraryTab, isMobile);
-  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=discover/);
-  await expect(scope).toHaveValue('discover');
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
 });
 
-test('history restores the owning tab even when the detail URL is identical', async ({ page, isMobile }) => {
+test('opening an artist from the player on a utility tab stays neutral and leaves that tab untouched', async ({ page, isMobile }) => {
   const navigation = (href: string) => page.locator(`[data-nav-href="${href}"]`).filter({ visible: true });
-  const library = navigation('/');
-  const search = navigation('/search');
-  const libraryOwner = isMobile ? library : navigation('/library?view=songs');
+  const settings = navigation('/settings');
+  const activeNav = page.locator('[aria-current="page"][data-nav-href]').filter({ visible: true });
   await openMusicPlayer(page);
-  const artistLink = () => page.locator('[data-player-surface-open] [data-now-playing-tile="stage"]')
-    .getByRole('link', { name: 'Artista 7', exact: true });
-  await showPlayerPanel(page, 'stage');
-  await activate(page, artistLink(), isMobile);
-  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
-  const artistUrl = page.url();
+  if (isMobile) await page.keyboard.press('Escape');
+  await activate(page, settings, isMobile);
+  await expect(page).toHaveURL(/#\/settings$/);
+  await expect(settings).toHaveAttribute('aria-current', 'page');
 
-  await activate(page, search, isMobile);
-  await expect(page).toHaveURL(/#\/search$/);
   if (isMobile) await page.getByRole('button', { name: /^NORMAL:/ }).click();
   await showPlayerPanel(page, 'stage');
-  await activate(page, artistLink(), isMobile);
-  await expect(page).toHaveURL(artistUrl);
-  await expect(search).toHaveAttribute('aria-current', 'page');
+  const artistLink = page.locator('[data-player-surface-open] [data-now-playing-tile="stage"]')
+    .getByRole('link', { name: 'Artista 7', exact: true });
+  await activate(page, artistLink, isMobile);
+  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=discover/);
+  await expect(activeNav).toHaveCount(0);
 
-  await activate(page, library, isMobile);
-  await expect(page).toHaveURL(artistUrl);
-  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/settings$/);
+  await expect(settings).toHaveAttribute('aria-current', 'page');
 
-  await page.evaluate(() => history.back());
-  await expect(search).toHaveAttribute('aria-current', 'page');
-  await expect(page).toHaveURL(artistUrl);
-  await page.evaluate(() => history.forward());
-  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
-  await expect(page).toHaveURL(artistUrl);
+  await page.goForward();
+  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=discover/);
+  await expect(activeNav).toHaveCount(0);
+
+  await activate(page, settings, isMobile);
+  await expect(page).toHaveURL(/#\/settings$/);
+  await expect(settings).toHaveAttribute('aria-current', 'page');
 });
 
 test('full player artist opens the general page while keeping the current song and queue', async ({ page, isMobile }) => {
@@ -114,9 +116,9 @@ test('full player artist opens the general page while keeping the current song a
   await showPlayerPanel(page, 'stage');
   const link = stage.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await activate(page, link, isMobile);
-  // Opening the full discography preserves the underlying navigation section.
+  // Entity details are neutral: opening the full discography highlights no section tab.
   await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=discover/);
-  await expect(page.locator('[aria-current="page"][data-nav-href="/search"]').filter({ visible: true })).toHaveCount(0);
+  await expect(page.locator('[aria-current="page"][data-nav-href]').filter({ visible: true })).toHaveCount(0);
   if (isMobile) {
     // A phone's player covers the app, so it steps aside for the page.
     await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);

@@ -18,7 +18,7 @@ import { trackCount } from '../lib/format';
 import { formatReleaseDate, formatTotalDuration } from '../lib/releaseFormat';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
-import { albumPath, artistKey, decodeArtistName, parseViewParams } from '../lib/artistRoute';
+import { albumPath, artistKey, artistPath, decodeArtistName, parseViewParams } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumProfile, AlbumSummary, CatalogAlbum, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
@@ -34,7 +34,6 @@ import { ReleaseShelf } from '../components/ArtistDiscoveryView';
 import { openSavedEntityMenu } from '../components/savedEntityActions';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { EntityTrackList } from '../components/EntityTrackList';
-import { detailGroup } from '../components/primaryNavigation';
 import { tabRoot } from '../lib/tabMemory';
 
 type ViewMode = 'discover' | 'library';
@@ -298,7 +297,9 @@ export default function Album() {
 
   const back = () => navigateBackOr(
     navigate,
-    tabRoot(detailGroup()) ?? detailGroup(),
+    view() === 'library'
+      ? (tabRoot('/') ?? '/')
+      : (tabRoot('/search') ?? (artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search')),
   );
   let openCollectionMenu = () => {};
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : tracklist().length > 0;

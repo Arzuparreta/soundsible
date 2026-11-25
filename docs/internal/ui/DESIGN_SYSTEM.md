@@ -34,20 +34,22 @@ Existing imports from `components/Button`, `components/CoverImage` and
 
 ## Navigation decision (U4)
 
-Artist and album details inherit the navigation group of the page that opened
-them. Nested details keep that group. On the web, each history entry records
-the group so Back, Forward, and tab restores can distinguish visits to the
-same URL from different sections. A standalone link defaults to Search.
+Artist and album detail pages are neutral: no primary navigation tab or
+sidebar entry claims them (`aria-current="page"` / `aria-pressed="true"`), and
+visiting them leaves every section's saved location and scroll state intact.
+Back returns to the originating page through browser history (or falls back to
+Library for `view=library` and Discover for `view=discover` on cold deep
+links); selecting any tab returns directly to that section's last state.
 
 The URL selects the music shown and played in the detail. A library link
 opens the listener's tracks, with access to the full catalog from the scope
-selector. Changing scope replaces the detail URL and keeps the navigation
-group. Existing entity links continue to resolve.
+selector. Changing scope replaces the detail URL in place. Existing entity
+links continue to resolve.
 
-The Android Library keeps its list mounted behind an open detail. The
-detail's Back control returns to that list and its scroll position.
-Reselecting Library returns to Songs. Selecting Search opens its own
-surface with its own detail history.
+On Android, the originating surface stays mounted behind an open detail with no
+tab pressed. The detail's Back control returns to that surface and its scroll
+position, while selecting any tab closes the detail and switches directly to
+that tab.
 
 ## Enforcement
 

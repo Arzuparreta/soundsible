@@ -35,7 +35,6 @@ import { CatalogResultRow } from '../components/CatalogResultRow';
 import { ArtistDiscoveryView, fansLabel } from '../components/ArtistDiscoveryView';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { EntityTrackList } from '../components/EntityTrackList';
-import { detailGroup } from '../components/primaryNavigation';
 import { tabRoot } from '../lib/tabMemory';
 
 type ViewMode = 'discover' | 'library';
@@ -328,7 +327,10 @@ export default function Artist() {
     setSearchParams({ view: mode }, { replace: true });
   };
 
-  const back = () => navigateBackOr(navigate, tabRoot(detailGroup()) ?? detailGroup());
+  const back = () => navigateBackOr(
+    navigate,
+    view() === 'library' ? (tabRoot('/') ?? '/') : (tabRoot('/search') ?? '/search'),
+  );
   let openCollectionMenu = () => {};
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;
   const radioLabel = () => t(player().autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');

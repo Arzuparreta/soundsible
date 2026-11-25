@@ -1,5 +1,6 @@
-import { useNavigate, type RouteSectionProps } from '@solidjs/router';
+import { useLocation, useNavigate, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createSignal, onCleanup, onMount, Show, type Component } from 'solid-js';
+import { rememberTabLocation } from './lib/tabMemory';
 import { registerMusicNavigator } from './lib/musicNavigation';
 import { nowPlayingOpen } from './stores';
 import { player } from './stores/player';
@@ -24,6 +25,8 @@ import styles from './app.module.css';
  */
 export default function Shell(props: RouteSectionProps) {
   onCleanup(registerMusicNavigator(useNavigate()));
+  const location = useLocation();
+  createEffect(() => rememberTabLocation(location.pathname, location.search));
   const [playerSurface, setPlayerSurface] = createSignal<Component>();
   let loadingPlayerSurface = false;
   const loadPlayerSurface = () => {

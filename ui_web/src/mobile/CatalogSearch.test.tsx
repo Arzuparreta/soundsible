@@ -351,3 +351,33 @@ it('shows the passive cold-start hint on Android and emits music_search_played o
     expect.objectContaining({ title: 'Song', artist: 'Artist', source: 'search' }),
   );
 });
+
+it('reports neutral detail visibility, skips feed loading in detailOnly mode, and closes on closeDetailToken', async () => {
+  mocks.artist.mockResolvedValue({ name: 'Artist', deezer_id: '11', resolved: true, candidates: [], top_tracks: [], albums: [], singles_eps: [], related_artists: [], in_library: false, cached: false });
+  const states: boolean[] = [];
+  const [closeToken, setCloseToken] = createSignal(0);
+  const [request, setRequest] = createSignal<{ path: string; id: number } | null>({ path: '/artist/Artist?view=library', id: 1 });
+  const detailView = render(() => (
+    <CatalogSearch
+      detailOnly
+      openRequest={request()}
+      onRequestHandled={() => setRequest(null)}
+      onDetailChange={open => states.push(open)}
+      closeDetailToken={closeToken()}
+      generation={1}
+      tracks={[]}
+      saved={[]}
+      disconnected={false}
+      onPlay={vi.fn()}
+      onChanged={vi.fn()}
+    />
+  ));
+  await waitFor(() => expect(detailView.getByRole('heading', { name: 'Artist' })).toBeTruthy());
+  expect(detailView.container.querySelector('[data-testid="android-catalog-search"]')).toBeNull();
+  expect(mocks.feed).not.toHaveBeenCalled();
+  expect(states).toEqual([true]);
+
+  setCloseToken(1);
+  await waitFor(() => expect(detailView.queryByRole('heading', { name: 'Artist' })).toBeNull());
+  expect(states).toEqual([true, false]);
+});

@@ -67,25 +67,29 @@ class SongMenuTest {
                 web.evaluate(scenario, "localStorage.setItem('lang','en')"); scenario.recreate()
                 waitFor("!!document.querySelector('[data-testid=android-library]')&&!document.documentElement.hasAttribute('data-booting')")
 
-                // Both details open in Library. The Library tab and Back each return to the collection.
+                // Entity details are neutral (no nav tab pressed). Back and Library return to the collection; Discover opens cleanly.
                 openMenu()
                 waitFor("!!${menuButton("Go to artist")}&&!!${menuButton("Go to album")}&&!!${menuButton("Play on device")}")
                 web.evaluate(scenario, "${menuButton("Go to album")}.click()")
                 waitFor("document.querySelector('[data-testid=android-entity-profile] h1')?.textContent==='member album'")
-                waitFor("Array.from(document.querySelectorAll('nav button')).some(b=>b.textContent==='Library'&&b.getAttribute('aria-pressed')==='true')")
+                waitFor("Array.from(document.querySelectorAll('nav button')).every(b=>b.getAttribute('aria-pressed')!=='true')")
                 waitFor("document.querySelector('[data-testid=android-entity-profile]').innerText.includes('member private song')")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='Library').click()")
+                waitFor("Array.from(document.querySelectorAll('nav button')).some(b=>b.textContent==='Library'&&b.getAttribute('aria-pressed')==='true')")
                 web.revealLibraryTrack(scenario, "member-track")
                 waitFor("!!document.querySelector('[data-browse-track-id=member-track]')")
                 openMenu(); web.evaluate(scenario, "${menuButton("Go to artist")}.click()")
                 waitFor("document.querySelector('[data-testid=android-entity-profile] h1')?.textContent==='member artist'")
+                waitFor("Array.from(document.querySelectorAll('nav button')).every(b=>b.getAttribute('aria-pressed')!=='true')")
                 waitFor("document.querySelector('[data-testid=android-entity-profile]').innerText.includes('member private song')")
                 web.evaluate(scenario, "document.querySelector('[data-testid=android-entity-profile] button[aria-label=Back]').click()")
                 waitFor("!document.querySelector('[data-testid=android-entity-profile]')&&!!document.querySelector('[data-testid=android-library]')")
+                waitFor("Array.from(document.querySelectorAll('nav button')).some(b=>b.textContent==='Library'&&b.getAttribute('aria-pressed')==='true')")
                 openMenu(); web.evaluate(scenario, "${menuButton("Go to artist")}.click()")
                 waitFor("document.querySelector('[data-testid=android-entity-profile] h1')?.textContent==='member artist'")
                 web.evaluate(scenario, "document.querySelector('[data-android-discover]').click()")
                 waitFor("!!document.querySelector('[data-testid=android-catalog-search]')&&!document.querySelector('[data-testid=android-entity-profile]')")
+                waitFor("document.querySelector('[data-android-discover]')?.getAttribute('aria-pressed')==='true'")
 
                 // Play on device lists the other online device only, and that device is asked to play this song.
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='Library').click()")
