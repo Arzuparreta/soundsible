@@ -17,14 +17,19 @@ const LATIN_FOLDS: Record<string, string> = { ø: 'o', ł: 'l', đ: 'd', æ: 'ae
  * from `и`, and Thai tone marks, Devanagari signs and kana voicing marks still
  * tell words apart.
  */
-export function normalizeLibraryQuery(value: string): string {
+export function foldSearchText(value: string): string {
   return value
     .normalize('NFKD')
     .replace(/([A-Za-z\u0370-\u03ff])[\u0300-\u036f]+/g, '$1')
-    .toLocaleLowerCase()
-    .replace(/[øłđæœß]/g, letter => LATIN_FOLDS[letter])
-    .trim()
-    .replace(/\s+/g, ' ');
+    // Not toLocaleLowerCase: under a Turkish locale `I` would become `ı` and
+    // `imagine` would stop finding `Imagine Dragons`.
+    .toLowerCase()
+    .replace(/[øłđæœß]/g, letter => LATIN_FOLDS[letter]);
+}
+
+/** `foldSearchText` with outer space trimmed and inner runs collapsed. */
+export function normalizeLibraryQuery(value: string): string {
+  return foldSearchText(value).trim().replace(/\s+/g, ' ');
 }
 
 export type SearchFieldValue = string | null | undefined;

@@ -35,7 +35,7 @@ vi.mock('../components/SettingsSections', () => {
 
 function mount(path = '/settings') {
   window.history.replaceState({}, '', `/player/#${path}`);
-  const Root = (props: RouteSectionProps) => <><main><AppBar /><div data-app-outlet>{props.children}</div><PageIndicator /></main><TabBar /><OverlayOutlet /></>;
+  const Root = (props: RouteSectionProps) => <><main><AppBar /><PageIndicator /><div data-app-outlet>{props.children}</div></main><TabBar /><OverlayOutlet /></>;
   return render(() => <HashRouter root={Root}>
     <Route path="/settings" component={Settings} />
     <Route path="/settings/:section" component={Settings} />

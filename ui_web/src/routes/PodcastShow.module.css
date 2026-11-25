@@ -93,13 +93,6 @@
 .epDownloaded {
   color: var(--success);
 }
-@media (hover: hover) and (pointer: fine) {
-.back:hover {
-  color: var(--ink-primary);
-  background: var(--bg-raised);
-}
-}
-
 /* Following remains directly available on a show opened from the directory. */
 .follow {
   flex-shrink: 0;

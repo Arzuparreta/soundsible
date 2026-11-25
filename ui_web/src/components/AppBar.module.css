@@ -232,7 +232,10 @@
   position: absolute;
   right: calc(var(--gutter) + env(safe-area-inset-right, 0px));
   bottom: var(--space-sm);
-  z-index: var(--z-base);
+  /* Above anything a route raises inside the outlet (row links, badges,
+     sticky headers); the outlet is not its own stacking context, because
+     its menus must still clear the dock. */
+  z-index: var(--z-header);
   max-width: calc(100% - var(--gutter) * 2);
   margin: 0;
   font-size: var(--text-micro);

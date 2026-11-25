@@ -19,6 +19,13 @@ function pageScroller(from: HTMLElement): HTMLElement | null {
     ?? null;
 }
 
+/** A page's own title tap if it set one, otherwise the page back to its top. */
+function returnToTop(from: HTMLElement) {
+  const custom = currentAppBar()?.onTitleTap;
+  if (custom) return custom();
+  pageScroller(from)?.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+}
+
 /**
  * The top bar of the touch shell: one instance, mounted by the shell, never by
  * a page. The leading control is Menu or Back, with page commands at the
@@ -74,11 +81,7 @@ export function AppBar() {
     schedule();
   });
 
-  const toTop = () => {
-    const custom = bar()?.onTitleTap;
-    if (custom) return custom();
-    root && pageScroller(root)?.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-  };
+  const toTop = () => root && returnToTop(root);
 
   const title = () => bar()?.indicator ? '' : bar()?.title() ?? '';
   const echoed = () => !!bar()?.heading;
@@ -165,11 +168,7 @@ function ActionButton(props: { action: AppBarAction; desktop?: boolean }) {
 export function PageIndicator() {
   const bar = currentAppBar;
   const title = () => bar()?.indicator ? bar()?.title() : undefined;
-  const toTop = (event: MouseEvent & { currentTarget: HTMLButtonElement }) => {
-    const custom = bar()?.onTitleTap;
-    if (custom) custom();
-    else pageScroller(event.currentTarget)?.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-  };
+  const toTop = (event: MouseEvent & { currentTarget: HTMLButtonElement }) => returnToTop(event.currentTarget);
   return <Show when={title()}>
     <h1 class={styles.indicator} data-page-indicator>
       <Control class={styles.indicatorButton} onClick={toTop}>{title()}</Control>
