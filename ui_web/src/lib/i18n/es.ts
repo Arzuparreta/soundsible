@@ -183,6 +183,7 @@ export const es: Dict = {
     },
   },
   common: {
+    clearSearch: 'Borrar búsqueda',
     loadFailed: 'No se ha podido cargar. Inténtalo de nuevo.',
     play: 'Reproducir',
     pause: 'Pausar',
@@ -386,7 +387,6 @@ export const es: Dict = {
     noCollectionMatches: 'No hay coincidencias en esta lista.',
     filterCollection: 'Filtrar esta lista',
     filterLoadedEpisodes: 'Buscar en episodios cargados',
-    filterSubscriptions: 'Filtrar suscripciones',
     filterLive: 'Filtrar salas en directo',
     searchAction: 'Buscar en biblioteca',
     title: 'Tu biblioteca',
@@ -416,7 +416,6 @@ export const es: Dict = {
     filterTitle: 'Mostrar sólo',
     filterDownloaded: 'Descargadas',
     searchLibrary: 'Buscar canciones y artistas',
-    clearSearch: 'Limpiar búsqueda en la biblioteca',
     noSearchResults: 'No hay canciones ni artistas que coincidan.',
     resultTrack: 'Canción',
     resultArtist: 'Artista',
@@ -990,7 +989,6 @@ export const es: Dict = {
   },
   searchPanel: {
     noResolve: 'No se pudo resolver la canción',
-    clear: 'Borrar búsqueda',
   },
   searchResultRow: {
     ariaRadio: 'Radio: más como esto',

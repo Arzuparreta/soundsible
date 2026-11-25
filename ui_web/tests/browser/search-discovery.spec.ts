@@ -316,8 +316,9 @@ test('refresh control triggers rotation request and labels singles and EPs', asy
   const headerScope = page.locator(isMobile ? '[data-app-bar]' : '[data-app-outlet]');
   const refresh = headerScope.getByRole('button', { name: 'Actualizar' });
   await expect(refresh).toBeVisible();
-  await expect(headerScope.getByRole('heading', { level: 1 })).toHaveCount(0);
-  await expect(page.locator('[data-page-indicator]')).toHaveText('Descubrir');
+  await expect(headerScope.getByRole('heading', { level: 1 })).toHaveCount(isMobile ? 1 : 0);
+  await expect(page.getByRole('heading', { name: 'Descubrir', level: 1 })).toBeVisible();
+  await expect(page.locator('[data-page-indicator]')).toHaveCount(isMobile ? 0 : 1);
 
   await refresh.click();
   await expect(home.getByText('Nuevo sencillo')).toBeVisible();

@@ -2,24 +2,16 @@
    The field and desktop commands stay above the results. The suggestions
    dropdown follows the same gutters as the field. */
 .searchBox {
-  --search-top: var(--view-top, var(--space-lg));
   position: relative;
   flex-shrink: 0;
   z-index: 5;
-}
-
-.bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--search-top) var(--gutter) var(--space-sm);
 }
 
 .suggest {
   position: absolute;
   left: var(--gutter);
   right: var(--gutter);
-  top: calc(var(--search-top) + var(--control-h) + var(--space-xs));
+  top: 100%;
   padding: var(--space-2xs);
   background: var(--bg-elevated);
   border: 1px solid var(--hairline);

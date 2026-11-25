@@ -34,7 +34,7 @@ export interface AppBarAction {
  */
 export interface AppBarConfig {
   title: () => string;
-  /** Routine pages label themselves at the foot of the view. */
+  /** Routine pages get a small label at the foot of the desktop view. */
   indicator?: boolean;
   /** A detail page returns with this instead of opening the menu. */
   back?: () => void;

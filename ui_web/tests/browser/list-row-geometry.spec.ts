@@ -105,3 +105,30 @@ test('mounted mixed results follow live density and desktop/mobile breakpoint ch
     }
   }
 });
+
+test('collection fields fill the toolbar before any totals or commands', async ({ page, isMobile }) => {
+  await mockLists(page);
+  const routes = ['/favourites', '/playlists', '/playlists/Halo',
+    '/artist/Halo%20artista%200?view=library',
+    '/album/Halo%20%C3%A1lbum?artist=Halo%20artista%200&view=library'];
+  if (!isMobile) routes.unshift('/library?view=songs');
+  for (const route of routes) await test.step(route, async () => {
+    await page.goto(`/player/#${route}`);
+    const toolbar = page.locator('main [data-page-toolbar]').filter({ has: page.getByRole('searchbox') });
+    await expect(toolbar.getByRole('searchbox')).toBeVisible();
+    expect(await toolbar.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const field = element.firstElementChild!.getBoundingClientRect();
+      const last = element.lastElementChild!.getBoundingClientRect();
+      const gutter = parseFloat(style.getPropertyValue('--gutter'));
+      const insetLeft = box.left + gutter;
+      const insetRight = box.right - gutter;
+      return {
+        inset: Math.abs(field.left - insetLeft) <= 1,
+        fills: Math.abs(last.right - insetRight) <= 1,
+        row: Math.abs((last.top + last.bottom) / 2 - (field.top + field.bottom) / 2) <= 1,
+      };
+    })).toEqual({ inset: true, fills: true, row: true });
+  });
+});

@@ -44,6 +44,7 @@
    is left over and never a pixel the name still needs: a zero basis is what
    says that, where competing shrink factors only ever slow the theft down. */
 .annotation { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--accent-ink); }
+.annotation[data-visible-annotation] { flex: 0 0 auto; max-width: 50%; }
 /* The artist carries its own touch target, which makes it an inline-block —
    and an inline-block truncates all or nothing: too narrow, and the whole name
    is replaced by the line's ellipsis rather than losing its last letters. That

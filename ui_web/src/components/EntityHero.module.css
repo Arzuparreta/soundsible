@@ -71,6 +71,7 @@ button.art { cursor: pointer; }
 }
 .toolbar > :last-child { grid-column: 3; }
 .primaryActions {
+  grid-column: 2;
   display: inline-flex; align-items: center; gap: var(--space-xs);
   min-width: 0;
 }

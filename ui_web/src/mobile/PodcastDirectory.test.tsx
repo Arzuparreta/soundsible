@@ -32,7 +32,7 @@ it('recommends top shows not yet followed, and their menu subscribes or sends "n
     { title: 'Followed show', rss_url: 'https://example.com/followed' }];
   mocks.request.mockImplementation((path: string) => Promise.resolve(path.includes('recommendations') ? { items: top } : { recorded: true, event_id: 'e1' }));
   const subscribe = vi.fn().mockResolvedValue(undefined), open = vi.fn();
-  const view = render(() => <PodcastDirectory generation={1} onOpen={open} subscribed={feed => feed === 'https://example.com/followed'} onSubscribe={subscribe} />);
+  const view = render(() => <PodcastDirectory generation={1} onOpen={open} subscriptions={[{ id: 'followed', title: 'Followed show', rss_url: 'https://example.com/followed' }]} onSubscribe={subscribe} />);
   await waitFor(() => expect(view.getByText('Top show')).toBeTruthy());
   expect(view.queryByText('Followed show')).toBeNull();
   fireEvent.click(view.getByText('Top show')); expect(open).toHaveBeenCalledWith(expect.objectContaining({ rss_url: 'https://example.com/top' }));

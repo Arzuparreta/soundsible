@@ -49,7 +49,7 @@ describe('ViewHeader on the desktop shell', () => {
 });
 
 describe('ViewHeader on the touch shell', () => {
-  it('hands commands to the top bar and labels the page at the foot of the view', () => {
+  it('puts the title and commands in the touch bar', () => {
     const onSelect = vi.fn();
     render(() => (
       <InShell>
@@ -63,7 +63,8 @@ describe('ViewHeader on the touch shell', () => {
     ));
 
     const bar = document.querySelector<HTMLElement>('[data-app-bar]')!;
-    expect(bar).not.toContainElement(screen.getByRole('heading', { name: 'Your library', level: 1 }));
+    expect(bar).toContainElement(screen.getByRole('heading', { name: 'Your library', level: 1 }));
+    expect(document.querySelector('[data-page-indicator]')).toBeNull();
     expect(screen.getAllByRole('heading')).toHaveLength(1);
     expect(screen.queryByText('12 songs')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Desktop only' })).toBeNull();
@@ -97,8 +98,8 @@ describe('ViewHeader on the touch shell', () => {
     ));
 
     const bar = document.querySelector<HTMLElement>('[data-app-bar]')!;
-    expect(bar).not.toHaveTextContent('Page');
-    expect(document.querySelector('[data-page-indicator]')).toHaveTextContent('Page');
+    expect(bar).toHaveTextContent('Page');
+    expect(document.querySelector('[data-page-indicator]')).toBeNull();
     expect(bar).not.toHaveTextContent('Panel');
     expect(screen.getByRole('heading', { name: 'Panel' })).toBeInTheDocument();
   });

@@ -1,0 +1,5 @@
+.count {
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}

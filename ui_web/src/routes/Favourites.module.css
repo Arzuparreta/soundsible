@@ -1,3 +1,5 @@
 .link {
   margin-top: var(--space-md);
 }
+
+.page { --list-inline-padding: var(--gutter); }

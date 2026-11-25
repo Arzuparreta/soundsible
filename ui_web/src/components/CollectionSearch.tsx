@@ -3,7 +3,7 @@ import { t } from '../lib/i18n';
 import { filterLocalCollection, normalizeLibraryQuery, type SearchFieldValue } from '../lib/librarySearch';
 import { EmptyState } from './EmptyState';
 import { SearchField } from './SearchField';
-import styles from './CollectionSearch.module.css';
+import { PageToolbar } from './PageToolbar';
 
 /** Filters available rows in place. The source array still owns their order and identity. */
 export function createCollectionSearch() {
@@ -26,25 +26,32 @@ export function createCollectionSearch() {
   return { value, setValue, query, filter, positions };
 }
 
-export function CollectionSearch(props: {
+type CollectionSearchProps = {
   search: Pick<ReturnType<typeof createCollectionSearch>, 'value' | 'setValue'>;
   placeholder?: string;
-  inset?: boolean;
-  toolbar?: boolean;
+};
+
+export function CollectionSearch(props: CollectionSearchProps) {
+  return <SearchField
+    value={props.search.value()}
+    placeholder={props.placeholder ?? t('library.filterCollection')}
+    onInput={props.search.setValue}
+    onKeyDown={event => {
+      if (event.key !== 'Escape' || event.isComposing || !props.search.value()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      props.search.setValue('');
+    }}
+  />;
+}
+
+export function CollectionToolbar(props: CollectionSearchProps & {
+  contained?: boolean;
+  actions?: JSX.Element;
+  meta?: JSX.Element;
 }) {
-  return <div class={styles.search} data-inset={props.inset ? '' : undefined} data-toolbar-field={props.toolbar ? '' : undefined}>
-    <SearchField
-      value={props.search.value()}
-      placeholder={props.placeholder ?? t('library.filterCollection')}
-      onInput={props.search.setValue}
-      onKeyDown={event => {
-        if (event.key !== 'Escape' || event.isComposing || !props.search.value()) return;
-        event.preventDefault();
-        event.stopPropagation();
-        props.search.setValue('');
-      }}
-    />
-  </div>;
+  return <PageToolbar contained={props.contained} field={<CollectionSearch search={props.search} placeholder={props.placeholder} />}
+    meta={props.meta} actions={props.actions} />;
 }
 
 export function NoCollectionMatches() {

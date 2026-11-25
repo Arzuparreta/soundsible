@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockMusicEngine, TRACKS, fixtureWav } from './music-browser-fixture';
 import { dragTouch } from './playerGestures';
 
-const FOLLOWED = { id: 'show-1', title: 'Programa seguido', author: 'Autora', rss_url: 'https://feeds.example.com/seguido.xml', image_url: null };
+const FOLLOWED = { id: 'show-1', title: 'Programa seguido', author: 'Autora', rss_url: 'https://feeds.example.com/seguido.xml', image_url: null, itunes_collection_id: '11' };
 const POPULAR = { title: 'Programa popular', author: 'Alguien', feed_url: 'https://feeds.example.com/popular.xml', recommendation_identity: 'podcast:popular' };
 const FOUND = { title: 'Programa buscado', author: 'Otra persona', feed_url: 'https://feeds.example.com/buscado.xml' };
 const episode = (title: string) => ({ guid: title, title, enclosure_url: `https://cdn.example.com/${encodeURIComponent(title)}.mp3`, duration_sec: 600 });
@@ -151,7 +151,7 @@ test('a search result opens its show, and its own button still follows without o
   await expect(result).toBeVisible();
   if (!isMobile) {
     await page.getByRole('button', { name: 'Suscribir', exact: true }).click();
-    await expect(page.getByText('Suscrito', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Programa buscado.*Suscrito/ })).toBeVisible();
     await expect(page).toHaveURL(/#\/podcasts\?q=buscado$/);
     expect(followed).toEqual([FOUND.feed_url]);
   }
@@ -284,7 +284,7 @@ test('podcast buttons jump 15 seconds and each show resumes after switching and 
   await expect(pill.getByRole('button', { name: 'Avanzar 15 segundos' })).toBeVisible();
 });
 
-test('the globe selects the account country from the mobile header or desktop search bar', async ({ page, isMobile }, testInfo) => {
+test('the globe selects the account country beside the search field', async ({ page }, testInfo) => {
   await mockPodcasts(page);
   let country = 'us';
   await page.route('**/api/discovery/settings', async route => {
@@ -302,13 +302,11 @@ test('the globe selects the account country from the mobile header or desktop se
   await page.goto('/player/#/podcasts');
   const selector = page.getByRole('combobox', { name: 'País para descubrir podcasts' });
   await expect(selector).toHaveValue('us');
-  if (isMobile) {
-    await expect(page.locator('[data-app-bar]').getByRole('combobox')).toBeVisible();
-  } else {
-    const search = await page.getByPlaceholder('Buscar podcasts…').boundingBox();
-    const globe = await selector.boundingBox();
-    expect(globe!.x).toBeGreaterThan(search!.x + search!.width);
-  }
+  const search = page.getByPlaceholder('Buscar podcasts…');
+  const field = (await search.boundingBox())!;
+  const globe = (await selector.boundingBox())!;
+  expect(globe.x).toBeGreaterThan(field.x + field.width);
+  expect(globe.y + globe.height / 2).toBeCloseTo(field.y + field.height / 2, 0);
   await selector.selectOption('es');
   await expect(selector).toHaveValue('es');
   await expect(page.getByRole('heading', { name: 'Podcasts populares en España' })).toBeVisible();
@@ -441,4 +439,39 @@ test('category filters both country rankings while keeping followed shows visibl
   await expect(page.getByText('Programa seguido', { exact: true })).toBeVisible();
   await category.selectOption('');
   await expect(page.getByText('Podcast noticias', { exact: true })).toBeVisible();
+});
+
+test('one podcast search combines followed and directory shows and keeps local matches on directory failure', async ({ page }) => {
+  const { followed } = await mockPodcasts(page);
+  const credit = 'Autora y productora del programa de entrevistas y conversaciones sobre música';
+  await page.route(url => url.pathname === '/api/library', route => route.fulfill({ json: {
+    tracks: TRACKS, playlists: {}, settings: {}, podcast_subscriptions: [{ ...FOLLOWED, author: credit }],
+  } }));
+  const followedVariant = { ...FOUND, title: 'Programa alias del directorio', feed_url: 'https://feeds.example.com/alias.xml', itunes_collection_id: FOLLOWED.itunes_collection_id };
+  let failDirectory = false;
+  await page.route('**/api/discovery/podcasts/search?**', route => route.fulfill(failDirectory
+    ? { status: 502, json: { results: [] } }
+    : { json: { results: [followedVariant, { ...followedVariant, feed_url: FOLLOWED.rss_url }, FOUND] } }));
+  await page.goto('/player/#/podcasts');
+  await expect(page.getByText('Programa seguido', { exact: true })).toBeVisible();
+  await expect(page.locator('main input[type="search"]')).toHaveCount(1);
+  const field = page.getByPlaceholder('Buscar podcasts…');
+
+  await field.fill('programa');
+  const local = page.getByRole('link', { name: /Programa seguido.*Suscrito/ });
+  await expect(local).toBeVisible();
+  const marker = local.locator('xpath=ancestor::*[@data-music-list-row]').locator('[data-visible-annotation]');
+  await expect(marker).toHaveText(/Suscrito/);
+  expect(await marker.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await expect(page.getByText('Programa buscado', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('Programa alias del directorio')).toHaveCount(0);
+
+  failDirectory = true;
+  await field.fill('autora');
+  await expect(local).toBeVisible();
+  await expect(page.getByText('No se pudo completar la búsqueda.')).toBeVisible();
+  await expect(page.getByText('Programa buscado', { exact: true })).toHaveCount(0);
+  await local.click();
+  await expect(page).toHaveURL(/#\/podcasts\/show-1$/);
+  expect(followed).toEqual([]);
 });

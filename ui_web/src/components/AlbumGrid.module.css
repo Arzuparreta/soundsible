@@ -58,12 +58,6 @@
   max-width: 100%;
 }
 
-.count {
-  font-size: var(--text-caption);
-  color: var(--ink-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
 /* Cover and title are one block, so the card's row gap opens below them rather
    than between the sleeve and the name it carries. */
 .sleeve { display: flex; flex-direction: column; min-width: 0; }

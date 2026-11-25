@@ -3,7 +3,6 @@
   color: var(--ink-primary);
 }
 
-.directoryHead button,
 .roomTop button,
 .renameActions button {
   min-height: var(--control-h);
@@ -191,7 +190,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-xs);
 }
 
 .directoryHead h2 {
@@ -199,7 +198,6 @@
   font-size: var(--text-h2);
 }
 
-.directoryHead button,
 .roomTop button {
   color: var(--ink-secondary);
   background: var(--bg-raised);

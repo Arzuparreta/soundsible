@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from './CollectionSearch';
+import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from './CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { createEffect, createMemo, createSignal, on, createUniqueId, For, Show, type JSX } from 'solid-js';
 import type { AlbumSummary, ArtistSummary, CatalogItem } from '../types/music';
@@ -122,7 +122,7 @@ export function ArtistDiscoveryView(props: {
     <Show when={topTracks().length > 0}>
       <section class={`${styles.section} ${styles.topSection}`}>
         <h2 class={styles.topTitle}>{t('artist.topTracks')}</h2>
-        <CollectionSearch search={search} />
+        <CollectionToolbar search={search} contained />
         <Show when={shown().length} fallback={<NoCollectionMatches />}>
           <div class={styles.trackList}>
             <For each={shown()}>{(item, index) => props.renderSong(item, () => index() + 1, shown, rank(item))}</For>

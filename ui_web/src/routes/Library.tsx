@@ -205,7 +205,7 @@ export default function Library() {
     isMobile() ? `--search-reveal:${searchProgress()};--search-offset:${(1 - searchProgress()) * -8}px` : undefined;
   const searchHidden = () => isMobile() && searchProgress() === 0;
 
-  /** Desktop keeps the filter below the title; mobile reveals it on swipe. */
+  /** Mobile reveals the library field on swipe. */
   const searchField = () => (
     <SearchField
       value={query()}
@@ -278,7 +278,7 @@ export default function Library() {
     <div ref={viewRef} class="view">
       <ViewHeader
         title={t(`library.${libraryTab()}` as 'library.songs')}
-        desktopField={<div class={styles.desktopSearch}>{searchField()}</div>}
+        desktopField={searchField()}
         rendersOwnCommands
         barActions={[
           { label: t('library.searchAction'), icon: () => <SearchIcon />, onSelect: revealSearch },

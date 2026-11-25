@@ -60,7 +60,7 @@ async function mockEngine(page: Page) {
   });
 }
 
-test('tapping the library indicator returns a scrolled track list to the top', async ({ page }) => {
+test('tapping the library title returns a scrolled track list to the top', async ({ page, isMobile }) => {
   await mockEngine(page);
   await page.addInitScript(() => {
     localStorage.clear();
@@ -68,7 +68,7 @@ test('tapping the library indicator returns a scrolled track list to the top', a
   });
   await page.goto('/player/#/library?view=songs');
 
-  const heading = page.locator('[data-page-indicator]').getByRole('button', { name: 'Songs' });
+  const heading = page.locator(isMobile ? '[data-app-bar]' : '[data-page-indicator]').getByRole('button', { name: 'Songs' });
   await expect(heading).toBeVisible();
   await expect(page.getByText('Track 80')).toBeVisible();
 

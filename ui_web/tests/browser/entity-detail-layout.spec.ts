@@ -111,14 +111,10 @@ async function expectFullTitle(heading: Locator, title: string) {
   })).toBe(true);
 }
 
-/** Allow the field and its margin while retaining the hero's original height budget. */
+/** Allow the shared toolbar while retaining the hero's height budget. */
 async function fieldFootprint(field: Locator) {
   await expect(field).toBeVisible();
-  return field.evaluate(element => {
-    const wrapper = element.parentElement!.parentElement!;
-    const style = getComputedStyle(wrapper);
-    return wrapper.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
-  });
+  return field.evaluate(element => element.closest('[data-page-toolbar]')!.getBoundingClientRect().height);
 }
 
 for (const kind of ['album', 'artist'] as const) {

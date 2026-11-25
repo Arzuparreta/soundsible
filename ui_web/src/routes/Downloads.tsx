@@ -56,12 +56,12 @@ export default function Downloads() {
     <div class="view">
       <ViewHeader
         title={t('downloads.title')}
-        meta={summary()}
+        field={hasDownloads() ? <CollectionSearch search={search} /> : undefined}
+        meta={hasDownloads() ? summary() : undefined}
         barActions={counts().failed > 0
           ? [{ label: t('downloads.clearErrors'), tone: 'danger', icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]
           : []}
       />
-      <Show when={hasDownloads()}><CollectionSearch search={search} inset /></Show>
 
       <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
         <Show when={failed()}>

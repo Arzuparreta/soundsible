@@ -1,5 +1,5 @@
 import { liveRoomSearchFields } from '../lib/librarySearch';
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { createEffect, createSignal, onMount, onCleanup, For, Show } from 'solid-js';
 import { nativeLive, type NativeLiveState, type NativeLiveCommand } from './live';
 import { t } from '../lib/i18n';
@@ -118,7 +118,7 @@ export function NativeLive(props: { generation: () => number; current: () => boo
     </section>}</Show>
     <div class={styles.directory}><h3>{t('live.directory')}</h3><button disabled={busy()} onClick={() => void refresh()}>{t('live.refresh')}</button></div>
     <Show when={rooms().length} fallback={<p>{config()?.state === 'available' ? t('live.empty') : t('live.unavailable')}</p>}>
-      <CollectionSearch search={search} placeholder={t('library.filterLive')} />
+      <CollectionToolbar contained search={search} placeholder={t('library.filterLive')} />
       <Show when={filteredRooms().length} fallback={<NoCollectionMatches />}><ul><For each={filteredRooms()}>{entry => <li><strong>{entry.title}</strong> · {entry.host.display_name}
         <button disabled={busy() || entry.id === host()?.session?.id} onClick={() => {
           const origin = config()?.api_url;

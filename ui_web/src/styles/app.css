@@ -215,15 +215,13 @@ main:has(> [data-page-indicator]) [data-primary-scroll]::after {
 
 /* On touch the mini-player floats over these surfaces instead of sitting in a
    row of its own (OmniBar.module.css), so the last item of every list would end
-   up underneath it. This box buys that back, plus the indicator's room above
-   the pill. Same specificity as the rule above and later in the file, so it
-   wins where both apply. Scoped to the shell's own attribute because the pill
-   hides itself while nothing is playing: no pill, nothing to clear. */
+   up underneath it. The trailing box clears the pill whenever the shell
+   shows it. */
 @media (max-width: 1023px) {
   [data-mini-player] main [data-primary-scroll]::after {
     display: block;
     flex: 0 0 auto;
-    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px + var(--page-indicator-room, 0px));
+    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px);
     content: '';
   }
 }

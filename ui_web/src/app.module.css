@@ -47,19 +47,11 @@
 
 /* The routes' column, under the top bar. */
 .outlet {
-  /* Room above a page's first row when nothing sits above it. Under the top
-     bar the bar already is that room, so a page that opens with a field or a
-     toolbar (Search, Podcasts, Settings) starts right beneath it. */
-  --view-top: var(--space-lg);
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-x: clip;
   overflow-y: auto;
-}
-
-.content:has(> :global([data-app-bar])) > .outlet {
-  --view-top: var(--space-2xs);
 }
 
 /* Room the overlaid page indicator needs at the end of a list, so the last
@@ -84,15 +76,9 @@
 }
 
 @media (max-width: 1023px) {
-  /* The mini-player floats over the foot of the view; the indicator sits on
-     top of it rather than under it. */
-  .app[data-mini-player] .content > :global([data-page-indicator]) {
-    bottom: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + var(--space-xs));
-  }
-
   .app[data-mini-player] .content > .outlet:not(:has(:global(.view)))::after {
     display: block;
-    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px + var(--page-indicator-room, 0px));
+    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px);
     content: '';
   }
 }

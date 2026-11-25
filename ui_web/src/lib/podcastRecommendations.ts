@@ -5,8 +5,10 @@ export interface RawPodcastRow {
   title?: string;
   author?: string;
   feed_url?: string;
+  feedUrl?: string;
   rss_url?: string;
   image_url?: string;
+  artworkUrl600?: string;
   itunes_collection_id?: string;
   collectionId?: number | string;
   external_ids?: { rss_url?: string; itunes_collection_id?: string };
@@ -20,8 +22,8 @@ export function podcastRecommendations(rows: RawPodcastRow[] | undefined): Podca
   return (rows ?? []).map((r) => ({
     title: r.title ?? '',
     author: r.author,
-    feed_url: r.feed_url ?? r.rss_url ?? r.external_ids?.rss_url ?? '',
-    image_url: r.image_url,
+    feed_url: r.feed_url ?? r.feedUrl ?? r.rss_url ?? r.external_ids?.rss_url ?? '',
+    image_url: r.image_url ?? r.artworkUrl600,
     itunes_collection_id: r.itunes_collection_id ?? r.external_ids?.itunes_collection_id ?? (r.collectionId != null ? String(r.collectionId) : undefined),
     recommendation_identity: r.recommendation_identity,
     reason: r.reason,

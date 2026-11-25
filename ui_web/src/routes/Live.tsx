@@ -1,5 +1,6 @@
+import Button from '../components/Button';
 import { liveRoomSearchFields } from '../lib/librarySearch';
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { actions, state } from '../stores';
 import { user } from '../lib/session';
@@ -497,10 +498,13 @@ export default function Live() {
         <section class={styles.directory}>
           <div class={styles.directoryHead}>
             <h2>{t('live.directory')}</h2>
-            <button type="button" onClick={() => void refreshLiveSessions()}>{t('live.refresh')}</button>
+            <Show when={!liveSessions().length}>
+              <Button variant="secondary" onClick={() => void refreshLiveSessions()}>{t('live.refresh')}</Button>
+            </Show>
           </div>
           <Show when={liveSessions().length > 0} fallback={<Show when={!communityError()}><p class={styles.empty}>{t('live.empty')}</p></Show>}>
-            <CollectionSearch search={directorySearch} placeholder={t('library.filterLive')} />
+            <CollectionToolbar contained search={directorySearch} placeholder={t('library.filterLive')}
+              actions={<Button variant="secondary" onClick={() => void refreshLiveSessions()}>{t('live.refresh')}</Button>} />
             <Show when={rooms().length} fallback={<NoCollectionMatches />}>
             <div class={styles.grid}>
               <For each={rooms()}>

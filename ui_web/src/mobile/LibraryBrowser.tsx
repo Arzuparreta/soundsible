@@ -1,4 +1,4 @@
-import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createMemo, createResource, createSignal, createEffect, on, For, Show, onCleanup, type JSX } from 'solid-js';
@@ -148,7 +148,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     <Show when={collection() || tab() === 'songs' || tab() === 'favourites'} fallback={
       <Show when={tab() === 'playlists'} fallback={
         <><Show when={tab() === 'albums'}><div class={styles.libraryTools}><button class={styles.menuTrigger} data-album-menu aria-label={t('library.albumSortTitle')} onClick={event => void albumMenu(event)}>⋯</button></div></Show>
-        <Show when={tab() === 'albums' ? albumRows().length : artistRows().length}><CollectionSearch search={search} /></Show>
+        <Show when={tab() === 'albums' ? albumRows().length : artistRows().length}><CollectionToolbar contained search={search} /></Show>
         <Show when={!albums.error && !artists.error} fallback={<p role="alert">{t('common.loadFailed')} <button onClick={() => { void retryAlbums(); void retryArtists(); }}>{t('common.retry')}</button></p>}>
           <Show when={!albums.loading && !artists.loading} fallback={<p role="status">{t('common.loading')}</p>}>
             <Show when={tab() === 'albums'} fallback={<For each={visibleArtists()} fallback={empty(artistRows(), t('library.emptyArtists'))}>{artist =>
@@ -166,7 +166,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
           </Show>
         </Show></>
       }>
-      <Show when={names().length}><CollectionSearch search={search} /></Show>
+      <Show when={names().length}><CollectionToolbar contained search={search} /></Show>
       <For each={visibleNames()} fallback={empty(names(), t('playlists.empty'))}>{name =>
           <MusicListRowView title={name} subtitle={trackCount(library().playlists?.[name]?.length ?? 0)} seed={name}
             cover={props.disconnected ? undefined : (() => { const id = library().settings?.playlist_covers?.[name] ?? library().playlists?.[name]?.find(id => library().tracks.some(track => collectionId(track) === id && track.source !== 'preview')); return id ? coverUrl(id, 'thumb') : undefined; })()}
@@ -175,7 +175,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     }>
       <div class={styles.libraryTools}>
       <Show when={sourceTracks().length || search.query()}>
-        <CollectionSearch search={search} placeholder={!collection() && tab() === 'songs' ? t('library.searchLibrary') : undefined} />
+        <CollectionToolbar contained search={search} placeholder={!collection() && tab() === 'songs' ? t('library.searchLibrary') : undefined} />
       </Show>
       <Show when={props.onManageOffline}><button class={styles.menuTrigger} data-library-menu aria-label={t('songRow.ariaMore')} onClick={event => {
         const offline: MenuAction[] = [

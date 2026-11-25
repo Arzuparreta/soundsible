@@ -1,5 +1,5 @@
 import { EntityHero } from '../components/EntityHero';
-import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createEffect, createMemo, createSignal, on, Show } from 'solid-js';
@@ -75,21 +75,23 @@ export default function PlaylistDetail() {
           <CoverImage src={cover()} eager />
         </div>}>
           <div class={hero.toolbar} data-entity-toolbar>
-            <span class={hero.context}>{trackCount(trackIds().length)}</span>
-            <button class={hero.play} type="button" onClick={playAll} disabled={tracks().length === 0}
-              aria-label={player().autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}>
-              <PlayIcon size={16} />
-              <span class={hero.primaryLabel}>{player().autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}</span>
-            </button>
+            <Show when={editing() || !tracks().length}><span class={hero.context}>{trackCount(trackIds().length)}</span></Show>
+            <div class={hero.primaryActions}>
+              <button class={hero.play} type="button" onClick={playAll} disabled={tracks().length === 0}
+                aria-label={player().autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}>
+                <PlayIcon size={16} />
+                <span class={hero.primaryLabel}>{player().autoMode.active ? t('autoMode.startDj') : t('playlistDetail.play')}</span>
+              </button>
               <Show when={editing()}>
                 <Control class={hero.secondary} onClick={() => setEditing(false)}>{t('musicExplorer.done')}</Control>
               </Show>
+            </div>
               <button class={hero.options} type="button" aria-label={t('playlistDetail.ariaOptions')} aria-haspopup="dialog" onClick={openMenu}>
                 <MoreIcon size={20} />
               </button>
           </div>
       </EntityHero>
-      <Show when={!editing() && tracks().length}><CollectionSearch search={search} inset /></Show>
+      <Show when={!editing() && tracks().length}><CollectionToolbar search={search} meta={trackCount(trackIds().length)} /></Show>
       <Show when={editing()} fallback={<TrackList
         tracks={filteredTracks()}
         context={context()}

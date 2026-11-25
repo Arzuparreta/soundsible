@@ -1,5 +1,3 @@
-import { podcastShowSearchFields } from '../lib/librarySearch';
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { ViewHeader } from '../components/ViewHeader';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
@@ -10,7 +8,6 @@ import { createEffect, on, createMemo, createSignal, For, Show, onMount, onClean
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import { podcastCountry, countryName } from '../lib/podcastCountry';
 import { PodcastCountryPicker } from '../components/PodcastCountryPicker';
-import { desktopShell } from '../lib/shellLayout';
 import { user } from '../lib/session';
 import { api, request } from '../lib/api';
 import { state } from '../stores';
@@ -29,12 +26,9 @@ import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { SearchField } from '../components/SearchField';
+import { createPodcastSearch } from '../lib/podcastSearch';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { CARD_ARTWORK, ROW_ARTWORK, podcastArtwork } from '../lib/podcastArtwork';
-
-function isAbort(e: unknown): boolean {
-  return e instanceof Error && e.name === 'AbortError';
-}
 
 /** Podcasts: your subscriptions grid + iTunes directory search. Every show
  * opens its page, followed or not; following is a choice made there, in the
@@ -44,13 +38,9 @@ export default function Podcasts() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [q, setQ] = createSignal(typeof searchParams.q === 'string' ? searchParams.q : '');
-  const [results, setResults] = createSignal<PodcastSearchResult[]>([]);
-  const [loading, setLoading] = createSignal(false);
-  const [searchError, setSearchError] = createSignal(false);
   const [subscribing, setSubscribing] = createSignal<Set<string>>(new Set());
-
-  const subscriptionsSearch = createCollectionSearch();
-  const subscriptions = subscriptionsSearch.filter(() => state.podcastSubscriptions, podcastShowSearchFields);
+  const subscriptions = () => state.podcastSubscriptions;
+  const search = createPodcastSearch({ query: q, subscriptions, country: podcastCountry, account: () => user()?.id });
   const subscribedFeeds = createMemo(() => new Set(state.podcastSubscriptions.map((s) => s.rss_url)));
   const [genre, setGenre] = createSignal('');
   const matchesGenre = (row: PodcastSearchResult) => !genre() || row.genres?.some(g => g.id === genre());
@@ -86,7 +76,7 @@ export default function Podcasts() {
   createEffect(on(podcastCountry, (country, previous) => {
     if (previous && country !== previous) {
       episodeRequest?.abort(); episodeRequest = undefined; setPlayingEpisode(undefined);
-      setGenre(''); refreshDiscover(); if (q().trim().length >= 2) run(q());
+      setGenre(''); refreshDiscover();
     }
   }));
 
@@ -111,49 +101,11 @@ export default function Podcasts() {
     finally { if (episodeRequest === controller) { episodeRequest = undefined; setPlayingEpisode(undefined); } }
   };
 
-  let aborter: AbortController | undefined;
-  let debounce: number | undefined;
-  let requestId = 0;
+  onMount(ensureDiscover);
 
-  const run = (query: string) => {
-    query = query.trim();
-    setSearchParams({ q: query || undefined }, { replace: true });
-    const current = ++requestId;
-    aborter?.abort();
-    aborter = undefined;
-    setSearchError(false);
-    if (query.length < 2) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
-    aborter = new AbortController();
-    setLoading(true);
-    api
-      .searchPodcasts(query, aborter.signal)
-      .then((next) => {
-        if (current !== requestId) return;
-        setResults(next);
-      })
-      .catch((e) => {
-        if (current !== requestId || isAbort(e)) return;
-        setResults([]);
-        setSearchError(true);
-      })
-      .finally(() => {
-        if (current === requestId) setLoading(false);
-      });
-  };
-
-  onMount(() => {
-    ensureDiscover();
-    if (q().trim().length >= 2) run(q());
-  });
-
-  const onInput = (v: string) => {
-    setQ(v);
-    clearTimeout(debounce);
-    debounce = window.setTimeout(() => run(v), 300);
+  const onInput = (value: string) => {
+    setQ(value);
+    setSearchParams({ q: value.trim() || undefined }, { replace: true });
   };
 
   const subscribe = async (r: PodcastSearchResult) => {
@@ -214,58 +166,42 @@ export default function Podcasts() {
   onCleanup(() => {
     disposed = true;
     episodeRequest?.abort();
-    requestId += 1;
-    aborter?.abort();
-    clearTimeout(debounce);
   });
 
   return (
     <div class="view">
-      {/* The country scopes the directory, so on the desktop it sits beside
-        * the search it narrows; on a phone the top bar carries the native
-        * dropdown itself rather than a described command. */}
-      <ViewHeader title={t('nav.podcasts')} barTrailing={<PodcastCountryPicker />} />
-      <div class={styles.bar}>
-        <SearchField
-          placeholder={t('podcasts.searchPlaceholder')}
-          clearLabel={t('searchPanel.clear')}
-          value={q()}
-          onInput={onInput}
-        />
-        <Show when={desktopShell()}><PodcastCountryPicker /></Show>
-      </div>
+      <ViewHeader title={t('nav.podcasts')} fieldActions={<PodcastCountryPicker />}
+        field={<SearchField placeholder={t('podcasts.searchPlaceholder')} value={q()} onInput={onInput} />}
+      />
 
       <div
-        ref={(element) => registerPrimaryScroll(element, () => !loading())}
+        ref={(element) => registerPrimaryScroll(element, () => !search.pending())}
         class={styles.scroll}
         data-primary-scroll
       >
-        <Show when={loading() && results().length > 0}>
+        <Show when={search.pending() && search.results().length > 0}>
           <div class={styles.loadingBar} role="status" aria-live="polite" aria-label={t('common.loading')}>
             <span>{t('common.loading')}</span>
           </div>
         </Show>
         <Show
-          when={q().trim().length >= 2}
+          when={search.active()}
           fallback={
             <>
               <Show when={state.podcastSubscriptions.length > 0}>
                 <h2 class={styles.sectionTitle}>{t('podcasts.yourShows')}</h2>
-                <CollectionSearch search={subscriptionsSearch} placeholder={t('library.filterSubscriptions')} />
-                <Show when={subscriptions().length} fallback={<NoCollectionMatches />}>
                 <CollectionGrid items={subscriptions()} class={styles.grid}>
-                    {(s) => {
-                      const href = () => `/podcasts/${encodeURIComponent(s().id)}`;
-                      return (
-                        <A href={href()} class={styles.card} data-pressable {...openTap(href)}>
-                          <div class={styles.cover} style={neutralCoverStyle(podcastArtwork(s().image_url, CARD_ARTWORK))} />
-                          <span class={styles.name}>{s().title}</span>
-                          <span class={styles.author}>{s().author}</span>
-                        </A>
-                      );
-                    }}
+                  {(s) => {
+                    const href = () => `/podcasts/${encodeURIComponent(s().id)}`;
+                    return (
+                      <A href={href()} class={styles.card} data-pressable {...openTap(href)}>
+                        <div class={styles.cover} style={neutralCoverStyle(podcastArtwork(s().image_url, CARD_ARTWORK))} />
+                        <span class={styles.name}>{s().title}</span>
+                        <span class={styles.author}>{s().author}</span>
+                      </A>
+                    );
+                  }}
                 </CollectionGrid>
-                </Show>
               </Show>
 
               <Show when={genres().length > 0}>
@@ -321,69 +257,33 @@ export default function Podcasts() {
             </>
           }
         >
-          <Show when={loading() && results().length === 0}>
-            <SkeletonRows count={6} compact />
-          </Show>
-          <Show when={!loading() && results().length === 0}>
-            <EmptyState compact tone={searchError() ? 'danger' : 'neutral'}>
-              {searchError() ? (
-                <>
-                  {t('search.catalogErrorHint')}{' '}
-                  <button class={styles.retry} type="button" onClick={() => run(q())}>
-                    {t('common.retry')}
-                  </button>
-                </>
-              ) : (
-                t('podcasts.noResults')
-              )}
+          <Show when={search.pending() && !search.results().length}><SkeletonRows count={6} compact /></Show>
+          <Show when={search.error()}>
+            <EmptyState compact tone="danger">
+              {t('search.catalogErrorHint')}{' '}
+              <button class={styles.retry} type="button" onClick={search.retry}>{t('common.retry')}</button>
             </EmptyState>
           </Show>
-          <div
-            classList={{ [styles.results]: true, [styles.resultsRefreshing]: loading() }}
-            aria-busy={loading()}
-            aria-disabled={loading()}
-            inert={loading() ? true : undefined}
-          >
-            <For each={results()}>
-              {(r) => {
-                const disabled = () => subscribing().has(r.feed_url);
-                const tap = createResponsiveTap({
-                  disabled,
-                  onTap: () => void subscribe(r),
-                });
-                return (
-                  <Show when={!mobileListLayout()} fallback={<MusicListRow title={r.title} subtitle={r.author}
-                    seed={r.feed_url} cover={podcastArtwork(r.image_url, ROW_ARTWORK)} busy={disabled()} busyLabel={t('podcasts.subscribing')}
-                    onActivate={() => navigate(podcastPath(r))}
-                    onMenu={() => openContextMenu({ title: r.title, subtitle: r.author, actions: [subscribeAction(r)] })} />}>
-                  <div class={styles.row}>
-                    <A href={podcastPath(r)} class={styles.rowOpen} data-pressable {...openTap(() => podcastPath(r))}>
-                      <div class={styles.rowCover} style={neutralCoverStyle(podcastArtwork(r.image_url, ROW_ARTWORK))} />
-                      <div class={styles.meta}>
-                        <span class={styles.title}>{r.title}</span>
-                        <span class={styles.sub}>{r.author}</span>
-                      </div>
-                    </A>
-                    <Show
-                      when={!subscribedFeeds().has(r.feed_url)}
-                      fallback={<span class={styles.subbed}>{t('podcasts.subscribed')}</span>}
-                    >
-                      <button
-                        class={styles.subBtn}
-                        data-pressable
-                        type="button"
-                        disabled={disabled()}
-                        {...tap}
-                      >
-                        {disabled() ? t('podcasts.subscribing') : t('podcasts.subscribe')}
-                      </button>
-                    </Show>
-                  </div>
-                  </Show>
-                );
-              }}
-            </For>
-          </div>
+          <Show when={!search.pending() && !search.error() && !search.results().length}>
+            <EmptyState compact>{t('podcasts.noResults')}</EmptyState>
+          </Show>
+          <For each={search.results()}>
+            {({ show, subscription }) => {
+              const href = () => subscription ? `/podcasts/${encodeURIComponent(subscription.id)}` : podcastPath(show);
+              return <MusicListRow
+                title={show.title} subtitle={show.author} titlePath={href()}
+                annotation={subscription ? t('podcasts.subscribed') : undefined} keepAnnotationVisible
+                seed={show.feed_url} cover={podcastArtwork(show.image_url, ROW_ARTWORK)}
+                busy={subscribing().has(show.feed_url)} busyLabel={t('podcasts.subscribing')}
+                onActivate={() => navigate(href())}
+                primaryAction={!subscription && !mobileListLayout()
+                  ? { label: t('podcasts.subscribe'), onSelect: () => void subscribe(show) } : undefined}
+                onMenu={!subscription && mobileListLayout()
+                  ? event => openContextMenu({ title: show.title, subtitle: show.author, actions: [subscribeAction(show)] }, event)
+                  : undefined}
+              />;
+            }}
+          </For>
         </Show>
       </div>
     </div>
