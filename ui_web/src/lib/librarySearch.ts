@@ -11,14 +11,16 @@ const LATIN_FOLDS: Record<string, string> = { ø: 'o', ł: 'l', đ: 'd', æ: 'ae
 
 /**
  * NFKD folds compatibility forms (the `ﬃ` ligature, full-width letters) and
- * splits accented Latin letters; only the Combining Diacritical Marks block is
- * dropped, so `bjork` finds `Björk` while Thai tone marks, Devanagari vowel
- * signs and kana voicing marks still tell words apart.
+ * splits accented letters into a base and its marks. Marks are dropped only
+ * after a Latin or Greek base, where they are accents: `bjork` finds `Björk`.
+ * Everywhere else they are part of the letter, so Cyrillic `й` stays apart
+ * from `и`, and Thai tone marks, Devanagari signs and kana voicing marks still
+ * tell words apart.
  */
 export function normalizeLibraryQuery(value: string): string {
   return value
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/([A-Za-z\u0370-\u03ff])[\u0300-\u036f]+/g, '$1')
     .toLocaleLowerCase()
     .replace(/[øłđæœß]/g, letter => LATIN_FOLDS[letter])
     .trim()

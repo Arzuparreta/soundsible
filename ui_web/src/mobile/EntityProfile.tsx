@@ -76,7 +76,7 @@ export default function NativeEntityProfile(props: {
     const selected = new Set(discovered().flatMap(item => { const track = props.catalog.trackFor(item); return track && track.source !== 'preview' ? [track.id] : []; }));
     return props.tracks.filter(track => selected.has(track.id) || !!provider && (props.subject.kind === 'artist' ? track.deezer_artist_id === provider : track.deezer_album_id === provider));
   });
-  const view = () => resolveViewMode({ urlView: props.subject.view, override: override(), canToggle: owned().length > 0 });
+  const view = createMemo(() => resolveViewMode({ urlView: props.subject.view, override: override(), canToggle: owned().length > 0 }));
   const songs = () => view() === 'library' ? owned().map((track): CatalogItem => ({ id: `library:${track.id}`, type: 'library_track', source: 'library', track_id: track.id, title: track.title, artist: track.artist, album: track.album ?? undefined, raw: { ...track } }))
     : props.subject.kind === 'artist' ? discovered().slice(0, 10) : discovered();
   const bookmark = () => nativeProfileBookmark({ ...props.subject, view: view() }, profile.profile());
@@ -151,7 +151,7 @@ export default function NativeEntityProfile(props: {
   };
   const trackSearch = createCollectionSearch();
   const matches = trackSearch.filter(songs, trackSearchFields);
-  createEffect(on(() => [props.subject, view()] as const, () => trackSearch.setValue(''), { defer: true }));
+  createEffect(on(view, () => trackSearch.setValue(''), { defer: true }));
 
   return <section class={`${styles.library} ${profileStyles.profile}`} data-testid="android-entity-profile">
     <header class={`${hero.header} ${profileStyles.header}`}>

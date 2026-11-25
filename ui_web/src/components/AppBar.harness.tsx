@@ -9,7 +9,7 @@ import { AppBar, PageIndicator } from './AppBar';
  */
 export function InShell(props: { children: JSX.Element }) {
   return (
-    <MemoryRouter root={(root) => <main><AppBar /><div data-app-outlet>{root.children}</div><PageIndicator /></main>}>
+    <MemoryRouter root={(root) => <main><AppBar /><PageIndicator /><div data-app-outlet>{root.children}</div></main>}>
       <Route path="*" component={() => <>{props.children}</>} />
     </MemoryRouter>
   );

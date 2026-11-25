@@ -11,8 +11,9 @@ export function ViewHeader(props: {
   desktopField?: JSX.Element;
   actions?: JSX.Element;
   barActions?: AppBarAction[];
-  /** On desktop the page renders `barActions` itself, next to its own field,
-   * so the header leaves them out. Touch still gets them in the top bar. */
+  /** On desktop the page draws whichever of its commands it wants next to
+   * its own field (a field can replace a search command), so the header
+   * leaves `barActions` out. Touch still gets them all in the top bar. */
   rendersOwnCommands?: boolean;
   /** A native control the top bar carries as is — a dropdown keeps its
    * platform keyboard behaviour that a described command would lose. */
