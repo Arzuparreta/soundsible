@@ -302,6 +302,45 @@ test('every inert part of the compact pill opens the player on a phone', async (
   }
 });
 
+test('Explore from rows link verified YouTube performers while leaving channels and legacy items as text', async ({ page, isMobile }) => {
+  await page.route('**/api/discovery/music/feed**', route => route.fulfill({ json: {
+    v: 1,
+    sections: [{
+      id: 'explore_from_1',
+      title: 'Explorar desde Semilla',
+      title_key: 'explore_from',
+      title_params: { title: 'Semilla' },
+      item_ids: ['youtube:perf', 'youtube:chan', 'youtube:old'],
+    }],
+    items: [
+      { id: 'youtube:perf', title: 'La vereda', artist: 'Extremoduro', artist_is_channel: false, external_ids: { youtube_id: 'perf' } },
+      { id: 'youtube:chan', title: 'Directo subido', artist: 'Canal Cualquiera', artist_is_channel: true, external_ids: { youtube_id: 'chan' } },
+      { id: 'youtube:old', title: 'Clip antiguo', artist: 'Sin Indicador', external_ids: { youtube_id: 'old' } },
+    ],
+  } }));
+  await page.route('**/api/catalog/artist**', route => route.fulfill({ json: {
+    artist: 'Extremoduro', resolved: true, in_library: false,
+    top_tracks: [], albums: [], singles_eps: [], related_artists: [], candidates: [],
+  } }));
+
+  await page.goto('/player/#/search');
+  const performerLink = page.getByRole('link', { name: 'Extremoduro', exact: true });
+  await expect(performerLink).toBeVisible();
+  await expect(page.getByText('Canal Cualquiera', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Canal Cualquiera', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Sin Indicador', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sin Indicador', exact: true })).toHaveCount(0);
+
+  await activate(page, performerLink, isMobile);
+  await expect(page).toHaveURL(/#\/artist\/Extremoduro\?view=discover/);
+  await expect(page.getByRole('heading', { name: 'Extremoduro', exact: true })).toBeVisible();
+  await expect(page.locator('[aria-current="page"][data-nav-href]').filter({ visible: true })).toHaveCount(0);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/search$/);
+  await expect(performerLink).toBeVisible();
+});
+
 test('a native scroll starting on an artist link does not navigate or play', async ({ page, context }, info) => {
   test.skip(info.project.name !== 'chromium-mobile', 'Native touch injection uses CDP');
   await page.goto('/player/#/library?view=songs');

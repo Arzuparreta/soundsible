@@ -194,6 +194,7 @@ export function discoveryCatalogItem(item: DiscoveryFeedItem): CatalogItem {
     action_state: item.action_state,
     raw: {
       ...(youtube ? { id: video, youtube_id: video, title: item.title, artist: item.artist } : {}),
+      ...(typeof item.artist_is_channel === 'boolean' ? { artist_is_channel: item.artist_is_channel } : {}),
       ...(item.artists?.length ? { artists: item.artists } : {}),
       recommendation: item.recommendation_identity ? {
         identity: item.recommendation_identity,

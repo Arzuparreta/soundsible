@@ -7,7 +7,8 @@ import { createNativeCatalogActions, pendingCatalogTrack } from './catalogAction
 import { createNativeDiscoveryFeed } from './discoveryFeed';
 import NativeEntityProfile from './EntityProfile';
 import { catalogFeedback, nativeFeedbackActions, nativeMusicLinkActions } from './songActions';
-import { catalogItemMusic } from '../lib/musicLinks';
+import { artistDestination, catalogItemMusic, performerNames } from '../lib/musicLinks';
+import linkStyles from '../components/MusicLinks.module.css';
 import { nativeEntitySubject, type NativeEntitySubject } from './entityProfile';
 import { registerNativeBack } from './backNavigation';
 import { catalogEntityBookmark, catalogEntityDestination, catalogEntityHeld, catalogEntityHoldings } from '../lib/catalogEntity';
@@ -29,6 +30,20 @@ import type { MenuAction } from '../components/ActionMenu';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
 import type { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
 import styles from './AndroidStart.module.css';
+
+function NativeArtistLink(props: { path: string; name: string; onOpen: (path: string) => void }) {
+  const tap = createResponsiveTap({
+    onTap: event => {
+      event.stopPropagation();
+      event.preventDefault();
+      props.onOpen(props.path);
+    },
+  });
+  return <a href={`#${props.path}`} class={linkStyles.link} draggable={false} {...tap}
+    onKeyDown={event => event.stopPropagation()}
+    onContextMenu={event => event.stopPropagation()}
+    onDragStart={event => event.stopPropagation()}>{props.name}</a>;
+}
 
 /** Account-scoped catalog UI; resolution never imports the web audio runtime. */
 export default function CatalogSearch(props: {
@@ -271,9 +286,17 @@ export default function CatalogSearch(props: {
     const entry = catalogEntityBookmark(item); if (entry) props.onEntityMenu?.(entry, event);
   }
   const entityStatus = (item: CatalogItem) => [entitySaved(item) ? t('savedEntities.saved') : '', catalogEntityHeld(item, holdings()) ? t('savedEntities.inLibrary') : ''].filter(Boolean).join(' · ');
+  const songSubtitle = (item: CatalogItem, owned?: Track) => {
+    const fallback = itemArtist(item);
+    const music = catalogItemMusic(item, owned);
+    if (music.linkable === false || (props.disconnected && music.view !== 'library')) return fallback;
+    const names = performerNames(music);
+    if (!names.length) return fallback;
+    return <For each={names}>{(name, index) => <><Show when={index() > 0}>{', '}</Show><NativeArtistLink path={artistDestination(music, name)} name={name} onOpen={openEntity} /></>}</For>;
+  };
   const songRow = (item: CatalogItem) => {
     const track = () => trackFor(item);
-    return <MusicListRowView playback title={item.title} subtitle={itemArtist(item)} seed={item.id}
+    return <MusicListRowView playback title={item.title} subtitle={itemArtist(item)} subtitleContent={songSubtitle(item, track() ?? undefined)} seed={item.id}
       cover={track()?.source !== 'preview' && track() ? coverUrl(track()!.id, 'thumb') : item.cover}
       active={Boolean(track() && (props.isActive ? props.isActive(track()!) : props.activeId === track()!.id))} busy={pending() === item.id}
       disabled={props.disconnected} onActivate={() => { emitSearchPlayed(item); void act(item, 'play'); }} onMenu={event => menu(item, event)} />;

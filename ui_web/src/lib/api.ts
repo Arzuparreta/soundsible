@@ -172,6 +172,7 @@ export interface DiscoveryFeedItem {
   title: string;
   artist: string;
   artists?: string[] | null;
+  artist_is_channel?: boolean;
   album?: string;
   duration?: number;
   cover?: string;

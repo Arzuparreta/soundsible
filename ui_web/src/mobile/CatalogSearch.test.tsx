@@ -381,3 +381,34 @@ it('reports neutral detail visibility, skips feed loading in detailOnly mode, an
   await waitFor(() => expect(detailView.queryByRole('heading', { name: 'Artist' })).toBeNull());
   expect(states).toEqual([true, false]);
 });
+
+it('opens an artist profile from Explore from rows only for verified performers and returns to Discover on Back', async () => {
+  mocks.artist.mockResolvedValue({ name: 'Extremoduro', deezer_id: '42', resolved: true, candidates: [], top_tracks: [], albums: [], singles_eps: [], related_artists: [], in_library: false, cached: false });
+  mocks.feed.mockResolvedValue({
+    sections: [{ id: 'explore_from_1', title: 'Explore from Seed', title_key: 'explore_from', title_params: { title: 'Seed' }, item_ids: ['youtube:perf', 'youtube:chan', 'youtube:old'] }],
+    items: [
+      { id: 'youtube:perf', title: 'La vereda', artist: 'Extremoduro', artist_is_channel: false, external_ids: { youtube_id: 'perf' } },
+      { id: 'youtube:chan', title: 'Bootleg', artist: 'Random Channel', artist_is_channel: true, external_ids: { youtube_id: 'chan' } },
+      { id: 'youtube:old', title: 'Legacy clip', artist: 'Old Feed Artist', external_ids: { youtube_id: 'old' } },
+    ],
+  });
+  const play = vi.fn();
+  const detailStates: boolean[] = [];
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onDetailChange={open => detailStates.push(open)} onPlay={play} onChanged={vi.fn()} />);
+
+  const performerLink = await view.findByRole('link', { name: 'Extremoduro' });
+  expect(view.getByText('Random Channel')).toBeTruthy();
+  expect(view.queryByRole('link', { name: 'Random Channel' })).toBeNull();
+  expect(view.getByText('Old Feed Artist')).toBeTruthy();
+  expect(view.queryByRole('link', { name: 'Old Feed Artist' })).toBeNull();
+
+  fireEvent.click(performerLink);
+  await waitFor(() => expect(view.getByRole('heading', { name: 'Extremoduro' })).toBeTruthy());
+  expect(play).not.toHaveBeenCalled();
+  expect(detailStates).toEqual([true]);
+
+  expect(dispatchNavigationBack()).toBe(true);
+  await waitFor(() => expect(view.queryByRole('heading', { name: 'Extremoduro' })).toBeNull());
+  expect(view.getByRole('link', { name: 'Extremoduro' })).toBeVisible();
+  expect(detailStates).toEqual([true, false]);
+});

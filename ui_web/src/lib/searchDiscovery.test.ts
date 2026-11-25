@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from './i18n';
+import { catalogItemMusic } from './musicLinks';
 import {
   discoveryCatalogItem,
   discoveryEntityReason,
@@ -25,6 +26,26 @@ describe('discovery catalog rows', () => {
     expect(item.type).toBe('library_track');
     expect(item.track_id).toBe('one');
     expect(item.external_ids?.deezer_album_id).toBe('12');
+  });
+  it('links YouTube discovery rows only when artist_is_channel is explicitly false', () => {
+    const performer = discoveryCatalogItem({
+      id: 'youtube:perf', title: 'La vereda', artist: 'Extremoduro', artist_is_channel: false,
+      external_ids: { youtube_id: 'perf' },
+    });
+    const channel = discoveryCatalogItem({
+      id: 'youtube:chan', title: 'Live set', artist: 'Uploader Channel', artist_is_channel: true,
+      external_ids: { youtube_id: 'chan' },
+    });
+    const legacy = discoveryCatalogItem({
+      id: 'youtube:old', title: 'Cached song', artist: 'Old Cache',
+      external_ids: { youtube_id: 'old' },
+    });
+    expect(performer.raw?.artist_is_channel).toBe(false);
+    expect(channel.raw?.artist_is_channel).toBe(true);
+    expect(legacy.raw?.artist_is_channel).toBeUndefined();
+    expect(catalogItemMusic(performer).linkable).toBe(true);
+    expect(catalogItemMusic(channel).linkable).toBe(false);
+    expect(catalogItemMusic(legacy).linkable).toBe(false);
   });
 });
 
