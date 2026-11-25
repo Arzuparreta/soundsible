@@ -8,6 +8,7 @@ import styles from './ProgramTransport.module.css';
 import { openContextMenu } from '../lib/contextMenu';
 import { vibrate } from '../lib/haptics';
 import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
+import { CoverGlass } from './CoverGlass';
 import { RangeControl } from '../design/Control';
 
 /** Stateless ownership: presentation observes a program; commands never create audio here. */
@@ -22,9 +23,11 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
   createEffect(() => { occurrence(); setSeeking(null); });
   const run = (command: ProgramCommand) => { vibrate(); return props.command(command).catch(() => {}); };
   const disabled = () => !props.state.ready || props.pending;
+  const artwork = () => coverStyle(props.state.id, programCover(props.state.items[props.state.index]));
   const live = () => props.state.id.startsWith('soundsible:live:');
   return <section class={styles.program} data-testid="android-program" aria-label={t('nowPlaying.nowPlayingSection')} aria-busy={props.pending}>
-    <div class={styles.heading}><span class={styles.artwork} data-program-artwork aria-hidden="true" style={coverStyle(props.state.id, programCover(props.state.items[props.state.index]))} />
+    <CoverGlass artwork={artwork()} />
+    <div class={styles.heading}><span class={styles.artwork} data-program-artwork aria-hidden="true" style={artwork()} />
     <p>{props.state.title || props.state.id}<br /><small>{props.state.artist}</small></p>
     <button data-program-menu aria-label={t('songRow.ariaMore')} disabled={disabled()} onClick={event => {
       const generation = props.state.generation;

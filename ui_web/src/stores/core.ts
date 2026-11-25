@@ -35,7 +35,9 @@ import type {
 } from '../types/music';
 import type { PodcastSubscription } from '../types/podcast';
 import type { CompletedDownload, DownloadQueueItem } from '../types/download';
-import { isTheme, type Theme } from '../boot/themes';
+import { loadTheme, type Theme } from '../boot/themes';
+import { readCustomColors } from '../boot/customColors.js';
+import type { CustomColors } from '../lib/colorPreferences';
 
 
 /** The theme vocabulary lives with the boot palette table, which has to stay
@@ -134,6 +136,7 @@ export interface AppState {
   online: boolean;
   device: DeviceRegistration;
   theme: Theme;
+  customColors: CustomColors;
   interfaceSize: InterfaceSize;
   highContrast: boolean;
   haptics: boolean;
@@ -195,11 +198,6 @@ function loadDevice(): DeviceRegistration {
   };
 }
 
-function loadTheme(): Theme {
-  const raw = localStorage.getItem('theme');
-  return isTheme(raw) ? raw : 'system';
-}
-
 /** Volume levelling, read synchronously so the first track of a session is
  * already levelled. The account is the source of truth and reconciles a moment
  * later in `initStore`; this mirror is what removes the startup race. */
@@ -221,6 +219,7 @@ function initialState(): AppState {
   online: false,
   device: loadDevice(),
   theme: loadTheme(),
+  customColors: readCustomColors(),
   interfaceSize: initialVisualPreferences.interfaceSize,
   highContrast: initialVisualPreferences.highContrast,
   haptics: localStorage.getItem('haptics') !== 'off',

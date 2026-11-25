@@ -1,3 +1,5 @@
+import { installAppearanceAutomation } from '../lib/colorPreferences';
+import { preferenceActions } from './preferences';
 import { isAppleMobile } from '../lib/audio/appleMobile';
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { syncSavedEntities } from "../lib/savedEntities";
@@ -169,6 +171,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       interfaceSize: state.interfaceSize,
       highContrast: state.highContrast
     });
+    lifetime.own(installAppearanceAutomation(() => ({ theme: state.theme, colors: state.customColors }), preferenceActions.setTheme));
     applyTheme(state.theme);
     // Catch the shell up on a preference chosen before it could be told — an
     // upgrade, or a theme set in a browser and first met on the desktop.

@@ -31,6 +31,18 @@ downloads, library rescans, accounts, paired devices and
 music import. Some settings belong to each person and some only to an admin;
 [Accounts](#6-accounts-multi-user) lists which.
 
+### Custom colors
+
+Open **Settings → Appearance → Custom** on the web player, desktop or Android.
+Choose a **Background** and **Accent** with the color pickers or enter sRGB hex
+values. The player updates as you edit, and derives shades for readable text,
+controls and artwork-tinted glass. **Reset colors** restores the starting pair.
+You can switch to **System**, **Dark** or **Light** and return to your custom
+pair later.
+
+The choice is saved in this browser or installation. If you used a named theme
+preset before the update, the player starts in **System**.
+
 ### Navigation preferences
 
 The mobile bottom bar starts with **Library, Favourites, Search, Settings**.

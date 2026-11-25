@@ -20,8 +20,9 @@ it('returns from appearance/accessibility to account before leaving Settings', a
     appearance={preference} feedback={feedback} playback={{ state: null, pending: false, available: false, command: vi.fn() }} onUser={vi.fn()} onLogout={vi.fn()}
     library={{ trackCount: () => 0, sync: vi.fn(), onImport: vi.fn() }} online={() => false} />);
   await fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
-  await fireEvent.click(screen.getByRole('radio', { name: 'Pure black' }));
-  expect(document.documentElement.dataset.theme).toBe('pure-black');
+  await fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+  expect(document.documentElement).toHaveAttribute('data-custom-colors');
+  expect(screen.getByRole('textbox', { name: 'Background (HEX)' })).toBeVisible();
   expect(dispatchNavigationBack()).toBe(true); expect(screen.getByTestId('account')).toBeVisible();
   await fireEvent.click(screen.getByRole('button', { name: 'Accessibility' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Large' }));

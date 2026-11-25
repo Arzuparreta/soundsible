@@ -111,13 +111,13 @@ pub fn load_persisted_music_dir() -> Option<PathBuf> {
 }
 
 /// What the player last chose, written by the engine into the shared config
-/// directory (see `/api/desktop/appearance`). The shell and the player live in
+/// directory. The shell and the player live in
 /// different origins, so this file is the only channel between them — and the
 /// only one that is readable before the engine is even running, which is
 /// exactly when the shell is on screen alone.
 ///
-/// The player sends the whole colour table so the shell never carries a second
-/// copy of the palette: a theme added to the player arrives here for free.
+/// Custom colors arrive as resolved semantic tokens so the native window and
+/// the shell match the player even before an engine connection is available.
 #[derive(Debug, Clone, Deserialize)]
 struct AppearancePrefs {
     theme: Option<String>,
@@ -131,6 +131,7 @@ struct AppearancePrefs {
 pub struct Appearance {
     pub theme: String,
     pub color: Option<String>,
+    pub colors: HashMap<String, String>,
 }
 
 pub const APPEARANCE_FILENAME: &str = "desktop-appearance.json";
@@ -142,22 +143,44 @@ pub fn resolve_appearance(raw: Option<&str>, os_prefers_dark: bool) -> Appearanc
     let fallback = if os_prefers_dark { "dark" } else { "light" };
     let prefs = raw.and_then(|raw| serde_json::from_str::<AppearancePrefs>(raw).ok());
 
+    let mut appearance = Appearance {
+        theme: fallback.to_string(),
+        color: None,
+        colors: HashMap::new(),
+    };
     let Some(prefs) = prefs else {
-        return Appearance {
-            theme: fallback.to_string(),
-            color: None,
-        };
+        return appearance;
     };
-    let theme = match prefs.theme.as_deref() {
-        None | Some("system") => fallback,
-        // A palette the shell has never heard of is not one it can paint.
-        Some(stored) if prefs.colors.contains_key(stored) => stored,
-        Some(_) => fallback,
-    };
-    Appearance {
-        theme: theme.to_string(),
-        color: prefs.colors.get(theme).cloned(),
+
+    let custom = ["light", "dark"].iter().find_map(|&scheme| {
+        let color = prefs.colors.get(&format!("custom-{scheme}"))?;
+        (crate::parse_hex_color(color).is_some()).then_some((scheme, color))
+    });
+    match (prefs.theme.as_deref(), custom) {
+        (Some("custom"), Some((scheme, color))) => {
+            appearance.theme = scheme.to_string();
+            appearance.color = Some(color.clone());
+            appearance.colors = prefs
+                .colors
+                .into_iter()
+                .filter(|(_, color)| crate::parse_hex_color(color).is_some())
+                .collect();
+        }
+        (mode, _) => {
+            let theme = match mode {
+                Some("light") => "light",
+                Some("dark") => "dark",
+                _ => fallback,
+            };
+            appearance.theme = theme.to_string();
+            appearance.color = prefs
+                .colors
+                .get(theme)
+                .filter(|color| crate::parse_hex_color(color).is_some())
+                .cloned();
+        }
     }
+    appearance
 }
 
 pub fn load_appearance(os_prefers_dark: bool) -> Appearance {
@@ -271,7 +294,7 @@ mod tests {
     use super::resolve_appearance;
 
     // r##..##: the colours contain `"#`, which closes a single-hash raw string.
-    const TABLE: &str = r##"{"light":"#f6f6f7","dark":"#0c0c0e","forest-green":"#0b110d"}"##;
+    const TABLE: &str = r##"{"light":"#f6f6f7","dark":"#0c0c0e","custom-light":"#ffeeee","bg-base":"#ffeeee","accent":"#003333","forest-green":"#0b110d"}"##;
 
     fn stored(theme: &str) -> String {
         format!(r#"{{"theme":"{theme}","colors":{TABLE}}}"#)
@@ -279,17 +302,18 @@ mod tests {
 
     #[test]
     fn paints_the_palette_the_player_chose() {
-        let appearance = resolve_appearance(Some(&stored("forest-green")), true);
-        assert_eq!(appearance.theme, "forest-green");
-        assert_eq!(appearance.color.as_deref(), Some("#0b110d"));
+        let appearance = resolve_appearance(Some(&stored("custom")), true);
+        assert_eq!(appearance.theme, "light");
+        assert_eq!(appearance.color.as_deref(), Some("#ffeeee"));
+        assert_eq!(appearance.colors["accent"], "#003333");
     }
 
     #[test]
     fn an_explicit_palette_ignores_the_desktop() {
         for os_prefers_dark in [true, false] {
             assert_eq!(
-                resolve_appearance(Some(&stored("forest-green")), os_prefers_dark).theme,
-                "forest-green"
+                resolve_appearance(Some(&stored("custom")), os_prefers_dark).theme,
+                "light"
             );
         }
     }
@@ -316,9 +340,10 @@ mod tests {
 
     #[test]
     fn refuses_a_palette_it_was_given_no_colour_for() {
-        // A theme the player shipped and this build of the shell has not: the
-        // colour table is the only thing that says the shell can paint it.
-        let orphan = r##"{"theme":"midnight","colors":{"dark":"#0c0c0e"}}"##;
+        let orphan = r##"{"theme":"custom","colors":{"dark":"#0c0c0e"}}"##;
         assert_eq!(resolve_appearance(Some(orphan), true).theme, "dark");
+        let retired = resolve_appearance(Some(&stored("forest-green")), false);
+        assert_eq!(retired.theme, "light");
+        assert!(retired.colors.is_empty());
     }
 }

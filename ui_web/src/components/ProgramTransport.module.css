@@ -8,3 +8,11 @@
 .program [data-program-close] { min-width: 44px; flex-shrink: 0; padding: 8px; }
 .volume { display: flex; align-items: center; gap: var(--space-sm); width: 100%; }
 .program .volume input { flex: 1; min-width: 0; }
+
+:global([data-custom-colors]) .program {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  padding: var(--space-md);
+}

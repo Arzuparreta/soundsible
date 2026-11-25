@@ -1,6 +1,8 @@
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
 import { registerPlugin } from '@capacitor/core';
-import { isTheme, THEME_COLORS, type Theme, type ResolvedTheme } from '../boot/themes';
+import { readCustomColors } from '../boot/customColors.js';
+import { isTheme, loadTheme, type Theme, type ResolvedTheme } from '../boot/themes';
+import { installAppearanceAutomation, paintTheme, persistTheme, type CustomColors } from '../lib/colorPreferences';
 import { applyVisualPreferences, loadVisualPreferences, persistHighContrast, persistInterfaceSize, type InterfaceSize } from '../lib/visualPreferences';
 
 interface AppearanceBridge { apply(options: { color: string }): Promise<void> }
@@ -9,38 +11,64 @@ const native = registerPlugin<AppearanceBridge>('SoundsibleAppearance');
 const systemBars = registerPlugin<SystemBarsBridge>('SystemBars');
 
 /** Installation preference; never depends on the engine identity or audio stores. */
-export function createNativeAppearance(notify: (theme: ResolvedTheme) => void = theme => {
-  void systemBars.setStyle({ style: theme === 'light' ? 'LIGHT' : 'DARK' })
-    .then(() => native.apply({ color: THEME_COLORS[theme] })).catch(() => {});
+export function createNativeAppearance(notify: (theme: ResolvedTheme, color: string) => void | Promise<void> = async (theme, color) => {
+  await systemBars.setStyle({ style: theme === 'light' ? 'LIGHT' : 'DARK' });
+  await native.apply({ color });
 }) {
-  let stored: unknown;
-  try { stored = localStorage.getItem('theme'); } catch { /* Session preference remains usable. */ }
-  const [theme, setTheme] = createSignal<Theme>(isTheme(stored) ? stored : 'system');
+  const [theme, setTheme] = createSignal(loadTheme());
+  const [colors, setColors] = createSignal<CustomColors>(readCustomColors());
   const visual = loadVisualPreferences();
   const [interfaceSize, setInterfaceSize] = createSignal(visual.interfaceSize);
   const [highContrast, setHighContrast] = createSignal(visual.highContrast);
-  let media: MediaQueryList | undefined;
-  try { media = window.matchMedia('(prefers-color-scheme: dark)'); } catch { /* Dark is the fallback. */ }
-  function apply() {
-    const resolved = theme() === 'system' ? (media?.matches === false ? 'light' : 'dark') : theme() as ResolvedTheme;
-    document.documentElement.dataset.theme = resolved;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[resolved]);
-    applyVisualPreferences({ interfaceSize: interfaceSize(), highContrast: highContrast() });
-    notify(resolved);
+  const media = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : undefined;
+  let latest: ReturnType<typeof paintTheme> | undefined;
+  let sending = false;
+  let last = '';
+  async function notifyNative() {
+    if (sending) return;
+    sending = true;
+    try {
+      while (latest) {
+        const { scheme, color } = latest;
+        latest = undefined;
+        try { await notify(scheme, color); } catch { /* Browser preview has no native bars. */ }
+      }
+    } finally {
+      sending = false;
+    }
   }
-  const changed = () => apply();
+  function apply() {
+    const paint = paintTheme(theme(), colors());
+    applyVisualPreferences({ interfaceSize: interfaceSize(), highContrast: highContrast() });
+    const stamp = paint.scheme + paint.color;
+    if (stamp === last) return;
+    last = stamp;
+    latest = paint;
+    void notifyNative();
+  }
+  function update(value: Theme, seeds = colors(), persist = true) {
+    if (!isTheme(value)) return;
+    batch(() => {
+      setTheme(value);
+      setColors(seeds);
+    });
+    if (persist) persistTheme(value, seeds);
+    apply();
+  }
+  const removeAutomation = installAppearanceAutomation(() => ({ theme: theme(), colors: colors() }), update);
   const visible = () => { if (document.visibilityState === 'visible') apply(); };
-  media?.addEventListener('change', changed);
+  media?.addEventListener('change', apply);
   document.addEventListener('visibilitychange', visible);
   apply();
   return {
-    theme, interfaceSize, highContrast,
-    setTheme(value: Theme) {
-      if (!isTheme(value)) return;
-      setTheme(value); try { localStorage.setItem('theme', value); } catch { /* Session only. */ } apply();
-    },
+    theme, colors, interfaceSize, highContrast, setTheme: update,
     setInterfaceSize(value: InterfaceSize) { setInterfaceSize(value); persistInterfaceSize(value); apply(); },
     setHighContrast(value: boolean) { setHighContrast(value); persistHighContrast(value); apply(); },
-    dispose() { media?.removeEventListener('change', changed); document.removeEventListener('visibilitychange', visible); },
+    dispose() {
+      latest = undefined;
+      removeAutomation();
+      media?.removeEventListener('change', apply);
+      document.removeEventListener('visibilitychange', visible);
+    },
   };
 }

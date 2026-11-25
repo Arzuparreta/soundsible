@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-import { THEMES, THEME_COLORS } from '../../ui_web/src/boot/themes';
+import { THEME_COLORS } from '../../ui_web/src/boot/themes';
 
 /*
  * The shell paints its own first-run, loading and error screens, from its own
@@ -29,7 +29,7 @@ function tokensOf(selector) {
 
 const base = tokensOf(':root');
 /** Dark is the bare :root block; `system` is never stamped on the document. */
-const overrides = THEMES.filter((theme) => theme !== 'dark' && theme !== 'system');
+const overrides = Object.keys(THEME_COLORS).filter((theme) => theme !== 'dark');
 
 describe('shell palettes', () => {
   it('knows the player is there at all', () => {
@@ -55,7 +55,6 @@ describe('shell palettes', () => {
     // the webview navigates is a visible flicker between two near-blacks.
     expect(base['--bg-base']).toBe(THEME_COLORS.dark);
     for (const theme of overrides) {
-      if (theme === 'system') continue;
       expect(tokensOf(`[data-theme="${theme}"]`)['--bg-base']).toBe(THEME_COLORS[theme]);
     }
   });

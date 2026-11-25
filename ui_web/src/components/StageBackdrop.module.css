@@ -49,7 +49,7 @@
 
 .wash {
   z-index: -2;
-  background-color: var(--stage-panel);
+  background-color: var(--stage-wash-fill, var(--stage-panel));
   background-image: var(--stage-wash);
 }
 

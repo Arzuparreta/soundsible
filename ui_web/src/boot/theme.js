@@ -1,22 +1,17 @@
-/*
- * Applied before first paint, so a stored theme never flashes the default one.
- * Inlined by the boot plugin with the palette table substituted in; it cannot
- * import, and must not throw on a browser that refuses localStorage.
- */
+/* Applied before first paint. The palette generator is shared with the app. */
 (function () {
-  try {
-    var themes = __THEMES__;
-    var colors = __THEME_COLORS__;
-    var stored = localStorage.getItem('theme');
-    var preference = themes.indexOf(stored) === -1 ? 'system' : stored;
-    var resolved =
-      preference === 'system'
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light'
-        : preference;
-    document.documentElement.dataset.theme = resolved;
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', colors[resolved]);
-  } catch (e) {}
+  __CUSTOM_COLORS__
+  var themes = __THEMES__;
+  var colors = __THEME_COLORS__;
+  var stored;
+  try { stored = localStorage.getItem('theme'); } catch (e) {}
+  var preference = themes.indexOf(stored) === -1 ? 'system' : stored;
+  var palette = preference === 'custom' ? deriveCustomColors(readCustomColors()) : null;
+  var resolved = palette ? palette.scheme : preference === 'system'
+    ? (typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : preference;
+  stampCustomColors(palette);
+  document.documentElement.dataset.theme = resolved;
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', palette ? palette.tokens['bg-base'] : colors[resolved]);
 })();

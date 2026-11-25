@@ -8,20 +8,17 @@ import { desktopBridge } from '../lib/desktopBridge';
  */
 
 import { THEME_COLORS } from '../boot/themes';
+import { deriveCustomColors } from '../boot/customColors.js';
+import { paintTheme, resolveTheme as resolve, systemPrefersDark } from '../lib/colorPreferences';
 import { api } from '../lib/api';
 import { ownerToken } from '../lib/config';
 import { state } from './core';
 import type { ResolvedTheme, Theme } from './core';
 
-export function systemPrefersDark(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
-}
+export { systemPrefersDark };
 
-/** Resolve a stored preference to the concrete palette tokens to apply. */
 export function resolveTheme(theme: Theme): ResolvedTheme {
-  if (theme === 'system') return systemPrefersDark() ? 'dark' : 'light';
-  return theme;
+  return resolve(theme, state.customColors);
 }
 
 let systemMediaQuery: MediaQueryList | null = null;
@@ -51,7 +48,7 @@ function syncSystemThemeListener(theme: Theme): void {
 
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   systemMediaListener = () => {
-    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'), true);
+    if (state.theme === 'system') paint('system', true);
   };
   systemMediaQuery = mq;
   if (typeof mq.addEventListener === 'function') {
@@ -66,7 +63,7 @@ function syncSystemThemeListener(theme: Theme): void {
   // changed, applyResolvedTheme is a no-op.
   systemVisibilityListener = () => {
     if (document.visibilityState !== 'visible') return;
-    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'), true);
+    if (state.theme === 'system') paint('system', true);
   };
   document.addEventListener('visibilitychange', systemVisibilityListener);
 }
@@ -86,12 +83,14 @@ let themeTransitionTimer: ReturnType<typeof setTimeout> | null = null;
  * ViewGestureControllerIOS shows that image during the swipe. No page API can
  * refresh or drop it. The only escapes are re-visiting every earlier page or
  * replacing browser history with in-app navigation; neither is worth it. */
-function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
+function paint(theme: Theme, animate = false): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  if (root.dataset.theme === resolved) return;
-
-  if (animate) {
+  if (theme === 'custom' || root.hasAttribute('data-custom-colors')) {
+    if (themeTransitionTimer) clearTimeout(themeTransitionTimer);
+    themeTransitionTimer = null;
+    delete root.dataset.themeTransition;
+  } else if (animate && root.dataset.theme !== resolveTheme(theme)) {
     root.dataset.themeTransition = '';
     // Flush styles so the transition rule is in effect *before* the tokens flip;
     // without it some engines coalesce both changes and skip the animation.
@@ -103,9 +102,7 @@ function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
     }, THEME_TRANSITION_MS);
   }
 
-  root.dataset.theme = resolved;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', THEME_COLORS[resolved]);
+  paintTheme(theme, state.customColors);
 }
 
 /**
@@ -121,17 +118,52 @@ function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
  * Best-effort on purpose: a preference the shell never hears about is a stale
  * splash screen, not a reason to refuse the theme the listener just chose.
  */
+let pendingAnnouncement: Theme | undefined;
+let announcementTimer: ReturnType<typeof setTimeout> | undefined;
+let sendingAppearance = false;
+
+async function sendAppearance(): Promise<void> {
+  if (sendingAppearance || !pendingAnnouncement) return;
+  const theme = pendingAnnouncement;
+  pendingAnnouncement = undefined;
+  sendingAppearance = true;
+  try {
+    const bridge = desktopBridge();
+    let colors: Record<string, string> = THEME_COLORS;
+    if (theme === 'custom') {
+      const { scheme, tokens } = deriveCustomColors(state.customColors);
+      colors = { ...THEME_COLORS, ...tokens, [`custom-${scheme}`]: tokens['bg-base'] };
+    }
+    if (bridge) await bridge.appearance(theme, colors);
+    else if (ownerToken()) await api.setDesktopAppearance(theme, colors);
+  } catch { /* The local document already applied the preference. */ }
+  finally {
+    sendingAppearance = false;
+    if (pendingAnnouncement && !announcementTimer) void sendAppearance();
+  }
+}
+
 export function announceTheme(theme: Theme): void {
-  const bridge = desktopBridge();
-  if (bridge) { void bridge.appearance(theme, THEME_COLORS).catch(() => {}); return; }
-  if (!ownerToken()) return;
-  void api.setDesktopAppearance(theme, THEME_COLORS).catch(() => {});
+  if (!desktopBridge() && !ownerToken()) return;
+  pendingAnnouncement = theme;
+  clearTimeout(announcementTimer);
+  announcementTimer = undefined;
+  if (theme === 'custom') {
+    // Color pickers can emit at pointer-move frequency. Keep disk writes small
+    // and ordered while the WebView itself repaints on every input.
+    announcementTimer = setTimeout(() => {
+      announcementTimer = undefined;
+      void sendAppearance();
+    }, 120);
+  } else {
+    void sendAppearance();
+  }
 }
 
 /** Apply the theme to the document (token overrides live in tokens.css) and
  * sync the mobile status-bar colour. When `system`, follows prefers-color-scheme
  * and re-applies if the OS preference changes. */
 export function applyTheme(theme: Theme, animate = false): void {
-  applyResolvedTheme(resolveTheme(theme), animate);
+  paint(theme, animate);
   syncSystemThemeListener(theme);
 }

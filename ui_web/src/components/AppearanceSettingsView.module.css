@@ -1,0 +1,95 @@
+.editor {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--control-h) * 3.6)), 1fr));
+  gap: var(--space-lg);
+}
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.label {
+  color: var(--ink-primary);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.swatch,
+.hex,
+.reset {
+  min-height: max(var(--control-h), calc(var(--space-xl) + var(--space-lg) + var(--space-xs)));
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink-primary);
+}
+
+.swatch {
+  flex: none;
+  width: max(var(--control-h), calc(var(--space-xl) + var(--space-lg) + var(--space-xs)));
+  padding: var(--space-xs);
+  background: var(--bg-raised);
+  cursor: pointer;
+}
+
+.swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.swatch::-webkit-color-swatch { border: 0; border-radius: var(--radius-xs); }
+.swatch::-moz-color-swatch { border: 0; border-radius: var(--radius-xs); }
+
+.hex {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding-inline: var(--space-md);
+  background: var(--bg-inset);
+  font: var(--fw-medium) var(--text-body) var(--font-mono);
+}
+
+.hex[aria-invalid='true'] { border-color: var(--danger); }
+.error { color: var(--danger); font-size: var(--text-caption); }
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.footer p {
+  margin: 0;
+  flex: 1 1 min(100%, calc(var(--control-h) * 5));
+  color: var(--ink-secondary);
+  font-size: var(--text-label);
+}
+
+.reset {
+  padding-inline: var(--space-md);
+  background: var(--bg-raised);
+  font: var(--fw-semibold) var(--text-label) var(--font-sans);
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .reset:hover { background: var(--bg-hover); }
+}
+
+.swatch:focus-visible,
+.hex:focus-visible,
+.reset:focus-visible {
+  outline: var(--space-2xs) solid var(--accent-ink);
+  outline-offset: var(--space-2xs);
+}

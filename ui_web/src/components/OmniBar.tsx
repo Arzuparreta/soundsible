@@ -7,6 +7,7 @@ import { state, setNowPlayingOpen } from '../stores';
 import { advancePlayback, isPlaybackSilent, player } from '../stores/player';
 import { trackCoverUrl } from '../lib/media';
 import { mobileListLayout } from '../lib/listLayout';
+import { CoverGlass } from './CoverGlass';
 import { OmniSeek } from './OmniSeek';
 import { t } from '../lib/i18n';
 import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
@@ -162,6 +163,7 @@ export function OmniBar() {
         element.addEventListener('click', consumeSwipeClick, true);
         onCleanup(() => element.removeEventListener('click', consumeSwipeClick, true));
       }}>
+      <Show when={state.theme === 'custom' && current()}><CoverGlass artwork={coverBg()} /></Show>
       <OmniSeek onClaim={resetSwipe} onOpen={handleOpen} />
 
       <div class={styles.openArea}><button

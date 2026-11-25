@@ -3,7 +3,6 @@ import path from 'node:path';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
-import { EXTRA_THEMES } from '../boot/themes';
 import { colour, contrast, over, palette, resolve, rgb } from './testing/tokens';
 
 /*
@@ -46,7 +45,6 @@ function painted(values: Record<string, string>, declaration: string): string {
 describe.each([
   ['dark', [] as string[]],
   ['light', [":root[data-theme='light']"]],
-  ...EXTRA_THEMES.map(theme => [theme, [`:root[data-theme='${theme}']`]] as const),
 ] as const)('%s selection', (theme, themeSelectors) => {
   it.each([false, true])('stays visible over every surface (high contrast: %s)', highContrast => {
     const selectors = [':root', ...themeSelectors];

@@ -1,0 +1,27 @@
+.glass { display: none; }
+
+@media (forced-colors: none) {
+  :global([data-custom-colors]) .glass {
+    display: block;
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--bg-base);
+  }
+
+  .glass > span {
+    position: absolute;
+    inset: calc(-1 * var(--space-2xl));
+    filter: var(--cover-glass-filter);
+  }
+
+  .glass::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, var(--cover-glass-tint), var(--glass-fill));
+  }
+}

@@ -159,7 +159,7 @@ function AccountSection() {
 /* ── Appearance ───────────────────────────────────────────────────────── */
 
 function AppearanceSection() {
-  return <AppearanceSettingsView theme={state.theme} onTheme={actions.setTheme} />;
+  return <AppearanceSettingsView theme={state.theme} colors={state.customColors} onTheme={actions.setTheme} />;
 }
 
 /* ── Accessibility ────────────────────────────────────────────────────── */

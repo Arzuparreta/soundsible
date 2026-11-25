@@ -15,3 +15,11 @@ export function IconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & 
 export function RangeControl(props: Omit<JSX.InputHTMLAttributes<HTMLInputElement>, 'type'>) {
   return <input {...props} type="range" />;
 }
+
+export function ColorControl(props: Omit<JSX.InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  return <input {...props} type="color" />;
+}
+
+export function TextControl(props: Omit<JSX.InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  return <input {...props} type="text" />;
+}

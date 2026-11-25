@@ -679,3 +679,7 @@
     background: var(--accent-faint);
   }
 }
+
+:global([data-custom-colors]) .omni {
+  isolation: isolate;
+}
