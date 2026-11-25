@@ -533,13 +533,15 @@
   left: 2px;
   width: 20px;
   height: 20px;
-  background: #fff;
+  --switch-knob-default: #fff;
+  background: var(--player-switch-knob-off, var(--switch-knob-default));
   border-radius: 50%;
   box-shadow: var(--shadow-1);
   transition: transform var(--dur-short) var(--ease-out);
 }
 
 .switch[aria-checked='true'] .knob {
+  background: var(--switch-knob-on, var(--switch-knob-default));
   transform: translateX(18px);
 }
 

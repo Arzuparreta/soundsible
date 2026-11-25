@@ -27,6 +27,7 @@ window.soundsibleAppearance.set({
 ```
 
 Use `window.soundsibleAppearance.get()` to read the current mode and saved pair.
+Pass the result of `get()` to `set()` to restore both the mode and its saved pair.
 The accepted modes are `system`, `dark`, `light` and `custom`. Choose `custom`
 without a colors object to reactivate the saved pair. Each seed accepts RGB or
 RRGGBB hex, with an optional leading `#`. The player normalizes the seeds and

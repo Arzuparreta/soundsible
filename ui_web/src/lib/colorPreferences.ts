@@ -26,7 +26,7 @@ export function paintTheme(theme: Theme, colors: CustomColors) {
 
 export function persistTheme(theme: Theme, colors: CustomColors): void {
   try {
-    if (theme === 'custom') localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(colors));
+    localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(colors));
     localStorage.setItem('theme', theme);
   } catch { /* The setting remains usable for this session. */ }
 }
@@ -57,8 +57,8 @@ export function installAppearanceAutomation(read: () => Appearance, apply: SetAp
     set(preference) {
       const { theme, colors } = (preference ?? {}) as Partial<Appearance>;
       const seeds = colors === undefined ? undefined : parseCustomColors(colors);
-      if (!isTheme(theme) || seeds === null || (seeds && theme !== 'custom')) {
-        throw new TypeError('Expected a theme and, for custom colors, two hex seeds.');
+      if (!isTheme(theme) || seeds === null) {
+        throw new TypeError('Expected a theme and an optional pair of hex colors.');
       }
       apply(theme, seeds);
       return get();

@@ -24,11 +24,11 @@ function applyShellTheme(appearance) {
   if (appearance?.theme !== 'light' && appearance?.theme !== 'dark') return;
   const root = document.documentElement;
   root.dataset.theme = appearance.theme;
-  const custom = Boolean(appearance.colors?.['bg-base']);
+  const custom = Object.keys(shellColors).every(source => /^#[0-9a-f]{6}$/i.test(appearance.colors?.[source]));
   root.toggleAttribute('data-custom-colors', custom);
   for (const [source, token] of Object.entries(shellColors)) {
     const value = appearance.colors?.[source];
-    if (custom && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty(`--custom-${token}`, value);
+    if (custom) root.style.setProperty(`--custom-${token}`, value);
     else root.style.removeProperty(`--custom-${token}`);
   }
 }

@@ -1,4 +1,4 @@
-import { createSignal, createUniqueId, For, Show } from 'solid-js';
+import { createEffect, createSignal, createUniqueId, For, on, Show } from 'solid-js';
 import { DEFAULT_CUSTOM_COLORS, normalizeHex } from '../boot/customColors.js';
 import type { Theme } from '../boot/themes';
 import { ColorControl, Control, TextControl } from '../design/Control';
@@ -13,10 +13,21 @@ const labels: Record<Theme, () => string> = {
 };
 const order: Theme[] = ['system', 'dark', 'light', 'custom'];
 
-function ColorField(props: { label: string; value: string; update: (value: string) => void }) {
+function ColorField(props: { label: string; value: string; reset: number; update: (value: string) => void }) {
   const id = createUniqueId();
   const [draft, setDraft] = createSignal<string>();
   const [invalid, setInvalid] = createSignal(false);
+  createEffect(on(() => props.value, (value) => {
+    if (normalizeHex(draft()) !== value) {
+      setDraft(undefined);
+      setInvalid(false);
+    }
+  }, { defer: true }));
+
+  createEffect(on(() => props.reset, () => {
+    setDraft(undefined);
+    setInvalid(false);
+  }, { defer: true }));
   function commit() {
     if (draft() === undefined) return;
     const color = normalizeHex(draft());
@@ -76,16 +87,14 @@ export function AppearanceSettingsView(props: {
     <Show when={props.theme === 'custom'}>
       <SettingsGroup label={t('settings.customColors')}>
         <div class={styles.editor}>
-          <div class={styles.fields}>
-            <For each={[reset()]}>{() => <>
-              <ColorField label={t('settings.canvasColor')} value={props.colors.canvas} update={value => update('canvas', value)} />
-              <ColorField label={t('settings.accentColor')} value={props.colors.accent} update={value => update('accent', value)} />
-            </>}</For>
-          </div>
           <Control class={styles.reset} onClick={() => {
             props.onTheme('custom', DEFAULT_CUSTOM_COLORS);
             setReset(reset() + 1);
           }}>{t('settings.resetColors')}</Control>
+          <div class={styles.fields}>
+            <ColorField label={t('settings.canvasColor')} value={props.colors.canvas} reset={reset()} update={value => update('canvas', value)} />
+            <ColorField label={t('settings.accentColor')} value={props.colors.accent} reset={reset()} update={value => update('accent', value)} />
+          </div>
         </div>
       </SettingsGroup>
     </Show>

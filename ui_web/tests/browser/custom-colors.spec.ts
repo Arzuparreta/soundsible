@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { CUSTOM_COLORS_KEY, deriveCustomColors } from '../../src/boot/customColors.js';
+import { CUSTOM_COLORS_KEY, contrast, deriveCustomColors } from '../../src/boot/customColors.js';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 
 const path = '/player/#/settings/appearance';
@@ -45,9 +45,13 @@ test('custom colors preview live, survive reload and tint the normal and DJ play
   await expect(page.locator('#startup-screen')).toHaveCount(0);
   expect((await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa']).analyze()).violations).toEqual([]);
 
+  // An edit that an agent supersedes must not be saved again on blur.
+  await canvas.fill('#110022');
   await page.evaluate(() => {
     window.soundsibleAppearance!.set({ theme: 'custom', colors: { canvas: '#203163', accent: '#83e6bc' } });
   });
+  await expect(canvas).toHaveValue('#203163');
+  await canvas.press('Tab');
   await expect(canvas).toHaveValue('#203163');
   await expect(root).toHaveAttribute('data-theme', 'dark');
   await page.emulateMedia({ colorScheme: 'light' });
@@ -58,24 +62,38 @@ test('custom colors preview live, survive reload and tint the normal and DJ play
   await expect(root).toHaveAttribute('data-theme', 'light');
   await custom.check();
   await expect(accent).toHaveValue('#83e6bc');
-  await page.getByRole('button', { name: 'Restablecer colores' }).click();
+  await accent.fill('#bad input');
+  const reset = page.getByRole('button', { name: 'Restablecer colores' });
+  const position = { x: 12, y: 4 };
+  if (info.project.name.endsWith('mobile')) await reset.tap({ position });
+  else await reset.click({ position });
   await expect(accent).toHaveValue('#78dcca');
-  await page.evaluate(() => {
-    window.soundsibleAppearance!.set({ theme: 'custom', colors: { canvas: '#203163', accent: '#83e6bc' } });
-  });
-
+  const paleColors = { canvas: '#909090', accent: '#0033cc' };
+  const { tokens } = deriveCustomColors(paleColors);
+  await page.evaluate(value => window.soundsibleAppearance!.set({ theme: 'custom', colors: value }), paleColors);
   await page.goto('/player/#/settings/accessibility');
   await page.getByRole('checkbox').first().check();
   await page.getByRole('button', { name: 'Grande', exact: true }).click();
+  const activeColors = await root.evaluate(el => {
+    const styles = getComputedStyle(el);
+    return {
+      accent: styles.getPropertyValue('--accent-ink').trim(),
+      active: styles.getPropertyValue('--bg-active').trim(),
+      edge: styles.getPropertyValue('--hairline-strong').trim(),
+    };
+  });
+  expect(activeColors.accent).toBe(tokens['accent-ink']);
+  expect(contrast(activeColors.accent, activeColors.active)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(activeColors.edge, activeColors.active)).toBeGreaterThanOrEqual(3);
   expect((await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa']).analyze()).violations).toEqual([]);
-  await page.getByRole('checkbox').first().uncheck();
   await openMusicPlayer(page);
   const stage = page.locator('[data-player-stage]').first();
   await expect(stage).toBeVisible();
   await expect.poll(() => stage.locator('[data-player-backdrop="active"]').evaluate(el =>
     el.hasAttribute('data-rasterized') || getComputedStyle(el).backgroundImage.includes('library-track-320'),
   )).toBe(true);
-  expect(await stage.evaluate(el => getComputedStyle(el).getPropertyValue('--stage-base').trim())).toBe(deriveCustomColors({ canvas: '#203163', accent: '#83e6bc' }).tokens['bg-base']);
+  expect(await stage.evaluate(el => getComputedStyle(el).getPropertyValue('--stage-base').trim())).toBe(tokens['bg-base']);
+  expect(await stage.evaluate(el => getComputedStyle(el).getPropertyValue('--stage-sheet').trim())).toBe(tokens['bg-elevated']);
   expect(await stage.evaluate(el => getComputedStyle(el).getPropertyValue('--stage-wash').trim())).toContain('linear-gradient');
   await page.getByRole('tab', { name: 'DJ', exact: true }).click();
   await expect(page.locator('[data-player-stage-mode="auto"]')).toBeVisible();
@@ -84,6 +102,7 @@ test('custom colors preview live, survive reload and tint the normal and DJ play
     await page.emulateMedia({ forcedColors: 'active' });
     expect(await root.evaluate(el => getComputedStyle(el).getPropertyValue('--ink-primary').trim())).toBe('CanvasText');
     expect(await stage.evaluate(el => getComputedStyle(el).getPropertyValue('--stage-backdrop-opacity').trim())).toBe('0');
+    expect(await stage.evaluate(el => getComputedStyle(el).getPropertyValue('--stage-sheet').trim())).toBe('Canvas');
     await page.emulateMedia({ forcedColors: 'none' });
   }
 
@@ -93,6 +112,7 @@ test('a color publication in another tab repaints an open player without a reloa
   await mockMusicEngine(page);
   await page.goto(path);
   await expect(page.getByRole('radio', { name: 'Sistema', exact: true })).toBeVisible();
+  const previous = await page.evaluate(() => window.soundsibleAppearance!.get());
   const other = await context.newPage();
   await mockMusicEngine(other);
   await other.goto(path);
@@ -101,4 +121,10 @@ test('a color publication in another tab repaints an open player without a reloa
   await expect(page.locator('html')).toHaveAttribute('data-custom-colors', '');
   await expect(page.getByRole('textbox', { name: 'Fondo (HEX)' })).toHaveValue(colors.canvas);
   await other.close();
+  await page.evaluate(value => window.soundsibleAppearance!.set(value), previous);
+  await expect(page.getByRole('radio', { name: 'Sistema', exact: true })).toBeChecked();
+  expect(await page.evaluate(() => window.soundsibleAppearance!.get())).toEqual(previous);
+  await page.reload();
+  await expect(page.getByRole('radio', { name: 'Sistema', exact: true })).toBeChecked();
+  expect(await page.evaluate(() => window.soundsibleAppearance!.get())).toEqual(previous);
 });

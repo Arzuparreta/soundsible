@@ -90,7 +90,7 @@ export function deriveCustomColors({ canvas, accent }) {
   const dark = luminance(canvas) < 0.179;
   const paper = dark ? '#000000' : '#ffffff';
   const ink = dark ? '#ffffff' : '#000000';
-  const edge = (/** @type {string} */ color) => blend(color, ink, 0.20);
+  const edge = (/** @type {string} */ color) => blend(color, ink, 0.28);
   const base = shade(canvas, paper, value => contrast(edge(value), ink) >= 7.5);
   const surface = (/** @type {number} */ amount) => blend(base, ink, amount);
   const boundary = edge(base);
@@ -139,7 +139,7 @@ export function stampCustomColors(palette) {
     for (const [name, value] of Object.entries(palette.tokens)) {
       root.style.setProperty('--custom-' + name, value);
     }
-    root.dataset.customColors = '';
+    if (!root.hasAttribute('data-custom-colors')) root.dataset.customColors = '';
   } else if (root.hasAttribute('data-custom-colors')) {
     for (const name of Array.from(root.style)) {
       if (name.startsWith('--custom-')) root.style.removeProperty(name);

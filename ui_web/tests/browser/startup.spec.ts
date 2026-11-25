@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { deriveCustomColors } from '../../src/boot/customColors.js';
 import { mockMusicEngine } from './music-browser-fixture';
 
 function gate() {
@@ -76,6 +77,29 @@ test('HTML paints the branded loader before JavaScript arrives', async ({ page }
   } finally { scripts.release(); }
   await expect(page.getByRole('heading', { name: 'Entrar', exact: true })).toBeVisible();
   await expect(page.locator('#startup-screen')).toHaveCount(0);
+});
+
+test('custom colors paint before modules and remain editable in the player', async ({ page }) => {
+  const auth = gate();
+  await engine(page, auth.promise, false);
+  const colors = { canvas: '#101b2a', accent: '#81e5bc' };
+  const background = deriveCustomColors(colors).tokens['bg-base'];
+  await page.addInitScript(colors => {
+    localStorage.setItem('theme', 'custom');
+    localStorage.setItem('soundsible:custom-colors', JSON.stringify(colors));
+  }, colors);
+  await page.goto('/player/', { waitUntil: 'commit' });
+  const meta = page.locator('meta[name="theme-color"]');
+  try {
+    await visibleLoader(page);
+    await expect(meta).toHaveAttribute('content', background);
+  } finally { auth.release(); }
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  await expect(meta).toHaveAttribute('content', background);
+  await page.evaluate(() => window.soundsibleAppearance!.set({
+    theme: 'custom', colors: { canvas: '#fffaf5', accent: '#675090' },
+  }));
+  await expect(meta).toHaveAttribute('content', '#fffaf5');
 });
 
 for (const destination of ['player', 'login', 'invite']) {

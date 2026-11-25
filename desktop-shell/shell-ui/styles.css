@@ -49,7 +49,7 @@
   --danger-line: rgba(201, 37, 27, 0.4);
 }
 
-@media (forced-colors: none) {
+@media not all and (forced-colors: active) {
   [data-custom-colors] {
     --bg-base: var(--custom-bg-base);
     --bg-elevated: var(--custom-bg-elevated);

@@ -182,13 +182,15 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #fff;
+  --switch-knob-default: #fff;
+  background: var(--settings-switch-knob-off, var(--switch-knob-default));
   box-shadow: var(--shadow-1);
   transition: transform var(--dur-short) var(--ease-out);
 }
 
 .switchOn .knob,
 .switchInput:checked + .switch .knob {
+  background: var(--switch-knob-on, var(--switch-knob-default));
   transform: translateX(20px);
 }
 
@@ -326,6 +328,12 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888890' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right var(--space-md) center;
+}
+
+:global([data-custom-colors]) .select {
+  appearance: auto;
+  background-image: none;
+  padding-inline-end: var(--space-sm);
 }
 
 .input {

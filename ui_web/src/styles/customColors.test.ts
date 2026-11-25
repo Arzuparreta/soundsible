@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { contrast, deriveCustomColors, parseCustomColors } from '../boot/customColors.js';
-import { over, contrast as compositeContrast } from './testing/tokens';
+import { colour, over, contrast as compositeContrast } from './testing/tokens';
 
 it('accepts compact and full sRGB hex and refuses non-color values', () => {
   expect(parseCustomColors({ canvas: ' FF0 ', accent: '#12aB34' })).toEqual({ canvas: '#ffff00', accent: '#12ab34' });
@@ -18,7 +18,11 @@ it('keeps foregrounds, fills and focus legible across canvas and accent extremes
       // Include maximal dark and light artwork behind the glass, plus selected
       // text, focus on interactive surfaces, and filled buttons in every state.
       const surfaces = [tokens['bg-base'], tokens['bg-inset'], tokens['bg-elevated'], tokens['bg-active'], tokens['selection-bg'],
-        over(tokens['bg-base'] + 'd6', [0, 0, 0]), over(tokens['bg-base'] + 'd6', [255, 255, 255])];
+        ...[[0, 0, 0], [255, 255, 255]].flatMap(artwork => {
+          const glass = over({ ...colour(tokens['bg-base']), alpha: 0.84 }, artwork);
+          const glossy = over({ ...colour(tokens['ink-primary']), alpha: 0.04 }, glass);
+          return [glass, over({ ...colour(tokens.accent), alpha: 0.10 }, glossy)];
+        })];
       for (const surface of surfaces) {
         for (const name of ink) {
           expect(compositeContrast(tokens[name], surface), `${canvas} / ${accent}: ${name} on ${surface}`).toBeGreaterThanOrEqual(4.5);

@@ -592,8 +592,8 @@
 /* Custom colors share one contrast envelope. The cover stays visible through
    a bounded layer of tinted glass. Foreground colors are computed against a
    more extreme composite than the cover or any interactive material can make. */
-@media (forced-colors: none) {
-  :root[data-custom-colors] {
+@media not all and (forced-colors: active) {
+  :root[data-theme][data-custom-colors] {
     --bg-base: var(--custom-bg-base);
     --bg-raised: var(--custom-bg-raised);
     --bg-elevated: var(--custom-bg-elevated);
@@ -634,6 +634,9 @@
     --glass-filter: blur(24px) saturate(1.55);
     --cover-glass-tint: color-mix(in srgb, var(--bg-base) 84%, transparent);
     --cover-glass-filter: blur(22px) saturate(1.75);
+    --switch-knob-on: var(--ink-on-accent);
+    --settings-switch-knob-off: var(--ink-on-accent);
+    --player-switch-knob-off: var(--ink-primary);
   }
 
   :root[data-custom-colors][data-high-contrast='true'] {
@@ -644,7 +647,7 @@
     --cover-glass-tint: color-mix(in srgb, var(--bg-base) 95%, transparent);
   }
 
-  :root[data-custom-colors] :is([data-player-stage], [data-stage-surface]) {
+  :root[data-theme][data-custom-colors] :is([data-player-stage], [data-stage-surface]) {
     --stage-base: var(--bg-base);
     --stage-backdrop: blur(62px) saturate(1.75);
     --stage-backdrop-opacity: 1;
@@ -655,20 +658,20 @@
     --stage-wash-fill: transparent;
     --stage-media-filter: blur(30px) saturate(1.55);
     --stage-media-veil: var(--stage-wash);
-    --stage-material-quiet: var(--glass-fill);
-    --stage-material: var(--glass-fill);
-    --stage-material-hover: var(--bg-hover);
-    --stage-material-active: var(--bg-active);
-    --stage-panel: var(--glass-fill);
+    --stage-material-quiet: color-mix(in srgb, var(--ink-primary) 3%, transparent);
+    --stage-material: color-mix(in srgb, var(--ink-primary) 6%, transparent);
+    --stage-material-hover: color-mix(in srgb, var(--ink-primary) 8%, transparent);
+    --stage-material-active: color-mix(in srgb, var(--ink-primary) 10%, transparent);
+    --stage-panel: color-mix(in srgb, var(--bg-raised) 28%, transparent);
     --stage-sheet: var(--bg-elevated);
     --stage-well: var(--bg-inset);
-    --stage-row-hover: var(--bg-hover);
+    --stage-row-hover: var(--stage-material-hover);
     --stage-line: var(--hairline);
     --stage-line-soft: var(--hairline-soft);
     --stage-line-strong: var(--hairline-strong);
     --stage-rail: var(--hairline-strong);
     --stage-text-halo: none;
-    --sidebar-active: var(--bg-active);
+    --sidebar-active: var(--stage-material-active);
     --sidebar-active-border: var(--hairline-strong);
   }
 }
@@ -804,7 +807,7 @@
     --ink-on-accent: HighlightText;
   }
 
-  :root[data-theme] :is([data-stage-surface], [data-player-stage]) {
+  :root:is([data-theme], [data-theme][data-high-contrast]) :is([data-stage-surface], [data-player-stage]) {
     --stage-base: Canvas;
     --stage-backdrop: none;
     --stage-backdrop-opacity: 0;
