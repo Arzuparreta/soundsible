@@ -12,6 +12,7 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 beforeEach(() => { cleanup(); setLocale('en'); vi.clearAllMocks(); mocks.request.mockImplementation((path: string) => Promise.resolve(path.includes('recommendations') ? { items: [] } : { results: [row] })); });
 it('opens a directory show without subscribing or creating audio', async () => {
   const open = vi.fn(); const view = render(() => <PodcastDirectory generation={1} onOpen={open} />);
+  fireEvent.click(view.getByRole('button', { name: 'Search podcasts…' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'show' } }); await waitFor(() => expect(view.getByText('Show')).toBeTruthy());
   fireEvent.click(view.getByText('Show')); expect(open).toHaveBeenCalledWith({ title: 'Show', rss_url: row.feed_url, author: 'Host', image_url: undefined, itunes_collection_id: undefined });
   expect(searches()).toHaveLength(1);
@@ -19,12 +20,14 @@ it('opens a directory show without subscribing or creating audio', async () => {
 it('discards stale directory results and aborts after an account change', async () => {
   const old = deferred<{ results: typeof row[] }>(); mocks.request.mockImplementation((path: string) => path.includes('recommendations') ? Promise.resolve({ items: [] }) : old.promise);
   const [generation, change] = createSignal(1); const view = render(() => <PodcastDirectory generation={generation()} onOpen={vi.fn()} />);
+  fireEvent.click(view.getByRole('button', { name: 'Search podcasts…' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'old' } }); await waitFor(() => expect(searches()).toHaveLength(1));
   change(2); old.resolve({ results: [row] }); await Promise.resolve();
   expect(searches()[0][1].signal.aborted).toBe(true); expect(view.queryByText('Show')).toBeNull();
 });
 it('does not make directory requests while disconnected', async () => {
   const view = render(() => <PodcastDirectory generation={1} disconnected onOpen={vi.fn()} />);
+  fireEvent.click(view.getByRole('button', { name: 'Search podcasts…' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'show' } }); await new Promise(resolve => setTimeout(resolve, 350)); expect(mocks.request).not.toHaveBeenCalled();
 });
 it('recommends top shows not yet followed, and their menu subscribes or sends "not interested"', async () => {
@@ -48,9 +51,11 @@ it('hides recommendations while searching and drops them on account change', asy
   const [generation, change] = createSignal(1);
   const view = render(() => <PodcastDirectory generation={generation()} onOpen={vi.fn()} />);
   await waitFor(() => expect(view.getByText('Top show')).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'Search podcasts…' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'show' } }); await waitFor(() => expect(view.getByText('Show')).toBeTruthy());
   expect(view.queryByText('Top show')).toBeNull();
   mocks.request.mockImplementation((path: string) => Promise.resolve(path.includes('recommendations') ? { items: [] } : { results: [] }));
+  fireEvent.click(view.getByRole('button', { name: 'Search podcasts…' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: '' } }); change(2);
   await waitFor(() => expect(mocks.request.mock.calls.filter(([path]) => String(path).includes('recommendations'))).toHaveLength(2));
   expect(view.queryByText('Top show')).toBeNull();

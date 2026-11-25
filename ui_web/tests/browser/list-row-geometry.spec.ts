@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { dragTouch } from './playerGestures';
 import { mockMusicEngine } from './music-browser-fixture';
 
 const tracks = Array.from({ length: 40 }, (_, index) => ({
@@ -106,7 +107,7 @@ test('mounted mixed results follow live density and desktop/mobile breakpoint ch
   }
 });
 
-test('collection fields fill the toolbar before any totals or commands', async ({ page, isMobile }) => {
+test('collection search uses the full toolbar on desktop and opens from the app bar on phones', async ({ page, isMobile }) => {
   await mockLists(page);
   const routes = ['/favourites', '/playlists', '/playlists/Halo',
     '/artist/Halo%20artista%200?view=library',
@@ -114,6 +115,16 @@ test('collection fields fill the toolbar before any totals or commands', async (
   if (!isMobile) routes.unshift('/library?view=songs');
   for (const route of routes) await test.step(route, async () => {
     await page.goto(`/player/#${route}`);
+    if (isMobile) {
+      const field = page.getByRole('searchbox');
+      await expect(field).toHaveCount(0);
+      const command = page.locator('[data-app-bar]').getByRole('button', { name: 'Filtrar esta lista' });
+      await expect(command).toHaveAttribute('aria-expanded', 'false');
+      await command.tap();
+      await expect(field).toBeFocused();
+      await expect(command).toHaveAttribute('aria-expanded', 'true');
+      return;
+    }
     const toolbar = page.locator('main [data-page-toolbar]').filter({ has: page.getByRole('searchbox') });
     await expect(toolbar.getByRole('searchbox')).toBeVisible();
     expect(await toolbar.evaluate(element => {
@@ -131,4 +142,23 @@ test('collection fields fill the toolbar before any totals or commands', async (
       };
     })).toEqual({ inset: true, fills: true, row: true });
   });
+});
+
+test('pulling at the top reveals a list filter without focusing it and scrolling away hides it', async ({ page, isMobile, browserName }) => {
+  test.skip(!isMobile || browserName !== 'chromium', 'CDP injects trusted touch gestures');
+  await mockLists(page);
+  await page.goto('/player/#/favourites');
+  const surface = page.locator('[data-primary-scroll]');
+  const field = page.getByRole('searchbox');
+  await expect(surface.locator(rowSelector).first()).toBeVisible();
+  await expect(field).toHaveCount(0);
+  await dragTouch(page, '[data-primary-scroll]', { dx: 85 });
+  await expect(field).toHaveCount(0);
+  await dragTouch(page, '[data-primary-scroll]', { dy: 70 });
+  await expect(field).toBeVisible();
+  await expect(field).not.toBeFocused();
+  await surface.evaluate(element => { element.scrollTop = 300; });
+  await expect(field).toHaveCount(0);
+  await dragTouch(page, '[data-primary-scroll]', { dy: 60 });
+  await expect(field).toHaveCount(0);
 });

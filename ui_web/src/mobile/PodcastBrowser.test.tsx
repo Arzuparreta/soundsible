@@ -55,6 +55,7 @@ it('confirms following through the server without acquiring episodes', async () 
   const changed = vi.fn().mockResolvedValue(undefined); const followed = { ...show, id: 'new-feed' };
   mocks.request.mockImplementation((path: string) => path === '/api/podcasts/subscribe' ? Promise.resolve({ subscription: followed }) : path.startsWith('/api/discovery') ? Promise.resolve({ results: [{ title: show.title, feed_url: show.rss_url }] }) : Promise.resolve({ episodes: [episode] }));
   const view = render(() => <PodcastBrowser generation={1} subscriptions={[]} acquired={[]} onPlay={vi.fn()} onChanged={changed} />);
+  fireEvent.click(view.getByRole('button', { name: 'Search podcasts…' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'show' } }); await waitFor(() => expect(view.getByText(show.title)).toBeTruthy());
   fireEvent.click(view.getByText(show.title)); await waitFor(() => expect(view.getByText(episode.title)).toBeTruthy());
   fireEvent.click(view.container.querySelector('[data-podcast-show-menu]')!); mocks.menu.mock.calls[0][0].actions[0].onSelect();
@@ -65,6 +66,7 @@ it('a stale Follow menu never turns into Unfollow when another client follows', 
   const [subscriptions, set] = createSignal<typeof show[]>([]);
   mocks.request.mockImplementation((path: string) => path.startsWith('/api/discovery') ? Promise.resolve({ results: [{ title: show.title, feed_url: show.rss_url }] }) : Promise.resolve({ episodes: [episode] }));
   const view = render(() => <PodcastBrowser generation={1} subscriptions={subscriptions()} acquired={[]} onPlay={vi.fn()} />);
+  fireEvent.click(view.getByRole('button', { name: 'Search podcasts…' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'show' } }); await waitFor(() => expect(view.getByText(show.title)).toBeTruthy());
   fireEvent.click(view.getByText(show.title)); await waitFor(() => expect(view.getByText(episode.title)).toBeTruthy());
   fireEvent.click(view.container.querySelector('[data-podcast-show-menu]')!); set([show]);
@@ -76,6 +78,7 @@ it('does not join unrelated unfollowed shows that reuse the same GUID', async ()
   const unrelated = { id: 'wrong', title: episode.title, artist: 'Other show', media_kind: 'podcast_episode', podcast_episode_guid: episode.guid, podcast_rss_url: 'https://different.example.com/feed' } as Track;
   mocks.request.mockImplementation((path: string) => path.startsWith('/api/discovery') ? Promise.resolve({ results: [{ title: show.title, feed_url: show.rss_url }] }) : Promise.resolve({ episodes: [episode], queue: [] }));
   const play = vi.fn().mockResolvedValue(undefined); const view = render(() => <PodcastBrowser generation={1} subscriptions={[]} acquired={[unrelated]} onPlay={play} />);
+  fireEvent.click(view.getByRole('button', { name: 'Search podcasts…' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'show' } }); await waitFor(() => expect(view.getByText(show.title)).toBeTruthy());
   fireEvent.click(view.getByText(show.title)); await waitFor(() => expect(view.getByText(episode.title)).toBeTruthy()); fireEvent.click(view.getByText(episode.title));
   expect(play).toHaveBeenCalledWith(expect.objectContaining({ id: episode.guid, source: 'preview' }));

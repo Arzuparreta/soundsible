@@ -1,4 +1,6 @@
-import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar } from '../components/CollectionToolbar';
+import { desktopShell } from '../lib/shellLayout';
+import { NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { EntityHero } from '../components/EntityHero';
 import Button from '../components/Button';
 import { mobileListLayout } from '../lib/listLayout';
@@ -269,9 +271,9 @@ export default function PodcastShow() {
     ...(sub() || params.id ? [{ icon: menuIcons.trash(), label: t(leaving() ? 'podcastShow.unsubscribing' : 'podcastShow.unsubscribe'),
       disabled: leaving(), danger: true, onSelect: () => void unsubscribe() }] : []),
   ] });
-  const search = createCollectionSearch();
+  const search = createCollectionSearch(() => t('library.filterLoadedEpisodes'));
   const matchingEpisodes = search.filter(episodes, episode => [episode.title]);
-  createEffect(on(() => params.id, () => search.setValue(''), { defer: true }));
+  createEffect(on(() => params.id, search.reset, { defer: true }));
 
   return (
     <div class="view">
@@ -296,7 +298,10 @@ export default function PodcastShow() {
           onCleanup(attachPullToRefresh(element, {
             onPull: setPull,
             onRefresh: () => void refresh(),
-            enabled: () => !data.loading && !refreshing(),
+            // A closed search gets the first pull. With it open, the next pull
+            // can refresh the episode feed as before.
+            enabled: () => !data.loading && !refreshing() &&
+              (desktopShell() || !episodes().length || search.reveal.expanded()),
           }));
         }}
         class={styles.scroll}
@@ -305,7 +310,7 @@ export default function PodcastShow() {
         {/* The show's header scrolls away with its episodes, as an album's
           * does, so a long feed gets the whole height once you are reading. */}
         <div ref={measureHeader}>
-        <EntityHero name={title()} back={back} backLabel={t('podcastShow.ariaBack')} variant="podcast"
+        <EntityHero name={title()} back={back} backLabel={t('podcastShow.ariaBack')} variant="podcast" search={episodes().length ? search.reveal : undefined}
           headerClass={styles.header}
           art={<div class={hero.art} style={neutralCoverStyle(podcastArtwork(image(), HEADER_ARTWORK))} />}
           metadata={<Show when={show()?.author}><span class={hero.credit}>{show()?.author}</span></Show>}>
@@ -329,7 +334,7 @@ export default function PodcastShow() {
           </div>
         </EntityHero>
         <Show when={episodes().length}>
-          <CollectionToolbar search={search} placeholder={t('library.filterLoadedEpisodes')} />
+          <CollectionToolbar search={search} />
         </Show>
         </div>
         <Show

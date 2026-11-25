@@ -1,3 +1,5 @@
+import { CollectionToolbar } from '../components/CollectionToolbar';
+import { createCollectionSearch, type CollectionSearchState } from '../components/CollectionSearch';
 import { EntityHero, EntityMenuCover } from '../components/EntityHero';
 import { openSavedEntityMenu } from '../components/savedEntityActions';
 import { CollectionControl, EntityBookmarkButton } from '../components/CollectionControl';
@@ -332,6 +334,11 @@ export default function Artist() {
     view() === 'library' ? (tabRoot('/') ?? '/') : (tabRoot('/search') ?? '/search'),
   );
   let openCollectionMenu = () => {};
+  const search = createCollectionSearch();
+  createEffect(on([profileKey, view, () => viewParams().artistId], search.reset, { defer: true }));
+  const canSearch = () => view() === 'library'
+    ? !membershipFailed() && libraryTrackList().length > 0
+    : topTracks().length > 0;
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;
   const radioLabel = () => t(player().autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');
 
@@ -349,7 +356,7 @@ export default function Artist() {
         class={hero.page}
         data-primary-scroll
       >
-        <EntityHero name={name()} back={back} backLabel={t('artist.ariaBack')}
+        <EntityHero name={name()} back={back} backLabel={t('artist.ariaBack')} search={canSearch() ? search.reveal : undefined}
           openMenu={() => openCollectionMenu()}
           corner={<EntityBookmarkButton entity={entity()} />}
           art={<EntityMenuCover name={name()} cover={cover()} round onOpen={() => openCollectionMenu()} />}
@@ -413,10 +420,11 @@ export default function Artist() {
               fallback={<EmptyState tone={profileError() ? 'danger' : undefined}>{profileError() ? t('common.loadFailed') : t('artist.noCatalogData')} <Show when={profileError()}><Button class={hero.retry} variant="secondary" size="sm" onClick={() => void retryProfile()}>{t('common.retry')}</Button></Show></EmptyState>}
             >
               <Show when={view() === 'discover'} fallback={
-                <LibraryView tracks={libraryTrackList()} loading={state.loading || membership.loading}
+                <LibraryView search={search} tracks={libraryTrackList()} loading={state.loading || membership.loading}
                   failed={membershipFailed()} onRetry={() => void retryMembership()} context={artistContext('library')} />
               }>
                 <DiscoverView
+                  search={search}
                   topTracks={topTracks()}
                   albums={albums()}
                   singlesEps={singlesEps()}
@@ -439,14 +447,14 @@ export default function Artist() {
   );
 }
 
-function LibraryView(props: { tracks: Track[]; loading: boolean; failed: boolean; onRetry: () => void; context: PlaybackContextDescriptor }) {
+function LibraryView(props: { search: CollectionSearchState; tracks: Track[]; loading: boolean; failed: boolean; onRetry: () => void; context: PlaybackContextDescriptor }) {
   return (
     <div class={styles.libraryView}>
       <Show when={!props.failed} fallback={
         <EmptyState tone="danger">{t('common.loadFailed')} <Button class={hero.retry} variant="secondary" size="sm" onClick={() => props.onRetry()}>{t('common.retry')}</Button></EmptyState>
       }>
         <Show when={props.tracks.length > 0} fallback={<Show when={props.loading} fallback={<EmptyState>{t('artist.empty')}</EmptyState>}><SkeletonRows /></Show>}>
-          <EntityTrackList tracks={props.tracks} context={props.context} />
+          <EntityTrackList search={props.search} tracks={props.tracks} context={props.context} />
         </Show>
       </Show>
     </div>
@@ -454,6 +462,7 @@ function LibraryView(props: { tracks: Track[]; loading: boolean; failed: boolean
 }
 
 function DiscoverView(props: {
+  search: CollectionSearchState;
   topTracks: CatalogItem[];
   albums: AlbumSummary[];
   singlesEps: AlbumSummary[];
@@ -465,7 +474,7 @@ function DiscoverView(props: {
   onSaveItem: (item: CatalogItem) => void;
   artistName: string;
 }) {
-  return <ArtistDiscoveryView topTracks={props.topTracks} albums={props.albums} singlesEps={props.singlesEps}
+  return <ArtistDiscoveryView search={props.search} toolbar={<CollectionToolbar search={props.search} contained />} topTracks={props.topTracks} albums={props.albums} singlesEps={props.singlesEps}
     latestRelease={props.latestRelease} related={props.related} loading={props.loading} artistName={props.artistName}
     renderSong={(item, _index, queue, rank) => <CatalogResultRow item={item} index={rank} active={isPlayingItem(item)}
       saving={props.saving.has(item.id)} onPlay={() => props.onPlayItem(item, queue())} onDownload={() => props.onSaveItem(item)} />}

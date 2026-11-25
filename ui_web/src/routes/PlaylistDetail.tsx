@@ -1,5 +1,6 @@
+import { CollectionToolbar } from '../components/CollectionToolbar';
 import { EntityHero } from '../components/EntityHero';
-import { CollectionToolbar, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createEffect, createMemo, createSignal, on, Show } from 'solid-js';
@@ -38,7 +39,7 @@ export default function PlaylistDetail() {
 
   const search = createCollectionSearch();
   const filteredTracks = search.filter(tracks, trackSearchFields);
-  createEffect(on(name, () => search.setValue(''), { defer: true }));
+  createEffect(on(name, search.reset, { defer: true }));
 
   const context = () => playlistContext(name(), tracks(), state.librarySettings);
   // The sleeve the playlists grid shows: the cover the user picked, else the
@@ -60,6 +61,7 @@ export default function PlaylistDetail() {
   };
 
   const [editing, setEditing] = createSignal(false);
+  const canSearch = () => !editing() && tracks().length > 0;
   const openMenu = () =>
     openPlaylistMenu(name(), {
       onEdit: () => setEditing(true),
@@ -70,7 +72,7 @@ export default function PlaylistDetail() {
   const back = () => navigateBackOr(navigate, '/playlists');
   return (
     <div class={`view ${hero.collection}`}>
-      <EntityHero name={name()} back={back} backLabel={t('playlistDetail.ariaBack')} variant="compact"
+      <EntityHero name={name()} back={back} backLabel={t('playlistDetail.ariaBack')} variant="compact" search={canSearch() ? search.reveal : undefined}
         art={<div class={hero.art} style={{ background: NEUTRAL_COVER }} aria-hidden="true">
           <CoverImage src={cover()} eager />
         </div>}>
@@ -91,7 +93,7 @@ export default function PlaylistDetail() {
               </button>
           </div>
       </EntityHero>
-      <Show when={!editing() && tracks().length}><CollectionToolbar search={search} meta={trackCount(trackIds().length)} /></Show>
+      <Show when={canSearch()}><CollectionToolbar search={search} meta={trackCount(trackIds().length)} /></Show>
       <Show when={editing()} fallback={<TrackList
         tracks={filteredTracks()}
         context={context()}

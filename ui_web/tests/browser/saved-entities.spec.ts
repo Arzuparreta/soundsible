@@ -179,7 +179,7 @@ test('every saved card is the same size, whatever the length of its name', async
   expect(new Set(await coverSizes('Artistas')).size).toBe(1);
 });
 
-test('a compatibility-normalized saved match suppresses the Library empty state', async ({ page }) => {
+test('a compatibility-normalized saved match suppresses the Library empty state', async ({ page, isMobile }) => {
   await mockMusicEngine(page);
   await page.route('**/api/library/saved-entities', route => route.fulfill({ json: { entities: [
     { kind: 'album', name: 'Oﬃce', artist: 'Björk', destination: '/album/Office?artist=Bjork&deezer_id=1' },
@@ -190,6 +190,11 @@ test('a compatibility-normalized saved match suppresses the Library empty state'
 
   await page.goto('/player/#/?saved=albums');
   const field = page.getByRole('searchbox', { name: 'Filtrar esta lista' });
+  if (isMobile) {
+    await expect(field).toHaveCount(0);
+    await page.getByRole('button', { name: 'Filtrar esta lista' }).click();
+    await expect(field).toBeFocused();
+  }
   await field.fill('BJORK');
   await expect(page.getByRole('link', { name: 'Oﬃce', exact: true })).toBeVisible();
   await field.fill('missing');

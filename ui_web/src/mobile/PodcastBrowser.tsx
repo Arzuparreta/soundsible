@@ -1,5 +1,6 @@
+import { NativeSearchToolbar } from '../components/NativeSearchToolbar';
 import Button from '../components/Button';
-import { CollectionToolbar, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { registerNativeBack } from './backNavigation';
@@ -15,7 +16,7 @@ import type { Track } from '../types/music';
 
 /** Feed browsing imports no audio runtime; only the selected episode reaches native NORMAL. */
 export default function PodcastBrowser(props: { generation: number; subscriptions: PodcastSubscription[]; acquired: Track[]; disconnected?: boolean; activeId?: string; onPlay(track: Track): Promise<void>; onPlayOnDevice?(track: Track): void; onChanged?(): Promise<void> }) {
-  const episodeSearch = createCollectionSearch();
+  const episodeSearch = createCollectionSearch(() => t('library.filterLoadedEpisodes'));
   const [show, setShow] = createSignal<PodcastShowInfo | null>(null);
   const [followResult, setFollowResult] = createSignal<{ url: string; subscription: PodcastShowInfo | null } | null>(null);
   const followed = createMemo(() => followResult()?.url === show()?.rss_url ? followResult()?.subscription : props.subscriptions.find(row => row.rss_url === show()?.rss_url));
@@ -50,7 +51,7 @@ export default function PodcastBrowser(props: { generation: number; subscription
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal(false);
   let epoch = 0; let controller = new AbortController();
-  function reset() { episodeSearch.setValue(''); queueEpoch++; queueAbort?.abort(); clearTimeout(queueTimer); setQueueError(false); setFollowResult(null); actionEpoch++; actionAbort?.abort(); setMutation(false); epoch++; controller.abort(); controller = new AbortController(); setEpisodes([]); setNext(null); setError(false); setBusy(false); }
+  function reset() { episodeSearch.reset(); queueEpoch++; queueAbort?.abort(); clearTimeout(queueTimer); setQueueError(false); setFollowResult(null); actionEpoch++; actionAbort?.abort(); setMutation(false); epoch++; controller.abort(); controller = new AbortController(); setEpisodes([]); setNext(null); setError(false); setBusy(false); }
   createEffect(() => { props.generation; reset(); setJobs([]); observedComplete.clear(); setShow(null); });
   createEffect(on(() => props.disconnected, disconnected => {
     if (disconnected) { queueEpoch++; queueAbort?.abort(); clearTimeout(queueTimer); }
@@ -167,7 +168,7 @@ export default function PodcastBrowser(props: { generation: number; subscription
         <Show when={error()}><p role="alert">{t('common.loadFailed')}</p><button disabled={busy() || props.disconnected} onClick={() => void load(selected())}>{t('common.retry')}</button></Show>
         <Show when={queueError()}><p role="status">{t('common.loadFailed')} <button onClick={() => void loadQueue()}>{t('common.retry')}</button></p></Show>
         <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
-        <Show when={shownEpisodes().length}><CollectionToolbar contained search={episodeSearch} placeholder={t('library.filterLoadedEpisodes')} /></Show>
+        <Show when={shownEpisodes().length}><NativeSearchToolbar search={episodeSearch.reveal} /></Show>
         <For each={matchingEpisodes()} fallback={<Show when={!busy() && !error()}>
           <CollectionEmpty source={shownEpisodes().length}>
             <Show when={downloadedOnly()} fallback={<EmptyState>{t('podcastShow.empty')}</EmptyState>}>

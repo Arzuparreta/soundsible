@@ -23,12 +23,11 @@ describe('ViewHeader on the desktop shell', () => {
   it('keeps a long title whole, with its meta, rather than cutting it', () => {
     setMediaQuery(DESKTOP, true);
     const title = 'A podcast whose name runs far longer than any header is wide';
-    render(() => <InShell><ViewHeader title={title} meta="3 in progress" barTrailing={<select aria-label="Country" />} /></InShell>);
+    render(() => <InShell><ViewHeader title={title} meta="3 in progress" trailing={<select aria-label="Country" />} /></InShell>);
 
     expect(screen.getByRole('heading', { name: title })).toHaveTextContent(title);
     expect(screen.getByText('3 in progress')).toBeInTheDocument();
-    // On the desktop there is no top bar to hand the control to.
-    expect(screen.queryByRole('combobox', { name: 'Country' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Country' }).closest('[data-page-toolbar]')).toBeInTheDocument();
 
     // The page title wraps; only an ellipsis-free rule keeps its end readable.
     const file = path.join(path.dirname(new URL(import.meta.url).pathname), 'AppBar.module.css');
@@ -79,7 +78,7 @@ describe('ViewHeader on the touch shell', () => {
         <ViewHeader
           title="Podcasts"
           actions={<select aria-label="Desktop country" />}
-          barTrailing={<select aria-label="Country" />}
+          trailing={<select aria-label="Country" />}
         />
       </InShell>
     ));

@@ -1,3 +1,5 @@
+import { NativeSearchToolbar } from './NativeSearchToolbar';
+import { createCollectionSearch } from './CollectionSearch';
 import { cleanup, fireEvent, render } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { setLocale } from '../lib/i18n';
@@ -7,7 +9,7 @@ afterEach(cleanup);
 it('delegates full entity identities and song context through the shared discography layout', () => {
   setLocale('en'); const open = vi.fn(), play = vi.fn();
   const songs: CatalogItem[] = [{ id: 'song:1', title: 'Song', type: 'track', source: 'deezer' }];
-  const view = render(() => <ArtistDiscoveryView artistName="Artist" topTracks={songs} loading={false}
+  const view = render(() => <ArtistDiscoveryView search={createCollectionSearch()} artistName="Artist" topTracks={songs} loading={false}
     albums={[{ deezer_id: '1', title: 'Same album', cover: '', year: 2001 }]}
     singlesEps={[{ deezer_id: '2', title: 'Same album', cover: '' }]}
     related={[{ deezer_id: '3', name: 'Related', picture: '', nb_fans: 12300 }]}
@@ -25,7 +27,7 @@ it('delegates full entity identities and song context through the shared discogr
 });
 
 const albums = (n: number) => Array.from({ length: n }, (_, i) => ({ deezer_id: String(i), title: `Record ${i}`, cover: '' }));
-const shelf = (props: { albums?: number; related?: number; loading?: boolean }) => render(() => <ArtistDiscoveryView artistName="Artist"
+const shelf = (props: { albums?: number; related?: number; loading?: boolean }) => render(() => <ArtistDiscoveryView search={createCollectionSearch()} artistName="Artist"
   topTracks={[]} loading={!!props.loading} albums={albums(props.albums ?? 0)} singlesEps={[]}
   related={Array.from({ length: props.related ?? 0 }, (_, i) => ({ deezer_id: `r${i}`, name: `Related ${i}`, picture: '', nb_fans: 10 }))}
   renderSong={() => null} renderLink={link => <a href={link.entity.destination} class={link.class}>{link.children}</a>} />);
@@ -66,7 +68,7 @@ it('opens a long shelf into a grid through a labelled, stateful control', () => 
 it('renders the latest release spotlight card at the top when present', () => {
   setLocale('en');
   const open = vi.fn();
-  const view = render(() => <ArtistDiscoveryView artistName="Artist" topTracks={[]} albums={[]} singlesEps={[]} related={[]} loading={false}
+  const view = render(() => <ArtistDiscoveryView search={createCollectionSearch()} artistName="Artist" topTracks={[]} albums={[]} singlesEps={[]} related={[]} loading={false}
     latestRelease={{ deezer_id: '99', title: 'Fresh Drop', cover: '', year: 2026, release_date: '2026-11-10', record_type: 'single' }}
     renderSong={() => null} renderLink={link => <button onClick={() => open(link.entity)}>{link.children}</button>} />);
   expect(view.getByRole('heading', { name: 'Latest release' })).toBeInTheDocument();
@@ -82,10 +84,14 @@ it('filters only the top tracks on screen and keeps their rank', () => {
   const topTracks: CatalogItem[] = Array.from({ length: 12 }, (_, i) => ({
     id: `song:${i + 1}`, title: i === 8 || i === 11 ? `Echo ${i + 1}` : `Song ${i + 1}`, type: 'track', source: 'deezer',
   }));
-  const view = render(() => <ArtistDiscoveryView artistName="Artist" topTracks={topTracks} loading={false}
+  const view = render(() => {
+    const search = createCollectionSearch();
+    return <ArtistDiscoveryView search={search} toolbar={<NativeSearchToolbar search={search.reveal} />} artistName="Artist" topTracks={topTracks} loading={false}
     albums={[]} singlesEps={[]} related={[]}
     renderSong={(item, _index, _queue, rank) => <span data-rank={rank}>{item.title}</span>}
-    renderLink={link => <a href={link.entity.destination}>{link.children}</a>} />);
+    renderLink={link => <a href={link.entity.destination}>{link.children}</a>} />;
+  });
+  fireEvent.click(view.getByRole('button', { name: 'Filter this list' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'echo' } });
   expect(view.getByText('Echo 9').getAttribute('data-rank')).toBe('9');
   // Track 12 was never in the list, so filtering must not reveal it.

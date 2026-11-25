@@ -9,10 +9,10 @@ export interface SwipeRevealFrame {
 }
 
 /**
- * Small, DOM-free state machine for Library's concealed mobile controls.
+ * Small, DOM-free state machine for concealed mobile search.
  *
- * The first gesture towards the top of the library is consumed by the controls
- * instead of overscrolling the first song. Touch coordinates move down while
+ * The first gesture towards the top of the list is consumed by the controls
+ * instead of overscrolling the first row. Touch coordinates move down while
  * the scroll position is being pushed back towards zero. Horizontal/diagonal
  * gestures and taps are deliberately rejected so row actions stay predictable.
  */
@@ -46,7 +46,7 @@ export function createTopSwipeReveal() {
     const horizontal = Math.abs(x - startX);
 
     if (!captured) {
-      if (horizontal > ACTIVATION_SLOP && horizontal >= Math.abs(revealDelta)) {
+      if (revealDelta < -ACTIVATION_SLOP || (horizontal > ACTIVATION_SLOP && horizontal >= Math.abs(revealDelta))) {
         cancelled = true;
         return { captured: false, progress };
       }
@@ -83,5 +83,5 @@ export function createTopSwipeReveal() {
     return { captured: wasCaptured, progress: 0 };
   };
 
-  return { begin, move, end, cancel };
+  return { begin, move, end, cancel, isTracking: () => tracking && !cancelled };
 }

@@ -2,11 +2,11 @@ import Button from '../components/Button';
 import { afterPaint } from '../lib/afterPaint';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { openAlbumBrowseMenu } from '../components/albumBrowseMenu';
-import { createEffect, createMemo, createResource, createSignal, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, Match, onMount, Show, Switch } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
 import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
-import { SearchField } from '../components/SearchField';
+import { createSearchReveal } from '../components/SearchReveal';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
 import AlbumGrid from '../components/AlbumGrid';
@@ -37,13 +37,11 @@ import {
   type AlbumSort,
 } from '../lib/albumBrowse';
 import { normalizeLibraryQuery, searchLibrary } from '../lib/librarySearch';
-import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
-import { DownloadIcon, SearchIcon, SortIcon } from '../components/icons';
+import { DownloadIcon, SortIcon } from '../components/icons';
 import type { AppBarAction } from '../lib/appBar';
 import { PageCommands } from '../components/PageCommands';
-import { desktopShell } from '../lib/shellLayout';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { libraryContext } from '../lib/playbackContext';
@@ -55,7 +53,6 @@ export default function Library() {
     const view = searchParams.view;
     setLibraryTab(view === 'albums' || view === 'artists' ? view : 'songs');
   });
-  let viewRef: HTMLDivElement | undefined;
   const active = createMemo(() => downloadCounts().active);
   // Keyed off the resolved rows rather than library ids, so "favourites first"
   // also lifts the marked songs that have no file — they are in this list too.
@@ -91,7 +88,6 @@ export default function Library() {
     setQuerySignal(next);
     setSearchParams({ q: next || undefined }, { replace: true });
   };
-  const [searchFocused, setSearchFocused] = createSignal(false);
   const searchResults = createMemo(() => searchLibrary(sorted(), artists(), query()));
   const searching = createMemo(() => !!normalizeLibraryQuery(query()));
   /** The library never loaded, as opposed to being genuinely empty. */
@@ -110,114 +106,18 @@ export default function Library() {
     </Show>
   );
 
-  // Desktop breakpoint is 1024px (matches app.module.css / tokens.css). On
-  // mobile the song row's subtitle is the same gesture as the row itself, so
-  // we render the artist as plain text and let the row click play the track.
-  // The touch composition is the shell's call (lib/shellLayout), not a width
-  // of this page's own: at the Large size a small desktop window still gets
-  // the top bar, and this page has to agree with it.
-  const isMobile = () => !desktopShell();
-  const [searchProgress, setSearchProgress] = createSignal(isMobile() && !searching() ? 0 : 1);
-  const [searchDragging, setSearchDragging] = createSignal(false);
-  const swipeReveal = createTopSwipeReveal();
-
-  createEffect(on(isMobile, (mobile) => {
-    if (!mobile) {
-      setSearchProgress(1);
-      setSearchDragging(false);
-    } else {
-      setSearchProgress(searching() || searchFocused() ? 1 : 0);
-    }
-  }, { defer: true }));
+  const search = createSearchReveal(() => ({
+    value: query(),
+    placeholder: t('library.searchLibrary'),
+    onInput: setQuery,
+  }), () => t('library.searchAction'));
 
   onMount(() => {
     if (searchParams.search === '1') {
       setSearchParams({ search: undefined }, { replace: true });
-      revealSearch();
+      search.open();
     }
-
-    const scrollSurface = (target: EventTarget | null) =>
-      target instanceof HTMLElement ? target.closest<HTMLElement>('[data-library-scroll]') : null;
-
-    const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || searchProgress() > 0) return;
-      const surface = scrollSurface(event.target);
-      const touch = event.touches[0];
-      swipeReveal.begin(touch.clientX, touch.clientY, event.timeStamp, !!surface && surface.scrollTop <= 1, isMobile());
-    };
-    const onTouchMove = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || (searchProgress() >= 1 && !searchDragging())) return;
-      const touch = event.touches[0];
-      const frame = swipeReveal.move(touch.clientX, touch.clientY, event.timeStamp);
-      if (!frame.captured) return;
-      event.preventDefault();
-      setSearchDragging(true);
-      setSearchProgress(frame.progress);
-    };
-    const finishTouch = (event: TouchEvent) => {
-      if (searchProgress() >= 1 && !searchDragging()) return;
-      const frame = swipeReveal.end(event.timeStamp);
-      if (frame.captured) event.preventDefault();
-      setSearchDragging(false);
-      setSearchProgress(frame.progress);
-    };
-    const cancelTouch = () => {
-      const frame = swipeReveal.cancel();
-      setSearchDragging(false);
-      if (frame.captured) setSearchProgress(0);
-    };
-    const onScroll = (event: Event) => {
-      const surface = scrollSurface(event.target);
-      if (
-        isMobile() &&
-        searchProgress() === 1 &&
-        !searching() &&
-        !searchFocused() &&
-        surface &&
-        surface.scrollTop > 24
-      ) {
-        setSearchProgress(0);
-      }
-    };
-
-    const view = viewRef;
-    view?.addEventListener('touchstart', onTouchStart, { passive: true });
-    view?.addEventListener('touchmove', onTouchMove, { passive: false });
-    view?.addEventListener('touchend', finishTouch, { passive: false });
-    view?.addEventListener('touchcancel', cancelTouch, { passive: true });
-    view?.addEventListener('scroll', onScroll, true);
-
-    onCleanup(() => {
-      view?.removeEventListener('touchstart', onTouchStart);
-      view?.removeEventListener('touchmove', onTouchMove);
-      view?.removeEventListener('touchend', finishTouch);
-      view?.removeEventListener('touchcancel', cancelTouch);
-      view?.removeEventListener('scroll', onScroll, true);
-    });
   });
-
-  const revealSearch = () => {
-    setSearchProgress(1);
-    requestAnimationFrame(() => viewRef?.querySelector<HTMLInputElement>('input')?.focus());
-  };
-
-  const searchRevealStyle = () =>
-    isMobile() ? `--search-reveal:${searchProgress()};--search-offset:${(1 - searchProgress()) * -8}px` : undefined;
-  const searchHidden = () => isMobile() && searchProgress() === 0;
-
-  /** Mobile reveals the library field on swipe. */
-  const searchField = () => (
-    <SearchField
-      value={query()}
-      placeholder={t('library.searchLibrary')}
-      onInput={setQuery}
-      onFocus={() => {
-        setSearchFocused(true);
-        setSearchProgress(1);
-      }}
-      onBlur={() => setSearchFocused(false)}
-    />
-  );
 
   const sortLabel = (sort: AlbumSort) => t(`library.albumSort.${sort}`);
 
@@ -270,20 +170,16 @@ export default function Library() {
 
   const resetLibrarySearch = () => {
     setQuery('');
-    setSearchProgress(0);
-    setSearchFocused(false);
+    search.reset();
   };
 
   return (
-    <div ref={viewRef} class="view">
+    <div class="view">
       <ViewHeader
         title={t(`library.${libraryTab()}` as 'library.songs')}
-        desktopField={searchField()}
+        search={search}
         rendersOwnCommands
-        barActions={[
-          { label: t('library.searchAction'), icon: () => <SearchIcon />, onSelect: revealSearch },
-          ...sortCommands(),
-        ]}
+        barActions={sortCommands()}
         onViewChange={resetLibrarySearch}
         onTitleTap={() => reselectPrimaryTab('/library')}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
@@ -310,18 +206,6 @@ export default function Library() {
           </>
         }
       />
-
-      <Show when={isMobile()}>
-        <div
-          class={styles.searchReveal}
-          classList={{ [styles.searchDragging]: searchDragging() }}
-          style={searchRevealStyle()}
-          aria-hidden={searchHidden() ? 'true' : undefined}
-          inert={searchHidden()}
-        >
-          {searchField()}
-        </div>
-      </Show>
 
       <Show when={!searching() && libraryTab() === 'songs' && libraryFilter() === 'downloaded'}>
         <div class={styles.filterChips}>

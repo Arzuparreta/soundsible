@@ -7,6 +7,7 @@ import { desktopShell } from '../lib/shellLayout';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { BackIcon } from './icons';
 import { NavigationMenuButton } from './NavigationMenu';
+import { SearchReveal } from './SearchReveal';
 import { PageCommands } from './PageCommands';
 import styles from './AppBar.module.css';
 
@@ -37,6 +38,12 @@ function returnToTop(from: HTMLElement) {
 export function AppBar() {
   const location = useLocation();
   const bar = currentAppBar;
+  const search = () => bar()?.search?.();
+  const commands = () => {
+    const action = search()?.action();
+    const actions = bar()?.actions?.() ?? [];
+    return action ? [action, ...actions] : actions;
+  };
   const [scrolled, setScrolled] = createSignal(false);
   const [headingOut, setHeadingOut] = createSignal(false);
   let root: HTMLElement | undefined;
@@ -132,9 +139,12 @@ export function AppBar() {
 
         <div class={styles.actions}>
           {bar()?.trailing?.()}
-          <PageCommands actions={bar()?.actions?.()} />
+          <PageCommands actions={commands()} />
         </div>
       </header>
+      <Show when={search()} keyed>{search => <SearchReveal search={search}
+        scope={field => field.parentElement?.querySelector<HTMLElement>('[data-app-outlet]')}
+        scroller={pageScroller} />}</Show>
     </Show>
   );
 }

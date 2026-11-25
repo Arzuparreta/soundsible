@@ -1,4 +1,5 @@
-import { CollectionToolbar, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
+import { NativeSearchToolbar } from '../components/NativeSearchToolbar';
+import { CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { collectionId, collectionIndex } from '../lib/collectionIdentity';
 import { createMemo, createResource, createSignal, createEffect, on, For, Show, onCleanup, type JSX } from 'solid-js';
@@ -41,8 +42,8 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     }
     return [...groups.values()];
   };
-  const search = createCollectionSearch();
-  const { value: query, setValue: setQuery } = search;
+  const search = createCollectionSearch(() => !collection() && tab() === 'songs' ? t('library.searchLibrary') : t('library.filterCollection'));
+  const query = search.value;
   const [detailError, setDetailError] = createSignal(false);
   const [albums, { refetch: retryAlbums }] = createResource(() => tab() === 'albums' ? `${props.revision}:${props.disconnected}:${onlyAvailable()}:${albumSort()}:${JSON.stringify(albumFilter())}:${props.offline?.items.filter(item => item.state === 'ready').map(item => item.track.id).join(',')}` : false,
     (): Promise<{ albums: CatalogAlbum[] }> => props.disconnected || onlyAvailable()
@@ -88,7 +89,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     setDetailError(false);
     try {
       const detail = props.disconnected || onlyAvailable() ? { track_ids: localCollections(kind).find(group => group.id === id)?.ids ?? [] } : await request<{ track_ids?: string[] }>(`/api/library/${kind}/${encodeURIComponent(id)}`, { signal: controller.signal });
-      if (epoch === detailEpoch) { setCollection({ title, ids: detail.track_ids ?? [], kind, id, bookmark }); setQuery(''); }
+      if (epoch === detailEpoch) { setCollection({ title, ids: detail.track_ids ?? [], kind, id, bookmark }); search.reset(); }
     } catch { if (epoch === detailEpoch) setDetailError(true); }
   }
   createEffect(on(() => props.revision, () => {
@@ -107,12 +108,12 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
       .catch(() => { if (epoch === detailEpoch) setDetailError(true); });
   }, { defer: true }));
   const selectTab = (next: typeof tab extends () => infer T ? T : never) => {
-    cancelDetail(); setCollection(null); setQuery(''); setDetailError(false); setTab(next);
+    cancelDetail(); setCollection(null); search.reset(); setDetailError(false); setTab(next);
   };
-  const closeCollection = () => { cancelDetail(); setCollection(null); setQuery(''); setDetailError(false); };
+  const closeCollection = () => { cancelDetail(); setCollection(null); search.reset(); setDetailError(false); };
   registerNativeBack(() => {
     if (collection()) { closeCollection(); return true; }
-    if (query()) { setQuery(''); return true; }
+    if (query()) { search.reset(); return true; }
     if (tab() !== 'songs') { selectTab('songs'); return true; }
     return false;
   });
@@ -148,7 +149,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     <Show when={collection() || tab() === 'songs' || tab() === 'favourites'} fallback={
       <Show when={tab() === 'playlists'} fallback={
         <><Show when={tab() === 'albums'}><div class={styles.libraryTools}><button class={styles.menuTrigger} data-album-menu aria-label={t('library.albumSortTitle')} onClick={event => void albumMenu(event)}>⋯</button></div></Show>
-        <Show when={tab() === 'albums' ? albumRows().length : artistRows().length}><CollectionToolbar contained search={search} /></Show>
+        <Show when={tab() === 'albums' ? albumRows().length : artistRows().length}><NativeSearchToolbar search={search.reveal} /></Show>
         <Show when={!albums.error && !artists.error} fallback={<p role="alert">{t('common.loadFailed')} <button onClick={() => { void retryAlbums(); void retryArtists(); }}>{t('common.retry')}</button></p>}>
           <Show when={!albums.loading && !artists.loading} fallback={<p role="status">{t('common.loading')}</p>}>
             <Show when={tab() === 'albums'} fallback={<For each={visibleArtists()} fallback={empty(artistRows(), t('library.emptyArtists'))}>{artist =>
@@ -166,18 +167,15 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
           </Show>
         </Show></>
       }>
-      <Show when={names().length}><CollectionToolbar contained search={search} /></Show>
+      <Show when={names().length}><NativeSearchToolbar search={search.reveal} /></Show>
       <For each={visibleNames()} fallback={empty(names(), t('playlists.empty'))}>{name =>
           <MusicListRowView title={name} subtitle={trackCount(library().playlists?.[name]?.length ?? 0)} seed={name}
             cover={props.disconnected ? undefined : (() => { const id = library().settings?.playlist_covers?.[name] ?? library().playlists?.[name]?.find(id => library().tracks.some(track => collectionId(track) === id && track.source !== 'preview')); return id ? coverUrl(id, 'thumb') : undefined; })()}
-            onMenu={props.onPlaylistMenu ? event => props.onPlaylistMenu?.(name, event) : undefined} onActivate={() => { setCollection({ title: name, ids: library().playlists?.[name] ?? [], kind: 'playlists', id: name }); setQuery(''); }} />
+            onMenu={props.onPlaylistMenu ? event => props.onPlaylistMenu?.(name, event) : undefined} onActivate={() => { setCollection({ title: name, ids: library().playlists?.[name] ?? [], kind: 'playlists', id: name }); search.reset(); }} />
       }</For></Show>
     }>
-      <div class={styles.libraryTools}>
-      <Show when={sourceTracks().length || search.query()}>
-        <CollectionToolbar contained search={search} placeholder={!collection() && tab() === 'songs' ? t('library.searchLibrary') : undefined} />
-      </Show>
-      <Show when={props.onManageOffline}><button class={styles.menuTrigger} data-library-menu aria-label={t('songRow.ariaMore')} onClick={event => {
+      <NativeSearchToolbar search={sourceTracks().length || search.query() ? search.reveal : undefined}
+        actions={<Show when={props.onManageOffline}><button class={styles.menuTrigger} data-library-menu aria-label={t('songRow.ariaMore')} onClick={event => {
         const offline: MenuAction[] = [
         { label: t(onlyAvailable() ? 'android.offlineAll' : 'android.offlineOnly'), disabled: props.disconnected, selected: onlyAvailable() || props.disconnected, onSelect: () => { detailEpoch++; setCollection(null); setOnlyAvailable(value => !value); } },
         { label: t('android.offlineManage'), onSelect: () => props.onManageOffline?.() },
@@ -190,7 +188,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
           { label: t('android.offlineManage'), actions: offline.slice(1) },
         ] }, event);
         else openContextMenu({ title: t('library.title'), actions: offline }, event);
-      }}>⋯</button></Show></div>
+      }}>⋯</button></Show>} />
       <Show when={tracks().length} fallback={empty(sourceTracks(), t(tab() === 'favourites' ? 'favourites.empty' : 'library.emptyLibrary'))}>
 <VirtualBrowseRows favourite={props.isFavourite} offline={props.disconnected} onMenu={props.onMenu ? (track, event, index) => {
   const selected = collection();

@@ -1,4 +1,4 @@
-import { PageIndicator } from '../components/AppBar';
+import { AppBar, PageIndicator } from '../components/AppBar';
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JSX } from 'solid-js';
@@ -19,6 +19,7 @@ const routerMock = vi.hoisted(() => ({
 }));
 
 vi.mock('@solidjs/router', () => ({
+  useLocation: () => ({ pathname: "/podcasts" }),
   useNavigate: () => vi.fn(),
   useSearchParams: () => [routerMock.params, routerMock.setParams],
   A: (props: { href: string; children: JSX.Element }) => <a href={props.href}>{props.children}</a>,
@@ -44,12 +45,14 @@ vi.mock('../lib/toast', () => ({
 describe('Podcasts route search state', () => {
   beforeEach(() => {
     setLocale('en');
+    setMediaQuery('(min-width: 1024px)', true);
     vi.useFakeTimers();
     routerMock.params = {};
     apiMock.request.mockResolvedValue({ results: [] });
   });
 
   afterEach(() => {
+    setMediaQuery('(min-width: 1024px)', false);
     vi.useRealTimers();
     vi.clearAllMocks();
   });
@@ -140,12 +143,17 @@ describe('Podcasts page header', () => {
     expect(screen.getAllByRole('combobox', { name: 'Country for discovering podcasts' })).toHaveLength(1);
   });
 
-  it('keeps the country by the search on a phone', () => {
-    render(() => <Podcasts />);
+  it('keeps the country and search commands in the phone app bar', () => {
+    render(() => <main><AppBar /><div data-app-outlet><Podcasts /></div></main>);
 
-    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    const bar = screen.getByRole('heading', { level: 1, name: 'Podcasts' }).closest('[data-app-bar]');
     const country = screen.getByRole('combobox', { name: 'Country for discovering podcasts' });
-    expect(country.closest('[data-page-toolbar]')).toContainElement(screen.getByPlaceholderText(/Search podcasts/));
+    expect(bar).toContainElement(country);
+    const open = screen.getByRole('button', { name: 'Search podcasts…' });
+    expect(bar).toContainElement(open);
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    fireEvent.click(open);
+    expect(screen.getByRole('searchbox')).toBeInTheDocument();
   });
 });
 

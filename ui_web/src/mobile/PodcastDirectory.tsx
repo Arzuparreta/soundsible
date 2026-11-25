@@ -2,8 +2,8 @@ import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createSignal, For, on, onCleanup, Show, type JSX } from 'solid-js';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
-import { SearchField } from '../components/SearchField';
-import { PageToolbar } from '../components/PageToolbar';
+import { createSearchReveal } from '../components/SearchReveal';
+import { NativeSearchToolbar } from '../components/NativeSearchToolbar';
 import Button from '../components/Button';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { EmptyState } from '../components/EmptyState';
@@ -61,9 +61,12 @@ export default function PodcastDirectory(props: { generation: number; disconnect
     query, subscriptions: () => props.subscriptions ?? [], country: country.podcastCountry,
     account: () => props.generation, disconnected: () => props.disconnected,
   });
+  const reveal = createSearchReveal(() => ({
+    value: query(), placeholder: t('podcasts.searchPlaceholder'), onInput: setQuery,
+  }));
   return <section data-testid="android-podcast-directory">
     <h2>{t('nav.podcasts')}</h2>
-    <PageToolbar contained field={<SearchField value={query()} placeholder={t('podcasts.searchPlaceholder')} onInput={setQuery} />}
+    <NativeSearchToolbar search={reveal}
       actions={<PodcastCountryPicker state={country} disabled={props.disconnected} />} />
     <Show when={countryError()}><p role="alert">{t('common.loadFailed')} <button disabled={props.disconnected} onClick={() => setCountryRetry(n => n + 1)}>{t('common.retry')}</button></p></Show>
     <Show when={!search.active()}>{props.children}</Show>

@@ -1,4 +1,5 @@
-import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar } from '../components/CollectionToolbar';
+import { NoCollectionMatches, createCollectionSearch, type CollectionSearchState } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { EntityHero, EntityMenuCover } from '../components/EntityHero';
 import { CollectionControl, EntityBookmarkButton } from '../components/CollectionControl';
@@ -302,6 +303,11 @@ export default function Album() {
       : (tabRoot('/search') ?? (artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search')),
   );
   let openCollectionMenu = () => {};
+  const search = createCollectionSearch();
+  createEffect(on([profileKey, view, () => viewParams().albumId], search.reset, { defer: true }));
+  const canSearch = () => view() === 'library'
+    ? !membership.loading && !state.loading && !membershipFailed() && libraryTrackList().length > 0
+    : tracklist().length > 0;
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : tracklist().length > 0;
 
   const entity = () => ({
@@ -319,7 +325,7 @@ export default function Album() {
         class={hero.page}
         data-primary-scroll
       >
-        <EntityHero name={displayTitle()} back={back} backLabel={t('album.ariaBack')}
+        <EntityHero name={displayTitle()} back={back} backLabel={t('album.ariaBack')} search={canSearch() ? search.reveal : undefined}
           openMenu={() => openCollectionMenu()}
           corner={<EntityBookmarkButton entity={entity()} />}
           art={<EntityMenuCover name={displayTitle()} cover={cover()} onOpen={() => openCollectionMenu()} />}
@@ -378,11 +384,11 @@ export default function Album() {
                 <Show when={!membershipFailed()} fallback={
                   <EmptyState tone="danger">{t('common.loadFailed')} <Button class={hero.retry} variant="secondary" size="sm" onClick={() => void retryMembership()}>{t('common.retry')}</Button></EmptyState>
                 }>
-                  <Show when={!membership.loading && !state.loading} fallback={<SkeletonRows />}><LibraryView tracks={libraryTrackList()} context={albumContext('library')} /></Show>
+                  <Show when={!membership.loading && !state.loading} fallback={<SkeletonRows />}><LibraryView search={search} tracks={libraryTrackList()} context={albumContext('library')} /></Show>
                 </Show>
               }>
                 <DiscoverView
-                  subject={profileKey()}
+                  search={search}
                   tracklist={tracklist()}
                   label={currentProfile()?.label || ''}
                   artistName={displayArtist()}
@@ -402,18 +408,18 @@ export default function Album() {
   );
 }
 
-function LibraryView(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
+function LibraryView(props: { search: CollectionSearchState; tracks: Track[]; context: PlaybackContextDescriptor }) {
   return (
     <div class={styles.contentView}>
       <Show when={props.tracks.length > 0} fallback={<EmptyState>{t('album.empty')}</EmptyState>}>
-        <EntityTrackList tracks={props.tracks} context={props.context} />
+        <EntityTrackList search={props.search} tracks={props.tracks} context={props.context} />
       </Show>
     </div>
   );
 }
 
 function DiscoverView(props: {
-  subject: object;
+  search: CollectionSearchState;
   tracklist: CatalogItem[];
   label: string;
   artistName: string;
@@ -422,10 +428,9 @@ function DiscoverView(props: {
   onPlayItem: (item: CatalogItem, queue?: CatalogItem[]) => void;
   onSaveItem: (item: CatalogItem) => void;
 }) {
-  const search = createCollectionSearch();
+  const search = props.search;
   const tracks = search.filter(() => props.tracklist, trackSearchFields);
   const position = search.positions(() => props.tracklist);
-  createEffect(on(() => props.subject, () => search.setValue(''), { defer: true }));
   return (
     <div class={styles.contentView}>
       <Show when={props.tracklist.length > 0} fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}>

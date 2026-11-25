@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { collectionIndex } from '../lib/collectionIdentity';
 import { SkeletonCards } from '../components/Skeleton';
 import { NEUTRAL_COVER } from '../lib/cover';
@@ -48,7 +48,7 @@ export default function Playlists() {
     <div class="view">
       <ViewHeader
         title={t('playlists.title')}
-        field={showSearch() ? <CollectionSearch search={search} /> : undefined}
+        search={showSearch() ? search.reveal : undefined}
         barActions={[
           { label: t('playlists.new'), icon: () => <PlusIcon />, prominent: true, opensDialog: true, onSelect: createNew },
           ...(names().length > 1 ? [{

@@ -7,7 +7,7 @@ import Favourites from './Favourites';
 const mocks = vi.hoisted(() => ({ resolve: vi.fn(), play: vi.fn() }));
 
 vi.mock('@solidjs/router', () => ({ A: () => null }));
-vi.mock('../lib/shellLayout', () => ({ desktopShell: () => false }));
+vi.mock('../lib/shellLayout', () => ({ desktopShell: () => true }));
 vi.mock('../lib/api', () => ({ api: { resolveCatalogItem: mocks.resolve } }));
 vi.mock('../stores/player', () => ({ player: () => ({ autoMode: { active: false }, actions: { playFrom: mocks.play } }) }));
 vi.mock('../stores', () => ({

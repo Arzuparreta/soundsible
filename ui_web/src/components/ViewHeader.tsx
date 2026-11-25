@@ -1,5 +1,7 @@
 import { createMemo, Show, type JSX } from 'solid-js';
 import { PageCommands } from './PageCommands';
+import { SearchField } from './SearchField';
+import type { SearchRevealState } from './SearchReveal';
 import { PageToolbar } from './PageToolbar';
 import { useAppBar, type AppBarAction } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
@@ -10,17 +12,15 @@ export function ViewHeader(props: {
   title: string;
   meta?: JSX.Element;
   field?: JSX.Element;
-  desktopField?: JSX.Element;
-  fieldActions?: JSX.Element;
+  search?: SearchRevealState;
   actions?: JSX.Element;
   barActions?: AppBarAction[];
   /** On desktop the page draws whichever of its commands it wants next to
    * its own field (a field can replace a search command), so the header
    * leaves `barActions` out. Touch still gets them all in the top bar. */
   rendersOwnCommands?: boolean;
-  /** A native control the top bar carries as is — a dropdown keeps its
-   * platform keyboard behaviour that a described command would lose. */
-  barTrailing?: JSX.Element;
+  /** A native control both toolbars carry as is, preserving its keyboard behavior. */
+  trailing?: JSX.Element;
   onViewChange?: () => void;
   compact?: boolean;
   onTitleTap?: () => void;
@@ -31,19 +31,23 @@ export function ViewHeader(props: {
       indicator: true,
       get onViewChange() { return props.onViewChange; },
       actions: () => props.barActions ?? [],
-      trailing: () => props.barTrailing,
+      search: () => props.search,
+      trailing: () => props.trailing,
       get onTitleTap() { return props.onTitleTap; },
     });
   }
 
   const showDesktop = () => props.compact || desktopShell();
-  const field = createMemo(() => showDesktop() ? props.desktopField ?? props.field : props.field);
+  const field = createMemo(() => {
+    const search = props.search;
+    return showDesktop() && search ? <SearchField {...search.field()} inputRef={search.attachInput} /> : props.field;
+  });
   const meta = () => showDesktop() || field() ? props.meta : undefined;
   const desktopActions = createMemo(() => showDesktop() ? props.actions : undefined);
   const commands = () => showDesktop() && !props.rendersOwnCommands ? props.barActions : undefined;
-  const fieldActions = createMemo(() => props.fieldActions);
-  const hasActions = createMemo(() => Boolean(fieldActions() || desktopActions() || commands()?.length));
-  const actions = () => <Show when={hasActions()}>{desktopActions()}{fieldActions()}<PageCommands actions={commands()} desktop /></Show>;
+  const trailing = createMemo(() => showDesktop() ? props.trailing : undefined);
+  const hasActions = createMemo(() => Boolean(trailing() || desktopActions() || commands()?.length));
+  const actions = () => <Show when={hasActions()}>{desktopActions()}{trailing()}<PageCommands actions={commands()} desktop /></Show>;
 
   if (props.compact) {
     return <header class={styles.header}>

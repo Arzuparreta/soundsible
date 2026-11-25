@@ -17,6 +17,7 @@ it('collection preparation includes all members even when song search filters th
   const view = render(() => <LibraryBrowser snapshot={{ tracks: [a, b], playlists: { Flight: ['a', 'b', 'a'] } }} revision={0} onCollectionMenu={menu} />);
   fireEvent.click(view.getByText('Playlists'));
   fireEvent.click(view.getByText('Flight'));
+  fireEvent.click(view.getByRole('button', { name: 'Filter this list' }));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: 'One' } });
   fireEvent.click(view.container.querySelector('[data-collection-menu]')!);
   expect(menu.mock.calls[0][0]).toEqual([a, b, a]);

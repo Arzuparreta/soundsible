@@ -2,11 +2,11 @@ import { createMemo, createSignal, Show, type Accessor, type JSX } from 'solid-j
 import { t } from '../lib/i18n';
 import { filterLocalCollection, normalizeLibraryQuery, type SearchFieldValue } from '../lib/librarySearch';
 import { EmptyState } from './EmptyState';
-import { SearchField } from './SearchField';
-import { PageToolbar } from './PageToolbar';
+import { createSearchReveal } from './SearchReveal';
+import { collectionSearchField } from './collectionSearchField';
 
 /** Filters available rows in place. The source array still owns their order and identity. */
-export function createCollectionSearch() {
+export function createCollectionSearch(placeholder?: Accessor<string>) {
   const [value, setValue] = createSignal('');
   const query = createMemo(() => normalizeLibraryQuery(value()));
 
@@ -23,36 +23,12 @@ export function createCollectionSearch() {
     return (item: T) => map().get(item) ?? 0;
   }
 
-  return { value, setValue, query, filter, positions };
+  const reveal = createSearchReveal(() => collectionSearchField(value, setValue, placeholder?.()));
+  const reset = () => { setValue(''); reveal.reset(); };
+  return { value, setValue, query, filter, positions, reveal, reset };
 }
 
-type CollectionSearchProps = {
-  search: Pick<ReturnType<typeof createCollectionSearch>, 'value' | 'setValue'>;
-  placeholder?: string;
-};
-
-export function CollectionSearch(props: CollectionSearchProps) {
-  return <SearchField
-    value={props.search.value()}
-    placeholder={props.placeholder ?? t('library.filterCollection')}
-    onInput={props.search.setValue}
-    onKeyDown={event => {
-      if (event.key !== 'Escape' || event.isComposing || !props.search.value()) return;
-      event.preventDefault();
-      event.stopPropagation();
-      props.search.setValue('');
-    }}
-  />;
-}
-
-export function CollectionToolbar(props: CollectionSearchProps & {
-  contained?: boolean;
-  actions?: JSX.Element;
-  meta?: JSX.Element;
-}) {
-  return <PageToolbar contained={props.contained} field={<CollectionSearch search={props.search} placeholder={props.placeholder} />}
-    meta={props.meta} actions={props.actions} />;
-}
+export type CollectionSearchState = ReturnType<typeof createCollectionSearch>;
 
 export function NoCollectionMatches() {
   return <EmptyState compact>{t('library.noCollectionMatches')}</EmptyState>;

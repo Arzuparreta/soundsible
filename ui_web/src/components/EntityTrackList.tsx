@@ -1,6 +1,7 @@
-import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from './CollectionSearch';
+import { CollectionToolbar } from './CollectionToolbar';
+import { NoCollectionMatches, type CollectionSearchState } from './CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
-import { createEffect, For, on, Show } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { player } from '../stores/player';
 import { trackMusic } from '../lib/musicNavigation';
 import { trackCoverUrl } from '../lib/media';
@@ -20,11 +21,10 @@ const WHOLE_LIST_ROWS = 60;
  * list: an artist with a thousand songs renders the rows on screen, not a
  * thousand.
  */
-export function EntityTrackList(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
-  const search = createCollectionSearch();
+export function EntityTrackList(props: { tracks: Track[]; context: PlaybackContextDescriptor; search: CollectionSearchState }) {
+  const search = props.search;
   const tracks = search.filter(() => props.tracks, trackSearchFields);
   const position = search.positions(() => props.tracks);
-  createEffect(on(() => props.context.id, () => search.setValue(''), { defer: true }));
   const row = (track: () => Track, index: () => number) => (
     <SongRow
       track={track()} music={trackMusic(track(), 'library')}
