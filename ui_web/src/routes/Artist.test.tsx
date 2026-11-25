@@ -275,11 +275,15 @@ describe('Artist route view mode', () => {
 
     const play = screen.getByRole('button', { name: 'Play' });
     const options = screen.getByRole('button', { name: 'Options' });
+    const pin = screen.getByRole('button', { name: 'Add to bookmarks' });
+    expect(pin).toHaveAttribute('title', 'Add to bookmarks');
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    expect(pin.textContent?.trim()).toBe('');
     expect(play.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(options);
     expect(menuMock.open).toHaveBeenCalledTimes(1);
     const first = menuMock.open.mock.calls[0][0] as { actions: Array<{ label: string; onSelect: () => void }> };
-    expect(first.actions.some(action => action.label === 'Save')).toBe(true);
+    expect(first.actions.some(action => /bookmark|save/i.test(action.label))).toBe(false);
     first.actions.find(action => action.label === 'Not this artist?')!.onSelect();
     const [{ actions }] = menuMock.open.mock.calls[1] as [{ actions: Array<{ label: string; onSelect: () => void }> }];
     expect(actions.map((action) => action.label)).toEqual(['Twin (band) · 1.2K fans']);

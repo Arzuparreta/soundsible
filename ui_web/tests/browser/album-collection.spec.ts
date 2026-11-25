@@ -70,8 +70,8 @@ test('an album bookmark is independent of bulk actions and download review', asy
     const trigger = page.getByTestId(target);
     for (const button of ['left', 'right'] as const) {
       await trigger.click({ button });
-      await expect(page.getByRole('dialog').getByRole('button', { name: 'Guardar', exact: true })).toBeVisible();
       await expect(page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true })).toBeVisible();
+      await expect(page.getByRole('dialog').getByRole('button', { name: /marcadores/i })).toHaveCount(0);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toHaveCount(0);
     }
@@ -93,20 +93,12 @@ test('an album bookmark is independent of bulk actions and download review', asy
     await expect(menu).toBeVisible();
   };
   const setBookmark = async (saved: boolean) => {
-    await openMenu();
-    const action = menu.getByRole('button', { name: saved ? 'Guardar' : 'Quitar de guardados', exact: true });
-    if (saved) await expect(action).not.toHaveAttribute('aria-current', 'true');
-    else await expect(action).toHaveAttribute('aria-current', 'true');
-    await action.click();
-    await expect(menu).toHaveCount(0);
+    const pin = page.getByRole('button', { name: saved ? 'Añadir a marcadores' : 'Quitar de marcadores', exact: true });
+    await expect(pin).toHaveAttribute('aria-pressed', saved ? 'false' : 'true');
+    await pin.click();
     await expect.poll(() => bookmarked.length).toBe(saved ? 1 : 0);
-    // Reopening reads the persisted selection; the closed menu is not reactive.
-    await openMenu();
-    const next = menu.getByRole('button', { name: saved ? 'Quitar de guardados' : 'Guardar', exact: true });
-    if (saved) await expect(next).toHaveAttribute('aria-current', 'true');
-    else await expect(next).not.toHaveAttribute('aria-current', 'true');
-    await page.keyboard.press('Escape');
-    await expect(menu).toHaveCount(0);
+    const next = page.getByRole('button', { name: saved ? 'Quitar de marcadores' : 'Añadir a marcadores', exact: true });
+    await expect(next).toHaveAttribute('aria-pressed', saved ? 'true' : 'false');
   };
 
   // A bookmark adds only the entity and can be removed without touching Songs.

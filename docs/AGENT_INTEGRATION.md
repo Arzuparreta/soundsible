@@ -342,13 +342,14 @@ Failed persistence returns an error without discarding the previous collection;
 instance backups include the account's `saved_entities.json` automatically.
 
 The web Library root (`#/`, also `#/library`) contains collection shortcuts and
-saved album/artist rows. Songs, albums and artists open at
-`#/library?view=songs|albums|artists`; saved collections open at
-`#/?saved=albums|artists`. All of these subentries are selectable in the bottom
-bar settings. Selecting Library itself always returns to its root. The NORMAL/DJ
-browser retains its existing sections, with an additional Saved section. On
-desktop, the sidebar subentries switch between songs, albums and artists; the
-library search sits below the title beside the sorting control.
+pinned bookmark rows (artists first, then albums). Songs, albums and artists open at
+`#/library?view=songs|albums|artists`; bookmarks open at `#/?saved=bookmarks`
+(or filtered by kind at `#/?saved=artists|albums`). All of these subentries are
+selectable in the bottom bar settings, with Bookmarks as a single destination.
+Selecting Library itself always returns to its root. The NORMAL/DJ browser retains
+its existing sections, with an additional Saved section. On desktop, the sidebar
+subentries switch between songs, albums and artists; the library search sits below
+the title beside the sorting control.
 
 Mutation routes may require admin authorization or trusted LAN/Tailscale access.
 

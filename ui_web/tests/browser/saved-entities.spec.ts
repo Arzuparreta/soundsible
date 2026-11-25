@@ -36,33 +36,49 @@ test('save artist and album, reload, browse, remove and undo without changing so
     title: 'In Rainbows', artist: 'Radiohead', tracklist: [], resolved: true,
   } }));
   await page.goto('/player/#/artist/Radiohead?deezer_id=1');
-  await page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Opciones', exact: true }).click();
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect.poll(() => entities.length).toBe(1);
-  await page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Opciones', exact: true }).click();
-  await expect(page.getByRole('dialog').getByRole('button', { name: 'Quitar de guardados', exact: true })).toHaveAttribute('aria-current', 'true');
+  const artistPin = page.getByRole('button', { name: 'Añadir a marcadores', exact: true });
+  await expect(artistPin).toHaveAttribute('title', 'Añadir a marcadores');
+  await expect(artistPin).toHaveAttribute('aria-pressed', 'false');
+  expect((await artistPin.textContent())?.trim()).toBe('');
+  const artistMore = page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Opciones', exact: true });
+  const artistCover = page.getByTestId('collection-header-cover');
+  const [pinBox, moreBox, coverBox] = await Promise.all([artistPin.boundingBox(), artistMore.boundingBox(), artistCover.boundingBox()]);
+  expect(Math.abs((pinBox!.x + pinBox!.width / 2) - (moreBox!.x + moreBox!.width / 2))).toBeLessThanOrEqual(1);
+  expect(pinBox!.y).toBeGreaterThan(coverBox!.y);
+  expect(pinBox!.y).toBeLessThan(moreBox!.y);
+  await artistMore.click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: /marcadores/i })).toHaveCount(0);
   await page.keyboard.press('Escape');
+  await artistPin.click();
+  await expect.poll(() => entities.length).toBe(1);
+  const artistUnpin = page.getByRole('button', { name: 'Quitar de marcadores', exact: true });
+  await expect(artistUnpin).toHaveAttribute('aria-pressed', 'true');
+  await expect(artistUnpin).toHaveAttribute('title', 'Quitar de marcadores');
   await expect.poll(() => page.evaluate(() => (window as unknown as { navPulses: string[] }).navPulses)).toContain('/');
   await page.getByRole('link', { name: /In Rainbows/ }).click();
-  await page.locator('[data-entity-toolbar]').getByRole('button', { name: 'Opciones', exact: true }).click();
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+  await page.getByRole('button', { name: 'Añadir a marcadores', exact: true }).click();
   await expect.poll(() => entities.length).toBe(2);
   await page.goto('/player/#/');
-  const saved = page.getByRole('region', { name: 'Álbumes guardados', exact: true });
+  const artists = page.getByRole('region', { name: 'Artistas', exact: true });
+  const saved = page.getByRole('region', { name: 'Álbumes', exact: true });
+  await expect(artists.getByRole('link', { name: 'Radiohead', exact: true })).toBeVisible();
   await expect(saved.getByRole('link', { name: 'In Rainbows', exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Artistas guardados' }).getByRole('link', { name: 'Radiohead', exact: true })).toBeVisible();
+  await expect(artists.locator('h2 svg')).toHaveCount(1);
+  await expect(saved.locator('h2 svg')).toHaveCount(1);
+  const [artistsBox, albumsBox] = await Promise.all([artists.boundingBox(), saved.boundingBox()]);
+  expect(artistsBox!.y).toBeLessThan(albumsBox!.y);
   // The options button hangs below its card. Past the rail's padding it becomes
   // a vertical scroll range, and a scrollbar wherever scrollbars are classic.
   expect(await saved.locator('[data-horizontal-scroll]').evaluate((rail) => rail.scrollHeight - rail.clientHeight)).toBe(0);
   await page.reload();
   await expect(saved.getByRole('link', { name: 'In Rainbows', exact: true })).toBeVisible();
-  await saved.getByRole('link', { name: 'Ver todos: Álbumes guardados', exact: true }).click();
+  await saved.getByRole('link', { name: 'Ver todos: Álbumes', exact: true }).click();
   await expect(page.locator('[data-primary-scroll]')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  expect((await new AxeBuilder({ page }).include('section[aria-label="Álbumes guardados"]').analyze()).violations).toEqual([]);
+  expect((await new AxeBuilder({ page }).include('section[aria-label="Álbumes"]').analyze()).violations).toEqual([]);
   await saved.getByRole('button', { name: 'Opciones: In Rainbows', exact: true }).click();
   // A button in the phone's sheet, a menu item in the desktop popover.
-  const remove = page.locator('button').filter({ hasText: /^Quitar de guardados/ });
+  const remove = page.locator('button').filter({ hasText: /^Quitar de marcadores/ });
   await expect(remove.locator('mask')).toHaveCount(1);
   expect(await remove.evaluate((button) => {
     const probe = button.appendChild(document.createElement('span'));
@@ -89,12 +105,12 @@ test('small viewport keeps the collection usable and can leave it after removing
     await route.fulfill({ json: { entities } });
   });
   await page.goto('/player/#/');
-  const saved = page.getByRole('region', { name: 'Artistas guardados', exact: true });
-  await saved.getByRole('link', { name: 'Ver todos: Artistas guardados', exact: true }).click();
+  const saved = page.getByRole('region', { name: 'Artistas', exact: true });
+  await saved.getByRole('link', { name: 'Ver todos: Artistas', exact: true }).click();
   const box = await saved.boundingBox();
   expect(box!.y + box!.height).toBeLessThanOrEqual(568);
   await saved.getByRole('button', { name: 'Opciones: Radiohead', exact: true }).click();
-  await page.locator('button').filter({ hasText: /^Quitar de guardados/ }).click();
+  await page.locator('button').filter({ hasText: /^Quitar de marcadores/ }).click();
   await expect(saved.getByRole('link')).toHaveCount(0);
   await page.getByRole('link', { name: /Volver a Biblioteca/ }).click();
   await expect(page.getByRole('region', { name: 'Tu biblioteca', exact: true })).toBeVisible();
@@ -122,19 +138,19 @@ test('Library opens its root and every subentry can be pinned to the bottom bar'
 
   await page.goto('/player/#/settings/accessibility');
   await page.locator('summary').filter({ hasText: 'Barra inferior' }).click();
-  const paths = ['/library?view=songs', '/library?view=albums', '/library?view=artists', '/?saved=albums', '/?saved=artists'];
+  const paths = ['/library?view=songs', '/library?view=albums', '/library?view=artists', '/?saved=bookmarks'];
   for (const path of paths) await expect(page.getByLabel('Posición 1').locator(`option[value="${path}"]`)).toHaveCount(1);
+  await expect(page.getByLabel('Posición 1').locator('option[value="/?saved=albums"]')).toHaveCount(0);
+  await expect(page.getByLabel('Posición 1').locator('option[value="/?saved=artists"]')).toHaveCount(0);
   await page.getByLabel('Posición 1').selectOption('/library?view=songs');
   await page.getByLabel('Posición 2').selectOption('/library?view=albums');
   await page.getByLabel('Posición 3').selectOption('/library?view=artists');
-  await page.getByLabel('Posición 4').selectOption('/?saved=albums');
-  await page.getByRole('button', { name: 'Añadir destino', exact: true }).click();
-  await page.getByLabel('Posición 5').selectOption('/?saved=artists');
+  await page.getByLabel('Posición 4').selectOption('/?saved=bookmarks');
   await page.reload();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('navigation:bottom')!))).toEqual(paths);
   if (info.project.name.includes('mobile')) {
     const nav = page.getByRole('navigation', { name: 'Navegación principal' });
-    for (const [index, label] of ['Canciones', 'Álbumes', 'Artistas', 'Álbumes guardados', 'Artistas guardados'].entries()) {
+    for (const [index, label] of ['Canciones', 'Álbumes', 'Artistas', 'Marcadores'].entries()) {
       const link = nav.getByRole('link', { name: label, exact: true });
       await link.click();
       await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#${paths[index]}`);
@@ -154,13 +170,13 @@ test('every saved card is the same size, whatever the length of its name', async
   const coverSizes = (region: string) => page.getByRole('region', { name: region, exact: true }).locator('article > a > div').evaluateAll(
     (covers) => covers.map((cover) => `${Math.round(cover.getBoundingClientRect().width)}x${Math.round(cover.getBoundingClientRect().height)}`));
   await page.goto('/player/#/');
-  for (const region of ['Artistas guardados', 'Álbumes guardados']) {
+  for (const region of ['Artistas', 'Álbumes']) {
     await expect.poll(() => coverSizes(region)).toHaveLength(4);
     expect(new Set(await coverSizes(region)).size, region).toBe(1);
   }
   await page.goto('/player/#/?saved=artists');
-  await expect.poll(() => coverSizes('Artistas guardados')).toHaveLength(4);
-  expect(new Set(await coverSizes('Artistas guardados')).size).toBe(1);
+  await expect.poll(() => coverSizes('Artistas')).toHaveLength(4);
+  expect(new Set(await coverSizes('Artistas')).size).toBe(1);
 });
 
 test('a compatibility-normalized saved match suppresses the Library empty state', async ({ page }) => {

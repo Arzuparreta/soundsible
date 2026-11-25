@@ -20,16 +20,31 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 const show = () => render(() => <Router root={props => { onCleanup(registerMusicNavigator(useNavigate())); return props.children; }}><Route path="/" component={LibraryHome} /></Router>);
-it('has library shortcuts and separate saved rows, with a reloadable collection route', async () => {
+it('has library shortcuts and pinned artist-then-album rows, with reloadable bookmark routes', async () => {
   show();
   expect(screen.getByRole('link', { name: 'Albums' })).toHaveAttribute('href', '#/library?view=albums');
   expect(screen.getByRole('link', { name: 'Artists' })).toHaveAttribute('href', '#/library?view=artists');
   await screen.findByRole('link', { name: 'Record' });
-  expect(screen.getByRole('region', { name: 'Saved artists' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('link', { name: 'See all: Saved albums' }));
+  const artistsSection = screen.getByRole('region', { name: 'Artists' });
+  const albumsSection = screen.getByRole('region', { name: 'Albums' });
+  expect(artistsSection.compareDocumentPosition(albumsSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(artistsSection.querySelector('h2 svg')).not.toBeNull();
+  expect(albumsSection.querySelector('h2 svg')).not.toBeNull();
+  fireEvent.click(screen.getByRole('link', { name: 'See all: Albums' }));
   await waitFor(() => expect(window.location.search).toBe('?saved=albums'));
   expect(screen.queryByRole('region', { name: 'Your library' })).toBeNull();
-  expect(screen.queryByRole('region', { name: 'Saved artists' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Artists' })).toBeNull();
+  expect(screen.getByRole('link', { name: /Back to Library/ })).toBeInTheDocument();
+});
+
+it('shows both artists and albums in the unified Bookmarks route', async () => {
+  window.history.replaceState({}, '', '/?saved=bookmarks');
+  show();
+  await screen.findByRole('link', { name: 'Record' });
+  expect(screen.queryByRole('region', { name: 'Your library' })).toBeNull();
+  const artistsSection = screen.getByRole('region', { name: 'Artists' });
+  const albumsSection = screen.getByRole('region', { name: 'Albums' });
+  expect(artistsSection.compareDocumentPosition(albumsSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByRole('link', { name: /Back to Library/ })).toBeInTheDocument();
 });
 
@@ -37,19 +52,19 @@ it('hides both saved rows when the collection is empty', async () => {
   vi.mocked(api.getSavedEntities).mockResolvedValue([]);
   show();
   await waitFor(() => expect(api.getSavedEntities).toHaveBeenCalled());
-  expect(screen.queryByRole('region', { name: 'Saved albums' })).toBeNull();
-  expect(screen.queryByRole('region', { name: 'Saved artists' })).toBeNull();
-  expect(screen.queryByText('Save an album or artist from its page to find it here.')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Albums' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Artists' })).toBeNull();
+  expect(screen.queryByText('Bookmark an album or artist from its page to find it here.')).toBeNull();
 });
 it('says once that the saved collection could not load, and retries it', async () => {
   // The root used to drop a failed read silently, which reads as "nothing
-  // saved". One line covers both rows, never one per kind.
+  // bookmarked". One line covers both rows, never one per kind.
   vi.mocked(api.getSavedEntities).mockRejectedValueOnce(new Error('unavailable'));
   show();
   const retry = await screen.findByRole('button', { name: 'Retry' });
   expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
-  expect(screen.queryByRole('region', { name: 'Saved albums' })).toBeNull();
-  expect(screen.queryByText('Save an album or artist from its page to find it here.')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Albums' })).toBeNull();
+  expect(screen.queryByText('Bookmark an album or artist from its page to find it here.')).toBeNull();
   fireEvent.click(retry);
   await screen.findByRole('link', { name: 'Record' });
   expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();

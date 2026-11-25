@@ -11,13 +11,13 @@ import { itemArtist } from '../lib/catalogTrack';
 import { coverUrl } from '../lib/media';
 import { ArtistDiscoveryView, ReleaseShelf, fansLabel, formatFans } from '../components/ArtistDiscoveryView';
 import { EntityViewSelect } from '../components/EntityViewSelect';
-import { BackIcon, MoreIcon, PlayIcon, RadioIcon, menuIcons } from '../components/icons';
-import { Control } from '../design/Control';
+import { BackIcon, MoreIcon, PinIcon, PlayIcon, RadioIcon, menuIcons } from '../components/icons';
+import { Control, IconButton } from '../design/Control';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { CoverImage } from '../components/CoverImage';
 import { CollectionDownloadView } from '../components/CollectionDownloadView';
 import { createNativeCollection } from './collection';
-import { nativeEntityMark } from './entityMarks';
+import { sameEntity, type SavedEntity } from '../lib/savedEntityIdentity';
 import { openContextMenu } from '../lib/contextMenu';
 import { openOverlay } from '../lib/overlay';
 import { collectionArrivedCount, collectionStep, jobReviewCount, jobMissingCount } from '../lib/collectionState';
@@ -27,7 +27,6 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { createNativeEntityProfile, nativeProfileBookmark, type NativeEntitySubject } from './entityProfile';
 import type { createNativeCatalogActions } from './catalogActions';
 import type { AlbumProfile, ArtistProfile, CatalogItem, Track } from '../types/music';
-import type { SavedEntity } from '../lib/savedEntityIdentity';
 import styles from './AndroidStart.module.css';
 import hero from '../components/EntityHero.module.css';
 import profileStyles from './EntityProfile.module.css';
@@ -85,6 +84,23 @@ export default function NativeEntityProfile(props: {
     songs: discovered, owned: item => !!props.catalog.trackFor(item) && props.catalog.trackFor(item)?.source !== 'preview', refresh: props.onChanged,
     onConfirmed: job => props.catalog.adoptCollection(job, props.generation) });
   const [bookmarkError, setBookmarkError] = createSignal(false);
+  const [bookmarkPending, setBookmarkPending] = createSignal(false);
+  const bookmarked = () => (props.savedEntities ?? []).some(row => sameEntity(row, bookmark()));
+  const bookmarkLabel = () => t(bookmarked() ? 'savedEntities.remove' : 'savedEntities.save');
+  function toggleBookmark() {
+    const generation = props.generation, current = () => !disposed && generation === props.generation && !props.disconnected;
+    if (!current() || bookmarkPending()) return;
+    const entry = bookmark();
+    const target = !bookmarked();
+    setBookmarkError(false);
+    setBookmarkPending(true);
+    void (async () => {
+      const reply = await request<{ entities: SavedEntity[] }>('/api/library/saved-entities', { method: 'PUT', body: { entry, saved: target }, timeoutMs: 15000 });
+      if (!current()) return;
+      if (!Array.isArray(reply.entities) || reply.entities.some(row => sameEntity(row, entry)) !== target) throw new Error('Missing bookmark confirmation');
+      await props.onChanged();
+    })().catch(() => { if (current()) setBookmarkError(true); }).finally(() => { if (!disposed) setBookmarkPending(false); });
+  }
   let closeDetails: (() => void) | undefined;
   onCleanup(() => closeDetails?.());
   function details() {
@@ -102,7 +118,6 @@ export default function NativeEntityProfile(props: {
       ...(props.subject.kind === 'artist' && props.canStartDj ? [{ icon: menuIcons.changeSession(), label: t('autoMode.startDj'),
         disabled: disabled || !songs().length || !!props.catalog.pending(),
         onSelect: () => { if (current()) void props.catalog.startDj(songs(), props.subject.name); } }] : []),
-      nativeEntityMark(bookmark(), () => props.savedEntities ?? [], current, props.onChanged, () => { if (current()) setBookmarkError(true); }),
       ...(subject().deezerId || discovered().length ? [{ label: t('collectionControl.addSongs'), disabled, onSelect: () => { if (current()) void collection.saveSongs(); } }] : []),
       ...(subject().deezerId ? [{ label: t(props.subject.kind === 'artist' ? 'collectionControl.downloadArtist' : 'collectionControl.downloadAlbum', { title: props.subject.name }), disabled,
         onSelect: () => { if (current()) void collection.download(); } }] : []),
@@ -156,7 +171,7 @@ export default function NativeEntityProfile(props: {
   return <section class={`${styles.library} ${profileStyles.profile}`} data-testid="android-entity-profile">
     <header class={`${hero.header} ${profileStyles.header}`}>
       <button class={`${hero.back} ${profileStyles.back}`} type="button" aria-label={t('artist.ariaBack')} onClick={props.onBack}><BackIcon size={20} /></button>
-      <div class={hero.hero}>
+      <div class={`${hero.hero} ${hero.hasCorner}`}>
         <div class={hero.art} classList={{ [hero.round]: props.subject.kind === 'artist' }}><CoverImage src={bookmark().cover} eager /></div>
         <div class={hero.identity}>
           <h1 class={`${hero.title} ${profileStyles.title}`}>{props.subject.name}</h1>
@@ -174,6 +189,13 @@ export default function NativeEntityProfile(props: {
               {progressLabel()}
             </button>}><span class={hero.meta} role="status">{t('collectionControl.owned')}</span></Show>
           </Show>
+        </div>
+        <div class={hero.corner}>
+          <IconButton class={`${hero.pin} ${profileStyles.pin}`} label={bookmarkLabel()} title={bookmarkLabel()}
+            aria-pressed={bookmarked()} aria-busy={bookmarkPending() || undefined}
+            disabled={props.disconnected || bookmarkPending()} onClick={toggleBookmark}>
+            <PinIcon size={18} filled={bookmarked()} />
+          </IconButton>
         </div>
         <div class={hero.toolbar} data-entity-toolbar>
           <Show when={owned().length} fallback={<span class={hero.context}>{t('artist.discover')}</span>}>

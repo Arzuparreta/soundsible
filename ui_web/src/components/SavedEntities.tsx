@@ -6,11 +6,11 @@ import { CoverImage } from './CoverImage';
 import { openSavedEntityMenu } from './savedEntityActions';
 import { coverGradient } from '../lib/cover';
 import { SkeletonCards } from './Skeleton';
-import { MoreIcon } from './icons';
+import { MoreIcon, PinIcon } from './icons';
 import Button from './Button';
 import styles from './SavedEntities.module.css';
 
-// Loaded only on the expanded saved-entity subviews so the Library landing
+// Loaded only on the expanded bookmark subviews so the Library landing
 // payload does not carry CollectionSearch or librarySearch on first paint.
 const [savedMatcher, setSavedMatcher] = createSignal<((entry: SavedEntity, raw: string) => boolean) | undefined>();
 const LazyCollectionSearch = lazy(async () => {
@@ -19,11 +19,11 @@ const LazyCollectionSearch = lazy(async () => {
   return { default: searchMod.CollectionSearch };
 });
 
-/** The two saved collections, displayed inside the Library root's ordinary page scroller. */
+/** Pinned artist and album bookmarks, displayed inside the Library root's ordinary page scroller. */
 export default function SavedEntities(props: { kind?: SavedEntity['kind']; expanded?: boolean; match?: (entry: SavedEntity) => boolean }) {
   onMount(() => void syncSavedEntities());
   const [value, setValue] = createSignal('');
-  createEffect(on(() => props.kind, () => setValue(''), { defer: true }));
+  createEffect(on(() => [props.kind, props.expanded] as const, () => setValue(''), { defer: true }));
   const source = (kind: SavedEntity['kind']) => savedEntities().filter(entry => entry.kind === kind);
   const entries = createMemo(() => {
     if (props.match) return savedEntities().filter(props.match);
@@ -33,9 +33,10 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
     return fn ? savedEntities().filter(entry => fn(entry, raw)) : savedEntities();
   });
   const heading = (kind: SavedEntity['kind']) => t(kind === 'album' ? 'savedEntities.albums' : 'savedEntities.artists');
+  const unifiedExpanded = () => Boolean(props.expanded && !props.kind);
   return <div aria-busy={entitiesLoading()}>
     {/* One line for the whole collection, whichever rows are shown: a failed
-      * read is said once, with its retry, and never mistaken for "nothing saved". */}
+      * read is said once, with its retry, and never mistaken for "nothing bookmarked". */}
     <Show when={entitiesError()}>
       <p class={styles.status} role="status">
         <span><strong>{t('savedEntities.title')}</strong> · {t('common.loadFailed')}</span>
@@ -43,16 +44,23 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
       </p>
     </Show>
     <Show when={props.expanded && entitiesLoading() && !savedEntities().length}><SkeletonCards count={3} /></Show>
-    <For each={props.kind ? [props.kind] : ['album', 'artist'] as const}>{kind => {
+    <Show when={unifiedExpanded() && savedEntities().length}>
+      <Suspense><LazyCollectionSearch search={{ value, setValue }} /></Suspense>
+    </Show>
+    <Show when={unifiedExpanded() && !entries().length && !entitiesLoading() && !entitiesError()}>
+      <p class={styles.empty}>{t(savedEntities().length > 0 ? 'library.noCollectionMatches' : 'savedEntities.empty')}</p>
+    </Show>
+    <For each={props.kind ? [props.kind] : ['artist', 'album'] as const}>{kind => {
       const matches = createMemo(() => entries().filter(entry => entry.kind === kind));
-      return <Show when={props.expanded || matches().length}>
+      return <Show when={(props.expanded && Boolean(props.kind)) || matches().length}>
         <section class={styles.section} aria-label={heading(kind)}>
-          <Show when={!props.expanded}><div class={styles.header}><h2>{heading(kind)}</h2>
-            <Show when={!props.match && matches().length}>
+          <div class={styles.header}>
+            <h2><PinIcon size={18} class={styles.pin} /><span>{heading(kind)}</span></h2>
+            <Show when={!props.expanded && !props.match && matches().length}>
               <MusicLink class={styles.more} path={`/?saved=${kind === 'album' ? 'albums' : 'artists'}`} label={`${t('searchHome.seeAll')}: ${heading(kind)}`}>{t('searchHome.seeAll')}</MusicLink>
             </Show>
-          </div></Show>
-          <Show when={props.expanded && source(kind).length}>
+          </div>
+          <Show when={props.expanded && Boolean(props.kind) && source(kind).length}>
             <Suspense><LazyCollectionSearch search={{ value, setValue }} /></Suspense>
           </Show>
           <Show when={matches().length} fallback={<Show when={!entitiesLoading() && !entitiesError()}>

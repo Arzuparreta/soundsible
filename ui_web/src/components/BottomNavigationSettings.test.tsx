@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from '../lib/i18n';
-import { bottomNavigation, setBottomNavigation } from '../lib/bottomNavigation';
+import { bottomNavigation, resolveBottomNavigation, setBottomNavigation } from '../lib/bottomNavigation';
 import { defaultBottomNavigation } from './primaryNavigation';
 import { BottomNavigationSettings } from './BottomNavigationSettings';
 beforeEach(async () => { await setLocale('es'); setBottomNavigation(defaultBottomNavigation); });
@@ -25,12 +25,13 @@ describe('bottom navigation editor', () => {
   });
 });
 
-it('offers every library subentry as a direct bottom-bar destination', () => {
+it('offers library views and a single Bookmarks entry as bottom-bar destinations', () => {
   render(() => <BottomNavigationSettings />);
   const select = screen.getByLabelText('Posición 1');
-  for (const href of ['/library?view=songs', '/library?view=albums', '/library?view=artists', '/?saved=albums', '/?saved=artists']) {
+  for (const href of ['/library?view=songs', '/library?view=albums', '/library?view=artists', '/?saved=bookmarks']) {
     fireEvent.change(select, { target: { value: href } });
     expect(bottomNavigation()[0]).toBe(href);
     expect(JSON.parse(localStorage.getItem('navigation:bottom')!)[0]).toBe(href);
   }
+  expect(resolveBottomNavigation(['/', '/?saved=albums', '/?saved=artists', '/search'])).toEqual(['/', '/?saved=bookmarks', '/search']);
 });

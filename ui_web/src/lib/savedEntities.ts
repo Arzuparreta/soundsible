@@ -80,7 +80,7 @@ export async function setEntitySaved(entry: SavedEntity, saved: boolean, opts: {
     if (current !== generation) return;
     setSavedEntities(entries);
     setEntitiesError(false);
-    if (saved) pulseNavigation(['/', entry.kind === 'album' ? '/?saved=albums' : '/?saved=artists']);
+    if (saved) pulseNavigation(['/', '/?saved=bookmarks']);
     if (!saved && !opts.quiet) toast.action(t('savedEntities.removed'), t('savedEntities.undo'), () => void setEntitySaved(entry, true));
   } catch {
     if (current !== generation) return;

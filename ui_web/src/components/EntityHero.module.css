@@ -26,6 +26,22 @@
   gap: var(--space-md) var(--space-lg);
   min-width: 0;
 }
+.hasCorner {
+  grid-template-columns: var(--entity-art) minmax(0, 1fr) auto;
+  grid-template-areas: 'art identity identity' 'toolbar toolbar toolbar';
+}
+.hasCorner .title,
+.hasCorner .credit {
+  padding-inline-end: calc(var(--control-h) + var(--space-sm));
+}
+.corner {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  margin-top: var(--space-xs);
+  z-index: 1;
+}
 .compact, .podcast { --entity-art: 80px; }
 .art {
   grid-area: art; position: relative; display: flex;
@@ -85,7 +101,7 @@ button.art { cursor: pointer; }
   text-overflow: ellipsis; cursor: pointer;
 }
 .viewSelect option { background: var(--bg-raised); color: var(--ink-primary); }
-.play, .secondary, .options {
+.play, .secondary, .options, .pin {
   display: inline-flex; align-items: center; justify-content: center;
   gap: var(--space-xs); flex: none;
   width: var(--control-h); height: var(--control-h);
@@ -95,17 +111,20 @@ button.art { cursor: pointer; }
 }
 .play { color: var(--ink-on-accent); background: var(--accent-primary); }
 .secondary { color: var(--ink-primary); background: var(--bg-raised); border-color: var(--hairline); }
-.options { color: var(--ink-secondary); background: transparent; border-color: var(--hairline); }
-.play:disabled, .secondary:disabled, .options:disabled { opacity: .45; cursor: not-allowed; }
+.options, .pin { color: var(--ink-secondary); background: transparent; border-color: var(--hairline); }
+.pin { transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out); }
+.pin[aria-pressed='true'] { color: var(--accent-ink); background: var(--accent-faint); border-color: var(--accent-soft); }
+.play:disabled, .secondary:disabled, .options:disabled, .pin:disabled { opacity: .45; cursor: not-allowed; }
 .primaryLabel { display: none; }
 .retry { margin-inline-start: var(--space-sm); }
-.viewSelect:focus-visible, .play:focus-visible, .secondary:focus-visible, .options:focus-visible, .back:focus-visible {
+.viewSelect:focus-visible, .play:focus-visible, .secondary:focus-visible, .options:focus-visible, .pin:focus-visible, .back:focus-visible {
   outline: 2px solid var(--accent-ink); outline-offset: 2px;
 }
 @media (hover: hover) and (pointer: fine) {
   .play:hover:not(:disabled) { background: var(--accent-hover); }
   .secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--hairline-strong); }
-  .options:hover:not(:disabled), .back:hover, .viewSelect:hover { background: var(--bg-hover); color: var(--ink-primary); }
+  .options:hover:not(:disabled), .pin:hover:not(:disabled), .back:hover, .viewSelect:hover { background: var(--bg-hover); color: var(--ink-primary); }
+  .pin[aria-pressed='true']:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
   .credit a:hover { color: var(--ink-primary); }
 }
 @media (min-width: 768px) {
@@ -115,6 +134,10 @@ button.art { cursor: pointer; }
     grid-template-rows: 1fr auto;
     column-gap: var(--space-xl);
   }
+  .hasCorner {
+    grid-template-areas: 'art identity identity' 'art toolbar toolbar';
+  }
+  .corner { margin-top: var(--space-sm); }
   .compact, .podcast { --entity-art: 136px; }
   .identity { align-self: end; }
   .title { font-size: clamp(28px, 3vw, 40px); }

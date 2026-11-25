@@ -12,10 +12,11 @@ import { entitiesBusy, fillEntityCover, isEntitySaved, setEntitySaved, syncSaved
 import { toast } from '../lib/toast';
 import { ownedTrackForItem } from '../stores';
 import type { CatalogItem } from '../types/music';
-import { BookmarkIcon, CheckIcon, MoreIcon, menuIcons } from './icons';
+import { IconButton } from '../design/Control';
+import { CheckIcon, MoreIcon, PinIcon, menuIcons } from './icons';
 import { Spinner } from './Spinner';
 import { openActionMenu, type MenuAction } from './ActionMenu';
-import saveStyles from './SavedEntities.module.css';
+import hero from './EntityHero.module.css';
 import styles from './CollectionControl.module.css';
 import { collectionArrivedCount as arrivedOf } from '../lib/collectionState';
 import { CollectionDownloadView } from './CollectionDownloadView';
@@ -30,14 +31,11 @@ const downloads = {
   artist: { get: api.getArtistDownload, start: api.startArtistDownload },
 };
 
-/** Bookmark first; explicit bulk song actions live in the overflow menu. */
-export function CollectionControl(props: { entity: SavedEntity; deezerId?: string; tracklist?: CatalogItem[]; onMenuReady?: (open: () => void) => void; compact?: boolean; menuActions?: () => MenuAction[] }) {
-  onMount(() => {
-    void syncSavedEntities();
-    props.onMenuReady?.(openMenu);
-  });
-  const artist = () => props.entity.kind === 'artist';
+/** Icon-only bookmark toggle for the top-right corner of artist and album heroes. */
+export function EntityBookmarkButton(props: { entity: SavedEntity }) {
+  onMount(() => void syncSavedEntities());
   const saved = () => isEntitySaved(props.entity);
+  const [changing, setChanging] = createSignal(false);
   // A bookmark saved without a picture takes the one this page shows, once per
   // picture: a failed write waits for the next visit instead of looping.
   let offeredCover: string | undefined;
@@ -47,6 +45,38 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
     offeredCover = cover;
     untrack(() => void fillEntityCover(props.entity));
   });
+  const label = () => t(saved() ? 'savedEntities.remove' : 'savedEntities.save');
+  const toggleSaved = async () => {
+    if (changing()) return;
+    setChanging(true);
+    try {
+      await setEntitySaved(props.entity, !saved());
+    } finally {
+      setChanging(false);
+    }
+  };
+  return (
+    <IconButton
+      class={hero.pin}
+      label={label()}
+      title={label()}
+      aria-pressed={saved()}
+      aria-busy={changing() || undefined}
+      disabled={entitiesBusy() || changing()}
+      onClick={() => void toggleSaved()}
+    >
+      <PinIcon size={18} filled={saved()} />
+    </IconButton>
+  );
+}
+
+/** Overflow actions and active download status; bookmarking lives in EntityBookmarkButton. */
+export function CollectionControl(props: { entity: SavedEntity; deezerId?: string; tracklist?: CatalogItem[]; onMenuReady?: (open: () => void) => void; compact?: boolean; menuActions?: () => MenuAction[] }) {
+  onMount(() => {
+    void syncSavedEntities();
+    props.onMenuReady?.(openMenu);
+  });
+  const artist = () => props.entity.kind === 'artist';
   const [discography, setDiscography] = createSignal<CatalogItem[] | null>(null);
   const songs = () => (artist() ? discography() ?? [] : props.tracklist ?? []);
   const total = () => songs().length;
@@ -95,16 +125,6 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
 
   const step = () => collectionStep({ total: total(), owned: owned(), job: job() });
   const arrived = () => arrivedOf(job());
-
-  const toggleSaved = async () => {
-    if (changing()) return;
-    setChanging(true);
-    try {
-      await setEntitySaved(props.entity, !saved());
-    } finally {
-      setChanging(false);
-    }
-  };
 
   /** A whole catalogue is worth a look before it lands on the disk. */
   const confirmDownload = () => {
@@ -173,10 +193,6 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
     actions: [
       ...(props.menuActions?.() ?? []),
       ...(props.compact && job() ? [{ icon: menuIcons.download(), label: statusLabel(), onSelect: details }] : []),
-      { icon: saved() ? menuIcons.unbookmark() : menuIcons.bookmark(),
-        label: t(saved() ? 'savedEntities.remove' : 'savedEntities.save'),
-        selected: saved(),
-        disabled: entitiesBusy() || changing(), onSelect: () => void toggleSaved() },
       ...(props.deezerId || (props.tracklist?.length ?? 0) > 0 ? [
         { icon: menuIcons.save(), label: t('collectionControl.addSongs'),
           disabled: starting() || changing(), onSelect: () => void addSongs() },
@@ -188,14 +204,6 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
 
   return (
     <span class={styles.control}>
-      <Show when={!props.compact}>
-      <button type="button" class={saveStyles.save} aria-pressed={saved()} aria-busy={changing() || undefined}
-        aria-label={saved() ? t('savedEntities.saved') : t('savedEntities.save')} title={saved() ? t('savedEntities.saved') : t('savedEntities.save')}
-        disabled={entitiesBusy() || changing()} onClick={() => void toggleSaved()}>
-        <BookmarkIcon />
-        <span class={saveStyles.saveLabel}>{saved() ? t('savedEntities.saved') : t('savedEntities.save')}</span>
-      </button>
-      </Show>
       <button type="button" class={styles.step} aria-label={menuLabel()} title={menuLabel()}
         aria-haspopup="dialog" onClick={openMenu}><MoreIcon size={18} />
         <Show when={props.compact && job() && step() !== 'owned'}><span class={styles.activity} aria-hidden="true" /></Show>

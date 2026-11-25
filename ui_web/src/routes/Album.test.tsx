@@ -185,11 +185,15 @@ describe('Album route', () => {
     await screen.findByText('Catalog song 1');
     const play = screen.getByRole('button', { name: 'Play' });
     const options = screen.getByRole('button', { name: 'Options' });
+    const pin = screen.getByRole('button', { name: 'Add to bookmarks' });
+    expect(pin).toHaveAttribute('title', 'Add to bookmarks');
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    expect(pin.textContent?.trim()).toBe('');
     expect(play.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
     fireEvent.click(options);
     const menu = menuMock.open.mock.calls.at(-1)![0] as { actions: Array<{ label: string }> };
-    expect(menu.actions.map(action => action.label)).toEqual(expect.arrayContaining(['Save', 'Shuffle']));
+    expect(menu.actions.map(action => action.label)).toEqual(expect.arrayContaining(['Shuffle']));
+    expect(menu.actions.some(action => /bookmark|save/i.test(action.label))).toBe(false);
     // The whole title is the heading, never a clipped copy of it.
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Record');
   });

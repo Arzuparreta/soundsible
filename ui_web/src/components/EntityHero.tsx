@@ -18,6 +18,7 @@ export function EntityHero(props: {
   headerClass?: string;
   art: JSX.Element;
   openMenu?: () => void;
+  corner?: JSX.Element;
   children?: JSX.Element;
   metadata?: JSX.Element;
 }) {
@@ -34,7 +35,7 @@ export function EntityHero(props: {
         <BackIcon size={20} />
       </Control>
     </Show>
-    <div class={hero.hero} classList={{ [hero.compact]: props.variant === 'compact', [hero.podcast]: props.variant === 'podcast' }}>
+    <div class={hero.hero} classList={{ [hero.compact]: props.variant === 'compact', [hero.podcast]: props.variant === 'podcast', [hero.hasCorner]: Boolean(props.corner) }}>
       {props.art}
       <div class={hero.identity}>
         <h1 ref={setHeading} class={hero.title}>
@@ -45,6 +46,7 @@ export function EntityHero(props: {
         </h1>
         {props.metadata}
       </div>
+      <Show when={props.corner}><div class={hero.corner}>{props.corner}</div></Show>
       {props.children}
     </div>
   </header>;

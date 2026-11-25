@@ -56,12 +56,16 @@ describe('native entity composition', () => {
     expect(mocks.play.mock.calls.at(-1)?.[2]).toEqual({ kind: 'album', id: '7' });
     expect(mocks.save).not.toHaveBeenCalled(); expect(mocks.download).not.toHaveBeenCalled();
   });
-  it('retains shuffle, bookmark, bulk song, download and native offline operations in one menu', () => {
+  it('places the bookmark pin in the hero and retains shuffle, bulk song, download and offline operations in options', () => {
     mount();
     expect(screen.queryByRole('button', { name: 'Shuffle' })).not.toBeInTheDocument();
+    const pin = screen.getByRole('button', { name: 'Add to bookmarks' });
+    expect(pin).toHaveAttribute('title', 'Add to bookmarks');
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(screen.getByRole('button', { name: 'Options: Record' }));
     const actions = vi.mocked(openContextMenu).mock.calls.at(-1)?.[0].actions ?? [];
-    expect(actions.map(action => action.label)).toEqual(expect.arrayContaining(['Shuffle', 'Save', 'Add all songs', 'Download the album', 'Keep offline']));
+    expect(actions.map(action => action.label)).toEqual(expect.arrayContaining(['Shuffle', 'Add all songs', 'Download the album', 'Keep offline']));
+    expect(actions.some(action => /bookmark|save/i.test(action.label))).toBe(false);
     actions.find(action => action.label === 'Shuffle')?.onSelect();
     expect(mocks.play).toHaveBeenCalledWith(items, 0, { kind: 'album', id: '7' }, true);
   });

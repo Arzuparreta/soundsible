@@ -155,10 +155,21 @@ for (const kind of ['album', 'artist'] as const) {
     expect(fixture.reads[kind]).toBe(1);
     expect(fixture.playbackRequests).toEqual([]);
 
-    await toolbar.getByRole('button', { name: /^Opciones/ }).click();
+    const pin = header.getByRole('button', { name: 'Añadir a marcadores', exact: true });
+    await expect(pin).toBeVisible();
+    const moreBtn = toolbar.getByRole('button', { name: /^Opciones/ });
+    const [pinBox, moreBox, artBox] = await Promise.all([
+      pin.boundingBox(),
+      moreBtn.boundingBox(),
+      header.getByTestId('collection-header-cover').boundingBox(),
+    ]);
+    expect(Math.abs((pinBox!.x + pinBox!.width / 2) - (moreBox!.x + moreBox!.width / 2))).toBeLessThanOrEqual(1);
+    expect(pinBox!.y).toBeGreaterThan(artBox!.y);
+
+    await moreBtn.click();
     const menu = page.getByRole('dialog');
     await expect(menu.getByRole('button', { name: 'Aleatorio', exact: true })).toBeInViewport();
-    await expect(menu.getByRole('button', { name: 'Guardar', exact: true })).toBeInViewport();
+    await expect(menu.getByRole('button', { name: /marcadores/i })).toHaveCount(0);
     await expect(menu.getByRole('button', { name: 'Añadir todas las canciones', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
