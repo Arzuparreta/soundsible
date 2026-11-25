@@ -32,7 +32,9 @@ export const track = (title: string): CatalogTrack => {
 const QUIET = new Set([
   '/api/catalog/resolve',
   '/api/discovery/music/recently-saved',
+  '/api/discovery/podcasts/countries',
   '/api/discovery/podcasts/recommendations',
+  '/api/playback/link',
   '/api/playback/play-timing',
   '/api/playback/trace',
 ]);
@@ -196,6 +198,14 @@ export async function mockShowcaseEngine(page: Page, theme: string): Promise<voi
     localStorage.setItem('theme', theme);
     localStorage.setItem('soundsible:interface-size', 'normal');
     localStorage.setItem('device_id', 'showcase-device');
+    // Freeze the audio clock at NOW_PLAYING_AT while letting the element enter
+    // the playing state, so every screenshot shows active playback without
+    // advancing between frames.
+    const nativePlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function play(this: HTMLMediaElement) {
+      this.playbackRate = 0;
+      return nativePlay.call(this);
+    };
   }, theme);
 }
 

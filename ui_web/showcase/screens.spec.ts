@@ -18,13 +18,18 @@ const PALETTES = THEMES.filter((theme) => theme !== 'system');
 async function startup(page: Page, route: string) {
   await page.goto(`/player/#${route}`);
   await expect(page.locator('#startup-screen')).toHaveCount(0);
-  await expect(page.locator('[data-omni-player]')).toContainText(NOW_PLAYING.title);
+  const omni = page.locator('[data-omni-player]');
+  await expect(omni).toContainText(NOW_PLAYING.title);
+  await omni.getByRole('button', { name: 'Play' }).click();
+  await expect(omni.getByRole('button', { name: 'Pause' })).toBeVisible();
+  await page.mouse.move(0, 0);
 }
 
 async function openPlayer(page: Page) {
   await startup(page, '/library?view=songs');
   await page.locator('[data-omni-player]').getByRole('button', { name: /^NORMAL:/ }).click();
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
+  await page.mouse.move(0, 0);
   await settle(page, '[data-player-surface-open]');
 }
 
@@ -36,9 +41,10 @@ const SHOTS: Array<{ name: string; project: 'desktop' | 'mobile'; themes?: strin
     themes: ['dark'], // The social card uses the dark shell with its lyrics open.
     stage: async (page) => {
       await openPlayer(page);
-      await page.locator('[data-player-stage-mode="now-playing"]').getByRole('button', { name: 'Show lyrics' }).click();
-      await expect(page.locator('[data-lyrics-stage]')).toBeVisible();
-      await expect(page.locator('[data-lyrics-scroll]')).toContainText('And god help any fool');
+      await page.locator('[data-compact-lyrics-toggle]').click();
+      await expect(page.locator('[data-compact-lyrics]')).toBeInViewport({ ratio: 1 });
+      await expect(page.locator('[data-compact-lyrics]')).toContainText('And god help any fool');
+      await page.mouse.move(0, 0);
       await settle(page, '[data-player-surface-open]');
     },
   },
