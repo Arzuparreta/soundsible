@@ -1,4 +1,4 @@
-import { PageCommands } from '../components/AppBar';
+import { PageCommands } from '../components/PageCommands';
 import type { AppBarAction } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { syncSavedEntities } from '../lib/savedEntities';

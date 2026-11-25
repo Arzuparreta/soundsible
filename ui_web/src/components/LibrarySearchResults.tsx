@@ -79,8 +79,9 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       event,
     );
 
+  const normalizedQuery = createMemo(() => normalizeLibraryQuery(props.query ?? ''));
   const hasBookmarkMatch = createMemo(() => {
-    const query = normalizeLibraryQuery(props.query ?? '');
+    const query = normalizedQuery();
     return !!query && savedEntities().some(entry => matchesSavedEntity(entry, query));
   });
 
@@ -94,7 +95,7 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       data-library-scroll
       data-primary-scroll
     >
-      <Show when={props.query}><SavedEntities query={props.query} /></Show>
+      <Show when={props.query}><SavedEntities match={entry => matchesSavedEntity(entry, normalizedQuery())} /></Show>
       <Show when={props.results.length > 0} fallback={<Show when={!props.query || (!hasBookmarkMatch() && !(entitiesLoading() && !savedEntities().length))}><EmptyState>{t('library.noSearchResults')}</EmptyState></Show>}>
         <CollectionRows items={props.results} scrollElement={() => scrollRef ?? null}>
           {(result) => {

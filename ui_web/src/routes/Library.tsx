@@ -42,7 +42,7 @@ import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { DownloadIcon, SearchIcon, SortIcon } from '../components/icons';
 import type { AppBarAction } from '../lib/appBar';
-import { PageCommands } from '../components/AppBar';
+import { PageCommands } from '../components/PageCommands';
 import { desktopShell } from '../lib/shellLayout';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { reselectPrimaryTab } from '../lib/tabNavigation';

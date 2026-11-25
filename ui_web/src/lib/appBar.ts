@@ -3,7 +3,7 @@ import { createSignal, onCleanup, type JSX } from 'solid-js';
 /**
  * One page command. The touch top bar draws it as an icon in its trailing
  * slot; the desktop toolbar draws the same definition with its label
- * (PageCommands in AppBar.tsx).
+ * (PageCommands in PageCommands.tsx).
  *
  * Commands are described, not drawn: the bar decides their size, spacing,
  * colour and feedback, so every page's buttons are the same buttons.

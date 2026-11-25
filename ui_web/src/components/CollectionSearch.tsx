@@ -27,7 +27,7 @@ export function createCollectionSearch() {
 }
 
 export function CollectionSearch(props: {
-  search: ReturnType<typeof createCollectionSearch>;
+  search: Pick<ReturnType<typeof createCollectionSearch>, 'value' | 'setValue'>;
   placeholder?: string;
   inset?: boolean;
   toolbar?: boolean;

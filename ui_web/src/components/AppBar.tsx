@@ -1,12 +1,13 @@
-import { createEffect, createSignal, Index, onCleanup, onMount, Show, untrack } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import { Control } from '../design/Control';
-import { currentAppBar, type AppBarAction } from '../lib/appBar';
+import { currentAppBar } from '../lib/appBar';
 import { t } from '../lib/i18n';
 import { desktopShell } from '../lib/shellLayout';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { BackIcon } from './icons';
 import { NavigationMenuButton } from './NavigationMenu';
+import { PageCommands } from './PageCommands';
 import styles from './AppBar.module.css';
 
 const SCROLLER = '[data-primary-scroll], [data-app-outlet]';
@@ -135,32 +136,6 @@ export function AppBar() {
         </div>
       </header>
     </Show>
-  );
-}
-
-export function PageCommands(props: { actions?: AppBarAction[]; desktop?: boolean }) {
-  return <Index each={props.actions ?? []}>{action => <ActionButton action={action()} desktop={props.desktop} />}</Index>;
-}
-
-function ActionButton(props: { action: AppBarAction; desktop?: boolean }) {
-  const worded = () => props.action.prominent || props.desktop;
-  return (
-    <button
-      type="button"
-      class={props.action.prominent ? styles.prominent : worded() ? styles.command : styles.icon}
-      data-command-tone={props.action.tone}
-      title={worded() ? undefined : props.action.label}
-      aria-label={props.action.label}
-      aria-busy={props.action.busy || undefined}
-      aria-pressed={props.action.pressed}
-      aria-haspopup={props.action.opensDialog ? 'dialog' : undefined}
-      disabled={props.action.disabled}
-      data-pressable
-      onClick={(event) => props.action.onSelect(event)}
-    >
-      <Show when={!props.action.prominent}>{props.action.icon()}</Show>
-      <Show when={worded()}><span>{props.action.desktopLabel ?? props.action.label}</span></Show>
-    </button>
   );
 }
 

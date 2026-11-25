@@ -1,5 +1,5 @@
 import { createMemo, Show, type JSX } from 'solid-js';
-import { PageCommands } from './AppBar';
+import { PageCommands } from './PageCommands';
 import { useAppBar, type AppBarAction } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import styles from './ViewHeader.module.css';

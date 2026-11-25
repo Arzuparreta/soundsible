@@ -6,8 +6,9 @@ export type LibrarySearchResult =
   | { kind: 'track'; track: Track; score: number; order: number }
   | { kind: 'artist'; artist: ArtistEntry; score: number; order: number };
 
-/** Latin letters drawn with a stroke or as a ligature do not decompose. */
-const LATIN_FOLDS: Record<string, string> = { ø: 'o', ł: 'l', đ: 'd', æ: 'ae', œ: 'oe', ß: 'ss' };
+/** Latin letters drawn with a stroke or as a ligature do not decompose, and
+ * Greek final sigma (ς) must match medial sigma (σ) while typing prefixes. */
+const CHAR_FOLDS: Record<string, string> = { ø: 'o', ł: 'l', đ: 'd', æ: 'ae', œ: 'oe', ß: 'ss', ς: 'σ' };
 
 /**
  * NFKD folds compatibility forms (the `ﬃ` ligature, full-width letters) and
@@ -24,7 +25,7 @@ export function foldSearchText(value: string): string {
     // Not toLocaleLowerCase: under a Turkish locale `I` would become `ı` and
     // `imagine` would stop finding `Imagine Dragons`.
     .toLowerCase()
-    .replace(/[øłđæœß]/g, letter => LATIN_FOLDS[letter]);
+    .replace(/[øłđæœßς]/g, letter => CHAR_FOLDS[letter]);
 }
 
 /** `foldSearchText` with outer space trimmed and inner runs collapsed. */
