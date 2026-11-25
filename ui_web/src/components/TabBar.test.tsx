@@ -116,15 +116,15 @@ describe('mobile tab bar', () => {
 });
 
 it('opens a configured subentry directly and highlights it instead of the root', async () => {
-  setBottomNavigation(['/', '/library?view=artists', '/?saved=albums', '/search']);
+  setBottomNavigation(['/', '/library?view=artists', '/?saved=bookmarks', '/search']);
   const view = renderTabs();
   fireEvent.click(view.getByRole('link', { name: 'Artistas' }));
   await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/library?view=artists'));
   expect(view.getByRole('link', { name: 'Artistas' })).toHaveAttribute('aria-current', 'page');
   expect(view.getByRole('link', { name: 'Biblioteca' })).not.toHaveAttribute('aria-current');
-  fireEvent.click(view.getByRole('link', { name: 'Álbumes guardados' }));
-  await waitFor(() => expect(window.location.search).toBe('?saved=albums'));
-  expect(view.getByRole('link', { name: 'Álbumes guardados' })).toHaveAttribute('aria-current', 'page');
+  fireEvent.click(view.getByRole('link', { name: 'Marcadores' }));
+  await waitFor(() => expect(window.location.search).toBe('?saved=bookmarks'));
+  expect(view.getByRole('link', { name: 'Marcadores' })).toHaveAttribute('aria-current', 'page');
   fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
   await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/'));
 });

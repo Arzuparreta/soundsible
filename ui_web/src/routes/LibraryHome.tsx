@@ -12,18 +12,23 @@ import styles from './LibraryHome.module.css';
 /** Main-shell landing page. */
 export default function LibraryHome() {
   const [params] = useSearchParams();
-  const kind = () => params.saved === 'albums' ? 'album' : params.saved === 'artists' ? 'artist' : undefined;
+  const savedView = () => params.saved === 'bookmarks' || params.saved === 'albums' || params.saved === 'artists' ? params.saved : undefined;
+  const kind = () => savedView() === 'albums' ? 'album' : savedView() === 'artists' ? 'artist' : undefined;
+  const expanded = () => Boolean(savedView());
   const shortcuts = [
     ...libraryViews.slice(0, 3),
     ...['/favourites', '/playlists', '/podcasts'].map(href => navigationItems.find(item => item.href === href)!),
   ];
+  const title = () => savedView() === 'bookmarks'
+    ? t('savedEntities.title')
+    : kind() === 'album' ? t('savedEntities.albums') : kind() === 'artist' ? t('savedEntities.artists') : t('nav.library');
   return <div class="view">
     <ViewHeader
-      title={kind() === 'album' ? t('savedEntities.albums') : kind() === 'artist' ? t('savedEntities.artists') : t('nav.library')}
-      onTitleTap={kind() ? undefined : () => reselectPrimaryTab('/')}
+      title={title()}
+      onTitleTap={expanded() ? undefined : () => reselectPrimaryTab('/')}
     />
     <div class={styles.body} ref={element => registerPrimaryScroll(element)} data-primary-scroll>
-      <Show when={!kind()} fallback={<MusicLink class={styles.back} path="/">← {t('savedEntities.back')}</MusicLink>}>
+      <Show when={!expanded()} fallback={<MusicLink class={styles.back} path="/">← {t('savedEntities.back')}</MusicLink>}>
         <section aria-label={t('savedEntities.library')} class={styles.library}>
           <h2>{t('savedEntities.library')}</h2>
           <div class={styles.shortcuts}><For each={shortcuts}>{item =>
@@ -31,7 +36,7 @@ export default function LibraryHome() {
           }</For></div>
         </section>
       </Show>
-      <SavedEntities kind={kind()} expanded={!!kind()} />
+      <SavedEntities kind={kind()} expanded={expanded()} />
     </div>
   </div>;
 }

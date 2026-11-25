@@ -302,7 +302,7 @@ export default function CatalogSearch(props: {
       renderMore={(section, link) => <button type="button" class={link.class} aria-label={link.label} onClick={() => openSection(section)}>{link.children}</button>}
       renderEntity={(item, link) => { const tap = createResponsiveTap({ onTap: () => { const path = catalogEntityDestination(item); if (path) openEntity(path); }, onLongPress: () => entityMenu(item) });
         return <button type="button" class={link.class} aria-label={link.label} {...tap} onContextMenu={event => { event.preventDefault(); entityMenu(item, event); }}>{link.children}</button>; }}
-      renderStatus={item => <CatalogCollectionStatusView label={entityStatus(item)} />} renderSong={songRow} /></Show>
+      renderStatus={item => <CatalogCollectionStatusView label={entityStatus(item)} bookmarked={entitySaved(item)} />} renderSong={songRow} /></Show>
     </div>
     <Show when={entity()?.subject} keyed>{subject => <NativeEntityProfile subject={subject} generation={props.generation} tracks={props.tracks}
       disconnected={props.disconnected} catalog={catalog} isActive={props.isActive} onBack={backEntity} onOpen={openEntity}

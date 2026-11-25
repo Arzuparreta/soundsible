@@ -1,6 +1,6 @@
 import { EntityHero, EntityMenuCover } from '../components/EntityHero';
 import { openSavedEntityMenu } from '../components/savedEntityActions';
-import { CollectionControl } from '../components/CollectionControl';
+import { CollectionControl, EntityBookmarkButton } from '../components/CollectionControl';
 import Button from '../components/Button';
 import { Control } from '../design/Control';
 import { CollectionActions } from '../components/CollectionActions';
@@ -343,6 +343,13 @@ export default function Artist() {
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;
   const radioLabel = () => t(player().autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');
 
+  const entity = () => ({
+    kind: 'artist' as const,
+    name: name(),
+    cover: cover(),
+    destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }),
+  });
+
   return (
     <div class="view">
       <div
@@ -352,6 +359,7 @@ export default function Artist() {
       >
         <EntityHero name={name()} back={back} backLabel={t('artist.ariaBack')}
           openMenu={() => openCollectionMenu()}
+          corner={<EntityBookmarkButton entity={entity()} />}
           art={<EntityMenuCover name={name()} cover={cover()} round onOpen={() => openCollectionMenu()} />}
           metadata={<>
             <span class={hero.meta}>
@@ -400,7 +408,7 @@ export default function Artist() {
                 ...(candidates().length ? [{ icon: menuIcons.artist(), label: t('artist.notThisArtist'), onSelect: chooseCandidate }] : []),
               ]}
               onMenuReady={(open) => { openCollectionMenu = open; }}
-              entity={{ kind: 'artist', name: name(), cover: cover(), destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }) }}
+              entity={entity()}
               deezerId={viewParams().deezerId ?? (currentProfile()?.deezer_id || undefined)} />
           </div>
         </EntityHero>

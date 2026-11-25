@@ -62,7 +62,7 @@ describe('desktop sidebar', () => {
     expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
   });
 
-  it.each([['/?saved=albums', 'Biblioteca'], ['/artist/example', 'Descubrir'], ['/search', 'Descubrir']])('gives %s exactly one current entry', (path, name) => {
+  it.each([['/?saved=bookmarks', 'Biblioteca'], ['/?saved=albums', 'Biblioteca'], ['/artist/example', 'Descubrir'], ['/search', 'Descubrir']])('gives %s exactly one current entry', (path, name) => {
     window.history.replaceState({}, '', path);
     const view = renderSidebar();
     const current = view.container.querySelectorAll('[aria-current="page"]');

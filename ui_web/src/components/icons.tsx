@@ -132,25 +132,38 @@ export function OutputDeviceIcon(props: GlyphProps) {
     </Glyph>
   );
 }
-const BOOKMARK = 'M6 3h12v18l-6-4-6 4Z';
-const BOOKMARK_STRIKE = 'M3 6l18 12';
-/** Keep an album or artist at hand in Library. Its button fills it once saved. */
-export const BookmarkIcon = line(BOOKMARK);
-/** The same bookmark struck through. The strike is cut out of the outline so
+const PIN_BODY = 'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z';
+const PIN_NEEDLE = 'M12 17v5';
+const PIN_STRIKE = 'M3 3l18 18';
+/** Keep an album or artist pinned in Home bookmarks. Fills once bookmarked. */
+export function PinIcon(props: GlyphProps & { filled?: boolean }) {
+  return (
+    <Glyph size={props.size} class={props.class}>
+      <path d={PIN_BODY} fill={props.filled ? 'currentColor' : 'none'} />
+      <path d={PIN_NEEDLE} />
+    </Glyph>
+  );
+}
+/** The same pushpin struck through. The strike is cut out of the outline so
  * the two never merge into one blot at menu size. */
-export function BookmarkOffIcon(props: GlyphProps) {
+export function PinOffIcon(props: GlyphProps) {
   const cut = createUniqueId();
   return (
     <Glyph {...props}>
       <mask id={cut}>
         <rect width="24" height="24" fill="white" stroke="none" />
-        <path d={BOOKMARK_STRIKE} stroke="black" stroke-width="5" />
+        <path d={PIN_STRIKE} stroke="black" stroke-width="5" />
       </mask>
-      <path d={BOOKMARK} mask={`url(#${cut})`} />
-      <path d={BOOKMARK_STRIKE} />
+      <g mask={`url(#${cut})`}>
+        <path d={PIN_BODY} />
+        <path d={PIN_NEEDLE} />
+      </g>
+      <path d={PIN_STRIKE} />
     </Glyph>
   );
 }
+export const BookmarkIcon = PinIcon;
+export const BookmarkOffIcon = PinOffIcon;
 /** Add to a collection, mix or list. */
 export const PlusIcon = line('M12 5v14M5 12h14');
 /** Save to the library: claim the song, no file yet. */

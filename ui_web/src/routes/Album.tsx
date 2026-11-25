@@ -1,7 +1,7 @@
 import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { EntityHero, EntityMenuCover } from '../components/EntityHero';
-import { CollectionControl } from '../components/CollectionControl';
+import { CollectionControl, EntityBookmarkButton } from '../components/CollectionControl';
 import Button from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
 import { PlayIcon, menuIcons } from '../components/icons';
@@ -317,6 +317,14 @@ export default function Album() {
   let openCollectionMenu = () => {};
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : tracklist().length > 0;
 
+  const entity = () => ({
+    kind: 'album' as const,
+    name: title(),
+    artist: artistName(),
+    cover: cover(),
+    destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }),
+  });
+
   return (
     <div class="view">
       <div
@@ -326,6 +334,7 @@ export default function Album() {
       >
         <EntityHero name={displayTitle()} back={back} backLabel={t('album.ariaBack')}
           openMenu={() => openCollectionMenu()}
+          corner={<EntityBookmarkButton entity={entity()} />}
           art={<EntityMenuCover name={displayTitle()} cover={cover()} onOpen={() => openCollectionMenu()} />}
           metadata={<>
             <ArtistLinks class={hero.credit} music={{ artist: displayArtist(), artists: displayArtists(), view: view(), artistId: membershipRead()?.album.album_artist_id ?? undefined }} />
@@ -365,7 +374,7 @@ export default function Album() {
                     { icon: menuIcons.changeSession(), label: t('autoMode.startDj'), disabled: !playable(), onSelect: startAlbumDj },
                   ] : []}
               onMenuReady={(open) => { openCollectionMenu = open; }}
-              entity={{ kind: 'album', name: title(), artist: artistName(), cover: cover(), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}
+              entity={entity()}
               tracklist={tracklist()}
               deezerId={viewParams().deezerId ?? currentProfile()?.deezer_id ?? undefined} />
           </div>

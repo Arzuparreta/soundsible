@@ -62,14 +62,14 @@ public class EntityBookmarksTest {
             web.awaitReady(scenario);web.evaluate(scenario,"localStorage.setItem('lang','en')");scenario.recreate();web.awaitReady(scenario);
             web.evaluate(scenario,"document.querySelector('input[type=url]').value="+JSONObject.quote(origin)+";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
             signIn(web,scenario,"member");var before=get(connection,origin,"/api/library");String playlists=before.getJSONObject("playlists").toString();int tracks=before.getJSONArray("tracks").length();String songs=get(connection,origin,"/api/library/saved").toString();
-            tab(web,scenario,"Albums");menu(web,scenario,"member album","Save");awaitMarked(connection,origin,"album","member album",true);
+            tab(web,scenario,"Albums");menu(web,scenario,"member album","Add to bookmarks");awaitMarked(connection,origin,"album","member album",true);
             scenario.recreate();waitFor(web,scenario,"!document.documentElement.hasAttribute('data-booting') && !!document.querySelector('[data-testid=android-library]')");
-            tab(web,scenario,"Albums");menu(web,scenario,"member album","Remove from saved");awaitMarked(connection,origin,"album","member album",false);
-            tab(web,scenario,"Artists");menu(web,scenario,"member artist","Save");awaitMarked(connection,origin,"artist","member artist",true);
+            tab(web,scenario,"Albums");menu(web,scenario,"member album","Remove from bookmarks");awaitMarked(connection,origin,"album","member album",false);
+            tab(web,scenario,"Artists");menu(web,scenario,"member artist","Add to bookmarks");awaitMarked(connection,origin,"artist","member artist",true);
             var after=get(connection,origin,"/api/library");assertEquals(tracks,after.getJSONArray("tracks").length());assertEquals(playlists,after.getJSONObject("playlists").toString());assertEquals(songs,get(connection,origin,"/api/library/saved").toString());
             web.evaluate(scenario,"Array.from(document.querySelectorAll('header button')).find(b=>b.textContent==='Sign out').click()");signIn(web,scenario,"owner");assertFalse(marked(connection,origin,"artist","member artist"));
             web.evaluate(scenario,"Array.from(document.querySelectorAll('header button')).find(b=>b.textContent==='Sign out').click()");signIn(web,scenario,"member");assertTrue(marked(connection,origin,"artist","member artist"));
-            tab(web,scenario,"Artists");menu(web,scenario,"member artist","Remove from saved");awaitMarked(connection,origin,"artist","member artist",false);
+            tab(web,scenario,"Artists");menu(web,scenario,"member artist","Remove from bookmarks");awaitMarked(connection,origin,"artist","member artist",false);
             web.evaluate(scenario,"window.__bookmarkNative=null;Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__bookmarkNative=s)");
             waitFor(web,scenario,"window.__bookmarkNative?.ready && window.__bookmarkNative.items.length===0");
             assertEquals("false",web.evaluate(scenario,"!!document.querySelector('audio')"));

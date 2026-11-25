@@ -97,15 +97,14 @@ export const libraryViews: PrimaryNavItem[] = [
   { href: '/library?view=songs', label: () => t('library.songs'), icon: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg> },
   { href: '/library?view=albums', label: () => t('library.albums'), icon: menuIcons.album },
   { href: '/library?view=artists', label: () => t('library.artists'), icon: menuIcons.artist },
-  { href: '/?saved=albums', label: () => t('savedEntities.albums'), icon: menuIcons.album },
-  { href: '/?saved=artists', label: () => t('savedEntities.artists'), icon: menuIcons.artist },
+  { href: '/?saved=bookmarks', label: () => t('savedEntities.title'), icon: menuIcons.bookmark },
 ];
 export const navigationItems = [...primaryNavigation, ...libraryShortcuts, ...libraryViews];
 export const defaultBottomNavigation = ['/', '/favourites', '/search', '/settings'];
 export function mobileNavGroup(path: string, search = ''): string {
   const params = new URLSearchParams(search);
   if (path === '/library' && ['songs', 'albums', 'artists'].includes(params.get('view') ?? '')) return `/library?view=${params.get('view')}`;
-  if (['/', '/library'].includes(path) && ['albums', 'artists'].includes(params.get('saved') ?? '')) return `/?saved=${params.get('saved')}`;
+  if (['/', '/library'].includes(path) && ['bookmarks', 'albums', 'artists'].includes(params.get('saved') ?? '')) return '/?saved=bookmarks';
   if (path === '/' || path === '/library') return '/';
   // Artist and album pages are Search's, wherever the link that opened them
   // was: the listener's own copy is a view of the page, not another page.

@@ -4,6 +4,7 @@ import { albumPath, artistPath } from '../lib/artistRoute';
 import { sameEntity, type SavedEntity } from '../lib/savedEntityIdentity';
 import type { CatalogAlbum, CatalogArtist } from '../types/music';
 import type { MenuAction } from '../components/ActionMenu';
+import { menuIcons } from '../components/icons';
 
 export function albumBookmark(album: CatalogAlbum): SavedEntity {
   return { kind: 'album', name: album.title, artist: album.album_artist,
@@ -18,7 +19,7 @@ export function nativeEntityMark(entry: SavedEntity, entries: () => SavedEntity[
   refresh: () => Promise<void>, failed: () => void): MenuAction {
   const saved = entries().some(row => sameEntity(row, entry));
   let pending = false;
-  return { label: t(saved ? 'savedEntities.remove' : 'savedEntities.save'), selected: saved, disabled: !current(),
+  return { icon: saved ? menuIcons.unbookmark() : menuIcons.bookmark(), label: t(saved ? 'savedEntities.remove' : 'savedEntities.save'), selected: saved, disabled: !current(),
     onSelect: () => {
       if (!current() || pending) return;
       pending = true;
