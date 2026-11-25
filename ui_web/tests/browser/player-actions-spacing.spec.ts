@@ -132,8 +132,16 @@ test('compact volume floats above the bottom dock without moving the player', as
   const popup = surface.locator(`[id="${await volume.getAttribute('aria-controls')}"]`);
   const [popupBox, buttonBox, dockBox] = await Promise.all([popup.boundingBox(), volume.boundingBox(), dock.boundingBox()]);
   expect(popupBox!.y + popupBox!.height).toBeLessThanOrEqual(buttonBox!.y);
-  expect(popupBox!.x + popupBox!.width).toBeCloseTo(buttonBox!.x + buttonBox!.width, 1);
+  // A vertical slider rising straight out of the volume icon.
+  expect(popupBox!.x + popupBox!.width / 2).toBeCloseTo(buttonBox!.x + buttonBox!.width / 2, 0);
+  expect(popupBox!.height).toBeGreaterThan(popupBox!.width * 2);
   expect(popupBox!.x).toBeGreaterThanOrEqual(dockBox!.x);
+  expect(popupBox!.x + popupBox!.width).toBeLessThanOrEqual(dockBox!.x + dockBox!.width);
+  const sliderBox = (await slider.boundingBox())!;
+  expect(sliderBox.height).toBeGreaterThan(sliderBox.width * 2);
+  // The minimum sits at the bottom: a click near the bottom of the track turns it down.
+  await page.mouse.click(sliderBox.x + sliderBox.width / 2, sliderBox.y + sliderBox.height - 2);
+  await expect.poll(async () => parseInt((await slider.getAttribute('aria-valuetext')) ?? '100', 10)).toBeLessThan(15);
   await expect(popup.getByRole('button')).toHaveCount(0);
   await slider.hover();
   await slider.fill('45');
