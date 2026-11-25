@@ -1,5 +1,5 @@
 import { ArtistLinks } from './MusicLinks';
-import { playerTrackMusic } from '../lib/musicNavigation';
+import { trackMusic } from '../lib/musicNavigation';
 import { savedFromTrack } from '../lib/saved';
 import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { createActivityMemo } from '../lib/activityMemo';
@@ -162,7 +162,7 @@ export function AutoMode(props: {
     const menu = () => [
       { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => player().actions.useAutoTrackAsSource(track) },
       { icon: menuIcons.changeSession(), label: t('musicExplorer.startDjFromSong'), onSelect: () => void player().actions.startDjFromTrack(track) },
-      ...buildTrackMenu(track, { music: playerTrackMusic(track), inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor }),
+      ...buildTrackMenu(track, { music: trackMusic(track, 'discover'), inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor }),
       ...(player().playback.index + index + 1 < firstEditable() ? [] : [{
         icon: menuIcons.remove(), label: t('autoMode.route.remove'), danger: true,
         onSelect: () => player().actions.removeAutoRouteOccurrence(track.queueId),
@@ -172,7 +172,7 @@ export function AutoMode(props: {
       id: track.queueId,
       title: track.title,
       artist: track.artist,
-      music: playerTrackMusic(track),
+      music: trackMusic(track, 'discover'),
       cover: trackCoverUrl(track, 'thumb'),
       position: index + 1,
       // A committed handoff is loaded and cued: whatever the route did around
@@ -361,7 +361,7 @@ export function AutoMode(props: {
       <Show when={carriedTrack()}>
         {(track) => (
           <div class={styles.carry} role="status">
-            <span><strong>{track().track.title}</strong><small><ArtistLinks music={playerTrackMusic(track().track)} /></small></span>
+            <span><strong>{track().track.title}</strong><small><ArtistLinks music={trackMusic(track().track, 'discover')} /></small></span>
             {/* On a phone the panels are a carousel with the inactive ones
               * inert, so a song can never be dragged from the route to the
               * tray. Carrying it here is that gesture, and this is where it

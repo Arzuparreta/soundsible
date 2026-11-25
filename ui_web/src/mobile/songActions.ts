@@ -5,13 +5,13 @@ import { itemArtist } from '../lib/catalogTrack';
 import { openContextMenu } from '../lib/contextMenu';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
-import { musicLinks, type MusicMetadata } from '../lib/musicLinks';
+import { musicLinks, type MusicLinkIntent } from '../lib/musicLinks';
 import { toast } from '../lib/toast';
 import type { CatalogItem, RecommendationContext, Track } from '../types/music';
 import type { PodcastSearchResult } from '../types/podcast';
 
 /** "Go to artist" per performer, then "Open album": the same entries and order as the web song menu. */
-export function nativeMusicLinkActions(meta: MusicMetadata, open: (path: string) => void, disabled: boolean): MenuAction[] {
+export function nativeMusicLinkActions(meta: MusicLinkIntent, open: (path: string) => void, disabled: boolean): MenuAction[] {
   return musicLinks(meta).map(link => link.kind === 'artist'
     ? { label: link.several ? `${t('trackActions.goToArtist')}: ${link.name}` : t('trackActions.goToArtist'), disabled, onSelect: () => open(link.path) }
     : { label: t('musicExplorer.openAlbum'), disabled, onSelect: () => open(link.path) });

@@ -1,7 +1,7 @@
 import { OverflowIcon } from './OverflowIcon';
 import type { MenuEvent } from '../lib/menuEvent';
 import { Control, IconButton } from './Control';
-import type { MusicMetadata } from '../lib/musicNavigation';
+import type { MusicLinkIntent } from '../lib/musicNavigation';
 import { createEffect, createSignal, on, onCleanup, Show, type JSX } from 'solid-js';
 import { ArtworkSurface } from './Artwork';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -22,7 +22,7 @@ export interface MediaRowProps {
   titleLink?: (label: string) => JSX.Element;
   subtitleContent?: JSX.Element;
   subtitle?: string;
-  music?: MusicMetadata;
+  music?: MusicLinkIntent;
   seed: string;
   cover?: string | null;
   round?: boolean;

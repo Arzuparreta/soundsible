@@ -1,5 +1,5 @@
 import type { MenuEvent } from '../lib/menuEvent';
-import type { MusicMetadata } from '../lib/musicNavigation';
+import type { MusicLinkIntent } from '../lib/musicNavigation';
 import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
 import { player } from '../stores/player';
 import { catalogContextTrack, resolveCatalogTrack } from '../lib/catalogItem';
@@ -20,7 +20,7 @@ import type { ContextTrack } from '../lib/playbackQueue';
 export interface EntryMenuContext {
   item?: CatalogItem;
   track?: Track;
-  music?: MusicMetadata;
+  music?: MusicLinkIntent;
   recommendation?: RecommendationContext;
   onDownload?: () => void;
   onRadio?: () => void;

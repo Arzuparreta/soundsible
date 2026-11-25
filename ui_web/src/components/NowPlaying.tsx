@@ -1,7 +1,7 @@
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
-import { navigateMusic, playerTrackMusic } from '../lib/musicNavigation';
+import { navigateMusic, trackMusic } from '../lib/musicNavigation';
 import { buildTrackMenu } from './trackActions';
 import { menuIcons } from './icons';
 import { savedFromTrack } from '../lib/saved';
@@ -153,7 +153,7 @@ export function NowPlaying(props: {
       id: entry.queueId,
       title: entry.title,
       artist: entry.artist,
-      get music() { return playerTrackMusic(entry); },
+      get music() { return trackMusic(entry, 'discover'); },
       get cover() { return trackCoverUrl(entry, 'thumb'); },
       position: ordinal,
       current,
@@ -164,7 +164,7 @@ export function NowPlaying(props: {
       get entry() { return savedFromTrack(entry); },
       menu: () => [
         ...buildTrackMenu(entry, {
-          music: playerTrackMusic(entry),
+          music: trackMusic(entry, 'discover'),
           onAddToPlaylist: openPlaylistPicker,
           onEditMetadata: openMetadataEditor,
           onPlayOnDevice: openPlayOnDevice,

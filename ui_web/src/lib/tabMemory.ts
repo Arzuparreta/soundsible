@@ -7,9 +7,8 @@ import { reselectPrimaryTab } from './tabNavigation';
 /**
  * Where each primary destination was left, by its navigation group: `last` is
  * the page the listener was on, `root` the destination's own page as they left
- * it — Search with its query, Library on its view. Artist and album pages
- * belong to Search, so a link that opens one from anywhere stacks it on the
- * search the listener had, and both survive a visit to another tab.
+ * it — Search with its query, Library on its view. Artist and album pages are
+ * neutral detail views, so visiting them leaves every tab's saved location intact.
  *
  * Module scope, not storage: it describes this session's navigation, and
  * signing out reloads the page.
@@ -18,6 +17,7 @@ const visited = new Map<string, { last: string; root?: string }>();
 
 export function rememberTabLocation(pathname: string, search: string): void {
   const own = mobileNavGroup(pathname, search);
+  if (!own) return;
   // Library's own views are Library's, unless the bar gives them a tab.
   const group = own !== '/' && (own.startsWith('/library?') || own.startsWith('/?saved=')) && !bottomNavigation().includes(own) ? '/' : own;
   const location = `${pathname}${search}`;

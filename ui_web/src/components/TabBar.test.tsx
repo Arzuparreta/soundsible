@@ -132,39 +132,33 @@ it('opens a configured subentry directly and highlights it instead of the root',
 describe('artist and album pages', () => {
   const here = () => window.location.pathname + window.location.search;
 
-  it.each(['/artist/Band?view=library', '/album/Record?artist=Band&view=discover'])('belong to Search: %s', (path) => {
+  it.each(['/artist/Band?view=library', '/album/Record?artist=Band&view=discover'])('highlight no tab: %s', (path) => {
     window.history.replaceState({}, '', path);
     const view = renderTabs();
-    expect(view.getByRole('link', { name: 'Descubrir' })).toHaveAttribute('aria-current', 'page');
-    expect(view.getByRole('link', { name: 'Biblioteca' })).not.toHaveAttribute('aria-current');
+    expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   });
 
-  it('stay open in Search while the listener visits another tab, on top of the search they came from', async () => {
+  it('leave Search and Library tab memory intact when opened', async () => {
     window.history.replaceState({}, '', '/search?q=band');
     const view = renderTabs();
     navigate('/artist/Band?view=discover');
     await waitFor(() => expect(here()).toBe('/artist/Band?view=discover'));
+    expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
 
     fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
     await waitFor(() => expect(here()).toBe('/'));
     fireEvent.click(view.getByRole('link', { name: 'Descubrir' }));
-    await waitFor(() => expect(here()).toBe('/artist/Band?view=discover'));
-    // A restored page has no parent in history: its back arrow climbs to the
-    // search below it instead of into Library.
+    await waitFor(() => expect(here()).toBe('/search?q=band'));
     expect(window.history.state?.[TAB_RETURN_STATE]).toBe(true);
     expect(tabRoot('/search')).toBe('/search?q=band');
-
-    // Re-selecting the active tab climbs to its root, the search as it was left.
-    fireEvent.click(view.getByRole('link', { name: 'Descubrir' }));
-    await waitFor(() => expect(here()).toBe('/search?q=band'));
   });
 
-  it('opened by a link from Library return to Library where it was left', async () => {
+  it('opened by a link from Library leave Library where it was left', async () => {
     window.history.replaceState({}, '', '/?saved=albums');
     setBottomNavigation(['/', '/search', '/settings']);
     const view = renderTabs();
     navigate('/album/Record?artist=Band&view=library');
-    await waitFor(() => expect(view.getByRole('link', { name: 'Descubrir' })).toHaveAttribute('aria-current', 'page'));
+    await waitFor(() => expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(0));
     fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
     await waitFor(() => expect(here()).toBe('/?saved=albums'));
   });

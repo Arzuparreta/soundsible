@@ -34,12 +34,22 @@ Existing imports from `components/Button`, `components/CoverImage` and
 
 ## Navigation decision (U4)
 
-Keep the canonical entity page under Search, including its library view. Artist
-and album pages let the listener explore one entity through library/discovery
-views; they do not change their navigation owner with their incoming link.
-Browser Back and retained navigation stacks preserve the originating place.
-This keeps the existing deliberate behavior and its browser coverage. No
-unmeasured origin-propagation scheme is introduced as a rendering fix.
+Artist and album detail pages are neutral: no primary navigation tab or
+sidebar entry claims them (`aria-current="page"` / `aria-pressed="true"`), and
+visiting them leaves every section's saved location and scroll state intact.
+Back returns to the originating page through browser history (or falls back to
+Library for `view=library` and Discover for `view=discover` on cold deep
+links); selecting any tab returns directly to that section's last state.
+
+The URL selects the music shown and played in the detail. A library link
+opens the listener's tracks, with access to the full catalog from the scope
+selector. Changing scope replaces the detail URL in place. Existing entity
+links continue to resolve.
+
+On Android, the originating surface stays mounted behind an open detail with no
+tab pressed. The detail's Back control returns to that surface and its scroll
+position, while selecting any tab closes the detail and switches directly to
+that tab.
 
 ## Enforcement
 

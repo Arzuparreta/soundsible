@@ -18,7 +18,7 @@ import { trackCount } from '../lib/format';
 import { formatReleaseDate, formatTotalDuration } from '../lib/releaseFormat';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
-import { albumPath, artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
+import { albumPath, artistKey, artistPath, decodeArtistName, parseViewParams } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumProfile, AlbumSummary, CatalogAlbum, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
@@ -51,7 +51,7 @@ export default function Album() {
   const title = createMemo(() => decodeArtistName(params.name));
   const viewParams = createMemo(() => parseViewParams(searchParams as Record<string, string | undefined>));
   const artistName = createMemo(() => (searchParams as Record<string, string | undefined>).artist || '');
-  const [viewOverride, setViewOverride] = createSignal<ViewMode | null>(null);
+
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
 
   let aborter: AbortController | undefined;
@@ -139,21 +139,9 @@ export default function Album() {
     }
     return currentProfile()?.in_library ?? libraryTrackList().length > 0;
   });
-  const showToggle = createMemo(() => inLibrary());
+  const showToggle = createMemo(() => inLibrary() || viewParams().view === 'library');
 
-  // See Artist.tsx: the router reuses this component across :name changes, so
-  // the tab is derived from the URL rather than held in a mount-seeded signal,
-  // and forced to discover whenever the toggle is hidden.
-  createEffect(
-    on(
-      () => JSON.stringify([title(), artistName(), viewParams().deezerId ?? '']),
-      () => setViewOverride(null),
-      { defer: true },
-    ),
-  );
-  const view = createMemo<ViewMode>(() =>
-    resolveViewMode({ urlView: viewParams().view, override: viewOverride(), canToggle: showToggle() }),
-  );
+  const view = () => viewParams().view;
 
   /** The sleeve the user owns: the catalog's cover track, else the first owned
    * song with artwork. */
@@ -304,15 +292,14 @@ export default function Album() {
   };
 
   const switchView = (mode: ViewMode) => {
-    setViewOverride(mode);
     setSearchParams({ view: mode }, { replace: true });
   };
 
-  // A page with no way back in history sits on the search it belongs to; a
-  // record opened cold, with no search behind it, climbs to its artist.
   const back = () => navigateBackOr(
     navigate,
-    tabRoot('/search') ?? (artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search'),
+    view() === 'library'
+      ? (tabRoot('/') ?? '/')
+      : (tabRoot('/search') ?? (artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search')),
   );
   let openCollectionMenu = () => {};
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : tracklist().length > 0;
@@ -328,7 +315,7 @@ export default function Album() {
   return (
     <div class="view">
       <div
-        ref={(element) => registerPrimaryScroll(element, () => !profile.loading)}
+        ref={(element) => registerPrimaryScroll(element, () => view() === 'library' ? !membership.loading : !profile.loading)}
         class={hero.page}
         data-primary-scroll
       >

@@ -207,16 +207,15 @@ describe('Artist route view mode', () => {
       .toBe('/artist/Mixed?view=discover&deezer_id=1');
   });
 
-  it('clamps to discover when a library deep-link lands on an artist not owned', async () => {
+  it('offers the complete discography when a library deep-link lands on an artist not owned', async () => {
     storeMock.library = [];
     apiMock.getArtistProfile.mockResolvedValue(profileFor('Stranger', false));
 
     renderAt('/artist/Stranger?view=library');
 
-    // No toggle is offered, so the requested library tab must not be honoured —
-    // discover content shows instead of an inescapable empty list.
-    await waitFor(() => expect(screen.getByText('Stranger Hit')).toBeInTheDocument());
-    expect(screen.queryByText('No tracks in your library yet.')).not.toBeInTheDocument();
+    await screen.findByText('You have no tracks by this artist in your library.');
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'discover' } });
+    await screen.findByText('Stranger Hit');
   });
 
   it('keeps a library link on its library tab when the membership read fails, and retries the same id', async () => {
@@ -255,14 +254,14 @@ describe('Artist route view mode', () => {
     expect(apiMock.getLibraryArtist).toHaveBeenCalledTimes(1);
   });
 
-  it('still leaves the library tab when the engine answers that nothing is owned', async () => {
+  it('keeps the requested library view when the engine answers that nothing is owned', async () => {
     apiMock.getArtistProfile.mockResolvedValue(profileFor('Former', false));
     apiMock.getLibraryArtist.mockResolvedValue({ artist: { id: 'ar-2', name: 'Former' }, track_ids: [] });
 
     renderAt('/artist/Former?view=library&artist_id=ar-2');
 
-    await screen.findByText('Former Hit');
-    expect(screen.queryByRole('combobox', { name: 'Shown content' })).toBeNull();
+    await screen.findByText('You have no tracks by this artist in your library.');
+    expect(screen.getByRole('combobox')).toHaveValue('library');
   });
 
   it('puts listening first and offers other matches in the shared sheet', async () => {

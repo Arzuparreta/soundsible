@@ -2,7 +2,7 @@ import { OverflowIcon } from '../design/OverflowIcon';
 import type { MenuEvent } from '../lib/menuEvent';
 import { Control, IconButton } from '../design/Control';
 import { ArtistLinks } from './MusicLinks';
-import { trackMusic, type MusicMetadata } from '../lib/musicNavigation';
+import { trackMusic, type MusicLinkIntent } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openTrackMenu } from './trackActions';
@@ -26,7 +26,7 @@ import { CollectionButton } from './CollectionButton';
 
 export interface SongRowProps {
   track: Track;
-  music?: MusicMetadata;
+  music?: MusicLinkIntent;
   /** 1-based list position; omit to hide the index column. */
   index?: number;
   /** Resolved cover URL; falls back to track.cover, then a gradient placeholder. */

@@ -62,12 +62,18 @@ describe('desktop sidebar', () => {
     expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
   });
 
-  it.each([['/?saved=bookmarks', 'Biblioteca'], ['/?saved=albums', 'Biblioteca'], ['/artist/example', 'Descubrir'], ['/search', 'Descubrir']])('gives %s exactly one current entry', (path, name) => {
+  it.each([['/?saved=bookmarks', 'Biblioteca'], ['/?saved=albums', 'Biblioteca'], ['/search', 'Descubrir']])('gives %s exactly one current entry', (path, name) => {
     window.history.replaceState({}, '', path);
     const view = renderSidebar();
     const current = view.container.querySelectorAll('[aria-current="page"]');
     expect(current).toHaveLength(1);
     expect(current[0].textContent?.trim()).toBe(name);
+  });
+
+  it.each(['/artist/example', '/album/record?artist=example'])('leaves entity page %s without an active sidebar entry', (path) => {
+    window.history.replaceState({}, '', path);
+    const view = renderSidebar();
+    expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   });
 
   it('keeps the lowercase brand a link home that never claims the current page', async () => {

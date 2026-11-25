@@ -101,14 +101,18 @@ export const libraryViews: PrimaryNavItem[] = [
 ];
 export const navigationItems = [...primaryNavigation, ...libraryShortcuts, ...libraryViews];
 export const defaultBottomNavigation = ['/', '/favourites', '/search', '/settings'];
+
+export function isEntityPath(path: string): boolean {
+  return /^\/(album|artist)\//.test(path);
+}
+
 export function mobileNavGroup(path: string, search = ''): string {
+  // Artist and album pages are neutral detail views: no primary destination owns them.
+  if (isEntityPath(path)) return '';
   const params = new URLSearchParams(search);
   if (path === '/library' && ['songs', 'albums', 'artists'].includes(params.get('view') ?? '')) return `/library?view=${params.get('view')}`;
   if (['/', '/library'].includes(path) && ['bookmarks', 'albums', 'artists'].includes(params.get('saved') ?? '')) return '/?saved=bookmarks';
   if (path === '/' || path === '/library') return '/';
-  // Artist and album pages are Search's, wherever the link that opened them
-  // was: the listener's own copy is a view of the page, not another page.
-  if (/^\/(album|artist)\//.test(path)) return '/search';
   return navigationItems.find(item => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)))?.href ?? path;
 }
 

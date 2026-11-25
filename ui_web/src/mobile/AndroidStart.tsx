@@ -57,6 +57,7 @@ import LibraryBrowser, { type BrowseSnapshot } from './LibraryBrowser';
 import PodcastBrowser from './PodcastBrowser';
 import { isPodcastTrack } from '../lib/track';
 import CatalogSearch from './CatalogSearch';
+import { nativeEntitySubject } from './entityProfile';
 import { nativeProgramTransport, mixedProgram } from './playback';
 import { createProgramRuntime, type ProgramCommand, type ProgramState, type ProgramContext } from '../lib/program/runtime';
 import ProgramTransport from '../components/ProgramTransport';
@@ -222,7 +223,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     }
     remote.reset(); setRemoteProgram(null);
     readCollection = createNativeCollectionReader();
-    setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setSavedEntries([]); setSavedEntities([]); setDownloadItems([]); setSurface('library'); setRevision(0); setEventsOnline(false); setStale(false);
+    setDetailHost(null); setDetailOpen(false); setEntityRequest(null); setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setSavedEntries([]); setSavedEntities([]); setDownloadItems([]); setSurface('library'); setRevision(0); setEventsOnline(false); setStale(false);
   }
   let expiration: Promise<void> | null = null;
   function expireSession(): Promise<void> {
@@ -467,21 +468,50 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     } catch { setError(t('android.connectFailed')); }
   }
   const [entityRequest, setEntityRequest] = createSignal<{ path: string; id: number } | null>(null);
+  const [detailHost, setDetailHost] = createSignal<Exclude<ReturnType<typeof surface>, 'search'> | null>(null);
+  const [detailOpen, setDetailOpen] = createSignal(false);
+  const [detailReset, setDetailReset] = createSignal(0);
+  const catalogSurface = () => (detailHost() ? 'detail' : surface() === 'search' ? 'search' : null);
+  const activeSurface = () => (detailOpen() ? null : surface());
   let entityRequests = 0;
-  /** Song menus anywhere open artist and album pages in Discover, as the web shell routes them. */
+  let detailReturnScroll = 0;
+  function selectSurface(next: ReturnType<typeof surface>) {
+    setDetailHost(null);
+    setDetailOpen(false);
+    setDetailReset(value => value + 1);
+    if (next === 'library') setLibraryTab('songs');
+    setSurface(next);
+  }
   function openEntityPath(path: string) {
-    if (stale() || !user()) return;
-    setEntityRequest({ path, id: ++entityRequests }); setSurface('search');
+    if (!user()) return;
+    const subject = nativeEntitySubject(path);
+    if (!subject || (stale() && subject.view !== 'library')) return;
+    const currentSurface = surface();
+    if (currentSurface !== 'search' && !detailHost()) {
+      detailReturnScroll = scrollContainer?.scrollTop ?? 0;
+      setDetailHost(currentSurface);
+    }
+    setDetailOpen(true);
+    setEntityRequest({ path, id: ++entityRequests });
+  }
+  function closeEntityPath() {
+    const host = detailHost();
+    const top = detailReturnScroll;
+    setDetailHost(null);
+    setDetailOpen(false);
+    if (host) requestAnimationFrame(() => {
+      if (surface() === host && !detailHost() && scrollContainer) scrollContainer.scrollTop = top;
+    });
   }
   function playOnDevice(track: Track) {
     const captured = epoch;
     void openNativePlayOnDevice(track, () => nativeDevices.deviceState().then(state => state.device_id).catch(() => null), () => captured === epoch && !!user() && !stale());
   }
-  function songMenu(track: Track, event?: MenuEvent, context?: { playlist: string; index: number }, catalogActions: MenuAction[] = [], inRoute = false) {
+  function songMenu(track: Track, event?: MenuEvent, context?: { playlist: string; index: number }, catalogActions: MenuAction[] = [], inRoute = false, scope: 'library' | 'discover' = 'library') {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
             const menu = programLibraryMenu(track, shown, shownPending, execute, candidate => openNativeDjPlacement(candidate, shown, shownPending, execute), inRoute);
             openContextMenu({ ...menu, actions: [...catalogActions, ...(menu.actions ?? []),
-              ...nativeMusicLinkActions(trackMusic(track), path => { if (current()) openEntityPath(path); }, !current()),
+              ...nativeMusicLinkActions(trackMusic(track, scope), path => { if (current()) openEntityPath(path); }, !current()),
               ...(canPlayOnDevice(track) && !inRoute ? [{ label: t('trackActions.playOnDevice'), disabled: !current(), onSelect: () => {
                 void openNativePlayOnDevice(track, () => nativeDevices.deviceState().then(state => state.device_id).catch(() => null), current);
               } }] : []),
@@ -501,7 +531,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   }
   registerNativeBack(() => {
     if (surface() === 'library') return false;
-    setLibraryTab('songs'); setSurface('library'); return true;
+    selectSurface('library'); return true;
   });
   onMount(() => {
     const removeBack = attachNativeBack(() => setError(t('common.loadFailed')));
@@ -590,15 +620,16 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         return;
       }
       const track = queueTrack(entry, snapshot()?.tracks.find(track => track.id === entry.id && (track.source ?? 'local') === entry.source));
-      songMenu(track, event, undefined, actions, !!shown()?.dj?.active);
+      songMenu(track, event, undefined, actions, !!shown()?.dj?.active, 'discover');
     }} /></Show></>}</Show>
     <Show when={user()}>
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
-        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => { setLibraryTab('songs'); setSurface('library'); }}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={surface() === 'downloads'} onClick={() => setSurface('downloads')}>{t('downloads.title')}</button><button data-android-migrate aria-pressed={surface() === 'migrate'} onClick={() => setSurface('migrate')}>{t('migrate.title')}</button><button data-android-live onClick={() => { const owner = epoch; openNativeLive(() => generation, () => owner === epoch && !!user(), user()?.display_name || user()?.username || 'DJ', () => void expireSession()); }}>{t('live.title')}</button><button data-android-settings aria-pressed={surface() === 'settings'} onClick={() => setSurface('settings')}>{t('nav.settings')}</button></nav>
-          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch onPlayOnDevice={playOnDevice} onStartRadio={startRadio} onStartDj={startDj} openRequest={entityRequest()} onRequestHandled={id => { if (entityRequest()?.id === id) setEntityRequest(null); }} scrollTarget={() => scrollContainer} offlineMenuActions={tracks => offlineActions(tracks, offlineState, offlineCommand, () => generation)} onResolvedMenu={(track, event, actions) => songMenu(track, event, undefined, actions)} queueActions={track => programQueueActions(track, shown, shownPending, execute)} savedEntities={savedEntities()} onEntityMenu={entityMenu} onPlayCollection={play} history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={shown()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser onPlayOnDevice={playOnDevice} generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={shown()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings library={{ trackCount: () => snapshot()?.tracks.length ?? 0, sync,
-              onImport: () => { setSurface('migrate'); } }} online={() => eventsOnline() && !stale()} server={server} generation={() => generation} subsonic={{ identity: () => epoch, accountId: () => user()?.id ?? '', username: () => user()?.username ?? '', origin, available: () => !stale() && !!user(), copy: nativeCopy(() => generation) }} playback={{ state: program(), pending: programPending(), available: !stale(), command: runtime.execute }} feedback={props.feedback} appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
+        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={activeSurface() === 'library'} onClick={() => selectSurface('library')}>{t('nav.library')}</button><button aria-pressed={activeSurface() === 'search'} data-android-discover onClick={() => selectSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={activeSurface() === 'podcasts'} onClick={() => selectSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={activeSurface() === 'downloads'} onClick={() => selectSurface('downloads')}>{t('downloads.title')}</button><button data-android-migrate aria-pressed={activeSurface() === 'migrate'} onClick={() => selectSurface('migrate')}>{t('migrate.title')}</button><button data-android-live onClick={() => { const owner = epoch; openNativeLive(() => generation, () => owner === epoch && !!user(), user()?.display_name || user()?.username || 'DJ', () => void expireSession()); }}>{t('live.title')}</button><button data-android-settings aria-pressed={activeSurface() === 'settings'} onClick={() => selectSurface('settings')}>{t('nav.settings')}</button></nav>
+          <Show when={catalogSurface()} keyed>{mode => <CatalogSearch detailOnly={mode === 'detail'} closeDetailToken={detailReset()} onDetailChange={open => { if (open) setDetailOpen(true); else closeEntityPath(); }} onPlayOnDevice={playOnDevice} onStartRadio={startRadio} onStartDj={startDj} openRequest={entityRequest()} onRequestHandled={id => { if (entityRequest()?.id === id) setEntityRequest(null); }} scrollTarget={() => scrollContainer} offlineMenuActions={tracks => offlineActions(tracks, offlineState, offlineCommand, () => generation)} onResolvedMenu={(track, event, actions) => songMenu(track, event, undefined, actions, false, 'discover')} queueActions={track => programQueueActions(track, shown, shownPending, execute)} savedEntities={savedEntities()} onEntityMenu={entityMenu} onPlayCollection={play} history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={shown()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}</Show>
+          <div hidden={Boolean(detailHost())}>          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={null}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setDetailHost(null); setDetailOpen(false); setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser onPlayOnDevice={playOnDevice} generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={shown()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings library={{ trackCount: () => snapshot()?.tracks.length ?? 0, sync,
+              onImport: () => { selectSurface('migrate'); } }} online={() => eventsOnline() && !stale()} server={server} generation={() => generation} subsonic={{ identity: () => epoch, accountId: () => user()?.id ?? '', username: () => user()?.username ?? '', origin, available: () => !stale() && !!user(), copy: nativeCopy(() => generation) }} playback={{ state: program(), pending: programPending(), available: !stale(), command: runtime.execute }} feedback={props.feedback} appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
               const owner = epoch;
               if (updated.id !== user()?.id) throw new Error('Account changed');
               setUser(updated); await restoreOffline(false);
@@ -613,7 +644,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
             openContextMenu({ title, actions: [...nativeDjSourceActions(`${context?.kind ?? 'collection'}:${context?.id ?? title}`, title, tracks, shown, current, shownPending, execute), ...(context?.bookmark ? [nativeEntityMark(context.bookmark, savedEntities, current, sync, () => { if (current()) setError(t('savedEntities.failed')); })] : []), ...(context?.kind === 'playlists' ? nativePlaylistActions(context.id, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []), ...offlineActions(tracks, offlineState, offlineCommand, () => generation)] }, event);
           }}
           onMenu={songMenu} />
-          </Show></>}
+          </Show></div></>}
       </Show>
     </Show>
     <OverlayOutlet /><ContextMenuOutlet /><ToastOutlet />

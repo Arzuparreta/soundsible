@@ -351,3 +351,64 @@ it('shows the passive cold-start hint on Android and emits music_search_played o
     expect.objectContaining({ title: 'Song', artist: 'Artist', source: 'search' }),
   );
 });
+
+it('reports neutral detail visibility, skips feed loading in detailOnly mode, and closes on closeDetailToken', async () => {
+  mocks.artist.mockResolvedValue({ name: 'Artist', deezer_id: '11', resolved: true, candidates: [], top_tracks: [], albums: [], singles_eps: [], related_artists: [], in_library: false, cached: false });
+  const states: boolean[] = [];
+  const [closeToken, setCloseToken] = createSignal(0);
+  const [request, setRequest] = createSignal<{ path: string; id: number } | null>({ path: '/artist/Artist?view=library', id: 1 });
+  const detailView = render(() => (
+    <CatalogSearch
+      detailOnly
+      openRequest={request()}
+      onRequestHandled={() => setRequest(null)}
+      onDetailChange={open => states.push(open)}
+      closeDetailToken={closeToken()}
+      generation={1}
+      tracks={[]}
+      saved={[]}
+      disconnected={false}
+      onPlay={vi.fn()}
+      onChanged={vi.fn()}
+    />
+  ));
+  await waitFor(() => expect(detailView.getByRole('heading', { name: 'Artist' })).toBeTruthy());
+  expect(detailView.container.querySelector('[data-testid="android-catalog-search"]')).toBeNull();
+  expect(mocks.feed).not.toHaveBeenCalled();
+  expect(states).toEqual([true]);
+
+  setCloseToken(1);
+  await waitFor(() => expect(detailView.queryByRole('heading', { name: 'Artist' })).toBeNull());
+  expect(states).toEqual([true, false]);
+});
+
+it('opens an artist profile from Explore from rows only for verified performers and returns to Discover on Back', async () => {
+  mocks.artist.mockResolvedValue({ name: 'Extremoduro', deezer_id: '42', resolved: true, candidates: [], top_tracks: [], albums: [], singles_eps: [], related_artists: [], in_library: false, cached: false });
+  mocks.feed.mockResolvedValue({
+    sections: [{ id: 'explore_from_1', title: 'Explore from Seed', title_key: 'explore_from', title_params: { title: 'Seed' }, item_ids: ['youtube:perf', 'youtube:chan', 'youtube:old'] }],
+    items: [
+      { id: 'youtube:perf', title: 'La vereda', artist: 'Extremoduro', artist_is_channel: false, external_ids: { youtube_id: 'perf' } },
+      { id: 'youtube:chan', title: 'Bootleg', artist: 'Random Channel', artist_is_channel: true, external_ids: { youtube_id: 'chan' } },
+      { id: 'youtube:old', title: 'Legacy clip', artist: 'Old Feed Artist', external_ids: { youtube_id: 'old' } },
+    ],
+  });
+  const play = vi.fn();
+  const detailStates: boolean[] = [];
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onDetailChange={open => detailStates.push(open)} onPlay={play} onChanged={vi.fn()} />);
+
+  const performerLink = await view.findByRole('link', { name: 'Extremoduro' });
+  expect(view.getByText('Random Channel')).toBeTruthy();
+  expect(view.queryByRole('link', { name: 'Random Channel' })).toBeNull();
+  expect(view.getByText('Old Feed Artist')).toBeTruthy();
+  expect(view.queryByRole('link', { name: 'Old Feed Artist' })).toBeNull();
+
+  fireEvent.click(performerLink);
+  await waitFor(() => expect(view.getByRole('heading', { name: 'Extremoduro' })).toBeTruthy());
+  expect(play).not.toHaveBeenCalled();
+  expect(detailStates).toEqual([true]);
+
+  expect(dispatchNavigationBack()).toBe(true);
+  await waitFor(() => expect(view.queryByRole('heading', { name: 'Extremoduro' })).toBeNull());
+  expect(view.getByRole('link', { name: 'Extremoduro' })).toBeVisible();
+  expect(detailStates).toEqual([true, false]);
+});
