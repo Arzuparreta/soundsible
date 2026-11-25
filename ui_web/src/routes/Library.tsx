@@ -1,6 +1,6 @@
 import Button from '../components/Button';
 import { afterPaint } from '../lib/afterPaint';
-import { SkeletonCards } from '../components/Skeleton';
+import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { openAlbumBrowseMenu } from '../components/albumBrowseMenu';
 import { createEffect, createMemo, createResource, createSignal, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
@@ -36,12 +36,13 @@ import {
   NO_ALBUM_FILTER,
   type AlbumSort,
 } from '../lib/albumBrowse';
-import { searchLibrary } from '../lib/librarySearch';
+import { normalizeLibraryQuery, searchLibrary } from '../lib/librarySearch';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { DownloadIcon, SearchIcon, SortIcon } from '../components/icons';
-import { useAppBar } from '../lib/appBar';
+import type { AppBarAction } from '../lib/appBar';
+import { PageCommands } from '../components/PageCommands';
 import { desktopShell } from '../lib/shellLayout';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
@@ -92,7 +93,7 @@ export default function Library() {
   };
   const [searchFocused, setSearchFocused] = createSignal(false);
   const searchResults = createMemo(() => searchLibrary(sorted(), artists(), query()));
-  const searching = createMemo(() => query().trim().length > 0);
+  const searching = createMemo(() => !!normalizeLibraryQuery(query()));
   /** The library never loaded, as opposed to being genuinely empty. */
   const unreachable = createMemo(() => state.libraryError && songs().length === 0);
 
@@ -253,59 +254,37 @@ export default function Library() {
       ],
     });
 
-  const sortControl = () => (<>
-    <Show when={libraryTab() === 'songs'}>
-      <button class={styles.sortButton} type="button" onClick={sortLibrary} aria-label={t('library.sortTitle')} data-pressable>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3 6h18M6 12h12M10 18h4" />
-        </svg>
-        <span>{librarySort() === 'az' ? t('library.sortAZ') : librarySort() === 'fav' ? t('library.sortFavFirst') : t('library.sortRecent')}</span>
-      </button>
-    </Show>
-    <Show when={libraryTab() === 'albums'}>
-      <button
-        class={styles.sortButton}
-        type="button"
-        onClick={openAlbumBrowseMenu}
-        aria-label={t('library.albumSortTitle')}
-        data-pressable
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3 6h18M6 12h12M10 18h4" />
-        </svg>
-        <span>{sortLabel(albumSort())}</span>
-      </button>
-    </Show>
-  </>);
+  const sortCommands = (): AppBarAction[] => {
+    const tab = libraryTab();
+    if (searching() || tab === 'artists') return [];
+    const albums = tab === 'albums';
+    return [{
+      label: t(albums ? 'library.albumSortTitle' : 'library.sortTitle'),
+      desktopLabel: albums ? sortLabel(albumSort())
+        : librarySort() === 'az' ? t('library.sortAZ') : librarySort() === 'fav' ? t('library.sortFavFirst') : t('library.sortRecent'),
+      icon: () => <SortIcon />,
+      opensDialog: true,
+      onSelect: () => albums ? void openAlbumBrowseMenu() : sortLibrary(),
+    }];
+  };
 
-  // On the touch shell the view's name is the title — the drawer is where the
-  // views are switched — and search and ordering are the bar's commands.
-  useAppBar({
-    title: () => t(`library.${libraryTab()}` as 'library.songs'),
-    actions: () => [
-      { label: t('library.searchAction'), icon: () => <SearchIcon />, onSelect: revealSearch },
-      ...(!searching() && libraryTab() !== 'artists'
-        ? [{
-            label: libraryTab() === 'albums' ? t('library.albumSortTitle') : t('library.sortTitle'),
-            icon: () => <SortIcon />,
-            opensDialog: true,
-            onSelect: () => (libraryTab() === 'albums' ? openAlbumBrowseMenu() : sortLibrary()),
-          }]
-        : []),
-    ],
-    onTitleTap: () => reselectPrimaryTab('/library'),
-    onViewChange: () => {
-      setQuery('');
-      setSearchProgress(0);
-      setSearchFocused(false);
-    },
-  });
+  const resetLibrarySearch = () => {
+    setQuery('');
+    setSearchProgress(0);
+    setSearchFocused(false);
+  };
 
   return (
     <div ref={viewRef} class="view">
-      <Show when={!isMobile()}>
       <ViewHeader
-        title={t('library.title')}
+        title={t(`library.${libraryTab()}` as 'library.songs')}
+        desktopField={<div class={styles.desktopSearch}>{searchField()}</div>}
+        rendersOwnCommands
+        barActions={[
+          { label: t('library.searchAction'), icon: () => <SearchIcon />, onSelect: revealSearch },
+          ...sortCommands(),
+        ]}
+        onViewChange={resetLibrarySearch}
         onTitleTap={() => reselectPrimaryTab('/library')}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
         actions={
@@ -327,10 +306,10 @@ export default function Library() {
                 <span class={styles.badge}>{active()}</span>
               </Show>
             </A>
+            <PageCommands desktop actions={sortCommands()} />
           </>
         }
       />
-      </Show>
 
       <Show when={isMobile()}>
         <div
@@ -341,13 +320,6 @@ export default function Library() {
           inert={searchHidden()}
         >
           {searchField()}
-        </div>
-      </Show>
-
-      <Show when={!isMobile()}>
-        <div class={styles.toolbar}>
-          <div class={styles.desktopSearch}>{searchField()}</div>
-          <Show when={!searching()}>{sortControl()}</Show>
         </div>
       </Show>
 
@@ -429,7 +401,11 @@ export default function Library() {
           </Match>
         </Switch>
       }>
-        <LibrarySearchResults results={searchResults()} query={query().trim()} />
+        <Show when={!unreachable()} fallback={emptyState(t('library.emptyLibrary'))}>
+          <Show when={!state.loading || songs().length > 0} fallback={<div class="page-loading"><SkeletonRows /></div>}>
+            <LibrarySearchResults results={searchResults()} query={query()} />
+          </Show>
+        </Show>
       </Show>
     </div>
   );

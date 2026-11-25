@@ -23,7 +23,7 @@ async function mockEngine(page: Page) {
     if (path === '/api/auth/state') {
       body = { requires_login: true, user: { id: 'qa', username: 'qa', display_name: 'QA', role: 'admin', has_password: true } };
     }
-    if (path === '/api/library') body = { tracks, playlists: {}, settings: {}, podcast_subscriptions: [] };
+    if (path === '/api/library') body = { tracks, playlists: { 'Contrast test': tracks.slice().reverse().map(track => track.id) }, settings: {}, podcast_subscriptions: [] };
     if (path === '/api/library/favourites') body = [];
     if (path === '/api/downloader/queue') body = { queue: [], is_processing: false, logs: [] };
     if (path === '/api/downloader/config') body = { quality: 'high', auto_update_ytdlp: false };
@@ -66,9 +66,9 @@ async function range(page: Page, clip: { x: number; y: number; width: number; he
 
 test.beforeEach(async ({ page }) => { await mockEngine(page); });
 
-test('the library never reads through the mini-player', async ({ page }) => {
+test('entity rows never read through the mini-player', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'the floating pill is the compact layout');
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/playlists/Contrast%20test');
   await page.getByRole('button', { name: /Reproducir Canción 39/ }).click();
   const pill = page.locator('[data-omni-player]');
   await expect(pill).toBeVisible();
@@ -99,4 +99,23 @@ test('the library never reads through the mini-player', async ({ page }) => {
   // Measured: 88 at the old 0.66 fill, 21 at the current one. 45 leaves room for
   // antialiasing and device pixel ratios without letting an edge back through.
   expect(through).toBeLessThan(45);
+});
+
+test('the page indicator and last library row clear the floating mini-player', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'the floating pill is the compact layout');
+  await page.goto('/player/#/library?view=songs');
+  await page.getByRole('button', { name: /Reproducir Canción 39/ }).click();
+
+  const pill = page.locator('[data-omni-player]');
+  const indicator = page.locator('[data-page-indicator]');
+  const scroller = page.locator('[data-primary-scroll]');
+  await expect(pill).toBeVisible();
+  await expect(indicator).toHaveText('Canciones');
+
+  await scroller.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  const last = scroller.getByText('Canción 0', { exact: true });
+  await expect(last).toBeInViewport();
+  const [labelBox, playerBox, rowBox] = await Promise.all([indicator.boundingBox(), pill.boundingBox(), last.boundingBox()]);
+  expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(labelBox!.y);
+  expect(labelBox!.y + labelBox!.height).toBeLessThanOrEqual(playerBox!.y);
 });

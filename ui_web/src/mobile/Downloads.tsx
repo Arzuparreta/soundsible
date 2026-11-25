@@ -1,5 +1,6 @@
+import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { createSignal, createEffect, on, For, Show } from 'solid-js';
-import { DownloadRowView } from '../components/DownloadRowView';
+import { downloadSearchFields, DownloadRowView } from '../components/DownloadRowView';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
 import type { DownloadQueueItem } from '../types/download';
@@ -7,9 +8,11 @@ import styles from './AndroidStart.module.css';
 
 /** Server-owned jobs; writes wait for a confirmed, refreshed account snapshot. */
 export default function NativeDownloads(props: { items: DownloadQueueItem[]; disconnected: boolean; generation: number; onChanged(): Promise<void> }) {
+  const search = createCollectionSearch();
+  const items = search.filter(() => props.items, downloadSearchFields);
   const [pending, setPending] = createSignal<string[]>([]);
   const [error, setError] = createSignal(false);
-  createEffect(on(() => props.generation, () => { setPending([]); setError(false); }));
+  createEffect(on(() => props.generation, () => { setPending([]); setError(false); search.setValue(''); }));
   async function mutate(id: string, kind: 'retry' | 'remove' | 'clear' | 'clearFailed') {
     if (props.disconnected || pending().includes(id)) return;
     const generation = props.generation;
@@ -32,7 +35,8 @@ export default function NativeDownloads(props: { items: DownloadQueueItem[]; dis
     <h2>{t('downloads.title')}</h2>
     <Show when={props.disconnected}><p role="status">{t('library.unreachable')}</p></Show>
     <Show when={error()}><p role="alert">{t('common.loadFailed')} <button onClick={() => void props.onChanged()}>{t('common.retry')}</button></p></Show>
-    <For each={props.items} fallback={<p>{t('downloads.emptyTitle')}</p>}>{item => <DownloadRowView item={item}
+    <Show when={props.items.length}><CollectionSearch search={search} /></Show>
+    <For each={items()} fallback={<CollectionEmpty source={props.items.length}><p>{t('downloads.emptyTitle')}</p></CollectionEmpty>}>{item => <DownloadRowView item={item}
       disabled={props.disconnected || pending().length > 0} retry={id => void mutate(id, 'retry')} remove={id => void mutate(id, 'remove')} />}</For>
     <Show when={props.items.some(row => row.status === 'failed' || row.status === 'interrupted')}><button disabled={props.disconnected || pending().length > 0} onClick={() => void mutate('__failed', 'clearFailed')}>{t('downloads.clearErrors')}</button></Show>
     <Show when={props.items.some(row => row.status !== 'downloading')}><button disabled={props.disconnected || pending().length > 0} onClick={() => void mutate('__all', 'clear')}>{t('downloads.clearQueue')}</button></Show>

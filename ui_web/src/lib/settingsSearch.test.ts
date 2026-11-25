@@ -124,3 +124,7 @@ describe('edit distance', () => {
     expect(editDistance('tema', 'idioma', 1)).toBe(2);
   });
 });
+
+it('highlights with the same fold matching uses', () => {
+  expect(highlightRanges('Cœur battant', ['coeur'])).toEqual([[0, 4]]);
+});

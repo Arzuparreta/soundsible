@@ -1,3 +1,5 @@
+import { podcastShowSearchFields } from '../lib/librarySearch';
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { ViewHeader } from '../components/ViewHeader';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
@@ -47,6 +49,8 @@ export default function Podcasts() {
   const [searchError, setSearchError] = createSignal(false);
   const [subscribing, setSubscribing] = createSignal<Set<string>>(new Set());
 
+  const subscriptionsSearch = createCollectionSearch();
+  const subscriptions = subscriptionsSearch.filter(() => state.podcastSubscriptions, podcastShowSearchFields);
   const subscribedFeeds = createMemo(() => new Set(state.podcastSubscriptions.map((s) => s.rss_url)));
   const [genre, setGenre] = createSignal('');
   const matchesGenre = (row: PodcastSearchResult) => !genre() || row.genres?.some(g => g.id === genre());
@@ -221,7 +225,7 @@ export default function Podcasts() {
         * the search it narrows; on a phone the top bar carries the native
         * dropdown itself rather than a described command. */}
       <ViewHeader title={t('nav.podcasts')} barTrailing={<PodcastCountryPicker />} />
-      <div class={styles.bar} data-under-header={desktopShell() ? '' : undefined}>
+      <div class={styles.bar}>
         <SearchField
           placeholder={t('podcasts.searchPlaceholder')}
           clearLabel={t('searchPanel.clear')}
@@ -247,7 +251,9 @@ export default function Podcasts() {
             <>
               <Show when={state.podcastSubscriptions.length > 0}>
                 <h2 class={styles.sectionTitle}>{t('podcasts.yourShows')}</h2>
-                <CollectionGrid items={state.podcastSubscriptions} class={styles.grid}>
+                <CollectionSearch search={subscriptionsSearch} placeholder={t('library.filterSubscriptions')} />
+                <Show when={subscriptions().length} fallback={<NoCollectionMatches />}>
+                <CollectionGrid items={subscriptions()} class={styles.grid}>
                     {(s) => {
                       const href = () => `/podcasts/${encodeURIComponent(s().id)}`;
                       return (
@@ -259,6 +265,7 @@ export default function Podcasts() {
                       );
                     }}
                 </CollectionGrid>
+                </Show>
               </Show>
 
               <Show when={genres().length > 0}>

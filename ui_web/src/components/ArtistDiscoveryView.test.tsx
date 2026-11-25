@@ -11,7 +11,7 @@ it('delegates full entity identities and song context through the shared discogr
     albums={[{ deezer_id: '1', title: 'Same album', cover: '', year: 2001 }]}
     singlesEps={[{ deezer_id: '2', title: 'Same album', cover: '' }]}
     related={[{ deezer_id: '3', name: 'Related', picture: '', nb_fans: 12300 }]}
-    renderSong={(item, index, queue) => <button onClick={() => play(item, index, queue)}>{item.title}</button>}
+    renderSong={(item, index, queue) => <button onClick={() => play(item, index(), queue())}>{item.title}</button>}
     renderLink={link => <button onClick={() => open(link.entity)}>{link.children}</button>} />);
   const albums = view.getAllByRole('button', { name: /Same album/ });
   fireEvent.click(albums[0]); fireEvent.click(albums[1]);
@@ -75,4 +75,19 @@ it('renders the latest release spotlight card at the top when present', () => {
   expect(card).toHaveTextContent(/2026/);
   fireEvent.click(card);
   expect(open).toHaveBeenCalledWith(expect.objectContaining({ kind: 'album', name: 'Fresh Drop', destination: expect.stringContaining('deezer_id=99') }));
+});
+
+it('filters only the top tracks on screen and keeps their rank', () => {
+  setLocale('en');
+  const topTracks: CatalogItem[] = Array.from({ length: 12 }, (_, i) => ({
+    id: `song:${i + 1}`, title: i === 8 || i === 11 ? `Echo ${i + 1}` : `Song ${i + 1}`, type: 'track', source: 'deezer',
+  }));
+  const view = render(() => <ArtistDiscoveryView artistName="Artist" topTracks={topTracks} loading={false}
+    albums={[]} singlesEps={[]} related={[]}
+    renderSong={(item, _index, _queue, rank) => <span data-rank={rank}>{item.title}</span>}
+    renderLink={link => <a href={link.entity.destination}>{link.children}</a>} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'echo' } });
+  expect(view.getByText('Echo 9').getAttribute('data-rank')).toBe('9');
+  // Track 12 was never in the list, so filtering must not reveal it.
+  expect(view.queryByText('Echo 12')).toBeNull();
 });

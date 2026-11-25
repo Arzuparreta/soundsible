@@ -111,6 +111,16 @@ async function expectFullTitle(heading: Locator, title: string) {
   })).toBe(true);
 }
 
+/** Allow the field and its margin while retaining the hero's original height budget. */
+async function fieldFootprint(field: Locator) {
+  await expect(field).toBeVisible();
+  return field.evaluate(element => {
+    const wrapper = element.parentElement!.parentElement!;
+    const style = getComputedStyle(wrapper);
+    return wrapper.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+  });
+}
+
 for (const kind of ['album', 'artist'] as const) {
   test(`${kind}: 360px Spanish Large reaches songs after one toolbar and switches content without playing`, async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
@@ -134,7 +144,10 @@ for (const kind of ['album', 'artist'] as const) {
     await expect(header.getByRole('button', { name: 'Descubrir', exact: true })).toHaveCount(0);
     await expect(header.getByRole('button', { name: /^Mi biblioteca/ })).toHaveCount(0);
     const first = outlet.locator(rowSelector).first();
-    expect((await first.boundingBox())!.y).toBeLessThanOrEqual(kind === 'album' ? 280 : 320);
+    const field = outlet.getByRole('searchbox', { name: 'Filtrar esta lista' });
+    const searchHeight = await fieldFootprint(field);
+    await expect(first).toBeInViewport();
+    expect((await first.boundingBox())!.y).toBeLessThanOrEqual((kind === 'album' ? 280 : 320) + searchHeight);
 
     await mode.selectOption('library');
     await expect(page).toHaveURL(/view=library/);
@@ -201,6 +214,7 @@ test('a long podcast identity leaves its first episode visible below one control
   await expectSingleToolbar(page);
   const episode = outlet.getByText('Episode 1: Making room for music', { exact: true });
   await expect(episode).toBeInViewport();
-  expect((await episode.boundingBox())!.y).toBeLessThanOrEqual(360);
+  const searchHeight = await fieldFootprint(outlet.getByRole('searchbox', { name: 'Buscar en episodios cargados' }));
+  expect((await episode.boundingBox())!.y).toBeLessThanOrEqual(360 + searchHeight);
   await expect(outlet.locator('header').getByRole('button', { name: 'Dejar de seguir', exact: true })).toHaveCount(0);
 });

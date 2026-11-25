@@ -162,3 +162,20 @@ test('every saved card is the same size, whatever the length of its name', async
   await expect.poll(() => coverSizes('Artistas guardados')).toHaveLength(4);
   expect(new Set(await coverSizes('Artistas guardados')).size).toBe(1);
 });
+
+test('a compatibility-normalized saved match suppresses the Library empty state', async ({ page }) => {
+  await mockMusicEngine(page);
+  await page.route('**/api/library/saved-entities', route => route.fulfill({ json: { entities: [
+    { kind: 'album', name: 'Oﬃce', artist: 'Björk', destination: '/album/Office?artist=Bjork&deezer_id=1' },
+  ] } }));
+  await page.goto('/player/#/library?view=songs&q=office');
+  await expect(page.getByRole('link', { name: 'Oﬃce', exact: true })).toBeVisible();
+  await expect(page.getByText('No hay canciones ni artistas que coincidan.')).toHaveCount(0);
+
+  await page.goto('/player/#/?saved=albums');
+  const field = page.getByRole('searchbox', { name: 'Filtrar esta lista' });
+  await field.fill('BJORK');
+  await expect(page.getByRole('link', { name: 'Oﬃce', exact: true })).toBeVisible();
+  await field.fill('missing');
+  await expect(page.getByText('No hay coincidencias en esta lista.')).toBeVisible();
+});

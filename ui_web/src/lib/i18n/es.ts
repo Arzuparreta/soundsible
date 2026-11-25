@@ -383,6 +383,11 @@ export const es: Dict = {
     reason: 'Similar a lo que estabas escuchando',
   },
   library: {
+    noCollectionMatches: 'No hay coincidencias en esta lista.',
+    filterCollection: 'Filtrar esta lista',
+    filterLoadedEpisodes: 'Buscar en episodios cargados',
+    filterSubscriptions: 'Filtrar suscripciones',
+    filterLive: 'Filtrar salas en directo',
     searchAction: 'Buscar en biblioteca',
     title: 'Tu biblioteca',
     favourites: 'Favoritos',

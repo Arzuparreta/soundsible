@@ -1,12 +1,11 @@
-import { createResponsiveTap } from '../lib/responsiveTap';
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { trackSearchFields } from '../lib/librarySearch';
+import { EntityHero, EntityMenuCover } from '../components/EntityHero';
 import { CollectionControl } from '../components/CollectionControl';
 import Button from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
-import { BackIcon, PlayIcon, menuIcons } from '../components/icons';
+import { PlayIcon, menuIcons } from '../components/icons';
 import { EntityViewSelect } from '../components/EntityViewSelect';
-import { useAppBar } from '../lib/appBar';
-import { desktopShell } from '../lib/shellLayout';
-import { CoverImage } from '../components/CoverImage';
 import { ArtistLinks, MusicLink } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
@@ -28,7 +27,6 @@ import { startDjFromCatalog, startDjFromTracks } from '../lib/djStart';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Album.module.css';
 import hero from '../components/EntityHero.module.css';
-import { coverGradient } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { CatalogResultRow } from '../components/CatalogResultRow';
@@ -317,20 +315,6 @@ export default function Album() {
     tabRoot('/search') ?? (artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search'),
   );
   let openCollectionMenu = () => {};
-  const coverMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
-  const titleMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
-  const headerContextMenu = (event: MouseEvent) => {
-    event.preventDefault();
-    openCollectionMenu();
-  };
-  const [heading, setHeading] = createSignal<HTMLElement>();
-  useAppBar({
-    title: () => currentProfile()?.title || title(),
-    back,
-    backLabel: () => t('album.ariaBack'),
-    heading,
-  });
-
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : tracklist().length > 0;
 
   return (
@@ -340,26 +324,10 @@ export default function Album() {
         class={hero.page}
         data-primary-scroll
       >
-        <header class={hero.header}>
-        <Show when={desktopShell()}>
-          <button class={hero.back} type="button" aria-label={t('album.ariaBack')} onClick={back}>
-            <BackIcon size={20} />
-          </button>
-        </Show>
-
-        <div class={hero.hero}>
-          <button type="button" class={hero.art} data-testid="collection-header-cover"
-            aria-label={`${t('savedEntities.options')}: ${displayTitle()}`} aria-haspopup="dialog"
-            {...coverMenuTap} onContextMenu={headerContextMenu} style={{ background: coverGradient(title()) }}>
-            <CoverImage src={cover()} eager />
-            <Show when={!cover()}>
-              <span class={hero.initial} aria-hidden="true">{(title()[0] ?? '?').toUpperCase()}</span>
-            </Show>
-          </button>
-          <div class={hero.identity}>
-            <h1 ref={setHeading} class={hero.title}><button type="button" class={hero.titleButton}
-              data-testid="collection-header-name" aria-haspopup="dialog" title={t('savedEntities.options')}
-              {...titleMenuTap} onContextMenu={headerContextMenu}>{displayTitle()}</button></h1>
+        <EntityHero name={displayTitle()} back={back} backLabel={t('album.ariaBack')}
+          openMenu={() => openCollectionMenu()}
+          art={<EntityMenuCover name={displayTitle()} cover={cover()} onOpen={() => openCollectionMenu()} />}
+          metadata={<>
             <ArtistLinks class={hero.credit} music={{ artist: displayArtist(), artists: displayArtists(), view: view(), artistId: membershipRead()?.album.album_artist_id ?? undefined }} />
             <span class={hero.meta}>
               <For each={metaParts()}>
@@ -371,7 +339,7 @@ export default function Album() {
                 )}
               </For>
             </span>
-          </div>
+          </>}>
           <div class={hero.toolbar} data-entity-toolbar>
             <Show when={showToggle()} fallback={<span class={hero.context}>{t('album.discover')}</span>}>
               <EntityViewSelect label={t('entityView.label')} value={view()} onChange={value => switchView(value as ViewMode)}
@@ -401,9 +369,7 @@ export default function Album() {
               tracklist={tracklist()}
               deezerId={viewParams().deezerId ?? currentProfile()?.deezer_id ?? undefined} />
           </div>
-        </div>
-
-        </header>
+        </EntityHero>
 
         <Show
           when={view() === 'discover' && profile.loading && !currentProfile()}
@@ -420,6 +386,7 @@ export default function Album() {
                 </Show>
               }>
                 <DiscoverView
+                  subject={profileKey()}
                   tracklist={tracklist()}
                   label={currentProfile()?.label || ''}
                   artistName={displayArtist()}
@@ -450,6 +417,7 @@ function LibraryView(props: { tracks: Track[]; context: PlaybackContextDescripto
 }
 
 function DiscoverView(props: {
+  subject: object;
   tracklist: CatalogItem[];
   label: string;
   artistName: string;
@@ -458,23 +426,30 @@ function DiscoverView(props: {
   onPlayItem: (item: CatalogItem, queue?: CatalogItem[]) => void;
   onSaveItem: (item: CatalogItem) => void;
 }) {
+  const search = createCollectionSearch();
+  const tracks = search.filter(() => props.tracklist, trackSearchFields);
+  const position = search.positions(() => props.tracklist);
+  createEffect(on(() => props.subject, () => search.setValue(''), { defer: true }));
   return (
     <div class={styles.contentView}>
       <Show when={props.tracklist.length > 0} fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}>
+        <CollectionSearch search={search} />
+        <Show when={tracks().length} fallback={<NoCollectionMatches />}>
         <div class={styles.trackList}>
-          <For each={props.tracklist}>
-            {(item, i) => (
+          <For each={tracks()}>
+            {(item) => (
               <CatalogResultRow
                 item={item}
-                index={i() + 1}
+                index={position(item)}
                 active={isPlayingItem(item)}
                 saving={props.saving.has(item.id)}
-                onPlay={() => props.onPlayItem(item, props.tracklist)}
+                onPlay={() => props.onPlayItem(item, tracks())}
                 onDownload={() => props.onSaveItem(item)}
               />
             )}
           </For>
         </div>
+        </Show>
       </Show>
       <Show when={props.label}>
         <p class={styles.labelCredit}>℗ {props.label}</p>

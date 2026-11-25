@@ -1,4 +1,6 @@
-import { createSignal, createUniqueId, For, Show, type JSX } from 'solid-js';
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from './CollectionSearch';
+import { trackSearchFields } from '../lib/librarySearch';
+import { createEffect, createMemo, createSignal, on, createUniqueId, For, Show, type JSX } from 'solid-js';
 import type { AlbumSummary, ArtistSummary, CatalogItem } from '../types/music';
 import type { SavedEntity } from '../lib/savedEntityIdentity';
 import { albumPath, artistPath } from '../lib/artistRoute';
@@ -74,10 +76,16 @@ export function ArtistDiscoveryView(props: {
   topTracks: CatalogItem[]; albums: AlbumSummary[]; singlesEps: AlbumSummary[]; related: ArtistSummary[];
   latestRelease?: AlbumSummary | null;
   loading: boolean; artistName: string;
-  renderSong: (item: CatalogItem, index: number, queue: CatalogItem[]) => JSX.Element;
+  /** `index` is the row's 1-based place in `queue`, the rows on screen; `rank`
+   * is its place among the top tracks, which filtering does not change. */
+  renderSong: (item: CatalogItem, index: () => number, queue: () => CatalogItem[], rank: number) => JSX.Element;
   renderLink: (link: ArtistDiscoveryLink) => JSX.Element;
 }) {
-  const topTracks = () => props.topTracks.slice(0, 10);
+  const search = createCollectionSearch();
+  const topTracks = createMemo(() => props.topTracks.slice(0, 10));
+  const shown = search.filter(topTracks, trackSearchFields);
+  const rank = search.positions(topTracks);
+  createEffect(on(() => props.artistName, () => search.setValue(''), { defer: true }));
   // One honest empty state for the whole profile rather than a "nothing here"
   // line under every heading.
   const nothing = () => !props.loading && !props.latestRelease && !props.topTracks.length && !props.albums.length
@@ -114,7 +122,12 @@ export function ArtistDiscoveryView(props: {
     <Show when={topTracks().length > 0}>
       <section class={`${styles.section} ${styles.topSection}`}>
         <h2 class={styles.topTitle}>{t('artist.topTracks')}</h2>
-        <div class={styles.trackList}><For each={topTracks()}>{(item, index) => props.renderSong(item, index() + 1, topTracks())}</For></div>
+        <CollectionSearch search={search} />
+        <Show when={shown().length} fallback={<NoCollectionMatches />}>
+          <div class={styles.trackList}>
+            <For each={shown()}>{(item, index) => props.renderSong(item, () => index() + 1, shown, rank(item))}</For>
+          </div>
+        </Show>
       </section>
     </Show>
     <Show when={props.albums.length > 0}>

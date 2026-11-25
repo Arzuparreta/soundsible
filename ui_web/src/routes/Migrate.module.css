@@ -15,8 +15,8 @@
   padding: var(--space-xl) 0 var(--space-sm);
 }
 
-.hero h1,
-.progressCard h1 {
+.hero h2,
+.progressCard h2 {
   margin: var(--space-2xs) 0 var(--space-sm);
   color: var(--ink-primary);
   font-size: clamp(1.75rem, 5vw, 2.75rem);

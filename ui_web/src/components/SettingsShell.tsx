@@ -257,10 +257,13 @@ function Detail(props: { section: SettingsSection; setting: string | null; onBac
     return Math.max(0, Math.round(offset));
   };
 
-  // On the touch shell a section is a page of its own: its name and the way
-  // back to the index are the top bar's. Side by side, it is a pane under the
-  // page's title.
-  useAppBar({ title: () => props.section.title(), back: () => props.onBack() });
+  // A stacked detail owns Back and its page label. In the split view the
+  // setting section remains a heading inside the Settings page.
+  useAppBar({
+    title: () => desktopShell() ? t('settings.title') : props.section.title(),
+    indicator: true,
+    back: () => props.onBack(),
+  });
 
   return (
     <section class={styles.detail}>

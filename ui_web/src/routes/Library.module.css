@@ -79,45 +79,6 @@
   transition: none;
 }
 
-.toolbar {
-  flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2xs) var(--space-md);
-  min-height: 44px;
-  padding: 0 var(--gutter) var(--space-sm);
-}
-
-.sortButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-  min-width: 44px;
-  min-height: 40px;
-  padding: 0 var(--space-sm);
-  font: inherit;
-  font-size: var(--text-caption);
-  font-weight: var(--fw-medium);
-  color: var(--ink-secondary);
-  background: transparent;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-}
-
-.sortButton svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
-  flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-}
-
 .filterChips {
   display: flex;
   gap: var(--space-2xs);
@@ -153,13 +114,6 @@
   stroke-linecap: round;
 }
 
-/* Keep the sort control compact on narrow screens. */
-@media (max-width: 480px) {
-  .sortButton span {
-    display: none;
-  }
-}
-
 :global(html[data-interface-size='normal']) .headerAction {
   width: 48px;
   height: 48px;
@@ -173,14 +127,6 @@
 
 :global(html[data-interface-size='large']) .headerAction {
   width: 56px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .sortButton:hover {
-    color: var(--ink-primary);
-    background: var(--bg-hover);
-    border-color: var(--hairline-strong);
-  }
 }
 
 .artistsScroll {
@@ -215,7 +161,7 @@
 
 .desktopSearch {
   flex: 1;
-  min-width: 200px;
+  min-width: 0;
 }
 
 @media (min-width: 1024px) {

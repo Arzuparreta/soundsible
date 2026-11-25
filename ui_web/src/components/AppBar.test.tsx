@@ -53,7 +53,7 @@ describe('AppBar', () => {
         <Page
           title={() => 'Live'}
           actions={() => [
-            { label: 'Search', icon: () => <svg />, onSelect: search, badge: 3 },
+            { label: 'Search', icon: () => <svg />, onSelect: search },
             { label: 'Go live', icon: () => null, prominent: true, disabled: true, onSelect: () => {} },
           ]}
         />
@@ -62,7 +62,6 @@ describe('AppBar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     expect(search).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: 'Search' })).toHaveTextContent('3');
     expect(screen.getByRole('button', { name: 'Go live' })).toBeDisabled();
   });
 

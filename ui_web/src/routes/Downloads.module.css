@@ -1,24 +1,3 @@
-.clear {
-  flex-shrink: 0;
-  padding: var(--space-xs) var(--space-md);
-  font-size: var(--text-label);
-  font-weight: var(--fw-medium);
-  color: var(--danger);
-  background: transparent;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  min-height: var(--control-h);
-  transition: border-color var(--dur-short) var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.clear:hover {
-  border-color: var(--danger);
-}
-}
-
 .scroll {
   flex: 1;
   min-height: 0;
@@ -300,9 +279,5 @@
   .iconBtn {
     width: 36px;
     height: 36px;
-  }
-
-  .clear {
-    min-height: 34px;
   }
 }

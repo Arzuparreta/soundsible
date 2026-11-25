@@ -11,11 +11,11 @@ const DESKTOP = '(min-width: 1024px)';
 afterEach(() => setMediaQuery(DESKTOP, false));
 
 describe('ViewHeader on the desktop shell', () => {
-  it('renders the title as plain text when no tap handler is given', () => {
+  it('renders one heading in the overlaid page indicator with the default scroll action', () => {
     setMediaQuery(DESKTOP, true);
     render(() => <InShell><ViewHeader title="Your library" /></InShell>);
 
-    expect(screen.queryByRole('button', { name: 'Your library' })).toBeNull();
+    expect(document.querySelector('[data-page-indicator]')).toContainElement(screen.getByRole('button', { name: 'Your library' }));
     expect(screen.getByRole('heading', { name: 'Your library' })).toBeInTheDocument();
     expect(document.querySelector('[data-app-bar]')).toBeNull();
   });
@@ -31,8 +31,8 @@ describe('ViewHeader on the desktop shell', () => {
     expect(screen.queryByRole('combobox', { name: 'Country' })).toBeNull();
 
     // The page title wraps; only an ellipsis-free rule keeps its end readable.
-    const file = path.join(path.dirname(new URL(import.meta.url).pathname), 'ViewHeader.module.css');
-    const rules = declarations(selector => selector === '.title', file);
+    const file = path.join(path.dirname(new URL(import.meta.url).pathname), 'AppBar.module.css');
+    const rules = declarations(selector => selector === '.indicatorButton', file);
     expect(rules['white-space']).toBeUndefined();
     expect(rules['text-overflow']).toBeUndefined();
   });
@@ -49,7 +49,7 @@ describe('ViewHeader on the desktop shell', () => {
 });
 
 describe('ViewHeader on the touch shell', () => {
-  it('hands its title and commands to the top bar instead of drawing a header', () => {
+  it('hands commands to the top bar and labels the page at the foot of the view', () => {
     const onSelect = vi.fn();
     render(() => (
       <InShell>
@@ -63,7 +63,7 @@ describe('ViewHeader on the touch shell', () => {
     ));
 
     const bar = document.querySelector<HTMLElement>('[data-app-bar]')!;
-    expect(bar).toContainElement(screen.getByRole('heading', { name: 'Your library', level: 1 }));
+    expect(bar).not.toContainElement(screen.getByRole('heading', { name: 'Your library', level: 1 }));
     expect(screen.getAllByRole('heading')).toHaveLength(1);
     expect(screen.queryByText('12 songs')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Desktop only' })).toBeNull();
@@ -97,7 +97,8 @@ describe('ViewHeader on the touch shell', () => {
     ));
 
     const bar = document.querySelector<HTMLElement>('[data-app-bar]')!;
-    expect(bar).toHaveTextContent('Page');
+    expect(bar).not.toHaveTextContent('Page');
+    expect(document.querySelector('[data-page-indicator]')).toHaveTextContent('Page');
     expect(bar).not.toHaveTextContent('Panel');
     expect(screen.getByRole('heading', { name: 'Panel' })).toBeInTheDocument();
   });

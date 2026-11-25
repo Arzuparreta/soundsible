@@ -3,9 +3,6 @@
   color: var(--ink-primary);
 }
 
-.goLive,
-.endLive,
-.share,
 .directoryHead button,
 .roomTop button,
 .renameActions button {
@@ -18,22 +15,6 @@
   font: inherit;
   font-size: var(--text-caption);
   font-weight: var(--fw-bold);
-}
-
-.goLive:disabled {
-  opacity: .45;
-}
-
-.share {
-  color: var(--ink-primary);
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-}
-
-.endLive {
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, var(--bg-raised));
-  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--hairline));
 }
 
 .secureHint {

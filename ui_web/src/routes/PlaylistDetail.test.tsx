@@ -74,6 +74,26 @@ describe('the playlist page header', () => {
     expect(openPlaylistMenu).toHaveBeenCalledWith('Road trip', expect.objectContaining({ onRenamed: expect.any(Function), onDeleted: expect.any(Function) }));
     expect(vi.mocked(useAppBar).mock.calls.at(-1)?.[0].actions).toBeUndefined();
   });
+  it('keeps repeated occurrences and gives reorder the full playlist while filtering', () => {
+    store.state.playlists = { 'Road trip': ['repeat', 'other', 'repeat'] };
+    store.library = [lib('repeat'), lib('other')];
+    render(() => <PlaylistDetail />);
+    fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'repeat' } });
+    expect(screen.getAllByText('repeat')).toHaveLength(2);
+    expect(screen.queryByText('other')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'playlistDetail.ariaOptions' }));
+    const options = vi.mocked(openPlaylistMenu).mock.calls.at(-1)?.[1];
+    expect(options?.onEdit).toBeTypeOf('function');
+    options?.onEdit?.();
+    expect(screen.getAllByText('repeat')).toHaveLength(2);
+    expect(screen.getByText('other')).toBeInTheDocument();
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'musicExplorer.done' }));
+    expect(screen.getByRole('searchbox')).toHaveValue('repeat');
+    expect(screen.queryByText('other')).not.toBeInTheDocument();
+  });
   it('starts a fresh DJ selection with the playlist as its source', () => {
     store.state.autoMode.active = true;
     store.state.playlists = { 'Road trip': ['first', 'second'] };

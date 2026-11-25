@@ -1,3 +1,6 @@
+import { podcastShowSearchFields } from '../lib/librarySearch';
+import Button from '../components/Button';
+import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { registerNativeBack } from './backNavigation';
@@ -13,6 +16,9 @@ import type { Track } from '../types/music';
 
 /** Feed browsing imports no audio runtime; only the selected episode reaches native NORMAL. */
 export default function PodcastBrowser(props: { generation: number; subscriptions: PodcastSubscription[]; acquired: Track[]; disconnected?: boolean; activeId?: string; onPlay(track: Track): Promise<void>; onPlayOnDevice?(track: Track): void; onChanged?(): Promise<void> }) {
+  const subscriptionsSearch = createCollectionSearch();
+  const episodeSearch = createCollectionSearch();
+  const subscriptions = subscriptionsSearch.filter(() => props.subscriptions, podcastShowSearchFields);
   const [show, setShow] = createSignal<PodcastShowInfo | null>(null);
   const [followResult, setFollowResult] = createSignal<{ url: string; subscription: PodcastShowInfo | null } | null>(null);
   const followed = createMemo(() => followResult()?.url === show()?.rss_url ? followResult()?.subscription : props.subscriptions.find(row => row.rss_url === show()?.rss_url));
@@ -47,8 +53,8 @@ export default function PodcastBrowser(props: { generation: number; subscription
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal(false);
   let epoch = 0; let controller = new AbortController();
-  function reset() { queueEpoch++; queueAbort?.abort(); clearTimeout(queueTimer); setQueueError(false); setFollowResult(null); actionEpoch++; actionAbort?.abort(); setMutation(false); epoch++; controller.abort(); controller = new AbortController(); setEpisodes([]); setNext(null); setError(false); setBusy(false); }
-  createEffect(() => { props.generation; reset(); setJobs([]); observedComplete.clear(); setShow(null); });
+  function reset() { episodeSearch.setValue(''); queueEpoch++; queueAbort?.abort(); clearTimeout(queueTimer); setQueueError(false); setFollowResult(null); actionEpoch++; actionAbort?.abort(); setMutation(false); epoch++; controller.abort(); controller = new AbortController(); setEpisodes([]); setNext(null); setError(false); setBusy(false); }
+  createEffect(() => { props.generation; reset(); subscriptionsSearch.setValue(''); setJobs([]); observedComplete.clear(); setShow(null); });
   createEffect(on(() => props.disconnected, disconnected => {
     if (disconnected) { queueEpoch++; queueAbort?.abort(); clearTimeout(queueTimer); }
     else if (show()) void loadQueue();
@@ -139,6 +145,7 @@ export default function PodcastBrowser(props: { generation: number; subscription
     const generation = props.generation; const url = item.rss_url; const remove = Boolean(followed()); const id = followed()?.id;
     openContextMenu({ title: item.title, actions: [{ label: t(remove ? 'podcastShow.unsubscribe' : 'podcasts.subscribe'), disabled: mutation() || props.disconnected, onSelect: () => { if (generation === props.generation && show()?.rss_url === url && !disposed && (remove ? followed()?.id === id : !followed())) void follow(remove); } }] }, event);
   }
+  const matchingEpisodes = episodeSearch.filter(shownEpisodes, episode => [episode.title]);
   const closeShow = () => { reset(); setDownloadedOnly(false); setShow(null); };
   async function playChart(episode: PodcastEpisode, row: import('../types/podcast').PopularPodcastEpisode) {
     const feed = props.subscriptions.find(show => show.rss_url === row.feed_url);
@@ -148,14 +155,23 @@ export default function PodcastBrowser(props: { generation: number; subscription
   }
   registerNativeBack(() => { if (!selected()) return false; closeShow(); return true; });
   return <section data-testid="android-podcasts">
-    <Show when={selected()} fallback={<><PodcastDirectory generation={props.generation} activeId={props.activeId} disconnected={props.disconnected} onOpen={open} onPlay={playChart} subscribed={feed => props.subscriptions.some(row => row.rss_url === feed)} onSubscribe={subscribe} /><h2>{t('podcasts.yourShows')}</h2><For each={props.subscriptions} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
+    <Show when={selected()} fallback={<><PodcastDirectory generation={props.generation} activeId={props.activeId} disconnected={props.disconnected} onOpen={open} onPlay={playChart} subscribed={feed => props.subscriptions.some(row => row.rss_url === feed)} onSubscribe={subscribe} /><h2>{t('podcasts.yourShows')}</h2>
+      <Show when={props.subscriptions.length}><CollectionSearch search={subscriptionsSearch} placeholder={t('library.filterSubscriptions')} /></Show>
+      <For each={subscriptions()} fallback={<CollectionEmpty source={props.subscriptions.length}><EmptyState>{t('podcasts.hint')}</EmptyState></CollectionEmpty>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
       {selected => <><button onClick={closeShow}>{t('common.back')}</button><h2>{selected().title}</h2><button data-podcast-show-menu aria-label={t('songRow.ariaMore')} disabled={mutation()} onClick={showMenu}>⋯</button>
         <button disabled={busy() || props.disconnected} onClick={() => void load(selected(), false, true)}>{t('podcastShow.refresh')}</button>
         <button data-podcast-downloaded-only aria-pressed={downloadedOnly()} onClick={() => setDownloadedOnly(value => !value)}>{t('podcastShow.downloadedOnly')}</button>
         <Show when={error()}><p role="alert">{t('common.loadFailed')}</p><button disabled={busy() || props.disconnected} onClick={() => void load(selected())}>{t('common.retry')}</button></Show>
         <Show when={queueError()}><p role="status">{t('common.loadFailed')} <button onClick={() => void loadQueue()}>{t('common.retry')}</button></p></Show>
         <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
-        <For each={shownEpisodes()} fallback={<Show when={!busy() && !error()}><EmptyState>{t('podcastShow.empty')}</EmptyState></Show>}>{episode => <MusicListRowView title={episode.title} subtitle={episode.published ?? ''} seed={episode.guid || episode.enclosure_url}
+        <Show when={shownEpisodes().length}><CollectionSearch search={episodeSearch} placeholder={t('library.filterLoadedEpisodes')} /></Show>
+        <For each={matchingEpisodes()} fallback={<Show when={!busy() && !error()}>
+          <CollectionEmpty source={shownEpisodes().length}>
+            <Show when={downloadedOnly()} fallback={<EmptyState>{t('podcastShow.empty')}</EmptyState>}>
+              <EmptyState compact>{t('podcastShow.noDownloaded')} <Button variant="secondary" size="sm" onClick={() => setDownloadedOnly(false)}>{t('podcastShow.showAll')}</Button></EmptyState>
+            </Show>
+          </CollectionEmpty>
+        </Show>}>{episode => <MusicListRowView title={episode.title} subtitle={episode.published ?? ''} seed={episode.guid || episode.enclosure_url}
           annotation={track(episode).source !== 'preview' ? t('podcastShow.ariaDownloaded') : episodeJob(episode)?.status === 'failed' || episodeJob(episode)?.status === 'interrupted' ? t('common.loadFailed') : episodeJob(episode) ? t('collection.downloading') : undefined} downloading={episodeJob(episode)?.status === 'pending' || episodeJob(episode)?.status === 'downloading'} busy={mutation()} onMenu={event => episodeMenu(episode, event)} active={props.activeId === track(episode).id} disabled={props.disconnected} onActivate={() => void props.onPlay(track(episode)).catch(() => setError(true))} />}</For>
         <Show when={next() !== null}><button disabled={busy() || props.disconnected} onClick={() => void load(selected(), true)}>{t('podcastShow.loadMore')}</button></Show>
       </>}

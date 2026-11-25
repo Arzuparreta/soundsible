@@ -33,3 +33,18 @@ describe('library search', () => {
     expect(searchLibrary(tracks, artists, '   ')).toEqual([]);
   });
 });
+
+it('folds accents and compatibility forms but keeps vowel signs that tell words apart', () => {
+  expect(normalizeLibraryQuery('Björk')).toBe(normalizeLibraryQuery('bjork'));
+  expect(normalizeLibraryQuery('Oﬃce')).toBe(normalizeLibraryQuery('office'));
+  expect(normalizeLibraryQuery('दिल')).not.toBe(normalizeLibraryQuery('दाल'));
+  expect(normalizeLibraryQuery('กิน')).not.toBe(normalizeLibraryQuery('กัน'));
+  expect(normalizeLibraryQuery('ป่า')).not.toBe(normalizeLibraryQuery('ป้า'));
+  expect(normalizeLibraryQuery('かば')).not.toBe(normalizeLibraryQuery('かは'));
+  expect(normalizeLibraryQuery('мой')).not.toBe(normalizeLibraryQuery('мои'));
+  expect(normalizeLibraryQuery('Việt')).toBe('viet');
+  expect(normalizeLibraryQuery('άλμπουμ')).toBe('αλμπουμ');
+  expect(normalizeLibraryQuery('ΑΣΤΕΡΙΑ').includes(normalizeLibraryQuery('ΑΣ'))).toBe(true);
+  expect(normalizeLibraryQuery('Røyksopp')).toBe('royksopp');
+  expect(normalizeLibraryQuery('Łódź')).toBe('lodz');
+});

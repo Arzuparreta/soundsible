@@ -1,4 +1,4 @@
-import { normalizeLibraryQuery } from './librarySearch';
+import { normalizeLibraryQuery, foldSearchText } from './librarySearch';
 
 /**
  * The matcher behind the settings search. Pure and generic: it ranks whatever
@@ -164,8 +164,8 @@ export function rankDocs<T>(docs: SearchDoc<T>[], query: string, limit = 40): Se
 }
 
 /**
- * Fold `text` the way `normalizeLibraryQuery` does, one character at a time, so
- * every folded index knows where it came from in the original.
+ * Fold `text` with `foldSearchText`, the fold matching uses, one character at
+ * a time, so every folded index knows where it came from in the original.
  */
 function foldWithMap(text: string): { folded: string; starts: number[]; ends: number[] } {
   let folded = '';
@@ -173,7 +173,7 @@ function foldWithMap(text: string): { folded: string; starts: number[]; ends: nu
   const ends: number[] = [];
   let index = 0;
   for (const char of text) {
-    const piece = char.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
+    const piece = foldSearchText(char);
     for (let k = 0; k < piece.length; k += 1) {
       starts.push(index);
       ends.push(index + char.length);

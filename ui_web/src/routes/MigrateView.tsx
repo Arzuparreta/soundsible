@@ -393,7 +393,7 @@ function UploadStep(props: {
     <>
       <section class={styles.hero}>
         <span class={styles.eyebrow}>{c().eyebrow}</span>
-        <h1>{c().title}</h1>
+        <h2>{c().title}</h2>
         <p>{c().intro}</p>
       </section>
       <Show
@@ -636,7 +636,7 @@ function SelectionStep(props: {
     <>
       <section class={styles.hero}>
         <span class={styles.eyebrow}>{props.job.provider === 'spotify' ? 'Spotify' : 'Apple Music'}</span>
-        <h1>{c().analyzed}</h1>
+        <h2>{c().analyzed}</h2>
         <p>{c().found(props.job.manifest.track_count, props.job.manifest.playlists.length)}</p>
         <div class={styles.chips}>
           <span>{c().reuse(reusable())}</span>
@@ -738,7 +738,7 @@ function JobStep(props: {
     <>
       <section class={styles.progressCard}>
         <span class={styles.provider}>{props.job.provider === 'spotify' ? 'Spotify' : 'Apple Music'}</span>
-        <h1>
+        <h2>
           {props.job.state === 'completed'
             ? c().done
             : props.job.state === 'partial'
@@ -746,7 +746,7 @@ function JobStep(props: {
               : props.job.state === 'needs_review'
                 ? c().reviewTitle
                 : c().moving}
-        </h1>
+        </h2>
         <p>
           {props.job.state === 'completed'
             ? c().doneHint

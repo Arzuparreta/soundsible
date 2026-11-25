@@ -1,3 +1,4 @@
+import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import Button from '../components/Button';
 import { A } from '@solidjs/router';
 import button from '../design/Button.module.css';
@@ -11,7 +12,7 @@ import { t } from '../lib/i18n';
 import type { DownloadQueueItem } from '../types/download';
 import styles from './Downloads.module.css';
 import { SkeletonRows } from '../components/Skeleton';
-import { DownloadRowView } from '../components/DownloadRowView';
+import { downloadSearchFields, DownloadRowView } from '../components/DownloadRowView';
 
 const RANK: Record<string, number> = {
   downloading: 0,
@@ -40,6 +41,10 @@ export default function Downloads() {
   const items = createMemo(() =>
     [...state.downloads.queue].sort((a, b) => (RANK[a.status] ?? 9) - (RANK[b.status] ?? 9)),
   );
+  const search = createCollectionSearch();
+  const filteredItems = search.filter(items, downloadSearchFields);
+  const recent = search.filter(() => state.downloads.recent, item => [item.title, item.artist]);
+  const hasDownloads = () => items().length > 0 || state.downloads.recent.length > 0;
   const counts = createMemo(() => downloadCounts());
   const hasClearable = createMemo(() => state.downloads.queue.some((i) => i.status !== 'downloading'));
 
@@ -53,14 +58,10 @@ export default function Downloads() {
         title={t('downloads.title')}
         meta={summary()}
         barActions={counts().failed > 0
-          ? [{ label: t('downloads.clearErrors'), icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]
+          ? [{ label: t('downloads.clearErrors'), tone: 'danger', icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]
           : []}
-        actions={counts().failed > 0 ? (
-          <button class={styles.clear} type="button" onClick={() => void actions.clearFailedDownloads()}>
-            {t('downloads.clearErrors')}
-          </button>
-        ) : undefined}
       />
+      <Show when={hasDownloads()}><CollectionSearch search={search} inset /></Show>
 
       <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
         <Show when={failed()}>
@@ -70,7 +71,7 @@ export default function Downloads() {
         </Show>
 
         <Show
-          when={items().length > 0 || state.downloads.recent.length > 0}
+          when={hasDownloads()}
           fallback={
             <Show when={!failed()}>
               <Show when={!loading()} fallback={<SkeletonRows />}>
@@ -84,7 +85,8 @@ export default function Downloads() {
           }
         >
           <div class={styles.column}>
-            <For each={state.downloads.recent}>
+            <Show when={!filteredItems().length && !recent().length}><NoCollectionMatches /></Show>
+            <For each={recent()}>
               {(r) => (
                 <div class={styles.recentRow}>
                   <span class={styles.recentCheck} aria-hidden="true">
@@ -100,7 +102,7 @@ export default function Downloads() {
               )}
             </For>
 
-            <For each={items()}>{(i) => <DownloadRow item={i} />}</For>
+            <For each={filteredItems()}>{(i) => <DownloadRow item={i} />}</For>
 
             <Show when={hasClearable()}>
               <button class={styles.clearAll} type="button" onClick={() => actions.clearDownloads()}>

@@ -383,6 +383,11 @@ export const zh: Dict = {
     reason: '与你刚才收听的内容相似',
   },
   library: {
+    noCollectionMatches: '此列表中没有匹配项。',
+    filterCollection: '筛选此列表',
+    filterLoadedEpisodes: '搜索已加载的单集',
+    filterSubscriptions: '筛选订阅',
+    filterLive: '筛选直播间',
     searchAction: '搜索音乐库',
     title: '你的资料库',
     favourites: '收藏',
