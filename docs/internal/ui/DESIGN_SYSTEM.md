@@ -44,6 +44,11 @@ opens the listener's tracks, with access to the full catalog from the scope
 selector. Changing scope replaces the detail URL and keeps the navigation
 group. Existing entity links continue to resolve.
 
+The Android Library keeps its list mounted behind an open detail. The
+detail's Back control returns to that list and its scroll position.
+Reselecting Library returns to Songs. Selecting Search opens its own
+surface with its own detail history.
+
 ## Enforcement
 
 `npm run design:check` parses JSX and CSS. New raw native controls outside the
