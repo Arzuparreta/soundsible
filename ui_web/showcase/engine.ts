@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page, Route } from '@playwright/test';
+import { CUSTOM_COLORS_KEY } from '../src/boot/customColors.js';
+import { THEME_COLORS } from '../src/boot/themes';
 import catalog from './catalog/catalog.json' with { type: 'json' };
 
 /**
@@ -120,6 +122,14 @@ function stream(route: Route, body: Buffer) {
   });
 }
 
+// The landing's extra palettes are examples of the player's custom colors.
+const CUSTOM_PALETTES: Record<string, { canvas: string; accent: string }> = {
+  slate: { canvas: '#252d38', accent: '#f97a12' },
+  'pure-black': { canvas: '#000000', accent: '#f97a12' },
+  'forest-green': { canvas: '#0b110d', accent: '#f2a43a' },
+};
+export const SHOWCASE_PALETTES = [...Object.keys(THEME_COLORS), ...Object.keys(CUSTOM_PALETTES)];
+
 export async function mockShowcaseEngine(page: Page, theme: string): Promise<void> {
   await page.routeWebSocket('**/socket.io/**', (socket) => socket.close());
   await page.route('**/socket.io/**', (route) => route.abort());
@@ -192,10 +202,11 @@ export async function mockShowcaseEngine(page: Page, theme: string): Promise<voi
     if (!QUIET.has(path)) console.warn(`showcase engine: nothing answers ${route.request().method()} ${path}`);
     return json({});
   });
-  await page.addInitScript((theme) => {
+  await page.addInitScript(({ theme, colors, colorsKey }) => {
     localStorage.clear();
     localStorage.setItem('lang', 'en');
-    localStorage.setItem('theme', theme);
+    localStorage.setItem('theme', colors ? 'custom' : theme);
+    if (colors) localStorage.setItem(colorsKey, JSON.stringify(colors));
     localStorage.setItem('soundsible:interface-size', 'normal');
     localStorage.setItem('device_id', 'showcase-device');
     // Freeze the audio clock at NOW_PLAYING_AT while letting the element enter
@@ -206,7 +217,7 @@ export async function mockShowcaseEngine(page: Page, theme: string): Promise<voi
       this.playbackRate = 0;
       return nativePlay.call(this);
     };
-  }, theme);
+  }, { theme, colors: CUSTOM_PALETTES[theme], colorsKey: CUSTOM_COLORS_KEY });
 }
 
 /** A session this device left paused: `NOW_PLAYING`, the requests queued

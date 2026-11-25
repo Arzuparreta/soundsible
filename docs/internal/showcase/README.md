@@ -8,8 +8,9 @@ upper corners clear of the library header, with vector signal, Wi-Fi and
 battery icons. The library capture retains its original aspect ratio below
 that area. No swipe indicator overlays the capture.
 The transparent canvas follows the README background.
-The phone overlaps only the lower part of the desktop's left sidebar,
-leaving the song list and the entire docked player column visible.
+The phone overlaps the right half of the Songs list, covering some durations
+and sitting slightly over the row menus. The sidebar stays fully visible, and
+a gap separates the phone from the docked player.
 
 After installing the dependencies in `ui_web/`, run
 `node scripts/render_readme.mjs` from the repository root to compose both PNGs
@@ -27,9 +28,9 @@ The source captures retain their existing Jamendo music credits in
 It uses the landing header's flat dark background, rounded icon and lowercase
 wordmark, with only “self-hosted music experience” below it, kept on one line
 at 36px with brighter text for small feed previews. The desktop shell
-shows lyrics, library and queue; the overlapping phone uses the same intact
-mobile-library capture as the README. The dark desktop-lyrics capture is staged
-by `screens.spec.ts`; the README composition and its source captures are unchanged.
+shows lyrics beside the Songs list. The phone overlaps the Songs rows as in the
+README and uses the same mobile-library capture. The dark
+desktop-lyrics capture is staged by `screens.spec.ts`.
 
 All three elements fit within the central 1280×480 region, with at least 80px
 of horizontal padding. `card.spec.ts` checks these bounds and GitHub's 1 MB

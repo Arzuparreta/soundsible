@@ -10,7 +10,7 @@ const require = createRequire(new URL('ui_web/package.json', root));
 const { chromium } = require('playwright');
 const browser = await chromium.launch();
 try {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 1024 }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({ viewport: { width: 1600, height: 960 }, deviceScaleFactor: 1 });
   await mkdir(new URL('docs/images/', root), { recursive: true });
   for (const theme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: theme });

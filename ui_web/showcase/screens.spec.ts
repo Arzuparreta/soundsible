@@ -1,18 +1,16 @@
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { THEME_COLORS } from '../src/boot/themes';
 import { settle } from '../tests/browser/settle';
-import { mockShowcaseEngine, NOW_PLAYING } from './engine';
+import { mockShowcaseEngine, NOW_PLAYING, SHOWCASE_PALETTES } from './engine';
 import { stillFrame, writePicture } from './picture';
 
 /**
  * Every screenshot, in every theme. Written to
  * `docs/images/screenshots/<theme>/<name>.webp`, where the README and the site
- * pick them up. These pictures represent the built-in light and dark modes.
+ * pick them up. The landing includes examples of custom colors.
  */
 
 const SCREENSHOTS = join(import.meta.dirname, '..', '..', 'docs', 'images', 'screenshots');
-const PALETTES = Object.keys(THEME_COLORS);
 
 async function startup(page: Page, route: string) {
   await page.goto(`/player/#${route}`);
@@ -63,7 +61,7 @@ const SHOTS: Array<{ name: string; project: 'desktop' | 'mobile'; themes?: strin
 ];
 
 for (const shot of SHOTS) {
-  for (const theme of shot.themes ?? PALETTES) {
+  for (const theme of shot.themes ?? SHOWCASE_PALETTES) {
     test(`${shot.name} · ${theme}`, async ({ page }, info) => {
       test.skip(info.project.name !== shot.project, `${shot.name} is a ${shot.project} screenshot`);
       await mockShowcaseEngine(page, theme);
