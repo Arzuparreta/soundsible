@@ -39,4 +39,8 @@ it('folds accents and compatibility forms but keeps vowel signs that tell words 
   expect(normalizeLibraryQuery('Oﬃce')).toBe(normalizeLibraryQuery('office'));
   expect(normalizeLibraryQuery('दिल')).not.toBe(normalizeLibraryQuery('दाल'));
   expect(normalizeLibraryQuery('กิน')).not.toBe(normalizeLibraryQuery('กัน'));
+  expect(normalizeLibraryQuery('ป่า')).not.toBe(normalizeLibraryQuery('ป้า'));
+  expect(normalizeLibraryQuery('かば')).not.toBe(normalizeLibraryQuery('かは'));
+  expect(normalizeLibraryQuery('Røyksopp')).toBe('royksopp');
+  expect(normalizeLibraryQuery('Łódź')).toBe('lodz');
 });

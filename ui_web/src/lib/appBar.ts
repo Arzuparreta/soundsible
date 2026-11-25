@@ -12,8 +12,6 @@ export interface AppBarAction {
   label: string;
   icon: () => JSX.Element;
   onSelect: (event: MouseEvent) => void;
-  /** A count worn on the icon — active downloads, for instance. */
-  badge?: number;
   disabled?: boolean;
   busy?: boolean;
   pressed?: boolean;

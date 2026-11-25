@@ -388,7 +388,6 @@ export const en = {
     filterLoadedEpisodes: 'Search loaded episodes',
     filterSubscriptions: 'Filter subscriptions',
     filterLive: 'Filter live rooms',
-
     searchAction: 'Search library',
     title: 'Your library',
     favourites: 'Favourites',

@@ -60,9 +60,11 @@ export default function Shell(props: RouteSectionProps) {
       <main class={styles.content}>
         <AppBar />
         <DjErrandBanner />
+        {/* Overlaid at the foot of the view, but first in reading order: it is
+            the page's h1, so assistive tech meets it before the content. */}
+        <PageIndicator />
         {/* The routes scroll here, under a bar that never moves. */}
         <div class={styles.outlet} data-app-outlet>{props.children}</div>
-        <PageIndicator />
       </main>
       <div class={styles.dock}>
         <OmniBar />

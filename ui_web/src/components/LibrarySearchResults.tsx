@@ -1,6 +1,6 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import SavedEntities from './SavedEntities';
-import { entitiesError, entitiesLoading, savedEntities } from '../lib/savedEntities';
+import { entitiesLoading, savedEntities } from '../lib/savedEntities';
 import { matchesSavedEntity, normalizeLibraryQuery } from '../lib/librarySearch';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
@@ -95,7 +95,7 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       data-primary-scroll
     >
       <Show when={props.query}><SavedEntities query={props.query} /></Show>
-      <Show when={props.results.length > 0} fallback={<Show when={!props.query || (!hasBookmarkMatch() && !entitiesLoading() && !entitiesError())}><EmptyState>{t('library.noSearchResults')}</EmptyState></Show>}>
+      <Show when={props.results.length > 0} fallback={<Show when={!props.query || (!hasBookmarkMatch() && !(entitiesLoading() && !savedEntities().length))}><EmptyState>{t('library.noSearchResults')}</EmptyState></Show>}>
         <CollectionRows items={props.results} scrollElement={() => scrollRef ?? null}>
           {(result) => {
             const track = () => (result() as Extract<LibrarySearchResult, { kind: 'track' }>).track;

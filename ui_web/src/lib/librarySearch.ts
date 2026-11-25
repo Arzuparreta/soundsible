@@ -6,16 +6,21 @@ export type LibrarySearchResult =
   | { kind: 'track'; track: Track; score: number; order: number }
   | { kind: 'artist'; artist: ArtistEntry; score: number; order: number };
 
+/** Latin letters drawn with a stroke or as a ligature do not decompose. */
+const LATIN_FOLDS: Record<string, string> = { ø: 'o', ł: 'l', đ: 'd', æ: 'ae', œ: 'oe', ß: 'ss' };
+
 /**
- * NFKD folds compatibility forms (the `ﬃ` ligature, full-width letters);
- * stripping only `Diacritic` marks lets `bjork` find `Björk` while keeping the
- * vowel signs that tell Devanagari or Thai words apart.
+ * NFKD folds compatibility forms (the `ﬃ` ligature, full-width letters) and
+ * splits accented Latin letters; only the Combining Diacritical Marks block is
+ * dropped, so `bjork` finds `Björk` while Thai tone marks, Devanagari vowel
+ * signs and kana voicing marks still tell words apart.
  */
 export function normalizeLibraryQuery(value: string): string {
   return value
     .normalize('NFKD')
-    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase()
+    .replace(/[øłđæœß]/g, letter => LATIN_FOLDS[letter])
     .trim()
     .replace(/\s+/g, ' ');
 }
@@ -72,6 +77,7 @@ function bestScore(query: string, fields: SearchFieldValue[], weights: number[])
   return best;
 }
 
+/** One weight per field of `trackSearchFields`, in its order: title, artist, album, album artist. */
 const TRACK_FIELD_WEIGHTS = [0, 2, 4, 5];
 
 /** One deterministic, accent-insensitive result list for the local library. */

@@ -388,7 +388,6 @@ export const fr: Dict = {
     filterLoadedEpisodes: 'Rechercher parmi les épisodes chargés',
     filterSubscriptions: 'Filtrer les abonnements',
     filterLive: 'Filtrer les salons en direct',
-
     searchAction: 'Rechercher dans la bibliothèque',
     title: 'Votre bibliothèque',
     favourites: 'Favoris',

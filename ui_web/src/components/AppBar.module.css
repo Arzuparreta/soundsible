@@ -120,25 +120,6 @@
   margin-left: auto;
 }
 
-.badge {
-  position: absolute;
-  top: calc(var(--bar-inset) - 7px);
-  right: calc(var(--bar-inset) - 9px);
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  font-size: var(--text-micro);
-  font-weight: var(--fw-bold);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  color: var(--ink-on-accent);
-  background: var(--accent);
-  border: 2px solid var(--bg-base);
-  border-radius: var(--radius-full);
-}
-
 /* The page's one primary command, spelled out. Shorter than the touch row so
    it reads as a pill inside the bar rather than a second bar. */
 .prominent {

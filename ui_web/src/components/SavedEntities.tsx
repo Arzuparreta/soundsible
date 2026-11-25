@@ -45,7 +45,7 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
           </div></Show>
           <Show when={props.expanded && source(kind).length}><CollectionSearch search={search} /></Show>
           <Show when={matches().length} fallback={<Show when={!entitiesLoading() && !entitiesError()}>
-            <CollectionEmpty source={query() ? source(kind).length : 0}><p class={styles.empty}>{t('savedEntities.empty')}</p></CollectionEmpty>
+            <CollectionEmpty source={source(kind).length}><p class={styles.empty}>{t('savedEntities.empty')}</p></CollectionEmpty>
           </Show>}>
             <div class={styles.rail} data-horizontal-scroll={props.expanded ? undefined : ''} classList={{ [styles.expanded]: props.expanded || !!props.query }}>
               <For each={matches()}>{entry => <article class={styles.card}>

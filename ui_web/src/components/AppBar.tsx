@@ -146,7 +146,7 @@ function ActionButton(props: { action: AppBarAction; desktop?: boolean }) {
       type="button"
       class={props.action.prominent ? styles.prominent : worded() ? styles.command : styles.icon}
       data-command-tone={props.action.tone}
-      title={props.action.label}
+      title={worded() ? undefined : props.action.label}
       aria-label={props.action.label}
       aria-busy={props.action.busy || undefined}
       aria-pressed={props.action.pressed}
@@ -157,9 +157,6 @@ function ActionButton(props: { action: AppBarAction; desktop?: boolean }) {
     >
       <Show when={!props.action.prominent}>{props.action.icon()}</Show>
       <Show when={worded()}><span>{props.action.desktopLabel ?? props.action.label}</span></Show>
-      <Show when={props.action.badge}>
-        {(count) => <span class={styles.badge} aria-hidden="true">{count()}</span>}
-      </Show>
     </button>
   );
 }
