@@ -21,14 +21,17 @@ import { contrast, declarations, over, rgb } from './testing/tokens';
 const src = process.cwd();
 const playerFiles = [
   'src/components/PlayerSurface.module.css',
+  'src/components/StageBackdrop.module.css',
   'src/components/NowPlaying.module.css',
   'src/components/AutoMode.module.css',
   'src/components/LyricsPanel.module.css',
 ].map((file) => path.resolve(src, file));
 
-const stageDark = () => declarations((selector) => selector === '[data-player-stage]');
-const stageLight = () =>
-  declarations((selector) => selector === ":root[data-theme='light'] [data-player-stage]");
+const hasSelector = (target: string) => (selector: string) =>
+  selector.split(',').some((part) => part.trim() === target);
+
+const stageDark = () => declarations(hasSelector('[data-player-stage]'));
+const stageLight = () => declarations(hasSelector(":root[data-theme='light'] [data-player-stage]"));
 const lightTheme = () => declarations((selector) => selector === ":root[data-theme='light']");
 
 describe('player stage tokens', () => {
@@ -105,5 +108,12 @@ describe('player stage tokens', () => {
   it('is claimed by the surface, so Now Playing and Auto inherit one room', () => {
     const surface = fs.readFileSync(path.resolve(src, 'src/components/PlayerSurface.tsx'), 'utf8');
     expect(surface).toContain('data-player-stage=""');
+  });
+
+  it('shares the dark and light stage tokens with the desktop sidebar surface', () => {
+    const sidebar = fs.readFileSync(path.resolve(src, 'src/components/Sidebar.tsx'), 'utf8');
+    expect(sidebar).toContain('data-stage-surface=""');
+    expect(declarations(hasSelector('[data-stage-surface]'))).toMatchObject(stageDark());
+    expect(declarations(hasSelector(":root[data-theme='light'] [data-stage-surface]"))).toMatchObject(stageLight());
   });
 });

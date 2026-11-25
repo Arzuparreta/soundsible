@@ -1,5 +1,5 @@
 import { render } from '@solidjs/testing-library';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CollectionGrid } from './CollectionGrid';
 import { mockScrollportLayout } from '../testLayout';
 
@@ -60,5 +60,58 @@ describe('CollectionGrid', () => {
     const { cards, view } = mount(2);
     expect(cards().map((card) => card.textContent)).toEqual(['Card 0', 'Card 1']);
     expect(view.container.querySelectorAll('[data-grid-spacer]').length).toBe(0);
+  });
+
+  it('re-measures row heights when card columnWidth changes without changing column count', async () => {
+    const resizeCallbacks: ResizeObserverCallback[] = [];
+    const originalRO = globalThis.ResizeObserver;
+    const originalGCS = window.getComputedStyle;
+    let width = 800;
+    let colWidth = 180;
+
+    globalThis.ResizeObserver = class {
+      constructor(cb: ResizeObserverCallback) { resizeCallbacks.push(cb); }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    } as unknown as typeof ResizeObserver;
+
+    const gridWidthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width);
+    const computedSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+      const base = originalGCS.call(window, el, pseudo);
+      if (el instanceof HTMLElement && el.classList.contains('grid')) {
+        return new Proxy(base, {
+          get(target, prop) {
+            if (prop === 'paddingTop') return '0px';
+            if (prop === 'rowGap') return '16px';
+            if (prop === 'gridTemplateColumns') return `${colWidth}px ${colWidth}px ${colWidth}px ${colWidth}px`;
+            const val = Reflect.get(target, prop, target);
+            return typeof val === 'function' ? val.bind(target) : val;
+          },
+        });
+      }
+      return base;
+    });
+
+    try {
+      const { view } = mount(40);
+      await settle();
+      const spacer = () => view.container.querySelector<HTMLElement>('[data-grid-spacer]');
+      const initialSpacerHeight = parseFloat(spacer()?.style.height || '0');
+      expect(initialSpacerHeight).toBeGreaterThan(0);
+
+      // Simulate sidebar collapse: same 4 columns, wider cards (180px -> 230px).
+      width = 1000;
+      colWidth = 230;
+      for (const cb of resizeCallbacks) cb([], {} as ResizeObserver);
+      await settle();
+
+      const updatedSpacerHeight = parseFloat(spacer()?.style.height || '0');
+      expect(updatedSpacerHeight).toBeGreaterThan(initialSpacerHeight);
+    } finally {
+      globalThis.ResizeObserver = originalRO;
+      gridWidthSpy.mockRestore();
+      computedSpy.mockRestore();
+    }
   });
 });

@@ -123,6 +123,9 @@ export const en = {
     downloads: 'Downloads',
     settings: 'Settings',
     library: 'Library',
+    collection: 'Collection',
+    collapseSidebar: 'Collapse sidebar',
+    expandSidebar: 'Expand sidebar',
     shortcuts: 'Quick access',
   },
   live: {

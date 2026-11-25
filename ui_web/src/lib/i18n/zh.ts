@@ -123,6 +123,9 @@ export const zh: Dict = {
     downloads: '下载',
     settings: '设置',
     library: '资料库',
+    collection: '曲库',
+    collapseSidebar: '收起侧边栏',
+    expandSidebar: '展开侧边栏',
     shortcuts: '快捷访问',
   },
   live: {

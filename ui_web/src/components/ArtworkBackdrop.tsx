@@ -1,11 +1,21 @@
-import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, untrack } from 'solid-js';
+import { getCachedStageImage, loadStageImage, rasterizeStageBackdrop } from '../lib/stageBackdrop';
 
-const MAX_BACKDROP_EDGE = 240;
-
-/** Rasterize the wallpaper's existing filter at a bounded resolution when its
- * image, theme, or aspect changes. Keeping the canvas at <= 240px cuts software
- * blur and texture bandwidth by ~80x while the GPU compositor upscales for free. */
-export function ArtworkBackdrop(props: { src: string; active: boolean; visible: boolean; class: string; activeClass: string }) {
+/**
+ * Renders one crossfade backdrop layer from the shared 240px blurred bitmap
+ * cache without re-blurring on resize or duplicate mounts.
+ */
+export function ArtworkBackdrop(props: {
+  src: string;
+  active: boolean;
+  visible: boolean;
+  class: string;
+  activeClass: string;
+  driftClass?: string;
+  hiddenClass?: string;
+  hidden?: boolean;
+  playerMark?: boolean;
+}) {
   let element!: HTMLDivElement;
   let canvas!: HTMLCanvasElement;
   const [ready, setReady] = createSignal(false);
@@ -16,49 +26,64 @@ export function ArtworkBackdrop(props: { src: string; active: boolean; visible: 
 
   const paint = () => {
     if (!props.visible || !context || !image?.naturalWidth || !element.clientWidth || !element.clientHeight) return;
-    const width = element.clientWidth, height = element.clientHeight;
     // Read the theme recipe with its original filter enabled. Keep it on the
     // wrapper until the bitmap is complete, so loading/failure has a fallback.
     delete element.dataset.rasterized;
     const filter = getComputedStyle(element).filter;
-    const ratio = Math.min(1, MAX_BACKDROP_EDGE / Math.max(width, height));
-    const drawWidth = Math.max(1, Math.round(width * ratio));
-    const drawHeight = Math.max(1, Math.round(height * ratio));
-    const key = `${image.currentSrc || props.src}|${filter}|${drawWidth}x${drawHeight}`;
+    if (!filter || filter === 'none') {
+      lastKey = '';
+      setReady(false);
+      return;
+    }
+    const resolvedSrc = image.currentSrc || props.src;
+    const key = `${resolvedSrc}|${filter}`;
     if (key === lastKey) {
       element.dataset.rasterized = '';
       setReady(true);
       return;
     }
-    const scaledFilter = filter.replace(/blur\(([\d.]+)px\)/g, (_match, px) =>
-      `blur(${(Number(px) * ratio).toFixed(2)}px)`);
-    canvas.width = drawWidth;
-    canvas.height = drawHeight;
+    const cached = rasterizeStageBackdrop(resolvedSrc, image, filter);
+    if (!cached) {
+      setReady(false);
+      return;
+    }
+    canvas.width = cached.canvas.width;
+    canvas.height = cached.canvas.height;
     canvas.dataset.sourceFilter = filter;
-    context.filter = scaledFilter;
-    const scale = Math.max(drawWidth / image.naturalWidth, drawHeight / image.naturalHeight);
-    const drawnWidth = image.naturalWidth * scale, drawnHeight = image.naturalHeight * scale;
-    context.drawImage(image, (drawWidth - drawnWidth) / 2, (drawHeight - drawnHeight) / 2, drawnWidth, drawnHeight);
+    context.filter = 'none';
+    context.drawImage(cached.canvas, 0, 0);
+    // Keep the scaled blur radius on the context without re-applying blur.
+    context.filter = cached.scaledFilter;
     lastKey = key;
     element.dataset.rasterized = '';
     setReady(true);
   };
+
   const schedule = () => {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(paint);
   };
+
   createEffect(() => { if (props.visible) schedule(); });
 
   onMount(() => {
     if (typeof CanvasRenderingContext2D === 'undefined') return;
     context = canvas.getContext('2d');
     if (!context || !('filter' in context)) { context = null; return; }
-    const resize = new ResizeObserver(schedule);
-    resize.observe(element);
-    const theme = new MutationObserver(schedule);
-    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    const resize = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => { if (props.visible && !untrack(ready)) schedule(); })
+      : null;
+    resize?.observe(element);
+    const theme = typeof MutationObserver === 'function'
+      ? new MutationObserver(() => { if (props.visible) schedule(); })
+      : null;
+    theme?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     schedule();
-    onCleanup(() => { resize.disconnect(); theme.disconnect(); cancelAnimationFrame(frame); });
+    onCleanup(() => {
+      resize?.disconnect();
+      theme?.disconnect();
+      cancelAnimationFrame(frame);
+    });
   });
 
   createEffect(() => {
@@ -68,15 +93,35 @@ export function ArtworkBackdrop(props: { src: string; active: boolean; visible: 
     if (element) delete element.dataset.rasterized;
     image = undefined;
     if (!source) return;
-    const next = new Image();
-    next.onload = () => { image = next; schedule(); };
-    next.src = source;
-    onCleanup(() => { next.onload = null; });
+    const cached = getCachedStageImage(source);
+    if (cached) {
+      image = cached;
+      schedule();
+      return;
+    }
+    let cancelled = false;
+    void loadStageImage(source).then((loaded) => {
+      if (cancelled || !loaded) return;
+      image = loaded;
+      schedule();
+    });
+    onCleanup(() => { cancelled = true; });
   });
 
-  return <div ref={element} class={props.class} classList={{ [props.activeClass]: props.active }}
-    style={{ 'background-image': !ready() && props.src ? `url("${props.src}")` : undefined }}
-    data-player-backdrop={props.active ? 'active' : 'inactive'} aria-hidden="true">
-    <canvas ref={canvas} width={0} height={0} hidden={!ready()} />
-  </div>;
+  return (
+    <div
+      ref={element}
+      class={props.class}
+      classList={{
+        [props.activeClass]: props.active,
+        ...(props.driftClass ? { [props.driftClass]: props.active } : {}),
+        ...(props.hiddenClass ? { [props.hiddenClass]: Boolean(props.hidden) } : {}),
+      }}
+      style={{ 'background-image': !ready() && props.src ? `url("${props.src}")` : undefined }}
+      data-player-backdrop={props.playerMark ? (props.active ? 'active' : 'inactive') : undefined}
+      aria-hidden="true"
+    >
+      <canvas ref={canvas} width={0} height={0} hidden={!ready()} />
+    </div>
+  );
 }

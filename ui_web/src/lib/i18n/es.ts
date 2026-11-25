@@ -123,6 +123,9 @@ export const es: Dict = {
     downloads: 'Descargas',
     settings: 'Ajustes',
     library: 'Biblioteca',
+    collection: 'Colección',
+    collapseSidebar: 'Contraer barra lateral',
+    expandSidebar: 'Expandir barra lateral',
     shortcuts: 'Accesos',
   },
   live: {

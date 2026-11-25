@@ -17,6 +17,27 @@
   --hairline-strong: #34343a; /* emphasized dividers */
   --hairline-soft: rgba(255, 255, 255, 0.055);
 
+  /* ── Sidebar rail (defaults for mobile Drawer; desktop overrides via [data-stage-surface]) ── */
+  --sidebar-hover: var(--bg-hover);
+  --sidebar-active: var(--bg-active);
+  --sidebar-active-border: transparent;
+  --sidebar-divider: var(--hairline-soft);
+  --sidebar-section-ink: var(--ink-tertiary);
+  --sidebar-icon-ink: var(--ink-secondary);
+  --stage-grain-size: 180px;
+  --sidebar-w: clamp(208px, 18vw, 248px);
+  --sidebar-w-collapsed: 68px;
+  --sidebar-item-h: 38px;
+  --sidebar-sub-item-h: 35px;
+  --sidebar-collapsed-item: 42px;
+  --sidebar-toggle-size: 30px;
+  --sidebar-brand-size: 20px;
+  --sidebar-label-size: 14px;
+  --sidebar-sub-label-size: 13.5px;
+  --sidebar-icon-size: 18px;
+  --sidebar-badge-size: 20px;
+  --sidebar-dot-size: 6px;
+
   /* ── Ink ── */
   --ink-primary: #f2f2f5;
   --ink-secondary: #a0a0a8;
@@ -456,6 +477,8 @@
   --glass-fill: rgba(8, 8, 11, 0.94);
   --glass-line: rgba(255, 255, 255, 0.34);
   --glass-rim: rgba(255, 255, 255, 0.16);
+  --sidebar-active-border: var(--hairline-strong);
+  --sidebar-section-ink: var(--ink-secondary);
 }
 
 :root[data-theme='light'][data-high-contrast='true'] {
@@ -495,7 +518,8 @@
    --stage-veil-floor of white. Even a pitch-black cover composites to ~0.72
    relative luminance, which keeps every ink token above 4.5:1. Saturation in
    the blur is what preserves the record's colour while luminance is pinned. */
-[data-player-stage] {
+[data-player-stage],
+[data-stage-surface] {
   --stage-base: #08080a;
   --stage-backdrop: blur(62px) saturate(1.42) brightness(0.5);
   --stage-backdrop-opacity: 1;
@@ -555,7 +579,8 @@
   --stage-text-halo: 0 2px 18px rgba(0, 0, 0, 0.34);
 }
 
-:root[data-theme='light'] [data-player-stage] {
+:root[data-theme='light'] [data-player-stage],
+:root[data-theme='light'] [data-stage-surface] {
   --stage-base: #f1f1f4;
   --stage-backdrop: blur(64px) saturate(1.85) brightness(1.22);
   --stage-backdrop-opacity: 0.58;
@@ -613,7 +638,8 @@
 
 /* High contrast spends the glass effect on separation: heavier lines, denser
    material, so a control's edge is never carried by the wallpaper alone. */
-[data-high-contrast='true'] [data-player-stage] {
+[data-high-contrast='true'] [data-player-stage],
+[data-high-contrast='true'] [data-stage-surface] {
   --stage-material-quiet: rgba(255, 255, 255, 0.1);
   --stage-material: rgba(255, 255, 255, 0.16);
   --stage-material-hover: rgba(255, 255, 255, 0.24);
@@ -625,7 +651,8 @@
   --stage-sheet: rgba(10, 10, 13, 0.98);
 }
 
-:root[data-theme='light'][data-high-contrast='true'] [data-player-stage] {
+:root[data-theme='light'][data-high-contrast='true'] [data-player-stage],
+:root[data-theme='light'][data-high-contrast='true'] [data-stage-surface] {
   --stage-veil-floor: 0.88;
   --stage-material-quiet: rgba(255, 255, 255, 0.72);
   --stage-material: rgba(255, 255, 255, 0.86);
@@ -639,7 +666,8 @@
 }
 
 /* Extra themes own stage materials as well as the surrounding shell. */
-:root[data-theme='slate'] [data-player-stage] {
+:root[data-theme='slate'] [data-player-stage],
+:root[data-theme='slate'] [data-stage-surface] {
   /* Slate is the foundation, not an opaque coat over the artwork. Keep the
      wallpaper chromatic; bound its brightness so pale covers remain readable. */
   --stage-base: #252d38;
@@ -661,7 +689,8 @@
   --stage-media-veil: linear-gradient(#252d3840, #252d3866);
 }
 
-:root[data-theme='slate'][data-high-contrast='true'] [data-player-stage] {
+:root[data-theme='slate'][data-high-contrast='true'] [data-player-stage],
+:root[data-theme='slate'][data-high-contrast='true'] [data-stage-surface] {
   --stage-material-quiet: rgba(41, 50, 62, 0.65);
   --stage-material: rgba(45, 55, 68, 0.78);
   --stage-material-hover: #3a4757;
@@ -669,7 +698,8 @@
   --stage-panel: rgba(45, 55, 68, 0.85);
 }
 
-:root[data-theme='pure-black'] [data-player-stage] {
+:root[data-theme='pure-black'] [data-player-stage],
+:root[data-theme='pure-black'] [data-stage-surface] {
   --stage-base: #000000;
   --stage-backdrop: none;
   --stage-backdrop-opacity: 0;
@@ -695,7 +725,8 @@
 /* Same contract as slate: the record stays the wallpaper, the room stays the
    colour of the theme. Brightness is bounded so a pale cover cannot wash the
    glass out from underneath the ink. */
-:root[data-theme='forest-green'] [data-player-stage] {
+:root[data-theme='forest-green'] [data-player-stage],
+:root[data-theme='forest-green'] [data-stage-surface] {
   --stage-base: #0b110d;
   /* The veil is greener and lighter than --bg-base on purpose. A near-black
      wash has no chroma to give, so over a saturated cover it only greys the
@@ -718,12 +749,46 @@
   --stage-media-veil: linear-gradient(#12301fb3, #0b110dd9);
 }
 
-:root[data-theme='forest-green'][data-high-contrast='true'] [data-player-stage] {
+:root[data-theme='forest-green'][data-high-contrast='true'] [data-player-stage],
+:root[data-theme='forest-green'][data-high-contrast='true'] [data-stage-surface] {
   --stage-material-quiet: rgba(17, 26, 20, 0.7);
   --stage-material: rgba(23, 36, 27, 0.82);
   --stage-material-hover: #1d2c22;
   --stage-material-active: #243729;
   --stage-panel: rgba(17, 26, 20, 0.88);
+}
+
+/* Desktop stage-backed sidebar maps its interactive surfaces to --stage-* tokens. */
+[data-stage-surface] {
+  --sidebar-hover: var(--stage-row-hover);
+  --sidebar-active: var(--stage-material);
+  --sidebar-active-border: transparent;
+  --sidebar-divider: var(--stage-line-soft);
+  --sidebar-section-ink: var(--ink-tertiary);
+  --sidebar-icon-ink: var(--ink-secondary);
+}
+
+:root[data-theme='light'] [data-stage-surface] {
+  --sidebar-active: var(--stage-material-active);
+  --sidebar-active-border: var(--stage-line-soft);
+  --sidebar-section-ink: var(--ink-secondary);
+}
+
+:root[data-theme='slate'] [data-stage-surface],
+:root[data-theme='forest-green'] [data-stage-surface] {
+  --sidebar-hover: var(--stage-material-hover);
+  --sidebar-active: var(--stage-material-active);
+}
+
+:root[data-theme='pure-black'] [data-stage-surface] {
+  --sidebar-hover: var(--stage-material-hover);
+  --sidebar-active: var(--stage-material-active);
+  --sidebar-active-border: var(--stage-line);
+}
+
+[data-high-contrast='true'] [data-stage-surface] {
+  --sidebar-active-border: var(--stage-line-strong);
+  --sidebar-section-ink: var(--ink-secondary);
 }
 
 :root[data-theme='slate'][data-high-contrast='true'] {
@@ -784,6 +849,18 @@
     --browse-card-min: 160px;
     --browse-card-width: 180px;
     --browse-card-gap: var(--space-xl);
+    --sidebar-item-h: 36px;
+    --sidebar-sub-item-h: 33px;
+    --sidebar-collapsed-item: 40px;
+    --sidebar-toggle-size: 28px;
+    --sidebar-brand-size: 19px;
+    --sidebar-label-size: 13px;
+    --sidebar-sub-label-size: 12.5px;
+    --sidebar-icon-size: 17px;
+  }
+
+  :root[data-sidebar-collapsed] {
+    --sidebar-w: var(--sidebar-w-collapsed);
   }
 
   :root[data-interface-size='normal'] {
@@ -797,6 +874,14 @@
     --segment-h: 38px;
     --cover-sm: 44px;
     --gutter: 26px;
+    --sidebar-item-h: 38px;
+    --sidebar-sub-item-h: 35px;
+    --sidebar-collapsed-item: 42px;
+    --sidebar-toggle-size: 30px;
+    --sidebar-brand-size: 20px;
+    --sidebar-label-size: 14px;
+    --sidebar-sub-label-size: 13.5px;
+    --sidebar-icon-size: 18px;
   }
 
   :root[data-interface-size='large'] {
@@ -812,6 +897,14 @@
     --gutter: 28px;
     --browse-card-min: 184px;
     --browse-card-width: 204px;
+    --sidebar-item-h: 44px;
+    --sidebar-sub-item-h: 40px;
+    --sidebar-collapsed-item: 48px;
+    --sidebar-toggle-size: 34px;
+    --sidebar-brand-size: 22px;
+    --sidebar-label-size: 16px;
+    --sidebar-sub-label-size: 15px;
+    --sidebar-icon-size: 20px;
   }
 }
 
@@ -823,6 +916,26 @@
     --bg-raised: Canvas;
     --bg-elevated: Canvas;
     --bg-inset: Canvas;
+    --stage-base: Canvas;
+    --stage-backdrop-opacity: 0;
+    --stage-wash: none;
+    --stage-wash-auto: none;
+    --stage-wash-auto-wide: none;
+    --stage-panel: transparent;
+    --stage-grain-opacity: 0;
+    --stage-line: CanvasText;
+    --stage-line-soft: CanvasText;
+    --stage-line-strong: CanvasText;
+    --stage-row-hover: Canvas;
+    --stage-material: Highlight;
+    --stage-material-hover: Highlight;
+    --stage-material-active: Highlight;
+    --sidebar-hover: Canvas;
+    --sidebar-active: Highlight;
+    --sidebar-active-border: Highlight;
+    --sidebar-divider: CanvasText;
+    --sidebar-section-ink: CanvasText;
+    --sidebar-icon-ink: CanvasText;
     --bg-hover: Highlight;
     --bg-active: Highlight;
     --ink-primary: CanvasText;

@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, Suspe
 import { Portal } from 'solid-js/web';
 import { nowPlayingOpen, setNowPlayingOpen } from '../stores';
 import { isCurrentTrackPodcast, player } from '../stores/player';
-import { trackCoverUrl } from '../lib/media';
 import { upcomingQueueEntries } from '../lib/playbackQueue';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { isEditableTextControl } from '../lib/shortcuts';
@@ -28,7 +27,7 @@ import { createTouchMoveLease } from '../lib/touchMoveLease';
 import { Control } from '../design/Control';
 import { connectLabel, openConnect } from './DeviceSheet';
 import { OutputDeviceIcon } from './icons';
-import { ArtworkBackdrop } from './ArtworkBackdrop';
+import { StageBackdrop } from './StageBackdrop';
 import { PlayerCompactDock } from './PlayerCompactDock';
 import { PlayerMiniHeader } from './PlayerMiniHeader';
 import { Spinner } from './Spinner';
@@ -80,12 +79,6 @@ const SWIPE_EXCLUDED = 'input, textarea, select, [data-rail], [data-lyrics-scrol
 const DOCK_KEY_STEP = 24;
 type PlayerPanel = NowPlayingMobilePanel | AutoModePanelId;
 
-type BackdropState = {
-  first: string;
-  second: string;
-  active: 'first' | 'second';
-};
-
 /**
  * The player environment shared by Now Playing and Auto Mode. On a phone it is
  * a sheet over the app; on a desktop it is docked as a column beside the app,
@@ -99,21 +92,12 @@ export function PlayerSurface() {
   const podcast = createMemo(isCurrentTrackPodcast);
   const auto = createMemo(() => player().autoMode.active);
   const autoAvailable = createMemo(() => !podcast());
-  const art = createMemo(() => {
-    const track = current();
-    return track ? trackCoverUrl(track, 'thumb') ?? '' : '';
-  });
   const [mobilePanel, setMobilePanel] = createSignal<PlayerPanel>('stage');
   const [compactLyrics, setCompactLyrics] = createSignal(false);
   const [closing, setClosing] = createSignal(false);
   const [surfaceSettled, setSurfaceSettled] = createSignal(untrack(nowPlayingOpen));
   const [surfaceAnimating, setSurfaceAnimating] = createSignal(false);
   const docked = playerDocked;
-  const [backdrops, setBackdrops] = createSignal<BackdropState>({
-    first: art(),
-    second: '',
-    active: 'first',
-  });
   let surfaceEl: HTMLDivElement | undefined;
   let lyricsToggleEl: HTMLButtonElement | undefined;
   let restoreFocus: HTMLElement | null = null;
@@ -139,16 +123,6 @@ export function PlayerSurface() {
       auto() ? { auto: true } : { auto: false, radioMode: Boolean(player().playback.radioMode) },
     ).length,
   );
-
-  createEffect(() => {
-    const next = art();
-    const currentState = backdrops();
-    const visible = currentState.active === 'first' ? currentState.first : currentState.second;
-    if (next === visible) return;
-    setBackdrops((value) => value.active === 'first'
-      ? { ...value, second: next, active: 'second' }
-      : { ...value, first: next, active: 'first' });
-  });
 
   const setPanel = (panel: PlayerPanel) => {
     setCompactLyrics(false);
@@ -609,12 +583,14 @@ export function PlayerSurface() {
             onDblClick={() => setPlayerDockWidth(DOCK_WIDTH.default)}
           />
         </Show>
-        <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
-          src={backdrops().first} active={backdrops().active === 'first'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
-        <ArtworkBackdrop class={styles.backdrop} activeClass={styles.backdropActive}
-          src={backdrops().second} active={backdrops().active === 'second'} visible={pageVisible() && (nowPlayingOpen() || closing())} />
-        <div class={styles.wash} data-player-veil="" aria-hidden="true" />
-        <div class={styles.grain} aria-hidden="true" />
+        <StageBackdrop
+          visible={pageVisible() && (nowPlayingOpen() || closing())}
+          drift={nowPlayingOpen()}
+          hideLayers={!nowPlayingOpen() && !closing()}
+          auto={auto()}
+          autoWide={auto() && !docked()}
+          playerMarks
+        />
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">
           <div class={styles.chromeLeft}>

@@ -176,6 +176,14 @@ export const SubscribeIcon = SaveIcon;
 /* The top bar's own verbs (AppBar.tsx). One drawing each, so "back" on an
  * album is the same chevron as "back" in a settings section. */
 export const MenuIcon = line('M4 6h16M4 12h16M4 18h16');
+export function SidebarToggleIcon(props: GlyphProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M9 4v16" />
+    </Glyph>
+  );
+}
 export const BackIcon = line('m15 18-6-6 6-6');
 export const ChevronDownIcon = line('m6 9 6 6 6-6');
 export const CloseIcon = line('M18 6 6 18M6 6l12 12');
