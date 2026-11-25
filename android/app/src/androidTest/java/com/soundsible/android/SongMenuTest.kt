@@ -82,6 +82,8 @@ class SongMenuTest {
                 waitFor("document.querySelector('[data-testid=android-entity-profile]').innerText.includes('member private song')")
                 web.evaluate(scenario, "document.querySelector('[data-testid=android-entity-profile] button[aria-label=Back]').click()")
                 waitFor("!document.querySelector('[data-testid=android-entity-profile]')&&!!document.querySelector('[data-testid=android-library]')")
+                openMenu(); web.evaluate(scenario, "${menuButton("Go to artist")}.click()")
+                waitFor("document.querySelector('[data-testid=android-entity-profile] h1')?.textContent==='member artist'")
                 web.evaluate(scenario, "document.querySelector('[data-android-discover]').click()")
                 waitFor("!!document.querySelector('[data-testid=android-catalog-search]')&&!document.querySelector('[data-testid=android-entity-profile]')")
 
