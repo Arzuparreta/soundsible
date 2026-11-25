@@ -62,6 +62,7 @@ public class PlaylistManagementTest {
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member playlist').click()");
             waitFor(web,scenario,"Array.from(document.querySelectorAll('[data-row-main]')).filter(b=>b.textContent==='member private song').length===2");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='Managed preview')");
+            web.openCollectionSearch(scenario, "android-library", "Filter this list");
             web.evaluate(scenario,"document.querySelector('[data-testid=android-library] input[type=search]').value='private';document.querySelector('[data-testid=android-library] input[type=search]').dispatchEvent(new Event('input',{bubbles:true}))");
             rowMenu(web,scenario,"member private song",1,"Remove from playlist");awaitIds(connection,origin,"member playlist",afterRemoval);
             waitFor(web,scenario,"Array.from(document.querySelectorAll('[data-row-main]')).filter(b=>b.textContent==='member private song').length===1");

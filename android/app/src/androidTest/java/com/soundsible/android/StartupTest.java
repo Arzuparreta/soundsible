@@ -27,6 +27,23 @@ public class StartupTest {
         return value.get();
     }
 
+    public void openCollectionSearch(ActivityScenario<MainActivity> scenario, String view, String label) throws Exception {
+        String scope = "document.querySelector(" + JSONObject.quote("[data-testid=" + view + "]") + ")";
+        String button = scope + "?.querySelector(" + JSONObject.quote("button[aria-label=\"" + label + "\"]") + ")";
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        while (System.nanoTime() < deadline) {
+            if ("true".equals(evaluate(scenario, "!!" + button))) {
+                assertEquals("false", evaluate(scenario, button + ".getAttribute('aria-expanded')==='true'"));
+                evaluate(scenario, button + ".click()");
+                assertEquals("true", evaluate(scenario, button + ".getAttribute('aria-expanded')==='true' && !!"
+                        + scope + ".querySelector('[data-search-reveal]:not([inert]) input[type=search]')"));
+                return;
+            }
+            Thread.sleep(100);
+        }
+        fail("Collection search command missing in " + view + ": " + label);
+    }
+
     public void awaitReady(ActivityScenario<MainActivity> scenario) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
         while (System.nanoTime() < deadline) {
