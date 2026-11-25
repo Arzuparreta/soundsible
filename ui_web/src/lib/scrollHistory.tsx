@@ -1,14 +1,12 @@
+import { mobileNavGroup, setDetailGroup } from '../components/primaryNavigation';
+import { TAB_RETURN_STATE, rememberTabLocation } from './tabMemory';
 import { createEffect, onCleanup, onMount } from 'solid-js';
 import { useIsRouting, useLocation, type Navigator } from '@solidjs/router';
 
 const HISTORY_STATE_KEY = '__soundsibleScroll';
 
-/** History state on an entry a primary tab restored (`lib/tabNavigation`). Its
- * page comes back where it was scrolled, and it has no parent: the page's back
- * arrow climbs to its tab's root rather than into the tab the listener left. */
-export const TAB_RETURN_STATE = '__soundsibleTabReturn';
-
 interface ScrollEntryState {
+  group?: string;
   id: string;
   parentId?: string;
 }
@@ -55,7 +53,7 @@ function entryFromState(state = stateRecord()): ScrollEntryState | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Partial<ScrollEntryState>;
   return typeof candidate.id === 'string' && candidate.id
-    ? { id: candidate.id, parentId: typeof candidate.parentId === 'string' ? candidate.parentId : undefined }
+    ? { id: candidate.id, group: candidate.group, parentId: typeof candidate.parentId === 'string' ? candidate.parentId : undefined }
     : null;
 }
 
@@ -102,7 +100,7 @@ function tryRestore(): void {
   if (top == null) return;
   registration.element.scrollTop = top;
   positions.set(pending.entryId, registration.element.scrollTop);
-  routePositions.set(pending.route, registration.element.scrollTop);
+  routePositions.set(JSON.stringify([activeEntry.group, pending.route]), registration.element.scrollTop);
 }
 
 function settleRoute(): void {
@@ -136,9 +134,21 @@ function settleRoute(): void {
       entry = { id: nextEntryId(), parentId: activeEntry?.id };
       fresh = activeEntry != null;
     }
-    writeEntry(entry);
   }
 
+  const queryStart = route.indexOf('?');
+  const path = route.slice(1, queryStart < 0 ? undefined : queryStart);
+  const search = queryStart < 0 ? '' : route.slice(queryStart);
+  const detail = /^\/(artist|album)\//.test(path);
+  const group = detail
+    ? entry.group ?? (typeof state.tabGroup === 'string' ? state.tabGroup : activeEntry?.group) ?? '/search'
+    : mobileNavGroup(path, search);
+  if (!stateEntry || entry.group !== group) {
+    entry = { ...entry, group };
+    writeEntry(entry);
+  }
+  setDetailGroup(group);
+  rememberTabLocation(path, search);
   activeEntry = entry;
   activeDepth = depth;
   activeRoute = route;
@@ -147,7 +157,7 @@ function settleRoute(): void {
   if (traversed && saved != null) {
     pendingRestore = { entryId: entry.id, route, top: saved, fresh: false };
   } else if (returned) {
-    const top = routePositions.get(route) ?? 0;
+    const top = routePositions.get(JSON.stringify([group, route])) ?? 0;
     pendingRestore = { entryId: entry.id, route, top, fresh: false };
     positions.set(entry.id, top);
   } else if (fresh) {
@@ -220,7 +230,7 @@ export function registerPrimaryScroll(
     // frame. Its clamped offset belongs to the destination, not the old entry.
     if (!activeEntry || routeKey() !== activeRoute || element !== activeRegistration()?.element) return;
     positions.set(activeEntry.id, element.scrollTop);
-    routePositions.set(activeRoute, element.scrollTop);
+    routePositions.set(JSON.stringify([activeEntry.group, activeRoute]), element.scrollTop);
   };
   const cancelPending = () => {
     if (pendingRestore?.entryId === activeEntry?.id) cancelRestore();

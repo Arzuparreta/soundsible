@@ -1,6 +1,6 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import { createMemo, Index, Show, type JSX } from 'solid-js';
-import { artistDestination, albumDestination, navigateMusic, performerNames, type MusicMetadata } from '../lib/musicNavigation';
+import { artistDestination, albumDestination, navigateMusic, performerNames, type MusicLinkIntent } from '../lib/musicNavigation';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import styles from './MusicLinks.module.css';
 
@@ -21,7 +21,7 @@ export function MusicLink(props: { path: string; class?: string; label?: string;
     onDragStart={(event) => event.stopPropagation()}>{props.children}</a>;
 }
 
-export function ArtistLinks(props: { music: MusicMetadata; class?: string; fallback?: JSX.Element }) {
+export function ArtistLinks(props: { music: MusicLinkIntent; class?: string; fallback?: JSX.Element }) {
   const names = createMemo(
     () => (props.music.linkable !== false ? performerNames(props.music) : []),
     [],
@@ -50,7 +50,7 @@ export function ArtistLinks(props: { music: MusicMetadata; class?: string; fallb
   );
 }
 
-export function AlbumLink(props: { music: MusicMetadata; class?: string; onMenu?: (event?: MenuEvent) => void; children?: JSX.Element }) {
+export function AlbumLink(props: { music: MusicLinkIntent; class?: string; onMenu?: (event?: MenuEvent) => void; children?: JSX.Element }) {
   return <Show when={props.music.linkable !== false && props.music.album?.trim()}
     fallback={<span class={props.class}>{props.children ?? props.music.album}</span>}>
     <MusicLink path={albumDestination(props.music)} class={props.class} onMenu={props.onMenu}>{props.children ?? props.music.album}</MusicLink>

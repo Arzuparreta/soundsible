@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { t } from '../lib/i18n';
 import { DownloadIcon, menuIcons } from './icons';
@@ -101,14 +102,15 @@ export const libraryViews: PrimaryNavItem[] = [
 ];
 export const navigationItems = [...primaryNavigation, ...libraryShortcuts, ...libraryViews];
 export const defaultBottomNavigation = ['/', '/favourites', '/search', '/settings'];
+const [detailGroup, setDetailGroup] = createSignal('/search');
+export { detailGroup, setDetailGroup };
+
 export function mobileNavGroup(path: string, search = ''): string {
   const params = new URLSearchParams(search);
   if (path === '/library' && ['songs', 'albums', 'artists'].includes(params.get('view') ?? '')) return `/library?view=${params.get('view')}`;
   if (['/', '/library'].includes(path) && ['bookmarks', 'albums', 'artists'].includes(params.get('saved') ?? '')) return '/?saved=bookmarks';
   if (path === '/' || path === '/library') return '/';
-  // Artist and album pages are Search's, wherever the link that opened them
-  // was: the listener's own copy is a view of the page, not another page.
-  if (/^\/(album|artist)\//.test(path)) return '/search';
+  if (/^\/(album|artist)\//.test(path)) return detailGroup();
   return navigationItems.find(item => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)))?.href ?? path;
 }
 

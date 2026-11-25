@@ -8,7 +8,7 @@ import { player } from '../stores/player';
 import { savedFromTrack } from '../lib/saved';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
-import { artistDestination, albumDestination, navigateMusic, performerNames, trackMusic, type MusicMetadata } from '../lib/musicNavigation';
+import { artistDestination, albumDestination, navigateMusic, performerNames, trackMusic, type MusicLinkIntent } from '../lib/musicNavigation';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { api } from '../lib/api';
@@ -23,7 +23,7 @@ import { canPlayOnDevice } from '../lib/remotePlayback';
  */
 export interface TrackMenuContext {
   navigate?: (path: string) => void;
-  music?: MusicMetadata;
+  music?: MusicLinkIntent;
   collection?: boolean;
   /** Present when the row lives inside a playlist; enables "remove from playlist". */
   playlistName?: string;
@@ -49,7 +49,7 @@ export interface TrackMenuContext {
  * the record it belongs to. Shared, so a saved row that never resolved to a
  * track offers the same wording and the same icons as the track menu beside it
  * — including the bare "Go to artist" a single performer reads better as. */
-export function musicLinkActions(music: MusicMetadata): MenuAction[] {
+export function musicLinkActions(music: MusicLinkIntent): MenuAction[] {
   if (music.linkable === false) return [];
   const performers = performerNames(music);
   const list: MenuAction[] = performers.map((name) => ({

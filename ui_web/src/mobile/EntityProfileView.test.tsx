@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ComponentProps } from 'solid-js';
+import { createSignal, type ComponentProps } from 'solid-js';
 import type { AlbumProfile, ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { MigrationJob } from '../lib/migrationApi';
 import NativeEntityProfile from './EntityProfile';
@@ -41,7 +41,8 @@ describe('native entity composition', () => {
     mocks.profile = { title: 'Record', artist: 'Artist', cover: '', tracklist: items, deezer_id: '7', in_library: true, resolved: true, cached: false };
   });
   function mount() {
-    return render(() => <NativeEntityProfile subject={{ kind: 'album', name: 'Record', artist: 'Artist', deezerId: '7', view: 'discover' }}
+    const [view, setView] = createSignal<'discover' | 'library'>('discover');
+    return render(() => <NativeEntityProfile view={view()} onViewChange={setView} subject={{ kind: 'album', name: 'Record', artist: 'Artist', deezerId: '7', view: 'discover' }}
       generation={1} disconnected={false} tracks={[track]} catalog={catalog} onBack={vi.fn()} onOpen={vi.fn()} onTrackMenu={vi.fn()}
       onChanged={async () => {}} offlineMenuActions={() => [{ label: 'Keep offline', onSelect: vi.fn() }]} />);
   }

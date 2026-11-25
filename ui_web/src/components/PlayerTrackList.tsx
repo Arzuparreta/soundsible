@@ -1,6 +1,6 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import { ArtistLinks } from './MusicLinks';
-import type { MusicMetadata } from '../lib/musicNavigation';
+import type { MusicLinkIntent } from '../lib/musicNavigation';
 import { playerCompact } from '../lib/playerDock';
 import { MusicListRow } from './MusicListRow';
 import Button from './Button';
@@ -31,7 +31,7 @@ export interface PlayerTrackListEntry {
   id: string;
   title: string;
   artist: string;
-  music?: MusicMetadata;
+  music?: MusicLinkIntent;
   cover?: string;
   position?: string | number;
   current?: boolean;

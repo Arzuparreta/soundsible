@@ -4,7 +4,7 @@ import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
-import { artistPath, resolveViewMode } from '../lib/artistRoute';
+import { artistPath } from '../lib/artistRoute';
 import { trackCount } from '../lib/format';
 import { formatReleaseDate, formatTotalDuration } from '../lib/releaseFormat';
 import { itemArtist } from '../lib/catalogTrack';
@@ -35,6 +35,7 @@ import profileStyles from './EntityProfile.module.css';
 export default function NativeEntityProfile(props: {
   subject: NativeEntitySubject; generation: number; disconnected: boolean; tracks: Track[];
   catalog: ReturnType<typeof createNativeCatalogActions>; isActive?: (track: Track) => boolean;
+  view?: NativeEntitySubject['view']; onViewChange?: (view: NativeEntitySubject['view']) => void;
   onBack: () => void; onOpen: (path: string) => void;
   onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void;
   onTrackMenu: (item: CatalogItem, event?: MenuEvent) => void;
@@ -46,7 +47,7 @@ export default function NativeEntityProfile(props: {
   const artist = () => props.subject.kind === 'artist' ? profile.profile() as ArtistProfile | null : null;
   const album = () => props.subject.kind === 'album' ? profile.profile() as AlbumProfile | null : null;
   const context = () => { const id = props.subject.localId || props.subject.deezerId || profile.profile()?.deezer_id; return id ? { kind: props.subject.kind, id: String(id) } : undefined; };
-  const [override, setOverride] = createSignal<'discover' | 'library' | null>(null);
+  const view = () => props.view ?? props.subject.view;
   const [ids, setIds] = createSignal<string[]>([]), [libraryLoading, setLibraryLoading] = createSignal(false), [libraryError, setLibraryError] = createSignal(false);
   const [libraryRetry, setLibraryRetry] = createSignal(0);
   let disposed = false, epoch = 0;
@@ -64,9 +65,12 @@ export default function NativeEntityProfile(props: {
     onCleanup(() => controller.abort());
   }));
   onCleanup(() => { disposed = true; epoch++; });
-  createEffect(() => { if (!profile.loading() && !libraryLoading()) props.onReady?.(); });
+  createEffect(() => { if (view() === 'library' ? !libraryLoading() : !profile.loading()) props.onReady?.(); });
   const discovered = () => artist()?.top_tracks ?? album()?.tracklist ?? [];
   const owned = createMemo(() => {
+    if (props.subject.localId && props.disconnected) {
+      return props.tracks.filter(track => (props.subject.kind === 'artist' ? track.artist_id : track.album_id) === props.subject.localId);
+    }
     if (props.subject.localId) {
       const tracks = new Map(props.tracks.map(track => [track.id, track]));
       return ids().map(id => tracks.get(id)).filter((track): track is Track => !!track);
@@ -75,9 +79,10 @@ export default function NativeEntityProfile(props: {
     const selected = new Set(discovered().flatMap(item => { const track = props.catalog.trackFor(item); return track && track.source !== 'preview' ? [track.id] : []; }));
     return props.tracks.filter(track => selected.has(track.id) || !!provider && (props.subject.kind === 'artist' ? track.deezer_artist_id === provider : track.deezer_album_id === provider));
   });
-  const view = createMemo(() => resolveViewMode({ urlView: props.subject.view, override: override(), canToggle: owned().length > 0 }));
   const songs = () => view() === 'library' ? owned().map((track): CatalogItem => ({ id: `library:${track.id}`, type: 'library_track', source: 'library', track_id: track.id, title: track.title, artist: track.artist, album: track.album ?? undefined, raw: { ...track } }))
     : props.subject.kind === 'artist' ? discovered().slice(0, 10) : discovered();
+  const loading = () => view() === 'library' ? libraryLoading() : profile.loading();
+  const failed = () => view() === 'library' ? libraryError() : profile.error();
   const bookmark = () => nativeProfileBookmark({ ...props.subject, view: view() }, profile.profile());
   const subject = () => ({ ...props.subject, deezerId: props.subject.deezerId ?? profile.profile()?.deezer_id ?? undefined });
   const collection = createNativeCollection({ subject, generation: () => props.generation, disconnected: () => props.disconnected,
@@ -198,10 +203,10 @@ export default function NativeEntityProfile(props: {
           </IconButton>
         </div>
         <div class={hero.toolbar} data-entity-toolbar>
-          <Show when={owned().length} fallback={<span class={hero.context}>{t('artist.discover')}</span>}>
+          <Show when={owned().length || view() === 'library'} fallback={<span class={hero.context}>{t(props.subject.kind === 'artist' ? 'artist.discover' : 'album.discover')}</span>}>
             <EntityViewSelect label={t('entityView.label')} value={view()}
-              options={[{ value: 'discover', label: t('artist.discover') }, { value: 'library', label: `${t('artist.library')} ${owned().length}` }]}
-              onChange={value => setOverride(value === 'library' ? 'library' : 'discover')} />
+              options={[{ value: 'discover', label: t(props.subject.kind === 'artist' ? 'artist.discover' : 'album.discover') }, { value: 'library', label: `${t('artist.library')} ${owned().length}` }]}
+              onChange={value => props.onViewChange?.(value === 'library' ? 'library' : 'discover')} />
           </Show>
           <div class={hero.primaryActions}>
             <button class={`${hero.play} ${profileStyles.play}`} type="button" aria-label={t('artist.play')}
@@ -222,12 +227,12 @@ export default function NativeEntityProfile(props: {
       </div>
     </header>
     <Show when={collection.error() || bookmarkError()}><p role="alert">{collection.error() || t('savedEntities.failed')} <Show when={collection.error()}><button onClick={() => void collection.retry()}>{t('common.retry')}</button></Show></p></Show>
-    <Show when={profile.error() || libraryError()}><p role="alert">{t('common.loadFailed')} <button onClick={() => { setLibraryRetry(value => value + 1); profile.retry(); }}>{t('common.retry')}</button></p></Show>
+    <Show when={failed()}><p role="alert">{t('common.loadFailed')} <button onClick={() => { if (view() === 'library') setLibraryRetry(value => value + 1); else profile.retry(); }}>{t('common.retry')}</button></p></Show>
     <Show when={profile.profile()?.partial_failures?.length}><p role="status">{t('musicExplorer.partial')}</p></Show>
-    <Show when={profile.loading() || libraryLoading()}><p role="status">{t('common.loading')}</p></Show>
+    <Show when={loading()}><p role="status">{t('common.loading')}</p></Show>
     <Show when={view() === 'discover' && artist()} fallback={<>
       <Show when={songs().length} fallback={
-        <Show when={!profile.loading() && !libraryLoading() && !profile.error() && !libraryError()}><EmptyState>{t('artist.empty')}</EmptyState></Show>
+        <Show when={!loading() && !failed()}><EmptyState>{t('artist.empty')}</EmptyState></Show>
       }>
         <CollectionToolbar contained search={trackSearch} />
         <For each={matches()} fallback={<NoCollectionMatches />}>{(item, index) => songRow(item, () => index() + 1, matches)}</For>

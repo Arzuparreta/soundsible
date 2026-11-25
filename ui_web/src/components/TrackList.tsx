@@ -1,5 +1,5 @@
 import type { MenuEvent } from '../lib/menuEvent';
-import { libraryTrackMusic } from '../lib/musicNavigation';
+import { trackMusic } from '../lib/musicNavigation';
 import { Show, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { isPlayingTrack } from '../stores';
@@ -46,7 +46,7 @@ export default function TrackList(props: {
       track,
       {
         navigate,
-        music: libraryTrackMusic(track),
+        music: trackMusic(track, 'library'),
         onAddToPlaylist: openPlaylistPicker,
         onEditMetadata: openMetadataEditor,
         onPlayOnDevice: openPlayOnDevice,
@@ -88,7 +88,7 @@ export default function TrackList(props: {
                     ? props.onPlay(props.tracks, index())
                     : player().actions.playFrom(props.tracks, index(), { context: props.context })
                 }
-                music={libraryTrackMusic(track())}
+                music={trackMusic(track(), 'library')}
                 onMenu={openMenu}
               />
             )}

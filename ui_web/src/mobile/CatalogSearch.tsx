@@ -33,6 +33,7 @@ import styles from './AndroidStart.module.css';
 /** Account-scoped catalog UI; resolution never imports the web audio runtime. */
 export default function CatalogSearch(props: {
   scrollTarget?: () => HTMLElement | undefined;
+  onDetailClosed?: () => void;
   generation: number; tracks: Track[]; saved: SavedEntry[]; disconnected: boolean; history?: ReturnType<typeof createSearchHistoryStorage>;
   offlineMenuActions?: (tracks: Track[]) => MenuAction[];
   onResolvedMenu?: (track: Track, event?: MenuEvent, actions?: MenuAction[]) => void;
@@ -67,7 +68,7 @@ export default function CatalogSearch(props: {
     const single = (fallback ?? itemArtist(item)).trim();
     return single ? [single] : [];
   };
-  const [entities, setEntities] = createSignal<{ subject: NativeEntitySubject; returnScroll: number }[]>([]);
+  const [entities, setEntities] = createSignal<{ subject: NativeEntitySubject; scope: ReturnType<typeof createSignal<NativeEntitySubject["view"]>>; returnScroll: number }[]>([]);
   const entity = () => entities().at(-1);
   const holdings = createMemo(() => catalogEntityHoldings(props.tracks));
   const entitySaved = (item: CatalogItem) => { const entry = catalogEntityBookmark(item); return !!entry && (props.savedEntities ?? []).some(saved => sameEntity(saved, entry)); };
@@ -127,9 +128,9 @@ export default function CatalogSearch(props: {
     });
   }
   function openEntity(path: string) {
-    const subject = nativeEntitySubject(path); if (!subject || props.disconnected) return;
+    const subject = nativeEntitySubject(path); if (!subject || props.disconnected && subject.view !== 'library') return;
     navigation++; catalog.reset(); restorePosition = 0;
-    setEntities(previous => [...previous, { subject, returnScroll: scrollPosition() }]);
+    setEntities(previous => [...previous, { subject, scope: createSignal(subject.view), returnScroll: scrollPosition() }]);
   }
   let handledRequest = 0;
   createEffect(() => {
@@ -141,7 +142,7 @@ export default function CatalogSearch(props: {
     const previous = entity(); if (!previous) return;
     navigation++; catalog.reset(); restorePosition = previous.returnScroll;
     setEntities(values => values.slice(0, -1));
-    if (!entity()) restoreScroll();
+    if (!entity()) { restoreScroll(); props.onDetailClosed?.(); }
   }
   function backSection() {
     navigation++; catalog.reset(); setExpanded(undefined); restorePosition = sectionPosition; restoreScroll();
@@ -304,7 +305,7 @@ export default function CatalogSearch(props: {
         return <button type="button" class={link.class} aria-label={link.label} {...tap} onContextMenu={event => { event.preventDefault(); entityMenu(item, event); }}>{link.children}</button>; }}
       renderStatus={item => <CatalogCollectionStatusView label={entityStatus(item)} bookmarked={entitySaved(item)} />} renderSong={songRow} /></Show>
     </div>
-    <Show when={entity()?.subject} keyed>{subject => <NativeEntityProfile subject={subject} generation={props.generation} tracks={props.tracks}
+    <Show when={entity()} keyed>{entry => <NativeEntityProfile subject={entry.subject} view={entry.scope[0]()} onViewChange={entry.scope[1]} generation={props.generation} tracks={props.tracks}
       disconnected={props.disconnected} catalog={catalog} isActive={props.isActive} onBack={backEntity} onOpen={openEntity}
       onEntityMenu={props.onEntityMenu} onTrackMenu={menu} onChanged={props.onChanged} savedEntities={props.savedEntities}
       canStartRadio={!!props.onStartRadio} canStartDj={!!props.onStartDj}

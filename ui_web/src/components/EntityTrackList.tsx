@@ -2,7 +2,7 @@ import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '
 import { trackSearchFields } from '../lib/librarySearch';
 import { createEffect, For, on, Show } from 'solid-js';
 import { player } from '../stores/player';
-import { libraryTrackMusic } from '../lib/musicNavigation';
+import { trackMusic } from '../lib/musicNavigation';
 import { trackCoverUrl } from '../lib/media';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import type { Track } from '../types/music';
@@ -27,7 +27,7 @@ export function EntityTrackList(props: { tracks: Track[]; context: PlaybackConte
   createEffect(on(() => props.context.id, () => search.setValue(''), { defer: true }));
   const row = (track: () => Track, index: () => number) => (
     <SongRow
-      track={track()} music={libraryTrackMusic(track())}
+      track={track()} music={trackMusic(track(), 'library')}
       index={position(track())}
       cover={trackCoverUrl(track(), 'thumb')}
       onPlay={() => player().actions.playFrom(tracks(), index(), { context: props.context })}

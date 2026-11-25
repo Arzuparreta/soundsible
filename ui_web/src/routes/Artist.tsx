@@ -20,7 +20,7 @@ import { catalogItemKeys } from '../lib/playbackIdentity';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
 import { isPodcastTrack } from '../lib/track';
-import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
+import { artistKey, artistPath, decodeArtistName, parseViewParams } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumSummary, ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
@@ -35,6 +35,7 @@ import { CatalogResultRow } from '../components/CatalogResultRow';
 import { ArtistDiscoveryView, fansLabel } from '../components/ArtistDiscoveryView';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { EntityTrackList } from '../components/EntityTrackList';
+import { detailGroup } from '../components/primaryNavigation';
 import { tabRoot } from '../lib/tabMemory';
 
 type ViewMode = 'discover' | 'library';
@@ -51,7 +52,7 @@ export default function Artist() {
   const navigate = useNavigate();
   const name = createMemo(() => decodeArtistName(params.name));
   const viewParams = createMemo(() => parseViewParams(searchParams as Record<string, string | undefined>));
-  const [viewOverride, setViewOverride] = createSignal<ViewMode | null>(null);
+
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
 
   let aborter: AbortController | undefined;
@@ -151,20 +152,13 @@ export default function Artist() {
     return currentProfile()?.in_library ?? libraryTrackList().length > 0;
   });
 
-  const showToggle = createMemo(() => inLibrary());
+  const showToggle = createMemo(() => inLibrary() || viewParams().view === 'library');
 
-  // The router reuses this component when only :name changes, so a tab held in
-  // a signal seeded at mount would survive navigation to a different artist —
-  // stranding the user on an empty "My library" tab whose toggle is hidden for
-  // artists they do not own. The URL is the source of truth; a tap overrides it
-  // until the next navigation, and the tab is forced to discover whenever the
-  // toggle is not offered, so the view always has a way out.
   createEffect(
     on(
       () => JSON.stringify([name(), viewParams().deezerId ?? '']),
       () => {
         actionEpoch++;
-        setViewOverride(null);
         radioOwner = 0;
         djOwner = 0;
         setRadioBusy(false);
@@ -173,9 +167,7 @@ export default function Artist() {
       { defer: true },
     ),
   );
-  const view = createMemo<ViewMode>(() =>
-    resolveViewMode({ urlView: viewParams().view, override: viewOverride(), canToggle: showToggle() }),
-  );
+  const view = () => viewParams().view;
 
   /** The catalogue picture, or the artwork of a song the user owns when the
    * catalogue has none or could not be reached. */
@@ -333,12 +325,11 @@ export default function Artist() {
   };
 
   const switchView = (mode: ViewMode) => {
-    setViewOverride(mode);
     setSearchParams({ view: mode }, { replace: true });
   };
 
   // A page with no way back in history sits on the search it belongs to.
-  const back = () => navigateBackOr(navigate, tabRoot('/search') ?? '/search');
+  const back = () => navigateBackOr(navigate, tabRoot(detailGroup()) ?? detailGroup());
   let openCollectionMenu = () => {};
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;
   const radioLabel = () => t(player().autoMode.active ? 'modeChange.startRadio' : 'trackActions.startRadio');
@@ -353,7 +344,7 @@ export default function Artist() {
   return (
     <div class="view">
       <div
-        ref={(element) => registerPrimaryScroll(element, () => !profile.loading)}
+        ref={(element) => registerPrimaryScroll(element, () => view() === 'library' ? !membership.loading : !profile.loading)}
         class={hero.page}
         data-primary-scroll
       >

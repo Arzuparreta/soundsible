@@ -1,6 +1,6 @@
 import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { AlbumLink, ArtistLinks } from './MusicLinks';
-import { playerTrackMusic } from '../lib/musicNavigation';
+import { trackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { isSavedTrack } from '../stores';
 import { advancePlayback, isCurrentTrackPodcast, isPlaybackSilent, player } from '../stores/player';
@@ -179,7 +179,7 @@ export function PlayerStage(props: {
 
   const openStageTrackMenu = (item: Track) => {
     openTrackMenu(item, {
-      music: playerTrackMusic(item),
+      music: trackMusic(item, 'discover'),
       onAddToPlaylist: openPlaylistPicker,
       onEditMetadata: openMetadataEditor,
       onPlayOnDevice: openPlayOnDevice,
@@ -213,7 +213,7 @@ export function PlayerStage(props: {
           },
         ] : []),
         ...buildTrackMenu(current, {
-          music: playerTrackMusic(current),
+          music: trackMusic(current, 'discover'),
           auto: props.mode === 'auto',
           onAddToPlaylist: openPlaylistPicker,
           onEditMetadata: openMetadataEditor,
@@ -277,10 +277,10 @@ export function PlayerStage(props: {
                   <div class={styles.meta}>
                     <h1 class={styles.title} title={current().title}>{current().title}</h1>
                     <p class={styles.byline}>
-                      <ArtistLinks class={styles.artist} music={playerTrackMusic(current())} />
-                      <Show when={playerTrackMusic(current()).linkable !== false && current().album?.trim()}>
+                      <ArtistLinks class={styles.artist} music={trackMusic(current(), 'discover')} />
+                      <Show when={trackMusic(current(), 'discover').linkable !== false && current().album?.trim()}>
                         <span class={styles.bylineSeparator} aria-hidden="true">·</span>
-                        <AlbumLink class={styles.album} music={playerTrackMusic(current())} />
+                        <AlbumLink class={styles.album} music={trackMusic(current(), 'discover')} />
                       </Show>
                     </p>
                   </div>

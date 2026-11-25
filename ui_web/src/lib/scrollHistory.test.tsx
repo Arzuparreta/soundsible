@@ -1,10 +1,10 @@
+import { TAB_RETURN_STATE } from './tabMemory';
 import { createSignal, type JSX } from 'solid-js';
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { HashRouter, Route, useNavigate, type RouteSectionProps } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ScrollHistoryManager,
-  TAB_RETURN_STATE,
   navigateBackOr,
   registerPrimaryScroll,
   resetScrollHistoryForTests,

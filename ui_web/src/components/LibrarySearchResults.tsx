@@ -2,7 +2,7 @@ import type { MenuEvent } from '../lib/menuEvent';
 import SavedEntities from './SavedEntities';
 import { entitiesLoading, savedEntities } from '../lib/savedEntities';
 import { matchesSavedEntity, normalizeLibraryQuery } from '../lib/librarySearch';
-import { libraryTrackMusic } from '../lib/musicNavigation';
+import { trackMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openArtistMenu } from './artistActions';
@@ -105,7 +105,7 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
                 <Show when={result().kind === 'track'}>
                   <SongRow
                     track={track()}
-                    music={libraryTrackMusic(track())}
+                    music={trackMusic(track(), 'library')}
                     // A saved song with no file has no engine-side cover to
                     // ask for; its thumbnail is the only artwork it has.
                     cover={trackCoverUrl(track(), 'thumb')}
