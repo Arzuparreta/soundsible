@@ -4,7 +4,7 @@ import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
-import { artistPath } from '../lib/artistRoute';
+import { artistKey, artistPath } from '../lib/artistRoute';
 import { trackCount } from '../lib/format';
 import { formatReleaseDate, formatTotalDuration } from '../lib/releaseFormat';
 import { itemArtist } from '../lib/catalogTrack';
@@ -74,6 +74,22 @@ export default function NativeEntityProfile(props: {
     if (props.subject.localId) {
       const tracks = new Map(props.tracks.map(track => [track.id, track]));
       return ids().map(id => tracks.get(id)).filter((track): track is Track => !!track);
+    }
+    // Older library links can have only the names from the local track tags.
+    // Resolve those from the snapshot even when the catalog cannot answer.
+    const subject = props.subject;
+    if (subject.view === 'library' && !subject.deezerId) {
+      const name = artistKey(subject.name);
+      const artist = artistKey(subject.artist);
+      if (!name) return [];
+      return props.tracks.filter(track => {
+        if (track.source === 'preview') return false;
+        if (subject.kind === 'album') {
+          return artistKey(track.album) === name
+            && (!artist || [track.artist, track.album_artist].some(credit => artistKey(credit) === artist));
+        }
+        return [track.artist, track.album_artist, ...(track.artists ?? [])].some(credit => artistKey(credit) === name);
+      });
     }
     const provider = props.subject.deezerId ?? profile.profile()?.deezer_id;
     const selected = new Set(discovered().flatMap(item => { const track = props.catalog.trackFor(item); return track && track.source !== 'preview' ? [track.id] : []; }));

@@ -190,6 +190,9 @@ export function ScrollHistoryManager() {
   onMount(() => {
     const onPopState = () => {
       pendingPopId = entryFromState()?.id ?? null;
+      // A tab can restore the same URL under another owner. Traversal between
+      // those entries emits popstate but no hashchange for HashRouter to see.
+      if (routeKey() === activeRoute) scheduleSettle();
     };
     window.addEventListener('popstate', onPopState);
     scheduleSettle();

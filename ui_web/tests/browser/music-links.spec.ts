@@ -34,18 +34,71 @@ test('artist links navigate without playing and preserve browser history', async
   await expect(page.getByRole('link', { name: 'Artista 7', exact: true }).first()).toBeVisible();
 });
 
-test('a library detail survives a visit to Search', async ({ page, isMobile }) => {
+test('a library detail and the previous search restore independently', async ({ page, isMobile }) => {
+  await page.route('**/api/catalog/artist**', route => route.fulfill({ json: {
+    artist: 'Artista 7', resolved: true, in_library: true,
+    top_tracks: [], albums: [{ title: 'Disco del catálogo', deezer_id: '20' }],
+    singles_eps: [], related_artists: [], candidates: [],
+  } }));
+  await page.goto('/player/#/search?q=disco');
+  await expect(page.getByRole('searchbox')).toHaveValue('disco');
+
   await page.goto('/player/#/library?view=songs');
   await activate(page, page.getByRole('link', { name: 'Artista 7', exact: true }).first(), isMobile);
   await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
   const searchTab = page.locator('[data-nav-href="/search"]').filter({ visible: true });
   const libraryTab = page.locator('[data-nav-href="/"]').filter({ visible: true });
-  await expect(searchTab).not.toHaveAttribute('aria-current', 'page');
+  const libraryOwner = isMobile ? libraryTab : page.locator('[data-nav-href="/library?view=songs"]');
+  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+
+  const scope = page.getByRole('combobox', { name: 'Contenido mostrado' });
+  await scope.selectOption('discover');
+  await activate(page, page.getByRole('link', { name: 'Disco del catálogo', exact: true }), isMobile);
+  await expect(page.getByRole('heading', { name: 'Disco del catálogo', exact: true })).toBeVisible();
+  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+
+  await page.goBack();
+  await expect(scope).toHaveValue('discover');
+  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
   await activate(page, searchTab, isMobile);
-  await expect(page).toHaveURL(/#\/search$/);
+  await expect(page).toHaveURL(/#\/search\?q=disco$/);
+  await expect(page.getByRole('searchbox')).toHaveValue('disco');
   await activate(page, libraryTab, isMobile);
-  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
-  await expect(page.getByRole('heading', { name: 'Artista 7', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=discover/);
+  await expect(scope).toHaveValue('discover');
+});
+
+test('history restores the owning tab even when the detail URL is identical', async ({ page, isMobile }) => {
+  const navigation = (href: string) => page.locator(`[data-nav-href="${href}"]`).filter({ visible: true });
+  const library = navigation('/');
+  const search = navigation('/search');
+  const libraryOwner = isMobile ? library : navigation('/library?view=songs');
+  await openMusicPlayer(page);
+  const artistLink = () => page.locator('[data-player-surface-open] [data-now-playing-tile="stage"]')
+    .getByRole('link', { name: 'Artista 7', exact: true });
+  await showPlayerPanel(page, 'stage');
+  await activate(page, artistLink(), isMobile);
+  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+  const artistUrl = page.url();
+
+  await activate(page, search, isMobile);
+  await expect(page).toHaveURL(/#\/search$/);
+  if (isMobile) await page.getByRole('button', { name: /^NORMAL:/ }).click();
+  await showPlayerPanel(page, 'stage');
+  await activate(page, artistLink(), isMobile);
+  await expect(page).toHaveURL(artistUrl);
+  await expect(search).toHaveAttribute('aria-current', 'page');
+
+  await activate(page, library, isMobile);
+  await expect(page).toHaveURL(artistUrl);
+  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+
+  await page.evaluate(() => history.back());
+  await expect(search).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(artistUrl);
+  await page.evaluate(() => history.forward());
+  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(artistUrl);
 });
 
 test('full player artist opens the general page while keeping the current song and queue', async ({ page, isMobile }) => {

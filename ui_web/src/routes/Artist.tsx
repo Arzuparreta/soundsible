@@ -328,7 +328,6 @@ export default function Artist() {
     setSearchParams({ view: mode }, { replace: true });
   };
 
-  // A page with no way back in history sits on the search it belongs to.
   const back = () => navigateBackOr(navigate, tabRoot(detailGroup()) ?? detailGroup());
   let openCollectionMenu = () => {};
   const playable = () => view() === 'library' ? libraryTrackList().length > 0 : topTracks().length > 0;

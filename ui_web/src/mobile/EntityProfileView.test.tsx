@@ -100,6 +100,20 @@ describe('native entity composition', () => {
     expect(screen.queryByRole('heading', { name: 'More by Artist' })).toBeNull();
   });
 
+  it.each(['artist', 'album'] as const)('opens a name-only library %s from local tags without a catalog profile', kind => {
+    mocks.profile = null;
+    const owned: Track = { id: 'local', title: 'Local track', artist: 'Guest', artists: ['Guest', 'Artist'],
+      album: 'Record', album_artist: 'Artist' };
+    const other: Track = { id: 'other', title: 'Another track', artist: 'Someone else', album: 'Record' };
+    const preview: Track = { ...owned, id: 'preview', title: 'Preview', source: 'preview' };
+    render(() => <NativeEntityProfile subject={{ kind, name: kind === 'artist' ? 'Artist' : 'Record', artist: 'Artist', view: 'library' }}
+      generation={1} disconnected tracks={[owned, other, preview]} catalog={catalog} onBack={vi.fn()} onOpen={vi.fn()}
+      onTrackMenu={vi.fn()} onChanged={async () => {}} />);
+    expect(screen.getByRole('button', { name: 'Local track' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Another track' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Preview' })).not.toBeInTheDocument();
+  });
+
   it('shows local album metadata in the hero when offline or Deezer profile is null', () => {
     mocks.profile = null;
     const localTracks: Track[] = [

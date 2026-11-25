@@ -34,12 +34,15 @@ Existing imports from `components/Button`, `components/CoverImage` and
 
 ## Navigation decision (U4)
 
-Keep the canonical entity page under Search, including its library view. Artist
-and album pages let the listener explore one entity through library/discovery
-views; they do not change their navigation owner with their incoming link.
-Browser Back and retained navigation stacks preserve the originating place.
-This keeps the existing deliberate behavior and its browser coverage. No
-unmeasured origin-propagation scheme is introduced as a rendering fix.
+Artist and album details inherit the navigation group of the page that opened
+them. Nested details keep that group. On the web, each history entry records
+the group so Back, Forward, and tab restores can distinguish visits to the
+same URL from different sections. A standalone link defaults to Search.
+
+The URL selects the music shown and played in the detail. A library link
+opens the listener's tracks, with access to the full catalog from the scope
+selector. Changing scope replaces the detail URL and keeps the navigation
+group. Existing entity links continue to resolve.
 
 ## Enforcement
 
