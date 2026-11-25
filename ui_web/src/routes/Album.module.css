@@ -3,7 +3,7 @@
 .contentView {
   min-width: 0;
   overflow: visible;
-  padding: var(--space-md) 0;
+  padding-bottom: var(--space-md);
 }
 
 .trackList {

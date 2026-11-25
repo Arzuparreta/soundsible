@@ -1,0 +1,34 @@
+.toolbar {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  padding: var(--space-sm) var(--gutter);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 86%, transparent), transparent);
+}
+
+.toolbar[data-contained] {
+  padding-inline: 0;
+  background: none;
+}
+
+.field {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.meta {
+  composes: count from '../design/CollectionMetadata.module.css';
+  font-family: var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  margin-inline-start: auto;
+}

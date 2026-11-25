@@ -96,9 +96,3 @@
   line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-
-.count {
-  font-size: var(--text-caption);
-  color: var(--ink-tertiary);
-  font-variant-numeric: tabular-nums;
-}

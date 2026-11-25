@@ -159,11 +159,6 @@
   border-radius: var(--radius-sm);
 }
 
-.desktopSearch {
-  flex: 1;
-  min-width: 0;
-}
-
 @media (min-width: 1024px) {
   /* Desktop already exposes both destinations in the permanent sidebar. */
   .headerAction {

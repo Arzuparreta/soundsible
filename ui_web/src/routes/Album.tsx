@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { EntityHero, EntityMenuCover } from '../components/EntityHero';
 import { CollectionControl } from '../components/CollectionControl';
@@ -433,7 +433,7 @@ function DiscoverView(props: {
   return (
     <div class={styles.contentView}>
       <Show when={props.tracklist.length > 0} fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}>
-        <CollectionSearch search={search} />
+        <CollectionToolbar search={search} />
         <Show when={tracks().length} fallback={<NoCollectionMatches />}>
         <div class={styles.trackList}>
           <For each={tracks()}>

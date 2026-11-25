@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show, onCleanup, createEffect, on } from
 import { createPodcastCountry } from '../lib/podcastCountry';
 import { PodcastCountrySettings } from '../components/PodcastCountrySettings';
 import { SearchField } from '../components/SearchField';
+import { PageToolbar } from '../components/PageToolbar';
 import { searchNativeSettings, type NativeSettingsTab } from './settingsSearch';
 import { UsersPanel } from '../components/UsersPanel';
 import NativeDevices from './Devices';
@@ -54,7 +55,7 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
   onCleanup(country.resetPodcastCountry);
   registerNativeBack(() => { if (query()) { setQuery(''); return true; } if (section() === 'account') return false; setSection('account'); return true; });
   return <section class={styles.library} data-testid="android-settings">
-    <SearchField value={query()} placeholder={t('settings.searchPlaceholder')} onInput={setQuery} />
+    <PageToolbar contained field={<SearchField value={query()} placeholder={t('settings.searchPlaceholder')} onInput={setQuery} />} />
     <Show when={results()}>{found => <section data-settings-results aria-label={t('settings.searchResults')}>
       <Show when={found().length} fallback={<p role="status">{t('settings.searchNoResults', { query: query().trim() })}</p>}>
         <For each={found()}>{result => <button type="button" data-settings-result={result.anchor ?? result.tab} onClick={() => open(result.tab, result.anchor)}>

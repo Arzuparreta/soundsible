@@ -6,6 +6,7 @@ import { trackCount } from '../lib/format';
 import { artistPath } from '../lib/artistRoute';
 import { openArtistMenu } from './artistActions';
 import type { ArtistEntry } from '../lib/libraryView';
+import metadata from '../design/CollectionMetadata.module.css';
 import styles from './ArtistGrid.module.css';
 import { coverGradient } from '../lib/cover';
 import { CoverImage } from './CoverImage';
@@ -22,7 +23,7 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
             >
               <div class={styles.avatar} style={{ position: 'relative', background: coverGradient(a().name) }}><Show when={coverUrl(a().coverId)}>{(src) => <CoverImage src={src()} />}</Show></div>
               <span class={styles.name}>{a().name}</span>
-              <span class={styles.count}>{trackCount(a().count)}</span>
+              <span class={metadata.count}>{trackCount(a().count)}</span>
             </MusicLink>
         )}
     </CollectionGrid>

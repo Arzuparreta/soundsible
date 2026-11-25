@@ -183,6 +183,7 @@ export const en = {
     },
   },
   common: {
+    clearSearch: 'Clear search',
     loadFailed: 'Could not load. Please try again.',
     play: 'Play',
     pause: 'Pause',
@@ -386,7 +387,6 @@ export const en = {
     noCollectionMatches: 'No matches in this list.',
     filterCollection: 'Filter this list',
     filterLoadedEpisodes: 'Search loaded episodes',
-    filterSubscriptions: 'Filter subscriptions',
     filterLive: 'Filter live rooms',
     searchAction: 'Search library',
     title: 'Your library',
@@ -416,7 +416,6 @@ export const en = {
     filterTitle: 'Show only',
     filterDownloaded: 'Downloaded',
     searchLibrary: 'Search songs and artists',
-    clearSearch: 'Clear library search',
     noSearchResults: 'No songs or artists match this search.',
     resultTrack: 'Song',
     resultArtist: 'Artist',
@@ -989,7 +988,6 @@ export const en = {
   },
   searchPanel: {
     noResolve: 'Could not resolve the track',
-    clear: 'Clear search',
   },
   searchResultRow: {
     ariaRadio: 'Radio: more like this',

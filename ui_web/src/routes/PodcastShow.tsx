@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { EntityHero } from '../components/EntityHero';
 import Button from '../components/Button';
 import { mobileListLayout } from '../lib/listLayout';
@@ -329,7 +329,7 @@ export default function PodcastShow() {
           </div>
         </EntityHero>
         <Show when={episodes().length}>
-          <CollectionSearch search={search} placeholder={t('library.filterLoadedEpisodes')} inset />
+          <CollectionToolbar search={search} placeholder={t('library.filterLoadedEpisodes')} />
         </Show>
         </div>
         <Show

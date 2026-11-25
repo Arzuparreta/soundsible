@@ -183,6 +183,7 @@ export const fr: Dict = {
     },
   },
   common: {
+    clearSearch: 'Effacer la recherche',
     loadFailed: 'Impossible de charger. Veuillez réessayer.',
     play: 'Lire',
     pause: 'Pause',
@@ -386,7 +387,6 @@ export const fr: Dict = {
     noCollectionMatches: 'Aucun résultat dans cette liste.',
     filterCollection: 'Filtrer cette liste',
     filterLoadedEpisodes: 'Rechercher parmi les épisodes chargés',
-    filterSubscriptions: 'Filtrer les abonnements',
     filterLive: 'Filtrer les salons en direct',
     searchAction: 'Rechercher dans la bibliothèque',
     title: 'Votre bibliothèque',
@@ -416,7 +416,6 @@ export const fr: Dict = {
     filterTitle: 'Afficher seulement',
     filterDownloaded: 'Téléchargées',
     searchLibrary: 'Rechercher des titres et artistes',
-    clearSearch: 'Effacer la recherche',
     noSearchResults: 'Aucun titre ni artiste ne correspond.',
     resultTrack: 'Titre',
     resultArtist: 'Artiste',
@@ -996,7 +995,6 @@ export const fr: Dict = {
   },
   searchPanel: {
     noResolve: 'Impossible de résoudre le titre',
-    clear: 'Effacer la recherche',
   },
   searchResultRow: {
     ariaRadio: 'Radio : plus comme ça',

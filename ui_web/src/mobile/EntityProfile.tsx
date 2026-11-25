@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
@@ -207,7 +207,7 @@ export default function NativeEntityProfile(props: {
       <Show when={songs().length} fallback={
         <Show when={!profile.loading() && !libraryLoading() && !profile.error() && !libraryError()}><EmptyState>{t('artist.empty')}</EmptyState></Show>
       }>
-        <CollectionSearch search={trackSearch} />
+        <CollectionToolbar contained search={trackSearch} />
         <For each={matches()} fallback={<NoCollectionMatches />}>{(item, index) => songRow(item, () => index() + 1, matches)}</For>
       </Show>
       <Show when={view() === 'discover' && album()?.label}>

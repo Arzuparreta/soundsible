@@ -29,6 +29,8 @@ export interface MediaRowProps {
   index?: string | number;
   /** Functional metadata (e.g. cued), never another independent control. */
   annotation?: string;
+  /** Reserve room for a status that identifies the result, even with a long credit. */
+  keepAnnotationVisible?: boolean;
   active?: boolean;
   busy?: boolean;
   busyLabel?: string;
@@ -111,7 +113,11 @@ export function MediaRow(props: MediaRowProps) {
           <span class={styles.subtitle}>
             <span class={styles.detail} data-row-detail><Show when={props.index != null}><span class={styles.index}>{props.index} · </span></Show>
               <span class={styles.detailText}>{props.subtitleContent ?? props.subtitle}</span></span>
-            <Show when={props.annotation}><span class={styles.annotation}>{props.subtitle ? ' · ' : ''}{props.annotation}</span></Show>
+            <Show when={props.annotation}>
+              <span class={styles.annotation} data-visible-annotation={props.keepAnnotationVisible ? '' : undefined}>
+                {props.subtitle ? ' · ' : ''}{props.annotation}
+              </span>
+            </Show>
           </span>
         </span>
       </div>

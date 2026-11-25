@@ -1,4 +1,3 @@
-import { desktopShell } from '../lib/shellLayout';
 import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { collectionIndex } from '../lib/collectionIdentity';
 import { SkeletonCards } from '../components/Skeleton';
@@ -14,6 +13,7 @@ import { pickPlaylistCoverTrack } from '../lib/playlists';
 import { createPlaylistDialog, openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
 import { attachContextMenu } from '../lib/contextMenu';
 import { t } from '../lib/i18n';
+import metadata from '../design/CollectionMetadata.module.css';
 import styles from './Playlists.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -36,6 +36,7 @@ export default function Playlists() {
 
   const createNew = () => void createPlaylistDialog();
   const [editing, setEditing] = createSignal(false);
+  const showSearch = createMemo(() => !editing() && names().length > 0);
 
   const menu = (e: MouseEvent, name: string) => {
     e.preventDefault();
@@ -47,7 +48,7 @@ export default function Playlists() {
     <div class="view">
       <ViewHeader
         title={t('playlists.title')}
-        desktopField={!editing() && names().length ? <CollectionSearch search={search} toolbar /> : undefined}
+        field={showSearch() ? <CollectionSearch search={search} /> : undefined}
         barActions={[
           { label: t('playlists.new'), icon: () => <PlusIcon />, prominent: true, opensDialog: true, onSelect: createNew },
           ...(names().length > 1 ? [{
@@ -58,9 +59,6 @@ export default function Playlists() {
           }] : []),
         ]}
       />
-      <Show when={!desktopShell() && !editing() && names().length}>
-        <CollectionSearch search={search} inset />
-      </Show>
       <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
         <Show when={!editing()} fallback={
           <MusicReorderList items={names()} label={(name) => name} render={(name) => <span>{name}</span>} onChange={actions.reorderPlaylists} />
@@ -83,7 +81,7 @@ export default function Playlists() {
                     <A href={href} class={styles.card} data-pressable {...tap}>
                       <div class={styles.cover} style={{ position: 'relative', background: NEUTRAL_COVER }}><CoverImage src={cover(name, ids())} /></div>
                       <span class={styles.name}>{name}</span>
-                      <span class={styles.count}>{trackCount(ids().length)}</span>
+                      <span class={metadata.count}>{trackCount(ids().length)}</span>
                     </A>
                     <button
                       class={styles.cardMenu}

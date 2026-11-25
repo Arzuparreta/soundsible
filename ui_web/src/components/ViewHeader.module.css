@@ -1,28 +1,7 @@
-.header {
-  flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm) var(--space-md);
-  padding: var(--space-sm) var(--gutter);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 86%, transparent), transparent);
-}
-
-.heading {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: var(--space-md);
-  row-gap: var(--space-2xs);
-  min-width: 0;
-}
-
-.heading[data-toolbar-field] {
-  flex-basis: 16rem;
-  flex-wrap: nowrap;
-}
+/* Compact panels have an inline heading and their own inset. */
+.header { display: flex; align-items: center; flex-shrink: 0; }
+.heading { display: flex; min-width: 0; }
+.actions { display: flex; align-items: center; margin-inline-start: auto; }
 
 .title {
   min-width: 0;
@@ -45,22 +24,13 @@
   white-space: nowrap;
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
-  flex: none;
-  margin-inline-start: auto;
-}
-
-.header[data-compact] { container-type: inline-size; padding: 4px 0 12px; background: none; gap: 8px; flex-wrap: wrap; }
-.header[data-compact] .heading { flex: 1; gap: 4px; align-items: flex-start; flex-direction: column; }
-.header[data-compact] .title { font-size: var(--text-title); }
-.header[data-compact] .actions { flex-wrap: wrap; gap: 4px; }
-.header[data-compact] button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 8px; border: 0; color: var(--ink-secondary); background: none; font: inherit; font-size: var(--text-caption); cursor: pointer; }
-.header[data-compact] button:disabled { opacity: .4; }
-.header[data-compact] button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
+.header { container-type: inline-size; padding: 4px 0 12px; background: none; gap: 8px; flex-wrap: wrap; }
+.header .heading { flex: 1; gap: 4px; align-items: flex-start; flex-direction: column; }
+.header .title { font-size: var(--text-title); }
+.header .actions { flex-wrap: wrap; gap: 4px; }
+.header button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 8px; border: 0; color: var(--ink-secondary); background: none; font: inherit; font-size: var(--text-caption); cursor: pointer; }
+.header button:disabled { opacity: .4; }
+.header button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
 /* A worded command's glyph gives way before the title does. Icon-only buttons
  * keep theirs; only the ones marked as carrying a label drop it. */
-@container (max-width: 360px) { .header[data-compact] [data-glyph-label] svg { display: none; } }
+@container (max-width: 360px) { .header [data-glyph-label] svg { display: none; } }

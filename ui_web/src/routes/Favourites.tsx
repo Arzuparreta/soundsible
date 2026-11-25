@@ -1,6 +1,6 @@
 import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
-import { createMemo, Show } from 'solid-js';
+import { createMemo } from 'solid-js';
 import { A } from '@solidjs/router';
 import { favouriteRows, state } from '../stores';
 import { player } from '../stores/player';
@@ -33,6 +33,7 @@ const context = () => favouritesContext(t('favourites.title'));
  */
 export default function Favourites() {
   const rows = createMemo(() => favouriteRows().filter((row) => !isPodcastTrack(row.track)));
+  const hasTracks = createMemo(() => rows().length > 0);
   const search = createCollectionSearch();
   const visibleRows = search.filter(rows, row => trackSearchFields(row.track));
   const visibleTracks = createMemo(() => visibleRows().map(row => row.track));
@@ -68,17 +69,15 @@ export default function Favourites() {
   };
 
   return (
-    <div class="view">
+    <div class={`view ${styles.page}`}>
       <ViewHeader
         title={t('favourites.title')}
-        meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
+        field={hasTracks() ? <CollectionSearch search={search} /> : undefined}
+        meta={hasTracks() ? trackCount(rows().length) : undefined}
         actions={player().autoMode.active ? (
           <CollectionActions title={t('favourites.title')} tracks={favTracks()} />
         ) : undefined}
       />
-      <Show when={rows().length}>
-        <CollectionSearch search={search} inset />
-      </Show>
       <TrackList
         tracks={visibleTracks()}
         context={context()}

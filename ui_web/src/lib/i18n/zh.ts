@@ -183,6 +183,7 @@ export const zh: Dict = {
     },
   },
   common: {
+    clearSearch: '清除搜索',
     loadFailed: '加载失败，请重试。',
     play: '播放',
     pause: '暂停',
@@ -386,7 +387,6 @@ export const zh: Dict = {
     noCollectionMatches: '此列表中没有匹配项。',
     filterCollection: '筛选此列表',
     filterLoadedEpisodes: '搜索已加载的单集',
-    filterSubscriptions: '筛选订阅',
     filterLive: '筛选直播间',
     searchAction: '搜索音乐库',
     title: '你的资料库',
@@ -416,7 +416,6 @@ export const zh: Dict = {
     filterTitle: '仅显示',
     filterDownloaded: '已下载',
     searchLibrary: '搜索歌曲和艺人',
-    clearSearch: '清除资料库搜索',
     noSearchResults: '没有匹配的歌曲或艺人。',
     resultTrack: '歌曲',
     resultArtist: '艺人',
@@ -982,7 +981,6 @@ export const zh: Dict = {
   },
   searchPanel: {
     noResolve: '无法解析曲目',
-    clear: '清除搜索',
   },
   searchResultRow: {
     ariaRadio: '电台：更多类似',

@@ -650,7 +650,7 @@ describe('Search route', () => {
     expect(await screen.findByText('Initial Pick')).toBeInTheDocument();
 
     const refreshBtn = screen.getByRole('button', { name: 'Refresh' });
-    expect(refreshBtn.parentElement).toContainElement(screen.getByRole('searchbox'));
+    expect(refreshBtn.closest('[data-page-toolbar]')).toContainElement(screen.getByRole('searchbox'));
     expect(within(screen.getByTestId('search-discovery')).queryByRole('button', { name: 'Refresh' })).toBeNull();
 
     fireEvent.click(refreshBtn);

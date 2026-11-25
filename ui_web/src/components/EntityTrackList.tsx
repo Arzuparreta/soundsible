@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from './CollectionSearch';
+import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from './CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { createEffect, For, on, Show } from 'solid-js';
 import { player } from '../stores/player';
@@ -34,7 +34,7 @@ export function EntityTrackList(props: { tracks: Track[]; context: PlaybackConte
     />
   );
   return <>
-    <CollectionSearch search={search} />
+    <CollectionToolbar search={search} />
     <Show when={tracks().length} fallback={<NoCollectionMatches />}>
       <Show when={tracks().length > WHOLE_LIST_ROWS} fallback={<For each={tracks()}>{(track, index) => row(() => track, index)}</For>}>
         <CollectionRows items={tracks()}>{row}</CollectionRows>

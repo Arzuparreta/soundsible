@@ -50,7 +50,7 @@ import type {
   AlbumProfile,
   LyricsResponse,
 } from '../types/music';
-import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '../types/podcast';
+import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadQueueItem } from '../types/download';
 import type { PlaybackSessionSnapshot } from './playbackSession';
 import type { MigrationJob } from './migrationApi';
@@ -153,29 +153,6 @@ function normalizeResult(r: RawResult): SearchResult {
     recommendation_source: r.recommendation_source,
     reason: r.reason,
     reason_code: r.reason_code,
-  };
-}
-
-interface RawPodcastRow {
-  title?: string;
-  author?: string;
-  feed_url?: string;
-  feedUrl?: string;
-  rss_url?: string;
-  image_url?: string;
-  artworkUrl600?: string;
-  itunes_collection_id?: string;
-  collectionId?: number | string;
-}
-
-function normalizePodcastRow(r: RawPodcastRow): PodcastSearchResult {
-  return {
-    title: r.title ?? '',
-    author: r.author,
-    feed_url: r.feed_url ?? r.feedUrl ?? r.rss_url ?? '',
-    image_url: r.image_url ?? r.artworkUrl600,
-    itunes_collection_id:
-      r.itunes_collection_id ?? (r.collectionId != null ? String(r.collectionId) : undefined),
   };
 }
 
@@ -1166,13 +1143,6 @@ export const api = {
       `/api/podcasts/episodes-by-url?rss_url=${encodeURIComponent(rssUrl)}${after ? `&after=${after}` : ''}`,
       { timeoutMs: 20000 },
     ),
-  searchPodcasts: async (q: string, signal?: AbortSignal): Promise<PodcastSearchResult[]> => {
-    const data = await request<{ results?: RawPodcastRow[] }>(
-      `/api/discovery/podcasts/search?q=${encodeURIComponent(q)}&limit=20`,
-      { signal, timeoutMs: 20000 },
-    );
-    return (data.results ?? []).map(normalizePodcastRow).filter((r) => r.feed_url);
-  },
   subscribePodcast: (body: {
     rss_url: string;
     title?: string;

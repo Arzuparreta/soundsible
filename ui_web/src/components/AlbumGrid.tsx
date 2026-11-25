@@ -6,6 +6,7 @@ import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
 import { openAlbumMenu } from './albumActions';
 import type { CatalogAlbum } from '../types/music';
+import metadata from '../design/CollectionMetadata.module.css';
 import styles from './AlbumGrid.module.css';
 import { coverGradient } from '../lib/cover';
 import { CoverImage } from './CoverImage';
@@ -40,7 +41,7 @@ export default function AlbumGrid(props: { albums: CatalogAlbum[] }) {
                 <span class={styles.title}>{album().title}</span>
               </div>
               <ArtistLinks class={styles.artist} music={albumMusic(album())} />
-              <span class={styles.count}>{trackCount(album().track_count)}</span>
+              <span class={metadata.count}>{trackCount(album().track_count)}</span>
             </div>
           );
         }}

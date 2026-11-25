@@ -22,6 +22,7 @@ import { coverUrl } from '../lib/media';
 import { IconButton } from '../design/Control';
 import { RefreshIcon } from '../components/icons';
 import { SearchField } from '../components/SearchField';
+import { PageToolbar } from '../components/PageToolbar';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { EmptyState } from '../components/EmptyState';
 import type { MenuAction } from '../components/ActionMenu';
@@ -264,9 +265,8 @@ export default function CatalogSearch(props: {
   const cold = () => isColdDiscoveryFeed(feed.feed(), visibleSections(), visibleTrackShelves());
   return <section class={styles.library} data-testid="android-catalog-search">
     <div style={{ display: entity() ? 'none' : undefined }}>
-    <div class={styles.searchTools}>
-      <SearchField value={query()} placeholder={t('search.placeholder')} onInput={setQuery} />
-      <Show when={!query().trim() && !expanded() && !props.disconnected && discoveryHasVisible(visibleSections(), visibleTrackShelves())}>
+    <PageToolbar contained field={<SearchField value={query()} placeholder={t('search.placeholder')} onInput={setQuery} />}
+      actions={!query().trim() && !expanded() && !props.disconnected && discoveryHasVisible(visibleSections(), visibleTrackShelves()) ? (
         <IconButton
           class={styles.refreshBtn}
           label={t('searchHome.refresh')}
@@ -276,8 +276,7 @@ export default function CatalogSearch(props: {
         >
           <RefreshIcon class={feed.refreshing() ? styles.spinning : undefined} />
         </IconButton>
-      </Show>
-    </div>
+      ) : undefined} />
     <Show when={!query().trim() && props.history?.load('music').length}>
       <section aria-label={t('search.recentsSection')}>
         <h2>{t('search.recentsSection')}</h2>

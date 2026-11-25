@@ -25,14 +25,10 @@
 .page[data-layout='split'] .rail {
   border-right: 1px solid var(--hairline);
   background: var(--bg-inset);
+  --gutter: var(--space-lg);
 }
 
-/* Grid, not a flex column: in a scrollable flex column every child is
-   shrinkable, so once the list is taller than the rail the search field and the
-   rows get squeezed instead of scrolling. `align-content: start` keeps each row
-   at its own height and lets the overflow do its job.
-
-   `--cat-inset` is the rows' own padding. Each list reaches into the gutter by
+/* `--cat-inset` is the rows' own padding. Each list reaches into the gutter by
    that much, so the titles line up with the search field and the labels. */
 .railScroll {
   --cat-inset: var(--space-md);
@@ -51,7 +47,7 @@
 .page[data-layout='split'] .railScroll {
   --cat-inset: var(--space-sm);
   gap: var(--space-lg);
-  padding: var(--space-sm) var(--space-lg) var(--space-xl);
+  padding-bottom: var(--space-xl);
 }
 
 .group {

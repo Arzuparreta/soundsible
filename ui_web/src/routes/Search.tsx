@@ -1,6 +1,4 @@
-import { PageCommands } from '../components/PageCommands';
 import type { AppBarAction } from '../lib/appBar';
-import { desktopShell } from '../lib/shellLayout';
 import { syncSavedEntities } from '../lib/savedEntities';
 import { CatalogCollectionStatus } from '../components/CatalogCollectionStatus';
 import { openCatalogEntityMenu } from '../components/savedEntityActions';
@@ -747,12 +745,6 @@ export default function Search() {
 
   return (
     <div class="view">
-      <ViewHeader
-        title={tr('nav.search')}
-        onTitleTap={() => reselectPrimaryTab('/search')}
-        rendersOwnCommands
-        barActions={refreshCommands()}
-      />
       {/* Suggestions and recent searches live as long as focus stays anywhere
           in this box, so Tab can reach them from the field. */}
       <div
@@ -769,24 +761,27 @@ export default function Search() {
           searchInput?.focus();
         }}
       >
-        <div class={styles.bar}>
-          <SearchField
-            placeholder={tr('search.placeholder')}
-            clearLabel={tr('searchPanel.clear')}
-            value={q()}
-            global
-            inputRef={(element) => {
-              searchInput = element;
-            }}
-            onInput={onInput}
-            onFocus={() => { setSearchFocused(true); setShowSuggest(domain() === 'youtube'); }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commit(e.currentTarget.value);
-              if (e.key === 'Escape') { setShowSuggest(false); setSearchFocused(false); }
-            }}
-          />
-          <Show when={desktopShell()}><PageCommands desktop actions={refreshCommands()} /></Show>
-        </div>
+        <ViewHeader
+          title={tr('nav.search')}
+          onTitleTap={() => reselectPrimaryTab('/search')}
+          barActions={refreshCommands()}
+          field={
+            <SearchField
+              placeholder={tr('search.placeholder')}
+              value={q()}
+              global
+              inputRef={(element) => {
+                searchInput = element;
+              }}
+              onInput={onInput}
+              onFocus={() => { setSearchFocused(true); setShowSuggest(domain() === 'youtube'); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commit(e.currentTarget.value);
+                if (e.key === 'Escape') { setShowSuggest(false); setSearchFocused(false); }
+              }}
+            />
+          }
+        />
         <Show when={searchHistoryEnabled() && searchFocused() && !q().trim() && recents().length > 0}>
           <div class={styles.suggest} role="group" aria-labelledby="search-recents-heading">
             <h2 class={styles.recentHeading} id="search-recents-heading">{tr('search.recentsSection')}</h2>

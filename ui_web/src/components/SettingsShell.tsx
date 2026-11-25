@@ -335,8 +335,7 @@ export default function SettingsShell(props: SettingsShellProps) {
     <div class={`view ${styles.page}`} data-settings-page data-layout={desktopShell() ? 'split' : 'stack'}>
       <Show when={desktopShell() || !current()}>
         <div class={styles.rail}>
-          <ViewHeader title={t('settings.title')} />
-          <ScrollArea primary={!desktopShell()} class={styles.railScroll}>
+          <ViewHeader title={t('settings.title')} field={
             <SearchField
               value={props.query}
               placeholder={t('settings.searchPlaceholder')}
@@ -344,7 +343,8 @@ export default function SettingsShell(props: SettingsShellProps) {
               onInput={props.onQueryChange}
               onKeyDown={onFieldKey}
             />
-
+          } />
+          <ScrollArea primary={!desktopShell()} class={styles.railScroll}>
             <Show
               when={matches()}
               fallback={

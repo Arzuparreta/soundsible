@@ -1,11 +1,13 @@
 import type { MenuEvent } from '../lib/menuEvent';
-import { createEffect, createSignal, For, on, onCleanup, Show } from 'solid-js';
+import { createEffect, createSignal, For, on, onCleanup, Show, type JSX } from 'solid-js';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
 import { SearchField } from '../components/SearchField';
+import { PageToolbar } from '../components/PageToolbar';
+import Button from '../components/Button';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { EmptyState } from '../components/EmptyState';
-import type { PodcastSearchResult, PodcastShowInfo } from '../types/podcast';
+import type { PodcastSearchResult, PodcastShowInfo, PodcastSubscription } from '../types/podcast';
 import { podcastRecommendations, type RawPodcastRow } from '../lib/podcastRecommendations';
 import { openContextMenu } from '../lib/contextMenu';
 import { toast } from '../lib/toast';
@@ -15,11 +17,11 @@ import { PodcastCountryPicker } from '../components/PodcastCountryPicker';
 import PodcastCharts from './PodcastCharts';
 import type { PodcastEpisode, PopularPodcastEpisode } from '../types/podcast';
 import { ROW_ARTWORK, podcastArtwork } from '../lib/podcastArtwork';
-
-const showInfo = (row: PodcastSearchResult): PodcastShowInfo => ({ title: row.title, author: row.author, rss_url: row.feed_url, image_url: row.image_url, itunes_collection_id: row.itunes_collection_id });
+import { createPodcastSearch, podcastShowInfo } from '../lib/podcastSearch';
 
 export default function PodcastDirectory(props: { generation: number; disconnected?: boolean; activeId?: string; onOpen(show: PodcastShowInfo): void;
-  subscribed?: (feed: string) => boolean; onSubscribe?: (show: PodcastShowInfo) => Promise<void>;
+  subscriptions?: PodcastSubscription[]; children?: JSX.Element;
+  onSubscribe?: (show: PodcastShowInfo) => Promise<void>;
   onPlay?: (episode: PodcastEpisode, row: PopularPodcastEpisode) => Promise<void> }) {
   const country = createPodcastCountry(() => String(props.generation));
   const [countryError, setCountryError] = createSignal(false), [countryRetry, setCountryRetry] = createSignal(0);
@@ -40,49 +42,46 @@ export default function PodcastDirectory(props: { generation: number; disconnect
       .then(result => { if (generation === props.generation && !controller.signal.aborted) setTop(podcastRecommendations(result.items)); }).catch(() => {});
     onCleanup(() => controller.abort());
   }));
-  const recommended = () => top().filter(row => !props.subscribed?.(row.feed_url));
+  const subscribed = (feed: string) => props.subscriptions?.some(row => row.rss_url === feed);
+  const recommended = () => top().filter(row => !subscribed(row.feed_url));
   function topMenu(row: PodcastSearchResult, event?: MenuEvent) {
     const generation = props.generation;
     const current = () => generation === props.generation && !props.disconnected;
     openContextMenu({ title: row.title, subtitle: row.author, actions: [
-      ...(props.onSubscribe ? [{ label: t('podcasts.subscribe'), disabled: !current() || !!subscribing() || !!props.subscribed?.(row.feed_url), onSelect: () => {
+      ...(props.onSubscribe ? [{ label: t('podcasts.subscribe'), disabled: !current() || !!subscribing() || !!subscribed(row.feed_url), onSelect: () => {
         if (!current() || subscribing()) return;
         setSubscribing(row.feed_url);
-        void props.onSubscribe!(showInfo(row)).catch(() => { if (current()) toast.error(t('podcasts.subscribeFailed')); }).finally(() => setSubscribing(null));
+        void props.onSubscribe!(podcastShowInfo(row)).catch(() => { if (current()) toast.error(t('podcasts.subscribeFailed')); }).finally(() => setSubscribing(null));
       } }] : []),
       ...nativeFeedbackActions(podcastFeedback(row), current),
     ] }, event);
   }
   const [query, setQuery] = createSignal('');
-  const [rows, setRows] = createSignal<PodcastSearchResult[]>([]);
-  const [busy, setBusy] = createSignal(false);
-  const [error, setError] = createSignal(false);
-  const [retry, setRetry] = createSignal(0);
-  let epoch = 0;
-  createEffect(on(() => [query().trim(), props.generation, props.disconnected, retry(), country.podcastCountry()] as const, ([term, generation, disconnected, , selectedCountry]) => {
-    const job = ++epoch; const controller = new AbortController();
-    setRows([]); setError(false); setBusy(Boolean(term && !disconnected));
-    const timer = term && !disconnected ? setTimeout(() => {
-      void request<{ results?: PodcastSearchResult[] }>(`/api/discovery/podcasts/search?q=${encodeURIComponent(term.slice(0, 500))}&limit=25${selectedCountry ? `&country=${selectedCountry}` : ''}`, { signal: controller.signal, timeoutMs: 20000 }).then(result => {
-        if (job !== epoch || generation !== props.generation || controller.signal.aborted) return;
-        setRows((result.results ?? []).filter(row => row.feed_url));
-      }).catch(() => { if (job === epoch && !controller.signal.aborted) setError(true); })
-        .finally(() => { if (job === epoch) setBusy(false); });
-    }, 300) : undefined;
-    onCleanup(() => { clearTimeout(timer); controller.abort(); });
-  }));
-  onCleanup(() => { epoch++; });
+  const search = createPodcastSearch({
+    query, subscriptions: () => props.subscriptions ?? [], country: country.podcastCountry,
+    account: () => props.generation, disconnected: () => props.disconnected,
+  });
   return <section data-testid="android-podcast-directory">
-    <header style={{ display: 'flex', 'align-items': 'center', 'justify-content': 'space-between' }}><h2>{t('nav.podcasts')}</h2><PodcastCountryPicker state={country} disabled={props.disconnected} /></header>
+    <h2>{t('nav.podcasts')}</h2>
+    <PageToolbar contained field={<SearchField value={query()} placeholder={t('podcasts.searchPlaceholder')} onInput={setQuery} />}
+      actions={<PodcastCountryPicker state={country} disabled={props.disconnected} />} />
     <Show when={countryError()}><p role="alert">{t('common.loadFailed')} <button disabled={props.disconnected} onClick={() => setCountryRetry(n => n + 1)}>{t('common.retry')}</button></p></Show>
-    <SearchField value={query()} placeholder={t('podcasts.searchPlaceholder')} onInput={setQuery} />
-    <PodcastCharts country={country} generation={props.generation} activeId={props.activeId} disconnected={props.disconnected} hidden={!!query().trim()} onOpen={row => props.onOpen(showInfo(row))} onPlay={(episode, row) => props.onPlay?.(episode, row) ?? Promise.reject(new Error('Playback unavailable'))} />
-    <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
-    <Show when={error()}><p role="alert">{t('common.loadFailed')}</p><button disabled={busy() || props.disconnected} onClick={() => setRetry(value => value + 1)}>{t('common.retry')}</button></Show>
-    <Show when={query().trim() && !busy() && !error()}><For each={rows()} fallback={<EmptyState>{t('podcasts.noResults')}</EmptyState>}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.feed_url} disabled={props.disconnected} onActivate={() => props.onOpen(showInfo(row))} />}</For></Show>
-    <Show when={!query().trim() && recommended().length}><section data-podcast-top aria-label={t('podcasts.top')}><h2>{t('podcasts.top')}</h2>
+    <Show when={!search.active()}>{props.children}</Show>
+    <PodcastCharts country={country} generation={props.generation} activeId={props.activeId} disconnected={props.disconnected} hidden={search.active()} onOpen={row => props.onOpen(podcastShowInfo(row))} onPlay={(episode, row) => props.onPlay?.(episode, row) ?? Promise.reject(new Error('Playback unavailable'))} />
+    <Show when={search.pending()}><p role="status">{t('common.loading')}</p></Show>
+    <Show when={search.error()}>
+      <EmptyState compact tone="danger">{t('search.catalogErrorHint')} <Button variant="secondary" onClick={search.retry}>{t('common.retry')}</Button></EmptyState>
+    </Show>
+    <Show when={search.active() && !search.pending() && !search.error() && !search.results().length && !props.disconnected}>
+      <EmptyState>{t('podcasts.noResults')}</EmptyState>
+    </Show>
+    <For each={search.results()}>{({ show, subscription }) => <MusicListRowView
+      title={show.title} subtitle={show.author} seed={show.feed_url} cover={podcastArtwork(show.image_url, ROW_ARTWORK)}
+      annotation={subscription ? t('podcasts.subscribed') : undefined} keepAnnotationVisible disabled={props.disconnected}
+      onActivate={() => props.onOpen(subscription ?? podcastShowInfo(show))} />}</For>
+    <Show when={!search.active() && recommended().length}><section data-podcast-top aria-label={t('podcasts.top')}><h2>{t('podcasts.top')}</h2>
       <For each={recommended()}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.feed_url} cover={podcastArtwork(row.image_url, ROW_ARTWORK)} disabled={props.disconnected}
-        busy={subscribing() === row.feed_url} onActivate={() => props.onOpen(showInfo(row))} onMenu={event => topMenu(row, event)} />}</For>
+        busy={subscribing() === row.feed_url} onActivate={() => props.onOpen(podcastShowInfo(row))} onMenu={event => topMenu(row, event)} />}</For>
     </section></Show>
   </section>;
 }

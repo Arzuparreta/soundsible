@@ -62,7 +62,7 @@ export function SearchField(props: SearchFieldProps) {
         <button
           class={styles.clear}
           type="button"
-          aria-label={props.clearLabel ?? t('library.clearSearch')}
+          aria-label={props.clearLabel ?? t('common.clearSearch')}
           onClick={() => { props.onInput(''); input?.focus(); }}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
