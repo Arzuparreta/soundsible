@@ -1,6 +1,5 @@
 import { createMemo, Show, type JSX } from 'solid-js';
 import { PageCommands } from './PageCommands';
-import { SearchField } from './SearchField';
 import type { SearchRevealState } from './SearchReveal';
 import { PageToolbar } from './PageToolbar';
 import { useAppBar, type AppBarAction } from '../lib/appBar';
@@ -40,7 +39,7 @@ export function ViewHeader(props: {
   const showDesktop = () => props.compact || desktopShell();
   const field = createMemo(() => {
     const search = props.search;
-    return showDesktop() && search ? <SearchField {...search.field()} inputRef={search.attachInput} /> : props.field;
+    return showDesktop() && search ? search.desktopField() : props.field;
   });
   const meta = () => showDesktop() || field() ? props.meta : undefined;
   const desktopActions = createMemo(() => showDesktop() ? props.actions : undefined);

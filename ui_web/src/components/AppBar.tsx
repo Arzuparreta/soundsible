@@ -7,7 +7,6 @@ import { desktopShell } from '../lib/shellLayout';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { BackIcon } from './icons';
 import { NavigationMenuButton } from './NavigationMenu';
-import { SearchReveal } from './SearchReveal';
 import { PageCommands } from './PageCommands';
 import styles from './AppBar.module.css';
 
@@ -142,9 +141,10 @@ export function AppBar() {
           <PageCommands actions={commands()} />
         </div>
       </header>
-      <Show when={search()} keyed>{search => <SearchReveal search={search}
-        scope={field => field.parentElement?.querySelector<HTMLElement>('[data-app-outlet]')}
-        scroller={pageScroller} />}</Show>
+      <Show when={search()} keyed>{search => search.mobileField({
+        scope: field => field.parentElement?.querySelector<HTMLElement>('[data-app-outlet]'),
+        scroller: pageScroller,
+      })}</Show>
     </Show>
   );
 }

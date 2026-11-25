@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show, onMount } from 'solid-js';
+import { createMemo, For, Show, onMount } from 'solid-js';
 import { entitiesError, entitiesLoading, savedEntities, syncSavedEntities, type SavedEntity } from '../lib/savedEntities';
 import { t } from '../lib/i18n';
 import { MusicLink } from './MusicLinks';
@@ -10,23 +10,11 @@ import { MoreIcon, PinIcon } from './icons';
 import Button from './Button';
 import styles from './SavedEntities.module.css';
 
-// Only searched bookmark views need the matcher on the Library landing route.
-const loadMatcher = () => import('../lib/librarySearch');
-
 /** Pinned artist and album bookmarks, displayed inside the Library root's ordinary page scroller. */
-export default function SavedEntities(props: { kind?: SavedEntity['kind']; expanded?: boolean; query?: string; match?: (entry: SavedEntity) => boolean }) {
+export default function SavedEntities(props: { kind?: SavedEntity['kind']; expanded?: boolean; match?: (entry: SavedEntity) => boolean }) {
   onMount(() => void syncSavedEntities());
-  const [matcher, setMatcher] = createSignal<Awaited<ReturnType<typeof loadMatcher>>>();
-  createEffect(() => { if (props.expanded) void loadMatcher().then(setMatcher); });
   const source = (kind: SavedEntity['kind']) => savedEntities().filter(entry => entry.kind === kind);
-  const entries = createMemo(() => {
-    if (props.match) return savedEntities().filter(props.match);
-    const raw = props.query?.trim();
-    if (!raw) return savedEntities();
-    const search = matcher();
-    const normalized = search?.normalizeLibraryQuery(raw);
-    return search && normalized ? savedEntities().filter(entry => search.matchesSavedEntity(entry, normalized)) : savedEntities();
-  });
+  const entries = createMemo(() => props.match ? savedEntities().filter(props.match) : savedEntities());
   const heading = (kind: SavedEntity['kind']) => t(kind === 'album' ? 'savedEntities.albums' : 'savedEntities.artists');
   const unifiedExpanded = () => Boolean(props.expanded && !props.kind);
   return <div aria-busy={entitiesLoading()}>

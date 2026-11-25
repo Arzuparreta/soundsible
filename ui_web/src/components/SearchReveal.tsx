@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, type Accessor } from 'solid-js';
+import { createSignal, onCleanup, onMount, type Accessor, type JSX } from 'solid-js';
 import type { AppBarAction } from '../lib/appBar';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import { createTouchMoveLease } from '../lib/touchMoveLease';
@@ -36,20 +36,24 @@ export function createSearchReveal(field: Accessor<SearchFieldProps>, label?: Ac
     onSelect: open,
     expanded: expanded(),
   });
-  return { field, action, attachInput, reset, progress, setProgress, open, expanded };
+  const desktopField = () => <SearchField {...field()} inputRef={attachInput} />;
+  const mobileField = (viewport: SearchViewport): JSX.Element => <SearchReveal search={search} {...viewport} />;
+  const search = { field, action, attachInput, reset, progress, setProgress, open, expanded, desktopField, mobileField };
+  return search;
 }
 
 export type SearchRevealState = ReturnType<typeof createSearchReveal>;
 
-/** The same pull at the top works in short lists, virtual lists and entity pages. */
-export function SearchReveal(props: {
-  search: SearchRevealState;
+interface SearchViewport {
   scope: (field: HTMLElement) => HTMLElement | null | undefined;
   scroller: (field: HTMLElement, target?: Element) => HTMLElement | null | undefined;
   /** Inline native sections lease the gesture only for touches in that section. */
   containsTouch?: (field: HTMLElement, target: Node) => boolean;
   contained?: boolean;
-}) {
+}
+
+/** The same pull at the top works in short lists, virtual lists and entity pages. */
+function SearchReveal(props: SearchViewport & { search: SearchRevealState }) {
   let root!: HTMLDivElement;
   const [dragging, setDragging] = createSignal(false);
   const [focused, setFocused] = createSignal(false);
