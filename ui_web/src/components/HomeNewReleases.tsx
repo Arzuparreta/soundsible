@@ -1,9 +1,10 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { api, type DiscoveryBrowseItem } from '../lib/api';
+import type { DiscoveryBrowseItem } from '../lib/api';
 import { albumPath } from '../lib/artistRoute';
 import { coverGradient } from '../lib/cover';
 import { onDiscoveryFeedReady } from '../lib/discoveryEvents';
 import { t } from '../lib/i18n';
+import { newReleasesApi } from '../lib/newReleasesApi';
 import { discoveryEntitySubtitle } from '../lib/searchDiscovery';
 import { userKey } from '../lib/session';
 import Button from './Button';
@@ -33,7 +34,7 @@ export default function HomeNewReleases() {
   let epoch = 0;
 
   async function load(fromFallback = false) {
-    if (typeof api.getDiscoveryNewReleases !== 'function') return;
+    if (typeof newReleasesApi.getDiscoveryNewReleases !== 'function') return;
     clearTimeout(fallbackTimer);
     fallbackTimer = undefined;
     controller?.abort();
@@ -42,7 +43,7 @@ export default function HomeNewReleases() {
     const op = ++epoch;
     const account = userKey('home-new-releases');
     try {
-      const response = await api.getDiscoveryNewReleases(request.signal, 12);
+      const response = await newReleasesApi.getDiscoveryNewReleases(request.signal, 12);
       if (disposed || request.signal.aborted || op !== epoch || userKey('home-new-releases') !== account) return;
       setItems(Array.isArray(response?.items) ? response.items : []);
       if (response?.revalidating) {

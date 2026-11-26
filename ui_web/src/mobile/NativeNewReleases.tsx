@@ -2,11 +2,12 @@ import { createEffect, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import Button from '../components/Button';
 import { CoverImage } from '../components/CoverImage';
 import styles from '../components/HomeNewReleases.module.css';
-import { api, type DiscoveryBrowseItem } from '../lib/api';
+import type { DiscoveryBrowseItem } from '../lib/api';
 import { albumPath } from '../lib/artistRoute';
 import { coverGradient } from '../lib/cover';
 import { onDiscoveryFeedReady } from '../lib/discoveryEvents';
 import { t } from '../lib/i18n';
+import { newReleasesApi } from '../lib/newReleasesApi';
 import { discoveryEntitySubtitle } from '../lib/searchDiscovery';
 
 function releaseDestination(item: DiscoveryBrowseItem): string {
@@ -35,7 +36,7 @@ export default function NativeNewReleases(props: {
   let epoch = 0;
 
   async function load(fromFallback = false) {
-    if (disposed || props.disconnected() || typeof api.getDiscoveryNewReleases !== 'function') {
+    if (disposed || props.disconnected() || typeof newReleasesApi.getDiscoveryNewReleases !== 'function') {
       return;
     }
     clearTimeout(fallbackTimer);
@@ -46,7 +47,7 @@ export default function NativeNewReleases(props: {
     const op = ++epoch;
     const gen = props.generation();
     try {
-      const response = await api.getDiscoveryNewReleases(request.signal, 12);
+      const response = await newReleasesApi.getDiscoveryNewReleases(request.signal, 12);
       if (disposed || request.signal.aborted || op !== epoch || gen !== props.generation() || props.disconnected()) {
         return;
       }

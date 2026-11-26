@@ -7,6 +7,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import LibraryHome from './LibraryHome';
 import { api } from '../lib/api';
 import { setLocale } from '../lib/i18n';
+import { newReleasesApi } from '../lib/newReleasesApi';
 import { setSavedEntities, syncSavedEntities } from '../lib/savedEntities';
 
 beforeEach(() => {
@@ -17,7 +18,7 @@ beforeEach(() => {
     { kind: 'album', name: 'Record', artist: 'Band', destination: '/album/Record?artist=Band&deezer_id=1' },
     { kind: 'artist', name: 'Band', destination: '/artist/Band?deezer_id=2' },
   ]);
-  vi.spyOn(api, 'getDiscoveryNewReleases').mockResolvedValue({ items: [], revalidating: false });
+  vi.spyOn(newReleasesApi, 'getDiscoveryNewReleases').mockResolvedValue({ items: [], revalidating: false });
 });
 afterEach(() => vi.restoreAllMocks());
 const show = () => render(() => <Router root={props => { onCleanup(registerMusicNavigator(useNavigate())); return props.children; }}><Route path="/" component={LibraryHome} /></Router>);
@@ -87,7 +88,7 @@ it('keeps cards and images mounted when a refresh returns fresh objects for the 
 });
 
 it('renders Home New Releases rail lazily from taste-profile endpoint and toggles expansion', async () => {
-  vi.mocked(api.getDiscoveryNewReleases).mockResolvedValue({
+  vi.mocked(newReleasesApi.getDiscoveryNewReleases).mockResolvedValue({
     items: [
       { id: 'deezer:album:10', type: 'album', source: 'deezer', title: 'Fresh EP', artist: 'Marea', record_type: 'ep', release_date: '2026-11-18', is_new: true, external_ids: { deezer_album_id: '10', deezer_artist_id: '1' } },
       { id: 'deezer:album:11', type: 'album', source: 'deezer', title: 'Season Single', artist: 'Robe', record_type: 'single', release_date: '2026-09-10', is_new: false, external_ids: { deezer_album_id: '11', deezer_artist_id: '2' } },

@@ -900,11 +900,6 @@ export const api = {
       signal,
       timeoutMs: 15000,
     }),
-  getDiscoveryNewReleases: (signal?: AbortSignal, limit = 12) =>
-    request<DiscoveryNewReleasesResponse>(`/api/discovery/music/new-releases?limit=${limit}`, {
-      signal,
-      timeoutMs: 10000,
-    }),
   planMusicQueue: (
     body: {
       intent: ListeningPlanIntent;

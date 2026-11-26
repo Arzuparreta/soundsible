@@ -11,7 +11,7 @@ import type { SavedEntity } from '../lib/savedEntities';
 import styles from './LibraryHome.module.css';
 
 const BookmarkHeader = lazy(() => import('./BookmarkHeader'));
-const HomeNewReleases = lazy(() => import('../components/HomeNewReleases').catch(() => ({ default: () => null })));
+const HomeNewReleases = lazy(() => import('../components/HomeNewReleases'));
 
 /** Main-shell landing page. */
 export default function LibraryHome() {
