@@ -298,7 +298,8 @@ def test_rollup_aggregates_plays_correctly(tmp_path):
     rollup = load_listening_event_rollups()
 
     assert rollup.has_data
-    assert rollup.artist_plays["queen"] == 3
+    # music_search_played is click intent, never a second play count.
+    assert rollup.artist_plays["queen"] == 2
     assert rollup.played_track_ids == {"t1", "t2"}
     assert rollup.artist_saves["bowie"] == 1
     assert rollup.podcast_plays["123"] == 2
@@ -854,9 +855,9 @@ def test_profile_policy_v3_backfills_discovery_signal_aliases_from_existing_even
         conn.commit()
     assert db.get_discovery_signal_aliases() == []
 
-    # Reading any multiplier triggers one-time policy v3 backfill into discovery_signal_aliases.
+    # Reading any multiplier triggers one-time policy v4 backfill into discovery_signal_aliases.
     assert recommendation_multiplier("music:isrc:usleg0000001") < 1.0
-    assert db.discovery_profile_policy_version() == "3"
+    assert db.discovery_profile_policy_version() == "4"
     stored_aliases = set(db.get_discovery_signal_aliases())
     assert ("music:isrc:usleg0000001", "music:deezer:777") in stored_aliases
     assert ("music:meta:blue oyster cult\x00legacy song", "music:deezer:777") in stored_aliases

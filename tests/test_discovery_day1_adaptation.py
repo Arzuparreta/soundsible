@@ -115,8 +115,21 @@ def test_music_search_played_feeds_rollup_and_wakes_cold_cached_feed(monkeypatch
         assert res.status_code == 200
         assert res.get_json()["recorded"] is True
         rollup = load_listening_event_rollups()
-        assert rollup.artist_plays["robe"] == 1
-        assert rollup.event_count == 1
+        assert "robe" not in rollup.artist_plays
+        assert rollup.event_count == 0
+
+        res2 = client.post(
+            "/api/discovery/events",
+            json={
+                "event": "music_played_30s",
+                "payload": {"title": "Mayéutica", "artist": "Robe", "youtube_id": "abc12345678", "source": "search"},
+            },
+        )
+        assert res2.status_code == 200
+        assert res2.get_json()["recorded"] is True
+        rollup_after = load_listening_event_rollups()
+        assert rollup_after.artist_plays["robe"] == 1
+        assert rollup_after.event_count == 1
 
     assert emitted == [("discovery_feed_ready", {"limit": 10, "generated_at": 123456, "browse_error": False}, "alice")]
     with discovery_common._DISCOVERY_FEED_LOCK:
@@ -213,7 +226,8 @@ def test_saved_entity_and_favourite_and_scrobble_connect_wake_cached_feed(monkey
             },
         )
         assert r1.status_code == 200
-        assert ("discovery_feed_ready", "alice") in emitted
+        # Bookmarks/pins carry zero taste weight and do not refresh Discover.
+        assert emitted == []
 
         emitted.clear()
         with discovery_common._DISCOVERY_FEED_LOCK:

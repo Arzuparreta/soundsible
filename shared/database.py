@@ -62,6 +62,9 @@ INSTANCE_TABLES = (
     "related_mix_cache",
     "stream_url_cache",
     "track_lyrics",
+    "artist_graph_nodes",
+    "artist_similarity_edges",
+    "artist_releases_cache",
 )
 
 
