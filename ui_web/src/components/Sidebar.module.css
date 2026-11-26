@@ -1,11 +1,16 @@
 /* Desktop-only stage-matched rail. Hidden by default; the grid shell reveals it at >=1024px. */
 .sidebar {
+  /* The expanded sidebar adds space to the right of the same icon column. */
+  --sidebar-rail-inset: calc((var(--sidebar-w-collapsed) - var(--sidebar-rail-item-w) - 1px) / 2);
+  --sidebar-icon-inset: calc((var(--sidebar-rail-item-w) - var(--sidebar-icon-size)) / 2);
+
   position: relative;
   isolation: isolate;
   display: none;
   height: 100%;
   flex-direction: column;
-  padding: var(--space-lg) var(--space-md) var(--space-md);
+  padding-block: var(--space-lg) var(--space-md);
+  padding-inline: var(--sidebar-rail-inset);
   color: var(--ink-primary);
   background: var(--stage-base);
   border-right: 1px solid var(--stage-line);
@@ -22,17 +27,13 @@
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
   flex: none;
-  padding: var(--space-2xs) var(--space-xs) var(--space-lg) var(--space-md);
+  padding-bottom: var(--space-lg);
 }
 
-/* Flush lowercase wordmark aligned to the nav column's left axis. */
 .brand {
-  display: inline-flex;
   align-items: center;
-  min-height: var(--sidebar-toggle-size);
+  min-height: var(--sidebar-item-h);
   font-size: var(--sidebar-brand-size);
   font-weight: var(--fw-bold);
   letter-spacing: -0.035em;
@@ -41,6 +42,10 @@
   text-decoration: none;
   border-radius: var(--radius-xs);
   transition: opacity var(--dur-short) var(--ease-out);
+}
+
+.brand:not([hidden]) {
+  display: inline-flex;
 }
 
 .brand:focus-visible {
@@ -53,20 +58,20 @@
   align-items: center;
   justify-content: center;
   flex: none;
-  width: var(--sidebar-toggle-size);
-  height: var(--sidebar-toggle-size);
+  width: var(--sidebar-rail-item-w);
+  height: var(--sidebar-item-h);
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--ink-tertiary);
+  color: var(--sidebar-icon-ink);
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
 
 .collapseBtn svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
+  width: var(--sidebar-icon-size);
+  height: var(--sidebar-icon-size);
 }
 
 .collapseBtn:focus-visible {
@@ -82,28 +87,6 @@
     background: var(--sidebar-hover);
     color: var(--ink-primary);
   }
-}
-
-.sidebar[data-collapsed] {
-  padding: var(--space-lg) var(--space-sm) var(--space-md);
-  align-items: center;
-}
-
-.sidebar[data-collapsed] .header {
-  justify-content: center;
-  width: 100%;
-  padding: 0 0 var(--space-lg);
-}
-
-.sidebar[data-collapsed] .collapseBtn {
-  width: var(--sidebar-collapsed-item);
-  height: var(--sidebar-collapsed-item);
-  color: var(--sidebar-icon-ink);
-}
-
-.sidebar[data-collapsed] .collapseBtn svg {
-  width: var(--sidebar-icon-size);
-  height: var(--sidebar-icon-size);
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {

@@ -44,11 +44,6 @@ export function Sidebar() {
         )}
       </Show>
       <div class={styles.header}>
-        {/* A plain link, not a router `A`: that would announce itself as the
-            current page beside Library, and only a navigation entry should. */}
-        <Show when={!collapsed()}>
-          <a href={home()} class={styles.brand}>soundsible</a>
-        </Show>
         <IconButton
           class={styles.collapseBtn}
           label={collapsed() ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
@@ -58,6 +53,8 @@ export function Sidebar() {
         >
           <SidebarToggleIcon />
         </IconButton>
+        {/* Only a navigation entry should announce itself as the current page. */}
+        <a href={home()} class={styles.brand} hidden={collapsed()}>soundsible</a>
       </div>
 
       <NavigationLinks

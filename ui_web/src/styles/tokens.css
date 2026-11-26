@@ -28,9 +28,7 @@
   --sidebar-w: clamp(208px, 18vw, 248px);
   --sidebar-w-collapsed: 68px;
   --sidebar-item-h: 38px;
-  --sidebar-sub-item-h: 35px;
-  --sidebar-collapsed-item: 42px;
-  --sidebar-toggle-size: 30px;
+  --sidebar-rail-item-w: 42px;
   --sidebar-brand-size: 20px;
   --sidebar-label-size: 14px;
   --sidebar-sub-label-size: 13.5px;
@@ -708,9 +706,7 @@
     --browse-card-width: 180px;
     --browse-card-gap: var(--space-xl);
     --sidebar-item-h: 36px;
-    --sidebar-sub-item-h: 33px;
-    --sidebar-collapsed-item: 40px;
-    --sidebar-toggle-size: 28px;
+    --sidebar-rail-item-w: 40px;
     --sidebar-brand-size: 19px;
     --sidebar-label-size: 13px;
     --sidebar-sub-label-size: 12.5px;
@@ -733,9 +729,7 @@
     --cover-sm: 44px;
     --gutter: 26px;
     --sidebar-item-h: 38px;
-    --sidebar-sub-item-h: 35px;
-    --sidebar-collapsed-item: 42px;
-    --sidebar-toggle-size: 30px;
+    --sidebar-rail-item-w: 42px;
     --sidebar-brand-size: 20px;
     --sidebar-label-size: 14px;
     --sidebar-sub-label-size: 13.5px;
@@ -756,9 +750,7 @@
     --browse-card-min: 184px;
     --browse-card-width: 204px;
     --sidebar-item-h: 44px;
-    --sidebar-sub-item-h: 40px;
-    --sidebar-collapsed-item: 48px;
-    --sidebar-toggle-size: 34px;
+    --sidebar-rail-item-w: 48px;
     --sidebar-brand-size: 22px;
     --sidebar-label-size: 16px;
     --sidebar-sub-label-size: 15px;

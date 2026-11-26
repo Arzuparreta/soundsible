@@ -45,12 +45,9 @@ function GroupSection(props: {
       }}
     >
       <Show when={props.group.showHeading}>
-        <Show
-          when={!props.collapsed}
-          fallback={<div class={styles.collapsedDivider} aria-hidden="true" />}
-        >
-          <h2>{props.group.label()}</h2>
-        </Show>
+        <h2 aria-hidden={props.collapsed || undefined}>
+          <span hidden={props.collapsed}>{props.group.label()}</span>
+        </h2>
       </Show>
       <nav aria-label={props.group.label()}>
         <For each={props.group.hrefs}>
@@ -83,16 +80,14 @@ function GroupSection(props: {
                 }}
               >
                 <span class={styles.icon}>{item.icon()}</span>
-                <Show when={!props.collapsed}>
-                  <span class={styles.label}>{item.label()}</span>
-                </Show>
+                <span class={styles.label} hidden={props.collapsed}>{item.label()}</span>
                 <Show when={hasDownloads()}>
-                  <Show
-                    when={!props.collapsed}
-                    fallback={<span class={styles.badgeDot} aria-hidden="true" />}
+                  <span
+                    class={props.collapsed ? styles.badgeDot : styles.badge}
+                    aria-hidden={props.collapsed || undefined}
                   >
-                    <span class={styles.badge}>{downloadCounts().active}</span>
-                  </Show>
+                    {props.collapsed ? undefined : downloadCounts().active}
+                  </span>
                 </Show>
               </a>
             );
@@ -117,10 +112,7 @@ export function NavigationLinks(props: {
   return (
     <div
       class={styles.links}
-      classList={{
-        [styles.desktopLinks]: Boolean(props.desktop),
-        [styles.collapsedLinks]: Boolean(props.collapsed),
-      }}
+      classList={{ [styles.desktopLinks]: Boolean(props.desktop) }}
     >
       <div class={styles.scrollGroups}>
         <For each={mainGroups}>

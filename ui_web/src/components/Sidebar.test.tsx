@@ -101,11 +101,13 @@ describe('desktop sidebar', () => {
     const view = renderSidebar();
     const aside = view.container.querySelector('aside')!;
     const toggle = view.getByRole('button', { name: 'Contraer barra lateral' });
+    const brand = view.getByRole('link', { name: 'soundsible' });
+    const library = view.getByRole('link', { name: 'Biblioteca' });
+    const downloads = view.getByRole('link', { name: /Descargas/ });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(aside).not.toHaveAttribute('data-collapsed');
-    expect(view.getByRole('link', { name: 'soundsible' })).toBeInTheDocument();
-    expect(view.getByRole('link', { name: /Descargas/ })).toHaveTextContent('1');
+    expect(downloads).toHaveTextContent('1');
 
     fireEvent.click(toggle);
 
@@ -114,17 +116,19 @@ describe('desktop sidebar', () => {
     expect(document.documentElement.hasAttribute('data-sidebar-collapsed')).toBe(true);
     expect(localStorage.getItem('sidebar:collapsed:v1')).toBe('1');
     expect(view.queryByRole('link', { name: 'soundsible' })).toBeNull();
-    expect(view.getByRole('button', { name: 'Expandir barra lateral' })).toHaveAttribute('aria-expanded', 'false');
+    expect(view.getByRole('button', { name: 'Expandir barra lateral' })).toBe(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(view.queryByRole('heading', { level: 2, name: 'Colección' })).toBeNull();
-    // Collapsed links unmount label spans and preserve aria-label + data-nav-href.
-    expect(view.getByRole('link', { name: 'Biblioteca' })).toHaveAttribute('data-nav-href', '/');
+    expect(view.getByRole('link', { name: 'Biblioteca' })).toBe(library);
+    expect(library).toHaveAttribute('title', 'Biblioteca');
     expect(view.getByRole('link', { name: 'Canciones' })).toHaveAttribute('data-nav-href', '/library?view=songs');
-    expect(view.getByRole('link', { name: 'Descargas' }).querySelector(`.${styles.badgeDot}`)).not.toBeNull();
+    expect(view.getByRole('link', { name: 'Descargas' })).toBe(downloads);
+    expect(downloads.querySelector(`.${styles.badgeDot}`)).not.toBeNull();
 
-    fireEvent.click(view.getByRole('button', { name: 'Expandir barra lateral' }));
+    fireEvent.click(toggle);
     expect(sidebarCollapsed()).toBe(false);
     expect(aside).not.toHaveAttribute('data-collapsed');
-    expect(view.getByRole('link', { name: 'soundsible' })).toBeInTheDocument();
+    expect(view.getByRole('link', { name: 'soundsible' })).toBe(brand);
   });
 
   it('claims the shared stage surface attribute without colliding with player backdrop locators', () => {
