@@ -29,6 +29,8 @@ _RELATED_TTL_SEC = 21 * 86400
 _RELEASES_TTL_SEC = 24 * 3600
 _ALLOWED_RECORD_TYPES = frozenset({"album", "ep", "single"})
 _RECENT_BADGE_DAYS = 30
+_RECORD_TYPE_PRIORITY = {"album": 2, "ep": 1, "single": 0}
+_FULL_RELEASE_PREFER_DAYS = 30
 
 _PROVIDER_WEIGHTS = {
     "deezer": 1.00,
@@ -780,70 +782,140 @@ def _resolve_album_credit(
     return credit
 
 
+def _record_type_priority(row: dict[str, Any]) -> int:
+    rtype = str(row.get("record_type") or "album").strip().casefold()
+    return _RECORD_TYPE_PRIORITY.get(rtype, 0)
+
+
 def build_release_rail(
     artist_weights: dict[str, float],
     *,
     window_days: int,
+    fallback_windows: tuple[int, ...] = (),
+    min_items: int = 0,
     exclude_album_keys: set[str] | None = None,
     exclude_album_ids: set[str] | None = None,
     reason_by_artist: dict[str, str] | None = None,
     artist_names_by_id: dict[str, str] | None = None,
     max_per_artist: int = 2,
+    prefer_full_release: bool = False,
     limit: int = 10,
     today: datetime.date | None = None,
     deadline: float | None = None,
     verify_credits: bool = True,
 ) -> list[dict[str, Any]]:
     """Project cached releases into a chronological release shelf shared by Home and Discover."""
-    if not artist_weights or limit <= 0:
+    if not artist_weights or limit <= 0 or max_per_artist <= 0:
         return []
     ref_today = today or datetime.date.today()
-    min_date = (ref_today - datetime.timedelta(days=window_days)).isoformat()
+    windows = (window_days, *(w for w in fallback_windows if w > window_days))
+    max_window = max(windows)
+    oldest_min_date = (ref_today - datetime.timedelta(days=max_window)).isoformat()
     max_date = ref_today.isoformat()
 
-    rows = instance_db().get_artist_releases(artist_weights.keys(), min_release_date=min_date)
+    rows = instance_db().get_artist_releases(artist_weights.keys(), min_release_date=oldest_min_date)
     if not rows:
         return []
 
-    filtered: list[tuple[datetime.date, float, int, dict[str, Any]]] = []
+    excluded_ids = set(exclude_album_ids or ())
+    parsed_rows: list[tuple[datetime.date, float, int, dict[str, Any]]] = []
     for row in rows:
         rel_str = str(row.get("release_date") or "").strip()
-        if not rel_str or rel_str > max_date or rel_str < min_date:
+        if not rel_str or rel_str > max_date or rel_str < oldest_min_date:
             continue
         rel_date = _parse_release_date(rel_str)
         if rel_date is None:
             continue
         owner_id = str(row.get("artist_deezer_id") or "").strip()
+        title = str(row.get("title") or "").strip()
         owner_name = (artist_names_by_id or {}).get(owner_id) or str(row.get("artist_credit") or "").strip()
-        if not owner_id.isdigit() or not owner_name:
+        album_num = _safe_int(row.get("deezer_album_id"), 0)
+        album_id = str(album_num) if album_num > 0 else ""
+        if not owner_id.isdigit() or not owner_name or not title or not album_id:
+            continue
+        if album_id in excluded_ids:
+            continue
+        if exclude_album_keys and identity_key(title, owner_name) in exclude_album_keys:
             continue
         affinity = float(artist_weights.get(owner_id, 0.0))
-        filtered.append((rel_date, affinity, _safe_int(row.get("deezer_album_id"), 0), row))
+        parsed_rows.append((rel_date, affinity, album_num, row))
 
-    filtered.sort(key=lambda entry: entry[:3], reverse=True)
+    if not parsed_rows:
+        return []
+
+    def select_for_window(days: int) -> list[tuple[datetime.date, float, int, dict[str, Any]]]:
+        min_rel_date = ref_today - datetime.timedelta(days=days)
+        qualifying = [entry for entry in parsed_rows if entry[0] >= min_rel_date]
+        if not qualifying:
+            return []
+
+        seen_albums = set(excluded_ids)
+        chosen_rows: list[tuple[datetime.date, float, int, dict[str, Any]]] = []
+        if prefer_full_release:
+            by_owner: dict[str, list[tuple[datetime.date, float, int, dict[str, Any]]]] = {}
+            for entry in qualifying:
+                by_owner.setdefault(str(entry[3].get("artist_deezer_id") or ""), []).append(entry)
+
+            picked: list[tuple[datetime.date, float, int, dict[str, Any]]] = []
+            for artist_rows in by_owner.values():
+                artist_rows.sort(
+                    key=lambda e: (e[0], _record_type_priority(e[3]), e[2]),
+                    reverse=True,
+                )
+                cutoff_date = artist_rows[0][0] - datetime.timedelta(days=_FULL_RELEASE_PREFER_DAYS)
+                recent = [e for e in artist_rows if e[0] >= cutoff_date]
+                older = [e for e in artist_rows if e[0] < cutoff_date]
+                recent.sort(
+                    key=lambda e: (_record_type_priority(e[3]), e[0], e[2]),
+                    reverse=True,
+                )
+                picked.extend([*recent, *older][:max_per_artist])
+
+            picked.sort(key=lambda entry: entry[:3], reverse=True)
+            for entry in picked:
+                if len(chosen_rows) >= limit:
+                    break
+                album_id = str(entry[2])
+                if album_id in seen_albums:
+                    continue
+                seen_albums.add(album_id)
+                chosen_rows.append(entry)
+            return chosen_rows
+
+        qualifying.sort(key=lambda entry: entry[:3], reverse=True)
+        per_artist: dict[str, int] = {}
+        for entry in qualifying:
+            if len(chosen_rows) >= limit:
+                break
+            album_id = str(entry[2])
+            owner_id = str(entry[3].get("artist_deezer_id") or "")
+            if album_id in seen_albums or per_artist.get(owner_id, 0) >= max_per_artist:
+                continue
+            seen_albums.add(album_id)
+            per_artist[owner_id] = per_artist.get(owner_id, 0) + 1
+            chosen_rows.append(entry)
+        return chosen_rows
+
+    target = min(limit, min_items) if min_items > 0 else 0
+    chosen: list[tuple[datetime.date, float, int, dict[str, Any]]] = []
+    for days in windows:
+        cand = select_for_window(days)
+        if len(cand) > len(chosen):
+            chosen = cand
+        if target <= 0 or len(chosen) >= target:
+            break
 
     out: list[dict[str, Any]] = []
-    seen_albums = set(exclude_album_ids or ())
-    per_artist: dict[str, int] = {}
-
-    for rel_date, _, album_num, row in filtered:
-        if len(out) >= limit:
-            break
+    for rel_date, _, album_num, row in chosen[:limit]:
         album_id = str(album_num)
         owner_id = str(row.get("artist_deezer_id") or "")
         title = str(row.get("title") or "").strip()
         owner_name = (artist_names_by_id or {}).get(owner_id) or str(row.get("artist_credit") or "").strip()
-        if not album_id or album_id in seen_albums or per_artist.get(owner_id, 0) >= max_per_artist:
-            continue
-        if exclude_album_keys and identity_key(title, owner_name) in exclude_album_keys:
-            continue
 
         credit = str(row.get("artist_credit") or "").strip() or owner_name
         if verify_credits and not row.get("credit_verified"):
             credit = _resolve_album_credit(album_id, owner_name, deadline=deadline)
 
-        seen_albums.add(album_id)
-        per_artist[owner_id] = per_artist.get(owner_id, 0) + 1
         out.append({
             "id": f"deezer:album:{album_id}",
             "type": "album",

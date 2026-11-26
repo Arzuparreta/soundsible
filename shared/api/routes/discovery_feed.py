@@ -677,12 +677,24 @@ def _build_discovery_feed_body(
                 ) or None
             except Exception:
                 federated_boosts = None
+        home_release_entries = select_release_profile_artists(
+            profile_entries,
+            limit=_HOME_NEW_RELEASES_ARTIST_LIMIT,
+        )
         browse_result = build_browse_sections(
             seeds,
             min(limit, 10),
             seed_weights=seed_weights,
-            profile_artist_keys={entry.literal_key for entry in profile_entries if not entry.deezer_artist_id},
-            profile_artist_ids={entry.deezer_artist_id for entry in profile_entries if entry.deezer_artist_id},
+            profile_artist_keys={
+                entry.literal_key
+                for entry in home_release_entries
+                if not entry.deezer_artist_id and entry.literal_key
+            },
+            profile_artist_ids={
+                entry.deezer_artist_id
+                for entry in home_release_entries
+                if entry.deezer_artist_id.isdigit()
+            },
             owned_album_keys=_local_album_keys(metadata),
             metadata=metadata,
             extra_candidate_boosts=federated_boosts,
@@ -880,6 +892,7 @@ register_discovery_signal_handler(_dispatch_discovery_signal)
 
 
 _HOME_NEW_RELEASES_WINDOW_DAYS = 180
+_HOME_NEW_RELEASES_ARTIST_LIMIT = 35
 _HOME_RELEASES_TTL_SEC = 24 * 3600
 _HOME_RELEASES_COOLDOWN_SEC = 1800
 _UNRESOLVED_ARTIST_TTL_SEC = 6 * 3600
@@ -1059,7 +1072,7 @@ def build_home_new_releases(
     learning_on = bool(load_discovery_settings().get("learning_enabled", True))
 
     profile = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True, now=now_ts)
-    release_entries = select_release_profile_artists(profile, limit=35)
+    release_entries = select_release_profile_artists(profile, limit=_HOME_NEW_RELEASES_ARTIST_LIMIT)
     if not release_entries:
         return {"generated_at": now_ts, "items": [], "revalidating": False}
 

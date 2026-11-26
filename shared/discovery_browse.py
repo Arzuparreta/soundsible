@@ -33,6 +33,10 @@ def _artist_mult(name: str, deezer_artist_id: str = "") -> float:
 
 _ALLOWED_RECORD_TYPES = {"album", "ep", "single"}
 _RELEASE_RADAR_WINDOW_DAYS = 45
+_RELEASE_RADAR_FALLBACK_WINDOWS = (90, 180)
+_RELEASE_RADAR_MIN_ITEMS = 4
+_RELEASE_RADAR_CANDIDATE_LIMIT = 35
+_RELEASE_SYNC_BATCH = 20
 
 
 def build_browse_sections(
@@ -203,7 +207,7 @@ def build_browse_sections(
             exclude_folded_names=seed_folded_names,
             extra_candidate_boosts=extra_candidate_boosts,
             impressions=impressions,
-            limit=max(40, limit * 4),
+            limit=max(50, limit * 5),
         )
         primary_artists = select_mmr_diverse(consensus_pool, limit=limit)
         artists = primary_artists
@@ -243,7 +247,7 @@ def build_browse_sections(
             if candidate["reason_artist"] and not candidate["_demoted"]
             and literal_artist_key(candidate["title"]) not in (profile_artist_keys or ())
             and candidate["external_ids"]["deezer_artist_id"] not in (profile_artist_ids or ())
-        ][: max(15, min(20, limit * 2))]
+        ][:_RELEASE_RADAR_CANDIDATE_LIMIT]
         seed_owner_items = [
             {
                 "id": f"deezer:artist:{s['deezer_artist_id']}",
@@ -257,62 +261,61 @@ def build_browse_sections(
             }
             for s in seed_nodes
         ]
-        candidate_owners = sorted(
-            [*artists, *seed_owner_items],
+        outward_owners = sorted(
+            artists,
             key=lambda owner: (
                 _artist_mult(owner["title"], owner["external_ids"]["deezer_artist_id"]),
                 float(owner.get("score") or 0.0),
             ),
             reverse=True,
         )
-        candidate_owners.extend(radar_candidates)
-        album_owner_ids: list[str] = []
+        outward_owners.extend(radar_candidates)
+        outward_owner_ids: list[str] = []
         seen_owner_ids: set[str] = set()
-        for owner in candidate_owners:
+        for owner in outward_owners:
             oid = str(owner["external_ids"]["deezer_artist_id"])
             if oid in seen_owner_ids:
                 continue
             seen_owner_ids.add(oid)
-            album_owner_ids.append(oid)
+            outward_owner_ids.append(oid)
+
+        seed_owner_ids: list[str] = []
+        for owner in seed_owner_items:
+            oid = str(owner["external_ids"]["deezer_artist_id"])
+            if oid in seen_owner_ids:
+                continue
+            seen_owner_ids.add(oid)
+            seed_owner_ids.append(oid)
+
+        album_owner_ids = [*outward_owner_ids, *seed_owner_ids]
+        candidate_owners = [*outward_owners, *seed_owner_items]
 
         radar_owners = {str(c["external_ids"]["deezer_artist_id"]): c for c in radar_candidates}
-        # Spend the first batch on artists who can actually populate Radar.
-        # Keep the album shelf ranking separate from network hydration order.
-        sync_ids = list(dict.fromkeys([*radar_owners, *album_owner_ids]))
+        # Spend hydration budget on outward artists first; only hydrate seed
+        # back-catalog owners when fewer than 5 outward artists exist.
+        sync_ids = list(dict.fromkeys([*radar_owners, *outward_owner_ids]))
+        if len(sync_ids) < 5:
+            sync_ids = list(dict.fromkeys([*sync_ids, *seed_owner_ids]))
         cached_nodes = db.get_graph_nodes_by_ids(sync_ids)
         sync_nodes = [cached_nodes[aid] for aid in sync_ids if aid in cached_nodes]
-        release_batch = 10
-        rel_failed, _ = sync_artist_releases(sync_nodes, max_sync=release_batch, deadline=deadline)
+        rel_failed, _ = sync_artist_releases(sync_nodes, max_sync=_RELEASE_SYNC_BATCH, deadline=deadline)
         failed |= rel_failed
 
-        def project_radar() -> list[dict]:
-            return build_release_rail(
+        if radar_owners:
+            release_radar = build_release_rail(
                 {aid: float(c["score"]) for aid, c in radar_owners.items()},
                 window_days=_RELEASE_RADAR_WINDOW_DAYS,
+                fallback_windows=_RELEASE_RADAR_FALLBACK_WINDOWS,
+                min_items=_RELEASE_RADAR_MIN_ITEMS,
                 exclude_album_keys=owned_album_keys,
                 reason_by_artist={aid: c["reason_artist"] for aid, c in radar_owners.items()},
                 artist_names_by_id={aid: str(c["title"]) for aid, c in radar_owners.items()},
-                max_per_artist=2,
+                max_per_artist=1,
+                prefer_full_release=True,
                 limit=limit,
                 today=ref_today,
                 deadline=deadline,
             )
-
-        if radar_owners:
-            release_radar = project_radar()
-            # A cold first batch can be complete and still contain only back
-            # catalogue. Check the rest of the ranked window before publishing
-            # an empty Radar, using the same deadline and shared discographies.
-            if not release_radar and not rel_failed and len(radar_owners) > release_batch:
-                remaining_nodes = db.get_graph_nodes_by_ids(radar_owners)
-                rel_failed, had_stale = sync_artist_releases(
-                    [remaining_nodes[aid] for aid in radar_owners if aid in remaining_nodes],
-                    max_sync=len(radar_owners) - release_batch,
-                    deadline=deadline,
-                )
-                failed |= rel_failed
-                if had_stale:
-                    release_radar = project_radar()
 
         # 2) Albums for you: full-catalog discovery reusing the exact same cache.
         radar_album_ids = {
