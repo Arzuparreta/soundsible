@@ -753,26 +753,72 @@ def sync_artist_releases(
     return failed, had_stale
 
 
+def _release_details(album_id: str, *, deadline: float | None) -> dict:
+    timeout = 4.0 if deadline is None else min(3.0, deadline - time.monotonic())
+    if timeout <= 0:
+        return {}
+    try:
+        album = deezer.get(f"album/{album_id}", timeout=timeout)
+    except Exception:
+        return {}
+    return album if isinstance(album, dict) and not album.get("error") else {}
+
+
+def find_companion_singles(rows: list[dict], *, deadline: float) -> dict[str, str]:
+    """Map singles to full albums when matching artwork narrows the track comparison."""
+    albums: dict[tuple[str, str], list[str]] = {}
+    for row in rows:
+        if row["record_type"] == "album" and row["cover_url"]:
+            key = (row["artist_deezer_id"], row["cover_url"])
+            albums.setdefault(key, []).append(row["deezer_album_id"])
+
+    details: dict[str, dict] = {}
+
+    def load(album_id: str) -> dict:
+        if album_id not in details and len(details) < 6:
+            details[album_id] = _release_details(album_id, deadline=deadline)
+        return details.get(album_id, {})
+
+    def track_keys(album: dict) -> set[tuple[str, int]]:
+        track_page = album.get("tracks")
+        tracks = track_page.get("data") if isinstance(track_page, dict) else None
+        if not isinstance(tracks, list):
+            return set()
+        return {
+            (title, duration)
+            for track in tracks if isinstance(track, dict)
+            if (title := fold_text(track.get("title"))) and (duration := _safe_int(track.get("duration"), 0)) > 0
+        }
+
+    companions: dict[str, str] = {}
+    for row in rows:
+        if row["record_type"] != "single":
+            continue
+        candidates = albums.get((row["artist_deezer_id"], row["cover_url"]))
+        if not candidates:
+            continue
+        single_id = row["deezer_album_id"]
+        single = load(single_id)
+        tracks = track_keys(single)
+        if not tracks or len(tracks) != _safe_int(single.get("nb_tracks"), 0):
+            continue
+        for album_id in candidates:
+            if tracks <= track_keys(load(album_id)):
+                companions[single_id] = album_id
+                break
+    return companions
+
+
 def _resolve_album_credit(
     album_id: str,
     fallback: str,
     *,
     deadline: float | None = None,
 ) -> str:
-    if deadline is not None:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return fallback
-        timeout = min(3.0, remaining)
-    else:
-        timeout = 4.0
-    try:
-        album = deezer.get(f"album/{album_id}", timeout=timeout)
-    except Exception:
-        return fallback
-    names = [name for _, name in main_contributors(album)] if isinstance(album, dict) else []
+    album = _release_details(album_id, deadline=deadline)
+    names = [name for _, name in main_contributors(album)]
     credit = ", ".join(names) if len(names) > 1 else fallback
-    if isinstance(album, dict) and not album.get("error"):
+    if album:
         try:
             instance_db().update_release_credit(album_id, credit)
         except Exception:

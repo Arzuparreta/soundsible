@@ -11,6 +11,7 @@ from shared.database import instance_db
 from shared.deezer_catalog import literal_artist_key
 from shared.discovery_graph_store import (
     build_release_rail,
+    find_companion_singles,
     project_youtube_mix_edges,
     resolve_artist_node,
     score_consensus_candidates,
@@ -285,11 +286,21 @@ def build_browse_sections(
         rel_failed, _ = sync_artist_releases(sync_nodes, max_sync=release_batch, deadline=deadline)
         failed |= rel_failed
 
+        companion_singles: dict[str, str] = {}
+
         def project_radar() -> list[dict]:
+            first_date = (ref_today - datetime.timedelta(days=_RELEASE_RADAR_WINDOW_DAYS)).isoformat()
+            rows = db.get_artist_releases(radar_owners, min_release_date=first_date)
+            companion_singles.update(find_companion_singles([
+                row for row in rows
+                if row["release_date"] <= ref_today.isoformat()
+                and identity_key(row["title"], radar_owners[row["artist_deezer_id"]]["title"]) not in (owned_album_keys or ())
+            ], deadline=deadline))
             return build_release_rail(
                 {aid: float(c["score"]) for aid, c in radar_owners.items()},
                 window_days=_RELEASE_RADAR_WINDOW_DAYS,
                 exclude_album_keys=owned_album_keys,
+                exclude_album_ids=set(companion_singles),
                 reason_by_artist={aid: c["reason_artist"] for aid, c in radar_owners.items()},
                 artist_names_by_id={aid: str(c["title"]) for aid, c in radar_owners.items()},
                 max_per_artist=2,
@@ -300,10 +311,10 @@ def build_browse_sections(
 
         if radar_owners:
             release_radar = project_radar()
-            # A cold first batch can be complete and still contain only back
-            # catalogue. Check the rest of the ranked window before publishing
-            # an empty Radar, using the same deadline and shared discographies.
-            if not release_radar and not rel_failed and len(radar_owners) > release_batch:
+            # Check the remaining ranked artists when the first batch yields
+            # releases from fewer than two artists. Keep the shared deadline.
+            represented_artists = {item["external_ids"]["deezer_artist_id"] for item in release_radar}
+            if len(represented_artists) < 2 and not rel_failed and len(radar_owners) > release_batch:
                 remaining_nodes = db.get_graph_nodes_by_ids(radar_owners)
                 rel_failed, had_stale = sync_artist_releases(
                     [remaining_nodes[aid] for aid in radar_owners if aid in remaining_nodes],
@@ -320,6 +331,7 @@ def build_browse_sections(
             for item in release_radar
             if item.get("external_ids", {}).get("deezer_album_id")
         }
+        radar_album_ids.update(single for single, album in companion_singles.items() if album in radar_album_ids)
         owner_meta = {
             str(owner["external_ids"]["deezer_artist_id"]): (
                 str(owner["title"]),

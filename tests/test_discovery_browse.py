@@ -272,6 +272,38 @@ def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatc
     assert [item["title"] for item in cached_radar] == [item["title"] for item in radar]
 
 
+def test_release_radar_collapses_companion_single_without_hiding_independent_single(monkeypatch):
+    artwork = "https://cdn.example.test/same-project.jpg"
+    tracks = {
+        101: [{"title": "Advance track", "duration": 237}, {"title": "Album track", "duration": 301}],
+        102: [{"title": "Advance track", "duration": 237}],
+        103: [{"title": "Standalone track", "duration": 220}],
+    }
+
+    def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            return {"data": [artist(1, "Seed")]}
+        if path == "artist/1/related":
+            return {"data": [artist(2, "Peer")]}
+        if path == "artist/1/albums":
+            return {"data": []}
+        if path == "artist/2/albums":
+            return {"data": [
+                {"id": 101, "title": "The Album", "record_type": "album", "release_date": "2026-11-06", "cover": artwork},
+                {"id": 102, "title": "Advance track", "record_type": "single", "release_date": "2026-11-10", "cover": artwork},
+                {"id": 103, "title": "Standalone track", "record_type": "single", "release_date": "2026-11-20", "cover": artwork},
+            ]}
+        assert path.startswith("album/"), path
+        album_id = int(path.split("/")[1])
+        return {"id": album_id, "nb_tracks": len(tracks[album_id]), "tracks": {"data": tracks[album_id]}}
+
+    monkeypatch.setattr(deezer, "get", get)
+    body = build_browse_sections(["Seed"], today=datetime.date(2026, 11, 26))
+    sections = {section["id"]: section["items"] for section in body["browse_sections"]}
+    assert [item["title"] for item in sections["release_radar"]] == ["Standalone track", "The Album"]
+    assert not any(item["title"] == "Advance track" for item in sections.get("albums", []))
+
+
 def test_release_radar_hydrates_past_first_batch_when_catalogues_are_cold(monkeypatch):
     from shared.database import instance_db
 
