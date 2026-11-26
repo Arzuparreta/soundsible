@@ -1,6 +1,7 @@
+import { CollectionToolbar } from '../components/CollectionToolbar';
 import Button from '../components/Button';
 import { liveRoomSearchFields } from '../lib/librarySearch';
-import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { actions, state } from '../stores';
 import { user } from '../lib/session';
@@ -417,7 +418,7 @@ export default function Live() {
     }
   };
 
-  const directorySearch = createCollectionSearch();
+  const directorySearch = createCollectionSearch(() => t('library.filterLive'));
   const rooms = directorySearch.filter(liveSessions, liveRoomSearchFields);
 
   return (
@@ -426,6 +427,7 @@ export default function Live() {
         <ViewHeader
           title={t('live.title')}
           meta={t('live.meta')}
+          search={liveSessions().length ? directorySearch.reveal : undefined}
           barActions={hostSession()
             ? [
                 { label: copied() ? t('live.linkCopied') : t('live.share'), icon: () => <ShareIcon />, onSelect: () => void share(hostSession()!.id) },
@@ -503,7 +505,7 @@ export default function Live() {
             </Show>
           </div>
           <Show when={liveSessions().length > 0} fallback={<Show when={!communityError()}><p class={styles.empty}>{t('live.empty')}</p></Show>}>
-            <CollectionToolbar contained search={directorySearch} placeholder={t('library.filterLive')}
+            <CollectionToolbar contained search={directorySearch}
               actions={<Button variant="secondary" onClick={() => void refreshLiveSessions()}>{t('live.refresh')}</Button>} />
             <Show when={rooms().length} fallback={<NoCollectionMatches />}>
             <div class={styles.grid}>

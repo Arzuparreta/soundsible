@@ -1,4 +1,5 @@
-import { CollectionToolbar, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { NativeSearchToolbar } from '../components/NativeSearchToolbar';
+import { NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
@@ -187,9 +188,9 @@ export default function NativeEntityProfile(props: {
   };
   const trackSearch = createCollectionSearch();
   const matches = trackSearch.filter(songs, trackSearchFields);
-  createEffect(on(view, () => trackSearch.setValue(''), { defer: true }));
+  createEffect(on([view, () => props.subject], trackSearch.reset, { defer: true }));
 
-  return <section class={`${styles.library} ${profileStyles.profile}`} data-testid="android-entity-profile">
+  return <section class={`${styles.library} ${profileStyles.profile}`} data-testid="android-entity-profile" data-native-search-scope>
     <header class={`${hero.header} ${profileStyles.header}`}>
       <button class={`${hero.back} ${profileStyles.back}`} type="button" aria-label={t('artist.ariaBack')} onClick={props.onBack}><BackIcon size={20} /></button>
       <div class={`${hero.hero} ${hero.hasCorner}`}>
@@ -250,7 +251,7 @@ export default function NativeEntityProfile(props: {
       <Show when={songs().length} fallback={
         <Show when={!loading() && !failed()}><EmptyState>{t('artist.empty')}</EmptyState></Show>
       }>
-        <CollectionToolbar contained search={trackSearch} />
+        <NativeSearchToolbar search={trackSearch.reveal} />
         <For each={matches()} fallback={<NoCollectionMatches />}>{(item, index) => songRow(item, () => index() + 1, matches)}</For>
       </Show>
       <Show when={view() === 'discover' && album()?.label}>
@@ -260,7 +261,7 @@ export default function NativeEntityProfile(props: {
         <ReleaseShelf title={t('album.moreBy', { artist: albumArtist() })} artistName={albumArtist()} releases={album()!.more_by_artist!} renderLink={renderEntityLink} />
       </Show>
     </>}>
-      <ArtistDiscoveryView artistName={props.subject.name} topTracks={artist()?.top_tracks ?? []} albums={artist()?.albums ?? []}
+      <ArtistDiscoveryView search={trackSearch} toolbar={<NativeSearchToolbar search={trackSearch.reveal} />} artistName={props.subject.name} topTracks={artist()?.top_tracks ?? []} albums={artist()?.albums ?? []}
         singlesEps={artist()?.singles_eps ?? []} latestRelease={artist()?.latest_release ?? null} related={artist()?.related_artists ?? []} loading={profile.loading()} renderSong={songRow}
         renderLink={renderEntityLink} />
     </Show>

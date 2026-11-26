@@ -1,0 +1,36 @@
+.reveal {
+  flex-shrink: 0;
+  overflow: clip;
+  height: calc(var(--search-reveal, 0) * (var(--control-h) + var(--space-sm)));
+  padding: 0 var(--gutter);
+  transition: height 240ms var(--ease-out);
+}
+
+.reveal > * {
+  opacity: var(--search-reveal, 0);
+  transform: translateY(var(--search-offset, -8px));
+  transition:
+    opacity var(--dur-short) var(--ease-out),
+    transform 240ms var(--ease-out);
+}
+
+.dragging,
+.dragging > * {
+  transition: none;
+}
+
+.contained { padding-inline: 0; }
+
+.nativeActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal > * {
+    transition: none;
+  }
+}

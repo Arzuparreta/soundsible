@@ -100,6 +100,7 @@ public class RadioTest {
             command(web,scenario,"action:'pause'");
             // Canonical recently-added songs can put the original seed outside
             // the virtualized window. Search before interacting with its row.
+            web.openCollectionSearch(scenario, "android-library", "Search songs and artists");
             web.evaluate(scenario,"const input=document.querySelector('[data-testid=android-library] input[type=search]');input.value='member private song';input.dispatchEvent(new Event('input',{bubbles:true}))");
             web.revealLibraryTrack(scenario, "member-track");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song')");

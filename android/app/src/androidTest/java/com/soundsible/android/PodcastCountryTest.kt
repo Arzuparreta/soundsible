@@ -34,7 +34,7 @@ class PodcastCountryTest {
                 web.evaluate(scenario, "localStorage.setItem('lang','en')"); scenario.recreate()
                 waitFor("!!document.querySelector('[data-android-podcasts]')&&!document.documentElement.hasAttribute('data-booting')")
                 web.evaluate(scenario, "document.querySelector('[data-android-podcasts]').click()")
-                val picker = "document.querySelector('[data-testid=android-podcast-directory] header select')"
+                val picker = "document.querySelector('[data-testid=android-podcast-directory] select[aria-label=\"Country for discovering podcasts\"]')"
                 waitFor("$picker?.value==='es'&&document.body.innerText.includes('Popular episodes in Spain')&&document.body.innerText.includes('fixture ranked episode')")
                 web.evaluate(scenario, "$picker.value='us';$picker.dispatchEvent(new Event('change',{bubbles:true}))")
                 waitFor("$picker?.value==='us'&&document.body.innerText.includes('Popular podcasts in United States')")

@@ -25,7 +25,7 @@ import { toast } from '../lib/toast';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import { SearchField } from '../components/SearchField';
+import { createSearchReveal } from '../components/SearchReveal';
 import { createPodcastSearch } from '../lib/podcastSearch';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { CARD_ARTWORK, ROW_ARTWORK, podcastArtwork } from '../lib/podcastArtwork';
@@ -168,10 +168,14 @@ export default function Podcasts() {
     episodeRequest?.abort();
   });
 
+  const reveal = createSearchReveal(() => ({
+    placeholder: t('podcasts.searchPlaceholder'), value: q(), onInput,
+  }));
+
   return (
     <div class="view">
-      <ViewHeader title={t('nav.podcasts')} fieldActions={<PodcastCountryPicker />}
-        field={<SearchField placeholder={t('podcasts.searchPlaceholder')} value={q()} onInput={onInput} />}
+      <ViewHeader title={t('nav.podcasts')} trailing={<PodcastCountryPicker />}
+        search={reveal}
       />
 
       <div

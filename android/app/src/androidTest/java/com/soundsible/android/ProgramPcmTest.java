@@ -143,6 +143,7 @@ public class ProgramPcmTest {
                 click(scenario, "Refresh"); waitFor(scenario, "!!document.querySelector('[data-testid=android-configured]')&&!document.querySelector('[data-testid=android-configured] header button').disabled"); click(scenario, "Library");
                 web.revealLibraryTrack(scenario, "member-pcm-loud");
                 waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-pcm-loud] [data-row-main]')");
+                web.openCollectionSearch(scenario, "android-library", "Search songs and artists");
                 web.evaluate(scenario, "document.querySelector('[data-testid=android-library] input[type=search]').value='member private song';document.querySelector('[data-testid=android-library] input[type=search]').dispatchEvent(new Event('input',{bubbles:true}))");
                 waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");
                 waitFor(scenario, "window.__pcm.playing&&window.__pcm.programToken!==" + JSONObject.quote(programme)); probe.await(currentKey(state(scenario)), (int) Math.round(3000 * gain(first)), 0);

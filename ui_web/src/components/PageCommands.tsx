@@ -17,6 +17,7 @@ function ActionButton(props: { action: AppBarAction; desktop?: boolean }) {
       aria-label={props.action.label}
       aria-busy={props.action.busy || undefined}
       aria-pressed={props.action.pressed}
+      aria-expanded={props.action.expanded}
       aria-haspopup={props.action.opensDialog ? 'dialog' : undefined}
       disabled={props.action.disabled}
       data-pressable

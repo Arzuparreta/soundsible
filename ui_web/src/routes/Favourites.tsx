@@ -1,4 +1,4 @@
-import { CollectionSearch, CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
+import { CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
 import { createMemo } from 'solid-js';
 import { A } from '@solidjs/router';
@@ -72,7 +72,7 @@ export default function Favourites() {
     <div class={`view ${styles.page}`}>
       <ViewHeader
         title={t('favourites.title')}
-        field={hasTracks() ? <CollectionSearch search={search} /> : undefined}
+        search={hasTracks() ? search.reveal : undefined}
         meta={hasTracks() ? trackCount(rows().length) : undefined}
         actions={player().autoMode.active ? (
           <CollectionActions title={t('favourites.title')} tracks={favTracks()} />

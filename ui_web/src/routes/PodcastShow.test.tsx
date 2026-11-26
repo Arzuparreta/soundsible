@@ -1,3 +1,4 @@
+vi.mock('../lib/shellLayout', () => ({ desktopShell: () => true }));
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import PodcastShow from './PodcastShow';

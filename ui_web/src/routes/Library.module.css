@@ -54,31 +54,6 @@
   border-radius: var(--radius-full);
 }
 
-/* Rendered only by the touch shell, which is not a width: at the Large size it
-   also covers small desktop windows (lib/shellLayout.ts). The height is the
-   field plus its bottom gap, scaled by how far the swipe has revealed it. */
-.searchReveal {
-  flex-shrink: 0;
-  overflow: clip;
-  height: calc(var(--search-reveal, 0) * (var(--control-h) + var(--space-sm)));
-  padding: 0 var(--gutter);
-  transition: height 240ms var(--ease-out);
-  will-change: height;
-}
-
-.searchReveal > * {
-  opacity: var(--search-reveal, 0);
-  transform: translateY(var(--search-offset, -8px));
-  transition:
-    opacity var(--dur-short) var(--ease-out),
-    transform 240ms var(--ease-out);
-}
-
-.searchDragging,
-.searchDragging > * {
-  transition: none;
-}
-
 .filterChips {
   display: flex;
   gap: var(--space-2xs);

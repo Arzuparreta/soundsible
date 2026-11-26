@@ -1,4 +1,4 @@
-import { CollectionSearch, NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
+import { NoCollectionMatches, createCollectionSearch } from '../components/CollectionSearch';
 import Button from '../components/Button';
 import { A } from '@solidjs/router';
 import button from '../design/Button.module.css';
@@ -56,7 +56,7 @@ export default function Downloads() {
     <div class="view">
       <ViewHeader
         title={t('downloads.title')}
-        field={hasDownloads() ? <CollectionSearch search={search} /> : undefined}
+        search={hasDownloads() ? search.reveal : undefined}
         meta={hasDownloads() ? summary() : undefined}
         barActions={counts().failed > 0
           ? [{ label: t('downloads.clearErrors'), tone: 'danger', icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]

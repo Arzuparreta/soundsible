@@ -1,3 +1,4 @@
+import type { SearchRevealState } from '../components/SearchReveal';
 import { createSignal, onCleanup, type JSX } from 'solid-js';
 
 /**
@@ -15,6 +16,7 @@ export interface AppBarAction {
   disabled?: boolean;
   busy?: boolean;
   pressed?: boolean;
+  expanded?: boolean;
   /** Current value shown as the desktop command label, e.g. the sort order. */
   desktopLabel?: string;
   /** A destructive command: red text, or a red fill when `prominent`. */
@@ -40,6 +42,7 @@ export interface AppBarConfig {
   back?: () => void;
   backLabel?: () => string;
   actions?: () => AppBarAction[];
+  search?: () => SearchRevealState | undefined;
   /** Native dropdowns need their own control to preserve platform keyboard behavior. */
   trailing?: () => JSX.Element;
   /**

@@ -210,16 +210,18 @@ test('the refresh button reads the feed again', async ({ page, isMobile }) => {
   expect(asked).toEqual(['cached', 'check', 'refresh']);
 });
 
-test('pulling the episode list down from its top refreshes it', async ({ page, isMobile, browserName }) => {
+test('a pull reveals episode search and a longer pull refreshes the feed', async ({ page, isMobile, browserName }) => {
   test.skip(!isMobile || browserName !== 'chromium', 'CDP provides real multi-event touch input');
   await mockPodcasts(page);
   const { asked, kept } = await mockFeedModes(page, async () => ({ episodes: kept, changed: false }));
   await page.goto('/player/#/podcasts/show-1');
   await expect(page.getByText('Episodio guardado', { exact: true })).toBeVisible();
   await expect.poll(() => asked).toEqual(['cached', 'check']);
-  // A short pull lets go without asking for anything.
+  const search = page.getByRole('searchbox', { name: 'Buscar en episodios cargados' });
+  await expect(search).toHaveCount(0);
   await dragTouch(page, '[data-primary-scroll]', { dy: 60 });
-  await page.waitForTimeout(100);
+  await expect(search).toBeVisible();
+  await expect(search).not.toBeFocused();
   expect(asked).toEqual(['cached', 'check']);
   await dragTouch(page, '[data-primary-scroll]', { dy: 260 });
   await expect(page.getByText('Episodio recién subido', { exact: true })).toBeVisible();
@@ -284,7 +286,7 @@ test('podcast buttons jump 15 seconds and each show resumes after switching and 
   await expect(pill.getByRole('button', { name: 'Avanzar 15 segundos' })).toBeVisible();
 });
 
-test('the globe selects the account country beside the search field', async ({ page }, testInfo) => {
+test('the globe selects the account country from the page controls', async ({ page, isMobile }, testInfo) => {
   await mockPodcasts(page);
   let country = 'us';
   await page.route('**/api/discovery/settings', async route => {
@@ -302,11 +304,17 @@ test('the globe selects the account country beside the search field', async ({ p
   await page.goto('/player/#/podcasts');
   const selector = page.getByRole('combobox', { name: 'País para descubrir podcasts' });
   await expect(selector).toHaveValue('us');
-  const search = page.getByPlaceholder('Buscar podcasts…');
-  const field = (await search.boundingBox())!;
-  const globe = (await selector.boundingBox())!;
-  expect(globe.x).toBeGreaterThan(field.x + field.width);
-  expect(globe.y + globe.height / 2).toBeCloseTo(field.y + field.height / 2, 0);
+  const search = page.getByRole('searchbox', { name: 'Buscar podcasts…' });
+  if (isMobile) {
+    await expect(search).toHaveCount(0);
+    await expect(page.locator('[data-app-bar]').getByRole('combobox')).toHaveCount(1);
+  } else {
+    await expect(search).toBeVisible();
+    const field = (await search.boundingBox())!;
+    const globe = (await selector.boundingBox())!;
+    expect(globe.x).toBeGreaterThan(field.x + field.width);
+    expect(globe.y + globe.height / 2).toBeCloseTo(field.y + field.height / 2, 0);
+  }
   await selector.selectOption('es');
   await expect(selector).toHaveValue('es');
   await expect(page.getByRole('heading', { name: 'Podcasts populares en España' })).toBeVisible();
@@ -441,7 +449,7 @@ test('category filters both country rankings while keeping followed shows visibl
   await expect(page.getByText('Podcast noticias', { exact: true })).toBeVisible();
 });
 
-test('one podcast search combines followed and directory shows and keeps local matches on directory failure', async ({ page }) => {
+test('one podcast search combines followed and directory shows and keeps local matches on directory failure', async ({ page, isMobile }) => {
   const { followed } = await mockPodcasts(page);
   const credit = 'Autora y productora del programa de entrevistas y conversaciones sobre música';
   await page.route(url => url.pathname === '/api/library', route => route.fulfill({ json: {
@@ -455,7 +463,8 @@ test('one podcast search combines followed and directory shows and keeps local m
   await page.goto('/player/#/podcasts');
   await expect(page.getByText('Programa seguido', { exact: true })).toBeVisible();
   await expect(page.locator('main input[type="search"]')).toHaveCount(1);
-  const field = page.getByPlaceholder('Buscar podcasts…');
+  const field = page.getByRole('searchbox', { name: 'Buscar podcasts…' });
+  if (isMobile) await page.locator('[data-app-bar]').getByRole('button', { name: 'Buscar podcasts…' }).click();
 
   await field.fill('programa');
   const local = page.getByRole('link', { name: /Programa seguido.*Suscrito/ });

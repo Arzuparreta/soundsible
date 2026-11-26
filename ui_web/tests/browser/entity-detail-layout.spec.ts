@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { mockMusicEngine } from './music-browser-fixture';
 
 const ARTIST = 'Josh Woodward';
@@ -111,12 +111,6 @@ async function expectFullTitle(heading: Locator, title: string) {
   })).toBe(true);
 }
 
-/** Allow the shared toolbar while retaining the hero's height budget. */
-async function fieldFootprint(field: Locator) {
-  await expect(field).toBeVisible();
-  return field.evaluate(element => element.closest('[data-page-toolbar]')!.getBoundingClientRect().height);
-}
-
 for (const kind of ['album', 'artist'] as const) {
   test(`${kind}: 360px Spanish Large reaches songs after one toolbar and switches content without playing`, async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
@@ -140,12 +134,20 @@ for (const kind of ['album', 'artist'] as const) {
     await expect(header.getByRole('button', { name: 'Descubrir', exact: true })).toHaveCount(0);
     await expect(header.getByRole('button', { name: /^Mi biblioteca/ })).toHaveCount(0);
     const first = outlet.locator(rowSelector).first();
-    const field = outlet.getByRole('searchbox', { name: 'Filtrar esta lista' });
-    const searchHeight = await fieldFootprint(field);
+    const field = page.getByRole('searchbox', { name: 'Filtrar esta lista' });
+    const search = page.locator('[data-app-bar]').getByRole('button', { name: 'Filtrar esta lista' });
+    await expect(field).toHaveCount(0);
     await expect(first).toBeInViewport();
-    expect((await first.boundingBox())!.y).toBeLessThanOrEqual((kind === 'album' ? 280 : 320) + searchHeight);
+    expect((await first.boundingBox())!.y).toBeLessThanOrEqual(kind === 'album' ? 280 : 320);
+
+    await search.click();
+    await expect(field).toBeFocused();
+    await field.fill('Catalog song 3');
+    await expect(outlet.locator(rowSelector)).toHaveCount(1);
+    await expect(outlet.getByText('Catalog song 3', { exact: true })).toBeVisible();
 
     await mode.selectOption('library');
+    await expect(field).toHaveCount(0);
     await expect(page).toHaveURL(/view=library/);
     await expect(outlet.locator(rowSelector)).toHaveCount(3);
     await expect(outlet.getByText('Local song 1', { exact: true })).toBeVisible();
@@ -221,7 +223,10 @@ test('a long podcast identity leaves its first episode visible below one control
   await expectSingleToolbar(page);
   const episode = outlet.getByText('Episode 1: Making room for music', { exact: true });
   await expect(episode).toBeInViewport();
-  const searchHeight = await fieldFootprint(outlet.getByRole('searchbox', { name: 'Buscar en episodios cargados' }));
-  expect((await episode.boundingBox())!.y).toBeLessThanOrEqual(360 + searchHeight);
+  const field = page.getByRole('searchbox', { name: 'Buscar en episodios cargados' });
+  await expect(field).toHaveCount(0);
+  expect((await episode.boundingBox())!.y).toBeLessThanOrEqual(360);
+  await page.locator('[data-app-bar]').getByRole('button', { name: 'Buscar en episodios cargados' }).click();
+  await expect(field).toBeFocused();
   await expect(outlet.locator('header').getByRole('button', { name: 'Dejar de seguir', exact: true })).toHaveCount(0);
 });

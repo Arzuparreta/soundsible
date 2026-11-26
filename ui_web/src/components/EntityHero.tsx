@@ -5,6 +5,7 @@ import { coverGradient } from '../lib/cover';
 import { t } from '../lib/i18n';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { desktopShell } from '../lib/shellLayout';
+import type { SearchRevealState } from './SearchReveal';
 import { CoverImage } from './CoverImage';
 import { BackIcon } from './icons';
 import hero from './EntityHero.module.css';
@@ -21,9 +22,10 @@ export function EntityHero(props: {
   corner?: JSX.Element;
   children?: JSX.Element;
   metadata?: JSX.Element;
+  search?: SearchRevealState;
 }) {
   const [heading, setHeading] = createSignal<HTMLElement>();
-  useAppBar({ title: () => props.name, back: props.back, backLabel: () => props.backLabel, heading });
+  useAppBar({ title: () => props.name, back: props.back, backLabel: () => props.backLabel, heading, search: () => props.search });
 
   const openMenu = () => props.openMenu?.();
   const tap = createResponsiveTap({ onTap: openMenu, onLongPress: openMenu });
