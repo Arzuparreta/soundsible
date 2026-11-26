@@ -144,7 +144,7 @@ test('collection search uses the full toolbar on desktop and opens from the app 
   });
 });
 
-test('pulling at the top reveals a list filter without focusing it and scrolling away hides it', async ({ page, isMobile, browserName }) => {
+test('a continuous pull through the top reveals the filter and an upward swipe into the list dismisses it', async ({ page, isMobile, browserName }) => {
   test.skip(!isMobile || browserName !== 'chromium', 'CDP injects trusted touch gestures');
   await mockLists(page);
   await page.goto('/player/#/favourites');
@@ -154,11 +154,93 @@ test('pulling at the top reveals a list filter without focusing it and scrolling
   await expect(field).toHaveCount(0);
   await dragTouch(page, '[data-primary-scroll]', { dx: 85 });
   await expect(field).toHaveCount(0);
-  await dragTouch(page, '[data-primary-scroll]', { dy: 70 });
-  await expect(field).toBeVisible();
-  await expect(field).not.toBeFocused();
+  const position = () => surface.evaluate(element => element.scrollTop);
   await surface.evaluate(element => { element.scrollTop = 300; });
-  await expect(field).toHaveCount(0);
   await dragTouch(page, '[data-primary-scroll]', { dy: 60 });
   await expect(field).toHaveCount(0);
+  await expect.poll(position).toBeGreaterThan(1);
+
+  await surface.evaluate(element => { element.scrollTop = 60; });
+  await dragTouch(page, '[data-primary-scroll]', { dy: 150 }, 12);
+  await expect.poll(position).toBe(0);
+  await expect(field).toBeVisible();
+  await expect(field).not.toBeFocused();
+  await dragTouch(page, '[data-primary-scroll]', { dy: -65 });
+  await expect.poll(position).toBeGreaterThan(24);
+  await expect(field).toHaveCount(0);
+  await surface.evaluate(element => { element.scrollTop = 0; });
+  await expect(field).toHaveCount(0);
+});
+
+test('an active filter stays open while scrolling, and an empty filter stays open on the way back up', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Only the touch shell conceals collection search');
+  await mockLists(page);
+  await page.goto('/player/#/favourites');
+  const surface = page.locator('[data-primary-scroll]');
+  const field = page.getByRole('searchbox');
+  const command = page.locator('[data-app-bar]').getByRole('button', { name: 'Filtrar esta lista' });
+  await expect(surface.locator(rowSelector).first()).toBeVisible();
+  await surface.evaluate(element => { element.scrollTop = 300; });
+  await command.tap();
+  await expect(field).toBeFocused();
+  await surface.evaluate(element => { element.scrollTop = 340; });
+  await expect(field).toBeFocused();
+  await field.blur();
+  await surface.evaluate(element => { element.scrollTop = 200; });
+  await expect(field).toBeVisible();
+
+  await field.fill('Halo');
+  await field.blur();
+  await surface.evaluate(element => { element.scrollTop = 400; });
+  await expect(field).toHaveValue('Halo');
+  await field.clear();
+  await field.blur();
+  await surface.evaluate(element => { element.scrollTop = 520; });
+  await expect(field).toHaveCount(0);
+});
+
+test('an empty filter can be swiped closed on a short collection', async ({ page, isMobile, browserName }) => {
+  test.skip(!isMobile || browserName !== 'chromium', 'CDP injects trusted touch gestures');
+  await mockLists(page);
+  await page.goto('/player/#/library?view=artists');
+  const surface = page.locator('[data-primary-scroll]');
+  const field = page.getByRole('searchbox');
+  await expect(surface.getByText('Halo artista 0')).toBeVisible();
+  await dragTouch(page, '[data-primary-scroll]', { dy: 60 });
+  await expect(field).toBeVisible();
+  await dragTouch(page, '[data-primary-scroll]', { dy: -55 });
+  await expect(field).toHaveCount(0);
+});
+
+test('the concealed field follows the drag and returns to rest when the touch is cancelled', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Only the touch shell conceals collection search');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await mockLists(page);
+  await page.goto('/player/#/favourites');
+  const surface = page.locator('[data-primary-scroll]');
+  const reveal = page.locator('[data-search-reveal]');
+  const field = page.getByRole('searchbox');
+  await expect(surface.locator(rowSelector).first()).toBeVisible();
+
+  const touch = (type: string, y?: number) => surface.evaluate((element, { type, y }) => {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'touches', { value: y === undefined ? [] : [{ clientX: 180, clientY: y }] });
+    element.dispatchEvent(event);
+  }, { type, y });
+  const height = () => reveal.evaluate(element => element.getBoundingClientRect().height);
+
+  await touch('touchstart', 200);
+  await touch('touchmove', 221);
+  const partial = await height();
+  expect(partial).toBeGreaterThan(0);
+  await expect(field).toHaveCount(0);
+  await touch('touchcancel');
+  await expect.poll(height).toBe(0);
+
+  await touch('touchstart', 200);
+  await touch('touchmove', 235);
+  await touch('touchend');
+  await expect(field).toBeVisible();
+  await expect.poll(height).toBeGreaterThan(partial);
+  await expect(field).not.toBeFocused();
 });
