@@ -78,14 +78,11 @@ class DjSharedTempoTest {
                 command("action:'queue',index:0,tracks:[{source:'local',id:'member-pcm-soft',title:'Clicks 120',artist:'member artist',duration:90}]")
                 waitFor("window.__dj.playing && window.__dj.id==='member-pcm-soft'")
                 // The whole programme output, in order, with its output frame.
-                val blocks = java.util.concurrent.ConcurrentLinkedQueue<Pair<Long, ShortArray>>()
-                var sampleRate = 0
-                NativeProgramOutput.subscribe(connection.generation) { block ->
-                    val input = ByteBuffer.wrap(block.bytes).order(ByteOrder.LITTLE_ENDIAN)
-                    val count = input.remaining() / (block.channels * 2)
-                    sampleRate = block.sampleRate
-                    val mono = ShortArray(count) { val value = input.short; repeat(block.channels - 1) { input.short }; value }
-                    blocks.add(block.frameOffset to mono)
+                val blocks = java.util.concurrent.ConcurrentLinkedQueue<ProgramPcmTap.Block>()
+                // A suspended emulator consumer must survive bursts of post-DSP blocks.
+                // Keep the callback allocation-light and decode only after playback capture.
+                NativeProgramOutput.subscribe(connection.generation, bufferedBlocks = 128) {
+                    blocks.add(it)
                 }.use { capture ->
                     command("action:'dj',fromCurrent:true,key:window.__dj.items[window.__dj.index].key,sources:[{id:'clicks',label:'Clicks',activation:0,tracks:[{id:'member-pcm-soft',title:'Clicks 120',artist:'member artist',duration:90},{id:'member-pcm-loud',title:'Clicks 132',artist:'member artist',duration:60}]}]")
                     waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>1")
@@ -98,7 +95,16 @@ class DjSharedTempoTest {
                 assertTrue("The native planner did not ask for shared-tempo plans", state.getInt("split_requests") > 0)
                 assertEquals(0, state.getInt("other_requests"))
 
-                val ordered = blocks.sortedBy { it.first }
+                val captured = blocks.toList()
+                assertTrue("No native PCM was captured", captured.isNotEmpty())
+                val sampleRate = captured.first().sampleRate
+                val ordered = captured.sortedBy { it.frameOffset }.map { block ->
+                    assertEquals("Native sample rate changed during capture", sampleRate, block.sampleRate)
+                    val input = ByteBuffer.wrap(block.bytes).order(ByteOrder.LITTLE_ENDIAN)
+                    val count = input.remaining() / (block.channels * 2)
+                    val mono = ShortArray(count) { index -> input.getShort(index * block.channels * 2) }
+                    block.frameOffset to mono
+                }
                 val start = ordered.first().first
                 val pcm = ShortArray((ordered.last().first - start).toInt() + ordered.last().second.size)
                 for ((frame, samples) in ordered) samples.copyInto(pcm, (frame - start).toInt())
