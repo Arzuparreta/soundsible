@@ -2,12 +2,10 @@ import { createEffect, createSignal, Show, type Component } from 'solid-js';
 import { useHref, useLocation, useNavigate } from '@solidjs/router';
 import { IconButton } from '../design/Control';
 import { t } from '../lib/i18n';
-import { setLibraryTab } from '../lib/libraryView';
 import { pageVisible } from '../lib/pageVisibility';
 import { playerDocked } from '../lib/playerDock';
 import { desktopShell } from '../lib/shellLayout';
 import { sidebarCollapsed, toggleSidebarCollapsed } from '../lib/sidebarState';
-import { openPrimaryDestination } from '../lib/tabMemory';
 import { nowPlayingOpen } from '../stores';
 import { SidebarToggleIcon } from './icons';
 import { NavigationLinks } from './NavigationMenu';
@@ -62,14 +60,7 @@ export function Sidebar() {
         collapsed={collapsed()}
         path={location.pathname}
         search={location.search}
-        select={(href, view, selected = false) => {
-          if (view) {
-            setLibraryTab(view);
-            navigate(href);
-          } else {
-            openPrimaryDestination(navigate, href, selected, `${location.pathname}${location.search}`);
-          }
-        }}
+        navigate={navigate}
       />
     </aside>
   );

@@ -11,6 +11,8 @@ import { navigationGroups, navigationItems, mobileNavGroup, type NavigationGroup
 import styles from './NavigationMenu.module.css';
 
 const LIBRARY_VIEW_PREFIX = '/library?view=';
+const mainGroups = navigationGroups.filter((group) => !group.footer);
+const footerGroups = navigationGroups.filter((group) => group.footer);
 
 function libraryViewOf(href: string): string | undefined {
   return href.startsWith(LIBRARY_VIEW_PREFIX) ? href.slice(LIBRARY_VIEW_PREFIX.length) : undefined;
@@ -34,15 +36,12 @@ function GroupSection(props: {
   group: NavigationGroup;
   collapsed?: boolean;
   current: () => { href: string; inside?: string };
-  select?: (href: string, view?: string, selected?: boolean) => void;
+  select: (href: string, view: string | undefined, selected: boolean) => void;
 }) {
   return (
     <section
       class={styles.group}
-      classList={{
-        [styles.secondaryGroup]: Boolean(props.group.secondary),
-        [styles.footerGroup]: Boolean(props.group.footer),
-      }}
+      classList={{ [styles.footerGroup]: Boolean(props.group.footer) }}
     >
       <Show when={props.group.showHeading}>
         <h2 aria-hidden={props.collapsed || undefined}>
@@ -71,12 +70,8 @@ function GroupSection(props: {
                 aria-label={props.collapsed ? item.label() : undefined}
                 title={props.collapsed ? item.label() : undefined}
                 onClick={(event) => {
-                  if (props.select) {
-                    event.preventDefault();
-                    props.select(href, view, selected());
-                  } else if (view) {
-                    setLibraryTab(view);
-                  }
+                  event.preventDefault();
+                  props.select(href, view, selected());
                 }}
               >
                 <span class={styles.icon}>{item.icon()}</span>
@@ -103,11 +98,22 @@ export function NavigationLinks(props: {
   search?: string;
   collapsed?: boolean;
   desktop?: boolean;
-  select?: (href: string, view?: string, selected?: boolean) => void;
+  navigate: Navigator;
+  onSelect?: (go: () => void, view: string | undefined) => void;
 }) {
   const current = () => navigationCurrent(props.path, props.search);
-  const mainGroups = navigationGroups.filter((group) => !group.footer);
-  const footerGroups = navigationGroups.filter((group) => group.footer);
+  const select = (href: string, view: string | undefined, selected: boolean) => {
+    const go = () => {
+      if (view) {
+        setLibraryTab(view);
+        props.navigate(href);
+      } else {
+        openPrimaryDestination(props.navigate, href, selected, `${props.path}${props.search ?? ''}`);
+      }
+    };
+    if (props.onSelect) props.onSelect(go, view);
+    else go();
+  };
 
   return (
     <div
@@ -121,7 +127,7 @@ export function NavigationLinks(props: {
               group={group}
               collapsed={props.collapsed}
               current={current}
-              select={props.select}
+              select={select}
             />
           )}
         </For>
@@ -132,7 +138,7 @@ export function NavigationLinks(props: {
             group={group}
             collapsed={props.collapsed}
             current={current}
-            select={props.select}
+            select={select}
           />
         )}
       </For>
@@ -164,14 +170,10 @@ function Drawer(props: {
       <NavigationLinks
         path={props.path()}
         search={props.search()}
-        select={(href, view, selected = false) => props.close(() => {
-          if (view) {
-            props.onViewChange?.();
-            setLibraryTab(view);
-            props.navigate(href);
-          } else {
-            openPrimaryDestination(props.navigate, href, selected, `${props.path()}${props.search()}`);
-          }
+        navigate={props.navigate}
+        onSelect={(go, view) => props.close(() => {
+          if (view) props.onViewChange?.();
+          go();
         })}
       />
     </div>
