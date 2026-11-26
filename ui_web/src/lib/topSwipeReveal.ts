@@ -1,87 +1,48 @@
 const ACTIVATION_SLOP = 7;
-const OPEN_DISTANCE = 38;
+const OPEN_DISTANCE = 48;
 const COMMIT_PROGRESS = 0.42;
+const FLICK_PROGRESS = 0.2;
 const FLICK_VELOCITY = 0.24;
-
-export interface SwipeRevealFrame {
-  captured: boolean;
-  progress: number;
-}
+const FLICK_WINDOW = 80;
 
 /**
- * Small, DOM-free state machine for concealed mobile search.
- *
- * The first gesture towards the top of the list is consumed by the controls
- * instead of overscrolling the first row. Touch coordinates move down while
- * the scroll position is being pushed back towards zero. Horizontal/diagonal
- * gestures and taps are deliberately rejected so row actions stay predictable.
+ * Track a pull towards the top of the list, or its reverse on a short list.
+ * Scroll distance before the top belongs to the list. Only the remaining
+ * finger travel counts towards revealing the controls.
  */
-export function createTopSwipeReveal() {
-  let tracking = false;
+export function createTopSwipeReveal(x: number, y: number, direction: 1 | -1, scrollOffset: number) {
+  let tracking = true;
   let captured = false;
-  let cancelled = false;
-  let startX = 0;
-  let startY = 0;
-  let startTime = 0;
-  let lastY = 0;
-  let lastTime = 0;
   let progress = 0;
+  let lastY = y;
+  let lastTime = 0;
+  let velocity = 0;
 
-  const begin = (x: number, y: number, time: number, atTop: boolean, enabled: boolean) => {
-    tracking = atTop && enabled;
-    captured = false;
-    cancelled = false;
-    startX = x;
-    startY = y;
-    startTime = time;
-    lastY = y;
-    lastTime = time;
-    progress = 0;
-  };
-
-  const move = (x: number, y: number, time: number): SwipeRevealFrame => {
-    if (!tracking || cancelled) return { captured: false, progress };
-
-    const revealDelta = y - startY;
-    const horizontal = Math.abs(x - startX);
+  const move = (clientX: number, clientY: number, time: number, atEdge: boolean) => {
+    const delta = direction * (clientY - y);
+    const across = Math.abs(clientX - x);
 
     if (!captured) {
-      if (revealDelta < -ACTIVATION_SLOP || (horizontal > ACTIVATION_SLOP && horizontal >= Math.abs(revealDelta))) {
-        cancelled = true;
-        return { captured: false, progress };
+      if (delta < -ACTIVATION_SLOP || (across > ACTIVATION_SLOP && across >= Math.abs(delta))) {
+        tracking = false;
       }
-      if (revealDelta <= ACTIVATION_SLOP || revealDelta <= horizontal * 1.2) {
+      if (!tracking || !atEdge || delta - scrollOffset <= ACTIVATION_SLOP || delta <= across * 1.2) {
         return { captured: false, progress };
       }
       captured = true;
     }
 
-    progress = Math.min(1, Math.max(0, (revealDelta - ACTIVATION_SLOP) / OPEN_DISTANCE));
-    lastY = y;
-    lastTime = time;
+    progress = Math.min(1, Math.max(0, (delta - scrollOffset - ACTIVATION_SLOP) / OPEN_DISTANCE));
+    if (clientY !== lastY) {
+      velocity = lastTime ? direction * (clientY - lastY) / Math.max(1, time - lastTime) : 0;
+      lastY = clientY;
+      lastTime = time;
+    }
     return { captured, progress };
   };
 
-  const end = (time: number): SwipeRevealFrame & { open: boolean } => {
-    const duration = Math.max(1, time - Math.max(startTime, lastTime - 80));
-    const velocity = captured ? Math.max(0, (lastY - startY) / duration) : 0;
-    const open = captured && (progress >= COMMIT_PROGRESS || velocity >= FLICK_VELOCITY);
-    const result = { captured, progress: open ? 1 : 0, open };
-    tracking = false;
-    captured = false;
-    cancelled = false;
-    progress = result.progress;
-    return result;
-  };
+  const commit = (time: number) => captured && (progress >= COMMIT_PROGRESS ||
+    (progress >= FLICK_PROGRESS && time - lastTime <= FLICK_WINDOW && velocity >= FLICK_VELOCITY));
 
-  const cancel = () => {
-    const wasCaptured = captured;
-    tracking = false;
-    captured = false;
-    cancelled = false;
-    progress = 0;
-    return { captured: wasCaptured, progress: 0 };
-  };
-
-  return { begin, move, end, cancel, isTracking: () => tracking && !cancelled };
+  return { move, commit, isTracking: () => tracking, isCaptured: () => captured };
 }

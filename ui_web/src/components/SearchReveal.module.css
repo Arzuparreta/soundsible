@@ -19,6 +19,13 @@
   transition: none;
 }
 
+/* The field supplies the motion at the top, including when a native scroll
+   reaches it mid-gesture. Avoid adding the browser's own rubber band. */
+.reveal ~ :global([data-app-outlet]),
+.reveal ~ :global([data-app-outlet] [data-primary-scroll]) {
+  overscroll-behavior-y: none;
+}
+
 .contained { padding-inline: 0; }
 
 .nativeActions {
