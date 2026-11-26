@@ -272,6 +272,49 @@ def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatc
     assert [item["title"] for item in cached_radar] == [item["title"] for item in radar]
 
 
+def test_release_radar_hydrates_past_first_batch_when_catalogues_are_cold(monkeypatch):
+    from shared.database import instance_db
+
+    db = instance_db()
+    now = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+    db.upsert_graph_nodes([
+        {"deezer_artist_id": "1", "name": "Seed", "literal_key": "seed",
+         "folded_key": "seed", "related_synced_at": now},
+        *[
+            {"deezer_artist_id": str(aid), "name": f"Peer {aid}",
+             "literal_key": f"peer {aid}", "folded_key": f"peer {aid}"}
+            for aid in range(10, 30)
+        ],
+    ])
+    db.replace_similarity_edges("1", "deezer", [
+        (str(aid), aid - 10, 1 / (aid - 9)) for aid in range(10, 30)
+    ], now)
+    calls = []
+
+    def get(path, params=None, **kwargs):
+        if path == "album/2400":
+            return {"id": 2400}
+        assert path.endswith("/albums"), path
+        aid = int(path.split("/")[1])
+        calls.append(aid)
+        return {"data": [{
+            "id": aid * 100,
+            "title": "New release" if aid == 24 else f"Back catalogue {aid}",
+            "record_type": "album",
+            "release_date": "2026-11-20" if aid == 24 else "2025-01-01",
+        }]}
+
+    monkeypatch.setattr(deezer, "get", get)
+    body = build_browse_sections(["Seed"], today=datetime.date(2026, 11, 26))
+    sections = {section["id"]: section["items"] for section in body["browse_sections"]}
+
+    assert [item["title"] for item in sections.get("release_radar", [])] == ["New release"]
+    assert calls == list(range(10, 30))
+    assert sections["release_radar"][0]["reason_artist"] == "Seed"
+    assert all(item["title"] != "New release" for item in sections["albums"])
+    assert not body["browse_error"]
+
+
 def test_home_new_releases_180d_taste_profile_ignores_pins_credits_contributors_and_route(monkeypatch):
     from flask import Flask
     from player.saved_entities import set_saved
