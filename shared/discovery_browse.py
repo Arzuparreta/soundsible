@@ -275,37 +275,44 @@ def build_browse_sections(
             seen_owner_ids.add(oid)
             album_owner_ids.append(oid)
 
-        cached_nodes = db.get_graph_nodes_by_ids(album_owner_ids)
-        sync_nodes = [cached_nodes[aid] for aid in album_owner_ids if aid in cached_nodes]
-        rel_failed, _ = sync_artist_releases(sync_nodes, max_sync=10, deadline=deadline)
-        if rel_failed:
-            failed = True
+        radar_owners = {str(c["external_ids"]["deezer_artist_id"]): c for c in radar_candidates}
+        # Spend the first batch on artists who can actually populate Radar.
+        # Keep the album shelf ranking separate from network hydration order.
+        sync_ids = list(dict.fromkeys([*radar_owners, *album_owner_ids]))
+        cached_nodes = db.get_graph_nodes_by_ids(sync_ids)
+        sync_nodes = [cached_nodes[aid] for aid in sync_ids if aid in cached_nodes]
+        release_batch = 10
+        rel_failed, _ = sync_artist_releases(sync_nodes, max_sync=release_batch, deadline=deadline)
+        failed |= rel_failed
 
-        # 1) Release Radar: recent releases (45d) from outward consensus artists.
-        if radar_candidates:
-            radar_weights = {
-                str(c["external_ids"]["deezer_artist_id"]): float(c.get("score") or 0.0)
-                for c in radar_candidates
-            }
-            radar_reasons = {
-                str(c["external_ids"]["deezer_artist_id"]): str(c.get("reason_artist") or "")
-                for c in radar_candidates
-            }
-            radar_names = {
-                str(c["external_ids"]["deezer_artist_id"]): str(c["title"])
-                for c in radar_candidates
-            }
-            release_radar = build_release_rail(
-                radar_weights,
+        def project_radar() -> list[dict]:
+            return build_release_rail(
+                {aid: float(c["score"]) for aid, c in radar_owners.items()},
                 window_days=_RELEASE_RADAR_WINDOW_DAYS,
                 exclude_album_keys=owned_album_keys,
-                reason_by_artist=radar_reasons,
-                artist_names_by_id=radar_names,
+                reason_by_artist={aid: c["reason_artist"] for aid, c in radar_owners.items()},
+                artist_names_by_id={aid: str(c["title"]) for aid, c in radar_owners.items()},
                 max_per_artist=2,
                 limit=limit,
                 today=ref_today,
                 deadline=deadline,
             )
+
+        if radar_owners:
+            release_radar = project_radar()
+            # A cold first batch can be complete and still contain only back
+            # catalogue. Check the rest of the ranked window before publishing
+            # an empty Radar, using the same deadline and shared discographies.
+            if not release_radar and not rel_failed and len(radar_owners) > release_batch:
+                remaining_nodes = db.get_graph_nodes_by_ids(radar_owners)
+                rel_failed, had_stale = sync_artist_releases(
+                    [remaining_nodes[aid] for aid in radar_owners if aid in remaining_nodes],
+                    max_sync=len(radar_owners) - release_batch,
+                    deadline=deadline,
+                )
+                failed |= rel_failed
+                if had_stale:
+                    release_radar = project_radar()
 
         # 2) Albums for you: full-catalog discovery reusing the exact same cache.
         radar_album_ids = {
