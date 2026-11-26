@@ -18,7 +18,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 import requests
 
@@ -195,6 +195,94 @@ class ListenBrainzClient:
         payload = [{"listened_at": item.started_at, "track_metadata": self._track(item)} for item in listens]
         return self._submit("single" if len(payload) == 1 else "import", payload)
 
+    # -- federated discovery read-back (ListenBrainz only, never Maloja) ----
+
+    def cf_recommendations(self, username: str, *, count: int = 50) -> Reply:
+        """Fetch collaborative-filtering recording MBIDs for ``username``."""
+        clean_user = str(username or "").strip()
+        if self._maloja or not clean_user:
+            return Reply(Outcome.OK, data={"mbids": []})
+        try:
+            response = requests.get(
+                f"{self._base}/1/cf/recommendation/user/{quote(clean_user, safe='')}/recording",
+                params={"count": max(1, min(100, int(count)))},
+                headers=self._headers(),
+                timeout=(4.0, 8.0),
+            )
+        except requests.RequestException as error:
+            return Reply(Outcome.RETRY, f"unreachable:{type(error).__name__}")
+        if response.status_code == 204:
+            return Reply(Outcome.OK, data={"mbids": []})
+        reply = self._reply(response)
+        if not reply.ok:
+            return reply
+        try:
+            body = response.json()
+        except ValueError:
+            return Reply(Outcome.REJECTED, "invalid_json")
+        rows = (body.get("payload") or {}).get("mbids") if isinstance(body, dict) else None
+        mbids = [
+            {
+                "recording_mbid": str(row.get("recording_mbid") or "").strip(),
+                "score": float(row.get("score") or 0.0),
+            }
+            for row in (rows if isinstance(rows, list) else [])
+            if isinstance(row, dict) and str(row.get("recording_mbid") or "").strip()
+        ]
+        return Reply(Outcome.OK, data={"mbids": mbids})
+
+    def recording_metadata(self, mbids: list[str]) -> Reply:
+        """Batch-resolve recording MBIDs to artist/release metadata (max 50)."""
+        cleaned = [str(m).strip() for m in mbids if str(m).strip()][:50]
+        if self._maloja or not cleaned:
+            return Reply(Outcome.OK, data={"recordings": {}})
+        try:
+            response = requests.get(
+                f"{self._base}/1/metadata/recording/",
+                params={"recording_mbids": ",".join(cleaned), "inc": "artist"},
+                headers=self._headers(),
+                timeout=(4.0, 8.0),
+            )
+        except requests.RequestException as error:
+            return Reply(Outcome.RETRY, f"unreachable:{type(error).__name__}")
+        reply = self._reply(response)
+        if not reply.ok:
+            return reply
+        try:
+            body = response.json()
+        except ValueError:
+            return Reply(Outcome.REJECTED, "invalid_json")
+        if not isinstance(body, dict):
+            return Reply(Outcome.OK, data={"recordings": {}})
+        return Reply(Outcome.OK, data={"recordings": body})
+
+    def fresh_releases(self, username: str, *, days: int = 14) -> Reply:
+        """Fetch personalized Fresh Releases for ``username``."""
+        clean_user = str(username or "").strip()
+        if self._maloja or not clean_user:
+            return Reply(Outcome.OK, data={"releases": []})
+        try:
+            response = requests.get(
+                f"{self._base}/1/user/{quote(clean_user, safe='')}/fresh-releases",
+                params={"days": max(1, min(90, int(days))), "future": "false"},
+                headers=self._headers(),
+                timeout=(4.0, 8.0),
+            )
+        except requests.RequestException as error:
+            return Reply(Outcome.RETRY, f"unreachable:{type(error).__name__}")
+        if response.status_code == 204:
+            return Reply(Outcome.OK, data={"releases": []})
+        reply = self._reply(response)
+        if not reply.ok:
+            return reply
+        try:
+            body = response.json()
+        except ValueError:
+            return Reply(Outcome.REJECTED, "invalid_json")
+        rows = (body.get("payload") or {}).get("releases") if isinstance(body, dict) else None
+        releases = [row for row in (rows if isinstance(rows, list) else []) if isinstance(row, dict)]
+        return Reply(Outcome.OK, data={"releases": releases})
+
 
 # ---------------------------------------------------------------------------
 # Last.fm
@@ -220,18 +308,8 @@ class LastFmClient:
         text = "".join(f"{name}{params[name]}" for name in sorted(params)) + self._api_secret
         return hashlib.md5(text.encode("utf-8"), usedforsecurity=False).hexdigest()
 
-    def _call(self, method: str, params: dict[str, str], *, session: bool) -> Reply:
-        signed = {"method": method, "api_key": self._api_key, **params}
-        if session:
-            signed["sk"] = self._session_key
-        # `format` is not part of the signature.
-        body = {**signed, "api_sig": self._sign(signed), "format": "json"}
-        try:
-            response = requests.post(
-                LASTFM_API_URL, data=body, headers={"User-Agent": _user_agent()}, timeout=TIMEOUT
-            )
-        except requests.RequestException as error:
-            return Reply(Outcome.RETRY, f"unreachable:{type(error).__name__}")
+    @staticmethod
+    def _parse_response(response: requests.Response) -> Reply:
         try:
             data = response.json()
         except ValueError:
@@ -253,6 +331,97 @@ class LastFmClient:
         if code in _LASTFM_RETRY:
             return Reply(Outcome.RETRY, f"lastfm_{code}")
         return Reply(Outcome.REJECTED, f"lastfm_{code}", data={"code": code})
+
+    def _call(self, method: str, params: dict[str, str], *, session: bool) -> Reply:
+        signed = {"method": method, "api_key": self._api_key, **params}
+        if session:
+            signed["sk"] = self._session_key
+        # `format` is not part of the signature.
+        body = {**signed, "api_sig": self._sign(signed), "format": "json"}
+        try:
+            response = requests.post(
+                LASTFM_API_URL, data=body, headers={"User-Agent": _user_agent()}, timeout=TIMEOUT
+            )
+        except requests.RequestException as error:
+            return Reply(Outcome.RETRY, f"unreachable:{type(error).__name__}")
+        return self._parse_response(response)
+
+    def _get_read(self, method: str, params: dict[str, str]) -> Reply:
+        """Unsigned public read call (similarity lookups)."""
+        try:
+            response = requests.get(
+                LASTFM_API_URL,
+                params={"method": method, "api_key": self._api_key, "format": "json", **params},
+                headers={"User-Agent": _user_agent()},
+                timeout=(4.0, 8.0),
+            )
+        except requests.RequestException as error:
+            return Reply(Outcome.RETRY, f"unreachable:{type(error).__name__}")
+        return self._parse_response(response)
+
+    # -- federated discovery read-back -------------------------------------
+
+    def artist_similar(self, artist_name: str, *, limit: int = 20) -> Reply:
+        """Fetch similar artists for ``artist_name`` via ``artist.getSimilar``."""
+        clean = str(artist_name or "").strip()
+        if not clean:
+            return Reply(Outcome.OK, data={"artists": []})
+        reply = self._get_read(
+            "artist.getSimilar",
+            {"artist": clean, "autocorrect": "1", "limit": str(max(1, min(50, int(limit))))},
+        )
+        if not reply.ok:
+            return reply
+        raw = (reply.data.get("similarartists") or {}).get("artist")
+        rows = [raw] if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+        artists = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                match = max(0.0, min(1.0, float(row.get("match") or 0.0)))
+            except (TypeError, ValueError):
+                match = 0.0
+            artists.append({"name": name, "match": match, "mbid": str(row.get("mbid") or "").strip()})
+        return Reply(Outcome.OK, data={"artists": artists})
+
+    def track_similar(self, artist_name: str, track_title: str, *, limit: int = 15) -> Reply:
+        """Fetch similar tracks via ``track.getSimilar``."""
+        clean_artist = str(artist_name or "").strip()
+        clean_track = str(track_title or "").strip()
+        if not clean_artist or not clean_track:
+            return Reply(Outcome.OK, data={"tracks": []})
+        reply = self._get_read(
+            "track.getSimilar",
+            {
+                "artist": clean_artist,
+                "track": clean_track,
+                "autocorrect": "1",
+                "limit": str(max(1, min(50, int(limit)))),
+            },
+        )
+        if not reply.ok:
+            return reply
+        raw = (reply.data.get("similartracks") or {}).get("track")
+        rows = [raw] if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+        tracks = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("name") or "").strip()
+            artist_obj = row.get("artist")
+            row_artist = str(artist_obj.get("name") if isinstance(artist_obj, dict) else artist_obj or "").strip()
+            if not title or not row_artist:
+                continue
+            try:
+                match = max(0.0, min(1.0, float(row.get("match") or 0.0)))
+            except (TypeError, ValueError):
+                match = 0.0
+            tracks.append({"title": title, "artist": row_artist, "match": match, "mbid": str(row.get("mbid") or "").strip()})
+        return Reply(Outcome.OK, data={"tracks": tracks})
 
     # -- connecting --------------------------------------------------------
 

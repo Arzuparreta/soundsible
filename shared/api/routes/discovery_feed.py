@@ -665,12 +665,25 @@ def _build_discovery_feed_body(
         profile_entries = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True)
         seed_weights = {entry.display_name: entry.effective_score for entry in profile_entries[:25]}
         seeds = [entry.display_name for entry in profile_entries[:25]]
+        federated_boosts: dict[str, tuple[float, str, str]] | None = None
+        if learning_on and profile_entries:
+            try:
+                from shared.discovery_federation import sync_federated_signals
+
+                federated_boosts = sync_federated_signals(
+                    user_id,
+                    profile_entries[:6],
+                    deadline=time.monotonic() + 8.0,
+                ) or None
+            except Exception:
+                federated_boosts = None
         browse_result = build_browse_sections(
             seeds,
             min(limit, 10),
             seed_weights=seed_weights,
             owned_album_keys=_local_album_keys(metadata),
             metadata=metadata,
+            extra_candidate_boosts=federated_boosts,
             impressions=impressions,
         )
         consensus_artists = browse_result.pop("_consensus_artists", []) or []
