@@ -81,13 +81,6 @@
   border-top: 1px solid var(--sidebar-divider);
 }
 
-.collapsedDivider {
-  width: var(--icon-lg);
-  height: 1px;
-  margin: 0 auto var(--space-sm);
-  background: var(--sidebar-divider);
-}
-
 .item {
   position: relative;
   display: flex;
@@ -186,10 +179,23 @@
   outline-offset: -2px;
 }
 
-/* Desktop rail typography, density and collapsed-rail geometry. */
+/* Desktop rows keep the same icon axis and height at either rail width. */
 @media (min-width: 1024px) {
-  .desktopLinks .group + .group {
-    margin-top: var(--space-lg);
+  .desktopLinks .group h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--sidebar-icon-inset);
+    height: calc(var(--text-micro) + var(--space-sm));
+    padding: 0;
+    line-height: 1;
+  }
+  .desktopLinks .group h2::before {
+    content: '';
+    flex: none;
+    width: var(--sidebar-icon-size);
+    height: 1px;
+    margin-inline-start: var(--sidebar-icon-inset);
+    background: var(--sidebar-divider);
   }
   .desktopLinks .footerGroup {
     margin-top: var(--space-sm);
@@ -197,30 +203,21 @@
   }
   .desktopLinks .item {
     min-height: var(--sidebar-item-h);
+    gap: var(--sidebar-icon-inset);
+    padding-block: 0;
+    padding-inline: calc(var(--sidebar-icon-inset) - 1px);
     font-size: var(--sidebar-label-size);
   }
   .desktopLinks .subItem {
-    min-height: var(--sidebar-sub-item-h);
     font-size: var(--sidebar-sub-label-size);
+  }
+  .desktopLinks .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .desktopLinks .icon {
     width: var(--sidebar-icon-size);
     height: var(--sidebar-icon-size);
-  }
-  .collapsedLinks .group + .group {
-    margin-top: var(--space-sm);
-  }
-  .collapsedLinks .group nav {
-    align-items: center;
-    gap: var(--space-xs);
-  }
-  .collapsedLinks .item {
-    width: var(--sidebar-collapsed-item);
-    min-height: var(--sidebar-collapsed-item);
-    padding: 0;
-    justify-content: center;
-  }
-  .collapsedLinks .footerGroup {
-    padding-top: var(--space-sm);
   }
 }

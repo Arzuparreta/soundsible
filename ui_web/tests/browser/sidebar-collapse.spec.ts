@@ -95,12 +95,22 @@ async function measureSidebarGeometry(page: Page) {
       .filter(visible)
       .filter((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
       .map((el) => el.textContent?.trim());
+    const railControls = [...aside.querySelectorAll('button, a[data-nav-href]')].map((el) => {
+      const { x, y, width, height } = el.getBoundingClientRect();
+      const icon = el.querySelector('svg')!.getBoundingClientRect();
+      return {
+        key: el.getAttribute('data-nav-href') ?? 'toggle',
+        x, y, width, height,
+        icon: { x: icon.x, y: icon.y, width: icon.width, height: icon.height },
+      };
+    });
     const asideRect = aside.getBoundingClientRect();
     return {
       asideWidth: Math.round(asideRect.width),
       controlCount: controls.length,
       undersized,
       clippedLabels,
+      railControls,
       documentOverflow: document.documentElement.scrollWidth > innerWidth + 1,
     };
   });
@@ -111,8 +121,14 @@ test.beforeEach(async ({ page }, info) => {
   await mockSidebarEngine(page);
 });
 
-for (const size of ['compact', 'normal', 'large'] as const) {
+for (const { size, width, height } of [
+  { size: 'compact', width: 1024, height: 768 },
+  { size: 'normal', width: 1366, height: 768 },
+  { size: 'large', width: 1280, height: 540 },
+]) {
   test(`desktop sidebar toggles cleanly at ${size} and preserves geometry`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.addInitScript((selected) => {
       localStorage.setItem('soundsible:interface-size', selected);
     }, size);
@@ -121,6 +137,8 @@ for (const size of ['compact', 'normal', 'large'] as const) {
     const aside = page.locator('aside');
     await expect(aside).toBeVisible();
     await expect(aside.getByRole('link', { name: 'soundsible', exact: true })).toBeVisible();
+    // At large scale in a short window this scrolls the navigation group.
+    await aside.getByRole('link', { name: 'Favoritos', exact: true }).scrollIntoViewIfNeeded();
 
     const expanded = await measureSidebarGeometry(page);
     expect(expanded.asideWidth).toBeGreaterThanOrEqual(208);
@@ -129,8 +147,11 @@ for (const size of ['compact', 'normal', 'large'] as const) {
     expect(expanded.clippedLabels).toEqual([]);
     expect(expanded.documentOverflow).toBe(false);
 
-    await aside.getByRole('button', { name: 'Contraer barra lateral', exact: true }).click();
+    const toggle = aside.getByRole('button', { name: 'Contraer barra lateral', exact: true });
+    await toggle.focus();
+    await toggle.press('Enter');
     await expect(page.locator('html')).toHaveAttribute('data-sidebar-collapsed', '');
+    await expect(aside.getByRole('button', { name: 'Expandir barra lateral', exact: true })).toBeFocused();
     await expect(aside.getByRole('link', { name: 'soundsible', exact: true })).toHaveCount(0);
 
     const collapsed = await measureSidebarGeometry(page);
@@ -139,6 +160,16 @@ for (const size of ['compact', 'normal', 'large'] as const) {
     expect(collapsed.undersized).toEqual([]);
     expect(collapsed.clippedLabels).toEqual([]);
     expect(collapsed.documentOverflow).toBe(false);
+    // Only link widths change. The toggle, icon sizes and all anchor points
+    // (including the scrolled Collection and bottom utilities) stay put.
+    expect(collapsed.railControls[0]).toEqual(expanded.railControls[0]);
+    expect(collapsed.railControls.map(({ width: _width, ...geometry }) => geometry))
+      .toEqual(expanded.railControls.map(({ width: _width, ...geometry }) => geometry));
+    for (const [index, control] of collapsed.railControls.entries()) {
+      if (control.key !== 'toggle') {
+        expect(control.width).toBeLessThan(expanded.railControls[index].width);
+      }
+    }
 
     // Persists across reload and restores cleanly.
     await page.reload();
