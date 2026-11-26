@@ -206,7 +206,11 @@ def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatc
             aid = 100 if name == "Seed One" else 200
             return {"data": [artist(aid, name)]}
         if path == "artist/100/related":
-            return {"data": [artist(101, "Related One")]}
+            return {"data": [
+                artist(101, "Related One"),
+                artist(102, "Related Three"),
+                artist(103, "Related Four"),
+            ]}
         if path == "artist/200/related":
             return {"data": [artist(201, "Related Two")]}
         if path == "artist/101/albums":
@@ -218,6 +222,12 @@ def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatc
                 {"id": 1004, "title": "Archive LP", "record_type": "album", "release_date": "2025-01-01"},
                 {"id": 1005, "title": "Future LP", "record_type": "album", "release_date": "2026-11-25"},
             ]}
+        if path == "artist/102/albums":
+            album_calls.append(path)
+            return {"data": [{"id": 1021, "title": "Recent Peer Single", "record_type": "single", "release_date": "2026-11-18"}]}
+        if path == "artist/103/albums":
+            album_calls.append(path)
+            return {"data": [{"id": 1031, "title": "Recent Peer LP", "record_type": "album", "release_date": "2026-11-12"}]}
         if path == "artist/201/albums":
             album_calls.append(path)
             return {"data": [
@@ -238,25 +248,27 @@ def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatc
     sections_by_id = {sec["id"]: sec for sec in body["browse_sections"]}
     radar = sections_by_id["release_radar"]["items"]
     assert [item["title"] for item in radar] == [
-        "Brand New Single",
+        "Recent Peer Single",
+        "Recent Peer LP",
         "Thirty Day EP",
         "Forty Five Days",
     ]
-    assert [item["is_new"] for item in radar] == [True, True, False]
+    assert [item["is_new"] for item in radar] == [True, True, True, False]
     assert radar[0]["reason_artist"] == "Seed One"
-    assert radar[1]["reason_artist"] == "Seed One"
-    assert radar[2]["reason_artist"] == "Seed Two"
+    assert radar[2]["reason_artist"] == "Seed One"
+    assert radar[3]["reason_artist"] == "Seed Two"
 
     # Albums for you reuses cached releases without duplicating items already in Release Radar.
     radar_ids = {item["external_ids"]["deezer_album_id"] for item in radar}
     album_ids = {item["external_ids"]["deezer_album_id"] for item in sections_by_id["albums"]["items"]}
     assert radar_ids.isdisjoint(album_ids)
-    assert "1003" in album_ids
+    assert "1001" in album_ids
     assert "1005" not in radar_ids
     assert "2002" in album_ids
 
     assert _deezer_artist_releases("201")["albums"][0]["title"] == "Forty Five Days"
-    assert album_calls == ["artist/101/albums", "artist/201/albums"]
+    assert sorted(album_calls) == ["artist/101/albums", "artist/102/albums", "artist/103/albums", "artist/201/albums"]
+    assert len(album_calls) == 4
 
     without_profile_artist = build_browse_sections(
         ["Seed One", "Seed Two"], profile_artist_ids={"201"}, today=ref_today,
@@ -273,6 +285,7 @@ def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatc
 
 
 def test_release_radar_hydrates_past_first_batch_when_catalogues_are_cold(monkeypatch):
+    from shared import discovery_browse
     from shared.database import instance_db
 
     db = instance_db()
@@ -290,6 +303,12 @@ def test_release_radar_hydrates_past_first_batch_when_catalogues_are_cold(monkey
         (str(aid), aid - 10, 1 / (aid - 9)) for aid in range(10, 30)
     ], now)
     calls = []
+    sync_calls = []
+    orig_sync = discovery_browse.sync_artist_releases
+
+    def counting_sync(*args, **kwargs):
+        sync_calls.append(kwargs.get("max_sync"))
+        return orig_sync(*args, **kwargs)
 
     def get(path, params=None, **kwargs):
         if path == "album/2400":
@@ -304,15 +323,279 @@ def test_release_radar_hydrates_past_first_batch_when_catalogues_are_cold(monkey
             "release_date": "2026-11-20" if aid == 24 else "2025-01-01",
         }]}
 
+    monkeypatch.setattr(discovery_browse, "sync_artist_releases", counting_sync)
     monkeypatch.setattr(deezer, "get", get)
     body = build_browse_sections(["Seed"], today=datetime.date(2026, 11, 26))
     sections = {section["id"]: section["items"] for section in body["browse_sections"]}
 
+    assert sync_calls == [20]
     assert [item["title"] for item in sections.get("release_radar", [])] == ["New release"]
     assert calls == list(range(10, 30))
     assert sections["release_radar"][0]["reason_artist"] == "Seed"
     assert all(item["title"] != "New release" for item in sections["albums"])
     assert not body["browse_error"]
+
+
+def test_release_radar_prefers_album_over_companion_single_and_keeps_standalone_single(monkeypatch):
+    album_detail_calls = []
+
+    def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            return {"data": [artist(1, "Seed")]}
+        if path == "artist/1/related":
+            return {"data": [
+                artist(20, "Album Peer"),
+                artist(21, "Standalone Peer"),
+                artist(22, "Other Peer A"),
+                artist(23, "Other Peer B"),
+            ]}
+        if path == "artist/1/albums":
+            raise AssertionError("Seed discography should not be hydrated when outward artists exist")
+        if path == "artist/20/albums":
+            return {"data": [
+                {"id": 2001, "title": "The Moth", "record_type": "album", "release_date": "2026-11-06"},
+                {"id": 2002, "title": "Advance Single", "record_type": "single", "release_date": "2026-10-21"},
+                {"id": 2003, "title": "Post Release Single", "record_type": "single", "release_date": "2026-11-12"},
+            ]}
+        if path == "artist/21/albums":
+            return {"data": [
+                {"id": 2101, "title": "Old Album", "record_type": "album", "release_date": "2026-09-15"},
+                {"id": 2102, "title": "Standalone Single", "record_type": "single", "release_date": "2026-11-20"},
+            ]}
+        if path == "artist/22/albums":
+            return {"data": [{"id": 2201, "title": "Other A LP", "record_type": "album", "release_date": "2026-11-10"}]}
+        if path == "artist/23/albums":
+            return {"data": [{"id": 2301, "title": "Other B LP", "record_type": "album", "release_date": "2026-11-05"}]}
+        if path.startswith("album/"):
+            album_detail_calls.append(path)
+            return {"id": int(path.split("/")[1])}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(deezer, "get", get)
+    body = build_browse_sections(["Seed"], today=datetime.date(2026, 11, 26))
+    sections = {sec["id"]: sec["items"] for sec in body["browse_sections"]}
+    radar = sections["release_radar"]
+    assert [item["title"] for item in radar] == [
+        "Standalone Single",
+        "Other A LP",
+        "The Moth",
+        "Other B LP",
+    ]
+    assert "album/2002" not in album_detail_calls
+    assert "album/2003" not in album_detail_calls
+    assert "album/2101" not in album_detail_calls
+
+
+def test_release_radar_widens_window_from_sqlite_when_45d_is_sparse(monkeypatch):
+    from shared.database import instance_db
+
+    db = instance_db()
+    ref_today = datetime.date(2026, 11, 26)
+    now_ts = int(datetime.datetime(2026, 11, 26, tzinfo=datetime.timezone.utc).timestamp())
+    db.upsert_graph_nodes([
+        {"deezer_artist_id": "1", "name": "Seed", "literal_key": "seed", "folded_key": "seed",
+         "related_synced_at": now_ts, "releases_synced_at": now_ts},
+        *[
+            {"deezer_artist_id": str(aid), "name": f"Peer {aid}", "literal_key": f"peer {aid}",
+             "folded_key": f"peer {aid}", "releases_synced_at": now_ts}
+            for aid in range(10, 15)
+        ],
+    ], now=now_ts)
+    db.replace_similarity_edges(
+        "1",
+        "deezer",
+        [(str(aid), idx + 1, 1.0 - idx * 0.1) for idx, aid in enumerate(range(10, 15))],
+        now_ts,
+    )
+    releases = {
+        "10": ("1001", "Fresh 6d", "album", "2026-11-20"),
+        "11": ("1101", "Window 67d", "album", "2026-09-20"),
+        "12": ("1201", "Window 86d", "ep", "2026-09-01"),
+        "13": ("1301", "Window 134d", "album", "2026-07-15"),
+        "14": ("1401", "Too Old 239d", "album", "2026-04-01"),
+    }
+    for aid, (alb_id, title, rtype, rel_date) in releases.items():
+        db.upsert_artist_releases(
+            aid,
+            [{
+                "deezer_album_id": alb_id,
+                "title": title,
+                "artist_credit": f"Peer {aid}",
+                "credit_verified": True,
+                "record_type": rtype,
+                "release_date": rel_date,
+            }],
+            now_ts,
+        )
+
+    monkeypatch.setattr(deezer, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("unexpected network call")))
+    body = build_browse_sections(["Seed"], limit=10, today=ref_today)
+    sections = {sec["id"]: sec["items"] for sec in body["browse_sections"]}
+    radar = sections["release_radar"]
+    assert [item["title"] for item in radar] == [
+        "Fresh 6d",
+        "Window 67d",
+        "Window 86d",
+        "Window 134d",
+    ]
+    assert [item["is_new"] for item in radar] == [True, False, False, False]
+
+    # Once 90d reaches min_items=4, the 180d fallback is not triggered.
+    db.upsert_artist_releases(
+        "14",
+        [{
+            "deezer_album_id": "1402",
+            "title": "Window 77d",
+            "artist_credit": "Peer 14",
+            "credit_verified": True,
+            "record_type": "single",
+            "release_date": "2026-09-10",
+        }],
+        now_ts + 1,
+    )
+    body_90 = build_browse_sections(["Seed"], limit=10, today=ref_today)
+    radar_90 = {sec["id"]: sec["items"] for sec in body_90["browse_sections"]}["release_radar"]
+    assert [item["title"] for item in radar_90] == [
+        "Fresh 6d",
+        "Window 67d",
+        "Window 77d",
+        "Window 86d",
+    ]
+
+
+def test_release_radar_excludes_only_home_top35_profile_not_tail_artists(tmp_path, monkeypatch):
+    from shared.api.routes import discovery_feed as route
+    from shared.database import instance_db
+    from shared.discovery_intelligence import emit_discovery_event
+    from shared.models import LibraryMetadata, Track
+    from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
+
+    reset_runtime()
+    runtime = RuntimeConfig(
+        host="127.0.0.1",
+        port=5005,
+        config_dir=(tmp_path / "cfg").resolve(),
+        data_dir=(tmp_path / "data").resolve(),
+        cache_dir=(tmp_path / "cache").resolve(),
+        log_dir=(tmp_path / "logs").resolve(),
+        music_dir=(tmp_path / "music").resolve(),
+        ui_dist=None,
+        owner_token_file=None,
+        lan_enabled=False,
+        advanced_mode=False,
+    )
+    configure_runtime(runtime)
+    for path in (runtime.config_dir, runtime.data_dir, runtime.cache_dir, runtime.log_dir, runtime.music_dir):
+        path.mkdir(parents=True, exist_ok=True)
+    try:
+        tracks = [
+            Track(
+                id=f"t{i}",
+                title=f"Song {i}",
+                artist=f"Home Core {i:02d}",
+                album=f"Album {i}",
+                duration=180,
+                file_hash=f"h{i}",
+                original_filename=f"t{i}.mp3",
+                file_size=100,
+                bitrate=320,
+                format="mp3",
+            )
+            for i in range(1, 36)
+        ]
+        # Boost artist 1..35 above the tail artist via library + active play events.
+        now_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+        for i in range(1, 36):
+            emit_discovery_event(
+                "music_play_completed",
+                {"title": f"Song {i}", "artist": f"Home Core {i:02d}", "source": "library"},
+                created_at=now_ts - i,
+            )
+        # Rank 36+ tail artist: single passive autoplay event (effective_score = 0.225 < 0.25, outside Home Top 35).
+        emit_discovery_event(
+            "music_played_30s",
+            {"title": "Auto Song", "artist": "Tail Passive", "source": "autoplay"},
+            created_at=now_ts - 100,
+        )
+
+        db = instance_db()
+        db.upsert_graph_nodes([
+            *[
+                {
+                    "deezer_artist_id": str(1000 + i),
+                    "name": f"Home Core {i:02d}",
+                    "literal_key": f"home core {i:02d}",
+                    "folded_key": f"home core {i:02d}",
+                    "related_synced_at": now_ts,
+                    "releases_synced_at": now_ts,
+                }
+                for i in range(1, 36)
+            ],
+            {
+                "deezer_artist_id": "9001",
+                "name": "Tail Passive",
+                "literal_key": "tail passive",
+                "folded_key": "tail passive",
+                "related_synced_at": now_ts,
+                "releases_synced_at": now_ts,
+            },
+        ], now=now_ts)
+        # Seed #1 points to Home Core 35 (inside Top 35) and Tail Passive (rank #36).
+        db.replace_similarity_edges(
+            "1001",
+            "deezer",
+            [("1035", 1, 1.0), ("9001", 2, 0.9)],
+            now_ts,
+        )
+        recent_date = datetime.date.today().isoformat()
+        db.upsert_artist_releases(
+            "1035",
+            [{
+                "deezer_album_id": "51035",
+                "title": "Home Core 35 LP",
+                "artist_credit": "Home Core 35",
+                "credit_verified": True,
+                "record_type": "album",
+                "release_date": recent_date,
+            }],
+            now_ts,
+        )
+        db.upsert_artist_releases(
+            "9001",
+            [{
+                "deezer_album_id": "59001",
+                "title": "Tail Passive LP",
+                "artist_credit": "Tail Passive",
+                "credit_verified": True,
+                "record_type": "album",
+                "release_date": recent_date,
+            }],
+            now_ts,
+        )
+
+        lib = SimpleNamespace(
+            metadata=LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={}),
+            refresh_if_stale=lambda: None,
+        )
+        monkeypatch.setattr(
+            route,
+            "_get_api",
+            lambda: {
+                "get_library": lambda: lib,
+                "favourite_library_ids": lambda: [t.id for t in tracks],
+                "emit_to_user": lambda *a, **kw: None,
+            },
+        )
+        monkeypatch.setattr(deezer, "get", lambda path, params=None, **kw: {"data": []})
+        monkeypatch.setattr(route, "_deezer_json", lambda path, params=None, ttl_sec=None: {"data": []})
+
+        body = route._build_discovery_feed_body(limit=10, include_external=True)
+        sections = {sec["id"]: sec["items"] for sec in body["browse_sections"]}
+        radar_titles = [item["title"] for item in sections.get("release_radar", [])]
+        assert "Tail Passive LP" in radar_titles
+        assert "Home Core 35 LP" not in radar_titles
+    finally:
+        reset_runtime()
 
 
 def test_home_new_releases_180d_taste_profile_ignores_pins_credits_contributors_and_route(monkeypatch):
