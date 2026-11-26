@@ -1,12 +1,6 @@
 import type { Track } from '../types/music';
+import { randomId } from './randomId';
 import { isPodcastTrack } from './track';
-
-function newPlaySessionId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `ps-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 /** Counts real, forward playback time without treating seeks as listening. */
 export class ListeningLearning {
@@ -26,7 +20,7 @@ export class ListeningLearning {
     const nextId = track?.id ?? '';
     if (nextId !== this.trackId) {
       this.trackId = nextId;
-      this.playSessionId = nextId ? newPlaySessionId() : '';
+      this.playSessionId = nextId ? randomId() : '';
       this.lastPosition = Number.isFinite(position) ? position : null;
       this.listenedSeconds = 0;
       this.emitted = false;
@@ -53,33 +47,25 @@ export class ListeningLearning {
   complete(track: Track | null, duration = track?.duration ?? 0): void {
     if (!track || this.outcomeEmitted || track.id !== this.trackId || isPodcastTrack(track)) return;
     const total = Number(duration || 0);
-    if (this.isGenerated(track)) {
-      const threshold = Math.min(60, Math.max(12, total * 0.6));
-      if (this.listenedSeconds < threshold) return;
-      this.outcomeEmitted = true;
-      this.emit('music_generated_completed', this.payload(track, total));
-      return;
-    }
-    const threshold = total > 0 ? Math.min(180, Math.max(30, total * 0.7)) : this.thresholdSeconds;
+    const generated = this.isGenerated(track);
+    const threshold = generated
+      ? Math.min(60, Math.max(12, total * 0.6))
+      : total > 0 ? Math.min(180, Math.max(30, total * 0.7)) : this.thresholdSeconds;
     if (this.listenedSeconds < threshold) return;
     this.outcomeEmitted = true;
-    this.emit('music_play_completed', this.payload(track, total));
+    this.emit(generated ? 'music_generated_completed' : 'music_play_completed', this.payload(track, total));
   }
 
   skip(track: Track | null, duration = track?.duration ?? 0): void {
     if (!track || this.outcomeEmitted || track.id !== this.trackId || isPodcastTrack(track)) return;
     const total = Number(duration || 0);
-    if (this.isGenerated(track)) {
-      const earlyBoundary = Math.min(60, Math.max(12, total * 0.3));
-      if (this.listenedSeconds >= earlyBoundary) return;
-      this.outcomeEmitted = true;
-      this.emit('music_generated_skipped_early', this.payload(track, total));
-      return;
-    }
-    const earlyBoundary = Math.min(25, Math.max(12, total * 0.25));
-    if (this.listenedSeconds < 4 || this.listenedSeconds >= earlyBoundary) return;
+    const generated = this.isGenerated(track);
+    const earlyBoundary = generated
+      ? Math.min(60, Math.max(12, total * 0.3))
+      : Math.min(25, Math.max(12, total * 0.25));
+    if ((!generated && this.listenedSeconds < 4) || this.listenedSeconds >= earlyBoundary) return;
     this.outcomeEmitted = true;
-    this.emit('music_play_skipped_early', this.payload(track, total));
+    this.emit(generated ? 'music_generated_skipped_early' : 'music_play_skipped_early', this.payload(track, total));
   }
 
   private isGenerated(track: Track): boolean {
