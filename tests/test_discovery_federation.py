@@ -253,3 +253,104 @@ def test_listenbrainz_cf_and_fresh_releases_boost_consensus_feed_with_memo_and_i
     monkeypatch.setattr(requests, "get", lambda *a, **kw: (_ for _ in ()).throw(requests.Timeout("timeout")))
     assert sync_federated_signals("testuser", [_entry("Seed Band", "10")]) == {}
     assert ScrobbleStore("testuser").connections()[LISTENBRAINZ]["needs_reconnect"] == 0
+
+
+def test_federation_separates_budgets_avoids_truncated_ttl_poison_and_omits_false_seed_attribution(monkeypatch):
+    from shared.discovery_browse import build_browse_sections
+
+    clear_federation_cache()
+    db = instance_db()
+    db.upsert_graph_nodes([_node("10", "Seed Band")])
+    ScrobbleStore("testuser").connect(LASTFM, secret="sess", username="alice")
+    ScrobbleStore("testuser").connect(LISTENBRAINZ, secret="lb-token", username="alice")
+    monkeypatch.setenv("SOUNDSIBLE_LASTFM_API_KEY", "k")
+    monkeypatch.setenv("SOUNDSIBLE_LASTFM_API_SECRET", "s")
+
+    def fake_get(url, params=None, **kwargs):
+        class Resp:
+            def __init__(self, payload):
+                self._p = payload
+                self.status_code = 200
+                self.ok = True
+                self.headers = {}
+
+            def json(self):
+                return self._p
+
+        method = (params or {}).get("method")
+        if method == "artist.getSimilar":
+            return Resp({
+                "similarartists": {
+                    "artist": [{"name": f"Uncached LFM {i}", "match": "0.8"} for i in range(8)]
+                }
+            })
+        if "/1/cf/recommendation/user/" in url:
+            return Resp({"payload": {"mbids": [{"recording_mbid": "m-lb", "score": 0.9}]}})
+        if "/1/metadata/recording/" in url:
+            return Resp({"m-lb": {"artist": {"artists": [{"artist_mb_name": "LB Unique Artist"}]}}})
+        if "/fresh-releases" in url:
+            return Resp({"payload": {"releases": []}})
+        raise AssertionError(url)
+
+    deezer_map = {f"Uncached LFM {i}": 200 + i for i in range(8)}
+    deezer_map["LB Unique Artist"] = 999
+
+    def fake_deezer(path, params=None, **kwargs):
+        if path == "search/artist":
+            q = params["q"]
+            aid = deezer_map.get(q)
+            return {"data": [{"id": aid, "name": q, "nb_fan": 50000}]} if aid else {"data": []}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(deezer, "get", fake_deezer)
+
+    # Even with 8 uncached Last.fm peers (>6), ListenBrainz still gets its own resolve budget.
+    boosts = sync_federated_signals("testuser", [_entry("Seed Band", "10")], now=1_700_000_000)
+    assert "999" in boosts
+    # Last.fm seed was truncated (only 6 of 8 peers resolved), so 21d TTL must not be stamped.
+    seed_node = db.get_graph_nodes_by_ids(["10"])["10"]
+    assert int(seed_node["lastfm_synced_at"]) == 0
+    assert len(db.get_similarity_edges_for_sources(["10"], providers=["lastfm"])) == 6
+
+    # ListenBrainz-only candidate must not receive false "Similar to <Seed #1>" attribution.
+    monkeypatch.setattr(deezer, "get", lambda path, params=None, **kw: {"data": []})
+    body = build_browse_sections(["Seed Band"], extra_candidate_boosts=boosts)
+    artists = {sec["id"]: sec["items"] for sec in body["browse_sections"]}["artists"]
+    lb_item = next(item for item in artists if item["title"] == "LB Unique Artist")
+    assert lb_item["reason_artist"] == ""
+    assert lb_item["reason_artist"] != "Seed Band"
+
+    # Exhausted budget for an uncached LB artist must not poison the 6h _LB_MEMO with {}.
+    clear_federation_cache()
+    db.upsert_graph_nodes([_node("11", "Uncached Seed")])
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda url, params=None, **kw: type("R", (), {
+            "status_code": 200,
+            "ok": True,
+            "headers": {},
+            "json": staticmethod(
+                lambda: {"payload": {"mbids": []}}
+                if "/cf/" in url
+                else {"payload": {"releases": [{"artist_credit_name": "Never Cached Anywhere"}]}}
+            ),
+        })(),
+    )
+    from shared import discovery_federation as fed
+
+    monkeypatch.setattr(
+        fed,
+        "_resolve_artist_budgeted",
+        lambda *a, **k: None,
+    )
+    # Force budget[0] == 0 before lookup to confirm truncation skips _LB_MEMO write.
+    assert fed._sync_listenbrainz_boosts(
+        "testuser",
+        connections=ScrobbleStore("testuser").connections(),
+        budget=[0],
+        deadline=None,
+        now_ts=1_700_000_000,
+    ) == {}
+    assert fed._LB_MEMO == {}

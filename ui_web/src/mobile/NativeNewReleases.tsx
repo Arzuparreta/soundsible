@@ -28,13 +28,18 @@ export default function NativeNewReleases(props: {
   const [items, setItems] = createSignal<DiscoveryBrowseItem[]>([]);
   const [expanded, setExpanded] = createSignal(false);
   let controller: AbortController | undefined;
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+  let fallbackUsed = false;
+  let awaitingRevalidate = false;
   let disposed = false;
   let epoch = 0;
 
-  async function load() {
+  async function load(fromFallback = false) {
     if (disposed || props.disconnected() || typeof api.getDiscoveryNewReleases !== 'function') {
       return;
     }
+    clearTimeout(fallbackTimer);
+    fallbackTimer = undefined;
     controller?.abort();
     const request = new AbortController();
     controller = request;
@@ -46,7 +51,21 @@ export default function NativeNewReleases(props: {
         return;
       }
       setItems(Array.isArray(response?.items) ? response.items : []);
+      if (response?.revalidating) {
+        awaitingRevalidate = true;
+        if (!fallbackUsed && !fromFallback) {
+          fallbackTimer = setTimeout(() => {
+            if (!disposed && !props.disconnected()) {
+              fallbackUsed = true;
+              void load(true);
+            }
+          }, 5000);
+        }
+      } else {
+        awaitingRevalidate = false;
+      }
     } catch {
+      awaitingRevalidate = false;
       // Offline or unavailable: keep Library responsive without error banner.
     }
   }
@@ -54,20 +73,26 @@ export default function NativeNewReleases(props: {
   createEffect(on(() => [props.generation(), props.disconnected()] as const, ([, disconnected], previous) => {
     if (!previous || props.generation() !== previous[0]) {
       setItems([]);
+      fallbackUsed = false;
+      awaitingRevalidate = false;
+      clearTimeout(fallbackTimer);
+      fallbackTimer = undefined;
     }
     if (!disconnected) {
       void load();
     }
   }));
 
-  const stopPush = onDiscoveryFeedReady(() => {
-    if (!disposed && !props.disconnected()) {
-      void load();
-    }
+  const stopPush = onDiscoveryFeedReady((data) => {
+    if (disposed || props.disconnected()) return;
+    if (data.reason !== 'new_releases' && !(data.reason === undefined && awaitingRevalidate)) return;
+    awaitingRevalidate = false;
+    void load();
   });
 
   onCleanup(() => {
     disposed = true;
+    clearTimeout(fallbackTimer);
     stopPush();
     controller?.abort();
   });

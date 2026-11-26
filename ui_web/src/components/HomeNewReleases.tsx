@@ -26,11 +26,16 @@ export default function HomeNewReleases() {
   const [items, setItems] = createSignal<DiscoveryBrowseItem[]>([]);
   const [expanded, setExpanded] = createSignal(false);
   let controller: AbortController | undefined;
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+  let fallbackUsed = false;
+  let awaitingRevalidate = false;
   let disposed = false;
   let epoch = 0;
 
-  async function load() {
+  async function load(fromFallback = false) {
     if (typeof api.getDiscoveryNewReleases !== 'function') return;
+    clearTimeout(fallbackTimer);
+    fallbackTimer = undefined;
     controller?.abort();
     const request = new AbortController();
     controller = request;
@@ -40,18 +45,36 @@ export default function HomeNewReleases() {
       const response = await api.getDiscoveryNewReleases(request.signal, 12);
       if (disposed || request.signal.aborted || op !== epoch || userKey('home-new-releases') !== account) return;
       setItems(Array.isArray(response?.items) ? response.items : []);
+      if (response?.revalidating) {
+        awaitingRevalidate = true;
+        if (!fallbackUsed && !fromFallback) {
+          fallbackTimer = setTimeout(() => {
+            if (!disposed) {
+              fallbackUsed = true;
+              void load(true);
+            }
+          }, 5000);
+        }
+      } else {
+        awaitingRevalidate = false;
+      }
     } catch {
+      awaitingRevalidate = false;
       // Keep Home clean and silent when offline or unavailable.
     }
   }
 
   onMount(() => {
     void load();
-    const stopPush = onDiscoveryFeedReady(() => {
-      if (!disposed) void load();
+    const stopPush = onDiscoveryFeedReady((data) => {
+      if (disposed) return;
+      if (data.reason !== 'new_releases' && !(data.reason === undefined && awaitingRevalidate)) return;
+      awaitingRevalidate = false;
+      void load();
     });
     onCleanup(() => {
       disposed = true;
+      clearTimeout(fallbackTimer);
       stopPush();
       controller?.abort();
     });

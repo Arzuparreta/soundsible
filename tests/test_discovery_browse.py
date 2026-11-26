@@ -380,6 +380,94 @@ def test_home_new_releases_180d_taste_profile_ignores_pins_credits_contributors_
     assert "items" in payload and "revalidating" in payload
 
 
+def test_home_new_releases_cooldown_preserves_undecorated_ids_and_avoids_sync_fanout(monkeypatch):
+    from shared.api.routes import discovery_common as common
+    from shared.api.routes import discovery_feed as route
+    from shared.database import instance_db
+    from shared.discovery_profile import build_artist_taste_profile
+    from shared.models import LibraryMetadata, Track
+
+    common._NEW_RELEASES_SYNCED_AT.clear()
+    common._UNRESOLVED_ARTIST_UNTIL.clear()
+
+    ref_today = datetime.date(2026, 11, 22)
+    emitted = []
+    search_calls = []
+
+    def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            q = params["q"]
+            search_calls.append(q)
+            if q == "Blue Oyster Cult":
+                return {"data": [{"id": 20, "name": "Blue Öyster Cult", "nb_fan": 500000, "picture_big": "https://img/20"}]}
+            return {"data": []}
+        if path == "artist/20/albums":
+            return {"data": [{"id": 2001, "title": "Fire of Unknown", "record_type": "album", "release_date": "2026-11-15"}]}
+        if path == "album/2001":
+            raise AssertionError("Synchronous HTTP path must not resolve album credits blocking the response")
+        raise AssertionError(path)
+
+    tracks = [
+        Track(id="t1", title="Reaper", artist="Blue Oyster Cult", album="LP", duration=180, file_hash="h1", original_filename="1.mp3", file_size=100, bitrate=320, format="mp3"),
+        Track(id="t2", title="Demo", artist="Local Bedroom Act", album="Tape", duration=180, file_hash="h2", original_filename="2.mp3", file_size=100, bitrate=320, format="mp3"),
+    ]
+    lib = SimpleNamespace(
+        metadata=LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={}),
+        refresh_if_stale=lambda: None,
+    )
+    monkeypatch.setattr(deezer, "get", get)
+    monkeypatch.setattr(
+        route,
+        "_get_api",
+        lambda: {"get_library": lambda: lib, "favourite_library_ids": lambda: ["t1"], "emit_to_user": lambda *a, **k: emitted.append((a, k))},
+    )
+
+    # 1) Pre-populate an unverified cached album (as if hydrated by Discover) and run sync_inline with only Local Bedroom Act.
+    inst = instance_db()
+    inst.upsert_graph_nodes([{
+        "deezer_artist_id": "20",
+        "name": "Blue Öyster Cult",
+        "literal_key": "blue öyster cult",
+        "folded_key": "blue oyster cult",
+        "nb_fan": 500000,
+        "releases_synced_at": int(route.time.time()),
+    }])
+    inst.upsert_artist_releases("20", [{
+        "deezer_album_id": "2001",
+        "title": "Fire of Unknown",
+        "artist_credit": "Blue Öyster Cult",
+        "credit_verified": False,
+        "record_type": "album",
+        "release_date": "2026-11-15",
+    }], int(route.time.time()))
+
+    # Non-inline synchronous read with Blue Oyster Cult not yet linked in profile still does 0 blocking album/2001 calls,
+    # and once resolved via inline sync for Local Bedroom Act only (unchanged), does not emit a false discovery_feed_ready.
+    common._NEW_RELEASES_SYNCED_AT.clear()
+    lib.metadata = LibraryMetadata(version=1, tracks=[tracks[1]], playlists={}, settings={})
+    res_unres = route.build_home_new_releases(limit=12, sync_inline=True, today=ref_today)
+    assert res_unres["items"] == []
+    assert emitted == []
+    assert not res_unres["revalidating"]
+    # Second non-inline read stays on cooldown/negative cache without revalidating.
+    res_unres2 = route.build_home_new_releases(limit=12, sync_inline=False, today=ref_today)
+    assert not res_unres2["revalidating"]
+
+    # 2) Undecorated artist ("Blue Oyster Cult") retains resolved deezer_artist_id across profile rebuilds,
+    # and synchronous build_home_new_releases skips album/2001 HTTP lookup even though credit_verified=0.
+    lib.metadata = LibraryMetadata(version=1, tracks=[tracks[0]], playlists={}, settings={})
+    common._NEW_RELEASES_SYNCED_AT.clear()
+    first = route.build_home_new_releases(limit=12, sync_inline=True, today=ref_today)
+    assert [item["title"] for item in first["items"]] == ["Fire of Unknown"]
+    assert any(args[0] == "discovery_feed_ready" for args, _ in emitted)
+    rebuilt = build_artist_taste_profile(lib.metadata, ["t1"], persist=True)
+    assert rebuilt[0].deezer_artist_id == "20"
+    monkeypatch.setattr(deezer, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("unexpected sync Deezer call")))
+    cached = route.build_home_new_releases(limit=12, sync_inline=False, today=ref_today)
+    assert [item["title"] for item in cached["items"]] == ["Fire of Unknown"]
+    assert not cached["revalidating"]
+
+
 def test_cold_start_uses_popular_entities_without_personalized_reasons(monkeypatch):
     def get(path, params=None, **kwargs):
         if path.endswith('artists'):

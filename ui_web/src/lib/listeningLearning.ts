@@ -86,6 +86,22 @@ export class ListeningLearning {
     return ['auto_mode', 'autoplay', 'radio'].includes(track.recommendation?.source ?? '');
   }
 
+  private extractDeezerTrackId(track: Track): string | undefined {
+    const direct = (track as { deezer_id?: string }).deezer_id;
+    if (direct && /^\d+$/.test(direct)) return direct;
+    const candidates = [
+      track.id,
+      track.canonical_identity ?? undefined,
+      track.recommendation?.identity,
+      ...(track.originKeys ?? []),
+    ];
+    for (const candidate of candidates) {
+      const match = candidate ? /^(?:music:)?deezer:(\d+)$/.exec(candidate.trim()) : null;
+      if (match?.[1]) return match[1];
+    }
+    return undefined;
+  }
+
   private payload(track: Track, durationSec = Number(track.duration || 0)): Record<string, unknown> {
     const podcast = isPodcastTrack(track);
     const queueSource = (track as { queueSource?: string }).queueSource;
@@ -97,6 +113,8 @@ export class ListeningLearning {
       artist: track.artist,
       album: track.album,
       youtube_id: podcast ? undefined : track.youtube_id || (track.source === 'preview' ? track.id : undefined),
+      deezer_id: podcast ? undefined : this.extractDeezerTrackId(track),
+      deezer_artist_id: podcast ? undefined : track.deezer_artist_id || undefined,
       podcast_feed_id: track.podcast_feed_id,
       podcast_episode_id: track.podcast_episode_guid,
       podcast_show_title: podcast ? track.artist : undefined,

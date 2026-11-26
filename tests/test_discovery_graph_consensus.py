@@ -163,3 +163,46 @@ def test_graph_caches_in_instance_db_and_projects_youtube_mixes(monkeypatch):
     edges = db.get_similarity_edges_for_sources(["1"], providers=["youtube"])
     assert len(edges) == 1
     assert edges[0]["target_artist_id"] == "20"
+
+
+def test_anchor2_prefers_active_short_term_and_get_related_mixes_batches_large_libraries():
+    from shared.discovery_graph_store import select_diverse_track_anchors
+    from shared.discovery_profile import ArtistProfileEntry
+
+    now_ts = 1_700_000_000
+
+    def entry(key: str, *, short_term: float, long_term: float, eff: float) -> ArtistProfileEntry:
+        return ArtistProfileEntry(
+            artist_key=key,
+            literal_key=key,
+            display_name=key,
+            deezer_artist_id="",
+            short_term_score=short_term,
+            long_term_score=long_term,
+            library_prior=eff,
+            effective_score=eff,
+            distinct_days=1,
+            distinct_tracks=1,
+            active_plays=0.0,
+            passive_plays=0.0,
+            early_skips=0.0,
+            last_listened_at=now_ts,
+            updated_at=now_ts,
+        )
+
+    anchors = select_diverse_track_anchors(
+        [
+            entry("Core Long", short_term=0.5, long_term=9.0, eff=8.0),
+            entry("Dormant Library", short_term=0.0, long_term=2.0, eff=5.0),
+            entry("Active Recent", short_term=1.5, long_term=1.0, eff=2.0),
+        ],
+        {},
+        limit=2,
+    )
+    assert [a.display_name for a in anchors] == ["Core Long", "Active Recent"]
+
+    db = instance_db()
+    db.set_related_mix("vid00000001", [{"id": "rec11111111", "title": "Song", "artist": "X"}])
+    many_ids = [f"vid{i:08d}" for i in range(1, 1205)]
+    res = db.get_related_mixes(many_ids)
+    assert "vid00000001" in res

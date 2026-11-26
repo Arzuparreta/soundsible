@@ -216,3 +216,22 @@ def test_feed_refresh_rotates_recommended_artists_and_tracks_via_impressions_whi
     assert after_artists[0] == "Related Beta"
     # Track-level impression fatigue also surfaces previously unseen tracks on More like X shelves.
     assert any(item["title"] == "Alpha Song 3" for item in after_body["items"])
+
+    # Positive listening interaction clears impression fatigue on both track and artist rows.
+    from shared.discovery_intelligence import emit_discovery_event
+
+    emit_discovery_event(
+        "music_played_30s",
+        {
+            "title": "Alpha Song 1",
+            "artist": "Related Alpha",
+            "deezer_id": "1001",
+            "deezer_artist_id": "10",
+            "youtube_id": "vid10010000",
+        },
+        created_at=now_ts + 20,
+    )
+    updated_imps = user_db().get_discovery_impressions(["deezer:1001", "deezer:artist:10"])
+    assert updated_imps["deezer:1001"]["last_interacted_at"] >= now_ts + 20
+    assert updated_imps["deezer:artist:10"]["last_interacted_at"] >= now_ts + 20
+    assert impression_fatigue_multiplier(updated_imps["deezer:artist:10"], now=now_ts + 30) == 1.0

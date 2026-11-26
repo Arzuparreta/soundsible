@@ -188,7 +188,10 @@ def build_browse_sections(
         if sync_related_artists(seed_nodes, max_sync=6, deadline=deadline):
             failed = True
         if metadata is not None and seed_nodes:
-            project_youtube_mix_edges(metadata, seed_nodes)
+            try:
+                project_youtube_mix_edges(metadata, seed_nodes)
+            except Exception:
+                pass
 
         consensus_pool = score_consensus_candidates(
             seed_weight_by_id,

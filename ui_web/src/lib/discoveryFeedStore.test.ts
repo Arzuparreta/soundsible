@@ -363,6 +363,10 @@ describe('discoveryFeedStore', () => {
     dispatchDiscoveryFeedReady({ limit: 10, generated_at: 100 });
     expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(1);
 
+    // Home New Releases background push must never clear or reload Search Discover.
+    dispatchDiscoveryFeedReady({ reason: 'new_releases', generated_at: 999 });
+    expect(mocks.getDiscoveryMusicFeed).toHaveBeenCalledTimes(1);
+
     // Newer server timestamp triggers reload and cache invalidation.
     dispatchDiscoveryFeedReady({ limit: 10, generated_at: 200 });
     await vi.waitFor(() => expect(shelfItemIds()).toEqual(['deezer:2']));

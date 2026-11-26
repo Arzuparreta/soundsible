@@ -39,6 +39,7 @@
   background: transparent;
   border: 0;
   border-radius: var(--radius-md);
+  white-space: normal;
 }
 .rail > .nativeCard { flex: 0 0 var(--browse-card-width); }
 .cover {
@@ -78,6 +79,7 @@
   line-height: 1.3;
   color: var(--ink-primary);
   overflow-wrap: anywhere;
+  white-space: normal;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;

@@ -16,7 +16,8 @@ from shared import request_scope
 from shared.atomic_file import publish, text_pieces
 from shared.file_revision import publication_lock
 from shared.models import LibraryMetadata, Track
-from shared.database import user_db
+from shared.database import instance_db, user_db
+from shared.deezer_catalog import literal_artist_key
 from shared.telemetry import emit, user_telemetry_dir
 from shared.text_utils import fold_text
 from shared.user_context import user_config_dir
@@ -477,10 +478,21 @@ def emit_discovery_event(
         aliases=_storage_aliases(identity, media_type, safe),
     )
     if event_name not in ("music_play_skipped_early", "music_generated_skipped_early", "music_search_played"):
+        resolved_daid = str(safe.get("deezer_artist_id") or "").strip()
+        if not resolved_daid and safe.get("artist"):
+            try:
+                lit = literal_artist_key(str(safe["artist"]))
+                node = instance_db().find_graph_node_by_literal(lit) if lit else None
+                if node:
+                    resolved_daid = str(node.get("deezer_artist_id") or "").strip()
+            except Exception:
+                resolved_daid = ""
         interacted_ids = [
             identity,
+            *(f"youtube:{safe['youtube_id']}" for _ in (0,) if safe.get("youtube_id")),
             *(f"deezer:{safe['deezer_id']}" for _ in (0,) if safe.get("deezer_id")),
-            *(f"deezer:artist:{safe['deezer_artist_id']}" for _ in (0,) if safe.get("deezer_artist_id")),
+            *(f"deezer:artist:{resolved_daid}" for _ in (0,) if resolved_daid.isdigit()),
+            *(f"deezer:album:{safe['deezer_album_id']}" for _ in (0,) if safe.get("deezer_album_id")),
             *artist_aliases(safe),
         ]
         try:

@@ -246,6 +246,8 @@ def project_youtube_mix_edges(
         seed_id = seed_by_literal.get(lit)
         if seed_id:
             vid_to_seed[vid] = seed_id
+            if len(vid_to_seed) >= 200:
+                break
     if not vid_to_seed:
         return 0
 
@@ -357,7 +359,7 @@ def score_consensus_candidates(
             if not dst or dst in excluded_ids or boost_w <= 0:
                 continue
             per_seed = seed_best_edge.setdefault(dst, {})
-            anchor = sample_seed if sample_seed in norm_weights else next(iter(norm_weights), "__cf__")
+            anchor = sample_seed if sample_seed in norm_weights else f"__ext__{prov or 'cf'}"
             if boost_w > per_seed.get(anchor, 0.0):
                 per_seed[anchor] = float(boost_w)
             if prov:
@@ -406,7 +408,8 @@ def score_consensus_candidates(
         fatigue = impression_fatigue_multiplier(imp, now=now_ts)
 
         final_score = base_vote * consensus * hub_penalty * feedback_mult * fatigue
-        top_seed_id = max(contributions, key=lambda sid: contributions[sid])
+        seed_contributions = {sid: contrib for sid, contrib in contributions.items() if sid in seed_names_by_id}
+        top_seed_id = max(seed_contributions, key=lambda sid: seed_contributions[sid]) if seed_contributions else ""
         reason_artist = seed_names_by_id.get(top_seed_id, "")
 
         scored.append({
@@ -608,12 +611,21 @@ def select_diverse_track_anchors(
     remaining.remove(anchor1)
 
     if remaining and len(selected) < limit:
-        # Anchor 2: recent short-term interest distinct from Anchor 1.
-        max_short = max((float(e.short_term_score) or float(e.effective_score) for e in remaining), default=1.0) or 1.0
+        # Anchor 2: active short-term interest distinct from Anchor 1 (falling back only when none are active).
+        has_short_term = any(float(e.short_term_score) > 0 for e in remaining)
+        if has_short_term:
+            denom = max(float(e.short_term_score) for e in remaining) or 1.0
+        else:
+            denom = max((float(e.effective_score) for e in remaining), default=1.0) or 1.0
+
+        def anchor2_rel(entry: Any) -> float:
+            raw = float(entry.short_term_score) if has_short_term else float(entry.effective_score)
+            return raw / denom
+
         best = max(
             remaining,
             key=lambda e: (
-                lam * ((float(e.short_term_score) or float(e.effective_score)) / max_short)
+                lam * anchor2_rel(e)
                 - (1.0 - lam) * _jaccard(contexts[e.artist_key], contexts[anchor1.artist_key])
             ),
         )
@@ -755,6 +767,7 @@ def build_release_rail(
     limit: int = 10,
     today: datetime.date | None = None,
     deadline: float | None = None,
+    verify_credits: bool = True,
 ) -> list[dict[str, Any]]:
     """Project cached releases into a chronological release shelf shared by Home and Discover."""
     if not artist_weights or limit <= 0:
@@ -812,7 +825,7 @@ def build_release_rail(
             continue
 
         credit = str(row.get("artist_credit") or "").strip() or owner_name
-        if not row.get("credit_verified"):
+        if verify_credits and not row.get("credit_verified"):
             credit = _resolve_album_credit(album_id, owner_name, deadline=deadline)
 
         seen_albums.add(album_id)

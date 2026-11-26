@@ -62,6 +62,9 @@ _DISCOVERY_FEED_STALE_SEC = 3600
 _DISCOVERY_FEED_INFLIGHT: set[str] = set()
 _DISCOVERY_FEED_DIRTY: set[str] = set()
 _NEW_RELEASES_INFLIGHT: set[str] = set()
+_NEW_RELEASES_SYNCED_AT: dict[str, float] = {}
+_UNRESOLVED_ARTIST_UNTIL: dict[str, float] = {}
+_UNRESOLVED_ARTIST_MAX = 512
 _DISCOVERY_FEED_LOCK = threading.Lock()
 _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
 
@@ -83,6 +86,7 @@ def _invalidate_personalized_cache_for_user_detailed(user_id: str | None) -> lis
     entries: list[tuple[str, int, bool]] = []
     seen: set[str] = set()
     with _DISCOVERY_FEED_LOCK:
+        _NEW_RELEASES_SYNCED_AT.pop(str(user_id or "-"), None)
         matching_cache = [key for key in _DISCOVERY_FEED_CACHE if key.startswith(feed_prefix)]
         matching_inflight = [key for key in _DISCOVERY_FEED_INFLIGHT if key.startswith(feed_prefix)]
         cold_by_key: dict[str, bool] = {}

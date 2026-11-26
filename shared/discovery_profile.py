@@ -165,6 +165,17 @@ def build_artist_taste_profile(
     variant_scores: dict[str, dict[str, float]] = {}
     variant_display: dict[str, dict[str, str]] = {}
     deezer_ids_by_literal: dict[str, str] = {}
+    persisted_ids: dict[tuple[str, str], str] = {}
+    if learning_enabled:
+        try:
+            for row in user_db().get_discovery_artist_profile():
+                did = str(row.get("deezer_artist_id") or "").strip()
+                ak = str(row.get("artist_key") or "").strip()
+                lk = str(row.get("literal_key") or "").strip()
+                if ak and lk and did.isdigit():
+                    persisted_ids[(ak, lk)] = did
+        except Exception:
+            pass
 
     def record_variant(
         raw_name: object,
@@ -415,6 +426,8 @@ def build_artist_taste_profile(
                     deezer_id = str(node.get("deezer_artist_id") or "")
             except Exception:
                 pass
+        if not deezer_id:
+            deezer_id = persisted_ids.get((artist_key, best_lit), "")
         exclusion_deezer_id = deezer_id or negative_id_lookup.get(best_lit, "")
         if is_artist_demoted(display_name, deezer_artist_id=exclusion_deezer_id):
             continue

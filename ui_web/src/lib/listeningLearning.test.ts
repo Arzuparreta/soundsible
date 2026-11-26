@@ -103,7 +103,29 @@ describe('ListeningLearning', () => {
     expect(emitSkip).toHaveBeenCalledTimes(1);
     expect(emitSkip).toHaveBeenCalledWith(
       'music_play_skipped_early',
-      expect.objectContaining({ source: 'discover', listened_sec: 8 }),
+      expect.objectContaining({
+        source: 'discover',
+        listened_sec: 8,
+        deezer_id: '1',
+      }),
+    );
+
+    const deezerTrack: Track = {
+      ...music,
+      id: 'vid-xyz',
+      deezer_artist_id: '777',
+      originKeys: ['deezer:987654'],
+    };
+    const emitDeezer = vi.fn();
+    const dzLearning = new ListeningLearning(emitDeezer, 5);
+    dzLearning.update(deezerTrack, 0, true);
+    for (let second = 1; second <= 5; second += 1) dzLearning.update(deezerTrack, second, true);
+    expect(emitDeezer).toHaveBeenCalledWith(
+      'music_played_30s',
+      expect.objectContaining({
+        deezer_id: '987654',
+        deezer_artist_id: '777',
+      }),
     );
   });
 
