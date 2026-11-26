@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 import threading
-import unicodedata
+from typing import Any
 
 from shared.deezer_catalog import literal_artist_key
 from shared.discovery_intelligence import (
@@ -17,7 +17,7 @@ from shared.user_context import current_user_id, user_context
 _MAX_TRACKED_USERS = 128
 _MAX_RECENT_TASTE_SEEDS = 10
 _MAX_RECENT_GRAPH_SEEDS = 12
-_DEFAULT_ROTATION_PENALTY = 0.02
+_DEFAULT_ROTATION_PENALTY = 0.25
 _DEEZER_ARTIST_KEY_PREFIX = "artist:deezer:"
 
 _SEED_LOCK = threading.Lock()
@@ -157,117 +157,14 @@ def select_taste_artists(
     rotate: bool = False,
     penalty: float = _DEFAULT_ROTATION_PENALTY,
 ) -> list[str]:
-    """Rank taste seed artists across favourites, bookmarks, playlists, library, and listens."""
-    tracks = list(metadata.tracks if metadata and metadata.tracks else [])
-    rollup = load_listening_event_rollups()
-    saved_artists = load_saved_entity_artists(user_id)
-    by_id = {track.id: track for track in tracks}
-    scores: dict[str, float] = {}
-    variant_scores: dict[str, dict[str, float]] = {}
-    variant_display: dict[str, dict[str, str]] = {}
-    variant_has_real_display: dict[str, set[str]] = {}
+    """Rank taste seed artists using the multi-horizon taste profile (zero pins)."""
+    from shared.discovery_profile import build_artist_taste_profile
 
-    def record_variant(raw: object, score: float, *, title_fallback: bool = False) -> tuple[str, str]:
-        name = str(raw or "").strip()
-        key = fold_text(name)
-        lit = literal_artist_key(name)
-        if not key or not lit:
-            return "", ""
-        v_disp = variant_display.setdefault(key, {})
-        real_set = variant_has_real_display.setdefault(key, set())
-        if not title_fallback:
-            if lit not in real_set:
-                v_disp[lit] = name
-                real_set.add(lit)
-        elif lit not in v_disp:
-            v_disp[lit] = name.title()
-        if score:
-            v_scores = variant_scores.setdefault(key, {})
-            v_scores[lit] = v_scores.get(lit, 0.0) + score
-        return key, lit
-
-    def add_artist(raw: object, score: float, *, title_fallback: bool = False) -> None:
-        key, _ = record_variant(raw, score, title_fallback=title_fallback)
-        if key:
-            scores[key] = scores.get(key, 0.0) + score
-
-    for idx, tid in enumerate(fav_ids):
-        track = by_id.get(str(tid))
-        if track:
-            add_artist(track.album_artist or track.artist, 9.0 - min(idx, 8) * 0.35)
-
-    for idx, saved in enumerate(saved_artists):
-        if saved["kind"] == "artist":
-            add_artist(saved["name"], 8.5 - min(idx, 8) * 0.35)
-        else:
-            add_artist(saved["name"], 5.5 - min(idx, 8) * 0.25)
-
-    playlists = metadata.playlists if metadata and isinstance(metadata.playlists, dict) else {}
-    playlist_track_ids: set[str] = set()
-    for ids in playlists.values():
-        if isinstance(ids, list):
-            playlist_track_ids.update(str(x) for x in ids)
-    for tid in playlist_track_ids:
-        track = by_id.get(tid)
-        if track:
-            add_artist(track.album_artist or track.artist, 3.0)
-
-    artist_counts: dict[str, int] = {}
-    variant_track_counts: dict[str, dict[str, int]] = {}
-    for track in tracks:
-        name = str(track.album_artist or track.artist or "").strip()
-        key, lit = record_variant(name, 0.0)
-        if not key:
-            continue
-        artist_counts[key] = artist_counts.get(key, 0) + 1
-        v_counts = variant_track_counts.setdefault(key, {})
-        v_counts[lit] = v_counts.get(lit, 0) + 1
-    for key, count in artist_counts.items():
-        lib_score = min(8.0, count * 1.4)
-        scores[key] = scores.get(key, 0.0) + lib_score
-        v_scores = variant_scores.setdefault(key, {})
-        for lit, vcount in variant_track_counts.get(key, {}).items():
-            v_scores[lit] = v_scores.get(lit, 0.0) + lib_score * (vcount / count)
-
-    for raw_key, count in rollup.artist_plays.items():
-        add_artist(raw_key, min(12.0, count * 2.0), title_fallback=True)
-    for raw_key, count in rollup.artist_saves.items():
-        add_artist(raw_key, min(10.0, count * 3.0), title_fallback=True)
-
-    display: dict[str, str] = {}
-    for key in scores:
-        key_nfc = unicodedata.normalize("NFC", key)
-        v_scores = variant_scores.get(key, {})
-        v_disp = variant_display.get(key, {})
-        if v_scores:
-            best_lit = max(v_scores, key=lambda lit: (v_scores[lit], lit != key_nfc))
-            display[key] = v_disp.get(best_lit, best_lit)
-        elif v_disp:
-            first_lit = next(iter(v_disp))
-            display[key] = v_disp[first_lit]
-
-    deezer_by_literal = {
-        literal_artist_key(item["name"]): item["deezer_id"]
-        for item in saved_artists
-        if literal_artist_key(item["name"]) and item["deezer_id"]
-    }
-    for key in list(scores):
-        chosen_name = display.get(key, key)
-        if _is_artist_excluded(
-            chosen_name,
-            user_id,
-            deezer_artist_id=deezer_by_literal.get(literal_artist_key(chosen_name), ""),
-        ):
-            scores.pop(key, None)
-
-    if rotate:
-        recent = _get_recent(_RECENT_TASTE_SEEDS, user_id)
-        for key in recent:
-            if key in scores:
-                scores[key] *= penalty
-
-    ranked = sorted(scores, key=lambda key: scores[key], reverse=True)
-    return [display[key] for key in ranked[:limit] if display.get(key)]
+    del rotate, penalty  # Core taste anchors stay stable; rotation happens via impression fatigue.
+    entries = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True)
+    if not entries:
+        return []
+    return [entry.display_name for entry in entries[:limit] if entry.display_name]
 
 
 def _is_artist_excluded(artist: str, user_id: str | None = None, *, deezer_artist_id: str = "") -> bool:
@@ -283,52 +180,26 @@ def _is_artist_excluded(artist: str, user_id: str | None = None, *, deezer_artis
 def select_release_seed_artists(
     metadata,
     fav_ids: list[str],
-    limit: int = 8,
+    limit: int = 35,
     *,
     user_id: str | None = None,
-) -> list[dict[str, str]]:
-    """Return unrotated artist seeds for release-radar checks, prioritizing bookmarks."""
-    saved_artists = load_saved_entity_artists(user_id)
-    deezer_by_literal = {
-        literal_artist_key(item["name"]): item["deezer_id"]
-        for item in saved_artists
-        if literal_artist_key(item["name"]) and item["deezer_id"]
-    }
+) -> list[dict[str, Any]]:
+    """Return unrotated taste-profile artist seeds for New Releases (zero pins)."""
+    from shared.discovery_profile import (
+        build_artist_taste_profile,
+        select_release_profile_artists,
+    )
 
-    candidates: list[dict[str, str]] = []
-    seen_names: set[str] = set()
-    seen_ids: set[str] = set()
-
-    def push(name: str, deezer_id: str = "") -> None:
-        lit = literal_artist_key(name)
-        if not lit or lit in seen_names:
-            return
-        resolved_id = deezer_id or deezer_by_literal.get(lit, "")
-        if resolved_id and resolved_id in seen_ids:
-            return
-        seen_names.add(lit)
-        if resolved_id:
-            seen_ids.add(resolved_id)
-        candidates.append({"name": name, "deezer_id": resolved_id})
-
-    for kind in ("artist", "album"):
-        for item in saved_artists:
-            if item["kind"] == kind:
-                push(item["name"], item["deezer_id"])
-
-    for name in select_taste_artists(metadata, fav_ids, limit=max(limit * 2, 16), user_id=user_id, rotate=False):
-        push(name)
-
-    filtered = [
-        item
-        for item in candidates
-        if not _is_artist_excluded(
-            item["name"],
-            user_id,
-            deezer_artist_id=item["deezer_id"],
-        )
+    profile = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True)
+    selected = select_release_profile_artists(profile, limit=limit)
+    return [
+        {
+            "name": entry.display_name,
+            "deezer_id": entry.deezer_artist_id,
+            "weight": entry.effective_score,
+        }
+        for entry in selected
     ]
-    return filtered[:limit]
 
 
 def select_graph_seed_tracks(

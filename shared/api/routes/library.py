@@ -1141,10 +1141,4 @@ def update_saved_entity():
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
     emit_to_user('saved_entities_updated')
-    try:
-        from shared.discovery_signals import notify_discovery_signal
-
-        notify_discovery_signal(always_refresh=True)
-    except Exception:
-        logger.debug("Discovery feed notify failed after saved entity update", exc_info=True)
     return jsonify({'entities': entries})

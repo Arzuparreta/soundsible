@@ -11,6 +11,7 @@ import type { SavedEntity } from '../lib/savedEntities';
 import styles from './LibraryHome.module.css';
 
 const BookmarkHeader = lazy(() => import('./BookmarkHeader'));
+const HomeNewReleases = lazy(() => import('../components/HomeNewReleases'));
 
 /** Main-shell landing page. */
 export default function LibraryHome() {
@@ -40,6 +41,9 @@ export default function LibraryHome() {
         </section>
       </Show>
       <SavedEntities kind={kind()} expanded={expanded()} match={match()} />
+      <Show when={!expanded()}>
+        <HomeNewReleases />
+      </Show>
     </div>
   </div>;
 }

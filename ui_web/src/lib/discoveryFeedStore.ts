@@ -38,6 +38,9 @@ function attachPushListener(): void {
   if (listeningPush) return;
   listeningPush = true;
   onDiscoveryFeedReady((data) => {
+    if (data.reason === 'new_releases') {
+      return;
+    }
     clearSearchCache(CACHE);
     if (hasRetainedConsumer && activeConsumers.size === 0) {
       return;

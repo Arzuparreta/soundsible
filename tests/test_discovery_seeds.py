@@ -88,11 +88,10 @@ def test_taste_artists_fold_diacritics_and_rotate_per_user(tmp_path):
 
         record_recent_taste_seeds("alice", first[:3])
         rotated = select_taste_artists(metadata, ["t1", "t3"], limit=5, user_id="alice", rotate=True)
-        # Rotation dampens recent seeds without starving the full limit.
-        assert len(rotated) == 5
-        assert rotated[:2] != first[:2]
+        # Core taste seeds stay stable under rotate=True; output rotation uses impression fatigue.
+        assert rotated == first
 
-        # Another user keeps independent rotation state.
+        # Another user receives the same deterministic ranking from identical profile inputs.
         bob_seeds = select_taste_artists(metadata, ["t1", "t3"], limit=5, user_id="bob", rotate=True)
         assert bob_seeds == first
 
@@ -177,19 +176,15 @@ def test_saved_entities_feed_taste_and_unrotated_release_seeds(tmp_path):
         ]
 
         empty_metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-        assert select_taste_artists(empty_metadata, [], limit=5, user_id="alice") == ["Extremoduro", "Marea"]
+        # Bookmarks/pins carry zero weight in Discover and release checks.
+        assert select_taste_artists(empty_metadata, [], limit=5, user_id="alice") == []
         assert select_taste_artists(empty_metadata, [], limit=5, user_id="bob") == []
 
         record_recent_taste_seeds("alice", ["Extremoduro", "Marea"])
         tracks = [_track("t1", "Robe"), _track("t2", "Platero y Tú")]
         rich = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})
         release_seeds = select_release_seed_artists(rich, ["t1"], limit=5, user_id="alice")
-        # Release seeds never rotate away saved artists and keep known deezer_ids.
-        assert release_seeds[:2] == [
-            {"name": "Extremoduro", "deezer_id": "77"},
-            {"name": "Marea", "deezer_id": "42"},
-        ]
-        assert [item["name"] for item in release_seeds] == ["Extremoduro", "Marea", "Robe", "Platero y Tú"]
+        assert [item["name"] for item in release_seeds] == ["Robe", "Platero y Tú"]
     finally:
         clear_recent_seeds(clear_all=True)
         reset_runtime()
@@ -294,10 +289,7 @@ def test_taste_and_release_seeds_prevent_diacritic_hijack_and_id_bleed(tmp_path)
         ]
 
         release_seeds = select_release_seed_artists(metadata, ["h1"], limit=5, user_id="alice")
-        assert release_seeds == [
-            {"name": "HALŌ", "deezer_id": "422708332"},
-            {"name": "Halo", "deezer_id": ""},
-        ]
+        assert [item["name"] for item in release_seeds] == ["Halo"]
     finally:
         clear_recent_seeds(clear_all=True)
         reset_runtime()

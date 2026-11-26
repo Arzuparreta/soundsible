@@ -16,14 +16,16 @@ from shared import request_scope
 from shared.atomic_file import publish, text_pieces
 from shared.file_revision import publication_lock
 from shared.models import LibraryMetadata, Track
-from shared.database import user_db
+from shared.database import instance_db, user_db
+from shared.deezer_catalog import literal_artist_key
 from shared.telemetry import emit, user_telemetry_dir
 from shared.text_utils import fold_text
 from shared.user_context import user_config_dir
 
 SETTINGS_VERSION = 1
-DISCOVERY_PROFILE_POLICY_VERSION = "3"
+DISCOVERY_PROFILE_POLICY_VERSION = "4"
 _GENERATED_SOURCES = {"auto_mode", "autoplay", "radio"}
+_NON_NEGATIVE_SKIP_SOURCES = {"library", "playlist", "album", "artist", "favourites"}
 _PROFILE_POLICY_LOCK = threading.Lock()
 DEFAULT_SETTINGS = {
     "v": SETTINGS_VERSION,
@@ -41,6 +43,8 @@ DEFAULT_SETTINGS = {
 
 POSITIVE_LISTENING_EVENTS = {
     "music_played_30s",
+    "music_play_completed",
+    "music_play_skipped_early",
     "music_search_played",
     "music_saved_to_library",
     "music_favourited",
@@ -57,7 +61,11 @@ POSITIVE_LISTENING_EVENTS = {
 
 _POSITIVE_WEIGHTS = {
     "music_played_30s": 1.0,
-    "music_search_played": 0.6,
+    "music_play_completed": 1.0,
+    "music_play_skipped_early": 0.0,
+    # Search click is pre-play intent, never a listen; real listens arrive via
+    # music_played_30s / music_play_completed with source="search".
+    "music_search_played": 0.0,
     "music_saved_to_library": 2.5,
     "music_favourited": 2.0,
     "music_added_to_playlist": 2.0,
@@ -75,6 +83,7 @@ _POSITIVE_WEIGHTS = {
 
 _NEGATIVE_WEIGHTS = {
     "music_generated_skipped_early": 0.15,
+    "music_play_skipped_early": 0.25,
 }
 
 
@@ -138,8 +147,12 @@ def _event_deltas(
     stored_negative: float = 0.0,
 ) -> tuple[float, float]:
     source = _clean_str(payload.get("source"), 80).casefold()
-    if event == "music_played_30s" and source in _GENERATED_SOURCES:
+    if event in ("music_played_30s", "music_play_completed") and source in _GENERATED_SOURCES:
         return 0.0, 0.0
+    if event == "music_play_skipped_early":
+        if source in _NON_NEGATIVE_SKIP_SOURCES:
+            return 0.0, 0.0
+        return 0.0, float(_NEGATIVE_WEIGHTS["music_play_skipped_early"])
     if event in _POSITIVE_WEIGHTS:
         return float(_POSITIVE_WEIGHTS[event]), float(_NEGATIVE_WEIGHTS.get(event, 0.0))
     return max(0.0, stored_positive), max(0.0, stored_negative)
@@ -284,10 +297,10 @@ def _read_listening_event_rollups(max_events: int = 2000) -> ListeningRollup:
                 )
 
         generated_passive = (
-            event == "music_played_30s"
+            event in ("music_played_30s", "music_play_completed")
             and _clean_str(ev.get("source"), 80).casefold() in _GENERATED_SOURCES
         )
-        if event in ("music_played_30s", "music_search_played") and not generated_passive:
+        if event in ("music_played_30s", "music_play_completed") and not generated_passive:
             if artist:
                 rollup.artist_plays[artist] = rollup.artist_plays.get(artist, 0) + 1
             if artist and album:
@@ -393,7 +406,12 @@ def _clean_str(value: Any, max_len: int = 220) -> str:
     return text
 
 
-def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> bool:
+def emit_discovery_event(
+    event: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    created_at: int | None = None,
+) -> bool:
     """Append one local listening event when discovery learning is enabled."""
     event_name = _clean_str(event, 80)
     if event_name not in POSITIVE_LISTENING_EVENTS:
@@ -403,10 +421,12 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
 
     ensure_discovery_profile_policy()
     payload = payload if isinstance(payload, dict) else {}
+    now_ts = int(time.time())
+    event_ts = int(created_at) if isinstance(created_at, int) and not isinstance(created_at, bool) and created_at > 0 else now_ts
     safe: dict[str, Any] = {
         "v": 2,
         "event": event_name,
-        "ts": int(time.time()),
+        "ts": event_ts,
     }
     for key in (
         "media_type",
@@ -415,6 +435,10 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
         "artist",
         "album",
         "source",
+        "play_source",
+        "play_session_id",
+        "listened_sec",
+        "duration_sec",
         "youtube_id",
         "deezer_id",
         "deezer_artist_id",
@@ -441,7 +465,8 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
     safe["identity"] = identity
     safe["media_type"] = media_type
     positive_delta, negative_delta = _event_deltas(event_name, safe)
-    user_db().record_discovery_signal(
+    db = user_db()
+    db.record_discovery_signal(
         event_id=str(uuid.uuid4()),
         event=event_name,
         identity=identity,
@@ -452,11 +477,34 @@ def emit_discovery_event(event: str, payload: dict[str, Any] | None = None) -> b
         created_at=int(safe["ts"]),
         aliases=_storage_aliases(identity, media_type, safe),
     )
+    if event_name not in ("music_play_skipped_early", "music_generated_skipped_early", "music_search_played"):
+        resolved_daid = str(safe.get("deezer_artist_id") or "").strip()
+        if not resolved_daid and safe.get("artist"):
+            try:
+                lit = literal_artist_key(str(safe["artist"]))
+                node = instance_db().find_graph_node_by_literal(lit) if lit else None
+                if node:
+                    resolved_daid = str(node.get("deezer_artist_id") or "").strip()
+            except Exception:
+                resolved_daid = ""
+        interacted_ids = [
+            identity,
+            *(f"youtube:{safe['youtube_id']}" for _ in (0,) if safe.get("youtube_id")),
+            *(f"deezer:{safe['deezer_id']}" for _ in (0,) if safe.get("deezer_id")),
+            *(f"deezer:artist:{resolved_daid}" for _ in (0,) if resolved_daid.isdigit()),
+            *(f"deezer:album:{safe['deezer_album_id']}" for _ in (0,) if safe.get("deezer_album_id")),
+            *artist_aliases(safe),
+        ]
+        try:
+            db.mark_discovery_impression_interacted(interacted_ids, now=event_ts)
+        except Exception:
+            pass
     emit("listening-events", safe)
     # The rollup is memoized per request; a request that records an event and
     # then rebuilds a feed must see it.
     request_scope.invalidate("listening_rollup:")
     request_scope.invalidate("discovery_signal_index:")
+    request_scope.invalidate("discovery_artist_profile:")
     return True
 
 
@@ -756,6 +804,7 @@ def reset_discovery_profile() -> None:
     """Clear the bound account's aggregate, audit rows, and listening log."""
     request_scope.invalidate("listening_rollup:")
     request_scope.invalidate("discovery_signal_index:")
+    request_scope.invalidate("discovery_artist_profile:")
     try:
         from shared.discovery_seeds import clear_recent_seeds
 

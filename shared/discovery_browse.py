@@ -1,16 +1,22 @@
-"""Bounded metadata enrichment for the Search home, independent of track ranking."""
+"""Bounded metadata enrichment for Discover and Home release rails."""
 from __future__ import annotations
 
 from collections import Counter
 import datetime
 from itertools import zip_longest
 import time
+from typing import Any
 
-from shared.deezer_catalog import (
-    DEEZER_ARTIST_SEARCH_LIMIT,
-    literal_artist_key,
-    main_contributors,
-    select_artist_matches,
+from shared.database import instance_db
+from shared.discovery_graph_store import (
+    build_release_rail,
+    project_youtube_mix_edges,
+    resolve_artist_node,
+    score_consensus_candidates,
+    select_2hop_exploration,
+    select_mmr_diverse,
+    sync_artist_releases,
+    sync_related_artists,
 )
 from shared.discovery_intelligence import artist_recommendation_multiplier
 from shared.providers import deezer
@@ -23,40 +29,33 @@ def _artist_mult(name: str, deezer_artist_id: str = "") -> float:
     except Exception:
         return 1.0
 
+
 _ALLOWED_RECORD_TYPES = {"album", "ep", "single"}
-_NEW_RELEASE_WINDOW_DAYS = 180
-_RECENT_BADGE_DAYS = 30
-_MAX_RELEASE_OWNERS = 8
-
-
-def _parse_release_date(value: object) -> datetime.date | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return datetime.date.fromisoformat(text)
-    except ValueError:
-        return None
+_RELEASE_RADAR_WINDOW_DAYS = 45
 
 
 def build_browse_sections(
     seed_names: list[str],
     limit: int = 10,
     *,
-    release_seeds: list[dict[str, str]] | None = None,
+    release_seeds: list[dict[str, Any]] | None = None,
+    seed_weights: dict[str, float] | None = None,
     owned_album_keys: set[str] | None = None,
+    metadata: Any = None,
+    extra_candidate_boosts: dict[str, tuple[float, str, str]] | None = None,
+    impressions: dict[str, dict[str, Any]] | None = None,
     today: datetime.date | None = None,
 ) -> dict:
-    """Return navigable catalog entities; never infer artists from video channels.
+    """Return outward Discover shelves: Release Radar, Artists to discover, and Albums for you.
 
     Runs only in the feed's background worker. Each provider failure is isolated,
     and a deadline prevents a large library from causing unbounded fan-out.
     """
+    del release_seeds  # Pins and user release checks now live strictly on Home New Releases.
     deadline = time.monotonic() + 20
     failed = False
     ref_today = today or datetime.date.today()
-    resolved_by_name: dict[str, dict | None] = {}
-    albums_by_artist: dict[str, list[dict]] = {}
+    db = instance_db()
 
     def rows(path: str, params: dict | None = None) -> list[dict]:
         nonlocal failed
@@ -89,210 +88,46 @@ def build_browse_sections(
             "reason_artist": reason,
         }
 
-    def resolve_seed_artist(name: str) -> dict | None:
-        wanted = literal_artist_key(name)
-        if not wanted or not fold_text(name):
-            return None
-        if wanted in resolved_by_name:
-            return resolved_by_name[wanted]
-        matches = rows("search/artist", {"q": name, "limit": DEEZER_ARTIST_SEARCH_LIMIT})
-        # A homonym or approximate search hit must not become a taste seed;
-        # keep literal diacritic matches separate from folded fallbacks.
-        valid_matches = [r for r in matches if str(r.get("id") or "").strip().isdigit()]
-        exact = select_artist_matches(name, valid_matches, fans_key="nb_fan")
-        match = exact[0] if exact else None
-        seed = artist_item(match) if match else None
-        resolved_by_name[wanted] = seed
-        return seed
-
-    def artist_albums(aid: str) -> list[dict]:
-        if aid not in albums_by_artist:
-            albums_by_artist[aid] = rows(f"artist/{aid}/albums", {"limit": 20})
-        return albums_by_artist[aid]
-
-    seeds: list[dict] = []
-    pools: list[list[dict]] = []
-    popular = not seed_names and not release_seeds
-    if popular:
-        pools = [[item for row in rows("chart/0/artists", {"limit": 20})
-                  if (item := artist_item(row))]]
-    else:
-        for name in seed_names[:5]:
-            seed = resolve_seed_artist(name)
-            if not seed or any(s["id"] == seed["id"] for s in seeds):
-                continue
-            seeds.append(seed)
-            aid = seed["external_ids"]["deezer_artist_id"]
-            pools.append([item for row in rows(f"artist/{aid}/related", {"limit": 10})
-                          if (item := artist_item(row, name))])
-
+    popular = not seed_names
     artists: list[dict] = []
-    seen = {s["id"] for s in seeds}
-    for round_items in zip_longest(*pools):
-        for item in round_items:
-            if item and item["id"] not in seen:
-                seen.add(item["id"])
-                artists.append(item)
-    artists.sort(
-        key=lambda item: _artist_mult(
-            item["title"],
-            item["external_ids"]["deezer_artist_id"],
-        ),
-        reverse=True,
-    )
-    artists = artists[:limit]
-
-    new_releases: list[dict] = []
-    new_release_ids: set[str] = set()
-    if not popular:
-        candidates = (
-            release_seeds[:_MAX_RELEASE_OWNERS]
-            if release_seeds is not None
-            else [
-                {"name": s["title"], "deezer_id": s["external_ids"]["deezer_artist_id"]}
-                for s in seeds[:_MAX_RELEASE_OWNERS]
-            ]
-        )
-        release_owners: list[tuple[str, str]] = []
-        seen_release_owners: set[str] = set()
-        for candidate in candidates:
-            cname = str(candidate.get("name") or "").strip()
-            caid = str(candidate.get("deezer_id") or "").strip()
-            if caid.isdigit() and cname:
-                owner_id, owner_name = caid, cname
-            elif cname:
-                resolved_seed = resolve_seed_artist(cname)
-                if not resolved_seed:
-                    continue
-                owner_id = resolved_seed["external_ids"]["deezer_artist_id"]
-                owner_name = resolved_seed["title"]
-            else:
-                continue
-            if owner_id in seen_release_owners:
-                continue
-            seen_release_owners.add(owner_id)
-            release_owners.append((owner_id, owner_name))
-
-        raw_releases: list[tuple[datetime.date, int, str, str, dict]] = []
-        for owner_id, owner_name in release_owners:
-            for row in artist_albums(owner_id):
-                aid = str(row.get("id") or "")
-                title = str(row.get("title") or "").strip()
-                rtype = str(row.get("record_type") or "").strip().casefold() or "album"
-                if not aid.isdigit() or not title or rtype not in _ALLOWED_RECORD_TYPES:
-                    continue
-                rel_date = _parse_release_date(row.get("release_date"))
-                if rel_date is None:
-                    continue
-                age_days = (ref_today - rel_date).days
-                if age_days < 0 or age_days > _NEW_RELEASE_WINDOW_DAYS:
-                    continue
-                raw_releases.append((rel_date, int(aid), owner_id, owner_name, row))
-
-        def credited_artist(album_id: str, fallback: str) -> str:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return fallback
-            try:
-                album = deezer.get(f"album/{album_id}", timeout=min(3, remaining))
-            except Exception:
-                return fallback
-            names = [name for _, name in main_contributors(album)] if isinstance(album, dict) else []
-            return ", ".join(names) if len(names) > 1 else fallback
-
-        raw_releases.sort(
-            key=lambda entry: (
-                _artist_mult(entry[3], entry[2]),
-                entry[0],
-                entry[1],
-            ),
-            reverse=True,
-        )
-        new_release_per_artist: Counter = Counter()
-        for rel_date, aid_num, owner_id, owner_name, row in raw_releases:
-            if len(new_releases) >= limit:
-                break
-            aid = str(aid_num)
-            if aid in new_release_ids or new_release_per_artist[owner_id] >= 2:
-                continue
-            title = str(row.get("title") or "").strip()
-            rtype = str(row.get("record_type") or "").strip().casefold() or "album"
-            new_release_ids.add(aid)
-            new_release_per_artist[owner_id] += 1
-            credited = credited_artist(aid, owner_name)
-            new_releases.append({
-                "id": f"deezer:album:{aid}",
-                "type": "album",
-                "source": "deezer",
-                "title": title,
-                "artist": credited,
-                "subtitle": credited,
-                "cover": deezer.image(row, "cover"),
-                "record_type": rtype,
-                "release_date": rel_date.isoformat(),
-                "is_new": (ref_today - rel_date).days <= _RECENT_BADGE_DAYS,
-                "external_ids": {"deezer_album_id": aid, "deezer_artist_id": owner_id},
-                "reason_artist": "",
-            })
-
-    album_pools: list[list[dict]] = []
-    if popular:
-        album_pools.append(rows("chart/0/albums", {"limit": 30}))
-    else:
-        # Prioritize related artists so "Albums for you" leads outward with
-        # "Similar to {artist}" attribution; fall back to seed artists only when
-        # related artists do not fill five album pools.
-        seen_owners: set[str] = set()
-        candidate_owners = sorted(
-            [*artists, *seeds],
-            key=lambda owner: _artist_mult(
-                owner["title"],
-                owner["external_ids"]["deezer_artist_id"],
-            ),
-            reverse=True,
-        )
-        for owner in candidate_owners:
-            if len(album_pools) >= 5:
-                break
-            aid = owner["external_ids"]["deezer_artist_id"]
-            if aid in seen_owners:
-                continue
-            seen_owners.add(aid)
-            owner_name = owner["title"]
-            releases = artist_albums(aid)
-            pool = [
-                {
-                    **r,
-                    "artist": {"id": aid, "name": owner_name},
-                    "reason_artist": owner.get("reason_artist") or "",
-                }
-                for r in releases
-                if (str(r.get("record_type") or "").strip().casefold() or "album") in _ALLOWED_RECORD_TYPES
-                and str(r.get("id") or "") not in new_release_ids
-                and not (
-                    owned_album_keys
-                    and identity_key(str(r.get("title") or "").strip(), owner_name) in owned_album_keys
-                )
-            ]
-            if pool:
-                album_pools.append(pool)
-
+    release_radar: list[dict] = []
     albums: list[dict] = []
-    seen_albums: set[str] = set(new_release_ids)
-    per_artist: Counter = Counter()
-    for round_items in zip_longest(*album_pools):
-        for row in round_items:
-            if not row:
-                continue
+    consensus_pool: list[dict] = []
+
+    if popular:
+        seen_pop: set[str] = set()
+        for row in rows("chart/0/artists", {"limit": 20}):
+            item = artist_item(row)
+            if item and item["id"] not in seen_pop:
+                seen_pop.add(item["id"])
+                artists.append(item)
+        artists.sort(
+            key=lambda item: _artist_mult(
+                item["title"],
+                item["external_ids"]["deezer_artist_id"],
+            ),
+            reverse=True,
+        )
+        artists = artists[:limit]
+
+        seen_albums: set[str] = set()
+        per_artist: Counter = Counter()
+        for row in rows("chart/0/albums", {"limit": 30}):
             aid = str(row.get("id") or "")
             owner = row.get("artist") if isinstance(row.get("artist"), dict) else {}
             owner_id, name = str(owner.get("id") or ""), str(owner.get("name") or "").strip()
             title = str(row.get("title") or "").strip()
             rtype = str(row.get("record_type") or "").strip().casefold()
-            if (not aid.isdigit() or not owner_id.isdigit() or not name or not title
-                    or aid in seen_albums or per_artist[owner_id] >= 2
-                    or (rtype and rtype not in _ALLOWED_RECORD_TYPES)
-                    or (owned_album_keys and identity_key(title, name) in owned_album_keys)):
+            if (
+                not aid.isdigit()
+                or not owner_id.isdigit()
+                or not name
+                or not title
+                or aid in seen_albums
+                or per_artist[owner_id] >= 2
+                or (rtype and rtype not in _ALLOWED_RECORD_TYPES)
+                or (owned_album_keys and identity_key(title, name) in owned_album_keys)
+            ):
                 continue
             seen_albums.add(aid)
             per_artist[owner_id] += 1
@@ -307,22 +142,265 @@ def build_browse_sections(
                 "record_type": rtype or "album",
                 "release_date": str(row.get("release_date") or "").strip(),
                 "external_ids": {"deezer_album_id": aid, "deezer_artist_id": owner_id},
-                "reason_artist": row.get("reason_artist", ""),
+                "reason_artist": "",
             })
-    albums.sort(
-        key=lambda item: _artist_mult(
-            item["artist"],
-            item["external_ids"]["deezer_artist_id"],
-        ),
-        reverse=True,
-    )
-    albums = albums[:limit]
+        albums.sort(
+            key=lambda item: _artist_mult(
+                item["artist"],
+                item["external_ids"]["deezer_artist_id"],
+            ),
+            reverse=True,
+        )
+        albums = albums[:limit]
+    else:
+        seed_nodes: list[dict[str, Any]] = []
+        seed_weight_by_id: dict[str, float] = {}
+        seed_names_by_id: dict[str, str] = {}
+        seed_folded_names: set[str] = set()
+        seen_seed_ids: set[str] = set()
+
+        for idx, name in enumerate(seed_names[:25]):
+            if time.monotonic() >= deadline:
+                failed = True
+                break
+            try:
+                node = resolve_artist_node(name, deadline=deadline)
+            except deezer.DeezerQuotaError:
+                failed = True
+                break
+            except Exception:
+                failed = True
+                continue
+            if not node:
+                continue
+            aid = str(node.get("deezer_artist_id") or "")
+            if not aid.isdigit() or aid in seen_seed_ids:
+                continue
+            seen_seed_ids.add(aid)
+            seed_nodes.append(node)
+            weight = float((seed_weights or {}).get(name, 1.0 / (1.0 + idx * 0.15)))
+            seed_weight_by_id[aid] = weight
+            seed_names_by_id[aid] = name
+            folded = fold_text(name)
+            if folded:
+                seed_folded_names.add(folded)
+
+        if sync_related_artists(seed_nodes, max_sync=6, deadline=deadline):
+            failed = True
+        if metadata is not None and seed_nodes:
+            try:
+                project_youtube_mix_edges(metadata, seed_nodes)
+            except Exception:
+                pass
+
+        consensus_pool = score_consensus_candidates(
+            seed_weight_by_id,
+            seed_names_by_id,
+            exclude_artist_ids=seen_seed_ids,
+            exclude_folded_names=seed_folded_names,
+            extra_candidate_boosts=extra_candidate_boosts,
+            impressions=impressions,
+            limit=max(40, limit * 4),
+        )
+        primary_artists = select_mmr_diverse(consensus_pool, limit=limit)
+        artists = primary_artists
+        if limit >= 6 and consensus_pool:
+            hop1_ids = {
+                str(c["external_ids"]["deezer_artist_id"])
+                for c in consensus_pool
+                if c.get("external_ids", {}).get("deezer_artist_id")
+            }
+            keep_count = max(0, limit - 2)
+            protected = primary_artists[:keep_count]
+            explore = select_2hop_exploration(
+                list(seen_seed_ids),
+                hop1_ids,
+                exclude_artist_ids=seen_seed_ids
+                | {
+                    str(a["external_ids"]["deezer_artist_id"])
+                    for a in protected
+                    if a.get("external_ids", {}).get("deezer_artist_id")
+                },
+                exclude_folded_names=seed_folded_names
+                | {fold_text(a["title"]) for a in protected if fold_text(a["title"])},
+                seed_names_by_id=seed_names_by_id,
+                impressions=impressions,
+                limit=2,
+            )
+            if explore:
+                explore_ids = {item["id"] for item in explore}
+                remaining_primary = [item for item in primary_artists if item["id"] not in explore_ids]
+                head = remaining_primary[: max(0, limit - len(explore))]
+                artists = [*head, *explore][:limit]
+
+        # Hydrate discographies once for the top outward consensus artists (shared
+        # cleanly between Release Radar and Albums for you).
+        radar_candidates = consensus_pool[: max(15, min(20, limit * 2))]
+        radar_ids = [str(c["external_ids"]["deezer_artist_id"]) for c in radar_candidates]
+        seed_owner_items = [
+            {
+                "id": f"deezer:artist:{s['deezer_artist_id']}",
+                "type": "artist",
+                "source": "deezer",
+                "title": seed_names_by_id.get(str(s["deezer_artist_id"]), str(s["name"])),
+                "artist": seed_names_by_id.get(str(s["deezer_artist_id"]), str(s["name"])),
+                "external_ids": {"deezer_artist_id": str(s["deezer_artist_id"])},
+                "reason_artist": "",
+                "score": 0.0,
+            }
+            for s in seed_nodes
+        ]
+        candidate_owners = sorted(
+            [*artists, *seed_owner_items],
+            key=lambda owner: (
+                _artist_mult(owner["title"], owner["external_ids"]["deezer_artist_id"]),
+                float(owner.get("score") or 0.0),
+            ),
+            reverse=True,
+        )
+        album_owner_ids: list[str] = []
+        seen_owner_ids: set[str] = set()
+        for owner in candidate_owners:
+            oid = str(owner["external_ids"]["deezer_artist_id"])
+            if oid in seen_owner_ids:
+                continue
+            seen_owner_ids.add(oid)
+            album_owner_ids.append(oid)
+            if len(album_owner_ids) >= 8:
+                break
+
+        all_sync_ids = list(dict.fromkeys([*radar_ids, *album_owner_ids]))
+        cached_nodes = db.get_graph_nodes_by_ids(all_sync_ids)
+        sync_nodes = [cached_nodes[aid] for aid in all_sync_ids if aid in cached_nodes]
+        rel_failed, _ = sync_artist_releases(sync_nodes, max_sync=10, deadline=deadline)
+        if rel_failed:
+            failed = True
+
+        # 1) Release Radar: recent releases (45d) from outward consensus artists.
+        if radar_candidates:
+            radar_weights = {
+                str(c["external_ids"]["deezer_artist_id"]): float(c.get("score") or 0.0)
+                for c in radar_candidates
+            }
+            radar_reasons = {
+                str(c["external_ids"]["deezer_artist_id"]): str(c.get("reason_artist") or "")
+                for c in radar_candidates
+            }
+            radar_names = {
+                str(c["external_ids"]["deezer_artist_id"]): str(c["title"])
+                for c in radar_candidates
+            }
+            release_radar = build_release_rail(
+                radar_weights,
+                window_days=_RELEASE_RADAR_WINDOW_DAYS,
+                exclude_album_keys=owned_album_keys,
+                reason_by_artist=radar_reasons,
+                artist_names_by_id=radar_names,
+                max_per_artist=2,
+                limit=limit,
+                today=ref_today,
+                deadline=deadline,
+            )
+
+        # 2) Albums for you: full-catalog discovery reusing the exact same cache.
+        radar_album_ids = {
+            str(item["external_ids"]["deezer_album_id"])
+            for item in release_radar
+            if item.get("external_ids", {}).get("deezer_album_id")
+        }
+        owner_meta = {
+            str(owner["external_ids"]["deezer_artist_id"]): (
+                str(owner["title"]),
+                str(owner.get("reason_artist") or ""),
+            )
+            for owner in candidate_owners
+        }
+        cached_releases = db.get_artist_releases(album_owner_ids)
+        by_owner: dict[str, list[dict[str, Any]]] = {}
+        for row in cached_releases:
+            oid = str(row.get("artist_deezer_id") or "")
+            by_owner.setdefault(oid, []).append(row)
+
+        album_pools: list[list[dict[str, Any]]] = []
+        for oid in album_owner_ids:
+            if len(album_pools) >= 5:
+                break
+            owner_name, owner_reason = owner_meta.get(oid, ("", ""))
+            pool = []
+            for row in by_owner.get(oid, []):
+                album_id = str(row.get("deezer_album_id") or "")
+                title = str(row.get("title") or "").strip()
+                rtype = str(row.get("record_type") or "album").strip().casefold() or "album"
+                if (
+                    not album_id
+                    or album_id in radar_album_ids
+                    or rtype not in _ALLOWED_RECORD_TYPES
+                    or (owned_album_keys and identity_key(title, owner_name) in owned_album_keys)
+                ):
+                    continue
+                pool.append({
+                    **row,
+                    "owner_name": owner_name,
+                    "reason_artist": owner_reason,
+                })
+            if pool:
+                album_pools.append(pool)
+
+        seen_albums = set(radar_album_ids)
+        per_artist = Counter()
+        for round_items in zip_longest(*album_pools):
+            for row in round_items:
+                if not row:
+                    continue
+                album_id = str(row.get("deezer_album_id") or "")
+                owner_id = str(row.get("artist_deezer_id") or "")
+                name = str(row.get("owner_name") or row.get("artist_credit") or "").strip()
+                title = str(row.get("title") or "").strip()
+                rtype = str(row.get("record_type") or "album").strip().casefold() or "album"
+                if (
+                    not album_id.isdigit()
+                    or not owner_id.isdigit()
+                    or not name
+                    or not title
+                    or album_id in seen_albums
+                    or per_artist[owner_id] >= 2
+                ):
+                    continue
+                seen_albums.add(album_id)
+                per_artist[owner_id] += 1
+                albums.append({
+                    "id": f"deezer:album:{album_id}",
+                    "type": "album",
+                    "source": "deezer",
+                    "title": title,
+                    "artist": name,
+                    "subtitle": name,
+                    "cover": str(row.get("cover_url") or ""),
+                    "record_type": rtype,
+                    "release_date": str(row.get("release_date") or "").strip(),
+                    "external_ids": {"deezer_album_id": album_id, "deezer_artist_id": owner_id},
+                    "reason_artist": str(row.get("reason_artist") or ""),
+                })
+        albums.sort(
+            key=lambda item: _artist_mult(
+                item["artist"],
+                item["external_ids"]["deezer_artist_id"],
+            ),
+            reverse=True,
+        )
+        albums = albums[:limit]
+
+    clean_artists = [
+        {k: v for k, v in item.items() if not k.startswith("_") and k != "score"}
+        for item in artists
+    ]
     browse_sections = [
-        {"id": "new_releases", "popular": False, "items": new_releases},
-        {"id": "artists", "popular": popular, "items": artists},
+        {"id": "release_radar", "popular": False, "items": release_radar},
+        {"id": "artists", "popular": popular, "items": clean_artists},
         {"id": "albums", "popular": popular, "items": albums},
     ]
     return {
         "browse_sections": [section for section in browse_sections if section["items"]],
         "browse_error": failed,
+        "_consensus_artists": consensus_pool if not popular else [],
     }

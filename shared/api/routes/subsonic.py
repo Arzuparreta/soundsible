@@ -915,9 +915,38 @@ def scrobble():
     when = int(played_at / 1000) if played_at and played_at > 10_000_000_000 else (played_at or int(time.time()))
     for identifier in identifiers:
         db.record_track_play(identifier, when)
-        listen = external(identifier)
-        if listen is not None:
-            service.play(user_id, listen.at(when))
+        found = db.get_tracks_by_ids([identifier])
+        track = found[0] if found else None
+        if track is not None and getattr(track, "media_kind", None) != "podcast_episode":
+            try:
+                from shared.discovery_intelligence import emit_discovery_event
+                from shared.discovery_signals import notify_discovery_signal
+
+                artist_name = (getattr(track, "album_artist", None) or getattr(track, "artist", None) or "").strip()
+                bounded_when = min(int(when), int(time.time()) + 300) if when > 0 else int(time.time())
+                if artist_name and getattr(track, "title", None):
+                    if emit_discovery_event(
+                        "music_play_completed",
+                        {
+                            "media_type": "music_track",
+                            "track_id": track.id,
+                            "title": track.title,
+                            "artist": artist_name,
+                            "album": getattr(track, "album", None) or "",
+                            "youtube_id": getattr(track, "youtube_id", None) or "",
+                            "isrc": getattr(track, "isrc", None) or "",
+                            "mbid": getattr(track, "musicbrainz_id", None) or "",
+                            "source": "subsonic",
+                        },
+                        created_at=bounded_when,
+                    ):
+                        notify_discovery_signal(user_id, always_refresh=False)
+            except Exception:
+                pass
+        if service.is_active(user_id) and track is not None:
+            listen = listen_from_track(track)
+            if listen is not None:
+                service.play(user_id, listen.at(when))
     return {}
 
 

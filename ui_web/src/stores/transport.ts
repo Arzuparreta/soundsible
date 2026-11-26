@@ -933,7 +933,10 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       });
     },
     next(trigger: PlaybackTrigger = 'next', preservePaused = false): void {
-      if (trigger === 'next') recordPlaybackDiagnostic('dj.interaction', { action: 'next' });
+      if (trigger === 'next') {
+        recordPlaybackDiagnostic('dj.interaction', { action: 'next' });
+        listeningLearning.skip(state.playback.currentTrack, ports.playingDuration());
+      }
       // Every path out of here either loads a deck or does nothing; loading
       // cancels the mixer, which reports back and clears the DJ state itself.
       if (audioService.mixPhase() !== 'idle') audioService.cancelMix('load');

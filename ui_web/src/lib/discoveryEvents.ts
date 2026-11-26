@@ -1,4 +1,5 @@
 export interface DiscoveryFeedReadyEvent {
+  reason?: string;
   limit?: number;
   generated_at?: number;
   browse_error?: boolean;

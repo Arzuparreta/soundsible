@@ -200,23 +200,25 @@ class MediaCache:
         if not wanted:
             return {}
         cutoff = int(self._RELATED_MIX_TTL_SEC)
-        placeholders = ",".join("?" * len(wanted))
+        found: Dict[str, list] = {}
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                f"""
-                SELECT video_id, results_json FROM related_mix_cache
-                WHERE video_id IN ({placeholders})
-                  AND last_updated >= datetime('now', (CASE WHEN results_json = '[]' THEN ? ELSE ? END) || ' seconds')
-                """,
-                (*wanted, -self._RELATED_MIX_EMPTY_TTL_SEC, -cutoff),
-            ).fetchall()
-        found: Dict[str, list] = {}
-        for row in rows:
-            try:
-                found[row["video_id"]] = json.loads(row["results_json"])
-            except Exception:
-                continue
+            for offset in range(0, len(wanted), 500):
+                batch = wanted[offset:offset + 500]
+                placeholders = ",".join("?" * len(batch))
+                rows = conn.execute(
+                    f"""
+                    SELECT video_id, results_json FROM related_mix_cache
+                    WHERE video_id IN ({placeholders})
+                      AND last_updated >= datetime('now', (CASE WHEN results_json = '[]' THEN ? ELSE ? END) || ' seconds')
+                    """,
+                    (*batch, -self._RELATED_MIX_EMPTY_TTL_SEC, -cutoff),
+                ).fetchall()
+                for row in rows:
+                    try:
+                        found[row["video_id"]] = json.loads(row["results_json"])
+                    except Exception:
+                        continue
         return found
 
     def set_related_mix(self, video_id: str, results: list) -> None:

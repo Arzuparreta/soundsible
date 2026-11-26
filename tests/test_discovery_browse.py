@@ -20,23 +20,25 @@ def test_personalized_entities_are_interleaved_unique_and_navigable(monkeypatch)
         if path.endswith("/albums"):
             aid = int(path.split('/')[1])
             return {"data": [
-                {"id": aid * 100 + i, "title": f"Album {i}", "record_type": "single" if i == 0 else ("compile" if i == 4 else "album"), "release_date": f"2026-0{i + 1}-01"}
+                {"id": aid * 100 + i, "title": f"Album {i}", "record_type": "single" if i == 0 else ("compile" if i == 4 else "album"), "release_date": f"2026-0{5 - i}-01"}
                 for i in range(5)
             ]}
         raise AssertionError(path)
     monkeypatch.setattr(deezer, 'get', get)
-    body = build_browse_sections(['Artist 1', 'Artist 2'])
+    body = build_browse_sections(['Artist 1', 'Artist 2'], today=datetime.date(2026, 11, 24))
     artists, albums = body['browse_sections']
-    assert [r['title'] for r in artists['items']][:3] == ['Artist 11', 'Artist 12', 'Artist 99']
+    # Consensus boosts Artist 99 (related to both seeds) ahead of single-seed neighbors.
+    assert artists['items'][0]['title'] == 'Artist 99'
+    assert {r['title'] for r in artists['items'][:3]} == {'Artist 99', 'Artist 11', 'Artist 12'}
     assert len({r['id'] for r in artists['items']}) == len(artists['items'])
-    assert artists['items'][0]['reason_artist'] == 'Artist 1'
+    assert artists['items'][0]['reason_artist'] in {'Artist 1', 'Artist 2'}
     assert not artists['popular']
     assert len(albums['items']) == 10
     counts = Counter(r['external_ids']['deezer_artist_id'] for r in albums['items'])
     assert max(counts.values()) == 2
     assert all(r['external_ids']['deezer_album_id'] for r in albums['items'])
     assert all(r['reason_artist'] in {'Artist 1', 'Artist 2'} for r in albums['items'])
-    assert any(r['title'] == 'Album 0' and r['record_type'] == 'single' and r['release_date'] == '2026-01-01' for r in albums['items'])
+    assert any(r['title'] == 'Album 0' and r['record_type'] == 'single' and r['release_date'] == '2026-05-01' for r in albums['items'])
     assert not any(r['title'] == 'Album 4' for r in albums['items'])
     assert not body['browse_error']
 
@@ -135,14 +137,35 @@ def test_halo_seed_ignores_hal_macron_homonym_and_keeps_memo_keys_distinct(monke
     body_halo = build_browse_sections(["Halo"], today=datetime.date(2026, 11, 24))
     assert asked_limits == [25]
     sections_halo = {sec["id"]: sec["items"] for sec in body_halo["browse_sections"]}
-    assert "new_releases" not in sections_halo
+    assert "release_radar" not in sections_halo
     assert [item["title"] for item in sections_halo["artists"]] == ["Jesper Kyd"]
 
-    # Resolving both "Halo" and "HALŌ" in the same call must not collide in the per-call memo.
+    # Resolving both "Halo" and "HALŌ" keeps memo keys distinct; seed releases live on Home.
     body_both = build_browse_sections(["Halo", "HALŌ"], today=datetime.date(2026, 11, 24))
     sections_both = {sec["id"]: sec["items"] for sec in body_both["browse_sections"]}
     assert [item["title"] for item in sections_both["artists"]] == ["Jesper Kyd", "Matisse & Sadko"]
-    assert [item["title"] for item in sections_both["new_releases"]] == ["Now Until Forever"]
+    assert "release_radar" not in sections_both
+
+    # Home New Releases surfaces HALŌ's single strictly when HALŌ is in the taste profile.
+    from shared.api.routes import discovery_feed as route
+    from shared.models import LibraryMetadata, Track
+
+    lib = SimpleNamespace(
+        metadata=LibraryMetadata(
+            version=1,
+            tracks=[Track(id="h1", title="Midnight", artist="HALŌ", album="Single", duration=180, file_hash="h1", original_filename="h1.mp3", file_size=100, bitrate=320, format="mp3")],
+            playlists={},
+            settings={},
+        ),
+        refresh_if_stale=lambda: None,
+    )
+    monkeypatch.setattr(
+        route,
+        "_get_api",
+        lambda: {"get_library": lambda: lib, "favourite_library_ids": lambda: ["h1"], "emit_to_user": lambda *a, **k: None},
+    )
+    home = route.build_home_new_releases(sync_inline=True, today=datetime.date(2026, 11, 24))
+    assert [item["title"] for item in home["items"]] == ["Now Until Forever"]
 
 
 def test_resolve_seed_artist_skips_malformed_ids_and_combining_only_input(monkeypatch):
@@ -171,105 +194,91 @@ def test_resolve_seed_artist_skips_malformed_ids_and_combining_only_input(monkey
     assert body["browse_sections"][0]["items"][0]["title"] == "Related Valid"
 
 
-def test_new_releases_sorted_newest_first_with_badge_window_and_dedup(monkeypatch):
+def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatch):
     ref_today = datetime.date(2026, 11, 22)
+    album_calls = []
 
     def get(path, params=None, **kwargs):
         if path == "search/artist":
             name = params["q"]
-            aid = 100 if name == "Artist One" else 200
+            aid = 100 if name == "Seed One" else 200
             return {"data": [artist(aid, name)]}
         if path == "artist/100/related":
             return {"data": [artist(101, "Related One")]}
         if path == "artist/200/related":
             return {"data": [artist(201, "Related Two")]}
-        if path == "artist/100/albums":
+        if path == "artist/101/albums":
+            album_calls.append(path)
             return {"data": [
                 {"id": 1001, "title": "Brand New Single", "record_type": "single", "release_date": "2026-11-17"},
                 {"id": 1002, "title": "Thirty Day EP", "record_type": "ep", "release_date": "2026-10-23"},
-                {"id": 1003, "title": "Third Same Artist", "record_type": "album", "release_date": "2026-10-01"},
+                {"id": 1003, "title": "Third Same Artist", "record_type": "album", "release_date": "2026-10-15"},
                 {"id": 1004, "title": "Archive LP", "record_type": "album", "release_date": "2025-01-01"},
                 {"id": 1005, "title": "Future LP", "record_type": "album", "release_date": "2026-11-25"},
             ]}
-        if path == "artist/200/albums":
+        if path == "artist/201/albums":
+            album_calls.append(path)
             return {"data": [
-                {"id": 2001, "title": "Thirty One Days", "record_type": "album", "release_date": "2026-10-22"},
-                {"id": 2002, "title": "Edge 180", "record_type": "single", "release_date": "2026-05-26"},
-                {"id": 2003, "title": "Too Old 181", "record_type": "album", "release_date": "2026-05-25"},
+                {"id": 2001, "title": "Forty Five Days", "record_type": "album", "release_date": "2026-10-08"},
+                {"id": 2002, "title": "Too Old 46", "record_type": "single", "release_date": "2026-10-07"},
                 {"id": 2004, "title": "Bad Date", "record_type": "album", "release_date": "unknown"},
             ]}
-        if path in ("artist/101/albums", "artist/201/albums"):
+        if path in ("artist/100/albums", "artist/200/albums"):
             return {"data": []}
         if path.startswith("album/"):
             return {"id": int(path.split("/")[1])}
         raise AssertionError(path)
 
     monkeypatch.setattr(deezer, "get", get)
-    body = build_browse_sections(
-        ["Artist One", "Artist Two"],
-        limit=10,
-        today=ref_today,
-    )
+    body = build_browse_sections(["Seed One", "Seed Two"], limit=10, today=ref_today)
     sections_by_id = {sec["id"]: sec for sec in body["browse_sections"]}
-    new_rel = sections_by_id["new_releases"]["items"]
-    assert [item["title"] for item in new_rel] == [
+    radar = sections_by_id["release_radar"]["items"]
+    assert [item["title"] for item in radar] == [
         "Brand New Single",
         "Thirty Day EP",
-        "Thirty One Days",
-        "Edge 180",
+        "Forty Five Days",
     ]
-    assert [item["is_new"] for item in new_rel] == [True, True, False, False]
-    assert all(item["reason_artist"] == "" for item in new_rel)
+    assert [item["is_new"] for item in radar] == [True, True, False]
+    assert radar[0]["reason_artist"] == "Seed One"
+    assert radar[1]["reason_artist"] == "Seed One"
+    assert radar[2]["reason_artist"] == "Seed Two"
 
-    # Albums section must not duplicate releases already surfaced in new_releases.
-    new_ids = {item["external_ids"]["deezer_album_id"] for item in new_rel}
+    # Albums for you reuses cached releases without duplicating items already in Release Radar.
+    radar_ids = {item["external_ids"]["deezer_album_id"] for item in radar}
     album_ids = {item["external_ids"]["deezer_album_id"] for item in sections_by_id["albums"]["items"]}
-    assert new_ids.isdisjoint(album_ids)
-    assert "1004" in album_ids
+    assert radar_ids.isdisjoint(album_ids)
     assert "1003" in album_ids
+    assert "1005" not in radar_ids
+    assert "2002" in album_ids
+
+    # Second call reads persisted artist_releases_cache with zero extra album fetches.
+    prev_calls = len(album_calls)
+    cached_body = build_browse_sections(["Seed One", "Seed Two"], limit=10, today=ref_today)
+    assert len(album_calls) == prev_calls
+    cached_radar = {sec["id"]: sec["items"] for sec in cached_body["browse_sections"]}["release_radar"]
+    assert [item["title"] for item in cached_radar] == [item["title"] for item in radar]
 
 
-def test_new_releases_reuse_saved_deezer_id_without_artist_search(monkeypatch):
-    calls = []
+def test_home_new_releases_180d_taste_profile_ignores_pins_credits_contributors_and_route(monkeypatch):
+    from flask import Flask
+    from player.saved_entities import set_saved
+    from shared.api.routes import discovery_feed as route
+    from shared.models import LibraryMetadata, Track
 
-    def get(path, params=None, **kwargs):
-        calls.append(path)
-        if path == "search/artist":
-            return {"data": [artist(1, params["q"])]}
-        if path == "artist/1/related":
-            return {"data": []}
-        if path == "artist/1/albums":
-            return {"data": []}
-        if path == "artist/555/albums":
-            return {"data": [
-                {"id": 9001, "title": "Saved Band New EP", "record_type": "ep", "release_date": "2026-11-18"},
-            ]}
-        if path == "album/9001":
-            return {
-                "id": 9001,
-                "title": "Saved Band New EP",
-                "artist": {"id": 555, "name": "Saved Band"},
-                "contributors": [{"id": 555, "name": "Saved Band", "role": "Main"}],
-            }
-        raise AssertionError(path)
-
-    monkeypatch.setattr(deezer, "get", get)
-    body = build_browse_sections(
-        ["Alpha"],
-        release_seeds=[{"name": "Saved Band", "deezer_id": "555"}],
-        today=datetime.date(2026, 11, 22),
-    )
-    assert body["browse_sections"][0]["id"] == "new_releases"
-    assert body["browse_sections"][0]["items"][0]["title"] == "Saved Band New EP"
-    assert body["browse_sections"][0]["items"][0]["artist"] == "Saved Band"
-    assert calls.count("search/artist") == 1
-    assert "artist/555/albums" in calls
-
-
-def test_new_releases_credits_multi_artist_albums_and_falls_back_on_error(monkeypatch):
     ref_today = datetime.date(2026, 11, 22)
+    album_detail_calls = []
 
     def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            q = params["q"]
+            if q == "Pinned Only Band":
+                raise AssertionError("Pinned bookmark artist must never be resolved for Home New Releases")
+            if q == "Ennio Morricone":
+                return {"data": [artist(1536, "Ennio Morricone")]}
+            if q == "Solo Composer":
+                return {"data": [artist(777, "Solo Composer")]}
+            if q == "Edge Artist":
+                return {"data": [artist(888, "Edge Artist")]}
         if path == "artist/1536/albums":
             return {"data": [
                 {"id": 1126150202, "title": "Midnight Jazz Confidential", "record_type": "album", "release_date": "2026-11-20"},
@@ -280,7 +289,13 @@ def test_new_releases_credits_multi_artist_albums_and_falls_back_on_error(monkey
             return {"data": [
                 {"id": 7771, "title": "Solo Work", "record_type": "album", "release_date": "2026-11-10"},
             ]}
+        if path == "artist/888/albums":
+            return {"data": [
+                {"id": 8881, "title": "Edge 180", "record_type": "single", "release_date": "2026-05-26"},
+                {"id": 8882, "title": "Too Old 181", "record_type": "album", "release_date": "2026-05-25"},
+            ]}
         if path == "album/1126150202":
+            album_detail_calls.append(path)
             return {
                 "id": 1126150202,
                 "title": "Midnight Jazz Confidential",
@@ -303,34 +318,154 @@ def test_new_releases_credits_multi_artist_albums_and_falls_back_on_error(monkey
                 "artist": {"id": 777, "name": "Solo Composer"},
                 "contributors": [{"id": 777, "name": "Solo Composer", "role": "Main"}],
             }
+        if path == "album/8881":
+            return {"id": 8881, "title": "Edge 180", "contributors": [{"id": 888, "name": "Edge Artist", "role": "Main"}]}
         raise AssertionError(path)
 
-    monkeypatch.setattr(deezer, "get", get)
-    body = build_browse_sections(
-        [],
-        release_seeds=[
-            {"name": "Ennio Morricone", "deezer_id": "1536"},
-            {"name": "Solo Composer", "deezer_id": "777"},
-        ],
-        today=ref_today,
+    # Pinned bookmark must carry zero weight on Home New Releases.
+    set_saved(
+        {
+            "kind": "artist",
+            "name": "Pinned Only Band",
+            "artist": "",
+            "cover": "",
+            "destination": "/artist/Pinned%20Only%20Band?deezer_id=999",
+        },
+        True,
     )
-    assert not body["browse_error"]
-    sections_by_id = {sec["id"]: sec for sec in body["browse_sections"]}
-    items = sections_by_id["new_releases"]["items"]
+    tracks = [
+        Track(id="t1", title="Tema", artist="Ennio Morricone", album="OST", duration=180, file_hash="h1", original_filename="1.mp3", file_size=100, bitrate=320, format="mp3"),
+        Track(id="t2", title="Piece", artist="Solo Composer", album="LP", duration=180, file_hash="h2", original_filename="2.mp3", file_size=100, bitrate=320, format="mp3"),
+        Track(id="t3", title="Edge", artist="Edge Artist", album="EP", duration=180, file_hash="h3", original_filename="3.mp3", file_size=100, bitrate=320, format="mp3"),
+    ]
+    lib = SimpleNamespace(
+        metadata=LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={}),
+        refresh_if_stale=lambda: None,
+    )
+    monkeypatch.setattr(deezer, "get", get)
+    monkeypatch.setattr(
+        route,
+        "_get_api",
+        lambda: {"get_library": lambda: lib, "favourite_library_ids": lambda: ["t1", "t2", "t3"], "emit_to_user": lambda *a, **k: None},
+    )
+
+    body = route.build_home_new_releases(limit=12, sync_inline=True, today=ref_today)
+    items = body["items"]
     assert [item["title"] for item in items] == [
         "Midnight Jazz Confidential",
         "Solo Work",
         "Horror Cinema Club",
+        "Edge 180",
     ]
+    assert [item["is_new"] for item in items] == [True, True, True, False]
+    assert all(item["reason_artist"] == "" for item in items)
     assert items[0]["artist"] == "Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde"
-    assert items[0]["subtitle"] == "Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde"
     assert items[0]["external_ids"]["deezer_artist_id"] == "1536"
-    # Single-artist album preserves owner_name.
     assert items[1]["artist"] == "Solo Composer"
-    assert items[1]["subtitle"] == "Solo Composer"
-    # Failed album detail lookup preserves owner_name without failing the feed.
+    # Timeout fallback preserves owner name cleanly.
     assert items[2]["artist"] == "Ennio Morricone"
-    assert items[2]["subtitle"] == "Ennio Morricone"
+
+    # Cached credit avoids re-fetching album/1126150202 on subsequent calls, and Flask route serves JSON.
+    calls_before = len(album_detail_calls)
+    monkeypatch.setattr(deezer, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("unexpected Deezer hit")))
+    second = route.build_home_new_releases(limit=12, today=ref_today)
+    assert len(album_detail_calls) == calls_before
+    assert second["items"][0]["artist"] == "Piero Piccioni, Ennio Morricone, Nino Rota, Philippe Sarde"
+
+    app = Flask(__name__)
+    app.register_blueprint(route.discovery_bp)
+    resp = app.test_client().get("/api/discovery/music/new-releases?limit=12")
+    assert resp.status_code == 200
+    payload = resp.get_json()
+    assert "items" in payload and "revalidating" in payload
+
+
+def test_home_new_releases_cooldown_preserves_undecorated_ids_and_avoids_sync_fanout(monkeypatch):
+    from shared.api.routes import discovery_common as common
+    from shared.api.routes import discovery_feed as route
+    from shared.database import instance_db
+    from shared.discovery_profile import build_artist_taste_profile
+    from shared.models import LibraryMetadata, Track
+
+    common._NEW_RELEASES_SYNCED_AT.clear()
+    common._UNRESOLVED_ARTIST_UNTIL.clear()
+
+    ref_today = datetime.date(2026, 11, 22)
+    emitted = []
+    search_calls = []
+
+    def get(path, params=None, **kwargs):
+        if path == "search/artist":
+            q = params["q"]
+            search_calls.append(q)
+            if q == "Blue Oyster Cult":
+                return {"data": [{"id": 20, "name": "Blue Öyster Cult", "nb_fan": 500000, "picture_big": "https://img/20"}]}
+            return {"data": []}
+        if path == "artist/20/albums":
+            return {"data": [{"id": 2001, "title": "Fire of Unknown", "record_type": "album", "release_date": "2026-11-15"}]}
+        if path == "album/2001":
+            raise AssertionError("Synchronous HTTP path must not resolve album credits blocking the response")
+        raise AssertionError(path)
+
+    tracks = [
+        Track(id="t1", title="Reaper", artist="Blue Oyster Cult", album="LP", duration=180, file_hash="h1", original_filename="1.mp3", file_size=100, bitrate=320, format="mp3"),
+        Track(id="t2", title="Demo", artist="Local Bedroom Act", album="Tape", duration=180, file_hash="h2", original_filename="2.mp3", file_size=100, bitrate=320, format="mp3"),
+    ]
+    lib = SimpleNamespace(
+        metadata=LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={}),
+        refresh_if_stale=lambda: None,
+    )
+    monkeypatch.setattr(deezer, "get", get)
+    monkeypatch.setattr(
+        route,
+        "_get_api",
+        lambda: {"get_library": lambda: lib, "favourite_library_ids": lambda: ["t1"], "emit_to_user": lambda *a, **k: emitted.append((a, k))},
+    )
+
+    # 1) Pre-populate an unverified cached album (as if hydrated by Discover) and run sync_inline with only Local Bedroom Act.
+    inst = instance_db()
+    inst.upsert_graph_nodes([{
+        "deezer_artist_id": "20",
+        "name": "Blue Öyster Cult",
+        "literal_key": "blue öyster cult",
+        "folded_key": "blue oyster cult",
+        "nb_fan": 500000,
+        "releases_synced_at": int(route.time.time()),
+    }])
+    inst.upsert_artist_releases("20", [{
+        "deezer_album_id": "2001",
+        "title": "Fire of Unknown",
+        "artist_credit": "Blue Öyster Cult",
+        "credit_verified": False,
+        "record_type": "album",
+        "release_date": "2026-11-15",
+    }], int(route.time.time()))
+
+    # Non-inline synchronous read with Blue Oyster Cult not yet linked in profile still does 0 blocking album/2001 calls,
+    # and once resolved via inline sync for Local Bedroom Act only (unchanged), does not emit a false discovery_feed_ready.
+    common._NEW_RELEASES_SYNCED_AT.clear()
+    lib.metadata = LibraryMetadata(version=1, tracks=[tracks[1]], playlists={}, settings={})
+    res_unres = route.build_home_new_releases(limit=12, sync_inline=True, today=ref_today)
+    assert res_unres["items"] == []
+    assert emitted == []
+    assert not res_unres["revalidating"]
+    # Second non-inline read stays on cooldown/negative cache without revalidating.
+    res_unres2 = route.build_home_new_releases(limit=12, sync_inline=False, today=ref_today)
+    assert not res_unres2["revalidating"]
+
+    # 2) Undecorated artist ("Blue Oyster Cult") retains resolved deezer_artist_id across profile rebuilds,
+    # and synchronous build_home_new_releases skips album/2001 HTTP lookup even though credit_verified=0.
+    lib.metadata = LibraryMetadata(version=1, tracks=[tracks[0]], playlists={}, settings={})
+    common._NEW_RELEASES_SYNCED_AT.clear()
+    first = route.build_home_new_releases(limit=12, sync_inline=True, today=ref_today)
+    assert [item["title"] for item in first["items"]] == ["Fire of Unknown"]
+    assert any(args[0] == "discovery_feed_ready" for args, _ in emitted)
+    rebuilt = build_artist_taste_profile(lib.metadata, ["t1"], persist=True)
+    assert rebuilt[0].deezer_artist_id == "20"
+    monkeypatch.setattr(deezer, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("unexpected sync Deezer call")))
+    cached = route.build_home_new_releases(limit=12, sync_inline=False, today=ref_today)
+    assert [item["title"] for item in cached["items"]] == ["Fire of Unknown"]
+    assert not cached["revalidating"]
 
 
 def test_cold_start_uses_popular_entities_without_personalized_reasons(monkeypatch):
@@ -456,15 +591,11 @@ def test_less_from_artist_demotes_browse_sections_and_related_rows(tmp_path, mon
         body = build_browse_sections(
             ["Seed Band"],
             limit=10,
-            release_seeds=[
-                {"name": "Disliked Band", "deezer_id": "11"},
-                {"name": "Good Band", "deezer_id": "12"},
-            ],
             today=datetime.date(2026, 11, 22),
         )
         sections = {sec["id"]: sec["items"] for sec in body["browse_sections"]}
         assert [item["title"] for item in sections["artists"]] == ["Good Band", "Disliked Band"]
-        assert [item["title"] for item in sections["new_releases"]] == ["Good New", "Disliked New"]
+        assert [item["title"] for item in sections["release_radar"]] == ["Good New", "Disliked New"]
 
         related_rows = route._deezer_related_artist_rows("Seed Band", limit=4)
         assert [row["title"] for row in related_rows] == ["Good Track", "Disliked Track"]

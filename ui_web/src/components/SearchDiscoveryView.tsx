@@ -53,7 +53,8 @@ export function SearchDiscoveryView(props: {
   const hasVisible = () => discoveryHasVisible(props.sections, props.trackShelves, props.expanded);
   const title = (id: string, popular = false) => discoveryBrowseSectionTitle(id, popular);
   const more = (id: string, name: string) => <span data-discovery-more={id}>{props.renderMore(id, { label: `${t('searchHome.seeAll')}: ${name}`, class: styles.more, children: t('searchHome.seeAll') })}</span>;
-  const isEntityExpanded = () => props.expanded === 'new_releases' || props.expanded === 'artists' || props.expanded === 'albums';
+  const isEntityExpanded = () => props.expanded === 'new_releases' || props.expanded === 'release_radar' || props.expanded === 'artists' || props.expanded === 'albums';
+  const isReleaseSection = (id: string) => id === 'new_releases' || id === 'release_radar';
   return <div ref={root} class={styles.home} data-testid="search-discovery">
     <Show when={props.expanded}><button class={styles.back} type="button" onClick={props.onBack}>
       <ChevronIcon direction="left" />{t('searchHome.back')}
@@ -67,7 +68,7 @@ export function SearchDiscoveryView(props: {
       <p class={styles.coldHint} role="note">{t('searchHome.coldHint')}</p>
     </Show>
     <For each={sections()}>{section => <DiscoveryEntitySection title={title(section.id, section.popular)} items={section.items}
-      round={section.id === 'artists'} isNewReleases={section.id === 'new_releases'} expanded={!!props.expanded}
+      round={section.id === 'artists'} isNewReleases={isReleaseSection(section.id)} expanded={!!props.expanded}
       more={!props.expanded && section.items.length > 2 ? more(section.id, title(section.id, section.popular)) : undefined}
       renderEntity={props.renderEntity} renderStatus={props.renderStatus} />}</For>
     <For each={trackShelves()}>{shelf => {

@@ -637,7 +637,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
               await sync();
               if (owner === epoch && user()) await attachEvents(owner);
             }} /></Show>}>
-          <LibraryBrowser initialTab={libraryTab()} onEntityMenu={entityMenu} onPlaylistMenu={playlistMenu} onCreatePlaylist={newPlaylist} isFavourite={isFavourite} snapshot={data()} isActive={isActive} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={shown()?.id} onPlay={play}
+          <LibraryBrowser initialTab={libraryTab()} accountGeneration={generation} onOpenEntityPath={openEntityPath} onEntityMenu={entityMenu} onPlaylistMenu={playlistMenu} onCreatePlaylist={newPlaylist} isFavourite={isFavourite} snapshot={data()} isActive={isActive} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={shown()?.id} onPlay={play}
           onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
           onCollectionMenu={(tracks, title, event, context) => {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();

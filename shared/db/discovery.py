@@ -7,6 +7,7 @@ and reaches SQLite through `self._get_connection()`.
 import sqlite3
 import json
 import logging
+import time
 from typing import List, Dict, Any, Iterable
 
 
@@ -213,4 +214,189 @@ class DiscoveryStore:
             conn.execute("DELETE FROM discovery_events")
             conn.execute("DELETE FROM discovery_signals")
             conn.execute("DELETE FROM discovery_signal_aliases")
+            conn.execute("DELETE FROM discovery_artist_profile")
+            conn.execute("DELETE FROM discovery_impressions")
             conn.execute("COMMIT")
+
+    def replace_discovery_artist_profile(self, rows: Iterable[Dict[str, Any]]) -> None:
+        """Persist the derived per-user artist taste profile snapshot."""
+        payload = [
+            (
+                str(row.get("artist_key") or ""),
+                str(row.get("literal_key") or ""),
+                str(row.get("display_name") or "")[:220],
+                str(row.get("deezer_artist_id") or "")[:64],
+                float(row.get("short_term_score") or 0.0),
+                float(row.get("long_term_score") or 0.0),
+                float(row.get("library_prior") or 0.0),
+                float(row.get("effective_score") or 0.0),
+                int(row.get("distinct_days") or 0),
+                int(row.get("distinct_tracks") or 0),
+                float(row.get("active_plays") or 0.0),
+                float(row.get("passive_plays") or 0.0),
+                float(row.get("early_skips") or 0.0),
+                int(row.get("last_listened_at") or 0),
+                int(row.get("updated_at") or 0),
+            )
+            for row in rows
+            if row.get("artist_key")
+        ]
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM discovery_artist_profile")
+            if payload:
+                conn.executemany(
+                    """
+                    INSERT INTO discovery_artist_profile (
+                        artist_key, literal_key, display_name, deezer_artist_id,
+                        short_term_score, long_term_score, library_prior, effective_score,
+                        distinct_days, distinct_tracks, active_plays, passive_plays,
+                        early_skips, last_listened_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    payload,
+                )
+            conn.execute("COMMIT")
+
+    def get_discovery_artist_profile(self, limit: int | None = None) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            sql = "SELECT * FROM discovery_artist_profile ORDER BY effective_score DESC, artist_key ASC"
+            if limit is not None and limit > 0:
+                rows = conn.execute(f"{sql} LIMIT ?", (int(limit),)).fetchall()
+            else:
+                rows = conn.execute(sql).fetchall()
+            return [dict(row) for row in rows]
+
+    def update_artist_profile_deezer_ids(self, mapping: Dict[str, str]) -> None:
+        """Persist resolved Deezer artist IDs back onto cached taste profile rows."""
+        updates = [
+            (str(did).strip(), str(key).strip())
+            for key, did in (mapping or {}).items()
+            if str(key).strip() and str(did).strip().isdigit()
+        ]
+        if not updates:
+            return
+        now_ts = int(time.time())
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.executemany(
+                """
+                UPDATE discovery_artist_profile
+                SET deezer_artist_id = ?, updated_at = ?
+                WHERE artist_key = ? AND (deezer_artist_id = '' OR deezer_artist_id != ?)
+                """,
+                [(did, now_ts, key, did) for did, key in updates],
+            )
+            conn.execute("COMMIT")
+
+    def record_discovery_impressions(
+        self,
+        entries: Iterable[tuple[str, str]],
+        *,
+        now: int | None = None,
+        debounce_sec: int = 6 * 3600,
+        force: bool = False,
+    ) -> None:
+        """Record candidate impressions with debounce to avoid burning the pool on tab switches."""
+        cleaned = [
+            (str(identity)[:240], str(entity_type)[:40])
+            for identity, entity_type in entries
+            if identity and entity_type
+        ]
+        if not cleaned:
+            return
+        deduped: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for identity, entity_type in cleaned:
+            if identity not in seen:
+                seen.add(identity)
+                deduped.append((identity, entity_type))
+        ts = int(now if now is not None else time.time())
+        cutoff = ts - max(0, int(debounce_sec))
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            for identity, entity_type in deduped:
+                if force:
+                    conn.execute(
+                        """
+                        INSERT INTO discovery_impressions (
+                            identity, entity_type, first_shown_at, last_shown_at, shown_count, last_interacted_at
+                        ) VALUES (?, ?, ?, ?, 1, 0)
+                        ON CONFLICT(identity) DO UPDATE SET
+                            entity_type = excluded.entity_type,
+                            last_shown_at = excluded.last_shown_at,
+                            shown_count = discovery_impressions.shown_count + 1
+                        """,
+                        (identity, entity_type, ts, ts),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO discovery_impressions (
+                            identity, entity_type, first_shown_at, last_shown_at, shown_count, last_interacted_at
+                        ) VALUES (?, ?, ?, ?, 1, 0)
+                        ON CONFLICT(identity) DO UPDATE SET
+                            entity_type = excluded.entity_type,
+                            shown_count = CASE
+                                WHEN discovery_impressions.last_shown_at <= ?
+                                THEN discovery_impressions.shown_count + 1
+                                ELSE discovery_impressions.shown_count
+                            END,
+                            last_shown_at = CASE
+                                WHEN discovery_impressions.last_shown_at <= ?
+                                THEN excluded.last_shown_at
+                                ELSE discovery_impressions.last_shown_at
+                            END
+                        """,
+                        (identity, entity_type, ts, ts, cutoff, cutoff),
+                    )
+            conn.execute("COMMIT")
+
+    def mark_discovery_impression_interacted(
+        self,
+        identities: Iterable[str],
+        *,
+        now: int | None = None,
+    ) -> None:
+        cleaned = [str(identity)[:240] for identity in identities if identity]
+        if not cleaned:
+            return
+        ts = int(now if now is not None else time.time())
+        placeholders = ",".join("?" for _ in cleaned)
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                f"""
+                UPDATE discovery_impressions
+                SET last_interacted_at = MAX(last_interacted_at, ?)
+                WHERE identity IN ({placeholders})
+                """,
+                (ts, *cleaned),
+            )
+            conn.execute("COMMIT")
+
+    def get_discovery_impressions(
+        self,
+        identities: Iterable[str] | None = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            if identities is None:
+                rows = conn.execute("SELECT * FROM discovery_impressions").fetchall()
+            else:
+                wanted = [str(identity)[:240] for identity in identities if identity]
+                if not wanted:
+                    return {}
+                out: Dict[str, Dict[str, Any]] = {}
+                for offset in range(0, len(wanted), 500):
+                    batch = wanted[offset:offset + 500]
+                    placeholders = ",".join("?" for _ in batch)
+                    rows = conn.execute(
+                        f"SELECT * FROM discovery_impressions WHERE identity IN ({placeholders})",
+                        tuple(batch),
+                    ).fetchall()
+                    for row in rows:
+                        out[str(row["identity"])] = dict(row)
+                return out
+            return {str(row["identity"]): dict(row) for row in rows}

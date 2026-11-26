@@ -7,6 +7,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import LibraryHome from './LibraryHome';
 import { api } from '../lib/api';
 import { setLocale } from '../lib/i18n';
+import { newReleasesApi } from '../lib/newReleasesApi';
 import { setSavedEntities, syncSavedEntities } from '../lib/savedEntities';
 
 beforeEach(() => {
@@ -17,6 +18,7 @@ beforeEach(() => {
     { kind: 'album', name: 'Record', artist: 'Band', destination: '/album/Record?artist=Band&deezer_id=1' },
     { kind: 'artist', name: 'Band', destination: '/artist/Band?deezer_id=2' },
   ]);
+  vi.spyOn(newReleasesApi, 'getDiscoveryNewReleases').mockResolvedValue({ items: [], revalidating: false });
 });
 afterEach(() => vi.restoreAllMocks());
 const show = () => render(() => <Router root={props => { onCleanup(registerMusicNavigator(useNavigate())); return props.children; }}><Route path="/" component={LibraryHome} /></Router>);
@@ -83,4 +85,24 @@ it('keeps cards and images mounted when a refresh returns fresh objects for the 
   expect(screen.getByRole('link', { name: 'Record' })).toBe(link);
   expect(link.querySelector('img')).toBe(image);
   expect(screen.getByText('Updated Band')).toBeInTheDocument();
+});
+
+it('renders Home New Releases rail lazily from taste-profile endpoint and toggles expansion', async () => {
+  vi.mocked(newReleasesApi.getDiscoveryNewReleases).mockResolvedValue({
+    items: [
+      { id: 'deezer:album:10', type: 'album', source: 'deezer', title: 'Fresh EP', artist: 'Marea', record_type: 'ep', release_date: '2026-11-18', is_new: true, external_ids: { deezer_album_id: '10', deezer_artist_id: '1' } },
+      { id: 'deezer:album:11', type: 'album', source: 'deezer', title: 'Season Single', artist: 'Robe', record_type: 'single', release_date: '2026-09-10', is_new: false, external_ids: { deezer_album_id: '11', deezer_artist_id: '2' } },
+      { id: 'deezer:album:12', type: 'album', source: 'deezer', title: 'Latest LP', artist: 'Extremoduro', record_type: 'album', release_date: '2026-08-05', is_new: false, external_ids: { deezer_album_id: '12', deezer_artist_id: '3' } },
+    ],
+    revalidating: false,
+  });
+  show();
+  const region = await screen.findByRole('region', { name: 'New releases' });
+  expect(region).toBeInTheDocument();
+  expect(screen.getAllByText('New')).toHaveLength(1);
+  expect(screen.getByRole('link', { name: 'Fresh EP' })).toHaveAttribute('href', '#/album/Fresh%20EP?artist=Marea&view=discover&deezer_id=10');
+  const toggle = screen.getByRole('button', { name: 'See all: New releases' });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(toggle);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Show less: New releases' })).toHaveAttribute('aria-expanded', 'true'));
 });

@@ -207,9 +207,15 @@ export interface DiscoveryBrowseItem extends CatalogItem {
 }
 
 export interface DiscoveryBrowseSection {
-  id: 'new_releases' | 'artists' | 'albums';
+  id: 'new_releases' | 'release_radar' | 'artists' | 'albums';
   popular: boolean;
   items: DiscoveryBrowseItem[];
+}
+
+export interface DiscoveryNewReleasesResponse {
+  generated_at?: number;
+  items?: DiscoveryBrowseItem[];
+  revalidating?: boolean;
 }
 
 export interface DiscoveryMusicFeed {

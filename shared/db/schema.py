@@ -571,6 +571,111 @@ class SchemaMixin:
             CREATE INDEX IF NOT EXISTS idx_discovery_events_created
             ON discovery_events (created_at DESC)
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS discovery_artist_profile (
+                artist_key TEXT PRIMARY KEY,
+                literal_key TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                deezer_artist_id TEXT DEFAULT '',
+                short_term_score REAL NOT NULL DEFAULT 0.0,
+                long_term_score REAL NOT NULL DEFAULT 0.0,
+                library_prior REAL NOT NULL DEFAULT 0.0,
+                effective_score REAL NOT NULL DEFAULT 0.0,
+                distinct_days INTEGER NOT NULL DEFAULT 0,
+                distinct_tracks INTEGER NOT NULL DEFAULT 0,
+                active_plays REAL NOT NULL DEFAULT 0.0,
+                passive_plays REAL NOT NULL DEFAULT 0.0,
+                early_skips REAL NOT NULL DEFAULT 0.0,
+                last_listened_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_discovery_artist_profile_score
+            ON discovery_artist_profile (effective_score DESC)
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS discovery_impressions (
+                identity TEXT PRIMARY KEY,
+                entity_type TEXT NOT NULL,
+                first_shown_at INTEGER NOT NULL,
+                last_shown_at INTEGER NOT NULL,
+                shown_count INTEGER NOT NULL DEFAULT 1,
+                last_interacted_at INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_discovery_impressions_last_shown
+            ON discovery_impressions (entity_type, last_shown_at DESC)
+        """)
+
+    @staticmethod
+    def _create_discovery_graph_tables(conn):
+        """Instance-shared artist similarity graph and release cache."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS artist_graph_nodes (
+                deezer_artist_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                literal_key TEXT NOT NULL,
+                folded_key TEXT NOT NULL,
+                nb_fan INTEGER NOT NULL DEFAULT 0,
+                picture_url TEXT DEFAULT '',
+                mbid TEXT DEFAULT '',
+                related_synced_at INTEGER NOT NULL DEFAULT 0,
+                lastfm_synced_at INTEGER NOT NULL DEFAULT 0,
+                releases_synced_at INTEGER NOT NULL DEFAULT 0,
+                top_tracks_synced_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artist_graph_nodes_literal
+            ON artist_graph_nodes (literal_key)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artist_graph_nodes_folded
+            ON artist_graph_nodes (folded_key)
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS artist_similarity_edges (
+                source_artist_id TEXT NOT NULL,
+                target_artist_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                rank_pos INTEGER NOT NULL,
+                weight REAL NOT NULL,
+                synced_at INTEGER NOT NULL,
+                PRIMARY KEY (source_artist_id, target_artist_id, provider)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artist_sim_edges_source
+            ON artist_similarity_edges (source_artist_id, provider)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artist_sim_edges_target
+            ON artist_similarity_edges (target_artist_id)
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS artist_releases_cache (
+                deezer_album_id TEXT PRIMARY KEY,
+                artist_deezer_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                artist_credit TEXT NOT NULL,
+                credit_verified INTEGER NOT NULL DEFAULT 0,
+                record_type TEXT NOT NULL,
+                release_date TEXT NOT NULL,
+                cover_url TEXT DEFAULT '',
+                synced_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artist_releases_owner_date
+            ON artist_releases_cache (artist_deezer_id, release_date DESC)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artist_releases_date
+            ON artist_releases_cache (release_date DESC)
+        """)
 
     @staticmethod
     def _create_performance_indexes(conn):
@@ -707,6 +812,7 @@ class SchemaMixin:
             self._create_pairing_table(conn)
             self._create_lyrics_table(conn)
             self._create_discovery_tables(conn)
+            self._create_discovery_graph_tables(conn)
             self._create_catalog_tables(conn)
             self._create_performance_indexes(conn)
             self._drop_retired_tables(conn)
