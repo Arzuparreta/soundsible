@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { setLocale } from '../lib/i18n';
 import { SearchDiscoveryView } from './SearchDiscoveryView';
-import { formatDiscoveryReleaseDate, isColdDiscoveryFeed, resolveDiscoveryTrackShelves, type DiscoveryTrackShelf } from '../lib/searchDiscovery';
+import { discoveryBrowseSectionTitle, formatDiscoveryReleaseDate, isColdDiscoveryFeed, resolveDiscoveryTrackShelves, type DiscoveryTrackShelf } from '../lib/searchDiscovery';
 import type { CatalogItem } from '../types/music';
 import type { DiscoveryBrowseSection } from '../lib/api';
 afterEach(cleanup);
@@ -205,22 +205,24 @@ it('formats single and ep subtitles locally without rendering an inline refresh 
   await setLocale('en');
 });
 
-it('renders new_releases with New badge, localized release dates, expansion, and focus restoration', async () => {
+it('renders release_radar with New badge, attribution, localized release dates, expansion, and focus restoration', async () => {
   await setLocale('en');
   const now = new Date(Date.UTC(2026, 10, 22));
   expect(formatDiscoveryReleaseDate('2026-11-18', now)).toBeTruthy();
   expect(formatDiscoveryReleaseDate('2025-12-10', now)).toContain('2025');
   expect(formatDiscoveryReleaseDate('2026-02-31', now)).toBe('');
+  expect(discoveryBrowseSectionTitle('new_releases')).toBe('New releases');
+  expect(discoveryBrowseSectionTitle('release_radar')).toBe('Release radar');
 
   const [expanded, setExpanded] = createSignal<string | undefined>();
   const browse: DiscoveryBrowseSection[] = [
     {
-      id: 'new_releases',
+      id: 'release_radar',
       popular: false,
       items: [
-        { id: 'album:1', title: 'Fresh EP', artist: 'Marea', type: 'album', source: 'deezer', record_type: 'ep', release_date: '2026-11-18', is_new: true },
-        { id: 'album:2', title: 'Season Single', artist: 'Robe', type: 'album', source: 'deezer', record_type: 'single', release_date: '2026-09-10', is_new: false },
-        { id: 'album:3', title: 'Latest LP', artist: 'Extremoduro', type: 'album', source: 'deezer', record_type: 'album', release_date: '2026-08-05', is_new: false },
+        { id: 'album:1', title: 'Fresh EP', artist: 'Marea', type: 'album', source: 'deezer', record_type: 'ep', release_date: '2026-11-18', is_new: true, reason_artist: 'Seed Band' },
+        { id: 'album:2', title: 'Season Single', artist: 'Robe', type: 'album', source: 'deezer', record_type: 'single', release_date: '2026-10-12', is_new: false, reason_artist: 'Seed Band' },
+        { id: 'album:3', title: 'Latest LP', artist: 'Extremoduro', type: 'album', source: 'deezer', record_type: 'album', release_date: '2026-10-09', is_new: false },
       ],
     },
     {
@@ -236,26 +238,28 @@ it('renders new_releases with New badge, localized release dates, expansion, and
     renderEntity={(_, link) => <button class={link.class} aria-label={link.label}>{link.children}</button>}
     renderStatus={noop} renderSong={noop} />);
 
-  const region = view.getByRole('region', { name: 'New releases' });
+  const region = view.getByRole('region', { name: 'Release radar' });
   expect(region).toBeTruthy();
   expect(view.getAllByText('New')).toHaveLength(1);
   expect(view.getByText(`Marea · EP · ${formatDiscoveryReleaseDate('2026-11-18')}`)).toBeTruthy();
-  expect(view.getByText(`Robe · Single · ${formatDiscoveryReleaseDate('2026-09-10')}`)).toBeTruthy();
-  expect(view.getByText(`Extremoduro · ${formatDiscoveryReleaseDate('2026-08-05')}`)).toBeTruthy();
+  expect(view.getByText(`Robe · Single · ${formatDiscoveryReleaseDate('2026-10-12')}`)).toBeTruthy();
+  expect(view.getByText(`Extremoduro · ${formatDiscoveryReleaseDate('2026-10-09')}`)).toBeTruthy();
+  expect(view.getAllByText('Similar to Seed Band')).toHaveLength(2);
 
   await setLocale('es');
-  await waitFor(() => expect(view.getByRole('region', { name: 'Novedades' })).toBeTruthy());
+  await waitFor(() => expect(view.getByRole('region', { name: 'Radar de novedades' })).toBeTruthy());
   expect(view.getByText('Nuevo')).toBeTruthy();
+  expect(view.getAllByText('Similar a Seed Band')).toHaveLength(2);
   await setLocale('en');
 
-  const more = view.getByRole('button', { name: 'See all: New releases' });
+  const more = view.getByRole('button', { name: 'See all: Release radar' });
   more.focus();
   fireEvent.click(more);
-  await waitFor(() => expect(view.getByRole('heading', { name: 'New releases' })).toHaveFocus());
+  await waitFor(() => expect(view.getByRole('heading', { name: 'Release radar' })).toHaveFocus());
   expect(view.queryByRole('region', { name: 'Artists to discover' })).toBeNull();
 
   fireEvent.click(view.getByRole('button', { name: 'Back to Discover' }));
-  await waitFor(() => expect(view.getByRole('button', { name: 'See all: New releases' })).toHaveFocus());
+  await waitFor(() => expect(view.getByRole('button', { name: 'See all: Release radar' })).toHaveFocus());
 });
 
 it('shows the passive cold-start hint only on an unexpanded cold popular feed', async () => {

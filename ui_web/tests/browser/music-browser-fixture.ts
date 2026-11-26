@@ -36,6 +36,8 @@ export async function mockMusicEngine(page: Page | BrowserContext) {
       body = { quality: 'high', auto_update_ytdlp: false };
     } else if (path === '/api/discovery/music/feed') {
       body = { sections: [] };
+    } else if (path === '/api/discovery/music/new-releases') {
+      body = { items: [], revalidating: false };
     } else if (path === '/api/devices' || path === '/api/paired-devices' || path === '/api/pairing/sessions') {
       body = { devices: [], sessions: [] };
     }

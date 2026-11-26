@@ -1,4 +1,4 @@
-import { createSignal, For, lazy, Show } from 'solid-js';
+import { createSignal, For, lazy, Show, Suspense } from 'solid-js';
 import { useSearchParams } from '@solidjs/router';
 import { ViewHeader } from '../components/ViewHeader';
 import SavedEntities from '../components/SavedEntities';
@@ -11,6 +11,7 @@ import type { SavedEntity } from '../lib/savedEntities';
 import styles from './LibraryHome.module.css';
 
 const BookmarkHeader = lazy(() => import('./BookmarkHeader'));
+const HomeNewReleases = lazy(() => import('../components/HomeNewReleases'));
 
 /** Main-shell landing page. */
 export default function LibraryHome() {
@@ -40,6 +41,11 @@ export default function LibraryHome() {
         </section>
       </Show>
       <SavedEntities kind={kind()} expanded={expanded()} match={match()} />
+      <Show when={!expanded()}>
+        <Suspense>
+          <HomeNewReleases />
+        </Suspense>
+      </Show>
     </div>
   </div>;
 }

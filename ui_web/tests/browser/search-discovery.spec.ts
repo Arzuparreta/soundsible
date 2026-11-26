@@ -444,14 +444,14 @@ test('unresolved Deezer Discover rows expose reason, immediate dismissal with Un
   expect(audit.violations).toEqual([]);
 });
 
-test('renders new_releases rail with New badge, formatted date, and expansion', async ({ page }) => {
+test('renders release_radar rail with New badge, attribution, formatted date, and expansion', async ({ page }) => {
   await page.route('**/api/discovery/music/feed?**', (route) =>
     route.fulfill({
       json: {
         needs_seed: false,
         browse_sections: [
           {
-            id: 'new_releases',
+            id: 'release_radar',
             popular: false,
             items: [
               {
@@ -463,6 +463,7 @@ test('renders new_releases rail with New badge, formatted date, and expansion', 
                 record_type: 'ep',
                 release_date: '2026-11-18',
                 is_new: true,
+                reason_artist: 'Extremoduro',
                 cover: artwork(1),
                 external_ids: { deezer_album_id: '901', deezer_artist_id: '1' },
               },
@@ -471,10 +472,11 @@ test('renders new_releases rail with New badge, formatted date, and expansion', 
                 type: 'album',
                 source: 'deezer',
                 title: 'Lanzamiento previo',
-                artist: 'Extremoduro',
+                artist: 'Platero y Tú',
                 record_type: 'album',
-                release_date: '2026-09-10',
+                release_date: '2026-10-15',
                 is_new: false,
+                reason_artist: 'Extremoduro',
                 cover: artwork(2),
                 external_ids: { deezer_album_id: '902', deezer_artist_id: '2' },
               },
@@ -485,7 +487,7 @@ test('renders new_releases rail with New badge, formatted date, and expansion', 
                 title: 'Tercer lanzamiento',
                 artist: 'Robe',
                 record_type: 'single',
-                release_date: '2026-08-05',
+                release_date: '2026-10-10',
                 is_new: false,
                 cover: artwork(3),
                 external_ids: { deezer_album_id: '903', deezer_artist_id: '3' },
@@ -509,19 +511,84 @@ test('renders new_releases rail with New badge, formatted date, and expansion', 
   await page.goto('/player/#/search');
   await expect(page.locator('#startup-screen')).toHaveCount(0);
   const home = page.getByTestId('search-discovery');
-  const releases = home.getByRole('region', { name: 'Novedades' });
-  await expect(releases).toBeVisible();
-  await expect(releases.getByText('Nuevo', { exact: true })).toHaveCount(1);
-  await expect(releases.getByText(/Marea · EP · /)).toBeVisible();
-  await expect(releases.getByText(/Robe · Sencillo · /)).toBeVisible();
+  const radar = home.getByRole('region', { name: 'Radar de novedades' });
+  await expect(radar).toBeVisible();
+  await expect(radar.getByText('Nuevo', { exact: true })).toHaveCount(1);
+  await expect(radar.getByText(/Marea · EP · /)).toBeVisible();
+  await expect(radar.getByText(/Robe · Sencillo · /)).toBeVisible();
+  await expect(radar.getByText('Similar a Extremoduro')).toHaveCount(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
-  await releases.getByRole('link', { name: 'Ver todos: Novedades' }).click();
-  await expect(page).toHaveURL(/browse=new_releases/);
-  await expect(home.getByRole('heading', { name: 'Novedades' })).toBeFocused();
+  await radar.getByRole('link', { name: 'Ver todos: Radar de novedades' }).click();
+  await expect(page).toHaveURL(/browse=release_radar/);
+  await expect(home.getByRole('heading', { name: 'Radar de novedades' })).toBeFocused();
   await expect(home.getByRole('region', { name: 'Artistas por descubrir' })).toHaveCount(0);
 
   const audit = await new AxeBuilder({ page }).include('[data-testid="search-discovery"]').analyze();
+  expect(audit.violations).toEqual([]);
+});
+
+test('renders Home New Releases rail lazily on Library root with expand toggle and a11y', async ({ page }) => {
+  await page.route('**/api/discovery/music/new-releases?**', (route) =>
+    route.fulfill({
+      json: {
+        generated_at: 1795000000,
+        revalidating: false,
+        items: [
+          {
+            id: 'deezer:album:801',
+            type: 'album',
+            source: 'deezer',
+            title: 'Nuevo disco propio',
+            artist: 'Marea',
+            record_type: 'ep',
+            release_date: '2026-11-18',
+            is_new: true,
+            cover: artwork(1),
+            external_ids: { deezer_album_id: '801', deezer_artist_id: '1' },
+          },
+          {
+            id: 'deezer:album:802',
+            type: 'album',
+            source: 'deezer',
+            title: 'Segundo disco',
+            artist: 'Extremoduro',
+            record_type: 'album',
+            release_date: '2026-09-10',
+            is_new: false,
+            cover: artwork(2),
+            external_ids: { deezer_album_id: '802', deezer_artist_id: '2' },
+          },
+          {
+            id: 'deezer:album:803',
+            type: 'album',
+            source: 'deezer',
+            title: 'Tercer sencillo',
+            artist: 'Robe',
+            record_type: 'single',
+            release_date: '2026-08-05',
+            is_new: false,
+            cover: artwork(3),
+            external_ids: { deezer_album_id: '803', deezer_artist_id: '3' },
+          },
+        ],
+      },
+    }),
+  );
+
+  await page.goto('/player/#/');
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  const homeReleases = page.getByRole('region', { name: 'Novedades' });
+  await expect(homeReleases).toBeVisible();
+  await expect(homeReleases.getByText('Nuevo', { exact: true })).toHaveCount(1);
+  await expect(homeReleases.getByText(/Marea · EP · /)).toBeVisible();
+  await expect(homeReleases.getByText(/Robe · Sencillo · /)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  await homeReleases.getByRole('button', { name: 'Ver todos: Novedades' }).click();
+  await expect(homeReleases.getByRole('button', { name: 'Ver menos: Novedades' })).toHaveAttribute('aria-expanded', 'true');
+
+  const audit = await new AxeBuilder({ page }).include('main').analyze();
   expect(audit.violations).toEqual([]);
 });
 

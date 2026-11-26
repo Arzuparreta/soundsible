@@ -8,6 +8,7 @@ waiting on Deezer, and the enriched version replaces it in the background.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 from itertools import zip_longest
 import logging
@@ -16,7 +17,16 @@ import time
 
 from flask import jsonify, request
 
-from shared.database import instance_db
+from shared.database import instance_db, user_db
+from shared.deezer_catalog import DEEZER_ARTIST_SEARCH_LIMIT, literal_artist_key, select_artist_matches
+from shared.discovery_graph_store import (
+    build_release_rail,
+    resolve_artist_node,
+    score_consensus_candidates,
+    select_diverse_track_anchors,
+    sync_artist_releases,
+    sync_related_artists,
+)
 from shared.discovery_intelligence import (
     artist_recommendation_multiplier,
     compose_discovery_feed,
@@ -24,21 +34,17 @@ from shared.discovery_intelligence import (
     load_discovery_settings,
     rank_recommendation_rows,
 )
+from shared.discovery_profile import (
+    ArtistProfileEntry,
+    build_artist_taste_profile,
+    select_release_profile_artists,
+)
 from shared.discovery_seeds import (
     record_recent_graph_seeds,
     record_recent_taste_seeds,
     select_graph_seed_tracks,
-    select_release_seed_artists,
     select_taste_artists,
 )
-from shared.deezer_catalog import DEEZER_ARTIST_SEARCH_LIMIT, select_artist_matches
-from shared.discovery_graph_store import (
-    resolve_artist_node,
-    score_consensus_candidates,
-    select_diverse_track_anchors,
-    sync_related_artists,
-)
-from shared.discovery_profile import build_artist_taste_profile
 from shared.discovery_signals import register_discovery_signal_handler
 from shared.hardening import rate_limit
 from shared.music_identity import youtube_music_metadata
@@ -55,6 +61,7 @@ from .discovery_common import (
     _DISCOVERY_FEED_STALE_SEC,
     _DISCOVERY_FEED_TTL_SEC,
     _MAX_PERSONALIZED_SEEDS,
+    _NEW_RELEASES_INFLIGHT,
     _get_api,
     _invalidate_personalized_cache_for_user_detailed,
 )
@@ -641,11 +648,9 @@ def _build_discovery_feed_body(
         profile_entries = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True)
         seed_weights = {entry.display_name: entry.effective_score for entry in profile_entries[:25]}
         seeds = [entry.display_name for entry in profile_entries[:25]]
-        release_seeds = select_release_seed_artists(metadata, fav_ids, limit=8, user_id=user_id)
         browse_result = build_browse_sections(
             seeds,
             min(limit, 10),
-            release_seeds=release_seeds,
             seed_weights=seed_weights,
             owned_album_keys=_local_album_keys(metadata),
             metadata=metadata,
@@ -730,7 +735,7 @@ def _refresh_discovery_feed_cache(
                     current_sections.setdefault(section["id"], section)
                 body["browse_sections"] = [
                     current_sections[key]
-                    for key in ("new_releases", "artists", "albums")
+                    for key in ("release_radar", "new_releases", "artists", "albums")
                     if key in current_sections
                 ]
             dirty = not _followup and cache_key in _DISCOVERY_FEED_DIRTY
@@ -826,6 +831,245 @@ def _dispatch_discovery_signal(
 
 
 register_discovery_signal_handler(_dispatch_discovery_signal)
+
+
+_HOME_NEW_RELEASES_WINDOW_DAYS = 180
+_HOME_RELEASES_TTL_SEC = 24 * 3600
+
+
+def _sync_home_new_releases_bg(
+    user_key: str,
+    user_id: str | None,
+    release_entries: list[ArtistProfileEntry],
+    *,
+    limit: int = 12,
+    today: datetime.date | None = None,
+) -> None:
+    try:
+        from shared import request_scope
+        from shared.user_context import user_context
+
+        deadline = time.monotonic() + 20.0
+        with request_scope.request_scope(), user_context(user_id):
+            resolved_nodes: list[dict] = []
+            resolved_id_map: dict[str, str] = {}
+            resolved_budget = 0
+            db = instance_db()
+            known_ids = [e.deezer_artist_id for e in release_entries if e.deezer_artist_id.isdigit()]
+            nodes_by_id = db.get_graph_nodes_by_ids(known_ids)
+            nodes_by_lit = db.find_graph_nodes_by_literals(
+                [literal_artist_key(e.display_name) for e in release_entries]
+            )
+            for entry in release_entries:
+                if time.monotonic() >= deadline:
+                    break
+                node = (
+                    nodes_by_id.get(entry.deezer_artist_id)
+                    or nodes_by_lit.get(literal_artist_key(entry.display_name))
+                )
+                if node is None:
+                    if resolved_budget >= 8:
+                        continue
+                    resolved_budget += 1
+                    try:
+                        node = resolve_artist_node(
+                            entry.display_name,
+                            deezer_id=entry.deezer_artist_id,
+                            deadline=deadline,
+                        )
+                    except Exception:
+                        node = None
+                if node:
+                    resolved_nodes.append(node)
+                    aid = str(node.get("deezer_artist_id") or "")
+                    if aid.isdigit() and aid != entry.deezer_artist_id:
+                        resolved_id_map[entry.artist_key] = aid
+            if resolved_id_map:
+                try:
+                    user_db().update_artist_profile_deezer_ids(resolved_id_map)
+                except Exception:
+                    pass
+            if resolved_nodes:
+                sync_artist_releases(resolved_nodes, max_sync=10, deadline=deadline)
+                weights = {}
+                names = {}
+                nodes_after = db.get_graph_nodes_by_ids(
+                    [str(n["deezer_artist_id"]) for n in resolved_nodes]
+                )
+                lit_map = db.find_graph_nodes_by_literals(
+                    [literal_artist_key(e.display_name) for e in release_entries]
+                )
+                for entry in release_entries:
+                    eff_id = resolved_id_map.get(entry.artist_key) or entry.deezer_artist_id
+                    node = (
+                        nodes_after.get(eff_id)
+                        or lit_map.get(literal_artist_key(entry.display_name))
+                    )
+                    if not node:
+                        continue
+                    aid = str(node["deezer_artist_id"])
+                    weights[aid] = entry.effective_score
+                    names[aid] = entry.display_name
+                if weights:
+                    build_release_rail(
+                        weights,
+                        window_days=_HOME_NEW_RELEASES_WINDOW_DAYS,
+                        reason_by_artist=None,
+                        artist_names_by_id=names,
+                        max_per_artist=2,
+                        limit=limit,
+                        today=today,
+                        deadline=deadline,
+                    )
+        emit = _get_api().get("emit_to_user")
+        if callable(emit):
+            try:
+                emit(
+                    "discovery_feed_ready",
+                    {"reason": "new_releases", "generated_at": int(time.time())},
+                    user_id=user_id,
+                )
+            except Exception:
+                logger.debug("New releases ready emit failed", exc_info=True)
+    except Exception as exc:
+        logger.debug("Background new-releases sync failed: %s", exc)
+    finally:
+        with _DISCOVERY_FEED_LOCK:
+            _NEW_RELEASES_INFLIGHT.discard(user_key)
+
+
+def build_home_new_releases(
+    limit: int = 12,
+    *,
+    refresh: bool = False,
+    today: datetime.date | None = None,
+    sync_inline: bool = False,
+) -> dict:
+    """Serve Home New Releases (100% listener Taste Profile, 0 pins) from SQLite with async refresh."""
+    from shared.user_context import current_user_id
+
+    api = _get_api()
+    lib = api["get_library"]()
+    try:
+        lib.refresh_if_stale()
+    except Exception:
+        pass
+    metadata = getattr(lib, "metadata", None)
+    fav_ids = api["favourite_library_ids"]()
+    user_id = current_user_id()
+    now_ts = int(time.time())
+
+    profile = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True, now=now_ts)
+    release_entries = select_release_profile_artists(profile, limit=35)
+    if not release_entries:
+        return {"generated_at": now_ts, "items": [], "revalidating": False}
+
+    db = instance_db()
+    nodes_by_id = db.get_graph_nodes_by_ids(
+        [e.deezer_artist_id for e in release_entries if e.deezer_artist_id.isdigit()]
+    )
+    nodes_by_lit = db.find_graph_nodes_by_literals(
+        [literal_artist_key(e.display_name) for e in release_entries]
+    )
+
+    weights: dict[str, float] = {}
+    names: dict[str, str] = {}
+    needs_sync = bool(refresh)
+    for entry in release_entries:
+        node = (
+            nodes_by_id.get(entry.deezer_artist_id)
+            or nodes_by_lit.get(literal_artist_key(entry.display_name))
+        )
+        if not node:
+            needs_sync = True
+            continue
+        aid = str(node["deezer_artist_id"])
+        weights[aid] = entry.effective_score
+        names[aid] = entry.display_name
+        last_sync = int(node.get("releases_synced_at") or 0)
+        if last_sync <= 0 or (now_ts - last_sync) > _HOME_RELEASES_TTL_SEC:
+            needs_sync = True
+
+    user_key = str(user_id or "-")
+    if sync_inline and needs_sync:
+        with _DISCOVERY_FEED_LOCK:
+            _NEW_RELEASES_INFLIGHT.add(user_key)
+        _sync_home_new_releases_bg(user_key, user_id, release_entries, limit=limit, today=today)
+        # Re-read newly resolved node IDs (including diacritic-folded matches) after inline sync.
+        refreshed_ids = {
+            str(r["artist_key"]): str(r.get("deezer_artist_id") or "")
+            for r in user_db().get_discovery_artist_profile(limit=100)
+        }
+        nodes_by_id = db.get_graph_nodes_by_ids(
+            [did for did in refreshed_ids.values() if did.isdigit()]
+        )
+        nodes_by_lit = db.find_graph_nodes_by_literals(
+            [literal_artist_key(e.display_name) for e in release_entries]
+        )
+        weights.clear()
+        names.clear()
+        for entry in release_entries:
+            eff_id = refreshed_ids.get(entry.artist_key) or entry.deezer_artist_id
+            node = nodes_by_id.get(eff_id) or nodes_by_lit.get(literal_artist_key(entry.display_name))
+            if node:
+                aid = str(node["deezer_artist_id"])
+                weights[aid] = entry.effective_score
+                names[aid] = entry.display_name
+        needs_sync = False
+
+    items = (
+        build_release_rail(
+            weights,
+            window_days=_HOME_NEW_RELEASES_WINDOW_DAYS,
+            reason_by_artist=None,
+            artist_names_by_id=names,
+            max_per_artist=2,
+            limit=limit,
+            today=today,
+        )
+        if weights
+        else []
+    )
+
+    revalidating = False
+    if needs_sync:
+        with _DISCOVERY_FEED_LOCK:
+            if user_key in _NEW_RELEASES_INFLIGHT:
+                revalidating = True
+            else:
+                _NEW_RELEASES_INFLIGHT.add(user_key)
+                revalidating = True
+                try:
+                    _DISCOVERY_FEED_EXECUTOR.submit(
+                        _sync_home_new_releases_bg,
+                        user_key,
+                        user_id,
+                        release_entries,
+                        limit=limit,
+                        today=today,
+                    )
+                except Exception:
+                    _NEW_RELEASES_INFLIGHT.discard(user_key)
+                    revalidating = False
+
+    return {
+        "generated_at": now_ts,
+        "items": items,
+        "revalidating": revalidating,
+    }
+
+
+@discovery_bp.route("/api/discovery/music/new-releases", methods=["GET"])
+@rate_limit("discovery_music_new_releases", limit=120, window_sec=60)
+def discovery_music_new_releases():
+    """Home New Releases rail: 100% listener Taste Profile, zero pins, cached in SQLite."""
+    limit = min(24, max(4, request.args.get("limit", type=int) or 12))
+    refresh = request.args.get("refresh") == "1"
+    try:
+        return jsonify(build_home_new_releases(limit=limit, refresh=refresh))
+    except Exception as exc:
+        logger.warning("Home new releases failed: %s", exc)
+        return jsonify({"generated_at": int(time.time()), "items": [], "revalidating": False})
 
 
 @discovery_bp.route("/api/discovery/music/feed", methods=["GET"])

@@ -61,6 +61,7 @@ _DISCOVERY_FEED_TTL_SEC = 180
 _DISCOVERY_FEED_STALE_SEC = 3600
 _DISCOVERY_FEED_INFLIGHT: set[str] = set()
 _DISCOVERY_FEED_DIRTY: set[str] = set()
+_NEW_RELEASES_INFLIGHT: set[str] = set()
 _DISCOVERY_FEED_LOCK = threading.Lock()
 _DISCOVERY_FEED_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="soundsible-discovery")
 

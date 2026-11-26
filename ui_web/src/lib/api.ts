@@ -207,9 +207,15 @@ export interface DiscoveryBrowseItem extends CatalogItem {
 }
 
 export interface DiscoveryBrowseSection {
-  id: 'new_releases' | 'artists' | 'albums';
+  id: 'new_releases' | 'release_radar' | 'artists' | 'albums';
   popular: boolean;
   items: DiscoveryBrowseItem[];
+}
+
+export interface DiscoveryNewReleasesResponse {
+  generated_at?: number;
+  items?: DiscoveryBrowseItem[];
+  revalidating?: boolean;
 }
 
 export interface DiscoveryMusicFeed {
@@ -893,6 +899,11 @@ export const api = {
     request<DiscoveryMusicFeed>(`/api/discovery/music/feed?limit=10${refresh ? '&refresh=1' : ''}`, {
       signal,
       timeoutMs: 15000,
+    }),
+  getDiscoveryNewReleases: (signal?: AbortSignal, limit = 12) =>
+    request<DiscoveryNewReleasesResponse>(`/api/discovery/music/new-releases?limit=${limit}`, {
+      signal,
+      timeoutMs: 10000,
     }),
   planMusicQueue: (
     body: {

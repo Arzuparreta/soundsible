@@ -24,10 +24,11 @@ import { ALBUM_SORTS, NO_ALBUM_FILTER, albumBrowseQuery, collateAlbums } from '.
 import type { MenuAction } from '../components/ActionMenu';
 import styles from './AndroidStart.module.css';
 import { filterLocalCollection, searchLibrary, trackSearchFields } from '../lib/librarySearch';
+import NativeNewReleases from './NativeNewReleases';
 
 export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap; settings?: LibrarySettings }
 /** Account browse surface; writes are delegated, sharing rows/artwork without the web player. */
-export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlists'; snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number, context?: ProgramContext) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MenuEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MenuEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MenuEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void }) {
+export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlists'; snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number, context?: ProgramContext) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MenuEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MenuEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MenuEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void; onOpenEntityPath?: (path: string) => void; accountGeneration?: number }) {
   const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists' | 'favourites'>(props.initialTab ?? 'songs');
   const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity } | null>(null);
   const [onlyAvailable, setOnlyAvailable] = createSignal(false);
@@ -189,6 +190,13 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
         ] }, event);
         else openContextMenu({ title: t('library.title'), actions: offline }, event);
       }}>⋯</button></Show>} />
+      <Show when={props.onOpenEntityPath && !props.disconnected && !onlyAvailable() && !collection() && tab() === 'songs'}>
+        <NativeNewReleases
+          generation={() => props.accountGeneration ?? 0}
+          disconnected={() => Boolean(props.disconnected || onlyAvailable())}
+          onOpenEntityPath={path => props.onOpenEntityPath?.(path)}
+        />
+      </Show>
       <Show when={tracks().length} fallback={empty(sourceTracks(), t(tab() === 'favourites' ? 'favourites.empty' : 'library.emptyLibrary'))}>
 <VirtualBrowseRows favourite={props.isFavourite} offline={props.disconnected} onMenu={props.onMenu ? (track, event, index) => {
   const selected = collection();

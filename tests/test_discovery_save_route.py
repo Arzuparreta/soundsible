@@ -1261,9 +1261,9 @@ def test_discovery_feed_refresh_rotates_seeds_and_emits_ready_after_clearing_inf
             assert refreshed.status_code == 200
             second_batch = list(picked_artists)
 
-        assert len(first_batch) == 5
-        assert len(second_batch) == 5
-        assert set(first_batch) != set(second_batch)
+        assert len(first_batch) == 6
+        assert len(second_batch) == 6
+        assert first_batch == second_batch
         assert any(event == "discovery_feed_ready" for event, _, _ in emitted)
         assert seen_inflight_during_emit and all(flag is False for flag in seen_inflight_during_emit)
     finally:

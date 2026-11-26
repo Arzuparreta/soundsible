@@ -109,6 +109,8 @@ export function discoveryBrowseSectionTitle(id: string, popular = false): string
   switch (id) {
     case 'new_releases':
       return t('searchHome.newReleases');
+    case 'release_radar':
+      return t('searchHome.releaseRadar');
     case 'artists':
       return t(popular ? 'searchHome.popularArtists' : 'searchHome.artists');
     case 'albums':

@@ -268,6 +268,28 @@ class DiscoveryStore:
                 rows = conn.execute(sql).fetchall()
             return [dict(row) for row in rows]
 
+    def update_artist_profile_deezer_ids(self, mapping: Dict[str, str]) -> None:
+        """Persist resolved Deezer artist IDs back onto cached taste profile rows."""
+        updates = [
+            (str(did).strip(), str(key).strip())
+            for key, did in (mapping or {}).items()
+            if str(key).strip() and str(did).strip().isdigit()
+        ]
+        if not updates:
+            return
+        now_ts = int(time.time())
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.executemany(
+                """
+                UPDATE discovery_artist_profile
+                SET deezer_artist_id = ?, updated_at = ?
+                WHERE artist_key = ? AND (deezer_artist_id = '' OR deezer_artist_id != ?)
+                """,
+                [(did, now_ts, key, did) for did, key in updates],
+            )
+            conn.execute("COMMIT")
+
     def record_discovery_impressions(
         self,
         entries: Iterable[tuple[str, str]],
