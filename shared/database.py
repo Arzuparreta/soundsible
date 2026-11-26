@@ -24,6 +24,7 @@ from shared.db.library import LibraryStore, StaleLibraryWrite  # noqa: F401  # r
 from shared.db.catalog import CatalogQueries
 from shared.db.user_state import TrackUserState
 from shared.db.discovery import DiscoveryStore
+from shared.db.discovery_graph import DiscoveryGraphStore
 from shared.db.media_cache import MediaCache
 from shared.db.lyrics import LyricsStore
 from shared.db.accounts import AccountStore
@@ -156,6 +157,7 @@ class DatabaseManager(
     CatalogQueries,
     TrackUserState,
     DiscoveryStore,
+    DiscoveryGraphStore,
     MediaCache,
     LyricsStore,
     AccountStore,

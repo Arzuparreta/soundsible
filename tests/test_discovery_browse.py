@@ -27,9 +27,11 @@ def test_personalized_entities_are_interleaved_unique_and_navigable(monkeypatch)
     monkeypatch.setattr(deezer, 'get', get)
     body = build_browse_sections(['Artist 1', 'Artist 2'])
     artists, albums = body['browse_sections']
-    assert [r['title'] for r in artists['items']][:3] == ['Artist 11', 'Artist 12', 'Artist 99']
+    # Consensus boosts Artist 99 (related to both seeds) ahead of single-seed neighbors.
+    assert artists['items'][0]['title'] == 'Artist 99'
+    assert {r['title'] for r in artists['items'][:3]} == {'Artist 99', 'Artist 11', 'Artist 12'}
     assert len({r['id'] for r in artists['items']}) == len(artists['items'])
-    assert artists['items'][0]['reason_artist'] == 'Artist 1'
+    assert artists['items'][0]['reason_artist'] in {'Artist 1', 'Artist 2'}
     assert not artists['popular']
     assert len(albums['items']) == 10
     counts = Counter(r['external_ids']['deezer_artist_id'] for r in albums['items'])

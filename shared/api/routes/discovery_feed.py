@@ -32,6 +32,13 @@ from shared.discovery_seeds import (
     select_taste_artists,
 )
 from shared.deezer_catalog import DEEZER_ARTIST_SEARCH_LIMIT, select_artist_matches
+from shared.discovery_graph_store import (
+    resolve_artist_node,
+    score_consensus_candidates,
+    select_diverse_track_anchors,
+    sync_related_artists,
+)
+from shared.discovery_profile import build_artist_taste_profile
 from shared.discovery_signals import register_discovery_signal_handler
 from shared.hardening import rate_limit
 from shared.music_identity import youtube_music_metadata
@@ -244,10 +251,11 @@ def _deezer_related_artist_rows(
     local_keys: set[str] | None = None,
     exclude_ids: set[str] | None = None,
     used_related_artists: set[str] | None = None,
+    consensus_scores: dict[str, float] | None = None,
     deadline: float | None = None,
     per_artist: int = 2,
 ) -> list[dict]:
-    """Top tracks from artists related to `artist_name`, round-robin interleaved."""
+    """Top tracks from artists related to `artist_name`, weighted by consensus and round-robin interleaved."""
     if deadline is not None and time.monotonic() >= deadline:
         return []
     seed_id = _resolve_deezer_artist_id(artist_name, allow_approximate=False)
@@ -278,8 +286,12 @@ def _deezer_related_artist_rows(
         fresh = [pair for pair in related_artists if pair[0] not in used_related_artists]
         reused = [pair for pair in related_artists if pair[0] in used_related_artists]
         related_artists = fresh + reused
+    scores_map = consensus_scores or {}
     related_artists.sort(
-        key=lambda pair: artist_recommendation_multiplier(pair[1], deezer_artist_id=pair[0]),
+        key=lambda pair: (
+            artist_recommendation_multiplier(pair[1], deezer_artist_id=pair[0]),
+            scores_map.get(pair[0], 0.0),
+        ),
         reverse=True,
     )
 
@@ -362,12 +374,49 @@ def _append_personalized_artist_sections(
     seen: set[str],
     limit: int,
     taste_seeds: list[str] | None = None,
+    consensus_scores: dict[str, float] | None = None,
     rotate: bool = False,
 ) -> None:
     deadline = time.monotonic() + 12.0
     used_related_artists: set[str] = set()
     added = 0
-    artists = taste_seeds if taste_seeds is not None else _top_taste_artists(metadata, fav_ids, rotate=rotate)
+    if taste_seeds is not None:
+        artists = taste_seeds
+    else:
+        profile_entries = build_artist_taste_profile(metadata, fav_ids, persist=True)
+        if profile_entries:
+            seed_nodes_by_key: dict[str, dict] = {}
+            for entry in profile_entries[:12]:
+                if time.monotonic() >= deadline:
+                    break
+                try:
+                    node = resolve_artist_node(entry.display_name, deezer_id=entry.deezer_artist_id, deadline=deadline)
+                    if node:
+                        seed_nodes_by_key[entry.artist_key] = node
+                except Exception:
+                    continue
+            if seed_nodes_by_key:
+                sync_related_artists(list(seed_nodes_by_key.values()), max_sync=3, deadline=deadline)
+            anchors = select_diverse_track_anchors(profile_entries, seed_nodes_by_key, limit=6)
+            artists = [entry.display_name for entry in anchors]
+            if consensus_scores is None and seed_nodes_by_key:
+                w_map = {
+                    str(seed_nodes_by_key[e.artist_key]["deezer_artist_id"]): e.effective_score
+                    for e in profile_entries
+                    if e.artist_key in seed_nodes_by_key
+                }
+                n_map = {
+                    str(seed_nodes_by_key[e.artist_key]["deezer_artist_id"]): e.display_name
+                    for e in profile_entries
+                    if e.artist_key in seed_nodes_by_key
+                }
+                scored = score_consensus_candidates(w_map, n_map, limit=40)
+                consensus_scores = {
+                    str(c["external_ids"]["deezer_artist_id"]): float(c["score"])
+                    for c in scored
+                }
+        else:
+            artists = _top_taste_artists(metadata, fav_ids, rotate=rotate)
     for artist in artists:
         if time.monotonic() >= deadline:
             break
@@ -378,6 +427,7 @@ def _append_personalized_artist_sections(
                 local_keys=local_keys,
                 exclude_ids=seen,
                 used_related_artists=used_related_artists,
+                consensus_scores=consensus_scores,
                 deadline=deadline,
             )
         except deezer.DeezerQuotaError:
@@ -430,6 +480,7 @@ def _build_music_feed(
     limit: int,
     *,
     taste_seeds: list[str] | None = None,
+    consensus_scores: dict[str, float] | None = None,
     rotate: bool = False,
 ) -> dict:
     local_keys = _local_library_keys(metadata)
@@ -446,6 +497,7 @@ def _build_music_feed(
         seen=seen,
         limit=limit,
         taste_seeds=taste_seeds,
+        consensus_scores=consensus_scores,
         rotate=rotate,
     )
 
@@ -581,13 +633,42 @@ def _build_discovery_feed_body(
     fav_ids = api["favourite_library_ids"]()
     user_id = current_user_id()
     taste_seeds: list[str] | None = None
+    browse_result: dict | None = None
+    consensus_scores: dict[str, float] = {}
     if include_external:
-        taste_seeds = _top_taste_artists(metadata, fav_ids, rotate=rotate)
+        from shared.discovery_browse import build_browse_sections
+
+        profile_entries = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True)
+        seed_weights = {entry.display_name: entry.effective_score for entry in profile_entries[:25]}
+        seeds = [entry.display_name for entry in profile_entries[:25]]
+        release_seeds = select_release_seed_artists(metadata, fav_ids, limit=8, user_id=user_id)
+        browse_result = build_browse_sections(
+            seeds,
+            min(limit, 10),
+            release_seeds=release_seeds,
+            seed_weights=seed_weights,
+            owned_album_keys=_local_album_keys(metadata),
+            metadata=metadata,
+        )
+        consensus_artists = browse_result.pop("_consensus_artists", []) or []
+        consensus_scores = {
+            str(item["external_ids"]["deezer_artist_id"]): float(item.get("score") or 0.0)
+            for item in consensus_artists
+            if item.get("external_ids", {}).get("deezer_artist_id")
+        }
+        seed_nodes_by_key: dict[str, dict] = {}
+        for entry in profile_entries[:12]:
+            node = resolve_artist_node(entry.display_name, deezer_id=entry.deezer_artist_id)
+            if node:
+                seed_nodes_by_key[entry.artist_key] = node
+        anchors = select_diverse_track_anchors(profile_entries, seed_nodes_by_key, limit=6)
+        taste_seeds = [entry.display_name for entry in anchors] if anchors else seeds[:5]
         feed = _build_music_feed(
             metadata,
             fav_ids,
             max(36, limit * 4),
             taste_seeds=taste_seeds,
+            consensus_scores=consensus_scores,
             rotate=rotate,
         )
     else:
@@ -615,23 +696,12 @@ def _build_discovery_feed_body(
         section_size=limit,
     )
 
-    if include_external:
-        from shared.discovery_browse import build_browse_sections
-
-        seeds = taste_seeds if taste_seeds is not None else _top_taste_artists(metadata, fav_ids, rotate=rotate)
-        release_seeds = select_release_seed_artists(metadata, fav_ids, limit=8, user_id=user_id)
-        body.update(
-            build_browse_sections(
-                seeds,
-                min(limit, 10),
-                release_seeds=release_seeds,
-                owned_album_keys=_local_album_keys(metadata),
-            )
-        )
+    if include_external and browse_result is not None:
+        body.update(browse_result)
         if any(not sec.get("popular", True) for sec in body.get("browse_sections") or []):
             body["needs_seed"] = False
-        if seeds:
-            record_recent_taste_seeds(user_id, seeds)
+        if taste_seeds:
+            record_recent_taste_seeds(user_id, taste_seeds)
     return body
 
 
