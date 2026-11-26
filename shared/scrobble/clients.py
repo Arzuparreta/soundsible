@@ -22,6 +22,7 @@ from urllib.parse import quote, urlencode, urlsplit
 
 import requests
 
+from shared.musicbrainz import normalize_recording_mbid
 from shared.version import resolve_version
 
 from .listen import Listen
@@ -196,6 +197,43 @@ class ListenBrainzClient:
         return self._submit("single" if len(payload) == 1 else "import", payload)
 
     # -- federated discovery read-back (ListenBrainz only, never Maloja) ----
+
+    @staticmethod
+    def public_similar_artists(artist_mbid: str, *, timeout: float = 3.0) -> Reply:
+        """Read public artist neighbors without sending a listener identity or token."""
+        mbid = normalize_recording_mbid(artist_mbid)
+        if not mbid:
+            return Reply(Outcome.REJECTED, "invalid_artist_mbid")
+        try:
+            response = requests.get(
+                f"{LISTENBRAINZ_URL}/1/lb-radio/artist/{mbid}",
+                params={
+                    "mode": "medium", "max_similar_artists": 8, "max_recordings_per_artist": 1,
+                    "pop_begin": 0, "pop_end": 100,
+                },
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            groups = response.json()
+        except requests.RequestException as error:
+            return Reply(Outcome.RETRY, f"unreachable:{type(error).__name__}")
+        except ValueError:
+            return Reply(Outcome.REJECTED, "invalid_json")
+        if not isinstance(groups, dict):
+            return Reply(Outcome.REJECTED, "invalid_similar_artists")
+        peers = []
+        for key, recordings in groups.items():
+            peer_mbid = normalize_recording_mbid(key)
+            if not peer_mbid or peer_mbid == mbid or not isinstance(recordings, list):
+                continue
+            for recording in recordings:
+                if not isinstance(recording, dict) or recording.get("similar_artist_mbid") != peer_mbid:
+                    continue
+                name = str(recording.get("similar_artist_name") or "").strip()
+                if name:
+                    peers.append({"mbid": peer_mbid, "name": name})
+                    break
+        return Reply(Outcome.OK, data={"artists": peers[:8]})
 
     def cf_recommendations(self, username: str, *, count: int = 50) -> Reply:
         """Fetch collaborative-filtering recording MBIDs for ``username``."""

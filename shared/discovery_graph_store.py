@@ -647,6 +647,53 @@ def select_diverse_track_anchors(
     return selected
 
 
+def load_artist_discography(
+    artist_id: str,
+    *,
+    owner_name: str = "",
+    timeout: float = 5.0,
+    ttl_sec: int = _RELEASES_TTL_SEC,
+    now: int | None = None,
+) -> list[dict]:
+    """Read the full provider response shared by artist pages and release rails."""
+    db = instance_db()
+    now_ts = int(time.time() if now is None else now)
+    snapshot = db.get_artist_discography(artist_id)
+    if snapshot and now_ts - snapshot[0] <= ttl_sec:
+        if owner_name:
+            db.mark_artist_discography_synced(artist_id, snapshot[0])
+        return snapshot[1]
+
+    # The provider coalesces concurrent requests with the same path and params.
+    from shared import deezer_catalog
+
+    response = deezer_catalog.deezer_get(f"artist/{artist_id}/albums", {"limit": 100}, timeout=timeout)
+    raw_rows = response.get("data")
+    if response.get("error") or not isinstance(raw_rows, list):
+        raise ValueError("Invalid Deezer artist discography")
+    rows = [row for row in raw_rows if isinstance(row, dict)]
+    releases = []
+    for row in rows:
+        album_id = str(row.get("id") or "").strip()
+        title = str(row.get("title") or "").strip()
+        record_type = str(row.get("record_type") or "").strip().casefold() or "album"
+        release_date = _parse_release_date(row.get("release_date"))
+        if not album_id.isdigit() or not title or record_type not in _ALLOWED_RECORD_TYPES or release_date is None:
+            continue
+        artist = row.get("artist")
+        credit = owner_name or (str(artist.get("name") or "") if isinstance(artist, dict) else "")
+        releases.append({
+            "deezer_album_id": album_id,
+            "title": title,
+            "artist_credit": credit,
+            "record_type": record_type,
+            "release_date": release_date.isoformat(),
+            "cover_url": deezer.image(row, "cover"),
+        })
+    db.upsert_artist_releases(artist_id, releases, now_ts, discography=rows)
+    return rows
+
+
 def sync_artist_releases(
     artist_nodes: list[dict[str, Any]],
     *,
@@ -660,7 +707,6 @@ def sync_artist_releases(
     Returns ``(failed, had_stale)``.
     """
     now_ts = int(now if now is not None else time.time())
-    db = instance_db()
     failed = False
     had_stale = False
     synced = 0
@@ -692,30 +738,9 @@ def sync_artist_releases(
                 timeout = min(3.0, remaining)
             else:
                 timeout = 5.0
-            response = deezer.get(f"artist/{aid}/albums", {"limit": 20}, timeout=timeout)
-            if not isinstance(response, dict) or response.get("error"):
-                failed = True
-                continue
-            raw_rows = response.get("data")
-            rows = [r for r in raw_rows if isinstance(r, dict)] if isinstance(raw_rows, list) else []
-            releases: list[dict[str, Any]] = []
-            for row in rows:
-                album_id = str(row.get("id") or "").strip()
-                title = str(row.get("title") or "").strip()
-                rtype = str(row.get("record_type") or "").strip().casefold() or "album"
-                rel_date = _parse_release_date(row.get("release_date"))
-                if not album_id.isdigit() or not title or rtype not in _ALLOWED_RECORD_TYPES or rel_date is None:
-                    continue
-                releases.append({
-                    "deezer_album_id": album_id,
-                    "title": title,
-                    "artist_credit": owner_name,
-                    "credit_verified": False,
-                    "record_type": rtype,
-                    "release_date": rel_date.isoformat(),
-                    "cover_url": deezer.image(row, "cover"),
-                })
-            db.upsert_artist_releases(aid, releases, now_ts)
+            load_artist_discography(
+                aid, owner_name=owner_name, timeout=timeout, ttl_sec=ttl_sec, now=now_ts,
+            )
         except deezer.DeezerQuotaError:
             failed = True
             break
@@ -780,7 +805,7 @@ def build_release_rail(
     if not rows:
         return []
 
-    filtered: list[tuple[float, datetime.date, float, int, dict[str, Any]]] = []
+    filtered: list[tuple[datetime.date, float, int, dict[str, Any]]] = []
     for row in rows:
         rel_str = str(row.get("release_date") or "").strip()
         if not rel_str or rel_str > max_date or rel_str < min_date:
@@ -792,27 +817,16 @@ def build_release_rail(
         owner_name = (artist_names_by_id or {}).get(owner_id) or str(row.get("artist_credit") or "").strip()
         if not owner_id.isdigit() or not owner_name:
             continue
-        mult = artist_recommendation_multiplier(owner_name, deezer_artist_id=owner_id)
         affinity = float(artist_weights.get(owner_id, 0.0))
-        filtered.append((mult, rel_date, affinity, _safe_int(row.get("deezer_album_id"), 0), row))
+        filtered.append((rel_date, affinity, _safe_int(row.get("deezer_album_id"), 0), row))
 
-    # Strict chronological ordering with artist affinity tiebreak for same-day releases
-    # (and demoted artists pushed behind non-demoted ones).
-    filtered.sort(
-        key=lambda entry: (
-            round(entry[0], 6),
-            entry[1],
-            round(entry[2], 6),
-            entry[3],
-        ),
-        reverse=True,
-    )
+    filtered.sort(key=lambda entry: entry[:3], reverse=True)
 
     out: list[dict[str, Any]] = []
     seen_albums = set(exclude_album_ids or ())
     per_artist: dict[str, int] = {}
 
-    for _, rel_date, _, album_num, row in filtered:
+    for rel_date, _, album_num, row in filtered:
         if len(out) >= limit:
             break
         album_id = str(album_num)

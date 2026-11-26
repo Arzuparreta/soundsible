@@ -8,6 +8,7 @@ import time
 from typing import Any
 
 from shared.database import instance_db
+from shared.deezer_catalog import literal_artist_key
 from shared.discovery_graph_store import (
     build_release_rail,
     project_youtube_mix_edges,
@@ -40,6 +41,8 @@ def build_browse_sections(
     *,
     release_seeds: list[dict[str, Any]] | None = None,
     seed_weights: dict[str, float] | None = None,
+    profile_artist_keys: set[str] | None = None,
+    profile_artist_ids: set[str] | None = None,
     owned_album_keys: set[str] | None = None,
     metadata: Any = None,
     extra_candidate_boosts: dict[str, tuple[float, str, str]] | None = None,
@@ -235,8 +238,12 @@ def build_browse_sections(
 
         # Hydrate discographies once for the top outward consensus artists (shared
         # cleanly between Release Radar and Albums for you).
-        radar_candidates = consensus_pool[: max(15, min(20, limit * 2))]
-        radar_ids = [str(c["external_ids"]["deezer_artist_id"]) for c in radar_candidates]
+        radar_candidates = [
+            candidate for candidate in consensus_pool
+            if candidate["reason_artist"] and not candidate["_demoted"]
+            and literal_artist_key(candidate["title"]) not in (profile_artist_keys or ())
+            and candidate["external_ids"]["deezer_artist_id"] not in (profile_artist_ids or ())
+        ][: max(15, min(20, limit * 2))]
         seed_owner_items = [
             {
                 "id": f"deezer:artist:{s['deezer_artist_id']}",
@@ -258,6 +265,7 @@ def build_browse_sections(
             ),
             reverse=True,
         )
+        candidate_owners.extend(radar_candidates)
         album_owner_ids: list[str] = []
         seen_owner_ids: set[str] = set()
         for owner in candidate_owners:
@@ -266,12 +274,9 @@ def build_browse_sections(
                 continue
             seen_owner_ids.add(oid)
             album_owner_ids.append(oid)
-            if len(album_owner_ids) >= 8:
-                break
 
-        all_sync_ids = list(dict.fromkeys([*radar_ids, *album_owner_ids]))
-        cached_nodes = db.get_graph_nodes_by_ids(all_sync_ids)
-        sync_nodes = [cached_nodes[aid] for aid in all_sync_ids if aid in cached_nodes]
+        cached_nodes = db.get_graph_nodes_by_ids(album_owner_ids)
+        sync_nodes = [cached_nodes[aid] for aid in album_owner_ids if aid in cached_nodes]
         rel_failed, _ = sync_artist_releases(sync_nodes, max_sync=10, deadline=deadline)
         if rel_failed:
             failed = True

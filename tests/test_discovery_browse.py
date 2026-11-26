@@ -195,6 +195,8 @@ def test_resolve_seed_artist_skips_malformed_ids_and_combining_only_input(monkey
 
 
 def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatch):
+    from shared.api.routes.catalog import _deezer_artist_releases
+
     ref_today = datetime.date(2026, 11, 22)
     album_calls = []
 
@@ -230,6 +232,8 @@ def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatc
         raise AssertionError(path)
 
     monkeypatch.setattr(deezer, "get", get)
+    assert _deezer_artist_releases("101")["singles_eps"][0]["title"] == "Brand New Single"
+    assert album_calls == ["artist/101/albums"]
     body = build_browse_sections(["Seed One", "Seed Two"], limit=10, today=ref_today)
     sections_by_id = {sec["id"]: sec for sec in body["browse_sections"]}
     radar = sections_by_id["release_radar"]["items"]
@@ -250,6 +254,15 @@ def test_release_radar_sorted_newest_first_45d_window_badge_and_dedup(monkeypatc
     assert "1003" in album_ids
     assert "1005" not in radar_ids
     assert "2002" in album_ids
+
+    assert _deezer_artist_releases("201")["albums"][0]["title"] == "Forty Five Days"
+    assert album_calls == ["artist/101/albums", "artist/201/albums"]
+
+    without_profile_artist = build_browse_sections(
+        ["Seed One", "Seed Two"], profile_artist_ids={"201"}, today=ref_today,
+    )
+    radar_without_profile = next(s["items"] for s in without_profile_artist["browse_sections"] if s["id"] == "release_radar")
+    assert all(item["external_ids"]["deezer_artist_id"] != "201" for item in radar_without_profile)
 
     # Second call reads persisted artist_releases_cache with zero extra album fetches.
     prev_calls = len(album_calls)
@@ -595,7 +608,7 @@ def test_less_from_artist_demotes_browse_sections_and_related_rows(tmp_path, mon
         )
         sections = {sec["id"]: sec["items"] for sec in body["browse_sections"]}
         assert [item["title"] for item in sections["artists"]] == ["Good Band", "Disliked Band"]
-        assert [item["title"] for item in sections["release_radar"]] == ["Good New", "Disliked New"]
+        assert [item["title"] for item in sections["release_radar"]] == ["Good New"]
 
         related_rows = route._deezer_related_artist_rows("Seed Band", limit=4)
         assert [row["title"] for row in related_rows] == ["Good Track", "Disliked Track"]

@@ -20,6 +20,28 @@ class ProgramPcmTapTest {
             assertEquals(92, capture.dropped.get()); assertEquals(0, source.position()); release.countDown()
         }
     }
+    @Test fun measurementCaptureKeepsBurstWhenConsumerIsDescheduled() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val delivered = CountDownLatch(129)
+        val offsets = mutableListOf<Long>()
+        ProgramPcmTap().use { tap ->
+            val capture = tap.subscribe({ true }, bufferedBlocks = 128) {
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+                offsets.add(it.frameOffset)
+                delivered.countDown()
+            }
+            val source = ByteBuffer.wrap(ByteArray(4096))
+            tap.offer(source, 48000, 2, stream, 0)
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            for (index in 1..128) tap.offer(source, 48000, 2, stream, index * 1024L)
+            release.countDown()
+            assertTrue(delivered.await(2, TimeUnit.SECONDS))
+            assertEquals(0L, capture.dropped.get())
+            assertEquals((0L..128L).map { it * 1024 }, offsets)
+        }
+    }
     @Test fun accountChangeDiscardsBufferedPrivateAudioAndLiveInputIsNeverRecaptured() {
         val generation = AtomicLong(7); val entered = CountDownLatch(1); val release = CountDownLatch(1)
         val received = AtomicLong()

@@ -7,20 +7,27 @@ import threading
 import time
 from typing import Any
 
+import requests
+
 from shared.database import instance_db
 from shared.deezer_catalog import literal_artist_key
 from shared.discovery_graph_store import resolve_artist_node
 from shared.discovery_intelligence import load_discovery_settings
+from shared.memo import Memo
+from shared.musicbrainz import normalize_recording_mbid
 from shared.scrobble.clients import LastFmClient, ListenBrainzClient
 from shared.scrobble.service import LASTFM, LISTENBRAINZ, lastfm_app
 from shared.scrobble.store import ScrobbleStore, decrypt_secret
 from shared.user_context import user_context
+from shared.version import resolve_version
 
 logger = logging.getLogger(__name__)
 
 _LASTFM_TTL_SEC = 21 * 86400
 _LB_TTL_SEC = 6 * 3600
 _MAX_LASTFM_SEEDS = 4
+_LB_SIMILARITY_TTL_SEC = 21 * 86400
+_MBID_LOOKUPS: Memo[str] = Memo(ttl_sec=86400, maxsize=256, wait_timeout_sec=3)
 _MAX_RESOLVES_PER_SYNC = 6
 
 _FED_LOCK = threading.Lock()
@@ -30,6 +37,7 @@ _LB_INFLIGHT: set[tuple[str, str, str]] = set()
 
 def clear_federation_cache() -> None:
     """Reset in-memory ListenBrainz recommendation memo state (for tests)."""
+    _MBID_LOOKUPS.clear()
     with _FED_LOCK:
         _LB_MEMO.clear()
         _LB_INFLIGHT.clear()
@@ -144,6 +152,102 @@ def _sync_lastfm_edges(
                 )
         else:
             db.replace_similarity_edges(src_id, "lastfm", edges, now_ts)
+
+
+def _musicbrainz_artist_id(deezer_id: str, *, timeout: float) -> str:
+    """Use an explicit Deezer URL relationship to avoid matching homonyms."""
+    def fetch() -> str:
+        response = requests.get(
+            "https://musicbrainz.org/ws/2/url",
+            params={
+                "resource": f"https://www.deezer.com/artist/{deezer_id}",
+                "inc": "artist-rels", "fmt": "json",
+            },
+            headers={"User-Agent": f"Soundsible/{resolve_version()} (https://github.com/Arzuparreta/soundsible)"},
+            timeout=timeout,
+        )
+        if response.status_code == 404:
+            return ""
+        response.raise_for_status()
+        relations = response.json().get("relations") or []
+        artist_ids = {
+            mbid for relation in relations
+            if isinstance(relation, dict) and not relation.get("ended")
+            and isinstance(relation.get("artist"), dict)
+            and (mbid := normalize_recording_mbid(relation["artist"].get("id")))
+        }
+        return next(iter(artist_ids)) if len(artist_ids) == 1 else ""
+
+    return _MBID_LOOKUPS.resolve(deezer_id, fetch)
+
+
+def _sync_listenbrainz_edges(
+    seed_entries: list[Any],
+    *,
+    budget: list[int],
+    deadline: float | None,
+    now_ts: int,
+) -> None:
+    db = instance_db()
+    fetched = False
+    for entry in seed_entries:
+        remaining = deadline - time.monotonic() if deadline is not None else 3.0
+        if remaining <= 0 or fetched:
+            break
+        name = str(getattr(entry, "display_name", "") or "").strip()
+        did = str(getattr(entry, "deezer_artist_id", "") or "").strip()
+        seed = db.get_graph_nodes_by_ids([did]).get(did) if did else None
+        seed = seed or _resolve_artist_budgeted(name, db=db, budget=budget, deadline=deadline, now_ts=now_ts)
+        if not seed:
+            continue
+        synced = int(seed.get("listenbrainz_synced_at") or 0)
+        if synced and now_ts - synced <= _LB_SIMILARITY_TTL_SEC:
+            continue
+
+        source = str(seed["deezer_artist_id"])
+        mbid = normalize_recording_mbid(seed.get("mbid"))
+        if not mbid:
+            # At most one public request chain per feed refresh.
+            fetched = _MBID_LOOKUPS.get(source) is None
+            mbid = _musicbrainz_artist_id(source, timeout=min(remaining, 2.0))
+            if not mbid:
+                continue
+            db.upsert_graph_nodes([{**seed, "mbid": mbid}], now=now_ts)
+
+        remaining = deadline - time.monotonic() if deadline is not None else 3.0
+        if remaining <= 0:
+            break
+        fetched = True
+        reply = ListenBrainzClient.public_similar_artists(mbid, timeout=min(remaining, 3.0))
+        if not reply.ok:
+            continue
+
+        targets: set[str] = set()
+        truncated = False
+        for peer in reply.data["artists"]:
+            if deadline is not None and time.monotonic() >= deadline:
+                truncated = True
+                break
+            target = _resolve_artist_budgeted(
+                peer["name"], db=db, budget=budget, deadline=deadline, now_ts=now_ts,
+            )
+            if not target:
+                truncated |= budget[0] <= 0
+                continue
+            known_mbid = normalize_recording_mbid(target.get("mbid"))
+            target_id = str(target["deezer_artist_id"])
+            if target_id != source and (not known_mbid or known_mbid == peer["mbid"]):
+                targets.add(target_id)
+
+        # The endpoint returns a map, with no documented neighbor order or
+        # similarity score. Use equal weights rather than UUID order or plays.
+        edges = [(target, 0, 0.55) for target in sorted(targets)]
+        if truncated:
+            db.merge_similarity_edges(
+                "listenbrainz", [(source, *edge) for edge in edges], now_ts,
+            )
+        else:
+            db.replace_similarity_edges(source, "listenbrainz", edges, now_ts)
 
 
 def _extract_lb_artists(meta_entry: Any) -> list[str]:
@@ -310,10 +414,19 @@ def sync_federated_signals(
         except Exception as exc:
             logger.debug("Last.fm federation skipped: %s", exc)
 
-        return _sync_listenbrainz_boosts(
+        boosts = _sync_listenbrainz_boosts(
             str(user_id),
             connections=connections,
             budget=lb_budget,
             deadline=deadline,
             now_ts=now_ts,
         )
+        listenbrainz = connections.get(LISTENBRAINZ)
+        if listenbrainz and listenbrainz.get("enabled") and not listenbrainz.get("needs_reconnect"):
+            try:
+                _sync_listenbrainz_edges(
+                    seed_entries, budget=[_MAX_RESOLVES_PER_SYNC], deadline=deadline, now_ts=now_ts,
+                )
+            except Exception as exc:
+                logger.debug("ListenBrainz public similarity skipped: %s", exc)
+        return boosts

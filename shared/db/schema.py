@@ -623,11 +623,14 @@ class SchemaMixin:
                 mbid TEXT DEFAULT '',
                 related_synced_at INTEGER NOT NULL DEFAULT 0,
                 lastfm_synced_at INTEGER NOT NULL DEFAULT 0,
+                listenbrainz_synced_at INTEGER NOT NULL DEFAULT 0,
                 releases_synced_at INTEGER NOT NULL DEFAULT 0,
                 top_tracks_synced_at INTEGER NOT NULL DEFAULT 0,
                 updated_at INTEGER NOT NULL
             )
         """)
+        if "listenbrainz_synced_at" not in {row[1] for row in conn.execute("PRAGMA table_info(artist_graph_nodes)")}:
+            conn.execute("ALTER TABLE artist_graph_nodes ADD COLUMN listenbrainz_synced_at INTEGER NOT NULL DEFAULT 0")
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_artist_graph_nodes_literal
             ON artist_graph_nodes (literal_key)
@@ -655,9 +658,15 @@ class SchemaMixin:
             CREATE INDEX IF NOT EXISTS idx_artist_sim_edges_target
             ON artist_similarity_edges (target_artist_id)
         """)
+        legacy_releases = any(
+            row[1] == "deezer_album_id" and row[5] == 1
+            for row in conn.execute("PRAGMA table_info(artist_releases_cache)")
+        )
+        if legacy_releases:
+            conn.execute("ALTER TABLE artist_releases_cache RENAME TO artist_releases_cache_legacy")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS artist_releases_cache (
-                deezer_album_id TEXT PRIMARY KEY,
+                deezer_album_id TEXT NOT NULL,
                 artist_deezer_id TEXT NOT NULL,
                 title TEXT NOT NULL,
                 artist_credit TEXT NOT NULL,
@@ -665,12 +674,27 @@ class SchemaMixin:
                 record_type TEXT NOT NULL,
                 release_date TEXT NOT NULL,
                 cover_url TEXT DEFAULT '',
-                synced_at INTEGER NOT NULL
+                synced_at INTEGER NOT NULL,
+                PRIMARY KEY (artist_deezer_id, deezer_album_id)
             )
+        """)
+        if legacy_releases:
+            conn.execute("INSERT INTO artist_releases_cache SELECT * FROM artist_releases_cache_legacy")
+            conn.execute("DROP TABLE artist_releases_cache_legacy")
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artist_releases_album
+            ON artist_releases_cache (deezer_album_id)
         """)
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_artist_releases_owner_date
             ON artist_releases_cache (artist_deezer_id, release_date DESC)
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS artist_discography_snapshots (
+                artist_deezer_id TEXT PRIMARY KEY,
+                rows_json TEXT NOT NULL,
+                synced_at INTEGER NOT NULL
+            )
         """)
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_artist_releases_date

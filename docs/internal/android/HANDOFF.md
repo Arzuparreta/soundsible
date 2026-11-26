@@ -134,3 +134,11 @@ checking both SDK fields before another release reaches signed APK verification.
   in the fixture would remove shared audio: do not run it.
 - Shard failures and Live silence: artifacts, signals and trace reading in
   [CI_DIAGNOSTICS](CI_DIAGNOSTICS.md). A passing retry does not identify the cause.
+
+### DJ PCM instrumentation
+
+`DjSharedTempoTest` captures the native post-DSP output and still fails on
+capture loss. Its dedicated 128-block queue absorbs emulator scheduling bursts,
+and the test decodes PCM after collection. The Live subscriber uses the
+existing eight-block queue. A JVM test holds the consumer with a latch and
+verifies that all 128 queued blocks are delivered in order.

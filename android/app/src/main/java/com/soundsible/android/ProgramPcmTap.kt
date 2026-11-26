@@ -12,8 +12,8 @@ internal class ProgramPcmTap : AutoCloseable {
     data class Stream(val generation: Long, val key: String, val program: String, val source: String, val positionOffsetUs: Long)
     data class Block(val bytes: ByteArray, val sampleRate: Int, val channels: Int, val stream: Stream, val frameOffset: Long)
     private val active = AtomicReference<Capture?>()
-    fun subscribe(owns: (Stream) -> Boolean, consume: (Block) -> Unit): Capture {
-        val capture = Capture(owns, consume)
+    fun subscribe(owns: (Stream) -> Boolean, bufferedBlocks: Int = 8, consume: (Block) -> Unit): Capture {
+        val capture = Capture(owns, bufferedBlocks, consume)
         active.getAndSet(capture)?.close()
         return capture
     }
@@ -23,8 +23,10 @@ internal class ProgramPcmTap : AutoCloseable {
     fun discardBuffered() { active.get()?.discardBuffered() }
     override fun close() { active.getAndSet(null)?.close() }
 
-    class Capture internal constructor(private val owns: (Stream) -> Boolean, private val consume: (Block) -> Unit) : AutoCloseable {
-        private val queue = ArrayBlockingQueue<Block>(8)
+    class Capture internal constructor(
+        private val owns: (Stream) -> Boolean, bufferedBlocks: Int, private val consume: (Block) -> Unit,
+    ) : AutoCloseable {
+        private val queue = ArrayBlockingQueue<Block>(bufferedBlocks)
         private val closed = AtomicBoolean()
         val dropped = AtomicLong()
         val failed = AtomicBoolean()

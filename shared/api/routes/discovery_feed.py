@@ -681,6 +681,8 @@ def _build_discovery_feed_body(
             seeds,
             min(limit, 10),
             seed_weights=seed_weights,
+            profile_artist_keys={entry.literal_key for entry in profile_entries if not entry.deezer_artist_id},
+            profile_artist_ids={entry.deezer_artist_id for entry in profile_entries if entry.deezer_artist_id},
             owned_album_keys=_local_album_keys(metadata),
             metadata=metadata,
             extra_candidate_boosts=federated_boosts,
