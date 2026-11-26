@@ -13,6 +13,7 @@ internal object NativeProgramOutput {
     @Synchronized fun unbind(tap: ProgramPcmTap) {
         if (owner?.tap === tap) { owner = null; playing = false; tap.close() }
     }
+    @JvmOverloads
     fun subscribe(generation: Long, bufferedBlocks: Int = 8, consume: (ProgramPcmTap.Block) -> Unit): ProgramPcmTap.Capture {
         val current = owner ?: error("No native programme output")
         require(current.generation() == generation)
