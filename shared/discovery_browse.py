@@ -13,6 +13,7 @@ from shared.discovery_graph_store import (
     project_youtube_mix_edges,
     resolve_artist_node,
     score_consensus_candidates,
+    select_2hop_exploration,
     select_mmr_diverse,
     sync_artist_releases,
     sync_related_artists,
@@ -198,7 +199,36 @@ def build_browse_sections(
             impressions=impressions,
             limit=max(40, limit * 4),
         )
-        artists = select_mmr_diverse(consensus_pool, limit=limit)
+        primary_artists = select_mmr_diverse(consensus_pool, limit=limit)
+        artists = primary_artists
+        if limit >= 6 and consensus_pool:
+            hop1_ids = {
+                str(c["external_ids"]["deezer_artist_id"])
+                for c in consensus_pool
+                if c.get("external_ids", {}).get("deezer_artist_id")
+            }
+            keep_count = max(0, limit - 2)
+            protected = primary_artists[:keep_count]
+            explore = select_2hop_exploration(
+                list(seen_seed_ids),
+                hop1_ids,
+                exclude_artist_ids=seen_seed_ids
+                | {
+                    str(a["external_ids"]["deezer_artist_id"])
+                    for a in protected
+                    if a.get("external_ids", {}).get("deezer_artist_id")
+                },
+                exclude_folded_names=seed_folded_names
+                | {fold_text(a["title"]) for a in protected if fold_text(a["title"])},
+                seed_names_by_id=seed_names_by_id,
+                impressions=impressions,
+                limit=2,
+            )
+            if explore:
+                explore_ids = {item["id"] for item in explore}
+                remaining_primary = [item for item in primary_artists if item["id"] not in explore_ids]
+                head = remaining_primary[: max(0, limit - len(explore))]
+                artists = [*head, *explore][:limit]
 
         # Hydrate discographies once for the top outward consensus artists (shared
         # cleanly between Release Radar and Albums for you).

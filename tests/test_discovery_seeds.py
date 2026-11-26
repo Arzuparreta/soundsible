@@ -88,11 +88,10 @@ def test_taste_artists_fold_diacritics_and_rotate_per_user(tmp_path):
 
         record_recent_taste_seeds("alice", first[:3])
         rotated = select_taste_artists(metadata, ["t1", "t3"], limit=5, user_id="alice", rotate=True)
-        # Rotation dampens recent seeds without starving the full limit.
-        assert len(rotated) == 5
-        assert rotated[:2] != first[:2]
+        # Core taste seeds stay stable under rotate=True; output rotation uses impression fatigue.
+        assert rotated == first
 
-        # Another user keeps independent rotation state.
+        # Another user receives the same deterministic ranking from identical profile inputs.
         bob_seeds = select_taste_artists(metadata, ["t1", "t3"], limit=5, user_id="bob", rotate=True)
         assert bob_seeds == first
 

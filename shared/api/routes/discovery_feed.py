@@ -21,6 +21,7 @@ from shared.database import instance_db, user_db
 from shared.deezer_catalog import DEEZER_ARTIST_SEARCH_LIMIT, literal_artist_key, select_artist_matches
 from shared.discovery_graph_store import (
     build_release_rail,
+    impression_fatigue_multiplier,
     resolve_artist_node,
     score_consensus_candidates,
     select_diverse_track_anchors,
@@ -259,10 +260,11 @@ def _deezer_related_artist_rows(
     exclude_ids: set[str] | None = None,
     used_related_artists: set[str] | None = None,
     consensus_scores: dict[str, float] | None = None,
+    impressions: dict[str, dict] | None = None,
     deadline: float | None = None,
     per_artist: int = 2,
 ) -> list[dict]:
-    """Top tracks from artists related to `artist_name`, weighted by consensus and round-robin interleaved."""
+    """Top tracks from artists related to `artist_name`, weighted by consensus, fatigue, and round-robin interleaved."""
     if deadline is not None and time.monotonic() >= deadline:
         return []
     seed_id = _resolve_deezer_artist_id(artist_name, allow_approximate=False)
@@ -294,9 +296,11 @@ def _deezer_related_artist_rows(
         reused = [pair for pair in related_artists if pair[0] in used_related_artists]
         related_artists = fresh + reused
     scores_map = consensus_scores or {}
+    imp_map = impressions or {}
     related_artists.sort(
         key=lambda pair: (
-            artist_recommendation_multiplier(pair[1], deezer_artist_id=pair[0]),
+            round(artist_recommendation_multiplier(pair[1], deezer_artist_id=pair[0]), 6),
+            round(impression_fatigue_multiplier(imp_map.get(f"deezer:artist:{pair[0]}")), 6),
             scores_map.get(pair[0], 0.0),
         ),
         reverse=True,
@@ -321,7 +325,7 @@ def _deezer_related_artist_rows(
             logger.info("Discovery music feed: related artist %s (%s) unavailable: %s", rel_name, rel_id, exc)
             continue
         top_rows = top.get("data") if isinstance(top.get("data"), list) else []
-        pool: list[dict] = []
+        eligible: list[tuple[float, dict]] = []
         for row in top_rows:
             if not isinstance(row, dict):
                 continue
@@ -347,10 +351,11 @@ def _deezer_related_artist_rows(
                 continue
             if not isinstance(row.get("artist"), dict) or not artist_row.get("name"):
                 row = {**row, "artist": {"id": rel_id, "name": row_artist}}
-            pool.append(row)
-            if len(pool) >= per_artist:
-                break
-        if pool:
+            fatigue = impression_fatigue_multiplier(imp_map.get(f"deezer:{track_id}")) if imp_map else 1.0
+            eligible.append((fatigue, row))
+        if eligible:
+            eligible.sort(key=lambda pair: round(pair[0], 6), reverse=True)
+            pool = [row for _, row in eligible[:per_artist]]
             pools.append(pool)
             if used_related_artists is not None:
                 used_related_artists.add(rel_id)
@@ -382,6 +387,7 @@ def _append_personalized_artist_sections(
     limit: int,
     taste_seeds: list[str] | None = None,
     consensus_scores: dict[str, float] | None = None,
+    impressions: dict[str, dict] | None = None,
     rotate: bool = False,
 ) -> None:
     deadline = time.monotonic() + 12.0
@@ -435,6 +441,7 @@ def _append_personalized_artist_sections(
                 exclude_ids=seen,
                 used_related_artists=used_related_artists,
                 consensus_scores=consensus_scores,
+                impressions=impressions,
                 deadline=deadline,
             )
         except deezer.DeezerQuotaError:
@@ -488,6 +495,7 @@ def _build_music_feed(
     *,
     taste_seeds: list[str] | None = None,
     consensus_scores: dict[str, float] | None = None,
+    impressions: dict[str, dict] | None = None,
     rotate: bool = False,
 ) -> dict:
     local_keys = _local_library_keys(metadata)
@@ -505,6 +513,7 @@ def _build_music_feed(
         limit=limit,
         taste_seeds=taste_seeds,
         consensus_scores=consensus_scores,
+        impressions=impressions,
         rotate=rotate,
     )
 
@@ -645,6 +654,14 @@ def _build_discovery_feed_body(
     if include_external:
         from shared.discovery_browse import build_browse_sections
 
+        learning_on = bool(load_discovery_settings().get("learning_enabled", True))
+        impressions: dict[str, dict] | None = None
+        if learning_on:
+            try:
+                impressions = user_db().get_discovery_impressions()
+            except Exception:
+                impressions = None
+
         profile_entries = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True)
         seed_weights = {entry.display_name: entry.effective_score for entry in profile_entries[:25]}
         seeds = [entry.display_name for entry in profile_entries[:25]]
@@ -654,6 +671,7 @@ def _build_discovery_feed_body(
             seed_weights=seed_weights,
             owned_album_keys=_local_album_keys(metadata),
             metadata=metadata,
+            impressions=impressions,
         )
         consensus_artists = browse_result.pop("_consensus_artists", []) or []
         consensus_scores = {
@@ -674,6 +692,7 @@ def _build_discovery_feed_body(
             max(36, limit * 4),
             taste_seeds=taste_seeds,
             consensus_scores=consensus_scores,
+            impressions=impressions,
             rotate=rotate,
         )
     else:
@@ -1072,6 +1091,52 @@ def discovery_music_new_releases():
         return jsonify({"generated_at": int(time.time()), "items": [], "revalidating": False})
 
 
+def _collect_feed_impressions(body: dict) -> list[tuple[str, str]]:
+    """Extract personalized entity and track identities from a Discover feed payload."""
+    if not isinstance(body, dict) or body.get("needs_seed"):
+        return []
+    entries: list[tuple[str, str]] = []
+    for section in body.get("browse_sections") or []:
+        if not isinstance(section, dict) or section.get("popular", False):
+            continue
+        sec_id = str(section.get("id") or "")
+        entity_type = "artist" if sec_id == "artists" else "album"
+        for item in section.get("items") or []:
+            if isinstance(item, dict) and item.get("id"):
+                entries.append((str(item["id"]), entity_type))
+    for item in body.get("items") or []:
+        if not isinstance(item, dict) or item.get("track_id"):
+            continue
+        ext = item.get("external_ids") if isinstance(item.get("external_ids"), dict) else {}
+        raw_deezer = str(ext.get("deezer_id") or item.get("deezer_id") or "").strip()
+        canon = f"deezer:{raw_deezer}" if raw_deezer.isdigit() else str(item.get("id") or "").strip()
+        if canon:
+            entries.append((canon, "track"))
+    return entries
+
+
+def _record_feed_impressions(
+    body: dict,
+    *,
+    now: int,
+    force: bool,
+    debounce_sec: int = 6 * 3600,
+) -> None:
+    try:
+        if not load_discovery_settings().get("learning_enabled", True):
+            return
+        entries = _collect_feed_impressions(body)
+        if entries:
+            user_db().record_discovery_impressions(
+                entries,
+                now=now,
+                debounce_sec=debounce_sec,
+                force=force,
+            )
+    except Exception:
+        pass
+
+
 @discovery_bp.route("/api/discovery/music/feed", methods=["GET"])
 @rate_limit("discovery_music_feed", limit=120, window_sec=60)
 def discovery_music_feed():
@@ -1088,16 +1153,23 @@ def discovery_music_feed():
         refreshing = cache_key in _DISCOVERY_FEED_INFLIGHT
     if cached and cached[0] > now and not refresh_requested:
         body = dict(cached[2])
+        _record_feed_impressions(body, now=int(now), force=False, debounce_sec=6 * 3600)
         body.update({"cached": True, "stale": False, "revalidating": refreshing})
         return jsonify(body)
     if cached and (cached[1] > now or refresh_requested):
+        body = dict(cached[2])
+        _record_feed_impressions(
+            body,
+            now=int(now),
+            force=refresh_requested,
+            debounce_sec=6 * 3600,
+        )
         revalidating = _schedule_discovery_feed_refresh(
             cache_key,
             user_id,
             limit,
             rotate=True,
         ) or refreshing
-        body = dict(cached[2])
         body.update({"cached": True, "stale": True, "revalidating": revalidating})
         return jsonify(body)
 

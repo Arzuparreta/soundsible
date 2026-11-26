@@ -17,7 +17,7 @@ from shared.user_context import current_user_id, user_context
 _MAX_TRACKED_USERS = 128
 _MAX_RECENT_TASTE_SEEDS = 10
 _MAX_RECENT_GRAPH_SEEDS = 12
-_DEFAULT_ROTATION_PENALTY = 0.02
+_DEFAULT_ROTATION_PENALTY = 0.25
 _DEEZER_ARTIST_KEY_PREFIX = "artist:deezer:"
 
 _SEED_LOCK = threading.Lock()
@@ -160,20 +160,11 @@ def select_taste_artists(
     """Rank taste seed artists using the multi-horizon taste profile (zero pins)."""
     from shared.discovery_profile import build_artist_taste_profile
 
+    del rotate, penalty  # Core taste anchors stay stable; rotation happens via impression fatigue.
     entries = build_artist_taste_profile(metadata, fav_ids, user_id=user_id, persist=True)
     if not entries:
         return []
-    scores = {entry.artist_key: entry.effective_score for entry in entries}
-    display = {entry.artist_key: entry.display_name for entry in entries}
-
-    if rotate:
-        recent = _get_recent(_RECENT_TASTE_SEEDS, user_id)
-        for key in recent:
-            if key in scores:
-                scores[key] *= penalty
-
-    ranked = sorted(scores, key=lambda key: scores[key], reverse=True)
-    return [display[key] for key in ranked[:limit] if display.get(key)]
+    return [entry.display_name for entry in entries[:limit] if entry.display_name]
 
 
 def _is_artist_excluded(artist: str, user_id: str | None = None, *, deezer_artist_id: str = "") -> bool:
