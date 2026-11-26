@@ -158,6 +158,8 @@ def test_listenbrainz_cf_and_fresh_releases_boost_consensus_feed_with_memo_and_i
 
     def fake_get(url, params=None, **kwargs):
         lb_calls.append(url)
+        if "musicbrainz.org/" in url:
+            return FakeResp({}, status_code=404)
         if "/1/cf/recommendation/user/" in url:
             return FakeResp({
                 "payload": {
@@ -242,6 +244,7 @@ def test_listenbrainz_cf_and_fresh_releases_boost_consensus_feed_with_memo_and_i
     artists = dict((s["id"], s["items"]) for s in cached["browse_sections"])["artists"]
     # Multi-provider agreement (Deezer + ListenBrainz CF/Fresh) lifts artist 21 to #1.
     assert artists[0]["title"] == "CF + Fresh Boosted"
+    assert db.get_similarity_edges_for_sources(["10"], providers=["listenbrainz"]) == []
 
     # Second federation call hits 6h memo with zero extra HTTP requests.
     prev_lb = len(lb_calls)
@@ -354,3 +357,45 @@ def test_federation_separates_budgets_avoids_truncated_ttl_poison_and_omits_fals
         now_ts=1_700_000_000,
     ) == {}
     assert fed._LB_MEMO == {}
+
+
+
+def test_listenbrainz_public_neighbors_use_linked_artist_ids_without_sharing_personal_boosts(monkeypatch):
+    clear_federation_cache()
+    db = instance_db()
+    db.upsert_graph_nodes([_node("10", "Seed Band"), _node("20", "Public Neighbor")])
+    ScrobbleStore("testuser").connect(LISTENBRAINZ, secret="lb-token", username="alice")
+    seed_mbid = "b7ffd2af-418f-4be2-bdd1-22f8b48613da"
+    peer_mbid = "66fc5bf8-daa4-4241-b378-9bc9077939d2"
+    edge_calls = []
+
+    def fake_get(url, **kwargs):
+        response = requests.Response()
+        response.status_code = 200
+        if "/cf/recommendation/" in url:
+            response.status_code = 204
+            return response
+        if "/fresh-releases" in url:
+            response.json = lambda: {"payload": {"releases": []}}
+            return response
+        edge_calls.append(url)
+        if url == "https://musicbrainz.org/ws/2/url":
+            assert kwargs["params"]["resource"] == "https://www.deezer.com/artist/10"
+            response.json = lambda: {"relations": [{"artist": {"id": seed_mbid}}]}
+            return response
+        assert url == f"https://api.listenbrainz.org/1/lb-radio/artist/{seed_mbid}"
+        assert "headers" not in kwargs
+        assert kwargs["params"]["pop_begin"] == 0
+        response.json = lambda: {
+            seed_mbid: [{"similar_artist_mbid": seed_mbid, "similar_artist_name": "Seed Band"}],
+            peer_mbid: [{"similar_artist_mbid": peer_mbid, "similar_artist_name": "Public Neighbor"}],
+        }
+        return response
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    assert sync_federated_signals("testuser", [_entry("Seed Band", "10")], now=1000) == {}
+    edges = db.get_similarity_edges_for_sources(["10"], providers=["listenbrainz"])
+    assert [(edge["target_artist_id"], edge["weight"]) for edge in edges] == [("20", 0.55)]
+    assert db.get_graph_nodes_by_ids(["10"])["10"]["mbid"] == seed_mbid
+    assert sync_federated_signals("testuser", [_entry("Seed Band", "10")], now=2000) == {}
+    assert len(edge_calls) == 2

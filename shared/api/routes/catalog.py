@@ -24,6 +24,7 @@ from shared.deezer_catalog import (
 )
 from shared.memo import Memo
 from shared.database import instance_db
+from shared.discovery_graph_store import load_artist_discography
 from shared.musicbrainz import normalize_recording_mbid
 from shared.providers import deezer
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
@@ -289,8 +290,7 @@ def _deezer_artist_releases(artist_id: str, limit: int = 100) -> dict[str, list[
     fetched the identical list twice and rendered both rails identically.
     `record_type` on each row is what actually distinguishes them.
     """
-    data = deezer_catalog.deezer_get(f"artist/{artist_id}/albums", {"limit": min(limit, 100)})
-    rows = data.get("data") if isinstance(data.get("data"), list) else []
+    rows = load_artist_discography(artist_id, timeout=8.0)[:min(limit, 100)]
     albums: list[dict[str, Any]] = []
     singles_eps: list[dict[str, Any]] = []
     for row in rows:

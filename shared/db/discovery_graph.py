@@ -6,6 +6,7 @@ and reaches SQLite through `self._get_connection()`.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import time
@@ -165,6 +166,11 @@ class DiscoveryGraphStore:
                     "UPDATE artist_graph_nodes SET lastfm_synced_at = ?, updated_at = ? WHERE deezer_artist_id = ?",
                     (int(synced_at), int(synced_at), src),
                 )
+            elif prov == "listenbrainz":
+                conn.execute(
+                    "UPDATE artist_graph_nodes SET listenbrainz_synced_at = ?, updated_at = ? WHERE deezer_artist_id = ?",
+                    (int(synced_at), int(synced_at), src),
+                )
             conn.execute("COMMIT")
 
     def merge_similarity_edges(
@@ -299,11 +305,29 @@ class DiscoveryGraphStore:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def get_artist_discography(self, artist_deezer_id: str) -> tuple[int, list[dict]] | None:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT synced_at, rows_json FROM artist_discography_snapshots WHERE artist_deezer_id = ?",
+                (artist_deezer_id,),
+            ).fetchone()
+        return (row[0], json.loads(row[1])) if row else None
+
+    def mark_artist_discography_synced(self, artist_deezer_id: str, synced_at: int) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """UPDATE artist_graph_nodes SET releases_synced_at = ?
+                   WHERE deezer_artist_id = ? AND releases_synced_at < ?""",
+                (synced_at, artist_deezer_id, synced_at),
+            )
+
     def upsert_artist_releases(
         self,
         artist_deezer_id: str,
         releases: Iterable[Dict[str, Any]],
         synced_at: int,
+        *,
+        discography: list[dict] | None = None,
     ) -> None:
         owner_id = str(artist_deezer_id or "").strip()
         if not owner_id.isdigit():
@@ -322,6 +346,28 @@ class DiscoveryGraphStore:
             payload.append((album_id, owner_id, title, credit, verified, rtype, rel_date, cover, int(synced_at)))
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            if discography is not None:
+                written = conn.execute(
+                    """
+                    INSERT INTO artist_discography_snapshots VALUES (?, ?, ?)
+                    ON CONFLICT(artist_deezer_id) DO UPDATE SET
+                        rows_json = excluded.rows_json, synced_at = excluded.synced_at
+                    WHERE artist_discography_snapshots.synced_at < excluded.synced_at
+                    """,
+                    (owner_id, json.dumps(discography, ensure_ascii=False), int(synced_at)),
+                )
+                if not written.rowcount:
+                    conn.execute("ROLLBACK")
+                    return
+                # Keep verified credits for surviving releases, and remove rows
+                # no longer returned for this artist by the provider.
+                retained = [row[0] for row in payload]
+                placeholders = ",".join("?" for _ in retained)
+                conn.execute(
+                    f"DELETE FROM artist_releases_cache WHERE artist_deezer_id = ? "
+                    f"AND deezer_album_id NOT IN ({placeholders})",
+                    (owner_id, *retained),
+                )
             if payload:
                 conn.executemany(
                     """
@@ -329,8 +375,7 @@ class DiscoveryGraphStore:
                         deezer_album_id, artist_deezer_id, title, artist_credit,
                         credit_verified, record_type, release_date, cover_url, synced_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(deezer_album_id) DO UPDATE SET
-                        artist_deezer_id = excluded.artist_deezer_id,
+                    ON CONFLICT(artist_deezer_id, deezer_album_id) DO UPDATE SET
                         title = excluded.title,
                         artist_credit = CASE
                             WHEN artist_releases_cache.credit_verified = 1 THEN artist_releases_cache.artist_credit

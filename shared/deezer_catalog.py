@@ -97,7 +97,7 @@ def deezer_track_raw(deezer_id: str, artist_row: dict, album_row: dict) -> dict[
     return raw
 
 
-def deezer_get(path: str, params: dict[str, Any] | None = None, timeout: int = 8) -> dict[str, Any]:
+def deezer_get(path: str, params: dict[str, Any] | None = None, timeout: float = 8) -> dict[str, Any]:
     """One artist page used to fire five of these, each uncached and on its own
     connection. `shared.providers.deezer` pools and caches them."""
     return deezer.get(path, params, timeout=timeout)

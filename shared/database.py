@@ -66,6 +66,7 @@ INSTANCE_TABLES = (
     "artist_graph_nodes",
     "artist_similarity_edges",
     "artist_releases_cache",
+    "artist_discography_snapshots",
 )
 
 
