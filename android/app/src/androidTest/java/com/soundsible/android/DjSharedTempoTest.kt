@@ -97,9 +97,13 @@ class DjSharedTempoTest {
 
                 val captured = blocks.toList()
                 assertTrue("No native PCM was captured", captured.isNotEmpty())
-                val sampleRate = captured.first().sampleRate
-                val ordered = captured.sortedBy { it.frameOffset }.map { block ->
-                    assertEquals("Native sample rate changed during capture", sampleRate, block.sampleRate)
+                val sampleRate = captured.last().sampleRate
+                // Drop any leading pre-DJ blocks emitted by the normal 16 kHz player before
+                // the 48 kHz DJ mixer takes over, then require a constant rate within DJ.
+                val djBlocks = captured.dropWhile { it.sampleRate != sampleRate }
+                assertTrue("No DJ PCM was captured", djBlocks.isNotEmpty())
+                val ordered = djBlocks.sortedBy { it.frameOffset }.map { block ->
+                    assertEquals("Native sample rate changed during DJ capture", sampleRate, block.sampleRate)
                     val input = ByteBuffer.wrap(block.bytes).order(ByteOrder.LITTLE_ENDIAN)
                     val count = input.remaining() / (block.channels * 2)
                     val mono = ShortArray(count) { index -> input.getShort(index * block.channels * 2) }
