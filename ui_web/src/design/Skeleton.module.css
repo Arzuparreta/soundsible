@@ -29,36 +29,18 @@
 
 .region,
 .rows:not([data-decorative]),
-.cards:not([data-decorative]) {
+[data-skeleton-cards]:not([data-decorative]) {
   contain: layout style;
   animation: skeleton-breathe 1.65s var(--ease-in-out) infinite;
   animation-play-state: var(--decorative-animation-state, running);
 }
 
 .region {
-  display: block;
   width: 100%;
   min-width: 0;
 }
 
 /* ── Toolbar & Section Heading ── */
-.toolbar {
-  display: flex;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs) var(--space-md);
-  padding: var(--space-sm) var(--gutter);
-}
-
-.toolbar[data-contained] {
-  padding-inline: 0;
-}
-
-.toolbarDesktop {
-  display: none;
-}
-
 .toolbarField {
   flex: 1 1 10rem;
   min-width: 0;
@@ -119,25 +101,9 @@
 .rows {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  width: 100%;
   min-width: 0;
 }
 
-.cover {
-  width: var(--cover-sm);
-  height: var(--cover-sm);
-  flex: 0 0 var(--cover-sm);
-  border-radius: var(--radius-xs);
-}
 
 .rowCopy {
   display: flex;
@@ -158,11 +124,11 @@
   height: calc(var(--text-label) * 0.72);
 }
 
-.row:nth-of-type(3n + 1) .title {
+[data-skeleton-row]:nth-of-type(3n + 1) .title {
   width: min(44%, 240px);
 }
 
-.row:nth-of-type(3n + 2) .subtitle {
+[data-skeleton-row]:nth-of-type(3n + 2) .subtitle {
   width: min(26%, 150px);
 }
 
@@ -184,137 +150,12 @@
   height: calc(var(--text-caption) * 0.72);
 }
 
-.menuSlot {
-  display: grid;
-  place-items: center;
-  width: var(--control-h);
-  height: var(--control-h);
-  flex: none;
-}
-
 .menuPill {
   width: var(--icon-sm);
   height: calc(var(--text-caption) * 0.5);
 }
 
-.rows[data-variant='song'] .row {
-  height: var(--row-h);
-  gap: var(--space-md);
-  padding: 0 var(--list-inline-padding, var(--space-md));
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-}
-
-.rows[data-variant='song'].compactRows .row {
-  padding-inline: var(--space-xs);
-}
-
-.rows[data-variant='media'] .row {
-  height: var(--row-h);
-  gap: 8px;
-  padding-block: 0;
-  padding-left: max(var(--list-inline-padding, 12px), env(safe-area-inset-left, 0px));
-  padding-right: max(var(--list-inline-padding, 12px), env(safe-area-inset-right, 0px));
-  border: 0;
-  border-radius: var(--radius-sm);
-}
-
-.rows[data-variant='media'] .rowCopy {
-  order: 0;
-  gap: calc(var(--text-body) * 0.28 + var(--space-2xs));
-}
-
-.rows[data-variant='media'] .trailing {
-  order: 1;
-  gap: 0;
-}
-
-.rows[data-variant='media'] .menuSlot {
-  width: max(44px, var(--control-h));
-  height: max(44px, var(--control-h));
-}
-
-.rows[data-variant='media'] .cover {
-  order: 2;
-}
-
-@media (max-width: 1023px) {
-  .rows[data-variant='song'] .row,
-  .rows[data-variant='song'].compactRows .row {
-    height: var(--row-h);
-    gap: 8px;
-    padding-block: 0;
-    padding-left: max(var(--list-inline-padding, 12px), env(safe-area-inset-left, 0px));
-    padding-right: max(var(--list-inline-padding, 12px), env(safe-area-inset-right, 0px));
-    border: 0;
-  }
-
-  .rows[data-variant='song'] .lead,
-  .rows[data-variant='song'] .duration {
-    display: none;
-  }
-
-  .rows[data-variant='song'] .rowCopy {
-    order: 0;
-    gap: calc(var(--text-body) * 0.28 + var(--space-2xs));
-  }
-
-  .rows[data-variant='song'] .trailing {
-    order: 1;
-    gap: 0;
-  }
-
-  .rows[data-variant='song'] .menuSlot {
-    width: max(44px, var(--control-h));
-    height: max(44px, var(--control-h));
-  }
-
-  .rows[data-variant='song'] .cover {
-    order: 2;
-  }
-}
-
 /* ── Cards ── */
-.cards {
-  display: grid;
-  grid-template-columns: var(--browse-grid-columns);
-  gap: var(--browse-grid-row-gap) var(--browse-card-gap);
-  width: 100%;
-  min-width: 0;
-}
-
-.paddedCards {
-  padding: var(--space-sm) var(--gutter) var(--space-2xl);
-}
-
-.compactCards {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-sm);
-}
-
-.railCards {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  gap: var(--browse-card-gap);
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  padding: var(--space-2xs) 0 var(--space-xs);
-}
-
-.railCards > .card {
-  flex: 0 0 var(--browse-card-width);
-}
-
-@media (hover: none), (pointer: coarse) {
-  .bleedOnTouch {
-    width: auto;
-    margin-inline: calc(-1 * var(--gutter));
-    padding-inline: var(--gutter);
-  }
-}
-
 .card {
   display: flex;
   flex-direction: column;
@@ -329,7 +170,7 @@
   border-radius: var(--radius-md);
 }
 
-/* Placed after .cover and .cardCover so round covers always win. */
+/* Round artwork takes precedence over the rectangular cover recipe. */
 .bone.round {
   border-radius: var(--radius-full);
 }
@@ -357,121 +198,6 @@
   width: 64%;
 }
 
-/* ── Home ── */
-.homePage {
-  padding: var(--space-md) var(--gutter) var(--space-xl);
-}
-
-.homeSection {
-  margin-bottom: var(--space-xl);
-}
-
-.homeHeading {
-  margin-bottom: var(--space-md);
-}
-
-.shortcuts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-sm);
-}
-
-@media (min-width: 768px) {
-  .shortcuts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.shortcutTile {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-  min-height: var(--home-shortcut-h);
-  padding: var(--space-sm) var(--space-md);
-  background: var(--bg-raised);
-  border-radius: var(--radius-md);
-}
-
-.shortcuts .bone {
-  background: var(--skeleton-on-raised);
-}
-
-.shortcutIcon {
-  flex: 0 0 var(--icon-lg);
-  height: var(--icon-lg);
-  border-radius: var(--radius-xs);
-}
-
-.shortcutLabel {
-  flex: 1;
-  max-width: 65%;
-  height: calc(var(--text-body) * 0.75);
-}
-
-@media (min-width: 1024px) {
-  .toolbarDesktop {
-    display: flex;
-  }
-}
-
-@media (min-width: 1024px) and (max-width: 1279px) {
-  :global(html[data-interface-size='large']) .toolbarDesktop {
-    display: none;
-  }
-}
-
-/* ── Page wrappers matching async route surfaces ── */
-.pagePad {
-  padding: var(--space-sm) var(--gutter) var(--space-xl);
-}
-
-.pagePadEntity,
-.pagePadFavourites {
-  --list-inline-padding: var(--gutter);
-}
-
-.pagePadPlaylists {
-  padding: var(--space-xs) var(--gutter) var(--space-2xl);
-}
-
-.pagePadPodcasts {
-  padding: 0 var(--gutter) var(--space-2xl);
-}
-
-.podcastsHeading {
-  margin: var(--space-md) 0 var(--space-md);
-}
-
-.pagePadDownloads {
-  padding: 0 var(--gutter) var(--space-2xl);
-}
-
-.downloadsColumn {
-  max-width: 720px;
-}
-
-.pagePadBookmarks {
-  padding: var(--space-md) var(--gutter) var(--space-xl);
-}
-
-.bookmarksBackBone {
-  width: 7rem;
-  height: calc(var(--text-body) * 0.78);
-  margin-block: var(--space-sm) var(--space-lg);
-}
-
-.stackGapLg,
-.stackGapMd {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xl);
-}
-
-.stackGapMd {
-  gap: var(--space-md);
-}
-
 @media (forced-colors: active) {
   .bone {
     background: Canvas;
@@ -482,7 +208,9 @@
 @media (prefers-reduced-motion: reduce) {
   .region,
   .rows:not([data-decorative]),
-  .cards:not([data-decorative]) {
+  [data-skeleton-cards]:not([data-decorative]) {
     animation: none;
   }
 }
+
+[data-skeleton-row] { pointer-events: none; }

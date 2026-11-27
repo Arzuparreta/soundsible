@@ -43,7 +43,7 @@ function createDeviceList(select: (devices: Device[]) => Device[]) {
 
 function DeviceListState(props: { list: ReturnType<typeof createDeviceList>; empty: string; children: JSX.Element }) {
   return (
-    <Show when={!props.list.loading()} fallback={<SkeletonSurfaceRows count={3} variant="device" />}>
+    <Show when={!props.list.loading()} fallback={<SkeletonSurfaceRows coverClass={styles.icon} rowClass={styles.item} count={3} variant="device" />}>
       <Show
         when={!props.list.failed()}
         fallback={

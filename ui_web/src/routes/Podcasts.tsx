@@ -259,7 +259,7 @@ export default function Podcasts() {
                 <Show when={state.loading || revalidating()} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}>
                   <SkeletonRegion>
                     <SkeletonHeading class={styles.sectionTitle} />
-                    <SkeletonCards count={12} lines={2} decorative />
+                    <SkeletonCards class={styles.grid} count={12} lines={2} decorative />
                   </SkeletonRegion>
                 </Show>
               </Show>

@@ -74,7 +74,7 @@ export default function Downloads() {
           when={hasDownloads()}
           fallback={
             <Show when={!failed()}>
-              <Show when={!loading()} fallback={<div class={styles.column}><SkeletonSurfaceRows count={4} variant="download" /></div>}>
+              <Show when={!loading()} fallback={<div class={styles.column}><SkeletonSurfaceRows coverClass={styles.cover} rowClass={styles.row} count={4} variant="download" /></div>}>
                 <EmptyState>
                   <strong class={styles.emptyTitle}>{t('downloads.emptyTitle')}</strong>
                   <p>{t('downloads.emptyBody')}</p>

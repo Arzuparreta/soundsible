@@ -1,3 +1,4 @@
+import styles from './SettingsRows.module.css';
 import Button from './Button';
 import { createSignal, onCleanup, onMount, Show, type ParentProps } from 'solid-js';
 import { t } from '../lib/i18n';
@@ -19,7 +20,7 @@ export function SettingsLoad(props: ParentProps<{ load: () => Promise<void> }>) 
     finally { if (!disposed) setLoading(false); }
   };
   onMount(() => void load());
-  return <Show when={!loading()} fallback={<div aria-busy="true"><SkeletonSurfaceRows count={4} variant="setting" /></div>}>
+  return <Show when={!loading()} fallback={<div aria-busy="true"><SkeletonSurfaceRows class={styles.panel} rowClass={styles.row} count={4} variant="setting" /></div>}>
     <Show when={!failed()} fallback={<EmptyState tone="danger">
       {t('common.loadFailed')} <Button variant="secondary" onClick={() => void load()}>{t('common.retry')}</Button>
     </EmptyState>}>{props.children}</Show>

@@ -224,7 +224,7 @@ export function PairedDevicesPanel(props: { origin?: () => string | null } = {})
 
   return (
     <>
-      <Show when={!loading()} fallback={<SkeletonSurfaceRows count={2} variant="setting" />}>
+      <Show when={!loading()} fallback={<SkeletonSurfaceRows rowClass={styles.deviceRow} count={2} variant="setting" />}>
         <Show when={devices().length > 0} fallback={<EmptyState compact>{t('pairDevice.empty')}</EmptyState>}>
           <For each={devices()}>
             {(d) => (

@@ -30,11 +30,11 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
       <SkeletonRegion>
         <div class={styles.section}>
           <div class={styles.header}><SkeletonHeading size="h2" /></div>
-          <SkeletonCards count={6} shape="round" lines={1} class={styles.loadingGrid} decorative />
+          <SkeletonCards count={6} shape="round" lines={1} class={`${styles.rail} ${styles.expanded}`} decorative />
         </div>
         <div class={styles.section}>
           <div class={styles.header}><SkeletonHeading size="h2" /></div>
-          <SkeletonCards count={6} lines={2} class={styles.loadingGrid} decorative />
+          <SkeletonCards count={6} lines={2} class={`${styles.rail} ${styles.expanded}`} decorative />
         </div>
       </SkeletonRegion>
     </Show>
@@ -53,7 +53,7 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
           </div>
           <Show when={matches().length} fallback={<Show when={!entitiesLoading() && !entitiesError()} fallback={
             <Show when={props.expanded && entitiesLoading() && !savedEntities().length}>
-              <SkeletonCards count={12} shape={kind === 'artist' ? 'round' : 'square'} lines={kind === 'album' ? 2 : 1} class={styles.loadingGrid} />
+              <SkeletonCards count={12} shape={kind === 'artist' ? 'round' : 'square'} lines={kind === 'album' ? 2 : 1} class={`${styles.rail} ${styles.expanded}`} />
             </Show>
           }>
             <p class={styles.empty}>{t(source(kind).length > 0 ? 'library.noCollectionMatches' : 'savedEntities.empty')}</p>

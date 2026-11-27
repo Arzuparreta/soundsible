@@ -1,5 +1,7 @@
 import Button from '../components/Button';
 import { afterPaint } from '../lib/afterPaint';
+import albumGrid from '../components/AlbumGrid.module.css';
+import artistGrid from '../components/ArtistGrid.module.css';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { openAlbumBrowseMenu } from '../components/albumBrowseMenu';
 import { createEffect, createMemo, createResource, createSignal, Match, on, onMount, Show, Switch } from 'solid-js';
@@ -235,7 +237,7 @@ export default function Library(props: { view: LibraryCollectionView }) {
       <Show when={searching()} fallback={
         <Switch>
           <Match when={view() === 'albums'}>
-            <Show when={gridReady() && (!albums.loading || albumRows().length > 0)} fallback={<div class="page-loading" tabIndex={0}><SkeletonCards count={12} lines={3} padded /></div>}>
+            <Show when={gridReady() && (!albums.loading || albumRows().length > 0)} fallback={<div class="page-loading" tabIndex={0}><SkeletonCards count={12} lines={3} class={albumGrid.grid} /></div>}>
             <Show when={!albumError()} fallback={<EmptyState tone="danger">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void retryAlbums()}>{t('common.retry')}</Button></EmptyState>}>
             <Show
               when={albumRows().length > 0}
@@ -256,7 +258,7 @@ export default function Library(props: { view: LibraryCollectionView }) {
             </Show></Show>
           </Match>
           <Match when={view() === 'artists'}>
-            <Show when={gridReady() && !((state.loading || state.catalog.loading) && artists().length === 0)} fallback={<div class="page-loading" tabIndex={0}><SkeletonCards count={12} shape="round" lines={2} padded /></div>}>
+            <Show when={gridReady() && !((state.loading || state.catalog.loading) && artists().length === 0)} fallback={<div class="page-loading" tabIndex={0}><SkeletonCards count={12} shape="round" lines={2} class={artistGrid.grid} /></div>}>
             <Show when={artists().length > 0} fallback={emptyState(t('library.emptyArtists'))}>
               <div
                 ref={(element) => registerPrimaryScroll(element)}

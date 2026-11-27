@@ -140,6 +140,10 @@ test.describe('skeleton alignment and scaling', () => {
         const firstLoaded = page.locator(isMobile ? '[data-music-list-row]' : '[data-song-row]').first();
         await expect(firstLoaded).toBeVisible();
         await settleFrames(page);
+        const cover = await measureBox(firstLoaded.locator('[data-artwork-surface]').first());
+        expect(Math.abs(rowMetrics.coverLeft - cover.left)).toBeLessThanOrEqual(2);
+        const title = await measureBox(firstLoaded.locator('[data-row-main], [role=button]').first());
+        expect(Math.abs(rowMetrics.copyLeft - title.left)).toBeLessThanOrEqual(2);
         const loadedBox = await measureBox(firstLoaded);
         expectBoxClose(rowMetrics.rowBox, loadedBox, ['left', 'top', 'width', 'height'], 2);
       }
@@ -449,24 +453,21 @@ test.describe('skeleton alignment and scaling', () => {
     await settleFrames(page);
     await expectNoHorizontalOverflow(page);
 
-    const splitBoxes = await topBlock.evaluate((block) => {
-      const columns = Array.from(block.children);
-      if (columns.length !== 2) return null;
-      return {
-        topCol: columns[0].getBoundingClientRect(),
-        songsCol: columns[1].getBoundingClientRect(),
-      };
-    });
-    expect(splitBoxes).not.toBeNull();
+    const columns = await Promise.all([0, 1].map(i => measureBox(topBlock.locator(':scope > *').nth(i))));
+    const [top, songs] = columns;
     if (isMobile) {
-      expect(splitBoxes!.topCol.bottom).toBeLessThanOrEqual(splitBoxes!.songsCol.top + 2);
+      expect(top.bottom).toBeLessThanOrEqual(songs.top + 2);
     } else {
-      expect(splitBoxes!.topCol.right).toBeLessThanOrEqual(splitBoxes!.songsCol.left + 2);
-      expect(Math.abs(splitBoxes!.topCol.top - splitBoxes!.songsCol.top)).toBeLessThanOrEqual(2);
+      expect(top.right).toBeLessThanOrEqual(songs.left + 2);
+      expect(Math.abs(top.top - songs.top)).toBeLessThanOrEqual(2);
     }
 
     searchGate.release();
     await expect(page.getByRole('heading', { name: 'Mejor resultado', exact: true })).toBeVisible();
+    const loaded = page.locator('[data-search-top-block] > section');
+    for (const [i, column] of columns.entries()) {
+      expectBoxClose(column, await measureBox(loaded.nth(i)), ['left', 'width']);
+    }
   });
 
   test('downloads, podcasts, settings and entity detail skeletons match target geometry', async ({ page, isMobile }) => {
@@ -626,7 +627,7 @@ test.describe('skeleton alignment and scaling', () => {
     expectBoxClose(podSearchBox, await measureBox(loadedPodRow), ['left', 'width'], 4);
 
     await page.goto('/player/#/podcasts/show-1');
-    const epSkel = page.locator('[data-primary-scroll] [data-variant="episode"] [data-skeleton-row]').first();
+    const epSkel = page.locator(`[data-primary-scroll] [data-variant="${isMobile ? 'media' : 'episode'}"] [data-skeleton-row]`).first();
     await expect(epSkel).toBeVisible();
     await settleFrames(page);
     const epSkelBox = await measureBox(epSkel);

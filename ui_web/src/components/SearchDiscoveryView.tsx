@@ -64,11 +64,11 @@ export function SearchDiscoveryView(props: {
         <Show when={props.expanded} fallback={<>
           <div class={styles.section}>
             <SkeletonHeading action />
-            <SkeletonCards layout="rail" shape="round" lines={2} bleedOnTouch decorative />
+            <SkeletonCards class={styles.rail} cardClass={styles.entity} layout="rail" shape="round" lines={2} decorative />
           </div>
           <div class={styles.section}>
             <SkeletonHeading action />
-            <SkeletonCards layout="rail" shape="square" lines={3} bleedOnTouch decorative />
+            <SkeletonCards class={styles.rail} cardClass={styles.entity} layout="rail" shape="square" lines={3} decorative />
           </div>
           <div class={styles.section}>
             <SkeletonHeading subtitle action />
@@ -79,7 +79,7 @@ export function SearchDiscoveryView(props: {
         </>}>
           <div class={styles.section}>
             <SkeletonHeading />
-            <Show when={!isEntityExpanded()} fallback={<SkeletonCards layout="grid" count={12} shape={props.expanded === 'artists' ? 'round' : 'square'} lines={props.expanded === 'artists' ? 2 : 3} decorative />}>
+            <Show when={!isEntityExpanded()} fallback={<SkeletonCards class={styles.grid} layout="grid" count={12} shape={props.expanded === 'artists' ? 'round' : 'square'} lines={props.expanded === 'artists' ? 2 : 3} decorative />}>
               <div class={styles.songs}>
                 <SkeletonRows count={10} decorative />
               </div>

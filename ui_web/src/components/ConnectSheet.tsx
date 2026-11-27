@@ -163,7 +163,7 @@ export function openConnectSheet(control: RemoteControl, self: ConnectSelf): voi
               onSelect={() => control(null)}
             />
             <Show when={remoteDevices()} fallback={
-              <Show when={remoteDevicesFailed()} fallback={<SkeletonSurfaceRows count={2} variant="device" />}>
+              <Show when={remoteDevicesFailed()} fallback={<SkeletonSurfaceRows coverClass={styles.icon} rowClass={styles.row} count={2} variant="device" />}>
                 <EmptyState compact tone="danger">
                   {t('common.loadFailed')} <Button variant="secondary" onClick={() => void refreshDevices()}>{t('common.retry')}</Button>
                 </EmptyState>

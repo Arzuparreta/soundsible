@@ -20,11 +20,11 @@ describe('shared visual states', () => {
       <SkeletonRegion>
         <SkeletonToolbar meta actions />
         <SkeletonRows count={3} variant="song" indexed round decorative />
-        <SkeletonSurfaceRows count={2} variant="setting" decorative />
-        <SkeletonSurfaceRows count={2} variant="user" decorative />
-        <SkeletonSurfaceRows count={2} variant="device" decorative />
-        <SkeletonSurfaceRows count={2} variant="episode" decorative />
-        <SkeletonSurfaceRows count={2} variant="download" decorative />
+        <SkeletonSurfaceRows rowClass="fixture-row" count={2} variant="setting" decorative />
+        <SkeletonSurfaceRows rowClass="fixture-row" count={2} variant="user" decorative />
+        <SkeletonSurfaceRows rowClass="fixture-row" count={2} variant="device" decorative />
+        <SkeletonSurfaceRows rowClass="fixture-row" count={2} variant="episode" decorative />
+        <SkeletonSurfaceRows rowClass="fixture-row" count={2} variant="download" decorative />
         <SkeletonRows count={2} variant="media" decorative />
       </SkeletonRegion>
     ));
@@ -49,17 +49,17 @@ describe('shared visual states', () => {
   });
 
   it('renders the requested number of cover-shaped placeholders', () => {
-    const { container } = render(() => <SkeletonCards count={6} compact />);
+    const { container } = render(() => <SkeletonCards count={6} class="grid" />);
 
     expect(screen.getByRole('status', { name: 'common.loading' })).toBeInTheDocument();
     expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(6);
   });
 
-  it('renders rail and padded card layouts with configurable line counts and shapes', () => {
+  it('renders rail and grid card layouts with configurable line counts and shapes', () => {
     const { container } = render(() => (
       <SkeletonRegion>
-        <SkeletonCards count={4} layout="rail" shape="round" lines={1} bleedOnTouch decorative />
-        <SkeletonCards count={3} layout="grid" lines={3} padded decorative />
+        <SkeletonCards count={4} layout="rail" shape="round" lines={1} class="rail" decorative />
+        <SkeletonCards count={3} layout="grid" lines={3} class="grid" decorative />
       </SkeletonRegion>
     ));
 

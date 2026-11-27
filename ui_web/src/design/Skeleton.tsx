@@ -1,5 +1,10 @@
 import { For, Show, type ParentProps } from 'solid-js';
 import { t } from '../lib/i18n';
+import { mobileListLayout } from '../lib/listLayout';
+import song from '../components/SongRow.module.css';
+import media from './MediaRow.module.css';
+import { PageToolbar } from '../components/PageToolbar';
+import { desktopShell } from '../lib/shellLayout';
 import styles from './Skeleton.module.css';
 
 const slotCache = new Map<number, readonly number[]>();
@@ -31,22 +36,15 @@ export function SkeletonRegion(props: ParentProps<{ class?: string }>) {
 }
 
 /** Search/command toolbar skeleton aligned with `PageToolbar`. */
-export function SkeletonToolbar(props: { always?: boolean; contained?: boolean; meta?: boolean; actions?: boolean }) {
-  return (
-    <div
-      class={props.always ? styles.toolbar : `${styles.toolbar} ${styles.toolbarDesktop}`}
-      data-contained={props.contained ? '' : undefined}
-      aria-hidden="true"
-    >
-      <span class={`${styles.bone} ${styles.toolbarField}`} />
-      <Show when={props.meta}>
-        <span class={`${styles.bone} ${styles.toolbarMeta}`} />
-      </Show>
-      <Show when={props.actions}>
-        <span class={`${styles.bone} ${styles.toolbarAction}`} />
-      </Show>
+export function SkeletonToolbar(props: { contained?: boolean; meta?: boolean; actions?: boolean }) {
+  return <Show when={desktopShell()}>
+    <div aria-hidden="true">
+      <PageToolbar contained={props.contained}
+        field={<span class={`${styles.bone} ${styles.toolbarField}`} />}
+        meta={props.meta && <span class={`${styles.bone} ${styles.toolbarMeta}`} />}
+        actions={props.actions && <span class={`${styles.bone} ${styles.toolbarAction}`} />} />
     </div>
-  );
+  </Show>;
 }
 
 /** Section heading skeleton aligned with discovery, search and entity headers. */
@@ -80,11 +78,12 @@ export function SkeletonRows(props: {
 }) {
   const variant = () => props.variant ?? 'song';
 
+  const mediaLayout = () => variant() === 'media' || mobileListLayout();
+
   return (
     <div
       classList={{
         [styles.rows]: true,
-        [styles.compactRows]: props.compact,
         ...(props.class ? { [props.class]: true } : {}),
       }}
       data-variant={variant()}
@@ -96,30 +95,24 @@ export function SkeletonRows(props: {
       </Show>
       <For each={skeletonSlots(props.count, 10)}>
         {() => (
-          <div class={styles.row} data-skeleton-row aria-hidden="true">
-            <Show when={variant() === 'song' && props.indexed}>
+          <div class={mediaLayout() ? media.row : song.row} data-compact={!mediaLayout() && props.compact ? '' : undefined} data-skeleton-row aria-hidden="true">
+            <Show when={!mediaLayout() && props.indexed}>
               <span class={`${styles.bone} ${styles.lead}`} />
             </Show>
-            <span
-              classList={{
-                [styles.bone]: true,
-                [styles.cover]: true,
-                [styles.round]: Boolean(props.round),
-              }}
-              data-skeleton-cover
-            />
+            <Show when={!mediaLayout()}><span class={`${styles.bone} ${song.cover} ${props.round ? styles.round : ''}`} data-skeleton-cover /></Show>
             <span class={styles.rowCopy}>
               <span class={`${styles.bone} ${styles.title}`} />
               <span class={`${styles.bone} ${styles.subtitle}`} />
             </span>
-            <span class={styles.trailing} data-skeleton-menu>
-              <Show when={variant() === 'song'}>
+            <span class={mediaLayout() ? media.menu : song.actionStripe} data-skeleton-menu>
+              <Show when={!mediaLayout() && !props.compact}>
                 <span class={`${styles.bone} ${styles.duration}`} />
               </Show>
-              <span class={styles.menuSlot}>
+              <span class={!mediaLayout() ? song.iconBtn : undefined}>
                 <span class={`${styles.bone} ${styles.menuPill}`} />
               </span>
             </span>
+            <Show when={mediaLayout()}><span class={`${styles.bone} ${media.cover} ${props.round ? styles.round : ''}`} data-skeleton-cover /></Show>
           </div>
         )}
       </For>
@@ -133,25 +126,16 @@ export function SkeletonCards(props: {
   layout?: 'grid' | 'rail';
   shape?: 'square' | 'round';
   lines?: 1 | 2 | 3;
-  padded?: boolean;
-  compact?: boolean;
-  bleedOnTouch?: boolean;
+  cardClass?: string;
   decorative?: boolean;
-  class?: string;
+  class: string;
 }) {
   const layout = () => props.layout ?? 'grid';
   const lines = () => props.lines ?? 2;
 
   return (
     <div
-      classList={{
-        [styles.cards]: true,
-        [styles.railCards]: layout() === 'rail',
-        [styles.paddedCards]: Boolean(props.padded && layout() === 'grid'),
-        [styles.compactCards]: Boolean(props.compact && layout() === 'grid'),
-        [styles.bleedOnTouch]: Boolean(props.bleedOnTouch && layout() === 'rail'),
-        ...(props.class ? { [props.class]: true } : {}),
-      }}
+      class={props.class}
       data-shape={props.shape ?? 'square'}
       data-layout={layout()}
       data-skeleton-cards
@@ -163,7 +147,7 @@ export function SkeletonCards(props: {
       </Show>
       <For each={skeletonSlots(props.count, layout() === 'rail' ? 8 : 12)}>
         {() => (
-          <div class={styles.card} aria-hidden="true">
+          <div class={props.cardClass ? `${styles.card} ${props.cardClass}` : styles.card} aria-hidden="true">
             <span
               classList={{
                 [styles.bone]: true,
@@ -184,30 +168,3 @@ export function SkeletonCards(props: {
     </div>
   );
 }
-
-/** Home route skeleton aligned with `Home.tsx` shortcuts and bookmark/release rails. */
-export function SkeletonHome() {
-  return (
-    <SkeletonRegion class={styles.homePage}>
-      <div class={styles.homeSection} aria-hidden="true">
-        <SkeletonHeading class={styles.homeHeading} />
-        <div class={styles.shortcuts}>
-          <For each={skeletonSlots(6, 6)}>
-            {() => (
-              <div class={styles.shortcutTile}>
-                <span class={`${styles.bone} ${styles.shortcutIcon}`} />
-                <span class={`${styles.bone} ${styles.shortcutLabel}`} />
-              </div>
-            )}
-          </For>
-        </div>
-      </div>
-      <div class={styles.homeSection}>
-        <SkeletonHeading action class={styles.homeHeading} />
-        <SkeletonCards layout="rail" shape="round" lines={1} decorative />
-      </div>
-    </SkeletonRegion>
-  );
-}
-
-export { styles as skeletonPageStyles };

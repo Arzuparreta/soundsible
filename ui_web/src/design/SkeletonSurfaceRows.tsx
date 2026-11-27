@@ -1,12 +1,15 @@
 import { For, Show } from 'solid-js';
 import { t } from '../lib/i18n';
-import { skeletonPageStyles as base, skeletonSlots, skeletonStatusProps } from './Skeleton';
+import { skeletonSlots, skeletonStatusProps } from './Skeleton';
+import base from './Skeleton.module.css';
 import sr from './SkeletonSurfaceRows.module.css';
 
 export type SkeletonSurfaceRowVariant = 'episode' | 'download' | 'setting' | 'user' | 'device';
 
 /** Route- and panel-specific skeleton rows kept outside the initial shell bundle. */
 export function SkeletonSurfaceRows(props: {
+  rowClass: string;
+  coverClass?: string;
   count?: number;
   variant: SkeletonSurfaceRowVariant;
   decorative?: boolean;
@@ -30,7 +33,7 @@ export function SkeletonSurfaceRows(props: {
         {() => {
           const v = props.variant;
           return (
-            <div class={`${base.row} ${sr.row}`} data-skeleton-row aria-hidden="true">
+            <div class={`${props.rowClass} ${sr.row}`} data-skeleton-row aria-hidden="true">
               <Show when={v === 'episode'}>
                 <span class={`${base.bone} ${sr.bone} ${base.lead} ${sr.lead}`} />
               </Show>
@@ -39,8 +42,7 @@ export function SkeletonSurfaceRows(props: {
                   classList={{
                     [base.bone]: true,
                     [sr.bone]: true,
-                    [base.cover]: true,
-                    [sr.cover]: true,
+                    ...(props.coverClass ? { [props.coverClass]: true } : {}),
                     [base.round]: v === 'user',
                   }}
                   data-skeleton-cover

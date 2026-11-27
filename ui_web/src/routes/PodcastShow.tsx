@@ -19,7 +19,7 @@ import type { PodcastEpisode, PodcastShowInfo, PodcastSubscription } from '../ty
 import styles from './PodcastShow.module.css';
 import hero from '../components/EntityHero.module.css';
 import { neutralCoverStyle } from '../lib/cover';
-import { SkeletonRegion, SkeletonToolbar } from '../design/Skeleton';
+import { SkeletonRegion, SkeletonRows, SkeletonToolbar } from '../design/Skeleton';
 import { SkeletonSurfaceRows } from '../design/SkeletonSurfaceRows';
 import { EmptyState } from '../components/EmptyState';
 import { CollectionRows } from '../components/CollectionView';
@@ -343,7 +343,9 @@ export default function PodcastShow() {
           fallback={
             <SkeletonRegion>
               <SkeletonToolbar />
-              <SkeletonSurfaceRows count={8} variant="episode" decorative />
+              <Show when={!mobileListLayout()} fallback={<SkeletonRows count={8} variant="media" decorative />}>
+                <SkeletonSurfaceRows coverClass={styles.epCover} rowClass={styles.ep} count={8} variant="episode" decorative />
+              </Show>
             </SkeletonRegion>
           }
         >

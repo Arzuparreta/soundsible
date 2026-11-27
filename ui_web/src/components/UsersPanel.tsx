@@ -161,7 +161,7 @@ export function UsersPanel(props: { account?: () => User | null; current?: () =>
           <p class={styles.intro}>{t('users.inviteHint')}</p>
         </Show>
 
-        <Show when={!list.loading} fallback={<SkeletonSurfaceRows count={3} variant="user" />}>
+        <Show when={!list.loading} fallback={<SkeletonSurfaceRows coverClass={styles.avatar} class={styles.list} rowClass={styles.row} count={3} variant="user" />}>
         <Show when={!list.error} fallback={<EmptyState tone="danger">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void refetch()}>{t('common.retry')}</Button></EmptyState>}>
         <ul class={styles.list}>
           <For each={list() ?? []}>

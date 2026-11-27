@@ -417,7 +417,7 @@ export default function Artist() {
               <div class={styles.sectionHead}>
                 <SkeletonHeading size="h3" />
               </div>
-              <SkeletonCards layout="rail" lines={2} decorative />
+              <SkeletonCards class={styles.albumRail} cardClass={styles.albumCard} layout="rail" lines={2} decorative />
             </div>
           </SkeletonRegion>
         </Show>
