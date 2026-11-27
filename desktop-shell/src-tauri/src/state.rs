@@ -36,14 +36,64 @@ impl EngineRuntimeState {
     }
 }
 
+const LEGACY_SHELL_FILES: [&str; 2] = [crate::client::PREFS_FILE, APPEARANCE_FILENAME];
+
+fn resolve_config_dir(override_dir: Option<&str>, base_dir: Option<PathBuf>) -> PathBuf {
+    if let Some(dir) = override_dir.map(str::trim).filter(|s| !s.is_empty()) {
+        return PathBuf::from(dir);
+    }
+    base_dir
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("soundsible")
+}
+
+/// Resolve the shared Soundsible configuration directory.
+///
+/// Uses `dirs::config_local_dir()` so Windows resolves `%LOCALAPPDATA%\soundsible`,
+/// matching Python `platformdirs` (`roaming=False`) and `docs/CONFIGURATION.md`.
+/// On Linux and macOS, `config_local_dir()` equals `config_dir()`.
 pub fn config_dir() -> PathBuf {
-    std::env::var("SOUNDSIBLE_CONFIG_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            dirs::config_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join("soundsible")
-        })
+    let override_dir = std::env::var("SOUNDSIBLE_CONFIG_DIR").ok();
+    resolve_config_dir(override_dir.as_deref(), dirs::config_local_dir())
+}
+
+fn migrate_legacy_shell_files(legacy_dir: &Path, target_dir: &Path) {
+    if legacy_dir == target_dir || !legacy_dir.is_dir() {
+        return;
+    }
+    for name in LEGACY_SHELL_FILES {
+        let source = legacy_dir.join(name);
+        let target = target_dir.join(name);
+        if !source.is_file() || target.exists() {
+            continue;
+        }
+        if std::fs::create_dir_all(target_dir).is_err() {
+            return;
+        }
+        let tmp = target_dir.join(format!("{name}.migrating-{}", std::process::id()));
+        if std::fs::copy(&source, &tmp).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+            continue;
+        }
+        if std::fs::rename(&tmp, &target).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+    }
+}
+
+/// Migrate shell-only settings (`desktop-client.json`, `desktop-appearance.json`)
+/// from an earlier Windows Roaming config directory into `%LOCALAPPDATA%\soundsible`
+/// without overwriting existing files or moving transient runtime files.
+pub fn migrate_legacy_roaming_config() {
+    if std::env::var("SOUNDSIBLE_CONFIG_DIR")
+        .ok()
+        .is_some_and(|dir| !dir.trim().is_empty())
+    {
+        return;
+    }
+    if let (Some(roaming), Some(local)) = (dirs::config_dir(), dirs::config_local_dir()) {
+        migrate_legacy_shell_files(&roaming.join("soundsible"), &local.join("soundsible"));
+    }
 }
 
 pub fn state_file_path() -> PathBuf {
@@ -291,7 +341,11 @@ pub fn sidecar_binary() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_appearance;
+    use super::{
+        migrate_legacy_shell_files, resolve_appearance, resolve_config_dir, APPEARANCE_FILENAME,
+        STATE_FILENAME,
+    };
+    use std::path::PathBuf;
 
     // r##..##: the colours contain `"#`, which closes a single-hash raw string.
     const TABLE: &str = r##"{"light":"#f6f6f7","dark":"#0c0c0e","custom-light":"#ffeeee","bg-base":"#ffeeee","accent":"#003333","forest-green":"#0b110d"}"##;
@@ -345,5 +399,86 @@ mod tests {
         let retired = resolve_appearance(Some(&stored("forest-green")), false);
         assert_eq!(retired.theme, "light");
         assert!(retired.colors.is_empty());
+    }
+
+    #[test]
+    fn config_dir_uses_non_empty_override_or_local_base() {
+        let base = PathBuf::from("local-base");
+        assert_eq!(
+            resolve_config_dir(Some("  /custom/soundsible  "), Some(base.clone())),
+            PathBuf::from("/custom/soundsible")
+        );
+        assert_eq!(
+            resolve_config_dir(Some("   "), Some(base.clone())),
+            base.join("soundsible")
+        );
+        assert_eq!(
+            resolve_config_dir(None, Some(base.clone())),
+            base.join("soundsible")
+        );
+        assert_eq!(
+            resolve_config_dir(None, None),
+            PathBuf::from(".").join("soundsible")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_default_config_dir_uses_local_appdata() {
+        let local = dirs::config_local_dir().expect("local app data dir");
+        assert_eq!(
+            resolve_config_dir(None, Some(local.clone())),
+            local.join("soundsible")
+        );
+        if let Some(roaming) = dirs::config_dir() {
+            if roaming != local {
+                assert_ne!(
+                    resolve_config_dir(None, Some(local)),
+                    roaming.join("soundsible")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn migrates_legacy_roaming_shell_files_without_overwriting() {
+        let root = std::env::temp_dir().join(format!(
+            "soundsible-roaming-migration-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let legacy = root.join("roaming");
+        let target = root.join("local");
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::create_dir_all(&target).unwrap();
+
+        std::fs::write(
+            legacy.join(crate::client::PREFS_FILE),
+            r#"{"mode":"server","server":"http://music.local:5005"}"#,
+        )
+        .unwrap();
+        std::fs::write(legacy.join(APPEARANCE_FILENAME), r#"{"theme":"light"}"#).unwrap();
+        std::fs::write(legacy.join(STATE_FILENAME), r#"{"pid":99}"#).unwrap();
+        std::fs::write(target.join(APPEARANCE_FILENAME), r#"{"theme":"dark"}"#).unwrap();
+
+        migrate_legacy_shell_files(&legacy, &target);
+
+        assert_eq!(
+            std::fs::read_to_string(target.join(crate::client::PREFS_FILE)).unwrap(),
+            r#"{"mode":"server","server":"http://music.local:5005"}"#
+        );
+        assert_eq!(
+            std::fs::read_to_string(target.join(APPEARANCE_FILENAME)).unwrap(),
+            r#"{"theme":"dark"}"#
+        );
+        assert!(!target.join(STATE_FILENAME).exists());
+
+        migrate_legacy_shell_files(&target, &target);
+        assert_eq!(
+            std::fs::read_to_string(target.join(APPEARANCE_FILENAME)).unwrap(),
+            r#"{"theme":"dark"}"#
+        );
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

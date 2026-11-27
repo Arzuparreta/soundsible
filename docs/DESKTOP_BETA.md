@@ -87,7 +87,7 @@ Windows architectures through the Windows UI Automation backend in
 `pywinauto`:
 
 1. install into a clean temporary location;
-2. launch with an isolated configuration;
+2. launch with the default Windows configuration directory;
 3. open and cancel the native folder dialog;
 4. reopen it and select a Unicode test library;
 5. wait for folder scan and engine health;

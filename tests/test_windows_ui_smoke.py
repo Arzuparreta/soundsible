@@ -92,3 +92,60 @@ def test_native_visibility_uses_hwnd_instead_of_stale_uia(smoke, monkeypatch):
     assert smoke.real_native_window_visible(window) is False
     native.IsWindowVisible.assert_called_once_with(456)
     window.is_visible.assert_not_called()
+
+
+def test_prepare_smoke_environment_uses_default_dir_and_drops_inherited_override(
+    smoke, monkeypatch, tmp_path
+):
+    local = (tmp_path / "Local" / "soundsible").resolve()
+    roaming = (tmp_path / "Roaming" / "soundsible").resolve()
+    monkeypatch.setattr(smoke, "default_config_dir", lambda: local)
+    monkeypatch.setattr(smoke, "legacy_roaming_config_dir", lambda: roaming)
+
+    env, config_path, roaming_path = smoke.prepare_smoke_environment(
+        {"SOUNDSIBLE_CONFIG_DIR": "/stale/override", "PATH": "x"},
+        None,
+    )
+
+    assert "SOUNDSIBLE_CONFIG_DIR" not in env
+    assert env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] == "--disable-gpu"
+    assert config_path == local
+    assert roaming_path == roaming
+
+
+def test_prepare_smoke_environment_omits_roaming_when_identical(
+    smoke, monkeypatch, tmp_path
+):
+    shared = (tmp_path / "soundsible").resolve()
+    monkeypatch.setattr(smoke, "default_config_dir", lambda: shared)
+    monkeypatch.setattr(smoke, "legacy_roaming_config_dir", lambda: shared)
+
+    env, config_path, roaming_path = smoke.prepare_smoke_environment({}, None)
+
+    assert "SOUNDSIBLE_CONFIG_DIR" not in env
+    assert config_path == shared
+    assert roaming_path is None
+
+
+def test_prepare_smoke_environment_respects_explicit_config_dir(smoke, tmp_path):
+    explicit = tmp_path / "isolated"
+    env, config_path, roaming_path = smoke.prepare_smoke_environment({}, explicit)
+
+    assert env["SOUNDSIBLE_CONFIG_DIR"] == str(explicit.resolve())
+    assert config_path == explicit.resolve()
+    assert roaming_path is None
+
+
+def test_run_smoke_refuses_to_clear_existing_default_profile_outside_ci(
+    smoke, monkeypatch, tmp_path
+):
+    existing_default = tmp_path / "Local" / "soundsible"
+    existing_default.mkdir(parents=True)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "runner"))
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(smoke, "default_config_dir", lambda: existing_default.resolve())
+    monkeypatch.setattr(smoke, "legacy_roaming_config_dir", lambda: existing_default.resolve())
+
+    with pytest.raises(RuntimeError, match="Refusing to clear"):
+        smoke.run_smoke(tmp_path / "Soundsible.exe", tmp_path / "artifacts")
+    assert existing_default.exists()
