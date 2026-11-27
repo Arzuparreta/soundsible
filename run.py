@@ -12,6 +12,8 @@ from pathlib import Path
 import platform
 import shutil
 import os
+
+from shared.runtime_cli import seed_runtime_env_from_args
 # Note: Gevent monkey-patching must happen early, but only after deps are ensured.
 
 
@@ -46,36 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _seed_runtime_env_from_args(args: argparse.Namespace) -> None:
-    mappings = {
-        "config_dir": "SOUNDSIBLE_CONFIG_DIR",
-        "data_dir": "SOUNDSIBLE_DATA_DIR",
-        "cache_dir": "SOUNDSIBLE_CACHE_DIR",
-        "log_dir": "SOUNDSIBLE_LOG_DIR",
-        "music_dir": "SOUNDSIBLE_MUSIC_DIR",
-        "ui_dist": "SOUNDSIBLE_UI_DIST",
-        "owner_token_file": "SOUNDSIBLE_OWNER_TOKEN_FILE",
-    }
-    for attr, env_key in mappings.items():
-        value = getattr(args, attr, None)
-        if value:
-            os.environ[env_key] = str(value)
-    if args.host:
-        os.environ["SOUNDSIBLE_HOST"] = args.host
-    if args.port is not None:
-        os.environ["SOUNDSIBLE_PORT"] = str(args.port)
-    if args.lan_enabled is not None:
-        os.environ["SOUNDSIBLE_LAN_ENABLED"] = "true" if args.lan_enabled else "false"
-    if args.advanced_mode:
-        os.environ["SOUNDSIBLE_ADVANCED_MODE"] = "true"
-
-
 if "--relay" not in sys.argv[1:] and any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
     build_parser().print_help()
     raise SystemExit(0)
 
 _BOOTSTRAP_ARGS, _ = build_parser().parse_known_args()
-_seed_runtime_env_from_args(_BOOTSTRAP_ARGS)
+seed_runtime_env_from_args(_BOOTSTRAP_ARGS)
 
 
 def _venv_python_path(venv_dir: Path) -> Path:
@@ -193,6 +171,21 @@ def _ensure_bootstrap_locked(root_dir: Path, lease) -> None:
             raise RuntimeError("Cannot safely modify dependencies: environment locking is unavailable")
         lease.require_write()
 
+    def install_requirements(py: Path) -> tuple[bool, str]:
+        result = lease.install(
+            [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
+        )
+        if result.returncode != 0:
+            print("Bootstrap tool upgrade failed.")
+            sys.exit(1)
+        result = lease.install(
+            [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
+        )
+        if result.returncode != 0:
+            print("Requirement installation failed.")
+            sys.exit(1)
+        return _venv_can_import(py, bootstrap_modules)
+
     try:
         if not _venv_has_pip(_venv_python_path(venv_dir)):
             require_write()
@@ -207,19 +200,7 @@ def _ensure_bootstrap_locked(root_dir: Path, lease) -> None:
         if not marker.exists() or marker.read_text() != current_hash or not env_ok:
             require_write()
             print("Installing/Updating requirements...", flush=True)
-            result = lease.install(
-                [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
-            )
-            if result.returncode != 0:
-                print("Bootstrap tool upgrade failed.")
-                sys.exit(1)
-            result = lease.install(
-                [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
-            )
-            if result.returncode != 0:
-                print("Requirement installation failed.")
-                sys.exit(1)
-            env_ok, env_error = _venv_can_import(py, bootstrap_modules)
+            env_ok, env_error = install_requirements(py)
             if not env_ok:
                 print("Virtual environment verification failed:", env_error)
                 print("Recreating virtual environment and retrying once...", flush=True)
@@ -229,19 +210,7 @@ def _ensure_bootstrap_locked(root_dir: Path, lease) -> None:
                 except Exception as exc:
                     print("Virtual environment recreation failed:", exc)
                     sys.exit(1)
-                result = lease.install(
-                    [str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
-                )
-                if result.returncode != 0:
-                    print("Bootstrap tool upgrade failed.")
-                    sys.exit(1)
-                result = lease.install(
-                    [str(py), "-m", "pip", "install", "--upgrade", "-r", str(req_file)],
-                )
-                if result.returncode != 0:
-                    print("Requirement installation failed.")
-                    sys.exit(1)
-                env_ok, env_error = _venv_can_import(py, bootstrap_modules)
+                env_ok, env_error = install_requirements(py)
                 if not env_ok:
                     print("Virtual environment verification failed after rebuild:", env_error)
                     sys.exit(1)

@@ -9,7 +9,7 @@ import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
 import { CoverImage } from './CoverImage';
 import { responsiveTapConstants } from '../lib/responsiveTap';
-import { prefersReducedMotion } from '../lib/prefersReducedMotion';
+import { animateLayoutRects, captureLayoutRects } from '../lib/layoutMotion';
 import { isEditableTextControl } from '../lib/shortcuts';
 import { savedFromTrack } from '../lib/saved';
 import { PODCAST_SKIP_SECONDS } from '../lib/track';
@@ -122,35 +122,11 @@ export function PlayerStage(props: {
     </Show>
   );
 
-  const animateRects = (before: Map<Element, DOMRect>) => {
-    if (prefersReducedMotion()) return;
-    requestAnimationFrame(() => {
-      for (const element of rootEl?.querySelectorAll<HTMLElement>('[data-lyrics-morph]') ?? []) {
-        const first = before.get(element);
-        const last = element.getBoundingClientRect();
-        if (!first || !last.width || !last.height) continue;
-        const dx = first.left - last.left;
-        const dy = first.top - last.top;
-        const sx = first.width / last.width;
-        const sy = first.height / last.height;
-        if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) continue;
-        element.animate(
-          [
-            { transformOrigin: 'top left', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
-            { transformOrigin: 'top left', transform: 'none' },
-          ],
-          { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' },
-        );
-      }
-    });
-  };
+  const layoutElements = () => rootEl?.querySelectorAll<HTMLElement>('[data-lyrics-morph]') ?? [];
 
   const toggleDesktopLyrics = () => {
     if (layoutBusy() || podcast()) return;
-    const before = new Map(
-      [...(rootEl?.querySelectorAll<HTMLElement>('[data-lyrics-morph]') ?? [])]
-        .map((element) => [element, element.getBoundingClientRect()] as const),
-    );
+    const before = captureLayoutRects(layoutElements());
     const next = !desktopLyrics();
     setLayoutBusy(true);
     setDesktopLyrics(next);
@@ -159,7 +135,7 @@ export function PlayerStage(props: {
     } catch {
       /* storage disabled/full */
     }
-    animateRects(before);
+    animateLayoutRects(before, layoutElements);
     window.setTimeout(() => setLayoutBusy(false), 440);
   };
 

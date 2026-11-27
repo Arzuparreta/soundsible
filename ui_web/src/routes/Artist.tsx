@@ -18,7 +18,7 @@ import { musicLibrary, isPlayingItem, state } from '../stores';
 import { player } from '../stores/player';
 import { api } from '../lib/api';
 import { hasCoverArt, trackCoverUrl } from '../lib/media';
-import { catalogItemKeys } from '../lib/playbackIdentity';
+import { createCatalogDownload } from '../lib/catalogDownload';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
 import { isPodcastTrack } from '../lib/track';
@@ -26,7 +26,7 @@ import { artistKey, artistPath, decodeArtistName, parseViewParams } from '../lib
 import { t } from '../lib/i18n';
 import type { AlbumSummary, ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
-import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
+import { useCatalogCollection, playCatalogItem, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import hero from '../components/EntityHero.module.css';
@@ -53,8 +53,6 @@ export default function Artist() {
   const navigate = useNavigate();
   const name = createMemo(() => decodeArtistName(params.name));
   const viewParams = createMemo(() => parseViewParams(searchParams as Record<string, string | undefined>));
-
-  const [saving, setSaving] = createSignal<Set<string>>(new Set());
 
   let aborter: AbortController | undefined;
 
@@ -275,39 +273,7 @@ export default function Artist() {
     }
   };
 
-  const saveItem = async (item: CatalogItem) => {
-    const artist = itemArtist(item);
-    if (!artist || !item.title) return;
-    setSaving((s) => new Set(s).add(item.id));
-    try {
-      const response = await api.saveCatalogItem({
-        catalog_item_id: item.id,
-        source: item.source,
-        artist,
-        title: item.title,
-        duration: item.duration,
-        cover: item.cover,
-        external_ids: item.external_ids,
-        identity_keys: catalogItemKeys(item),
-        ...catalogReleaseEvidence(item),
-      });
-      if (response.status === 'queued') {
-        toast.success(t('search.addedToDownloads'));
-      } else if (response.status === 'needs_review') {
-        toast.info(t('search.chooseVersion'));
-      } else {
-        toast.error(t('search.notSaved'));
-      }
-    } catch {
-      toast.error(t('search.notSaved'));
-    } finally {
-      setSaving((s) => {
-        const next = new Set(s);
-        next.delete(item.id);
-        return next;
-      });
-    }
-  };
+  const { saving, saveItem } = createCatalogDownload(catalogReleaseEvidence);
 
   /** Other artists the catalogue matched for this name, in the shared sheet:
    * it owns focus, Escape and the way back, and is never clipped by the page. */

@@ -1,10 +1,7 @@
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import type { DiscoveryBrowseItem } from '../lib/api';
-import { albumPath } from '../lib/artistRoute';
+import { createSignal, For, onMount, Show } from 'solid-js';
 import { coverGradient } from '../lib/cover';
-import { onDiscoveryFeedReady } from '../lib/discoveryEvents';
 import { t } from '../lib/i18n';
-import { newReleasesApi } from '../lib/newReleasesApi';
+import { createNewReleases, releaseDestination } from '../lib/newReleases';
 import { discoveryEntitySubtitle } from '../lib/searchDiscovery';
 import { userKey } from '../lib/session';
 import Button from './Button';
@@ -12,73 +9,14 @@ import { CoverImage } from './CoverImage';
 import { MusicLink } from './MusicLinks';
 import styles from './HomeNewReleases.module.css';
 
-function releaseDestination(item: DiscoveryBrowseItem): string {
-  const deezerId = item.external_ids?.deezer_album_id
-    ? String(item.external_ids.deezer_album_id)
-    : undefined;
-  return albumPath(item.title, item.artist ?? item.subtitle ?? '', {
-    view: 'discover',
-    deezerId,
-  });
-}
-
 /** Taste-profile New Releases rail rendered lazily on the Library Home page. */
 export default function HomeNewReleases() {
-  const [items, setItems] = createSignal<DiscoveryBrowseItem[]>([]);
+  const { items, load, subscribe } = createNewReleases(() => userKey('home-new-releases'));
   const [expanded, setExpanded] = createSignal(false);
-  let controller: AbortController | undefined;
-  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
-  let fallbackUsed = false;
-  let awaitingRevalidate = false;
-  let disposed = false;
-  let epoch = 0;
-
-  async function load(fromFallback = false) {
-    if (typeof newReleasesApi.getDiscoveryNewReleases !== 'function') return;
-    clearTimeout(fallbackTimer);
-    fallbackTimer = undefined;
-    controller?.abort();
-    const request = new AbortController();
-    controller = request;
-    const op = ++epoch;
-    const account = userKey('home-new-releases');
-    try {
-      const response = await newReleasesApi.getDiscoveryNewReleases(request.signal, 12);
-      if (disposed || request.signal.aborted || op !== epoch || userKey('home-new-releases') !== account) return;
-      setItems(Array.isArray(response?.items) ? response.items : []);
-      if (response?.revalidating) {
-        awaitingRevalidate = true;
-        if (!fallbackUsed && !fromFallback) {
-          fallbackTimer = setTimeout(() => {
-            if (!disposed) {
-              fallbackUsed = true;
-              void load(true);
-            }
-          }, 5000);
-        }
-      } else {
-        awaitingRevalidate = false;
-      }
-    } catch {
-      awaitingRevalidate = false;
-      // Keep Home clean and silent when offline or unavailable.
-    }
-  }
 
   onMount(() => {
     void load();
-    const stopPush = onDiscoveryFeedReady((data) => {
-      if (disposed) return;
-      if (data.reason !== 'new_releases' && !(data.reason === undefined && awaitingRevalidate)) return;
-      awaitingRevalidate = false;
-      void load();
-    });
-    onCleanup(() => {
-      disposed = true;
-      clearTimeout(fallbackTimer);
-      stopPush();
-      controller?.abort();
-    });
+    subscribe();
   });
 
   return (
